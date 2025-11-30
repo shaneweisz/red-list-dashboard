@@ -1,0 +1,38 @@
+## Web App TODOs
+- Link to Red List assessments
+- Link to occurrence records
+
+## Classifier Progress (as of Nov 30, 2025)
+
+### What's Working
+- classifier/ module created with training.py and model.py
+- EmbeddingManager loads Tessera embeddings from local numpy cache
+- Cache location: global_0.1_degree_representation/2024/grid_{lon}_{lat}/
+- Tile format: int8 data + float32 scales, de-quantized as: data * scales[:,:,np.newaxis]
+- Test loads 16 tiles for Cambridge bbox in ~5 seconds (vs 27+ min via API)
+
+### Current Issue
+- Mosaic stitching appears slow/stuck when concatenating 16 tiles x 128 channels
+- Memory intensive: each tile is ~1140x729x128 float32 = ~400MB
+- 16 tiles = ~6.4GB for full mosaic
+
+### Next Steps to Try
+1. Process tiles lazily - only load tiles that contain query points
+2. Use memory mapping instead of loading full arrays
+3. Sample directly from individual tiles without creating mosaic
+4. Reduce precision (float16 instead of float32)
+
+### Test Command
+uv run python test_classifier.py
+
+### Key Files
+- classifier/training.py - EmbeddingManager with local cache support
+- classifier/model.py - SpeciesClassifier (XGBoost-based)
+- classifier/gbif.py - GBIF API data fetching
+- test_classifier.py - End-to-end test with Quercus robur
+
+### Tile Grid Details
+- 0.1 degree grid cells
+- Tile naming: grid_{lon:.2f}_{lat:.2f} (e.g., grid_0.05_52.15)
+- SW corner coordinates (center at +0.05)
+- Cambridge bbox: lon [-0.003, 0.250], lat [52.092, 52.318] = 16 tiles
