@@ -25,6 +25,12 @@ const Rectangle = dynamic(
   { ssr: false }
 );
 
+// Locate button component that uses useMap hook
+const LocateControl = dynamic(
+  () => import("../components/LocateControl"),
+  { ssr: false }
+);
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -253,6 +259,7 @@ function ExpandedRow({ speciesKey, regionMode, mounted, colSpan }: ExpandedRowPr
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   />
+                  <LocateControl />
                   {config.bounds && (
                     <Rectangle
                       bounds={config.bounds}
@@ -638,6 +645,9 @@ export default function Home() {
                 <th className="px-2 sm:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase w-20 sm:w-28">
                   Count
                 </th>
+                <th className="hidden sm:table-cell px-2 sm:px-4 py-3 text-center text-xs font-medium text-zinc-500 uppercase w-14">
+                  GBIF
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
@@ -663,23 +673,23 @@ export default function Home() {
                       </td>
                       <td className="px-2 sm:px-4 py-2">
                         <div className="text-sm text-zinc-900 dark:text-zinc-100">{species.vernacularName || "—"}</div>
-                        <div className="text-xs text-zinc-500 italic">
-                          {species.canonicalName}
-                          <a
-                            href={`https://www.gbif.org/species/${species.key}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="ml-1 text-green-600 hover:text-green-700"
-                          >
-                            <svg className="w-3 h-3 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                            </svg>
-                          </a>
-                        </div>
+                        <div className="text-xs text-zinc-500 italic">{species.canonicalName}</div>
                       </td>
                       <td className="px-2 sm:px-4 py-2 text-sm text-right font-medium text-zinc-900 dark:text-zinc-100">
                         {species.occurrenceCount ? formatNumber(species.occurrenceCount) : "—"}
+                      </td>
+                      <td className="hidden sm:table-cell px-2 sm:px-4 py-2 text-center">
+                        <a
+                          href={`https://www.gbif.org/species/${species.key}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-green-600 hover:text-green-700"
+                        >
+                          <svg className="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                          </svg>
+                        </a>
                       </td>
                     </tr>
                     {selectedSpeciesKey === species.key && (
@@ -723,23 +733,23 @@ export default function Home() {
                         </td>
                         <td className="px-2 sm:px-4 py-2">
                           <div className="text-sm text-zinc-900 dark:text-zinc-100">{commonName}</div>
-                          <div className="text-xs text-zinc-500 italic">
-                            {displayName}
-                            <a
-                              href={`https://www.gbif.org/species/${record.species_key}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              className="ml-1 text-green-600 hover:text-green-700"
-                            >
-                              <svg className="w-3 h-3 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                              </svg>
-                            </a>
-                          </div>
+                          <div className="text-xs text-zinc-500 italic">{displayName}</div>
                         </td>
                         <td className="px-2 sm:px-4 py-2 text-sm text-right font-medium text-zinc-900 dark:text-zinc-100">
                           {formatNumber(record.occurrence_count)}
+                        </td>
+                        <td className="hidden sm:table-cell px-2 sm:px-4 py-2 text-center">
+                          <a
+                            href={`https://www.gbif.org/species/${record.species_key}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-green-600 hover:text-green-700"
+                          >
+                            <svg className="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                          </a>
                         </td>
                       </tr>
                       {selectedSpeciesKey === record.species_key && (
