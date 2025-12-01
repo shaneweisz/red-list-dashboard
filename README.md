@@ -31,3 +31,19 @@ npm run dev
 ```
 
 Open http://localhost:3000 to explore the data with filtering, sorting, and on-demand species lookups from GBIF.
+
+## Refreshing Data from GBIF
+
+The species occurrence count data is stored as a static CSV file (`app/public/plant_species_counts.csv`). To update it with fresh data from GBIF:
+
+```bash
+# From the project root directory
+uv run python main.py --fetch-all
+```
+
+This will:
+1. Query GBIF for occurrence counts of all plant species (takes several minutes)
+2. Save updated data to `app/public/plant_species_counts.csv`
+3. Generate analysis summary in `app/public/plant_species_counts.json`
+
+After refreshing, redeploy the app to see the updated data in production.

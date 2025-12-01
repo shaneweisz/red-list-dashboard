@@ -456,7 +456,6 @@ export default function Home() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0 });
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [filterPreset, setFilterPreset] = useState<FilterPreset>("all");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
@@ -627,31 +626,6 @@ export default function Home() {
     setSearchResults(null);
   };
 
-  const handleRefreshFromGBIF = async () => {
-    if (refreshing || regionMode !== "global") return;
-
-    const confirmed = window.confirm(
-      "This will fetch fresh data from GBIF. This may take several minutes. Continue?"
-    );
-    if (!confirmed) return;
-
-    setRefreshing(true);
-    try {
-      const response = await fetch("/api/refresh", { method: "POST" });
-      const result = await response.json();
-
-      if (result.success) {
-        alert("Data refresh completed! Reloading...");
-        fetchData();
-      } else {
-        alert(`Refresh failed: ${result.error}`);
-      }
-    } catch (error) {
-      alert(`Refresh failed: ${error}`);
-    }
-    setRefreshing(false);
-  };
-
   const handleRowClick = (speciesKey: number, occurrenceCount: number) => {
     setSelectedSpeciesKey(speciesKey);
     setSelectedOccurrenceCount(occurrenceCount);
@@ -661,39 +635,15 @@ export default function Home() {
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 p-4 md:p-8">
       <main className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="mb-6 flex justify-between items-start">
-          <div>
-            <h1 className="text-3xl font-bold text-zinc-900 dark:text-zinc-100 mb-2">
-              Plant Species Data Explorer
-            </h1>
-            <p className="text-zinc-600 dark:text-zinc-400">
-              {stats
-                ? `Explore ${formatNumber(stats.total)} plant species - ${config.description}`
-                : `Loading ${config.description}...`}
-            </p>
-          </div>
-          {regionMode === "global" && (
-            <button
-              onClick={handleRefreshFromGBIF}
-              disabled={refreshing}
-              className="px-4 py-2 rounded-lg text-sm font-medium bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700 dark:hover:bg-zinc-700 flex items-center gap-2"
-            >
-              <svg
-                className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                />
-              </svg>
-              {refreshing ? "Fetching..." : "Refresh"}
-            </button>
-          )}
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold text-zinc-900 dark:text-zinc-100 mb-2">
+            Plant Species Data Explorer
+          </h1>
+          <p className="text-zinc-600 dark:text-zinc-400">
+            {stats
+              ? `Explore ${formatNumber(stats.total)} plant species - ${config.description}`
+              : `Loading ${config.description}...`}
+          </p>
         </div>
 
         {/* Region Toggle */}
