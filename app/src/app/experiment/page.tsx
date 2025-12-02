@@ -202,9 +202,9 @@ export default function ExperimentPage() {
       const { latitude: lat, longitude: lon } = position.coords;
       setUserLocation({ lat, lon });
 
-      // Fetch predictions for this location
+      // Fetch predictions for this location (500m x 500m grid)
       const res = await fetch(
-        `/api/predict-local?lat=${lat}&lon=${lon}&speciesKey=${currentData.species_key}&gridSize=100`
+        `/api/predict-local?lat=${lat}&lon=${lon}&speciesKey=${currentData.species_key}&gridSize=500`
       );
 
       if (!res.ok) {
@@ -699,7 +699,7 @@ export default function ExperimentPage() {
                 Predict Near Me
               </h3>
               <p className="text-xs text-zinc-500 mt-1">
-                Get predictions for a 100m × 100m grid at your current location
+                Get predictions for a 500m × 500m grid at your current location
               </p>
             </div>
             <button
@@ -811,7 +811,7 @@ export default function ExperimentPage() {
                     {mounted && (
                       <MapContainer
                         center={[userLocation.lat, userLocation.lon]}
-                        zoom={18}
+                        zoom={16}
                         style={{ height: "100%", width: "100%" }}
                       >
                         <TileLayer
