@@ -13,7 +13,7 @@ import rasterio
 
 from .gbif import get_species_info, fetch_occurrences
 from .embeddings import EmbeddingMosaic
-from .methods import SimilarityMethod
+from .methods import ClassifierMethod
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +26,9 @@ REGIONS = {
     },
 }
 
+# Default ratio of background samples to occurrences
+NEGATIVE_RATIO = 5
+
 
 @dataclass
 class PredictionResult:
@@ -34,7 +37,8 @@ class PredictionResult:
     species_name: str
     taxon_key: int
     n_occurrences: int
-    scores: np.ndarray  # (H, W) similarity map
+    n_background: int
+    scores: np.ndarray  # (H, W) probability map
     transform: rasterio.transform.Affine
     bbox: tuple[float, float, float, float]
 
@@ -110,30 +114,82 @@ class PredictionResult:
         return paths
 
 
+def sample_background(
+    mosaic: EmbeddingMosaic,
+    n_samples: int,
+    exclude_coords: list[tuple[float, float]],
+    seed: int = 42,
+) -> tuple[np.ndarray, list[tuple[float, float]]]:
+    """
+    Sample random background points from the mosaic.
+
+    Args:
+        mosaic: Loaded embedding mosaic
+        n_samples: Number of background samples to generate
+        exclude_coords: Coordinates to exclude (occurrence locations)
+        seed: Random seed for reproducibility
+
+    Returns:
+        Tuple of (embeddings array, coordinates list)
+    """
+    rng = np.random.default_rng(seed)
+    h, w, _ = mosaic.shape
+
+    # Get pixel indices of exclusions
+    exclude_pixels = set()
+    for lon, lat in exclude_coords:
+        row, col = mosaic.coords_to_pixel(lon, lat)
+        exclude_pixels.add((row, col))
+
+    coords = []
+    embeddings = []
+    attempts = 0
+    max_attempts = n_samples * 20
+
+    while len(coords) < n_samples and attempts < max_attempts:
+        row = rng.integers(0, h)
+        col = rng.integers(0, w)
+        if (row, col) not in exclude_pixels:
+            emb = mosaic.mosaic[row, col, :]
+            if not np.allclose(emb, 0):  # Skip empty pixels
+                lon, lat = mosaic.pixel_to_coords(row, col)
+                coords.append((lon, lat))
+                embeddings.append(emb)
+                exclude_pixels.add((row, col))
+        attempts += 1
+
+    return np.array(embeddings), coords
+
+
 def find_candidates(
     species_name: str,
     bbox: tuple[float, float, float, float],
     cache_dir: Path,
     output_dir: Optional[Path] = None,
+    negative_ratio: int = NEGATIVE_RATIO,
 ) -> PredictionResult:
     """
-    Find candidate locations for a species using habitat similarity.
+    Find candidate locations for a species using a classifier.
+
+    Trains a logistic regression classifier on occurrence embeddings vs
+    random background embeddings, then scores all pixels.
 
     Args:
         species_name: Scientific name of the species
         bbox: Bounding box as (min_lon, min_lat, max_lon, max_lat)
         cache_dir: Directory containing Tessera embeddings
         output_dir: If provided, save results to this directory
+        negative_ratio: Ratio of background samples to occurrences
 
     Returns:
-        PredictionResult with similarity scores and metadata
+        PredictionResult with probability scores and metadata
     """
     logger.info("=" * 60)
     logger.info(f"Finding candidates for: {species_name}")
     logger.info("=" * 60)
 
     # 1. Get species info and occurrences
-    logger.info("\n[1/4] Fetching GBIF data...")
+    logger.info("\n[1/5] Fetching GBIF data...")
     species_info = get_species_info(species_name)
     taxon_key = species_info["taxon_key"]
     logger.info(f"  Matched: {species_info['scientific_name']} (key: {taxon_key})")
@@ -142,43 +198,52 @@ def find_candidates(
     n_occurrences = len(occurrences)
     logger.info(f"  Found {n_occurrences} occurrences in region")
 
-    if n_occurrences == 0:
-        raise ValueError(f"No occurrences found for {species_name} in the specified region")
+    if n_occurrences < 2:
+        raise ValueError(f"Need at least 2 occurrences, found {n_occurrences}")
 
     # 2. Load embedding mosaic
-    logger.info("\n[2/4] Loading embedding mosaic...")
+    logger.info("\n[2/5] Loading embedding mosaic...")
     mosaic = EmbeddingMosaic(cache_dir, bbox)
     mosaic.load()
     h, w, c = mosaic.shape
     logger.info(f"  Mosaic shape: {h} x {w} x {c}")
 
     # 3. Sample embeddings at occurrence locations
-    logger.info("\n[3/4] Sampling embeddings...")
+    logger.info("\n[3/5] Sampling occurrence embeddings...")
     positive_embeddings, valid_coords = mosaic.sample_at_coords(occurrences)
     logger.info(f"  Valid occurrence samples: {len(positive_embeddings)}")
 
-    if len(positive_embeddings) == 0:
-        raise ValueError("No valid embeddings found at occurrence locations")
+    if len(positive_embeddings) < 2:
+        raise ValueError("Need at least 2 valid embeddings at occurrence locations")
 
-    # 4. Compute similarity
-    logger.info("\n[4/4] Computing habitat similarity...")
-    predictor = SimilarityMethod()
-    predictor.fit(positive_embeddings)
+    # 4. Sample background embeddings
+    logger.info("\n[4/5] Sampling background embeddings...")
+    n_background = len(positive_embeddings) * negative_ratio
+    negative_embeddings, neg_coords = sample_background(
+        mosaic, n_background, valid_coords
+    )
+    logger.info(f"  Background samples: {len(negative_embeddings)}")
+
+    # 5. Train classifier and predict
+    logger.info("\n[5/5] Training classifier and predicting...")
+    classifier = ClassifierMethod()
+    classifier.fit(positive_embeddings, negative_embeddings)
 
     all_embeddings = mosaic.get_all_embeddings()
-    scores = predictor.predict(all_embeddings)
+    scores = classifier.predict(all_embeddings)
     scores_map = scores.reshape(h, w)
 
     # Log statistics
     logger.info(f"\n  Score range: {scores.min():.3f} - {scores.max():.3f}")
-    high_score = (scores > 0.6).sum()
-    logger.info(f"  High similarity pixels (>0.6): {high_score:,} ({100*high_score/len(scores):.1f}%)")
+    high_score = (scores > 0.5).sum()
+    logger.info(f"  High probability pixels (>0.5): {high_score:,} ({100*high_score/len(scores):.1f}%)")
 
     # Create result
     result = PredictionResult(
         species_name=species_info["canonical_name"],
         taxon_key=taxon_key,
         n_occurrences=len(valid_coords),
+        n_background=len(negative_embeddings),
         scores=scores_map,
         transform=mosaic.transform,
         bbox=bbox,
