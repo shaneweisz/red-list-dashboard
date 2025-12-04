@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, memo } from "react";
+import React, { useState, useEffect, memo } from "react";
 import {
   ComposableMap,
   Geographies,
@@ -56,6 +56,56 @@ const ALPHA2_TO_NAME: Record<string, string> = Object.fromEntries(
   Object.entries(NAME_TO_ALPHA2).map(([name, code]) => [code, name])
 );
 
+interface CountryStats {
+  [countryCode: string]: {
+    occurrences: number;
+    species: number;
+  };
+}
+
+type HeatmapMode = "none" | "occurrences";
+
+// Color scale for heatmap: cream -> yellow -> orange -> dark red
+function getHeatmapColor(value: number, maxValue: number): string {
+  if (value === 0 || maxValue === 0) return "#f5f5f4"; // stone-100
+
+  // Use log scale with high power to push most countries to pale end
+  // Higher power = more countries appear pale, only highest values get dark
+  const logValue = Math.log10(value + 1);
+  const logMax = Math.log10(maxValue + 1);
+  const ratio = Math.pow(logValue / logMax, 2.0);
+
+  // Color scale: #fef3c7 (cream) -> #fde047 (yellow) -> #f97316 (orange) -> #991b1b (dark red)
+  if (ratio < 0.33) {
+    // Cream to yellow
+    const t = ratio * 3;
+    const r = Math.round(254 + (253 - 254) * t);
+    const g = Math.round(243 + (224 - 243) * t);
+    const b = Math.round(199 + (71 - 199) * t);
+    return `rgb(${r}, ${g}, ${b})`;
+  } else if (ratio < 0.66) {
+    // Yellow to orange
+    const t = (ratio - 0.33) * 3;
+    const r = Math.round(253 + (249 - 253) * t);
+    const g = Math.round(224 + (115 - 224) * t);
+    const b = Math.round(71 + (22 - 71) * t);
+    return `rgb(${r}, ${g}, ${b})`;
+  } else {
+    // Orange to dark red
+    const t = (ratio - 0.66) * 3;
+    const r = Math.round(249 + (153 - 249) * t);
+    const g = Math.round(115 + (27 - 115) * t);
+    const b = Math.round(22 + (27 - 22) * t);
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+}
+
+function formatNumber(num: number): string {
+  if (num >= 1000000) return (num / 1000000).toFixed(1) + "M";
+  if (num >= 1000) return (num / 1000).toFixed(1) + "K";
+  return num.toString();
+}
+
 interface WorldMapProps {
   selectedCountry: string | null;
   onCountrySelect: (countryCode: string, countryName: string) => void;
@@ -64,10 +114,49 @@ interface WorldMapProps {
 
 function WorldMap({ selectedCountry, onCountrySelect, onClearSelection }: WorldMapProps) {
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
+  const [hoveredCountryCode, setHoveredCountryCode] = useState<string | null>(null);
+  const [countryStats, setCountryStats] = useState<CountryStats>({});
+  const [heatmapMode, setHeatmapMode] = useState<HeatmapMode>("occurrences");
+  const [loading, setLoading] = useState(true);
+
+  // Fetch country stats on mount
+  useEffect(() => {
+    fetch("/api/country/stats")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.stats) {
+          setCountryStats(data.stats);
+        }
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Calculate max value for heatmap scaling
+  const maxOccurrences = Object.values(countryStats).reduce(
+    (max, stat) => Math.max(max, stat.occurrences),
+    0
+  );
+
+  const getCountryColor = (alpha2: string | undefined, isSelected: boolean): string => {
+    if (isSelected) return "#22c55e";
+    if (!alpha2) return "#f4f4f5";
+
+    if (heatmapMode === "none") {
+      return "#e4e4e7";
+    }
+
+    const stats = countryStats[alpha2];
+    if (!stats) return "#f4f4f5";
+
+    return getHeatmapColor(stats.occurrences, maxOccurrences);
+  };
+
+  const hoveredStats = hoveredCountryCode ? countryStats[hoveredCountryCode] : null;
 
   return (
     <div className="relative">
-      {/* Header with clear button */}
+      {/* Header with controls */}
       <div className="flex items-center justify-between mb-3">
         <div>
           <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
@@ -79,25 +168,49 @@ function WorldMap({ selectedCountry, onCountrySelect, onClearSelection }: WorldM
               : "Click a country to filter by region"}
           </p>
         </div>
-        {selectedCountry && (
-          <button
-            onClick={onClearSelection}
-            className="px-3 py-1 text-sm text-zinc-600 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded-lg transition-colors"
-          >
-            Back to Global
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {/* Heatmap toggle */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-zinc-500">Heatmap:</span>
+            <select
+              value={heatmapMode}
+              onChange={(e) => setHeatmapMode(e.target.value as HeatmapMode)}
+              className="text-xs px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
+            >
+              <option value="occurrences">Occurrences</option>
+              <option value="none">Off</option>
+            </select>
+          </div>
+          {selectedCountry && (
+            <button
+              onClick={onClearSelection}
+              className="px-3 py-1 text-sm text-zinc-600 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded-lg transition-colors"
+            >
+              Back to Global
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Hover tooltip */}
       {hoveredCountry && (
-        <div className="absolute top-12 left-1/2 -translate-x-1/2 z-10 bg-white dark:bg-zinc-800 px-3 py-1 rounded shadow-lg text-sm text-zinc-700 dark:text-zinc-300 pointer-events-none">
-          {hoveredCountry}
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-10 bg-white dark:bg-zinc-800 px-3 py-2 rounded shadow-lg text-sm text-zinc-700 dark:text-zinc-300 pointer-events-none">
+          <div className="font-medium">{hoveredCountry}</div>
+          {hoveredStats && (
+            <div className="text-xs text-zinc-500">
+              {formatNumber(hoveredStats.occurrences)} occurrences
+            </div>
+          )}
         </div>
       )}
 
       {/* Map */}
-      <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+      <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden relative">
+        {loading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-zinc-900/50 z-10">
+            <div className="text-sm text-zinc-500">Loading heatmap data...</div>
+          </div>
+        )}
         <ComposableMap
           projectionConfig={{
             scale: 120,
@@ -113,13 +226,20 @@ function WorldMap({ selectedCountry, onCountrySelect, onClearSelection }: WorldM
                   const countryName = geo.properties.name;
                   const alpha2 = NAME_TO_ALPHA2[countryName];
                   const isSelected = selectedCountry === alpha2;
+                  const fillColor = getCountryColor(alpha2, isSelected);
 
                   return (
                     <Geography
                       key={geo.rsmKey}
                       geography={geo}
-                      onMouseEnter={() => setHoveredCountry(countryName)}
-                      onMouseLeave={() => setHoveredCountry(null)}
+                      onMouseEnter={() => {
+                        setHoveredCountry(countryName);
+                        setHoveredCountryCode(alpha2);
+                      }}
+                      onMouseLeave={() => {
+                        setHoveredCountry(null);
+                        setHoveredCountryCode(null);
+                      }}
                       onClick={() => {
                         if (alpha2) {
                           onCountrySelect(alpha2, countryName);
@@ -127,9 +247,7 @@ function WorldMap({ selectedCountry, onCountrySelect, onClearSelection }: WorldM
                       }}
                       style={{
                         default: {
-                          fill: isSelected
-                            ? "#22c55e"
-                            : alpha2 ? "#e4e4e7" : "#f4f4f5",
+                          fill: fillColor,
                           stroke: "#a1a1aa",
                           strokeWidth: 0.5,
                           outline: "none",
@@ -156,6 +274,22 @@ function WorldMap({ selectedCountry, onCountrySelect, onClearSelection }: WorldM
             </Geographies>
           </ZoomableGroup>
         </ComposableMap>
+
+        {/* Legend */}
+        {heatmapMode !== "none" && (
+          <div className="absolute bottom-2 right-2 bg-white/90 dark:bg-zinc-800/90 px-2 py-1 rounded text-xs">
+            <div className="flex items-center gap-1">
+              <span className="text-zinc-500">Low</span>
+              <div
+                className="w-20 h-2 rounded"
+                style={{
+                  background: "linear-gradient(to right, #fef3c7, #fde047, #f97316, #991b1b)"
+                }}
+              />
+              <span className="text-zinc-500">High</span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
