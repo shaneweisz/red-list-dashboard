@@ -32,6 +32,8 @@ interface Point {
   lon: number;
   lat: number;
   score?: number;
+  confidence?: number;
+  uncertainty?: number;
 }
 
 interface Trial {
