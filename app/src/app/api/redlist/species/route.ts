@@ -2,15 +2,25 @@ import { NextRequest, NextResponse } from "next/server";
 import * as fs from "fs";
 import * as path from "path";
 
+interface PreviousAssessment {
+  year: string;
+  assessment_id: number;
+  category: string;
+}
+
 interface Species {
   sis_taxon_id: number;
   assessment_id: number;
   scientific_name: string;
+  family: string | null;
   category: string;
+  assessment_date: string | null;
   year_published: string;
   url: string;
+  population_trend: string | null;
+  countries: string[];
   assessment_count: number;
-  previous_assessments: string[];
+  previous_assessments: PreviousAssessment[];
 }
 
 interface PrecomputedData {

@@ -66,21 +66,55 @@ interface TaxonAssessment {
   assessment_id: number;
   year_published: string;
   latest: boolean;
+  red_list_category_code: string;
+}
+
+interface TaxonData {
+  family_name?: string;
 }
 
 interface TaxonResponse {
   assessments?: TaxonAssessment[];
+  taxon?: TaxonData;
+}
+
+interface AssessmentLocation {
+  code: string;
+  origin: string;
+  presence: string;
+}
+
+interface AssessmentPopulationTrend {
+  description?: {
+    en?: string;
+  };
+}
+
+interface AssessmentResponse {
+  assessment_date?: string;
+  population_trend?: AssessmentPopulationTrend;
+  locations?: AssessmentLocation[];
+}
+
+interface PreviousAssessment {
+  year: string;
+  assessment_id: number;
+  category: string;
 }
 
 interface Species {
   sis_taxon_id: number;
   assessment_id: number;
   scientific_name: string;
+  family: string | null;
   category: string;
+  assessment_date: string | null;
   year_published: string;
   url: string;
+  population_trend: string | null;
+  countries: string[];
   assessment_count: number;
-  previous_assessments: string[];
+  previous_assessments: PreviousAssessment[];
 }
 
 interface OutputData {
@@ -111,26 +145,81 @@ async function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchAssessmentHistory(
-  taxonId: number
-): Promise<{ count: number; previous: string[] }> {
+interface SpeciesDetails {
+  count: number;
+  previous: PreviousAssessment[];
+  family: string | null;
+  assessment_date: string | null;
+  population_trend: string | null;
+  countries: string[];
+}
+
+async function fetchSpeciesDetails(
+  taxonId: number,
+  assessmentId: number
+): Promise<SpeciesDetails> {
+  const defaults: SpeciesDetails = {
+    count: 1,
+    previous: [],
+    family: null,
+    assessment_date: null,
+    population_trend: null,
+    countries: [],
+  };
+
   try {
-    const res = await fetchWithAuth(
-      `https://api.iucnredlist.org/api/v4/taxa/sis/${taxonId}`
-    );
-    if (res.ok) {
-      const data: TaxonResponse = await res.json();
-      const allAssessments = data.assessments || [];
-      const previous = allAssessments
+    // Fetch both taxon details and assessment details in parallel
+    const [taxonRes, assessmentRes] = await Promise.all([
+      fetchWithAuth(`https://api.iucnredlist.org/api/v4/taxa/sis/${taxonId}`),
+      fetchWithAuth(`https://api.iucnredlist.org/api/v4/assessment/${assessmentId}`),
+    ]);
+
+    let count = 1;
+    let previous: PreviousAssessment[] = [];
+    let family: string | null = null;
+    let assessment_date: string | null = null;
+    let population_trend: string | null = null;
+    let countries: string[] = [];
+
+    // Parse taxon response (for assessment history and family)
+    if (taxonRes.ok) {
+      const taxonData: TaxonResponse = await taxonRes.json();
+      const allAssessments = taxonData.assessments || [];
+      count = allAssessments.length;
+      previous = allAssessments
         .filter((a) => !a.latest)
-        .map((a) => a.year_published)
-        .sort((a, b) => parseInt(b) - parseInt(a));
-      return { count: allAssessments.length, previous };
+        .map((a) => ({
+          year: a.year_published,
+          assessment_id: a.assessment_id,
+          category: a.red_list_category_code,
+        }))
+        .sort((a, b) => parseInt(b.year) - parseInt(a.year));
+      family = taxonData.taxon?.family_name || null;
     }
+
+    // Parse assessment response (for assessment date, population trend and countries)
+    if (assessmentRes.ok) {
+      const assessmentData: AssessmentResponse = await assessmentRes.json();
+      // Store just the date portion (YYYY-MM-DD)
+      assessment_date = assessmentData.assessment_date?.split("T")[0] || null;
+      population_trend = assessmentData.population_trend?.description?.en || null;
+
+      // Extract unique country codes (only native/extant species)
+      if (assessmentData.locations) {
+        countries = [...new Set(
+          assessmentData.locations
+            .filter((loc) => loc.origin === "Native" && loc.presence === "Extant")
+            .map((loc) => loc.code)
+            .filter((code) => code.length === 2) // Only country codes, not regions
+        )].sort();
+      }
+    }
+
+    return { count, previous, family, assessment_date, population_trend, countries };
   } catch {
     // Silently fail, return defaults
   }
-  return { count: 1, previous: [] };
+  return defaults;
 }
 
 async function fetchPage(page: number): Promise<Assessment[]> {
@@ -270,27 +359,31 @@ async function main() {
 
       emptyPages = 0;
 
-      // Fetch assessment history in batches
+      // Fetch species details in batches
       for (let i = 0; i < assessments.length; i += BATCH_SIZE) {
         const batch = assessments.slice(i, i + BATCH_SIZE);
-        const historyPromises = batch.map((a) =>
-          fetchAssessmentHistory(a.sis_taxon_id)
+        const detailsPromises = batch.map((a) =>
+          fetchSpeciesDetails(a.sis_taxon_id, a.assessment_id)
         );
-        const histories = await Promise.all(historyPromises);
+        const detailsList = await Promise.all(detailsPromises);
 
         for (let j = 0; j < batch.length; j++) {
           const a = batch[j];
-          const history = histories[j];
+          const details = detailsList[j];
 
           const species: Species = {
             sis_taxon_id: a.sis_taxon_id,
             assessment_id: a.assessment_id,
             scientific_name: a.taxon_scientific_name,
+            family: details.family,
             category: a.red_list_category_code,
+            assessment_date: details.assessment_date,
             year_published: a.year_published,
             url: a.url,
-            assessment_count: history.count,
-            previous_assessments: history.previous,
+            population_trend: details.population_trend,
+            countries: details.countries,
+            assessment_count: details.count,
+            previous_assessments: details.previous,
           };
 
           allSpecies.push(species);
