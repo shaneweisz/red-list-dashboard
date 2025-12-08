@@ -429,77 +429,75 @@ export default function RedListView() {
           </div>
         </div>
 
-        {/* Center column - Category distribution (clickable) */}
-        <div className="lg:col-span-10 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
-          <div className="flex items-center justify-between mb-1">
-            <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Distribution by Category
-            </h3>
-            {selectedCategory && (
-              <button
-                onClick={() => setSelectedCategory(null)}
-                className="text-xs text-red-600 hover:text-red-700 dark:text-red-400"
-              >
-                Clear
-              </button>
-            )}
-          </div>
-          <div className="flex-1 min-h-[160px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={categoryDataWithPercent}
-                layout="vertical"
-                margin={{ top: 5, right: 75, left: 5, bottom: 5 }}
-                barCategoryGap={4}
-              >
-                <XAxis type="number" hide />
-                <YAxis
-                  type="category"
-                  dataKey="code"
-                  tick={{ fontSize: 11, fill: "#a1a1aa" }}
-                  tickLine={false}
-                  axisLine={false}
-                  width={26}
-                />
-                <Tooltip
-                  formatter={(value: number) => [`${value} species`, "Count"]}
-                  contentStyle={{
-                    backgroundColor: "#18181b",
-                    border: "1px solid #3f3f46",
-                    borderRadius: "8px",
-                  }}
-                  itemStyle={{ color: "#fff" }}
-                  labelStyle={{ color: "#a1a1aa" }}
-                />
-                <Bar
-                  dataKey="count"
-                  radius={[0, 4, 4, 0]}
-                  cursor="pointer"
-                  onClick={(data) => handleCategoryClick(data)}
-                >
-                  {categoryDataWithPercent.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={entry.color}
-                      opacity={selectedCategory && selectedCategory !== entry.code ? 0.3 : 1}
-                    />
-                  ))}
-                  <LabelList
-                    dataKey="label"
-                    position="right"
-                    style={{ fontSize: 11, fill: "#a1a1aa" }}
-                  />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          <p className="text-[10px] text-zinc-500 text-center mt-1">
-            Click to filter
-          </p>
-        </div>
-
-        {/* Right column - Two charts stacked or side by side */}
+        {/* Center column - Two charts stacked */}
         <div className="lg:col-span-7 flex flex-col gap-3">
+          {/* Number of Assessments chart */}
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex-1 flex flex-col">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                Number of Assessments
+              </h3>
+              {selectedAssessmentCount && (
+                <button
+                  onClick={() => setSelectedAssessmentCount(null)}
+                  className="text-xs text-purple-600 hover:text-purple-700 dark:text-purple-400"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <div className="flex-1 min-h-[70px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={reassessmentDistribution}
+                  margin={{ top: 20, right: 10, left: 10, bottom: 5 }}
+                  barCategoryGap={8}
+                >
+                  <XAxis
+                    dataKey="range"
+                    tick={{ fontSize: 10, fill: "#a1a1aa" }}
+                    tickLine={false}
+                    axisLine={false}
+                    interval={0}
+                  />
+                  <YAxis hide />
+                  <Tooltip
+                    formatter={(value: number) => [value, "Species"]}
+                    contentStyle={{
+                      backgroundColor: "#18181b",
+                      border: "1px solid #3f3f46",
+                      borderRadius: "8px",
+                    }}
+                    itemStyle={{ color: "#fff" }}
+                    labelStyle={{ color: "#a1a1aa" }}
+                  />
+                  <Bar
+                    dataKey="count"
+                    radius={[4, 4, 0, 0]}
+                    cursor="pointer"
+                    onClick={(data) => handleAssessmentCountClick(data)}
+                  >
+                    {reassessmentDistribution.map((entry, index) => (
+                      <Cell
+                        key={`assessment-cell-${index}`}
+                        fill="#8b5cf6"
+                        opacity={selectedAssessmentCount && selectedAssessmentCount !== entry.range ? 0.3 : 1}
+                      />
+                    ))}
+                    <LabelList
+                      dataKey="count"
+                      position="top"
+                      style={{ fontSize: 11, fill: "#a1a1aa" }}
+                    />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <p className="text-[10px] text-zinc-500 text-center mt-1">
+              Click to filter
+            </p>
+          </div>
+
           {/* Years Since Assessment chart */}
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex-1 flex flex-col">
             <div className="flex items-center justify-between mb-1">
@@ -569,73 +567,75 @@ export default function RedListView() {
               Click to filter
             </p>
           </div>
+        </div>
 
-          {/* Number of Assessments chart */}
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex-1 flex flex-col">
-            <div className="flex items-center justify-between mb-1">
-              <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                Number of Assessments
-              </h3>
-              {selectedAssessmentCount && (
-                <button
-                  onClick={() => setSelectedAssessmentCount(null)}
-                  className="text-xs text-purple-600 hover:text-purple-700 dark:text-purple-400"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-            <div className="flex-1 min-h-[70px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={reassessmentDistribution}
-                  margin={{ top: 20, right: 10, left: 10, bottom: 5 }}
-                  barCategoryGap={8}
-                >
-                  <XAxis
-                    dataKey="range"
-                    tick={{ fontSize: 10, fill: "#a1a1aa" }}
-                    tickLine={false}
-                    axisLine={false}
-                    interval={0}
-                  />
-                  <YAxis hide />
-                  <Tooltip
-                    formatter={(value: number) => [value, "Species"]}
-                    contentStyle={{
-                      backgroundColor: "#18181b",
-                      border: "1px solid #3f3f46",
-                      borderRadius: "8px",
-                    }}
-                    itemStyle={{ color: "#fff" }}
-                    labelStyle={{ color: "#a1a1aa" }}
-                  />
-                  <Bar
-                    dataKey="count"
-                    radius={[4, 4, 0, 0]}
-                    cursor="pointer"
-                    onClick={(data) => handleAssessmentCountClick(data)}
-                  >
-                    {reassessmentDistribution.map((entry, index) => (
-                      <Cell
-                        key={`assessment-cell-${index}`}
-                        fill="#8b5cf6"
-                        opacity={selectedAssessmentCount && selectedAssessmentCount !== entry.range ? 0.3 : 1}
-                      />
-                    ))}
-                    <LabelList
-                      dataKey="count"
-                      position="top"
-                      style={{ fontSize: 11, fill: "#a1a1aa" }}
-                    />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            <p className="text-[10px] text-zinc-500 text-center mt-1">
-              Click to filter
-            </p>
+        {/* Right column - Category distribution (clickable) */}
+        <div className="lg:col-span-10 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+          <div className="flex items-center justify-between mb-1">
+            <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Distribution by Category
+            </h3>
+            {selectedCategory && (
+              <button
+                onClick={() => setSelectedCategory(null)}
+                className="text-xs text-red-600 hover:text-red-700 dark:text-red-400"
+              >
+                Clear
+              </button>
+            )}
           </div>
+          <div className="flex-1 min-h-[160px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={categoryDataWithPercent}
+                layout="vertical"
+                margin={{ top: 5, right: 75, left: 5, bottom: 5 }}
+                barCategoryGap={4}
+              >
+                <XAxis type="number" hide />
+                <YAxis
+                  type="category"
+                  dataKey="code"
+                  tick={{ fontSize: 11, fill: "#a1a1aa" }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={26}
+                />
+                <Tooltip
+                  formatter={(value: number) => [`${value} species`, "Count"]}
+                  contentStyle={{
+                    backgroundColor: "#18181b",
+                    border: "1px solid #3f3f46",
+                    borderRadius: "8px",
+                  }}
+                  itemStyle={{ color: "#fff" }}
+                  labelStyle={{ color: "#a1a1aa" }}
+                />
+                <Bar
+                  dataKey="count"
+                  radius={[0, 4, 4, 0]}
+                  cursor="pointer"
+                  onClick={(data) => handleCategoryClick(data)}
+                >
+                  {categoryDataWithPercent.map((entry, index) => (
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={entry.color}
+                      opacity={selectedCategory && selectedCategory !== entry.code ? 0.3 : 1}
+                    />
+                  ))}
+                  <LabelList
+                    dataKey="label"
+                    position="right"
+                    style={{ fontSize: 11, fill: "#a1a1aa" }}
+                  />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <p className="text-[10px] text-zinc-500 text-center mt-1">
+            Click to filter
+          </p>
         </div>
       </div>
 
