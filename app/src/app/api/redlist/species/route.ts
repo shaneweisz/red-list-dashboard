@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 
 interface Species {
   sis_taxon_id: number;
+  assessment_id: number;
   scientific_name: string;
   category: string;
   year_published: string;
   url: string;
+  assessment_count: number;
+  previous_assessments: string[]; // years of previous assessments
 }
 
 interface CachedSpecies {
@@ -33,6 +36,7 @@ async function fetchWithAuth(url: string): Promise<Response> {
 
 interface Assessment {
   sis_taxon_id: number;
+  assessment_id: number;
   taxon_scientific_name: string;
   red_list_category_code: string;
   year_published: string;
@@ -41,6 +45,16 @@ interface Assessment {
 
 interface ApiResponse {
   assessments: Assessment[];
+}
+
+interface TaxonAssessment {
+  assessment_id: number;
+  year_published: string;
+  latest: boolean;
+}
+
+interface TaxonResponse {
+  assessments?: TaxonAssessment[];
 }
 
 export async function GET(request: NextRequest) {
@@ -61,16 +75,64 @@ export async function GET(request: NextRequest) {
       }
 
       const data: ApiResponse = await response.json();
-      const species: Species[] = (data.assessments || []).map((a) => ({
-        sis_taxon_id: a.sis_taxon_id,
-        scientific_name: a.taxon_scientific_name,
-        category: a.red_list_category_code,
-        year_published: a.year_published,
-        url: a.url,
-      }));
+      const assessments = data.assessments || [];
+
+      // Fetch assessment counts for each species in batches
+      const speciesWithCounts: Species[] = [];
+
+      // Process in batches of 10 to respect rate limits
+      for (let i = 0; i < assessments.length; i += 10) {
+        const batch = assessments.slice(i, i + 10);
+        const batchPromises = batch.map(async (a) => {
+          try {
+            const taxonRes = await fetchWithAuth(
+              `https://api.iucnredlist.org/api/v4/taxa/sis/${a.sis_taxon_id}`
+            );
+            if (taxonRes.ok) {
+              const taxonData: TaxonResponse = await taxonRes.json();
+              const allAssessments = taxonData.assessments || [];
+              // Get previous assessment years (not the latest one)
+              const previousAssessments = allAssessments
+                .filter((assess) => !assess.latest)
+                .map((assess) => assess.year_published)
+                .sort((a, b) => parseInt(b) - parseInt(a)); // Sort descending
+              return {
+                sis_taxon_id: a.sis_taxon_id,
+                assessment_id: a.assessment_id,
+                scientific_name: a.taxon_scientific_name,
+                category: a.red_list_category_code,
+                year_published: a.year_published,
+                url: a.url,
+                assessment_count: allAssessments.length,
+                previous_assessments: previousAssessments,
+              };
+            }
+          } catch {
+            // Fall back to count of 1 if fetch fails
+          }
+          return {
+            sis_taxon_id: a.sis_taxon_id,
+            assessment_id: a.assessment_id,
+            scientific_name: a.taxon_scientific_name,
+            category: a.red_list_category_code,
+            year_published: a.year_published,
+            url: a.url,
+            assessment_count: 1,
+            previous_assessments: [],
+          };
+        });
+
+        const batchResults = await Promise.all(batchPromises);
+        speciesWithCounts.push(...batchResults);
+
+        // Small delay between batches
+        if (i + 10 < assessments.length) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+      }
 
       cachedSpecies = {
-        species,
+        species: speciesWithCounts,
         lastUpdated: new Date().toISOString(),
       };
       cacheTime = Date.now();

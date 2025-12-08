@@ -44,10 +44,19 @@ interface AssessmentsResponse {
 
 interface Species {
   sis_taxon_id: number;
+  assessment_id: number;
   scientific_name: string;
   category: string;
   year_published: string;
   url: string;
+  assessment_count: number;
+  previous_assessments: string[];
+}
+
+interface SpeciesDetails {
+  criteria: string | null;
+  commonName: string | null;
+  gbifUrl: string | null;
 }
 
 interface SpeciesResponse {
@@ -77,7 +86,22 @@ export default function RedListView() {
 
   // Filters
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedYearRange, setSelectedYearRange] = useState<string | null>(null);
+  const [selectedAssessmentCount, setSelectedAssessmentCount] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Sorting
+  type SortField = "year" | "category" | null;
+  type SortDirection = "asc" | "desc";
+  const [sortField, setSortField] = useState<SortField>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 10;
+
+  // Species details cache (images, criteria, common names)
+  const [speciesDetails, setSpeciesDetails] = useState<Record<number, SpeciesDetails>>({});
 
   // Load stats and assessments
   useEffect(() => {
@@ -113,20 +137,176 @@ export default function RedListView() {
     fetchData();
   }, []);
 
-  // Filter species based on category and search
+  // Helper to check if species matches year range filter
+  const matchesYearRangeFilter = (yearPublished: string): boolean => {
+    if (!selectedYearRange) return true;
+    const currentYear = new Date().getFullYear();
+    const yearsSince = currentYear - parseInt(yearPublished);
+
+    switch (selectedYearRange) {
+      case "0-1 years": return yearsSince <= 1;
+      case "2-5 years": return yearsSince >= 2 && yearsSince <= 5;
+      case "6-10 years": return yearsSince >= 6 && yearsSince <= 10;
+      case "11-20 years": return yearsSince >= 11 && yearsSince <= 20;
+      case "20+ years": return yearsSince > 20;
+      default: return true;
+    }
+  };
+
+  // Helper to check if species matches assessment count filter
+  const matchesAssessmentCountFilter = (count: number): boolean => {
+    if (!selectedAssessmentCount) return true;
+    switch (selectedAssessmentCount) {
+      case "1": return count === 1;
+      case "2": return count === 2;
+      case "3": return count === 3;
+      case "4+": return count >= 4;
+      default: return true;
+    }
+  };
+
+  // Filter species based on category, year range, assessment count, and search
   const filteredSpecies = species.filter((s) => {
     const matchesCategory = !selectedCategory || s.category === selectedCategory;
+    const matchesYear = matchesYearRangeFilter(s.year_published);
+    const matchesAssessment = matchesAssessmentCountFilter(s.assessment_count);
     const matchesSearch = !searchQuery ||
       s.scientific_name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
+    return matchesCategory && matchesYear && matchesAssessment && matchesSearch;
   });
 
-  // Handle chart bar click
-  const handleBarClick = (data: { code: string }) => {
-    if (selectedCategory === data.code) {
+  // Calculate reassessment distribution from species data
+  const reassessmentDistribution = [
+    { range: "1", count: species.filter(s => s.assessment_count === 1).length },
+    { range: "2", count: species.filter(s => s.assessment_count === 2).length },
+    { range: "3", count: species.filter(s => s.assessment_count === 3).length },
+    { range: "4+", count: species.filter(s => s.assessment_count >= 4).length },
+  ];
+
+  // Category order for sorting (most threatened first)
+  const CATEGORY_ORDER: Record<string, number> = {
+    EX: 0, EW: 1, CR: 2, EN: 3, VU: 4, NT: 5, LC: 6, DD: 7,
+  };
+
+  // Sort filtered species
+  const sortedSpecies = [...filteredSpecies].sort((a, b) => {
+    if (!sortField) return 0;
+
+    let comparison = 0;
+    if (sortField === "year") {
+      comparison = parseInt(a.year_published) - parseInt(b.year_published);
+    } else if (sortField === "category") {
+      comparison = (CATEGORY_ORDER[a.category] ?? 99) - (CATEGORY_ORDER[b.category] ?? 99);
+    }
+
+    return sortDirection === "asc" ? comparison : -comparison;
+  });
+
+  // Pagination calculations
+  const totalPages = Math.ceil(sortedSpecies.length / PAGE_SIZE);
+  const paginatedSpecies = sortedSpecies.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE
+  );
+
+  // Handle sort toggle
+  const handleSort = (field: "year" | "category") => {
+    if (sortField === field) {
+      // Toggle direction or clear sort
+      if (sortDirection === "desc") {
+        setSortDirection("asc");
+      } else {
+        setSortField(null);
+      }
+    } else {
+      setSortField(field);
+      setSortDirection("desc");
+    }
+    setCurrentPage(1);
+  };
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedCategory, selectedYearRange, selectedAssessmentCount, searchQuery]);
+
+  // Fetch details for visible species
+  useEffect(() => {
+    async function fetchDetails() {
+      const speciesToFetch = paginatedSpecies.filter(
+        (s) => !speciesDetails[s.sis_taxon_id]
+      );
+
+      if (speciesToFetch.length === 0) return;
+
+      const detailPromises = speciesToFetch.map(async (s) => {
+        try {
+          const res = await fetch(
+            `/api/redlist/species/${s.sis_taxon_id}?assessmentId=${s.assessment_id}&name=${encodeURIComponent(s.scientific_name)}`
+          );
+          if (res.ok) {
+            const data = await res.json();
+            return { id: s.sis_taxon_id, data };
+          }
+        } catch {
+          // Ignore errors for individual species
+        }
+        return null;
+      });
+
+      const results = await Promise.all(detailPromises);
+      const newDetails: Record<number, SpeciesDetails> = {};
+
+      results.forEach((result) => {
+        if (result) {
+          newDetails[result.id] = {
+            criteria: result.data.criteria,
+            commonName: result.data.commonName,
+            gbifUrl: result.data.gbifUrl,
+          };
+        }
+      });
+
+      if (Object.keys(newDetails).length > 0) {
+        setSpeciesDetails((prev) => ({ ...prev, ...newDetails }));
+      }
+    }
+
+    if (paginatedSpecies.length > 0) {
+      fetchDetails();
+    }
+  }, [paginatedSpecies, speciesDetails]);
+
+  // Handle category bar click
+  const handleCategoryClick = (data: { payload?: { code?: string } }) => {
+    const code = data.payload?.code;
+    if (!code) return;
+    if (selectedCategory === code) {
       setSelectedCategory(null); // Toggle off
     } else {
-      setSelectedCategory(data.code);
+      setSelectedCategory(code);
+    }
+  };
+
+  // Handle year range bar click
+  const handleYearClick = (data: { payload?: { range?: string } }) => {
+    const range = data.payload?.range;
+    if (!range) return;
+    if (selectedYearRange === range) {
+      setSelectedYearRange(null); // Toggle off
+    } else {
+      setSelectedYearRange(range);
+    }
+  };
+
+  // Handle assessment count bar click
+  const handleAssessmentCountClick = (data: { payload?: { range?: string } }) => {
+    const range = data.payload?.range;
+    if (!range) return;
+    if (selectedAssessmentCount === range) {
+      setSelectedAssessmentCount(null); // Toggle off
+    } else {
+      setSelectedAssessmentCount(range);
     }
   };
 
@@ -188,29 +368,17 @@ export default function RedListView() {
         <div className="lg:col-span-3 space-y-3">
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
             <p className="text-xs text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
-              Total Assessed
+              Sample Size
             </p>
             <p className="text-2xl font-bold text-zinc-800 dark:text-zinc-100 mt-1">
-              {stats.totalAssessed.toLocaleString()}
+              {stats.sampleSize}
             </p>
             <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">
-              plant species globally
+              of ~{stats.totalAssessed.toLocaleString()} plants
             </p>
           </div>
 
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
-              Threatened
-            </p>
-            <p className="text-2xl font-bold text-red-600 dark:text-red-500 mt-1">
-              {threatenedCount}
-            </p>
-            <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">
-              CR + EN + VU ({((threatenedCount / stats.sampleSize) * 100).toFixed(0)}%)
-            </p>
-          </div>
-
-          <div className="bg-white dark:bg-zinc-900 border border-amber-200 dark:border-amber-800/50 rounded-xl p-4">
             <p className="text-xs text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
               Stale Assessments
             </p>
@@ -224,8 +392,8 @@ export default function RedListView() {
         </div>
 
         {/* Center column - Category distribution (clickable) */}
-        <div className="lg:col-span-10 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
-          <div className="flex items-center justify-between mb-4">
+        <div className="lg:col-span-10 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+          <div className="flex items-center justify-between mb-1">
             <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
               Distribution by Category
             </h3>
@@ -234,25 +402,26 @@ export default function RedListView() {
                 onClick={() => setSelectedCategory(null)}
                 className="text-xs text-red-600 hover:text-red-700 dark:text-red-400"
               >
-                Clear filter
+                Clear
               </button>
             )}
           </div>
-          <div className="h-72">
+          <div className="flex-1 min-h-[200px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={categoryDataWithPercent}
                 layout="vertical"
-                margin={{ top: 5, right: 80, left: 100, bottom: 5 }}
+                margin={{ top: 5, right: 75, left: 5, bottom: 5 }}
+                barCategoryGap={4}
               >
                 <XAxis type="number" hide />
                 <YAxis
                   type="category"
-                  dataKey="name"
-                  tick={{ fontSize: 11, fill: "#71717a" }}
+                  dataKey="code"
+                  tick={{ fontSize: 11, fill: "#a1a1aa" }}
                   tickLine={false}
                   axisLine={false}
-                  width={95}
+                  width={26}
                 />
                 <Tooltip
                   formatter={(value: number) => [`${value} species`, "Count"]}
@@ -267,7 +436,7 @@ export default function RedListView() {
                   dataKey="count"
                   radius={[0, 4, 4, 0]}
                   cursor="pointer"
-                  onClick={(data) => handleBarClick(data)}
+                  onClick={(data) => handleCategoryClick(data)}
                 >
                   {categoryDataWithPercent.map((entry, index) => (
                     <Cell
@@ -279,44 +448,52 @@ export default function RedListView() {
                   <LabelList
                     dataKey="label"
                     position="right"
-                    style={{ fontSize: 10, fill: "#71717a" }}
+                    style={{ fontSize: 11, fill: "#a1a1aa" }}
                   />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
-          <p className="text-xs text-zinc-400 text-center mt-2">
-            Click a bar to filter the species list below
+          <p className="text-[10px] text-zinc-500 text-center mt-1">
+            Click to filter
           </p>
         </div>
 
-        {/* Right column - Years chart */}
-        <div className="lg:col-span-7">
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 h-full">
-            <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-4">
-              Years Since Assessment
-            </h3>
-            <div className="h-64">
+        {/* Right column - Two charts stacked or side by side */}
+        <div className="lg:col-span-7 flex flex-col gap-3">
+          {/* Years Since Assessment chart */}
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex-1 flex flex-col">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                Years Since Assessment
+              </h3>
+              {selectedYearRange && (
+                <button
+                  onClick={() => setSelectedYearRange(null)}
+                  className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <div className="flex-1 min-h-[100px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
-                  data={assessments.yearsSinceAssessment}
-                  margin={{ top: 5, right: 10, left: 0, bottom: 25 }}
+                  data={assessments.yearsSinceAssessment.map(y => ({
+                    ...y,
+                    shortRange: y.range.replace(' years', 'y').replace('20+y', '>20y')
+                  }))}
+                  margin={{ top: 20, right: 10, left: 10, bottom: 5 }}
+                  barCategoryGap={8}
                 >
                   <XAxis
-                    dataKey="range"
-                    tick={{ fontSize: 9, fill: "#71717a" }}
+                    dataKey="shortRange"
+                    tick={{ fontSize: 10, fill: "#a1a1aa" }}
                     tickLine={false}
                     axisLine={false}
-                    angle={-15}
-                    textAnchor="end"
-                    height={45}
+                    interval={0}
                   />
-                  <YAxis
-                    tick={{ fontSize: 9, fill: "#71717a" }}
-                    tickLine={false}
-                    axisLine={false}
-                    width={30}
-                  />
+                  <YAxis hide />
                   <Tooltip
                     formatter={(value: number) => [value, "Species"]}
                     contentStyle={{
@@ -326,16 +503,97 @@ export default function RedListView() {
                       color: "#fff",
                     }}
                   />
-                  <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]}>
+                  <Bar
+                    dataKey="count"
+                    radius={[4, 4, 0, 0]}
+                    cursor="pointer"
+                    onClick={(data) => handleYearClick(data)}
+                  >
+                    {assessments.yearsSinceAssessment.map((entry, index) => (
+                      <Cell
+                        key={`year-cell-${index}`}
+                        fill="#3b82f6"
+                        opacity={selectedYearRange && selectedYearRange !== entry.range ? 0.3 : 1}
+                      />
+                    ))}
                     <LabelList
                       dataKey="count"
                       position="top"
-                      style={{ fontSize: 9, fill: "#71717a" }}
+                      style={{ fontSize: 11, fill: "#a1a1aa" }}
                     />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
+            <p className="text-[10px] text-zinc-500 text-center mt-1">
+              Click to filter
+            </p>
+          </div>
+
+          {/* Number of Assessments chart */}
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex-1 flex flex-col">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                Number of Assessments
+              </h3>
+              {selectedAssessmentCount && (
+                <button
+                  onClick={() => setSelectedAssessmentCount(null)}
+                  className="text-xs text-purple-600 hover:text-purple-700 dark:text-purple-400"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <div className="flex-1 min-h-[100px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={reassessmentDistribution}
+                  margin={{ top: 20, right: 10, left: 10, bottom: 5 }}
+                  barCategoryGap={8}
+                >
+                  <XAxis
+                    dataKey="range"
+                    tick={{ fontSize: 10, fill: "#a1a1aa" }}
+                    tickLine={false}
+                    axisLine={false}
+                    interval={0}
+                  />
+                  <YAxis hide />
+                  <Tooltip
+                    formatter={(value: number) => [value, "Species"]}
+                    contentStyle={{
+                      backgroundColor: "#18181b",
+                      border: "1px solid #3f3f46",
+                      borderRadius: "8px",
+                      color: "#fff",
+                    }}
+                  />
+                  <Bar
+                    dataKey="count"
+                    radius={[4, 4, 0, 0]}
+                    cursor="pointer"
+                    onClick={(data) => handleAssessmentCountClick(data)}
+                  >
+                    {reassessmentDistribution.map((entry, index) => (
+                      <Cell
+                        key={`assessment-cell-${index}`}
+                        fill="#8b5cf6"
+                        opacity={selectedAssessmentCount && selectedAssessmentCount !== entry.range ? 0.3 : 1}
+                      />
+                    ))}
+                    <LabelList
+                      dataKey="count"
+                      position="top"
+                      style={{ fontSize: 11, fill: "#a1a1aa" }}
+                    />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <p className="text-[10px] text-zinc-500 text-center mt-1">
+              Click to filter
+            </p>
           </div>
         </div>
       </div>
@@ -363,9 +621,40 @@ export default function RedListView() {
               </svg>
             </div>
             {selectedCategory && (
-              <span className="px-3 py-1 text-sm rounded-full" style={{ backgroundColor: CATEGORY_COLORS[selectedCategory] + "20", color: CATEGORY_COLORS[selectedCategory] }}>
+              <button
+                onClick={() => setSelectedCategory(null)}
+                className="px-3 py-1 text-sm rounded-full flex items-center gap-1 hover:opacity-80"
+                style={{ backgroundColor: CATEGORY_COLORS[selectedCategory] + "20", color: CATEGORY_COLORS[selectedCategory] }}
+              >
                 {selectedCategory}
-              </span>
+                <span className="text-xs">×</span>
+              </button>
+            )}
+            {selectedYearRange && (
+              <button
+                onClick={() => setSelectedYearRange(null)}
+                className="px-3 py-1 text-sm rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 flex items-center gap-1 hover:opacity-80"
+              >
+                {selectedYearRange}
+                <span className="text-xs">×</span>
+              </button>
+            )}
+            {selectedAssessmentCount && (
+              <button
+                onClick={() => setSelectedAssessmentCount(null)}
+                className="px-3 py-1 text-sm rounded-full bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400 flex items-center gap-1 hover:opacity-80"
+              >
+                {selectedAssessmentCount} assessment{selectedAssessmentCount !== "1" ? "s" : ""}
+                <span className="text-xs">×</span>
+              </button>
+            )}
+            {(selectedCategory || selectedYearRange || selectedAssessmentCount) && (
+              <button
+                onClick={() => { setSelectedCategory(null); setSelectedYearRange(null); setSelectedAssessmentCount(null); }}
+                className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 underline"
+              >
+                Clear all
+              </button>
             )}
             <span className="text-sm text-zinc-500">
               {filteredSpecies.length} species
@@ -374,37 +663,65 @@ export default function RedListView() {
         </div>
 
         {/* Species table */}
-        <div className="overflow-x-auto max-h-96">
+        <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-zinc-50 dark:bg-zinc-800 sticky top-0">
+            <thead className="bg-zinc-50 dark:bg-zinc-800">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
                   Species
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                  Category
+                <th
+                  className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
+                  onClick={() => handleSort("category")}
+                >
+                  <span className="flex items-center gap-1">
+                    Category
+                    {sortField === "category" && (
+                      <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
+                    )}
+                  </span>
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                  Year Assessed
+                  Criteria
+                </th>
+                <th
+                  className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
+                  onClick={() => handleSort("year")}
+                >
+                  <span className="flex items-center gap-1">
+                    Year
+                    {sortField === "year" && (
+                      <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
+                    )}
+                  </span>
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                  Previous Assessments
                 </th>
                 <th className="px-4 py-3 text-center text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                  Link
+                  Links
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
-              {filteredSpecies.map((s) => {
+              {paginatedSpecies.map((s) => {
                 const yearsSince = currentYear - parseInt(s.year_published);
+                const details = speciesDetails[s.sis_taxon_id];
                 return (
                   <tr key={s.sis_taxon_id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
                     <td className="px-4 py-3">
-                      <span className="italic text-zinc-900 dark:text-zinc-100">
+                      <span className="italic font-medium text-zinc-900 dark:text-zinc-100">
                         {s.scientific_name}
                       </span>
+                      {details?.commonName && (
+                        <span className="text-zinc-500 dark:text-zinc-400 text-sm ml-2">
+                          ({details.commonName})
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span
-                        className="px-2 py-1 text-xs font-medium rounded"
+                        className="px-2 py-0.5 text-xs font-medium rounded"
                         style={{
                           backgroundColor: CATEGORY_COLORS[s.category] + "20",
                           color: s.category === "EX" || s.category === "EW" ? "#fff" : CATEGORY_COLORS[s.category],
@@ -414,30 +731,54 @@ export default function RedListView() {
                         {s.category}
                       </span>
                     </td>
+                    <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400 text-xs">
+                      {details?.criteria || "—"}
+                    </td>
                     <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
                       {s.year_published}
                       {yearsSince > 10 && (
-                        <span className="ml-2 text-xs text-amber-600">({yearsSince}y ago)</span>
+                        <span className="ml-1 text-xs text-amber-600">({yearsSince}y ago)</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-center">
-                      <a
-                        href={s.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-red-600 hover:text-red-700"
-                      >
-                        <svg className="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                        </svg>
-                      </a>
+                    <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400 text-sm">
+                      {s.previous_assessments.length > 0
+                        ? s.previous_assessments.join(", ")
+                        : "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-center gap-1">
+                        {details?.gbifUrl && (
+                          <a
+                            href={details.gbifUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1.5 text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-900/20 rounded"
+                            title="View on GBIF"
+                          >
+                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                            </svg>
+                          </a>
+                        )}
+                        <a
+                          href={s.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-1.5 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
+                          title="View on IUCN Red List"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                          </svg>
+                        </a>
+                      </div>
                     </td>
                   </tr>
                 );
               })}
               {filteredSpecies.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-zinc-500">
+                  <td colSpan={6} className="px-4 py-8 text-center text-zinc-500">
                     No species found
                   </td>
                 </tr>
@@ -445,12 +786,36 @@ export default function RedListView() {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-zinc-200 dark:border-zinc-800">
+            <div className="text-sm text-zinc-500">
+              Showing {(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, filteredSpecies.length)} of {filteredSpecies.length}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-zinc-50 dark:hover:bg-zinc-800"
+              >
+                Previous
+              </button>
+              <span className="text-sm text-zinc-600 dark:text-zinc-400">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-zinc-50 dark:hover:bg-zinc-800"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Sample note */}
-      <p className="text-xs text-zinc-400 dark:text-zinc-500 text-center">
-        Showing sample of {stats.sampleSize} species from IUCN Red List
-      </p>
     </div>
   );
 }
