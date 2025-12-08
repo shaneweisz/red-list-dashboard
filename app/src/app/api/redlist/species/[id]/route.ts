@@ -59,7 +59,7 @@ export async function GET(
     const promises: Promise<Response>[] = [
       // IUCN taxon details (for assessment count and common name)
       fetchWithAuth(`https://api.iucnredlist.org/api/v4/taxa/sis/${cacheKey}`),
-      // GBIF species search by name (for GBIF link)
+      // GBIF species search by name (for GBIF link and taxon key)
       ...(scientificName ? [fetch(`https://api.gbif.org/v1/species/match?name=${encodeURIComponent(scientificName)}&kingdom=Plantae`)] : []),
     ];
 
@@ -75,6 +75,7 @@ export async function GET(
     let criteria: string | null = null;
     let commonName: string | null = null;
     let gbifUrl: string | null = null;
+    let gbifOccurrences: number | null = null;
     let assessmentCount = 1;
 
     // Parse IUCN taxon response (for assessment count and common name)
@@ -91,12 +92,24 @@ export async function GET(
       }
     }
 
-    // Parse GBIF response
+    // Parse GBIF response and fetch occurrence count
     const gbifIndex = 1;
     if (scientificName && responses[gbifIndex]?.ok) {
       const gbifMatch = await responses[gbifIndex].json();
       if (gbifMatch.usageKey) {
         gbifUrl = `https://www.gbif.org/species/${gbifMatch.usageKey}`;
+
+        // Fetch occurrence count from GBIF
+        try {
+          const occResponse = await fetch(
+            `https://api.gbif.org/v1/occurrence/count?taxonKey=${gbifMatch.usageKey}`
+          );
+          if (occResponse.ok) {
+            gbifOccurrences = await occResponse.json();
+          }
+        } catch {
+          // Ignore occurrence fetch errors
+        }
       }
     }
 
@@ -112,6 +125,7 @@ export async function GET(
       criteria,
       commonName,
       gbifUrl,
+      gbifOccurrences,
       assessmentCount,
     };
 

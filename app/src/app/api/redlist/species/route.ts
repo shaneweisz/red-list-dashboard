@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import * as fs from "fs";
+import * as path from "path";
 
 interface Species {
   sis_taxon_id: number;
@@ -8,53 +10,48 @@ interface Species {
   year_published: string;
   url: string;
   assessment_count: number;
-  previous_assessments: string[]; // years of previous assessments
+  previous_assessments: string[];
 }
 
-interface CachedSpecies {
+interface PrecomputedData {
   species: Species[];
-  lastUpdated: string;
+  metadata: {
+    totalSpecies: number;
+    fetchedAt: string;
+    pagesProcessed: number;
+    byCategory: Record<string, number>;
+  };
 }
 
-// Cache for 24 hours
-let cachedSpecies: CachedSpecies | null = null;
-let cacheTime: number = 0;
-const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+// In-memory cache of the JSON file
+let cachedData: PrecomputedData | null = null;
+let cacheLoadTime: number = 0;
+const CACHE_RELOAD_INTERVAL = 60 * 60 * 1000; // Reload file every hour
 
-async function fetchWithAuth(url: string): Promise<Response> {
-  const apiKey = process.env.RED_LIST_API_KEY;
-  if (!apiKey) {
-    throw new Error("RED_LIST_API_KEY environment variable not set");
+function loadPrecomputedData(): PrecomputedData | null {
+  const dataPath = path.join(process.cwd(), "data", "redlist-species.json");
+
+  try {
+    if (!fs.existsSync(dataPath)) {
+      console.warn(`Pre-computed data file not found: ${dataPath}`);
+      return null;
+    }
+
+    const fileContent = fs.readFileSync(dataPath, "utf-8");
+    return JSON.parse(fileContent) as PrecomputedData;
+  } catch (error) {
+    console.error("Error loading pre-computed data:", error);
+    return null;
   }
-
-  return fetch(url, {
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-    },
-  });
 }
 
-interface Assessment {
-  sis_taxon_id: number;
-  assessment_id: number;
-  taxon_scientific_name: string;
-  red_list_category_code: string;
-  year_published: string;
-  url: string;
-}
-
-interface ApiResponse {
-  assessments: Assessment[];
-}
-
-interface TaxonAssessment {
-  assessment_id: number;
-  year_published: string;
-  latest: boolean;
-}
-
-interface TaxonResponse {
-  assessments?: TaxonAssessment[];
+function getSpeciesData(): PrecomputedData | null {
+  // Reload from file if cache is stale or empty
+  if (!cachedData || Date.now() - cacheLoadTime > CACHE_RELOAD_INTERVAL) {
+    cachedData = loadPrecomputedData();
+    cacheLoadTime = Date.now();
+  }
+  return cachedData;
 }
 
 export async function GET(request: NextRequest) {
@@ -62,91 +59,22 @@ export async function GET(request: NextRequest) {
   const category = searchParams.get("category");
   const search = searchParams.get("search")?.toLowerCase();
 
-  // Return cached data if still valid
-  if (!cachedSpecies || Date.now() - cacheTime > CACHE_DURATION) {
-    try {
-      // Fetch 1 page of species
-      const response = await fetchWithAuth(
-        `https://api.iucnredlist.org/api/v4/taxa/kingdom/Plantae?latest=true&page=400`
-      );
+  const data = getSpeciesData();
 
-      if (!response.ok) {
-        throw new Error(`IUCN API error: ${response.statusText}`);
-      }
-
-      const data: ApiResponse = await response.json();
-      const assessments = data.assessments || [];
-
-      // Fetch assessment counts for each species in batches
-      const speciesWithCounts: Species[] = [];
-
-      // Process in batches of 10 to respect rate limits
-      for (let i = 0; i < assessments.length; i += 10) {
-        const batch = assessments.slice(i, i + 10);
-        const batchPromises = batch.map(async (a) => {
-          try {
-            const taxonRes = await fetchWithAuth(
-              `https://api.iucnredlist.org/api/v4/taxa/sis/${a.sis_taxon_id}`
-            );
-            if (taxonRes.ok) {
-              const taxonData: TaxonResponse = await taxonRes.json();
-              const allAssessments = taxonData.assessments || [];
-              // Get previous assessment years (not the latest one)
-              const previousAssessments = allAssessments
-                .filter((assess) => !assess.latest)
-                .map((assess) => assess.year_published)
-                .sort((a, b) => parseInt(b) - parseInt(a)); // Sort descending
-              return {
-                sis_taxon_id: a.sis_taxon_id,
-                assessment_id: a.assessment_id,
-                scientific_name: a.taxon_scientific_name,
-                category: a.red_list_category_code,
-                year_published: a.year_published,
-                url: a.url,
-                assessment_count: allAssessments.length,
-                previous_assessments: previousAssessments,
-              };
-            }
-          } catch {
-            // Fall back to count of 1 if fetch fails
-          }
-          return {
-            sis_taxon_id: a.sis_taxon_id,
-            assessment_id: a.assessment_id,
-            scientific_name: a.taxon_scientific_name,
-            category: a.red_list_category_code,
-            year_published: a.year_published,
-            url: a.url,
-            assessment_count: 1,
-            previous_assessments: [],
-          };
-        });
-
-        const batchResults = await Promise.all(batchPromises);
-        speciesWithCounts.push(...batchResults);
-
-        // Small delay between batches
-        if (i + 10 < assessments.length) {
-          await new Promise((resolve) => setTimeout(resolve, 100));
-        }
-      }
-
-      cachedSpecies = {
-        species: speciesWithCounts,
-        lastUpdated: new Date().toISOString(),
-      };
-      cacheTime = Date.now();
-    } catch (error) {
-      console.error("Error fetching Red List species:", error);
-      return NextResponse.json(
-        { error: error instanceof Error ? error.message : "Unknown error" },
-        { status: 500 }
-      );
-    }
+  if (!data) {
+    return NextResponse.json(
+      {
+        error:
+          "Species data not available. Run the fetch script: npx tsx scripts/fetch-redlist-species.ts",
+        species: [],
+        total: 0,
+      },
+      { status: 503 }
+    );
   }
 
   // Filter by category if specified
-  let filtered = cachedSpecies.species;
+  let filtered = data.species;
 
   if (category) {
     filtered = filtered.filter((s) => s.category === category);
@@ -161,6 +89,6 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     species: filtered,
     total: filtered.length,
-    cached: true,
+    metadata: data.metadata,
   });
 }

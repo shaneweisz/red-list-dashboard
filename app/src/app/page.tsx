@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
+import { ThemeToggle } from "../components/ThemeToggle";
 
 // Dynamically import Leaflet components
 const MapContainer = dynamic(
@@ -111,16 +113,6 @@ const WorldMap = dynamic(
   { ssr: false }
 );
 
-// Dynamically import RedListView component
-const RedListView = dynamic(
-  () => import("../components/redlist/RedListView"),
-  { ssr: false, loading: () => (
-    <div className="flex flex-col items-center justify-center py-20">
-      <div className="animate-spin h-10 w-10 border-4 border-red-600 border-t-transparent rounded-full" />
-      <p className="mt-4 text-zinc-500 dark:text-zinc-400">Loading Red List view...</p>
-    </div>
-  )}
-);
 
 // ============================================================================
 // Constants
@@ -371,9 +363,6 @@ function ExpandedRow({ speciesKey, speciesName, regionMode, countryCode, mounted
 // ============================================================================
 
 export default function Home() {
-  // Tab navigation
-  const [activeTab, setActiveTab] = useState<"gbif" | "redlist">("gbif");
-
   // Region mode
   const [regionMode, setRegionMode] = useState<RegionMode>("global");
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
@@ -603,64 +592,45 @@ export default function Home() {
       <main className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-6 flex items-start justify-between">
-          <div className="flex items-center gap-6">
-            <div>
-              <h1 className="text-3xl font-bold text-zinc-900 dark:text-zinc-100 mb-2">
-                {activeTab === "gbif" ? "Plant GBIF Data Explorer" : "Plant Conservation Status"}
-              </h1>
-              <p className="text-zinc-600 dark:text-zinc-400">
-                {activeTab === "gbif" ? (
-                  stats
-                    ? `Breaking down GBIF occurrence data for ${formatNumber(stats.total)} plant species ${selectedCountry && selectedCountryName ? `in ${selectedCountryName}` : "across the world"}`
-                    : regionMode === "country" && !selectedCountry
-                      ? "Select a country on the map to explore its plant species"
-                      : `Loading...`
-                ) : (
-                  "IUCN Red List statistics for plant species"
-                )}
-              </p>
-            </div>
+          <div>
+            <h1 className="text-3xl font-bold text-zinc-900 dark:text-zinc-100 mb-2">
+              Flora Explorer
+            </h1>
+            <p className="text-zinc-600 dark:text-zinc-400">
+              {stats
+                ? `Breaking down GBIF occurrence data for ${formatNumber(stats.total)} plant species ${selectedCountry && selectedCountryName ? `in ${selectedCountryName}` : "across the world"}`
+                : regionMode === "country" && !selectedCountry
+                  ? "Select a country on the map to explore its plant species"
+                  : `Loading...`}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
             {/* Tab Navigation */}
             <div className="flex gap-1 bg-zinc-100 dark:bg-zinc-800 rounded-lg p-1">
-              <button
-                onClick={() => setActiveTab("gbif")}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  activeTab === "gbif"
-                    ? "bg-white dark:bg-zinc-900 text-green-600 shadow-sm"
-                    : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200"
-                }`}
-              >
+              <div className="px-4 py-1.5 rounded-md text-sm font-medium bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm">
                 GBIF Explorer
-              </button>
-              <button
-                onClick={() => setActiveTab("redlist")}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  activeTab === "redlist"
-                    ? "bg-white dark:bg-zinc-900 text-red-600 shadow-sm"
-                    : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200"
-                }`}
+              </div>
+              <Link
+                href="/redlist"
+                className="px-4 py-1.5 rounded-md text-sm font-medium transition-colors text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
               >
                 Red List Stats
-              </button>
+              </Link>
             </div>
+            <ThemeToggle />
+            <a
+              href="/experiment"
+              className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+              title="Classification Experiment"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+              </svg>
+            </a>
           </div>
-          <a
-            href="/experiment"
-            className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-            title="Classification Experiment"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-            </svg>
-          </a>
         </div>
 
-        {/* Tab Content */}
-        {activeTab === "redlist" ? (
-          <RedListView />
-        ) : (
-          <>
-            {/* Stats, Map, and Distribution - 15% | 50% | 35% layout */}
+        {/* Stats, Map, and Distribution - 15% | 50% | 35% layout */}
             <div className="grid grid-cols-1 lg:grid-cols-20 gap-4 mb-4">
               {/* Stats stacked vertically - takes 3 columns (15%) */}
           {stats && (
@@ -1024,8 +994,6 @@ export default function Home() {
               </button>
             </div>
           </div>
-        )}
-          </>
         )}
       </main>
     </div>
