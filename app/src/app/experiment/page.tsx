@@ -304,7 +304,7 @@ export default function ExperimentPage() {
       <main className="max-w-6xl mx-auto">
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-zinc-900 dark:text-zinc-100 mb-2">
-            Tree Species Classification in Cambridge
+            WIP: Tree Species Classification in Cambridge
           </h1>
           <p className="text-zinc-600 dark:text-zinc-400">
             Validating classifier performance on held-out occurrences vs random background points
@@ -352,21 +352,19 @@ export default function ExperimentPage() {
             <div className="flex rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700">
               <button
                 onClick={() => setExperimentModelType("logistic")}
-                className={`px-3 py-1.5 text-sm font-medium transition-colors ${
-                  experimentModelType === "logistic"
+                className={`px-3 py-1.5 text-sm font-medium transition-colors ${experimentModelType === "logistic"
                     ? "bg-green-600 text-white"
                     : "bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700"
-                }`}
+                  }`}
               >
                 Logistic
               </button>
               <button
                 onClick={() => setExperimentModelType("mlp")}
-                className={`px-3 py-1.5 text-sm font-medium transition-colors border-l border-zinc-200 dark:border-zinc-700 ${
-                  experimentModelType === "mlp"
+                className={`px-3 py-1.5 text-sm font-medium transition-colors border-l border-zinc-200 dark:border-zinc-700 ${experimentModelType === "mlp"
                     ? "bg-purple-600 text-white"
                     : "bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700"
-                }`}
+                  }`}
               >
                 MLP
               </button>
@@ -383,11 +381,10 @@ export default function ExperimentPage() {
                 <button
                   key={n}
                   onClick={() => setSelectedNPositive(n)}
-                  className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                    selectedNPositive === n
+                  className={`px-2 py-1 rounded text-xs font-medium transition-colors ${selectedNPositive === n
                       ? "bg-green-600 text-white"
                       : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300"
-                  }`}
+                    }`}
                 >
                   {n}
                 </button>
@@ -407,11 +404,10 @@ export default function ExperimentPage() {
                 <button
                   key={idx}
                   onClick={() => setSelectedTrialIdx(idx)}
-                  className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                    selectedTrialIdx === idx
+                  className={`px-2 py-1 rounded text-xs font-medium transition-colors ${selectedTrialIdx === idx
                       ? "bg-blue-600 text-white"
                       : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300"
-                  }`}
+                    }`}
                 >
                   {idx + 1}
                 </button>
@@ -453,173 +449,173 @@ export default function ExperimentPage() {
               </div>
             </div>
             <div className="h-[500px]">
-            {mounted && (
-              <MapContainer
-                center={[52.205, 0.1235]}
-                zoom={11}
-                style={{ height: "100%", width: "100%" }}
-              >
-                <TileLayer
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                />
-                {/* True Negatives (correctly classified negatives) - grey */}
-                {trueNegatives.map((pt, idx) => {
-                  const score = getScore(pt);
-                  return (
+              {mounted && (
+                <MapContainer
+                  center={[52.205, 0.1235]}
+                  zoom={11}
+                  style={{ height: "100%", width: "100%" }}
+                >
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  />
+                  {/* True Negatives (correctly classified negatives) - grey */}
+                  {trueNegatives.map((pt, idx) => {
+                    const score = getScore(pt);
+                    return (
+                      <CircleMarker
+                        key={`tn-${idx}`}
+                        center={[pt.lat, pt.lon]}
+                        radius={5}
+                        pathOptions={{
+                          color: "#52525b",
+                          fillColor: "#a1a1aa",
+                          fillOpacity: 0.6,
+                          weight: 1,
+                        }}
+                      >
+                        <Popup>
+                          <div className="text-sm">
+                            <div className="font-medium text-zinc-600">True Negative (TN)</div>
+                            <div>Score: {score.toFixed(3)}</div>
+                            {experimentModelType === "mlp" && pt.confidence !== undefined && (
+                              <div className="text-purple-600">Confidence: {(pt.confidence * 100).toFixed(0)}%</div>
+                            )}
+                            <div className="text-xs text-zinc-500">Correctly rejected</div>
+                          </div>
+                        </Popup>
+                      </CircleMarker>
+                    );
+                  })}
+                  {/* False Positives (incorrectly predicted as positive) - red */}
+                  {falsePositives.map((pt, idx) => {
+                    const score = getScore(pt);
+                    return (
+                      <CircleMarker
+                        key={`fp-${idx}`}
+                        center={[pt.lat, pt.lon]}
+                        radius={6}
+                        pathOptions={{
+                          color: "#b91c1c",
+                          fillColor: "#ef4444",
+                          fillOpacity: 0.8,
+                          weight: 2,
+                        }}
+                      >
+                        <Popup>
+                          <div className="text-sm">
+                            <div className="font-medium text-red-600">False Positive (FP)</div>
+                            <div>Score: {score.toFixed(3)}</div>
+                            {experimentModelType === "mlp" && pt.confidence !== undefined && (
+                              <div className="text-purple-600">Confidence: {(pt.confidence * 100).toFixed(0)}%</div>
+                            )}
+                            <div className="text-xs text-zinc-500">Incorrectly predicted</div>
+                          </div>
+                        </Popup>
+                      </CircleMarker>
+                    );
+                  })}
+                  {/* False Negatives (missed real occurrences) - orange */}
+                  {falseNegatives.map((pt, idx) => {
+                    const score = getScore(pt);
+                    return (
+                      <CircleMarker
+                        key={`fn-${idx}`}
+                        center={[pt.lat, pt.lon]}
+                        radius={6}
+                        pathOptions={{
+                          color: "#c2410c",
+                          fillColor: "#f97316",
+                          fillOpacity: 0.8,
+                          weight: 2,
+                        }}
+                      >
+                        <Popup>
+                          <div className="text-sm">
+                            <div className="font-medium text-orange-600">False Negative (FN)</div>
+                            <div>Score: {score.toFixed(3)}</div>
+                            {experimentModelType === "mlp" && pt.confidence !== undefined && (
+                              <div className="text-purple-600">Confidence: {(pt.confidence * 100).toFixed(0)}%</div>
+                            )}
+                            <div className="text-xs text-zinc-500">Missed occurrence</div>
+                          </div>
+                        </Popup>
+                      </CircleMarker>
+                    );
+                  })}
+                  {/* True Positives (correctly identified occurrences) - green */}
+                  {truePositives.map((pt, idx) => {
+                    const score = getScore(pt);
+                    return (
+                      <CircleMarker
+                        key={`tp-${idx}`}
+                        center={[pt.lat, pt.lon]}
+                        radius={6}
+                        pathOptions={{
+                          color: "#15803d",
+                          fillColor: "#22c55e",
+                          fillOpacity: 0.8,
+                          weight: 2,
+                        }}
+                      >
+                        <Popup>
+                          <div className="text-sm">
+                            <div className="font-medium text-green-600">True Positive (TP)</div>
+                            <div>Score: {score.toFixed(3)}</div>
+                            {experimentModelType === "mlp" && pt.confidence !== undefined && (
+                              <div className="text-purple-600">Confidence: {(pt.confidence * 100).toFixed(0)}%</div>
+                            )}
+                            <div className="text-xs text-zinc-500">Correctly identified</div>
+                          </div>
+                        </Popup>
+                      </CircleMarker>
+                    );
+                  })}
+                  {/* Training negative points - purple */}
+                  {currentTrial.train_negative.map((pt, idx) => (
                     <CircleMarker
-                      key={`tn-${idx}`}
+                      key={`train-neg-${idx}`}
                       center={[pt.lat, pt.lon]}
-                      radius={5}
+                      radius={7}
                       pathOptions={{
-                        color: "#52525b",
-                        fillColor: "#a1a1aa",
-                        fillOpacity: 0.6,
-                        weight: 1,
-                      }}
-                    >
-                      <Popup>
-                        <div className="text-sm">
-                          <div className="font-medium text-zinc-600">True Negative (TN)</div>
-                          <div>Score: {score.toFixed(3)}</div>
-                          {experimentModelType === "mlp" && pt.confidence !== undefined && (
-                            <div className="text-purple-600">Confidence: {(pt.confidence * 100).toFixed(0)}%</div>
-                          )}
-                          <div className="text-xs text-zinc-500">Correctly rejected</div>
-                        </div>
-                      </Popup>
-                    </CircleMarker>
-                  );
-                })}
-                {/* False Positives (incorrectly predicted as positive) - red */}
-                {falsePositives.map((pt, idx) => {
-                  const score = getScore(pt);
-                  return (
-                    <CircleMarker
-                      key={`fp-${idx}`}
-                      center={[pt.lat, pt.lon]}
-                      radius={6}
-                      pathOptions={{
-                        color: "#b91c1c",
-                        fillColor: "#ef4444",
-                        fillOpacity: 0.8,
+                        color: "#7e22ce",
+                        fillColor: "#a855f7",
+                        fillOpacity: 0.9,
                         weight: 2,
                       }}
                     >
                       <Popup>
                         <div className="text-sm">
-                          <div className="font-medium text-red-600">False Positive (FP)</div>
-                          <div>Score: {score.toFixed(3)}</div>
-                          {experimentModelType === "mlp" && pt.confidence !== undefined && (
-                            <div className="text-purple-600">Confidence: {(pt.confidence * 100).toFixed(0)}%</div>
-                          )}
-                          <div className="text-xs text-zinc-500">Incorrectly predicted</div>
+                          <div className="font-medium text-purple-600">Training Negative</div>
+                          <div className="text-xs text-zinc-500">Background sample</div>
                         </div>
                       </Popup>
                     </CircleMarker>
-                  );
-                })}
-                {/* False Negatives (missed real occurrences) - orange */}
-                {falseNegatives.map((pt, idx) => {
-                  const score = getScore(pt);
-                  return (
+                  ))}
+                  {/* Training positive points (on top) - yellow */}
+                  {currentTrial.train_positive.map((pt, idx) => (
                     <CircleMarker
-                      key={`fn-${idx}`}
+                      key={`train-pos-${idx}`}
                       center={[pt.lat, pt.lon]}
-                      radius={6}
+                      radius={7}
                       pathOptions={{
-                        color: "#c2410c",
-                        fillColor: "#f97316",
-                        fillOpacity: 0.8,
+                        color: "#a16207",
+                        fillColor: "#eab308",
+                        fillOpacity: 0.9,
                         weight: 2,
                       }}
                     >
                       <Popup>
                         <div className="text-sm">
-                          <div className="font-medium text-orange-600">False Negative (FN)</div>
-                          <div>Score: {score.toFixed(3)}</div>
-                          {experimentModelType === "mlp" && pt.confidence !== undefined && (
-                            <div className="text-purple-600">Confidence: {(pt.confidence * 100).toFixed(0)}%</div>
-                          )}
-                          <div className="text-xs text-zinc-500">Missed occurrence</div>
+                          <div className="font-medium text-yellow-600">Training Positive</div>
+                          <div className="text-xs text-zinc-500">Known occurrence</div>
                         </div>
                       </Popup>
                     </CircleMarker>
-                  );
-                })}
-                {/* True Positives (correctly identified occurrences) - green */}
-                {truePositives.map((pt, idx) => {
-                  const score = getScore(pt);
-                  return (
-                    <CircleMarker
-                      key={`tp-${idx}`}
-                      center={[pt.lat, pt.lon]}
-                      radius={6}
-                      pathOptions={{
-                        color: "#15803d",
-                        fillColor: "#22c55e",
-                        fillOpacity: 0.8,
-                        weight: 2,
-                      }}
-                    >
-                      <Popup>
-                        <div className="text-sm">
-                          <div className="font-medium text-green-600">True Positive (TP)</div>
-                          <div>Score: {score.toFixed(3)}</div>
-                          {experimentModelType === "mlp" && pt.confidence !== undefined && (
-                            <div className="text-purple-600">Confidence: {(pt.confidence * 100).toFixed(0)}%</div>
-                          )}
-                          <div className="text-xs text-zinc-500">Correctly identified</div>
-                        </div>
-                      </Popup>
-                    </CircleMarker>
-                  );
-                })}
-                {/* Training negative points - purple */}
-                {currentTrial.train_negative.map((pt, idx) => (
-                  <CircleMarker
-                    key={`train-neg-${idx}`}
-                    center={[pt.lat, pt.lon]}
-                    radius={7}
-                    pathOptions={{
-                      color: "#7e22ce",
-                      fillColor: "#a855f7",
-                      fillOpacity: 0.9,
-                      weight: 2,
-                    }}
-                  >
-                    <Popup>
-                      <div className="text-sm">
-                        <div className="font-medium text-purple-600">Training Negative</div>
-                        <div className="text-xs text-zinc-500">Background sample</div>
-                      </div>
-                    </Popup>
-                  </CircleMarker>
-                ))}
-                {/* Training positive points (on top) - yellow */}
-                {currentTrial.train_positive.map((pt, idx) => (
-                  <CircleMarker
-                    key={`train-pos-${idx}`}
-                    center={[pt.lat, pt.lon]}
-                    radius={7}
-                    pathOptions={{
-                      color: "#a16207",
-                      fillColor: "#eab308",
-                      fillOpacity: 0.9,
-                      weight: 2,
-                    }}
-                  >
-                    <Popup>
-                      <div className="text-sm">
-                        <div className="font-medium text-yellow-600">Training Positive</div>
-                        <div className="text-xs text-zinc-500">Known occurrence</div>
-                      </div>
-                    </Popup>
-                  </CircleMarker>
-                ))}
+                  ))}
 
-              </MapContainer>
-            )}
+                </MapContainer>
+              )}
             </div>
           </div>
 
@@ -727,9 +723,8 @@ export default function ExperimentPage() {
                   return (
                     <tr
                       key={exp.n_positive}
-                      className={`border-b border-zinc-100 dark:border-zinc-800 cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800 ${
-                        exp.n_positive === selectedNPositive ? "bg-zinc-100 dark:bg-zinc-800" : ""
-                      }`}
+                      className={`border-b border-zinc-100 dark:border-zinc-800 cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800 ${exp.n_positive === selectedNPositive ? "bg-zinc-100 dark:bg-zinc-800" : ""
+                        }`}
                       onClick={() => setSelectedNPositive(exp.n_positive)}
                     >
                       <td className="py-2 px-3 font-medium">{exp.n_positive}</td>
@@ -791,21 +786,19 @@ export default function ExperimentPage() {
                 <div className="flex rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700">
                   <button
                     onClick={() => setModelType("logistic")}
-                    className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                      modelType === "logistic"
+                    className={`px-3 py-1.5 text-xs font-medium transition-colors ${modelType === "logistic"
                         ? "bg-green-600 text-white"
                         : "bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700"
-                    }`}
+                      }`}
                   >
                     Logistic
                   </button>
                   <button
                     onClick={() => setModelType("mlp")}
-                    className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                      modelType === "mlp"
+                    className={`px-3 py-1.5 text-xs font-medium transition-colors ${modelType === "mlp"
                         ? "bg-purple-600 text-white"
                         : "bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700"
-                    }`}
+                      }`}
                   >
                     MLP
                   </button>
@@ -892,22 +885,20 @@ export default function ExperimentPage() {
                         {localPredictions.has_uncertainty && (
                           <button
                             onClick={() => setShowConfidence(!showConfidence)}
-                            className={`px-3 py-1 text-xs rounded-lg transition-colors ${
-                              showConfidence
+                            className={`px-3 py-1 text-xs rounded-lg transition-colors ${showConfidence
                                 ? "bg-purple-600 text-white"
                                 : "bg-zinc-200 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-300"
-                            }`}
+                              }`}
                           >
                             {showConfidence ? "Confidence" : "Probability"}
                           </button>
                         )}
                         <button
                           onClick={() => setShowHeatmap(!showHeatmap)}
-                          className={`px-3 py-1 text-xs rounded-lg transition-colors ${
-                            showHeatmap
+                          className={`px-3 py-1 text-xs rounded-lg transition-colors ${showHeatmap
                               ? "bg-green-600 text-white"
                               : "bg-zinc-200 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-300"
-                          }`}
+                            }`}
                         >
                           {showHeatmap ? "Heatmap On" : "Heatmap Off"}
                         </button>

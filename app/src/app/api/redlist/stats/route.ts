@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import * as fs from "fs";
+import * as path from "path";
 
 // IUCN Red List category colors (official)
 const IUCN_COLORS: Record<string, string> = {
@@ -9,7 +11,7 @@ const IUCN_COLORS: Record<string, string> = {
   VU: "#f9e814", // Vulnerable - Yellow
   NT: "#cce226", // Near Threatened - Yellow-green
   LC: "#60c659", // Least Concern - Green
-  DD: "#d1d1c6", // Data Deficient - Gray
+  DD: "#6b7280", // Data Deficient - Gray
 };
 
 const IUCN_CATEGORY_NAMES: Record<string, string> = {
@@ -33,121 +35,78 @@ interface CategoryStats {
   color: string;
 }
 
-interface CachedStats {
-  totalAssessed: number;
-  byCategory: CategoryStats[];
-  sampleSize: number;
-  lastUpdated: string;
-}
-
-// Cache for 24 hours
-let cachedStats: CachedStats | null = null;
-let cacheTime: number = 0;
-const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
-
-// Delay helper for rate limiting
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function fetchWithAuth(url: string): Promise<Response> {
-  const apiKey = process.env.RED_LIST_API_KEY;
-  if (!apiKey) {
-    throw new Error("RED_LIST_API_KEY environment variable not set");
-  }
-
-  return fetch(url, {
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-    },
-  });
-}
-
-interface Assessment {
-  red_list_category_code: string;
-  year_published: string;
+interface Species {
   sis_taxon_id: number;
+  category: string;
+  year_published: string;
 }
 
-interface ApiResponse {
-  assessments: Assessment[];
+interface PrecomputedData {
+  species: Species[];
+  metadata: {
+    totalSpecies: number;
+    fetchedAt: string;
+    pagesProcessed: number;
+    byCategory: Record<string, number>;
+  };
+}
+
+// In-memory cache
+let cachedData: PrecomputedData | null = null;
+let cacheLoadTime: number = 0;
+const CACHE_RELOAD_INTERVAL = 60 * 60 * 1000; // Reload file every hour
+
+function loadPrecomputedData(): PrecomputedData | null {
+  const dataPath = path.join(process.cwd(), "data", "redlist-species.json");
+
+  try {
+    if (!fs.existsSync(dataPath)) {
+      console.warn(`Pre-computed data file not found: ${dataPath}`);
+      return null;
+    }
+
+    const fileContent = fs.readFileSync(dataPath, "utf-8");
+    return JSON.parse(fileContent) as PrecomputedData;
+  } catch (error) {
+    console.error("Error loading pre-computed data:", error);
+    return null;
+  }
+}
+
+function getSpeciesData(): PrecomputedData | null {
+  if (!cachedData || Date.now() - cacheLoadTime > CACHE_RELOAD_INTERVAL) {
+    cachedData = loadPrecomputedData();
+    cacheLoadTime = Date.now();
+  }
+  return cachedData;
 }
 
 export async function GET() {
-  // Return cached data if still valid
-  if (cachedStats && Date.now() - cacheTime < CACHE_DURATION) {
-    return NextResponse.json({ ...cachedStats, cached: true });
-  }
+  const data = getSpeciesData();
 
-  try {
-    // Fetch plant assessments from IUCN API
-    // We'll sample pages to build category distribution
-    const categoryCounts: Record<string, number> = {};
-    CATEGORY_ORDER.forEach((cat) => (categoryCounts[cat] = 0));
-
-    let totalSampled = 0;
-    const pagesToFetch = 20; // Sample 20 pages = 2000 species
-
-    // Just 1 page = 100 species for fast loading
-    const pagesToSample = [400]; // Middle of dataset for less bias
-
-    for (let i = 0; i < pagesToSample.length; i++) {
-      const page = pagesToSample[i];
-      const response = await fetchWithAuth(
-        `https://api.iucnredlist.org/api/v4/taxa/kingdom/Plantae?latest=true&page=${page}`
-      );
-
-      if (!response.ok) {
-        throw new Error(`IUCN API error: ${response.statusText}`);
-      }
-
-      const data: ApiResponse = await response.json();
-      const assessments = data.assessments || [];
-
-      if (assessments.length === 0) {
-        break; // No more data
-      }
-
-      for (const assessment of assessments) {
-        const cat = assessment.red_list_category_code;
-        if (cat && categoryCounts[cat] !== undefined) {
-          categoryCounts[cat]++;
-        }
-        totalSampled++;
-      }
-
-      // Rate limiting: 500ms delay between requests
-      if (i < pagesToSample.length - 1) {
-        await delay(500);
-      }
-    }
-
-    // Build category stats array in display order
-    const byCategory: CategoryStats[] = CATEGORY_ORDER.map((code) => ({
-      code,
-      name: IUCN_CATEGORY_NAMES[code],
-      count: categoryCounts[code],
-      color: IUCN_COLORS[code],
-    }));
-
-    // We know the exact total from testing: 807 pages * 100 = ~80,650 species
-    const estimatedTotal = 80650;
-
-    const stats: CachedStats = {
-      totalAssessed: estimatedTotal,
-      byCategory,
-      sampleSize: totalSampled,
-      lastUpdated: new Date().toISOString(),
-    };
-
-    // Cache the results
-    cachedStats = stats;
-    cacheTime = Date.now();
-
-    return NextResponse.json({ ...stats, cached: false });
-  } catch (error) {
-    console.error("Error fetching Red List stats:", error);
+  if (!data) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 }
+      {
+        error:
+          "Species data not available. Run the fetch script: npx tsx scripts/fetch-redlist-species.ts",
+      },
+      { status: 503 }
     );
   }
+
+  // Build category stats from precomputed data
+  const byCategory: CategoryStats[] = CATEGORY_ORDER.map((code) => ({
+    code,
+    name: IUCN_CATEGORY_NAMES[code],
+    count: data.metadata.byCategory[code] || 0,
+    color: IUCN_COLORS[code],
+  }));
+
+  return NextResponse.json({
+    totalAssessed: data.metadata.totalSpecies,
+    byCategory,
+    sampleSize: data.metadata.totalSpecies,
+    lastUpdated: data.metadata.fetchedAt,
+    cached: true,
+  });
 }

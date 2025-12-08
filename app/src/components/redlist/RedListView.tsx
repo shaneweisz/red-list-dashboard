@@ -57,6 +57,7 @@ interface SpeciesDetails {
   criteria: string | null;
   commonName: string | null;
   gbifUrl: string | null;
+  gbifOccurrences: number | null;
 }
 
 interface SpeciesResponse {
@@ -64,6 +65,10 @@ interface SpeciesResponse {
   total: number;
   error?: string;
 }
+
+// Total described plant species from World Flora Online (June 2025 release)
+// Source: https://list.worldfloraonline.org/stats.php
+const WFO_TOTAL_DESCRIBED_SPECIES = 380801;
 
 // IUCN category colors
 const CATEGORY_COLORS: Record<string, string> = {
@@ -74,7 +79,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   VU: "#f9e814",
   NT: "#cce226",
   LC: "#60c659",
-  DD: "#d1d1c6",
+  DD: "#6b7280",
 };
 
 export default function RedListView() {
@@ -93,7 +98,7 @@ export default function RedListView() {
   // Sorting
   type SortField = "year" | "category" | null;
   type SortDirection = "asc" | "desc";
-  const [sortField, setSortField] = useState<SortField>(null);
+  const [sortField, setSortField] = useState<SortField>("year");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
   // Pagination
@@ -263,6 +268,7 @@ export default function RedListView() {
             criteria: result.data.criteria,
             commonName: result.data.commonName,
             gbifUrl: result.data.gbifUrl,
+            gbifOccurrences: result.data.gbifOccurrences,
           };
         }
       });
@@ -349,43 +355,75 @@ export default function RedListView() {
   const categoryDataWithPercent = stats.byCategory.map((cat) => ({
     ...cat,
     percent: ((cat.count / stats.sampleSize) * 100).toFixed(1),
-    label: `${cat.count} (${((cat.count / stats.sampleSize) * 100).toFixed(0)}%)`,
+    label: `${cat.count} (${((cat.count / stats.sampleSize) * 100).toFixed(1)}%)`,
   }));
 
-  // Calculate stale assessments (>10 years)
-  const staleCount = assessments.yearsSinceAssessment
+  // Calculate outdated assessments (>10 years)
+  const outdatedCount = assessments.yearsSinceAssessment
     .filter((y) => y.minYear > 10)
     .reduce((sum, y) => sum + y.count, 0);
-  const stalePercent = ((staleCount / assessments.sampleSize) * 100).toFixed(0);
+  const outdatedPercent = ((outdatedCount / assessments.sampleSize) * 100).toFixed(0);
+
+  // Calculate % assessed (of total described species)
+  const assessedPercent = ((stats.sampleSize / WFO_TOTAL_DESCRIBED_SPECIES) * 100).toFixed(1);
 
   const currentYear = new Date().getFullYear();
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Stats Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-20 gap-4">
         {/* Left column - Summary stats */}
-        <div className="lg:col-span-3 space-y-3">
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
+        <div className="lg:col-span-3 space-y-2">
+          <a
+            href="https://list.worldfloraonline.org/stats.php"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors"
+          >
             <p className="text-xs text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
-              Sample Size
+              Total Described
             </p>
-            <p className="text-2xl font-bold text-zinc-800 dark:text-zinc-100 mt-1">
-              {stats.sampleSize}
+            <p className="text-xl font-bold text-zinc-800 dark:text-zinc-100">
+              {WFO_TOTAL_DESCRIBED_SPECIES.toLocaleString()}
             </p>
-            <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">
-              of ~{stats.totalAssessed.toLocaleString()} plants
+            <p className="text-xs text-zinc-400 dark:text-zinc-500">
+              WFO 2025-06
+            </p>
+          </a>
+
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
+              Total Assessed
+            </p>
+            <p className="text-xl font-bold text-zinc-800 dark:text-zinc-100">
+              {stats.sampleSize.toLocaleString()}
+            </p>
+            <p className="text-xs text-zinc-400 dark:text-zinc-500">
+              IUCN Red List
             </p>
           </div>
 
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
             <p className="text-xs text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
-              Stale Assessments
+              % Assessed
             </p>
-            <p className="text-2xl font-bold text-amber-600 dark:text-amber-500 mt-1">
-              {stalePercent}%
+            <p className="text-xl font-bold text-blue-600 dark:text-blue-500">
+              {assessedPercent}%
             </p>
-            <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">
+            <p className="text-xs text-zinc-400 dark:text-zinc-500">
+              of described species
+            </p>
+          </div>
+
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
+              % Outdated
+            </p>
+            <p className="text-xl font-bold text-amber-600 dark:text-amber-500">
+              {outdatedPercent}%
+            </p>
+            <p className="text-xs text-zinc-400 dark:text-zinc-500">
               assessed 10+ years ago
             </p>
           </div>
@@ -406,7 +444,7 @@ export default function RedListView() {
               </button>
             )}
           </div>
-          <div className="flex-1 min-h-[200px]">
+          <div className="flex-1 min-h-[160px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={categoryDataWithPercent}
@@ -429,8 +467,9 @@ export default function RedListView() {
                     backgroundColor: "#18181b",
                     border: "1px solid #3f3f46",
                     borderRadius: "8px",
-                    color: "#fff",
                   }}
+                  itemStyle={{ color: "#fff" }}
+                  labelStyle={{ color: "#a1a1aa" }}
                 />
                 <Bar
                   dataKey="count"
@@ -476,7 +515,7 @@ export default function RedListView() {
                 </button>
               )}
             </div>
-            <div className="flex-1 min-h-[100px]">
+            <div className="flex-1 min-h-[70px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={assessments.yearsSinceAssessment.map(y => ({
@@ -500,8 +539,9 @@ export default function RedListView() {
                       backgroundColor: "#18181b",
                       border: "1px solid #3f3f46",
                       borderRadius: "8px",
-                      color: "#fff",
                     }}
+                    itemStyle={{ color: "#fff" }}
+                    labelStyle={{ color: "#a1a1aa" }}
                   />
                   <Bar
                     dataKey="count"
@@ -545,7 +585,7 @@ export default function RedListView() {
                 </button>
               )}
             </div>
-            <div className="flex-1 min-h-[100px]">
+            <div className="flex-1 min-h-[70px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={reassessmentDistribution}
@@ -566,8 +606,9 @@ export default function RedListView() {
                       backgroundColor: "#18181b",
                       border: "1px solid #3f3f46",
                       borderRadius: "8px",
-                      color: "#fff",
                     }}
+                    itemStyle={{ color: "#fff" }}
+                    labelStyle={{ color: "#a1a1aa" }}
                   />
                   <Bar
                     dataKey="count"
@@ -698,6 +739,9 @@ export default function RedListView() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
                   Previous Assessments
                 </th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                  GBIF Occurrences
+                </th>
                 <th className="px-4 py-3 text-center text-xs font-medium text-zinc-500 uppercase tracking-wider">
                   Links
                 </th>
@@ -745,31 +789,36 @@ export default function RedListView() {
                         ? s.previous_assessments.join(", ")
                         : "—"}
                     </td>
+                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums">
+                      {details?.gbifOccurrences != null
+                        ? details.gbifOccurrences.toLocaleString()
+                        : "—"}
+                    </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center justify-center gap-1">
+                      <div className="flex items-center justify-center gap-3">
                         {details?.gbifUrl && (
                           <a
                             href={details.gbifUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="p-1.5 text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-900/20 rounded"
-                            title="View on GBIF"
+                            className="flex items-center gap-1 text-xs text-green-600 hover:text-green-700 hover:underline"
                           >
-                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
                               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
                             </svg>
+                            GBIF
                           </a>
                         )}
                         <a
                           href={s.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="p-1.5 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
-                          title="View on IUCN Red List"
+                          className="flex items-center gap-1 text-xs text-red-600 hover:text-red-700 hover:underline"
                         >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                           </svg>
+                          Red List
                         </a>
                       </div>
                     </td>
