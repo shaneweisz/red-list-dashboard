@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import * as fs from "fs";
 import * as path from "path";
+import { getTaxonConfig } from "@/config/taxa";
 
 interface YearRange {
   range: string;
@@ -18,16 +19,18 @@ interface PrecomputedData {
   metadata: {
     totalSpecies: number;
     fetchedAt: string;
+    taxonId?: string;
   };
 }
 
-// In-memory cache
-let cachedData: PrecomputedData | null = null;
-let cacheLoadTime: number = 0;
+// In-memory cache (keyed by taxon ID)
+const cachedData: Map<string, PrecomputedData | null> = new Map();
+const cacheLoadTimes: Map<string, number> = new Map();
 const CACHE_RELOAD_INTERVAL = 60 * 60 * 1000; // Reload file every hour
 
-function loadPrecomputedData(): PrecomputedData | null {
-  const dataPath = path.join(process.cwd(), "data", "redlist-species.json");
+function loadPrecomputedData(taxonId: string): PrecomputedData | null {
+  const taxon = getTaxonConfig(taxonId);
+  const dataPath = path.join(process.cwd(), "data", taxon.dataFile);
 
   try {
     if (!fs.existsSync(dataPath)) {
@@ -38,17 +41,18 @@ function loadPrecomputedData(): PrecomputedData | null {
     const fileContent = fs.readFileSync(dataPath, "utf-8");
     return JSON.parse(fileContent) as PrecomputedData;
   } catch (error) {
-    console.error("Error loading pre-computed data:", error);
+    console.error(`Error loading pre-computed data for ${taxonId}:`, error);
     return null;
   }
 }
 
-function getSpeciesData(): PrecomputedData | null {
-  if (!cachedData || Date.now() - cacheLoadTime > CACHE_RELOAD_INTERVAL) {
-    cachedData = loadPrecomputedData();
-    cacheLoadTime = Date.now();
+function getSpeciesData(taxonId: string): PrecomputedData | null {
+  const cacheTime = cacheLoadTimes.get(taxonId) || 0;
+  if (!cachedData.has(taxonId) || Date.now() - cacheTime > CACHE_RELOAD_INTERVAL) {
+    cachedData.set(taxonId, loadPrecomputedData(taxonId));
+    cacheLoadTimes.set(taxonId, Date.now());
   }
-  return cachedData;
+  return cachedData.get(taxonId) || null;
 }
 
 function getYearRange(yearsSince: number): string {
@@ -59,14 +63,17 @@ function getYearRange(yearsSince: number): string {
   return "20+ years";
 }
 
-export async function GET() {
-  const data = getSpeciesData();
+export async function GET(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams;
+  const taxonId = searchParams.get("taxon") || "plantae";
+  const taxon = getTaxonConfig(taxonId);
+
+  const data = getSpeciesData(taxonId);
 
   if (!data) {
     return NextResponse.json(
       {
-        error:
-          "Species data not available. Run the fetch script: npx tsx scripts/fetch-redlist-species.ts",
+        error: `Species data not available for ${taxon.name}. Run: npx tsx scripts/fetch-redlist-species.ts ${taxonId}`,
       },
       { status: 503 }
     );

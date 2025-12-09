@@ -1,24 +1,53 @@
 /**
- * Pre-compute script to fetch all IUCN Red List plant species
+ * Pre-compute script to fetch IUCN Red List species for any taxon
  * and save to a JSON file for fast serving.
  *
  * Usage:
- *   npx tsx scripts/fetch-redlist-species.ts [--pages N] [--start-page N] [--resume]
+ *   npx tsx scripts/fetch-redlist-species.ts <taxon> [--pages N] [--start-page N] [--resume]
+ *
+ * Taxa (from src/config/taxa.ts):
+ *   plantae, mammalia, aves, reptilia, amphibia, actinopterygii,
+ *   chondrichthyes, insecta, arachnida, malacostraca, gastropoda,
+ *   bivalvia, anthozoa
  *
  * Options:
- *   --pages N       Number of pages to fetch (default: all ~807 pages)
+ *   --pages N       Number of pages to fetch (default: all)
  *   --start-page N  Page to start from (default: 1)
  *   --resume        Resume from existing data file (auto-detect last page)
  *
- * Example (test with 3 pages):
- *   npx tsx scripts/fetch-redlist-species.ts --pages 3
- *
- * Resume after interruption:
- *   npx tsx scripts/fetch-redlist-species.ts --resume
+ * Examples:
+ *   npx tsx scripts/fetch-redlist-species.ts plantae          # Fetch all plants
+ *   npx tsx scripts/fetch-redlist-species.ts mammalia --pages 3  # Test with 3 pages
+ *   npx tsx scripts/fetch-redlist-species.ts aves --resume    # Resume birds fetch
  */
 
 import * as fs from "fs";
 import * as path from "path";
+
+// Taxa configuration (inline to avoid import issues with tsx)
+interface TaxonConfig {
+  id: string;
+  name: string;
+  apiEndpoint: string;
+  dataFile: string;
+}
+
+const TAXA_CONFIG: Record<string, TaxonConfig> = {
+  plantae: { id: "plantae", name: "Plants", apiEndpoint: "kingdom/Plantae", dataFile: "redlist-plantae.json" },
+  fungi: { id: "fungi", name: "Fungi", apiEndpoint: "phylum/Ascomycota", dataFile: "redlist-fungi.json" },
+  mammalia: { id: "mammalia", name: "Mammals", apiEndpoint: "class/Mammalia", dataFile: "redlist-mammalia.json" },
+  aves: { id: "aves", name: "Birds", apiEndpoint: "class/Aves", dataFile: "redlist-aves.json" },
+  reptilia: { id: "reptilia", name: "Reptiles", apiEndpoint: "class/Reptilia", dataFile: "redlist-reptilia.json" },
+  amphibia: { id: "amphibia", name: "Amphibians", apiEndpoint: "class/Amphibia", dataFile: "redlist-amphibia.json" },
+  actinopterygii: { id: "actinopterygii", name: "Ray-finned Fishes", apiEndpoint: "class/Actinopterygii", dataFile: "redlist-actinopterygii.json" },
+  chondrichthyes: { id: "chondrichthyes", name: "Sharks & Rays", apiEndpoint: "class/Chondrichthyes", dataFile: "redlist-chondrichthyes.json" },
+  insecta: { id: "insecta", name: "Insects", apiEndpoint: "class/Insecta", dataFile: "redlist-insecta.json" },
+  arachnida: { id: "arachnida", name: "Arachnids", apiEndpoint: "class/Arachnida", dataFile: "redlist-arachnida.json" },
+  malacostraca: { id: "malacostraca", name: "Crustaceans", apiEndpoint: "class/Malacostraca", dataFile: "redlist-malacostraca.json" },
+  gastropoda: { id: "gastropoda", name: "Snails & Slugs", apiEndpoint: "class/Gastropoda", dataFile: "redlist-gastropoda.json" },
+  bivalvia: { id: "bivalvia", name: "Bivalves", apiEndpoint: "class/Bivalvia", dataFile: "redlist-bivalvia.json" },
+  anthozoa: { id: "anthozoa", name: "Corals & Anemones", apiEndpoint: "class/Anthozoa", dataFile: "redlist-anthozoa.json" },
+};
 
 // Load environment variables from .env.local manually
 function loadEnvFile(filePath: string): void {
@@ -42,7 +71,6 @@ function loadEnvFile(filePath: string): void {
 loadEnvFile(path.join(__dirname, "../.env.local"));
 
 const API_KEY = process.env.RED_LIST_API_KEY;
-const OUTPUT_FILE = path.join(__dirname, "../data/redlist-species.json");
 const PAGE_DELAY = 1000; // ms between page fetches
 const BATCH_DELAY = 500; // ms between assessment detail batches
 const BATCH_SIZE = 5; // concurrent requests for assessment details (reduced)
@@ -126,6 +154,7 @@ interface OutputData {
     lastPage: number;
     byCategory: Record<string, number>;
     complete: boolean;
+    taxonId?: string;
   };
 }
 
@@ -222,10 +251,10 @@ async function fetchSpeciesDetails(
   return defaults;
 }
 
-async function fetchPage(page: number): Promise<Assessment[]> {
+async function fetchPage(page: number, apiEndpoint: string): Promise<Assessment[]> {
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     const res = await fetchWithAuth(
-      `https://api.iucnredlist.org/api/v4/taxa/kingdom/Plantae?latest=true&page=${page}`
+      `https://api.iucnredlist.org/api/v4/taxa/${apiEndpoint}?latest=true&page=${page}`
     );
 
     if (res.ok) {
@@ -247,10 +276,10 @@ async function fetchPage(page: number): Promise<Assessment[]> {
   throw new Error(`Failed to fetch page ${page} after ${MAX_RETRIES} retries`);
 }
 
-function loadExistingData(): OutputData | null {
+function loadExistingData(outputFile: string): OutputData | null {
   try {
-    if (fs.existsSync(OUTPUT_FILE)) {
-      const content = fs.readFileSync(OUTPUT_FILE, "utf-8");
+    if (fs.existsSync(outputFile)) {
+      const content = fs.readFileSync(outputFile, "utf-8");
       return JSON.parse(content) as OutputData;
     }
   } catch {
@@ -260,11 +289,13 @@ function loadExistingData(): OutputData | null {
 }
 
 function saveData(
+  outputFile: string,
   species: Species[],
   categoryCounts: Record<string, number>,
   pagesProcessed: number,
   lastPage: number,
-  complete: boolean
+  complete: boolean,
+  taxonId: string
 ): void {
   const output: OutputData = {
     species,
@@ -275,10 +306,11 @@ function saveData(
       lastPage,
       byCategory: categoryCounts,
       complete,
+      taxonId,
     },
   };
 
-  fs.writeFileSync(OUTPUT_FILE, JSON.stringify(output, null, 2));
+  fs.writeFileSync(outputFile, JSON.stringify(output, null, 2));
 }
 
 async function main() {
@@ -287,18 +319,44 @@ async function main() {
   let maxPages = Infinity;
   let startPage = 1;
   let resume = false;
+  let taxonId: string | null = null;
 
+  // First arg without -- is the taxon
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--pages" && args[i + 1]) {
       maxPages = parseInt(args[i + 1], 10);
-    }
-    if (args[i] === "--start-page" && args[i + 1]) {
+    } else if (args[i] === "--start-page" && args[i + 1]) {
       startPage = parseInt(args[i + 1], 10);
-    }
-    if (args[i] === "--resume") {
+    } else if (args[i] === "--resume") {
       resume = true;
+    } else if (!args[i].startsWith("--") && !taxonId) {
+      taxonId = args[i].toLowerCase();
     }
   }
+
+  // Validate taxon
+  if (!taxonId) {
+    console.error("Usage: npx tsx scripts/fetch-redlist-species.ts <taxon> [options]");
+    console.error("\nAvailable taxa:");
+    Object.entries(TAXA_CONFIG).forEach(([id, config]) => {
+      console.error(`  ${id.padEnd(18)} - ${config.name}`);
+    });
+    console.error("\nOptions:");
+    console.error("  --pages N        Number of pages to fetch");
+    console.error("  --start-page N   Page to start from");
+    console.error("  --resume         Resume from existing data");
+    process.exit(1);
+  }
+
+  const taxonConfig = TAXA_CONFIG[taxonId];
+  if (!taxonConfig) {
+    console.error(`Unknown taxon: ${taxonId}`);
+    console.error("\nAvailable taxa:");
+    Object.keys(TAXA_CONFIG).forEach((id) => console.error(`  ${id}`));
+    process.exit(1);
+  }
+
+  const OUTPUT_FILE = path.join(__dirname, "../data", taxonConfig.dataFile);
 
   // Load existing data if resuming
   let allSpecies: Species[] = [];
@@ -306,25 +364,27 @@ async function main() {
   let pagesProcessed = 0;
 
   if (resume) {
-    const existing = loadExistingData();
+    const existing = loadExistingData(OUTPUT_FILE);
     if (existing && !existing.metadata.complete) {
       allSpecies = existing.species;
       categoryCounts = existing.metadata.byCategory;
       pagesProcessed = existing.metadata.pagesProcessed;
       startPage = existing.metadata.lastPage + 1;
-      console.log(`📂 Resuming from existing data...`);
+      console.log(`Resuming from existing data...`);
       console.log(`   Found ${allSpecies.length} species from ${pagesProcessed} pages`);
       console.log(`   Continuing from page ${startPage}`);
       console.log("");
     } else if (existing?.metadata.complete) {
-      console.log("✓ Data collection already complete!");
+      console.log("Data collection already complete!");
       console.log(`   ${existing.species.length} species in ${OUTPUT_FILE}`);
       return;
     }
   }
 
-  console.log("🌿 IUCN Red List Species Fetcher");
-  console.log("================================");
+  console.log(`IUCN Red List Species Fetcher - ${taxonConfig.name}`);
+  console.log("=".repeat(50));
+  console.log(`Taxon: ${taxonConfig.name} (${taxonId})`);
+  console.log(`API endpoint: ${taxonConfig.apiEndpoint}`);
   console.log(`Start page: ${startPage}`);
   console.log(`Max pages: ${maxPages === Infinity ? "all" : maxPages}`);
   console.log(`Output: ${OUTPUT_FILE}`);
@@ -332,7 +392,7 @@ async function main() {
   console.log("");
 
   if (!API_KEY) {
-    console.error("❌ RED_LIST_API_KEY not set in .env.local");
+    console.error("RED_LIST_API_KEY not set in .env.local");
     process.exit(1);
   }
 
@@ -345,12 +405,12 @@ async function main() {
     process.stdout.write(`\rFetching page ${page}...`);
 
     try {
-      const assessments = await fetchPage(page);
+      const assessments = await fetchPage(page, taxonConfig.apiEndpoint);
 
       if (assessments.length === 0) {
         emptyPages++;
         if (emptyPages >= 3) {
-          console.log(`\n✓ Reached end of data at page ${page}`);
+          console.log(`\nReached end of data at page ${page}`);
           break;
         }
         page++;
@@ -404,31 +464,31 @@ async function main() {
       // Progress update and incremental save
       if (pagesProcessed % SAVE_INTERVAL === 0) {
         console.log(
-          `\n  → ${allSpecies.length} species collected (${pagesProcessed} pages) - saving...`
+          `\n  -> ${allSpecies.length} species collected (${pagesProcessed} pages) - saving...`
         );
-        saveData(allSpecies, categoryCounts, pagesProcessed, page - 1, false);
+        saveData(OUTPUT_FILE, allSpecies, categoryCounts, pagesProcessed, page - 1, false, taxonId);
       }
 
       // Delay between pages
       await delay(PAGE_DELAY);
     } catch (err) {
-      console.error(`\n❌ Error on page ${page}:`, err);
+      console.error(`\nError on page ${page}:`, err);
       // Save progress before continuing
-      saveData(allSpecies, categoryCounts, pagesProcessed, page - 1, false);
-      console.log(`   Progress saved. Resume with: npx tsx scripts/fetch-redlist-species.ts --resume`);
+      saveData(OUTPUT_FILE, allSpecies, categoryCounts, pagesProcessed, page - 1, false, taxonId);
+      console.log(`   Progress saved. Resume with: npx tsx scripts/fetch-redlist-species.ts ${taxonId} --resume`);
       // Continue to next page on error
       page++;
     }
   }
 
-  console.log(`\n\n📊 Collection complete!`);
+  console.log(`\n\nCollection complete for ${taxonConfig.name}!`);
   console.log(`   Total species: ${allSpecies.length}`);
   console.log(`   Pages processed: ${pagesProcessed}`);
   console.log(`   Categories:`, categoryCounts);
 
   // Final save
-  saveData(allSpecies, categoryCounts, pagesProcessed, page - 1, true);
-  console.log(`\n✓ Saved to ${OUTPUT_FILE}`);
+  saveData(OUTPUT_FILE, allSpecies, categoryCounts, pagesProcessed, page - 1, true, taxonId);
+  console.log(`\nSaved to ${OUTPUT_FILE}`);
 
   // File size
   const stats = fs.statSync(OUTPUT_FILE);
