@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Red List Dashboard",
+  title: "IUCN Red List Dashboard",
   description: "IUCN Red List and GBIF occurrence data explorer",
 };
 

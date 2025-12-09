@@ -38,13 +38,13 @@ export default function RedListPage() {
             {/* Tab Navigation */}
             <div className="flex gap-1 bg-zinc-100 dark:bg-zinc-800 rounded-lg p-1">
               <div className="px-4 py-1.5 rounded-md text-sm font-medium bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm">
-                Red List
+                Red List Dashboard
               </div>
               <Link
                 href="/gbif"
                 className="px-4 py-1.5 rounded-md text-sm font-medium transition-colors text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200"
               >
-                GBIF
+                GBIF Dashboard
               </Link>
             </div>
             <ThemeToggle />

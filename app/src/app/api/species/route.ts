@@ -15,7 +15,7 @@ async function loadData(taxonId: string): Promise<SpeciesRecord[]> {
   if (dataCache[taxonId]) return dataCache[taxonId];
 
   const taxon = getTaxonConfig(taxonId);
-  const filePath = path.join(process.cwd(), "public", taxon.gbifDataFile);
+  const filePath = path.join(process.cwd(), "data", taxon.gbifDataFile);
 
   try {
     const fileContent = await fs.readFile(filePath, "utf-8");

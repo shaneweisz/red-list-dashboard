@@ -671,10 +671,10 @@ export default function Home() {
                 href="/"
                 className="px-4 py-1.5 rounded-md text-sm font-medium transition-colors text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
               >
-                Red List
+                Red List Dashboard
               </Link>
               <div className="px-4 py-1.5 rounded-md text-sm font-medium bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm">
-                GBIF
+                GBIF Dashboard
               </div>
             </div>
             <ThemeToggle />

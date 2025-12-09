@@ -811,12 +811,15 @@ export default function RedListView() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
                   Criteria
                 </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                  Assessed
+                </th>
                 <th
                   className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
                   onClick={() => handleSort("year")}
                 >
                   <span className="flex items-center gap-1">
-                    Year
+                    Published
                     {sortField === "year" && (
                       <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
                     )}
@@ -865,18 +868,16 @@ export default function RedListView() {
                       {details?.criteria || "—"}
                     </td>
                     <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
-                      <span className="relative group cursor-default">
-                        {s.year_published}
-                        {s.assessment_date && (
-                          <span className="absolute left-0 bottom-full mb-1 px-2 py-1 text-xs bg-zinc-800 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">
-                            Assessed on {new Date(s.assessment_date).toLocaleDateString("en-GB", {
-                              day: "numeric",
-                              month: "long",
-                              year: "numeric",
-                            })}
-                          </span>
-                        )}
-                      </span>
+                      {s.assessment_date
+                        ? new Date(s.assessment_date).toLocaleDateString("en-GB", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })
+                        : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
+                      {s.year_published}
                       {yearsSince > 10 && (
                         <span className="ml-1 text-xs text-amber-600">({yearsSince}y ago)</span>
                       )}

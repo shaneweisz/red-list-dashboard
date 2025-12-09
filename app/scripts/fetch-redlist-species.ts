@@ -34,7 +34,8 @@ interface TaxonConfig {
 
 const TAXA_CONFIG: Record<string, TaxonConfig> = {
   plantae: { id: "plantae", name: "Plants", apiEndpoint: "kingdom/Plantae", dataFile: "redlist-plantae.json" },
-  fungi: { id: "fungi", name: "Fungi", apiEndpoint: "phylum/Ascomycota", dataFile: "redlist-fungi.json" },
+  ascomycota: { id: "ascomycota", name: "Ascomycota (Sac Fungi)", apiEndpoint: "phylum/Ascomycota", dataFile: "redlist-ascomycota.json" },
+  basidiomycota: { id: "basidiomycota", name: "Basidiomycota (Mushrooms)", apiEndpoint: "phylum/Basidiomycota", dataFile: "redlist-basidiomycota.json" },
   mammalia: { id: "mammalia", name: "Mammals", apiEndpoint: "class/Mammalia", dataFile: "redlist-mammalia.json" },
   aves: { id: "aves", name: "Birds", apiEndpoint: "class/Aves", dataFile: "redlist-aves.json" },
   reptilia: { id: "reptilia", name: "Reptiles", apiEndpoint: "class/Reptilia", dataFile: "redlist-reptilia.json" },
@@ -253,8 +254,9 @@ async function fetchSpeciesDetails(
 
 async function fetchPage(page: number, apiEndpoint: string): Promise<Assessment[]> {
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    // scope_code=1 = Global assessments only (excludes regional/national)
     const res = await fetchWithAuth(
-      `https://api.iucnredlist.org/api/v4/taxa/${apiEndpoint}?latest=true&page=${page}`
+      `https://api.iucnredlist.org/api/v4/taxa/${apiEndpoint}?latest=true&scope_code=1&page=${page}`
     );
 
     if (res.ok) {
