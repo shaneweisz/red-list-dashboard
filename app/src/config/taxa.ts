@@ -33,14 +33,19 @@ export interface TaxonConfig {
   icon?: string;
 }
 
+// Estimated described species from IUCN Red List Table 1a (version 2025-2)
+// Source: https://nc.iucnredlist.org/redlist/content/attachment_files/2025-2_RL_Table1a.pdf
+const IUCN_SOURCE = "IUCN 2025-2";
+const IUCN_SOURCE_URL = "https://nc.iucnredlist.org/redlist/content/attachment_files/2025-2_RL_Table1a.pdf";
+
 export const TAXA: TaxonConfig[] = [
   {
     id: "plantae",
     name: "Plants",
     apiEndpoint: "kingdom/Plantae",
-    estimatedDescribed: 452050,
-    estimatedSource: "WFO 2025-06",
-    estimatedSourceUrl: "https://wfoplantlist.org/plant-list/classifications",
+    estimatedDescribed: 426132,
+    estimatedSource: IUCN_SOURCE,
+    estimatedSourceUrl: IUCN_SOURCE_URL,
     dataFile: "redlist-plantae.json",
     gbifDataFile: "gbif-plantae.csv",
     gbifKingdomKey: 6,
@@ -50,9 +55,9 @@ export const TAXA: TaxonConfig[] = [
     id: "mammalia",
     name: "Mammals",
     apiEndpoint: "class/Mammalia",
-    estimatedDescribed: 6836,
-    estimatedSource: "MDD 2024",
-    estimatedSourceUrl: "https://mammaldiversity.org/",
+    estimatedDescribed: 6819,
+    estimatedSource: IUCN_SOURCE,
+    estimatedSourceUrl: IUCN_SOURCE_URL,
     dataFile: "redlist-mammalia.json",
     gbifDataFile: "gbif-mammalia.csv",
     gbifKingdomKey: 1,
@@ -63,9 +68,9 @@ export const TAXA: TaxonConfig[] = [
     id: "aves",
     name: "Birds",
     apiEndpoint: "class/Aves",
-    estimatedDescribed: 11000,
-    estimatedSource: "BirdLife 2024",
-    estimatedSourceUrl: "https://www.birdlife.org/",
+    estimatedDescribed: 11185,
+    estimatedSource: IUCN_SOURCE,
+    estimatedSourceUrl: IUCN_SOURCE_URL,
     dataFile: "redlist-aves.json",
     gbifDataFile: "gbif-aves.csv",
     gbifKingdomKey: 1,
@@ -76,9 +81,9 @@ export const TAXA: TaxonConfig[] = [
     id: "reptilia",
     name: "Reptiles",
     apiEndpoint: "class/Reptilia",
-    estimatedDescribed: 12110,
-    estimatedSource: "Reptile Database 2024",
-    estimatedSourceUrl: "https://reptile-database.reptarium.cz/",
+    estimatedDescribed: 12502,
+    estimatedSource: IUCN_SOURCE,
+    estimatedSourceUrl: IUCN_SOURCE_URL,
     dataFile: "redlist-reptilia.json",
     gbifDataFile: "gbif-reptilia.csv",
     gbifKingdomKey: 1,
@@ -90,9 +95,9 @@ export const TAXA: TaxonConfig[] = [
     id: "amphibia",
     name: "Amphibians",
     apiEndpoint: "class/Amphibia",
-    estimatedDescribed: 8974,
-    estimatedSource: "AmphibiaWeb 2025",
-    estimatedSourceUrl: "https://amphibiaweb.org/",
+    estimatedDescribed: 8918,
+    estimatedSource: IUCN_SOURCE,
+    estimatedSourceUrl: IUCN_SOURCE_URL,
     dataFile: "redlist-amphibia.json",
     gbifDataFile: "gbif-amphibia.csv",
     gbifKingdomKey: 1,
@@ -104,9 +109,9 @@ export const TAXA: TaxonConfig[] = [
     name: "Fishes",
     apiEndpoint: "class/Actinopterygii",
     apiEndpoints: ["class/Actinopterygii", "class/Chondrichthyes"],
-    estimatedDescribed: 37400, // 36100 ray-finned + 1300 sharks/rays
-    estimatedSource: "FishBase 2025",
-    estimatedSourceUrl: "https://www.fishbase.se/",
+    estimatedDescribed: 37288,
+    estimatedSource: IUCN_SOURCE,
+    estimatedSourceUrl: IUCN_SOURCE_URL,
     dataFile: "redlist-fishes.json",
     dataFiles: ["redlist-actinopterygii.json", "redlist-chondrichthyes.json"],
     gbifDataFile: "gbif-fishes.csv",
@@ -121,8 +126,9 @@ export const TAXA: TaxonConfig[] = [
     name: "Invertebrates",
     apiEndpoint: "class/Insecta",
     apiEndpoints: ["class/Insecta", "class/Arachnida", "class/Gastropoda", "class/Bivalvia", "class/Malacostraca", "class/Anthozoa"],
-    estimatedDescribed: 1283700, // 1050000 insects + 112000 arachnids + 74200 molluscs + 40000 crustaceans + 7500 corals
-    estimatedSource: "Various 2024",
+    estimatedDescribed: 1508442, // IUCN invertebrates subtotal
+    estimatedSource: IUCN_SOURCE,
+    estimatedSourceUrl: IUCN_SOURCE_URL,
     dataFile: "redlist-invertebrates.json",
     dataFiles: ["redlist-insecta.json", "redlist-arachnida.json", "redlist-gastropoda.json", "redlist-bivalvia.json", "redlist-malacostraca.json", "redlist-anthozoa.json"],
     gbifDataFile: "gbif-invertebrates.csv",
@@ -134,9 +140,9 @@ export const TAXA: TaxonConfig[] = [
     id: "fungi",
     name: "Fungi",
     apiEndpoint: "phylum/Ascomycota", // Only Ascomycota has assessments (mostly lichens)
-    estimatedDescribed: 155000,
-    estimatedSource: "Species Fungorum 2024",
-    estimatedSourceUrl: "https://www.speciesfungorum.org/",
+    estimatedDescribed: 162653, // IUCN fungi & protists subtotal
+    estimatedSource: IUCN_SOURCE,
+    estimatedSourceUrl: IUCN_SOURCE_URL,
     dataFile: "redlist-fungi.json",
     gbifDataFile: "gbif-fungi.csv",
     gbifKingdomKey: 5,
