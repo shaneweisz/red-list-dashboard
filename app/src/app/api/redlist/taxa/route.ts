@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import * as fs from "fs";
 import * as path from "path";
-import { TAXA, CATEGORY_COLORS } from "@/config/taxa";
+import { TAXA, CATEGORY_COLORS, TaxonConfig } from "@/config/taxa";
 
 interface PrecomputedData {
   species: { category: string }[];
@@ -18,6 +18,7 @@ interface TaxonSummary {
   color: string;
   estimatedDescribed: number;
   estimatedSource: string;
+  estimatedSourceUrl?: string;
   available: boolean;
   totalAssessed: number;
   percentAssessed: number;
@@ -36,7 +37,7 @@ let cachedSummary: TaxonSummary[] | null = null;
 let cacheTime = 0;
 const CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
-function loadTaxonData(dataFile: string): PrecomputedData | null {
+function loadSingleDataFile(dataFile: string): PrecomputedData | null {
   const dataPath = path.join(process.cwd(), "data", dataFile);
 
   try {
@@ -50,9 +51,55 @@ function loadTaxonData(dataFile: string): PrecomputedData | null {
   }
 }
 
+function loadTaxonData(taxon: TaxonConfig): PrecomputedData | null {
+  // If taxon has multiple data files (combined taxa like Fishes, Molluscs)
+  if (taxon.dataFiles && taxon.dataFiles.length > 0) {
+    const allData: PrecomputedData[] = [];
+
+    for (const dataFile of taxon.dataFiles) {
+      const data = loadSingleDataFile(dataFile);
+      if (data) {
+        allData.push(data);
+      }
+    }
+
+    if (allData.length === 0) {
+      return null;
+    }
+
+    // Merge all data files
+    const mergedSpecies = allData.flatMap(d => d.species);
+    const mergedByCategory: Record<string, number> = {};
+
+    for (const data of allData) {
+      for (const [cat, count] of Object.entries(data.metadata.byCategory)) {
+        mergedByCategory[cat] = (mergedByCategory[cat] || 0) + count;
+      }
+    }
+
+    // Use the most recent fetchedAt
+    const latestFetchedAt = allData
+      .map(d => d.metadata.fetchedAt)
+      .sort()
+      .pop() || allData[0].metadata.fetchedAt;
+
+    return {
+      species: mergedSpecies,
+      metadata: {
+        totalSpecies: mergedSpecies.length,
+        fetchedAt: latestFetchedAt,
+        byCategory: mergedByCategory,
+      },
+    };
+  }
+
+  // Single data file
+  return loadSingleDataFile(taxon.dataFile);
+}
+
 function buildSummary(): TaxonSummary[] {
   return TAXA.map((taxon) => {
-    const data = loadTaxonData(taxon.dataFile);
+    const data = loadTaxonData(taxon);
 
     if (!data) {
       return {
@@ -61,6 +108,7 @@ function buildSummary(): TaxonSummary[] {
         color: taxon.color,
         estimatedDescribed: taxon.estimatedDescribed,
         estimatedSource: taxon.estimatedSource,
+        estimatedSourceUrl: taxon.estimatedSourceUrl,
         available: false,
         totalAssessed: 0,
         percentAssessed: 0,
@@ -99,6 +147,7 @@ function buildSummary(): TaxonSummary[] {
       color: taxon.color,
       estimatedDescribed: taxon.estimatedDescribed,
       estimatedSource: taxon.estimatedSource,
+      estimatedSourceUrl: taxon.estimatedSourceUrl,
       available: true,
       totalAssessed: data.metadata.totalSpecies,
       percentAssessed: Math.round(percentAssessed * 10) / 10,

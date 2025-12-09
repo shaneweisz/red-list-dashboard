@@ -60,7 +60,7 @@ export async function GET(
       // IUCN taxon details (for assessment count and common name)
       fetchWithAuth(`https://api.iucnredlist.org/api/v4/taxa/sis/${cacheKey}`),
       // GBIF species search by name (for GBIF link and taxon key)
-      ...(scientificName ? [fetch(`https://api.gbif.org/v1/species/match?name=${encodeURIComponent(scientificName)}&kingdom=Plantae`)] : []),
+      ...(scientificName ? [fetch(`https://api.gbif.org/v1/species/match?name=${encodeURIComponent(scientificName)}`)] : []),
     ];
 
     // Also fetch assessment details for criteria if we have assessmentId

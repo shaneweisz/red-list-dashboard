@@ -107,7 +107,7 @@ export default function RedListView() {
   // Sorting
   type SortField = "year" | "category" | null;
   type SortDirection = "asc" | "desc";
-  const [sortField, setSortField] = useState<SortField>("year");
+  const [sortField, setSortField] = useState<SortField>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
   // Pagination

@@ -17,10 +17,13 @@
 export interface TaxonConfig {
   id: string;
   name: string;
-  apiEndpoint: string;
+  apiEndpoint: string; // Primary API endpoint
+  apiEndpoints?: string[]; // Multiple API endpoints for combined taxa (e.g., Fishes = Actinopterygii + Chondrichthyes)
   estimatedDescribed: number;
   estimatedSource: string;
-  dataFile: string;
+  estimatedSourceUrl?: string;
+  dataFile: string; // Primary data file
+  dataFiles?: string[]; // Multiple data files for combined taxa
   gbifDataFile: string;
   gbifKingdomKey?: number;
   gbifClassKey?: number;
@@ -35,30 +38,21 @@ export const TAXA: TaxonConfig[] = [
     id: "plantae",
     name: "Plants",
     apiEndpoint: "kingdom/Plantae",
-    estimatedDescribed: 380801,
+    estimatedDescribed: 452050,
     estimatedSource: "WFO 2025-06",
+    estimatedSourceUrl: "https://wfoplantlist.org/plant-list/classifications",
     dataFile: "redlist-plantae.json",
     gbifDataFile: "gbif-plantae.csv",
     gbifKingdomKey: 6,
     color: "#22c55e", // green-500
   },
   {
-    id: "fungi",
-    name: "Fungi",
-    apiEndpoint: "phylum/Ascomycota", // Only Ascomycota has assessments (mostly lichens)
-    estimatedDescribed: 148000,
-    estimatedSource: "Species Fungorum 2024",
-    dataFile: "redlist-fungi.json",
-    gbifDataFile: "gbif-fungi.csv",
-    gbifKingdomKey: 5,
-    color: "#d97706", // amber-600
-  },
-  {
     id: "mammalia",
     name: "Mammals",
     apiEndpoint: "class/Mammalia",
-    estimatedDescribed: 6500,
-    estimatedSource: "ASM 2024",
+    estimatedDescribed: 6836,
+    estimatedSource: "MDD 2024",
+    estimatedSourceUrl: "https://mammaldiversity.org/",
     dataFile: "redlist-mammalia.json",
     gbifDataFile: "gbif-mammalia.csv",
     gbifKingdomKey: 1,
@@ -71,6 +65,7 @@ export const TAXA: TaxonConfig[] = [
     apiEndpoint: "class/Aves",
     estimatedDescribed: 11000,
     estimatedSource: "BirdLife 2024",
+    estimatedSourceUrl: "https://www.birdlife.org/",
     dataFile: "redlist-aves.json",
     gbifDataFile: "gbif-aves.csv",
     gbifKingdomKey: 1,
@@ -81,8 +76,9 @@ export const TAXA: TaxonConfig[] = [
     id: "reptilia",
     name: "Reptiles",
     apiEndpoint: "class/Reptilia",
-    estimatedDescribed: 12000,
+    estimatedDescribed: 12110,
     estimatedSource: "Reptile Database 2024",
+    estimatedSourceUrl: "https://reptile-database.reptarium.cz/",
     dataFile: "redlist-reptilia.json",
     gbifDataFile: "gbif-reptilia.csv",
     gbifKingdomKey: 1,
@@ -94,8 +90,9 @@ export const TAXA: TaxonConfig[] = [
     id: "amphibia",
     name: "Amphibians",
     apiEndpoint: "class/Amphibia",
-    estimatedDescribed: 8700,
-    estimatedSource: "AmphibiaWeb 2024",
+    estimatedDescribed: 8974,
+    estimatedSource: "AmphibiaWeb 2025",
+    estimatedSourceUrl: "https://amphibiaweb.org/",
     dataFile: "redlist-amphibia.json",
     gbifDataFile: "gbif-amphibia.csv",
     gbifKingdomKey: 1,
@@ -103,29 +100,47 @@ export const TAXA: TaxonConfig[] = [
     color: "#14b8a6", // teal-500
   },
   {
-    id: "actinopterygii",
-    name: "Ray-finned Fishes",
+    id: "fishes",
+    name: "Fishes",
     apiEndpoint: "class/Actinopterygii",
-    estimatedDescribed: 35000,
-    estimatedSource: "FishBase 2024",
-    dataFile: "redlist-actinopterygii.json",
-    gbifDataFile: "gbif-actinopterygii.csv",
+    apiEndpoints: ["class/Actinopterygii", "class/Chondrichthyes"],
+    estimatedDescribed: 37400, // 36100 ray-finned + 1300 sharks/rays
+    estimatedSource: "FishBase 2025",
+    estimatedSourceUrl: "https://www.fishbase.se/",
+    dataFile: "redlist-fishes.json",
+    dataFiles: ["redlist-actinopterygii.json", "redlist-chondrichthyes.json"],
+    gbifDataFile: "gbif-fishes.csv",
     gbifKingdomKey: 1,
-    // GBIF has no class for fish - query by order keys instead
+    // Combined: ray-finned fish orders + Elasmobranchii (121) + Holocephali (120)
     gbifOrderKeys: [389,391,427,428,446,494,495,496,497,498,499,537,538,547,548,549,550,587,588,589,590,696,708,742,752,753,772,773,774,781,836,848,857,860,861,888,889,890,898,929,975,976,1067,1153,1313],
+    gbifClassKeys: [121, 120],
     color: "#06b6d4", // cyan-500
   },
   {
-    id: "insecta",
-    name: "Insects",
+    id: "invertebrates",
+    name: "Invertebrates",
     apiEndpoint: "class/Insecta",
-    estimatedDescribed: 1000000,
-    estimatedSource: "Estimated",
-    dataFile: "redlist-insecta.json",
-    gbifDataFile: "gbif-insecta.csv",
+    apiEndpoints: ["class/Insecta", "class/Arachnida", "class/Gastropoda", "class/Bivalvia", "class/Malacostraca", "class/Anthozoa"],
+    estimatedDescribed: 1283700, // 1050000 insects + 112000 arachnids + 74200 molluscs + 40000 crustaceans + 7500 corals
+    estimatedSource: "Various 2024",
+    dataFile: "redlist-invertebrates.json",
+    dataFiles: ["redlist-insecta.json", "redlist-arachnida.json", "redlist-gastropoda.json", "redlist-bivalvia.json", "redlist-malacostraca.json", "redlist-anthozoa.json"],
+    gbifDataFile: "gbif-invertebrates.csv",
     gbifKingdomKey: 1,
-    gbifClassKey: 216,
-    color: "#eab308", // yellow-500
+    gbifClassKeys: [216, 367, 225, 137, 229, 206], // Insecta, Arachnida, Gastropoda, Bivalvia, Malacostraca, Anthozoa
+    color: "#78716c", // stone-500
+  },
+  {
+    id: "fungi",
+    name: "Fungi",
+    apiEndpoint: "phylum/Ascomycota", // Only Ascomycota has assessments (mostly lichens)
+    estimatedDescribed: 155000,
+    estimatedSource: "Species Fungorum 2024",
+    estimatedSourceUrl: "https://www.speciesfungorum.org/",
+    dataFile: "redlist-fungi.json",
+    gbifDataFile: "gbif-fungi.csv",
+    gbifKingdomKey: 5,
+    color: "#d97706", // amber-600
   },
 ];
 
