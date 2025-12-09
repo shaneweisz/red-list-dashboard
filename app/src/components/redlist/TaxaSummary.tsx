@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CATEGORY_COLORS, CATEGORY_NAMES } from "@/config/taxa";
 
 interface TaxonSummary {
   id: string;
@@ -91,8 +90,8 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
               <th className="px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
                 % Assessed
               </th>
-              <th className="px-4 py-2 text-center text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                Category Distribution
+              <th className="px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                # Outdated
               </th>
               <th className="px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
                 <div>% Outdated</div>
@@ -151,32 +150,34 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
                 <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 tabular-nums">
                   {taxon.available ? taxon.totalAssessed.toLocaleString() : "—"}
                 </td>
-                <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 tabular-nums">
-                  {taxon.available ? `${taxon.percentAssessed.toFixed(1)}%` : "—"}
-                </td>
-                <td className="px-4 py-3">
-                  {taxon.available && taxon.totalAssessed > 0 ? (
-                    <div className="flex h-4 rounded overflow-hidden bg-zinc-200 dark:bg-zinc-700">
-                      {taxon.byCategory
-                        .filter((c) => c.count > 0)
-                        .map((cat) => (
-                          <div
-                            key={cat.code}
-                            className="h-full"
-                            style={{
-                              width: `${(cat.count / taxon.totalAssessed) * 100}%`,
-                              backgroundColor: cat.color,
-                            }}
-                            title={`${CATEGORY_NAMES[cat.code] || cat.code} (${cat.code}): ${((cat.count / taxon.totalAssessed) * 100).toFixed(1)}%`}
-                          />
-                        ))}
-                    </div>
-                  ) : (
-                    <div className="h-4 rounded bg-zinc-200 dark:bg-zinc-700" />
-                  )}
+                <td className="px-4 py-3 text-right tabular-nums">
+                  {taxon.available ? (
+                    <span
+                      className="px-2 py-0.5 rounded"
+                      style={{
+                        backgroundColor: taxon.percentAssessed >= 50 ? "rgba(34, 197, 94, 0.15)" : taxon.percentAssessed >= 20 ? "rgba(234, 179, 8, 0.15)" : "rgba(239, 68, 68, 0.15)",
+                        color: taxon.percentAssessed >= 50 ? "#16a34a" : taxon.percentAssessed >= 20 ? "#ca8a04" : "#dc2626",
+                      }}
+                    >
+                      {taxon.percentAssessed.toFixed(1)}%
+                    </span>
+                  ) : "—"}
                 </td>
                 <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 tabular-nums">
-                  {taxon.available ? `${taxon.percentOutdated.toFixed(1)}%` : "—"}
+                  {taxon.available ? taxon.outdated.toLocaleString() : "—"}
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums">
+                  {taxon.available ? (
+                    <span
+                      className="px-2 py-0.5 rounded"
+                      style={{
+                        backgroundColor: taxon.percentOutdated < 20 ? "rgba(34, 197, 94, 0.15)" : taxon.percentOutdated < 40 ? "rgba(234, 179, 8, 0.15)" : "rgba(239, 68, 68, 0.15)",
+                        color: taxon.percentOutdated < 20 ? "#16a34a" : taxon.percentOutdated < 40 ? "#ca8a04" : "#dc2626",
+                      }}
+                    >
+                      {taxon.percentOutdated.toFixed(1)}%
+                    </span>
+                  ) : "—"}
                 </td>
               </tr>
             ))}
@@ -193,24 +194,40 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
                 <td className="px-4 py-3 text-right text-zinc-700 dark:text-zinc-300 tabular-nums">
                   {totalAssessed.toLocaleString()}
                 </td>
-                <td className="px-4 py-3 text-right text-zinc-700 dark:text-zinc-300 tabular-nums">
-                  {((totalAssessed / totalDescribed) * 100).toFixed(1)}%
+                <td className="px-4 py-3 text-right tabular-nums">
+                  {(() => {
+                    const percent = (totalAssessed / totalDescribed) * 100;
+                    return (
+                      <span
+                        className="px-2 py-0.5 rounded"
+                        style={{
+                          backgroundColor: percent >= 50 ? "rgba(34, 197, 94, 0.15)" : percent >= 20 ? "rgba(234, 179, 8, 0.15)" : "rgba(239, 68, 68, 0.15)",
+                          color: percent >= 50 ? "#16a34a" : percent >= 20 ? "#ca8a04" : "#dc2626",
+                        }}
+                      >
+                        {percent.toFixed(1)}%
+                      </span>
+                    );
+                  })()}
                 </td>
-                <td className="px-4 py-3">
-                  <div className="flex flex-wrap justify-end gap-x-3 gap-y-1 text-xs">
-                    {Object.entries(CATEGORY_COLORS).map(([code, color]) => (
-                      <div key={code} className="flex items-center gap-1">
-                        <div
-                          className="w-3 h-3 rounded-sm"
-                          style={{ backgroundColor: color }}
-                        />
-                        <span className="text-zinc-500 dark:text-zinc-400">{code}</span>
-                      </div>
-                    ))}
-                  </div>
-                </td>
                 <td className="px-4 py-3 text-right text-zinc-700 dark:text-zinc-300 tabular-nums">
-                  {((totalOutdated / totalAssessed) * 100).toFixed(1)}%
+                  {totalOutdated.toLocaleString()}
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums">
+                  {(() => {
+                    const percent = (totalOutdated / totalAssessed) * 100;
+                    return (
+                      <span
+                        className="px-2 py-0.5 rounded"
+                        style={{
+                          backgroundColor: percent < 20 ? "rgba(34, 197, 94, 0.15)" : percent < 40 ? "rgba(234, 179, 8, 0.15)" : "rgba(239, 68, 68, 0.15)",
+                          color: percent < 20 ? "#16a34a" : percent < 40 ? "#ca8a04" : "#dc2626",
+                        }}
+                      >
+                        {percent.toFixed(1)}%
+                      </span>
+                    );
+                  })()}
                 </td>
               </tr>
             </tfoot>
