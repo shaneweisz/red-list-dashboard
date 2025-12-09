@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { ThemeToggle } from "../components/ThemeToggle";
@@ -21,6 +22,8 @@ const RedListView = dynamic(
 );
 
 export default function RedListPage() {
+  const [selectedTaxonName, setSelectedTaxonName] = useState<string | null>(null);
+
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 p-4 md:p-8">
       <main className="max-w-7xl mx-auto">
@@ -31,7 +34,9 @@ export default function RedListPage() {
               IUCN Red List Dashboard
             </h1>
             <p className="text-zinc-600 dark:text-zinc-400">
-              Select a taxon for a detailed breakdown
+              {selectedTaxonName
+                ? `Detailed assessments breakdown for ${selectedTaxonName}`
+                : "Select a taxon for a detailed breakdown"}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -71,7 +76,7 @@ export default function RedListPage() {
         </div>
 
         {/* Red List Content */}
-        <RedListView />
+        <RedListView onTaxonChange={setSelectedTaxonName} />
       </main>
     </div>
   );

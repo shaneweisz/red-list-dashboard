@@ -90,11 +90,11 @@ export default function GBIFTaxaSummary({ onSelectTaxon, selectedTaxon }: Props)
                 Total Occurrences
               </th>
               <th className="px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                <div>Median Occurrences</div>
+                <div>Mean Occurrences</div>
                 <div className="font-normal normal-case tracking-normal">(per species)</div>
               </th>
               <th className="px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                <div>Mean Occurrences</div>
+                <div>Median Occurrences</div>
                 <div className="font-normal normal-case tracking-normal">(per species)</div>
               </th>
               <th className="px-4 py-2 text-center text-xs font-medium text-zinc-500 uppercase tracking-wider">
@@ -133,10 +133,10 @@ export default function GBIFTaxaSummary({ onSelectTaxon, selectedTaxon }: Props)
                   {taxon.gbifDataAvailable ? formatNumber(taxon.gbifTotalOccurrences) : "—"}
                 </td>
                 <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 tabular-nums">
-                  {taxon.gbifDataAvailable ? formatNumber(taxon.gbifMedian) : "—"}
+                  {taxon.gbifDataAvailable ? formatNumber(taxon.gbifMean) : "—"}
                 </td>
                 <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 tabular-nums">
-                  {taxon.gbifDataAvailable ? formatNumber(taxon.gbifMean) : "—"}
+                  {taxon.gbifDataAvailable ? formatNumber(taxon.gbifMedian) : "—"}
                 </td>
                 <td className="px-4 py-3">
                   {taxon.gbifDataAvailable && taxon.distribution && taxon.gbifSpeciesCount > 0 ? (

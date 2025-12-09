@@ -88,7 +88,11 @@ interface SpeciesResponse {
   taxon?: TaxonInfo;
 }
 
-export default function RedListView() {
+interface RedListViewProps {
+  onTaxonChange?: (taxonName: string | null) => void;
+}
+
+export default function RedListView({ onTaxonChange }: RedListViewProps) {
   // Selected taxon (null = show summary table)
   const [selectedTaxon, setSelectedTaxon] = useState<string | null>(null);
   const [taxonInfo, setTaxonInfo] = useState<TaxonInfo | null>(null);
@@ -107,7 +111,7 @@ export default function RedListView() {
   // Sorting
   type SortField = "year" | "category" | null;
   type SortDirection = "asc" | "desc";
-  const [sortField, setSortField] = useState<SortField>(null);
+  const [sortField, setSortField] = useState<SortField>("year");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
   // Pagination
@@ -163,6 +167,11 @@ export default function RedListView() {
     fetchData();
   }, [selectedTaxon]);
 
+  // Notify parent when taxon changes
+  useEffect(() => {
+    onTaxonChange?.(taxonInfo?.name || null);
+  }, [taxonInfo, onTaxonChange]);
+
   // Reset filters when taxon changes
   useEffect(() => {
     setSelectedCategory(null);
@@ -173,11 +182,13 @@ export default function RedListView() {
     setSpeciesDetails({});
   }, [selectedTaxon]);
 
-  // Helper to check if species matches year range filter
-  const matchesYearRangeFilter = (yearPublished: string): boolean => {
+  // Helper to check if species matches year range filter (based on assessment date)
+  const matchesYearRangeFilter = (assessmentDate: string | null): boolean => {
     if (!selectedYearRange) return true;
+    if (!assessmentDate) return false;
     const currentYear = new Date().getFullYear();
-    const yearsSince = currentYear - parseInt(yearPublished);
+    const assessmentYear = new Date(assessmentDate).getFullYear();
+    const yearsSince = currentYear - assessmentYear;
 
     switch (selectedYearRange) {
       case "0-1 years": return yearsSince <= 1;
@@ -204,7 +215,7 @@ export default function RedListView() {
   // Filter species based on category, year range, assessment count, and search
   const filteredSpecies = species.filter((s) => {
     const matchesCategory = !selectedCategory || s.category === selectedCategory;
-    const matchesYear = matchesYearRangeFilter(s.year_published);
+    const matchesYear = matchesYearRangeFilter(s.assessment_date);
     const matchesAssessment = matchesAssessmentCountFilter(s.assessment_count);
     const matchesSearch = !searchQuery ||
       s.scientific_name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -230,7 +241,10 @@ export default function RedListView() {
 
     let comparison = 0;
     if (sortField === "year") {
-      comparison = parseInt(a.year_published) - parseInt(b.year_published);
+      // Sort by assessment date
+      const dateA = a.assessment_date ? new Date(a.assessment_date).getTime() : 0;
+      const dateB = b.assessment_date ? new Date(b.assessment_date).getTime() : 0;
+      comparison = dateA - dateB;
     } else if (sortField === "category") {
       comparison = (CATEGORY_ORDER[a.category] ?? 99) - (CATEGORY_ORDER[b.category] ?? 99);
     }
@@ -811,19 +825,19 @@ export default function RedListView() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
                   Criteria
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                  Assessed
-                </th>
                 <th
                   className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
                   onClick={() => handleSort("year")}
                 >
                   <span className="flex items-center gap-1">
-                    Published
+                    Assessed
                     {sortField === "year" && (
                       <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
                     )}
                   </span>
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                  Published
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
                   Previous Assessments
@@ -838,7 +852,8 @@ export default function RedListView() {
             </thead>
             <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
               {paginatedSpecies.map((s) => {
-                const yearsSince = currentYear - parseInt(s.year_published);
+                const assessmentYear = s.assessment_date ? new Date(s.assessment_date).getFullYear() : null;
+                const yearsSinceAssessment = assessmentYear ? currentYear - assessmentYear : null;
                 const details = speciesDetails[s.sis_taxon_id];
                 return (
                   <tr key={s.sis_taxon_id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
@@ -875,12 +890,12 @@ export default function RedListView() {
                             year: "numeric",
                           })
                         : "—"}
+                      {yearsSinceAssessment !== null && yearsSinceAssessment > 10 && (
+                        <span className="ml-1 text-xs text-amber-600">({yearsSinceAssessment}y ago)</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
                       {s.year_published}
-                      {yearsSince > 10 && (
-                        <span className="ml-1 text-xs text-amber-600">({yearsSince}y ago)</span>
-                      )}
                     </td>
                     <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400 text-sm">
                       {s.previous_assessments.length > 0
