@@ -24,7 +24,7 @@ interface TaxonSummary {
 }
 
 interface Props {
-  onSelectTaxon: (taxonId: string) => void;
+  onSelectTaxon: (taxonId: string | null) => void;
   selectedTaxon: string | null;
 }
 
@@ -103,10 +103,16 @@ export default function GBIFTaxaSummary({ onSelectTaxon, selectedTaxon }: Props)
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
-            {taxa.map((taxon) => (
+            {taxa
+              .filter((taxon) => !selectedTaxon || taxon.id === selectedTaxon)
+              .map((taxon) => (
               <tr
                 key={taxon.id}
-                onClick={() => taxon.gbifDataAvailable && onSelectTaxon(taxon.id)}
+                onClick={() => {
+                  if (!taxon.gbifDataAvailable) return;
+                  // Toggle: if already selected, deselect; otherwise select
+                  onSelectTaxon(selectedTaxon === taxon.id ? null : taxon.id);
+                }}
                 className={`
                   ${taxon.gbifDataAvailable ? "cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50" : "opacity-50 cursor-not-allowed"}
                   ${selectedTaxon === taxon.id ? "bg-zinc-100 dark:bg-zinc-800" : ""}
@@ -189,45 +195,47 @@ export default function GBIFTaxaSummary({ onSelectTaxon, selectedTaxon }: Props)
               </tr>
             ))}
           </tbody>
-          <tfoot className="bg-zinc-50 dark:bg-zinc-800 font-medium">
-            <tr>
-              <td className="px-4 py-3 text-zinc-700 dark:text-zinc-300">
-                Total
-              </td>
-              <td className="px-4 py-3 text-right text-zinc-700 dark:text-zinc-300 tabular-nums">
-                {formatNumber(totalSpecies)}
-              </td>
-              <td className="px-4 py-3 text-right text-zinc-700 dark:text-zinc-300 tabular-nums">
-                {formatNumber(totalOccurrences)}
-              </td>
-              <td className="px-4 py-3"></td>
-              <td className="px-4 py-3"></td>
-              <td className="px-4 py-3">
-                <div className="flex flex-wrap justify-end gap-x-3 gap-y-1 text-xs">
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded-sm bg-red-700" />
-                    <span className="text-zinc-500 dark:text-zinc-400">=1</span>
+          {!selectedTaxon && (
+            <tfoot className="bg-zinc-50 dark:bg-zinc-800 font-medium">
+              <tr>
+                <td className="px-4 py-3 text-zinc-700 dark:text-zinc-300">
+                  Total
+                </td>
+                <td className="px-4 py-3 text-right text-zinc-700 dark:text-zinc-300 tabular-nums">
+                  {formatNumber(totalSpecies)}
+                </td>
+                <td className="px-4 py-3 text-right text-zinc-700 dark:text-zinc-300 tabular-nums">
+                  {formatNumber(totalOccurrences)}
+                </td>
+                <td className="px-4 py-3"></td>
+                <td className="px-4 py-3"></td>
+                <td className="px-4 py-3">
+                  <div className="flex flex-wrap justify-end gap-x-3 gap-y-1 text-xs">
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 rounded-sm bg-red-700" />
+                      <span className="text-zinc-500 dark:text-zinc-400">=1</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 rounded-sm bg-red-500" />
+                      <span className="text-zinc-500 dark:text-zinc-400">2-10</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 rounded-sm bg-amber-500" />
+                      <span className="text-zinc-500 dark:text-zinc-400">11-100</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 rounded-sm bg-yellow-400" />
+                      <span className="text-zinc-500 dark:text-zinc-400">101-1K</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 rounded-sm bg-green-500" />
+                      <span className="text-zinc-500 dark:text-zinc-400">&gt;1K</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded-sm bg-red-500" />
-                    <span className="text-zinc-500 dark:text-zinc-400">2-10</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded-sm bg-amber-500" />
-                    <span className="text-zinc-500 dark:text-zinc-400">11-100</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded-sm bg-yellow-400" />
-                    <span className="text-zinc-500 dark:text-zinc-400">101-1K</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded-sm bg-green-500" />
-                    <span className="text-zinc-500 dark:text-zinc-400">&gt;1K</span>
-                  </div>
-                </div>
-              </td>
-            </tr>
-          </tfoot>
+                </td>
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
     </div>
