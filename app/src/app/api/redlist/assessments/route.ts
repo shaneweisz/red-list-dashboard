@@ -33,13 +33,45 @@ function loadPrecomputedData(taxonId: string): PrecomputedData | null {
   const dataPath = path.join(process.cwd(), "data", taxon.dataFile);
 
   try {
-    if (!fs.existsSync(dataPath)) {
-      console.warn(`Pre-computed data file not found: ${dataPath}`);
-      return null;
+    // First try to load the single data file
+    if (fs.existsSync(dataPath)) {
+      const fileContent = fs.readFileSync(dataPath, "utf-8");
+      return JSON.parse(fileContent) as PrecomputedData;
     }
 
-    const fileContent = fs.readFileSync(dataPath, "utf-8");
-    return JSON.parse(fileContent) as PrecomputedData;
+    // If single file doesn't exist, try to merge multiple data files (for combined taxa)
+    if (taxon.dataFiles && taxon.dataFiles.length > 0) {
+      const allSpecies: Species[] = [];
+      let latestFetchedAt = "";
+
+      for (const fileName of taxon.dataFiles) {
+        const filePath = path.join(process.cwd(), "data", fileName);
+        if (fs.existsSync(filePath)) {
+          const fileContent = fs.readFileSync(filePath, "utf-8");
+          const data = JSON.parse(fileContent) as PrecomputedData;
+          allSpecies.push(...data.species);
+
+          // Track the latest fetch time
+          if (data.metadata.fetchedAt > latestFetchedAt) {
+            latestFetchedAt = data.metadata.fetchedAt;
+          }
+        }
+      }
+
+      if (allSpecies.length > 0) {
+        return {
+          species: allSpecies,
+          metadata: {
+            totalSpecies: allSpecies.length,
+            fetchedAt: latestFetchedAt,
+            taxonId,
+          },
+        };
+      }
+    }
+
+    console.warn(`Pre-computed data file not found: ${dataPath}`);
+    return null;
   } catch (error) {
     console.error(`Error loading pre-computed data for ${taxonId}:`, error);
     return null;
@@ -48,11 +80,18 @@ function loadPrecomputedData(taxonId: string): PrecomputedData | null {
 
 function getSpeciesData(taxonId: string): PrecomputedData | null {
   const cacheTime = cacheLoadTimes.get(taxonId) || 0;
-  if (!cachedData.has(taxonId) || Date.now() - cacheTime > CACHE_RELOAD_INTERVAL) {
-    cachedData.set(taxonId, loadPrecomputedData(taxonId));
-    cacheLoadTimes.set(taxonId, Date.now());
+  const cached = cachedData.get(taxonId);
+  // Reload from file if cache is stale, empty, or was null (retry failed loads)
+  if (!cachedData.has(taxonId) || cached === null || Date.now() - cacheTime > CACHE_RELOAD_INTERVAL) {
+    const data = loadPrecomputedData(taxonId);
+    // Only cache successful loads
+    if (data) {
+      cachedData.set(taxonId, data);
+      cacheLoadTimes.set(taxonId, Date.now());
+    }
+    return data;
   }
-  return cachedData.get(taxonId) || null;
+  return cached || null;
 }
 
 function getYearRange(yearsSince: number): string {
