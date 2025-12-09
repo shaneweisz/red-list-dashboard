@@ -627,42 +627,14 @@ export default function Home() {
         {/* Header */}
         <div className="mb-6 flex items-start justify-between">
           <div>
-            <div className="flex items-center gap-3 mb-2">
-              <h1 className="text-3xl font-bold text-zinc-900 dark:text-zinc-100">
-                GBIF Dashboard
-              </h1>
-              {selectedTaxon && taxonConfig && (
-                <div className="flex items-center gap-2">
-                  <div
-                    className="w-4 h-4 rounded-full"
-                    style={{ backgroundColor: taxonConfig.color }}
-                  />
-                  <span className="text-xl font-medium text-zinc-700 dark:text-zinc-300">
-                    {taxonConfig.name}
-                  </span>
-                </div>
-              )}
-            </div>
+            <h1 className="text-3xl font-bold text-zinc-900 dark:text-zinc-100 mb-2">
+              GBIF Dashboard
+            </h1>
             <p className="text-zinc-600 dark:text-zinc-400">
-              {!selectedTaxon
-                ? "Select a taxon to explore GBIF occurrence data"
-                : stats
-                ? `Breaking down GBIF occurrence data for ${formatNumber(stats.total)} ${taxonConfig?.name.toLowerCase() || "species"} ${selectedCountry && selectedCountryName ? `in ${selectedCountryName}` : "across the world"}`
-                : regionMode === "country" && !selectedCountry
-                  ? `Select a country on the map to explore ${taxonConfig?.name.toLowerCase() || "species"}`
-                  : `Loading...`}
+              {selectedTaxon
+                ? `Select a taxon below to explore GBIF occurrence data`
+                : "Select a taxon below to explore GBIF occurrence data"}
             </p>
-            {selectedTaxon && (
-              <button
-                onClick={() => setSelectedTaxon(null)}
-                className="mt-2 text-sm text-green-600 dark:text-green-400 hover:underline flex items-center gap-1"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-                Back to all taxa
-              </button>
-            )}
           </div>
           <div className="flex items-center gap-2">
             {/* Tab Navigation */}
@@ -690,14 +662,15 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Show taxa summary when no taxon selected, otherwise show species details */}
-        {!selectedTaxon ? (
-          <GBIFTaxaSummary
-            onSelectTaxon={setSelectedTaxon}
-            selectedTaxon={selectedTaxon}
-          />
-        ) : (
-          <>
+        {/* Always show taxa summary */}
+        <GBIFTaxaSummary
+          onSelectTaxon={setSelectedTaxon}
+          selectedTaxon={selectedTaxon}
+        />
+
+        {/* Show species details below when a taxon is selected */}
+        {selectedTaxon && (
+          <div className="mt-4 space-y-4">
             {/* Stats, Map, and Distribution - 15% | 50% | 35% layout */}
             <div className="grid grid-cols-1 lg:grid-cols-20 gap-4 mb-4">
               {/* Stats stacked vertically - takes 3 columns (15%) */}
@@ -1063,7 +1036,7 @@ export default function Home() {
                 </div>
               </div>
             )}
-          </>
+          </div>
         )}
       </main>
     </div>

@@ -361,122 +361,65 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
     }
   };
 
-  // Show summary table if no taxon selected
-  if (!selectedTaxon) {
-    return (
-      <div className="space-y-4">
-        <TaxaSummary
-          onSelectTaxon={setSelectedTaxon}
-          selectedTaxon={selectedTaxon}
-        />
-      </div>
-    );
-  }
+  // Render loading state for details section
+  const renderDetailsLoading = () => (
+    <div className="flex flex-col items-center justify-center py-12">
+      <div className="animate-spin h-8 w-8 border-4 border-red-600 border-t-transparent rounded-full" />
+      <p className="mt-4 text-zinc-500 dark:text-zinc-400">
+        Loading Red List statistics...
+      </p>
+    </div>
+  );
 
-  if (loading) {
-    return (
-      <div className="space-y-4">
-        {/* Back button */}
-        <button
-          onClick={() => setSelectedTaxon(null)}
-          className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          Back to all taxa
-        </button>
+  // Render error state for details section
+  const renderDetailsError = () => (
+    <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 px-6 py-4 rounded-lg">
+      <p className="font-medium">Failed to load Red List data</p>
+      <p className="text-sm mt-1">{error}</p>
+    </div>
+  );
 
-        <div className="flex flex-col items-center justify-center py-20">
-          <div className="animate-spin h-10 w-10 border-4 border-red-600 border-t-transparent rounded-full" />
-          <p className="mt-4 text-zinc-500 dark:text-zinc-400">
-            Loading Red List statistics...
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="space-y-4">
-        {/* Back button */}
-        <button
-          onClick={() => setSelectedTaxon(null)}
-          className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          Back to all taxa
-        </button>
-
-        <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 px-6 py-4 rounded-lg">
-          <p className="font-medium">Failed to load Red List data</p>
-          <p className="text-sm mt-1">{error}</p>
-          <button
-            onClick={() => setSelectedTaxon(null)}
-            className="mt-3 text-sm underline hover:no-underline"
-          >
-            Go back
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!stats || !assessments || !taxonInfo) {
-    return null;
-  }
-
-  // Calculate threatened species count (CR + EN + VU)
-  const threatenedCount = stats.byCategory
+  // Calculate values only when data is available
+  const threatenedCount = stats?.byCategory
     .filter((c) => ["CR", "EN", "VU"].includes(c.code))
-    .reduce((sum, c) => sum + c.count, 0);
+    .reduce((sum, c) => sum + c.count, 0) ?? 0;
 
-  // Calculate percentages for category chart
-  const categoryDataWithPercent = stats.byCategory.map((cat) => ({
+  const categoryDataWithPercent = stats?.byCategory.map((cat) => ({
     ...cat,
     percent: ((cat.count / stats.sampleSize) * 100).toFixed(1),
     label: `${cat.count} (${((cat.count / stats.sampleSize) * 100).toFixed(1)}%)`,
-  }));
+  })) ?? [];
 
-  // Calculate outdated assessments (>10 years)
-  const outdatedCount = assessments.yearsSinceAssessment
+  const outdatedCount = assessments?.yearsSinceAssessment
     .filter((y) => y.minYear > 10)
-    .reduce((sum, y) => sum + y.count, 0);
-  const outdatedPercent = ((outdatedCount / assessments.sampleSize) * 100).toFixed(0);
+    .reduce((sum, y) => sum + y.count, 0) ?? 0;
+  const outdatedPercent = assessments && stats ? ((outdatedCount / assessments.sampleSize) * 100).toFixed(0) : "0";
 
-  // Calculate % assessed (of total described species)
-  const assessedPercent = ((stats.sampleSize / taxonInfo.estimatedDescribed) * 100).toFixed(1);
+  const assessedPercent = stats && taxonInfo ? ((stats.sampleSize / taxonInfo.estimatedDescribed) * 100).toFixed(1) : "0";
 
   const currentYear = new Date().getFullYear();
 
   return (
-    <div className="space-y-3">
-      {/* Back button and taxon header */}
-      <div className="flex items-center gap-4">
-        <button
-          onClick={() => setSelectedTaxon(null)}
-          className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          Back to all taxa
-        </button>
-        <div className="flex items-center gap-2">
-          <div
-            className="w-4 h-4 rounded-full"
-            style={{ backgroundColor: taxonInfo.color }}
-          />
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-            {taxonInfo.name}
-          </h2>
-        </div>
-      </div>
+    <div className="space-y-4">
+      {/* Always show Taxa Summary table */}
+      <TaxaSummary
+        onSelectTaxon={setSelectedTaxon}
+        selectedTaxon={selectedTaxon}
+      />
 
-      {/* Stats Grid */}
+      {/* Show details below when a taxon is selected */}
+      {selectedTaxon && (
+        <div className="space-y-3">
+          {/* Loading state */}
+          {loading && renderDetailsLoading()}
+
+          {/* Error state */}
+          {error && renderDetailsError()}
+
+          {/* Details content */}
+          {!loading && !error && stats && assessments && taxonInfo && (
+            <>
+              {/* Stats Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-20 gap-4">
         {/* Left column - Summary stats */}
         <div className="lg:col-span-3 space-y-2">
@@ -992,7 +935,10 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
           </div>
         )}
       </div>
-
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
