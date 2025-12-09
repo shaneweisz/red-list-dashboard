@@ -429,7 +429,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
         <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
           <div className="flex items-center justify-between mb-1">
             <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              # of Assessments
+              # of Assessments <span className="font-normal text-zinc-400">(click to filter)</span>
             </h3>
             {selectedAssessmentCount && (
               <button
@@ -440,7 +440,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
               </button>
             )}
           </div>
-          <div className="flex-1 min-h-[180px]">
+          <div className="flex-1 min-h-[130px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={reassessmentDistribution}
@@ -489,16 +489,13 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
               </BarChart>
             </ResponsiveContainer>
           </div>
-          <p className="text-[10px] text-zinc-500 text-center mt-1">
-            Click to filter
-          </p>
         </div>
 
         {/* Years Since Assessment chart - horizontal bars */}
         <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
           <div className="flex items-center justify-between mb-1">
             <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Years Since Last Assessed
+              Years Since Last Assessed <span className="font-normal text-zinc-400">(click to filter)</span>
             </h3>
             {selectedYearRange && (
               <button
@@ -509,7 +506,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
               </button>
             )}
           </div>
-          <div className="flex-1 min-h-[180px]">
+          <div className="flex-1 min-h-[150px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={assessments.yearsSinceAssessment.map(y => {
@@ -565,16 +562,13 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
               </BarChart>
             </ResponsiveContainer>
           </div>
-          <p className="text-[10px] text-zinc-500 text-center mt-1">
-            Click to filter
-          </p>
         </div>
 
         {/* Category distribution - horizontal bars */}
         <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
           <div className="flex items-center justify-between mb-1">
             <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Distribution by Category
+              Distribution by Category <span className="font-normal text-zinc-400">(click to filter)</span>
             </h3>
             {selectedCategory && (
               <button
@@ -585,7 +579,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
               </button>
             )}
           </div>
-          <div className="flex-1 min-h-[220px]">
+          <div className="flex-1 min-h-[200px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={categoryDataWithPercent}
@@ -635,9 +629,6 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
               </BarChart>
             </ResponsiveContainer>
           </div>
-          <p className="text-[10px] text-zinc-500 text-center mt-1">
-            Click to filter
-          </p>
         </div>
       </div>
 
