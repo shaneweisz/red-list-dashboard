@@ -139,11 +139,13 @@ export const TAXA: TaxonConfig[] = [
   {
     id: "fungi",
     name: "Fungi",
-    apiEndpoint: "phylum/Ascomycota", // Only Ascomycota has assessments (mostly lichens)
+    apiEndpoint: "phylum/Ascomycota",
+    apiEndpoints: ["phylum/Ascomycota", "phylum/Basidiomycota"],
     estimatedDescribed: 162653, // IUCN fungi & protists subtotal
     estimatedSource: IUCN_SOURCE,
     estimatedSourceUrl: IUCN_SOURCE_URL,
     dataFile: "redlist-fungi.json",
+    dataFiles: ["redlist-ascomycota.json", "redlist-basidiomycota.json"],
     gbifDataFile: "gbif-fungi.csv",
     gbifKingdomKey: 5,
     color: "#d97706", // amber-600

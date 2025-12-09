@@ -13,6 +13,7 @@ interface TaxonSummary {
   gbifSpeciesCount: number;
   gbifTotalOccurrences: number;
   gbifMedian: number;
+  gbifMean: number;
   gbifDataAvailable: boolean;
   distribution?: {
     lte1: number;
@@ -29,7 +30,7 @@ interface SpeciesRecord {
 }
 
 async function loadTaxonData(taxon: TaxonConfig): Promise<SpeciesRecord[]> {
-  const filePath = path.join(process.cwd(), "public", taxon.gbifDataFile);
+  const filePath = path.join(process.cwd(), "data", taxon.gbifDataFile);
 
   try {
     const fileContent = await fs.readFile(filePath, "utf-8");
@@ -53,6 +54,7 @@ function computeStats(data: SpeciesRecord[]) {
       speciesCount: 0,
       totalOccurrences: 0,
       median: 0,
+      mean: 0,
       distribution: { lte1: 0, lte10: 0, lte100: 0, lte1000: 0, lte10000: 0 },
     };
   }
@@ -60,11 +62,13 @@ function computeStats(data: SpeciesRecord[]) {
   const sorted = [...data].sort((a, b) => a.occurrence_count - b.occurrence_count);
   const totalOccurrences = data.reduce((sum, d) => sum + d.occurrence_count, 0);
   const median = sorted[Math.floor(sorted.length / 2)]?.occurrence_count || 0;
+  const mean = Math.round(totalOccurrences / data.length);
 
   return {
     speciesCount: data.length,
     totalOccurrences,
     median,
+    mean,
     distribution: {
       lte1: data.filter((d) => d.occurrence_count <= 1).length,
       lte10: data.filter((d) => d.occurrence_count <= 10).length,
@@ -91,6 +95,7 @@ export async function GET() {
         gbifSpeciesCount: stats.speciesCount,
         gbifTotalOccurrences: stats.totalOccurrences,
         gbifMedian: stats.median,
+        gbifMean: stats.mean,
         gbifDataAvailable: data.length > 0,
         distribution: stats.distribution,
       };

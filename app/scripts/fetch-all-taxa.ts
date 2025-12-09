@@ -29,7 +29,8 @@ import * as path from "path";
 // Taxa configuration
 const TAXA = [
   { id: "plantae", name: "Plants" },
-  { id: "fungi", name: "Fungi" },
+  { id: "ascomycota", name: "Ascomycota (Sac Fungi)" },
+  { id: "basidiomycota", name: "Basidiomycota (Mushrooms)" },
   { id: "mammalia", name: "Mammals" },
   { id: "aves", name: "Birds" },
   { id: "reptilia", name: "Reptiles" },

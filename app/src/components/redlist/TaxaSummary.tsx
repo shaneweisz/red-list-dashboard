@@ -75,15 +75,9 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
 
   return (
     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
-      <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-800">
-        <h2 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-          IUCN Red List Assessment Summary
-        </h2>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-          Click a row to view detailed statistics for that taxon
-        </p>
+      <div className="px-4 py-2 border-b border-zinc-200 dark:border-zinc-800 text-xs text-zinc-500 dark:text-zinc-400">
+        Click a row to view detailed statistics for that taxon
       </div>
-
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-zinc-50 dark:bg-zinc-800">
@@ -104,7 +98,8 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
                 Category Distribution
               </th>
               <th className="px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                % Outdated
+                <div>% Outdated</div>
+                <div className="font-normal normal-case tracking-normal">(10+ years)</div>
               </th>
             </tr>
           </thead>
@@ -197,7 +192,19 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
               <td className="px-4 py-3 text-right text-zinc-700 dark:text-zinc-300 tabular-nums">
                 {((totalAssessed / totalDescribed) * 100).toFixed(1)}%
               </td>
-              <td className="px-4 py-3"></td>
+              <td className="px-4 py-3">
+                <div className="flex flex-wrap justify-end gap-x-3 gap-y-1 text-xs">
+                  {Object.entries(CATEGORY_COLORS).map(([code, color]) => (
+                    <div key={code} className="flex items-center gap-1">
+                      <div
+                        className="w-3 h-3 rounded-sm"
+                        style={{ backgroundColor: color }}
+                      />
+                      <span className="text-zinc-500 dark:text-zinc-400">{code}</span>
+                    </div>
+                  ))}
+                </div>
+              </td>
               <td className="px-4 py-3 text-right text-zinc-700 dark:text-zinc-300 tabular-nums">
                 {((totalOutdated / totalAssessed) * 100).toFixed(1)}%
               </td>
@@ -206,18 +213,6 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
         </table>
       </div>
 
-      {/* Category legend */}
-      <div className="px-4 py-3 border-t border-zinc-200 dark:border-zinc-800 flex flex-wrap gap-3 text-xs">
-        {Object.entries(CATEGORY_COLORS).map(([code, color]) => (
-          <div key={code} className="flex items-center gap-1">
-            <div
-              className="w-3 h-3 rounded-sm"
-              style={{ backgroundColor: color }}
-            />
-            <span className="text-zinc-500 dark:text-zinc-400">{code}</span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
