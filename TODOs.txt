@@ -1,0 +1,6 @@
+GBIF page shouldnt default to plant page, start with summary page.
+Rename tabs to Red List and GBIF, with Red List tab on the left, GBIF on the right.
+Rename the headings to GBIF Explorer and Red List Explorer
+Change from estimated described species to a more verified described species number with a link to the source (see what we previously had for plants with a link to the source page)
+Don't apply a default sort to the red list table.
+Ensure the GBIF counts on the red list page are accurate

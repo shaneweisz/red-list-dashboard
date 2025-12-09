@@ -9,6 +9,7 @@ interface TaxonSummary {
   color: string;
   estimatedDescribed: number;
   estimatedSource: string;
+  estimatedSourceUrl?: string;
   available: boolean;
   totalAssessed: number;
   percentAssessed: number;
@@ -134,28 +135,29 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
                     )}
                   </div>
                 </td>
-                <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 tabular-nums">
-                  {taxon.estimatedDescribed.toLocaleString()}
+                <td className="px-4 py-3 text-right tabular-nums">
+                  {taxon.estimatedSourceUrl ? (
+                    <a
+                      href={taxon.estimatedSourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-blue-600 dark:text-blue-400 hover:underline"
+                      title={`Source: ${taxon.estimatedSource}`}
+                    >
+                      {taxon.estimatedDescribed.toLocaleString()}
+                    </a>
+                  ) : (
+                    <span className="text-zinc-600 dark:text-zinc-400">
+                      {taxon.estimatedDescribed.toLocaleString()}
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 tabular-nums">
                   {taxon.available ? taxon.totalAssessed.toLocaleString() : "—"}
                 </td>
-                <td className="px-4 py-3 text-right tabular-nums">
-                  {taxon.available ? (
-                    <span
-                      className={
-                        taxon.percentAssessed >= 50
-                          ? "text-green-600 dark:text-green-500"
-                          : taxon.percentAssessed >= 20
-                          ? "text-amber-600 dark:text-amber-500"
-                          : "text-red-600 dark:text-red-500"
-                      }
-                    >
-                      {taxon.percentAssessed.toFixed(1)}%
-                    </span>
-                  ) : (
-                    "—"
-                  )}
+                <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 tabular-nums">
+                  {taxon.available ? `${taxon.percentAssessed.toFixed(1)}%` : "—"}
                 </td>
                 <td className="px-4 py-3">
                   {taxon.available && taxon.totalAssessed > 0 ? (
@@ -181,22 +183,8 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
                 <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 tabular-nums">
                   {taxon.available ? taxon.threatened.toLocaleString() : "—"}
                 </td>
-                <td className="px-4 py-3 text-right tabular-nums">
-                  {taxon.available ? (
-                    <span
-                      className={
-                        taxon.percentThreatened >= 40
-                          ? "text-red-600 dark:text-red-500 font-medium"
-                          : taxon.percentThreatened >= 25
-                          ? "text-amber-600 dark:text-amber-500"
-                          : "text-zinc-600 dark:text-zinc-400"
-                      }
-                    >
-                      {taxon.percentThreatened.toFixed(1)}%
-                    </span>
-                  ) : (
-                    "—"
-                  )}
+                <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 tabular-nums">
+                  {taxon.available ? `${taxon.percentThreatened.toFixed(1)}%` : "—"}
                 </td>
               </tr>
             ))}

@@ -9,6 +9,7 @@ interface TaxonSummary {
   color: string;
   estimatedDescribed: number;
   estimatedSource: string;
+  estimatedSourceUrl?: string;
   gbifSpeciesCount: number;
   gbifTotalOccurrences: number;
   gbifMedian: number;
@@ -86,6 +87,7 @@ export async function GET() {
         color: taxon.color,
         estimatedDescribed: taxon.estimatedDescribed,
         estimatedSource: taxon.estimatedSource,
+        estimatedSourceUrl: taxon.estimatedSourceUrl,
         gbifSpeciesCount: stats.speciesCount,
         gbifTotalOccurrences: stats.totalOccurrences,
         gbifMedian: stats.median,
@@ -95,13 +97,7 @@ export async function GET() {
     })
   );
 
-  // Sort by species count descending, with available data first
-  summaries.sort((a, b) => {
-    if (a.gbifDataAvailable !== b.gbifDataAvailable) {
-      return a.gbifDataAvailable ? -1 : 1;
-    }
-    return b.gbifSpeciesCount - a.gbifSpeciesCount;
-  });
+  // Keep original order from TAXA config (no sorting)
 
   return NextResponse.json({
     taxa: summaries,

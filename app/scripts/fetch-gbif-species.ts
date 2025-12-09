@@ -41,7 +41,18 @@ const TAXA_CONFIG: Record<string, TaxonConfig> = {
   aves: { id: "aves", name: "Birds", gbifDataFile: "gbif-aves.csv", gbifKingdomKey: 1, gbifClassKey: 212 },
   reptilia: { id: "reptilia", name: "Reptiles", gbifDataFile: "gbif-reptilia.csv", gbifKingdomKey: 1, gbifClassKeys: [11592253, 11493978, 11418114] },
   amphibia: { id: "amphibia", name: "Amphibians", gbifDataFile: "gbif-amphibia.csv", gbifKingdomKey: 1, gbifClassKey: 131 },
+  // Combined taxa
+  fishes: { id: "fishes", name: "Fishes", gbifDataFile: "gbif-fishes.csv", gbifKingdomKey: 1, gbifOrderKeys: FISH_ORDER_KEYS, gbifClassKeys: [121, 120] },
+  mollusca: { id: "mollusca", name: "Molluscs", gbifDataFile: "gbif-mollusca.csv", gbifKingdomKey: 1, gbifClassKeys: [225, 137] },
+  // Individual taxa (still available for separate fetching)
   actinopterygii: { id: "actinopterygii", name: "Ray-finned Fishes", gbifDataFile: "gbif-actinopterygii.csv", gbifKingdomKey: 1, gbifOrderKeys: FISH_ORDER_KEYS },
+  chondrichthyes: { id: "chondrichthyes", name: "Sharks & Rays", gbifDataFile: "gbif-chondrichthyes.csv", gbifKingdomKey: 1, gbifClassKeys: [121, 120] },
+  gastropoda: { id: "gastropoda", name: "Snails & Slugs", gbifDataFile: "gbif-gastropoda.csv", gbifKingdomKey: 1, gbifClassKey: 225 },
+  bivalvia: { id: "bivalvia", name: "Bivalves", gbifDataFile: "gbif-bivalvia.csv", gbifKingdomKey: 1, gbifClassKey: 137 },
+  // Other taxa
+  arachnida: { id: "arachnida", name: "Arachnids", gbifDataFile: "gbif-arachnida.csv", gbifKingdomKey: 1, gbifClassKey: 367 },
+  malacostraca: { id: "malacostraca", name: "Crustaceans", gbifDataFile: "gbif-malacostraca.csv", gbifKingdomKey: 1, gbifClassKey: 229 },
+  anthozoa: { id: "anthozoa", name: "Corals & Anemones", gbifDataFile: "gbif-anthozoa.csv", gbifKingdomKey: 1, gbifClassKey: 206 },
   insecta: { id: "insecta", name: "Insects", gbifDataFile: "gbif-insecta.csv", gbifKingdomKey: 1, gbifClassKey: 216 },
 };
 
@@ -235,21 +246,10 @@ async function fetchForClassKey(classKey: number, label: string): Promise<Specie
 }
 
 async function fetchAllSpeciesCounts(taxon: TaxonConfig): Promise<SpeciesCount[]> {
-  // Handle multiple class keys (e.g., reptiles split into Squamata, Crocodylia, Testudines)
-  if (taxon.gbifClassKeys && taxon.gbifClassKeys.length > 0) {
-    const allResults: SpeciesCount[] = [];
-    for (const classKey of taxon.gbifClassKeys) {
-      console.log(`\nFetching classKey ${classKey}...`);
-      const results = await fetchForTaxonKey("classKey", classKey, `class ${classKey}`);
-      allResults.push(...results);
-      await delay(REQUEST_DELAY);
-    }
-    return deduplicateAndSort(allResults);
-  }
+  const allResults: SpeciesCount[] = [];
 
-  // Handle multiple order keys (e.g., fish have no class in GBIF)
+  // Handle multiple order keys (e.g., ray-finned fish have no class in GBIF)
   if (taxon.gbifOrderKeys && taxon.gbifOrderKeys.length > 0) {
-    const allResults: SpeciesCount[] = [];
     let orderIndex = 0;
     for (const orderKey of taxon.gbifOrderKeys) {
       orderIndex++;
@@ -258,11 +258,24 @@ async function fetchAllSpeciesCounts(taxon: TaxonConfig): Promise<SpeciesCount[]
       allResults.push(...results);
       await delay(REQUEST_DELAY);
     }
+  }
+
+  // Handle multiple class keys (e.g., reptiles, sharks/rays, molluscs)
+  if (taxon.gbifClassKeys && taxon.gbifClassKeys.length > 0) {
+    for (const classKey of taxon.gbifClassKeys) {
+      console.log(`\nFetching classKey ${classKey}...`);
+      const results = await fetchForTaxonKey("classKey", classKey, `class ${classKey}`);
+      allResults.push(...results);
+      await delay(REQUEST_DELAY);
+    }
+  }
+
+  // If we fetched from order keys or class keys, deduplicate and return
+  if (allResults.length > 0) {
     return deduplicateAndSort(allResults);
   }
 
   // Single class key or kingdom key
-  const allResults: SpeciesCount[] = [];
   let offset = 0;
   let hasMore = true;
 
