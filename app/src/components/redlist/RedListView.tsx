@@ -11,11 +11,21 @@ import {
   Cell,
   LabelList,
 } from "recharts";
+import TaxaSummary from "./TaxaSummary";
+import { CATEGORY_COLORS } from "@/config/taxa";
 
 interface CategoryStats {
   code: string;
   name: string;
   count: number;
+  color: string;
+}
+
+interface TaxonInfo {
+  id: string;
+  name: string;
+  estimatedDescribed: number;
+  estimatedSource: string;
   color: string;
 }
 
@@ -26,6 +36,7 @@ interface StatsResponse {
   lastUpdated: string;
   cached: boolean;
   error?: string;
+  taxon?: TaxonInfo;
 }
 
 interface YearRange {
@@ -74,25 +85,13 @@ interface SpeciesResponse {
   species: Species[];
   total: number;
   error?: string;
+  taxon?: TaxonInfo;
 }
 
-// Total described plant species from World Flora Online (June 2025 release)
-// Source: https://list.worldfloraonline.org/stats.php
-const WFO_TOTAL_DESCRIBED_SPECIES = 380801;
-
-// IUCN category colors
-const CATEGORY_COLORS: Record<string, string> = {
-  EX: "#000000",
-  EW: "#542344",
-  CR: "#d81e05",
-  EN: "#fc7f3f",
-  VU: "#f9e814",
-  NT: "#cce226",
-  LC: "#60c659",
-  DD: "#6b7280",
-};
-
 export default function RedListView() {
+  // Selected taxon (null = show summary table)
+  const [selectedTaxon, setSelectedTaxon] = useState<string | null>(null);
+  const [taxonInfo, setTaxonInfo] = useState<TaxonInfo | null>(null);
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [assessments, setAssessments] = useState<AssessmentsResponse | null>(null);
   const [species, setSpecies] = useState<Species[]>([]);
@@ -118,17 +117,28 @@ export default function RedListView() {
   // Species details cache (images, criteria, common names)
   const [speciesDetails, setSpeciesDetails] = useState<Record<number, SpeciesDetails>>({});
 
-  // Load stats and assessments
+  // Load stats and assessments when taxon changes
   useEffect(() => {
+    // If no taxon selected, don't fetch detailed data
+    if (!selectedTaxon) {
+      setLoading(false);
+      setStats(null);
+      setAssessments(null);
+      setSpecies([]);
+      setTaxonInfo(null);
+      return;
+    }
+
     async function fetchData() {
       setLoading(true);
       setError(null);
 
       try {
+        const taxonParam = `?taxon=${selectedTaxon}`;
         const [statsRes, assessmentsRes, speciesRes] = await Promise.all([
-          fetch("/api/redlist/stats"),
-          fetch("/api/redlist/assessments"),
-          fetch("/api/redlist/species"),
+          fetch(`/api/redlist/stats${taxonParam}`),
+          fetch(`/api/redlist/assessments${taxonParam}`),
+          fetch(`/api/redlist/species${taxonParam}`),
         ]);
 
         const statsData = await statsRes.json();
@@ -142,6 +152,7 @@ export default function RedListView() {
         setStats(statsData);
         setAssessments(assessmentsData);
         setSpecies(speciesData.species);
+        setTaxonInfo(statsData.taxon || null);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load data");
       } finally {
@@ -150,7 +161,17 @@ export default function RedListView() {
     }
 
     fetchData();
-  }, []);
+  }, [selectedTaxon]);
+
+  // Reset filters when taxon changes
+  useEffect(() => {
+    setSelectedCategory(null);
+    setSelectedYearRange(null);
+    setSelectedAssessmentCount(null);
+    setSearchQuery("");
+    setCurrentPage(1);
+    setSpeciesDetails({});
+  }, [selectedTaxon]);
 
   // Helper to check if species matches year range filter
   const matchesYearRangeFilter = (yearPublished: string): boolean => {
@@ -326,33 +347,71 @@ export default function RedListView() {
     }
   };
 
+  // Show summary table if no taxon selected
+  if (!selectedTaxon) {
+    return (
+      <div className="space-y-4">
+        <TaxaSummary
+          onSelectTaxon={setSelectedTaxon}
+          selectedTaxon={selectedTaxon}
+        />
+      </div>
+    );
+  }
+
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <div className="animate-spin h-10 w-10 border-4 border-red-600 border-t-transparent rounded-full" />
-        <p className="mt-4 text-zinc-500 dark:text-zinc-400">
-          Loading Red List statistics...
-        </p>
+      <div className="space-y-4">
+        {/* Back button */}
+        <button
+          onClick={() => setSelectedTaxon(null)}
+          className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          Back to all taxa
+        </button>
+
+        <div className="flex flex-col items-center justify-center py-20">
+          <div className="animate-spin h-10 w-10 border-4 border-red-600 border-t-transparent rounded-full" />
+          <p className="mt-4 text-zinc-500 dark:text-zinc-400">
+            Loading Red List statistics...
+          </p>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 px-6 py-4 rounded-lg mx-4">
-        <p className="font-medium">Failed to load Red List data</p>
-        <p className="text-sm mt-1">{error}</p>
+      <div className="space-y-4">
+        {/* Back button */}
         <button
-          onClick={() => window.location.reload()}
-          className="mt-3 text-sm underline hover:no-underline"
+          onClick={() => setSelectedTaxon(null)}
+          className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
         >
-          Try again
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          Back to all taxa
         </button>
+
+        <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 px-6 py-4 rounded-lg">
+          <p className="font-medium">Failed to load Red List data</p>
+          <p className="text-sm mt-1">{error}</p>
+          <button
+            onClick={() => setSelectedTaxon(null)}
+            className="mt-3 text-sm underline hover:no-underline"
+          >
+            Go back
+          </button>
+        </div>
       </div>
     );
   }
 
-  if (!stats || !assessments) {
+  if (!stats || !assessments || !taxonInfo) {
     return null;
   }
 
@@ -375,32 +434,49 @@ export default function RedListView() {
   const outdatedPercent = ((outdatedCount / assessments.sampleSize) * 100).toFixed(0);
 
   // Calculate % assessed (of total described species)
-  const assessedPercent = ((stats.sampleSize / WFO_TOTAL_DESCRIBED_SPECIES) * 100).toFixed(1);
+  const assessedPercent = ((stats.sampleSize / taxonInfo.estimatedDescribed) * 100).toFixed(1);
 
   const currentYear = new Date().getFullYear();
 
   return (
     <div className="space-y-3">
+      {/* Back button and taxon header */}
+      <div className="flex items-center gap-4">
+        <button
+          onClick={() => setSelectedTaxon(null)}
+          className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          Back to all taxa
+        </button>
+        <div className="flex items-center gap-2">
+          <div
+            className="w-4 h-4 rounded-full"
+            style={{ backgroundColor: taxonInfo.color }}
+          />
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+            {taxonInfo.name}
+          </h2>
+        </div>
+      </div>
+
       {/* Stats Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-20 gap-4">
         {/* Left column - Summary stats */}
         <div className="lg:col-span-3 space-y-2">
-          <a
-            href="https://list.worldfloraonline.org/stats.php"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors"
-          >
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
             <p className="text-xs text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
-              Total Described
+              Est. Described
             </p>
             <p className="text-xl font-bold text-zinc-800 dark:text-zinc-100">
-              {WFO_TOTAL_DESCRIBED_SPECIES.toLocaleString()}
+              {taxonInfo.estimatedDescribed.toLocaleString()}
             </p>
             <p className="text-xs text-zinc-400 dark:text-zinc-500">
-              WFO 2025-06
+              {taxonInfo.estimatedSource}
             </p>
-          </a>
+          </div>
 
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
             <p className="text-xs text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
