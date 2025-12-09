@@ -671,41 +671,11 @@ export default function Home() {
         {/* Show species details below when a taxon is selected */}
         {selectedTaxon && (
           <div className="mt-4 space-y-4">
-            {/* Stats, Map, and Distribution - 15% | 50% | 35% layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-20 gap-4 mb-4">
-              {/* Stats stacked vertically - takes 3 columns (15%) */}
-              {stats && (
-            <div className="flex flex-col gap-3 lg:col-span-3">
-              <div className="bg-white dark:bg-zinc-900 rounded-xl p-3 shadow-sm border border-zinc-200 dark:border-zinc-800 flex flex-col justify-center">
-                <div className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                  {formatNumber(stats.total)}
-                </div>
-                <div className="text-xs text-zinc-500">Total Species</div>
-              </div>
-              <div className="bg-white dark:bg-zinc-900 rounded-xl p-3 shadow-sm border border-zinc-200 dark:border-zinc-800 flex flex-col justify-center">
-                <div className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                  {formatNumber(stats.totalOccurrences)}
-                </div>
-                <div className="text-xs text-zinc-500">Total Occurrences</div>
-              </div>
-              <div className="bg-white dark:bg-zinc-900 rounded-xl p-3 shadow-sm border border-zinc-200 dark:border-zinc-800 flex flex-col justify-center">
-                <div className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                  {formatNumber(stats.median)}
-                </div>
-                <div className="text-xs text-zinc-500">Median per Species</div>
-              </div>
-              <div className="bg-white dark:bg-zinc-900 rounded-xl p-3 shadow-sm border border-zinc-200 dark:border-zinc-800 flex flex-col justify-center">
-                <div className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                  {formatNumber(Math.round(stats.totalOccurrences / stats.total))}
-                </div>
-                <div className="text-xs text-zinc-500">Mean per Species</div>
-              </div>
-            </div>
-          )}
-
-          {/* World Map - takes 10 columns (50%) */}
+            {/* Map and Distribution - 60% | 40% layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-4">
+          {/* World Map - takes 3 columns (60%) */}
           {mounted && (
-            <div className="lg:col-span-10">
+            <div className="lg:col-span-3">
               <WorldMap
                 selectedCountry={selectedCountry}
                 onCountrySelect={handleCountrySelect}
@@ -714,9 +684,9 @@ export default function Home() {
             </div>
           )}
 
-          {/* Distribution breakdown - takes 7 columns (35%) */}
+          {/* Distribution breakdown - takes 2 columns (40%) */}
           {stats && (
-            <div className="lg:col-span-7 bg-white dark:bg-zinc-900 rounded-xl p-4 shadow-sm border border-zinc-200 dark:border-zinc-800">
+            <div className="lg:col-span-2 bg-white dark:bg-zinc-900 rounded-xl p-4 shadow-sm border border-zinc-200 dark:border-zinc-800">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                   Filter by Count

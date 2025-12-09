@@ -420,60 +420,9 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
           {!loading && !error && stats && assessments && taxonInfo && (
             <>
               {/* Stats Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-20 gap-4">
-        {/* Left column - Summary stats */}
-        <div className="lg:col-span-3 space-y-2">
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
-              Est. Described
-            </p>
-            <p className="text-xl font-bold text-zinc-800 dark:text-zinc-100">
-              {taxonInfo.estimatedDescribed.toLocaleString()}
-            </p>
-            <p className="text-xs text-zinc-400 dark:text-zinc-500">
-              {taxonInfo.estimatedSource}
-            </p>
-          </div>
-
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
-              Total Assessed
-            </p>
-            <p className="text-xl font-bold text-zinc-800 dark:text-zinc-100">
-              {stats.sampleSize.toLocaleString()}
-            </p>
-            <p className="text-xs text-zinc-400 dark:text-zinc-500">
-              IUCN Red List
-            </p>
-          </div>
-
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
-              % Assessed
-            </p>
-            <p className="text-xl font-bold text-blue-600 dark:text-blue-500">
-              {assessedPercent}%
-            </p>
-            <p className="text-xs text-zinc-400 dark:text-zinc-500">
-              of described species
-            </p>
-          </div>
-
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
-              % Outdated
-            </p>
-            <p className="text-xl font-bold text-amber-600 dark:text-amber-500">
-              {outdatedPercent}%
-            </p>
-            <p className="text-xs text-zinc-400 dark:text-zinc-500">
-              assessed 10+ years ago
-            </p>
-          </div>
-        </div>
-
-        {/* Center column - Two charts stacked */}
-        <div className="lg:col-span-7 flex flex-col gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Left column - Two charts stacked */}
+        <div className="flex flex-col gap-3">
           {/* Number of Assessments chart */}
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex-1 flex flex-col">
             <div className="flex items-center justify-between mb-1">
@@ -613,7 +562,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
         </div>
 
         {/* Right column - Category distribution (clickable) */}
-        <div className="lg:col-span-10 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
           <div className="flex items-center justify-between mb-1">
             <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
               Distribution by Category
