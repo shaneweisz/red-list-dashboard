@@ -115,19 +115,20 @@ interface RedListViewProps {
 
 export default function RedListView({ onTaxonChange }: RedListViewProps) {
   // Selected taxon (null = show summary table), synced with URL hash
-  const [selectedTaxon, setSelectedTaxon] = useState<string | null>(() => {
-    if (typeof window !== "undefined") {
-      const hash = window.location.hash.slice(1);
-      return hash || null;
-    }
-    return null;
-  });
+  // Initialize to null to avoid hydration mismatch, then read hash in useEffect
+  const [selectedTaxon, setSelectedTaxon] = useState<string | null>(null);
 
-  // Sync URL hash with selected taxon
+  // Read initial hash and sync URL hash with selected taxon
   useEffect(() => {
+    // Read initial hash on mount
+    const hash = window.location.hash.slice(1);
+    if (hash) {
+      setSelectedTaxon(hash);
+    }
+
     const handleHashChange = () => {
-      const hash = window.location.hash.slice(1);
-      setSelectedTaxon(hash || null);
+      const newHash = window.location.hash.slice(1);
+      setSelectedTaxon(newHash || null);
     };
 
     window.addEventListener("hashchange", handleHashChange);
