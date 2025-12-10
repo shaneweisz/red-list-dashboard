@@ -161,7 +161,7 @@ function InatObservationPreview({
         <img
           src={obs.imageUrl.replace('/original.', '/medium.')}
           alt="iNaturalist observation"
-          className="w-full max-h-52 object-cover rounded mb-2 hover:opacity-90"
+          className="w-full h-40 object-cover rounded mb-2 hover:opacity-90"
         />
       </a>
       <div className="text-[10px] text-zinc-300 space-y-0.5">
@@ -1006,7 +1006,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                             {details.gbifOccurrences.toLocaleString()}
                           </a>
                           {details?.gbifByRecordType && (
-                            <div className="absolute right-0 top-full z-10 hidden group-hover/gbif:block pt-1">
+                            <div className="absolute right-0 top-full z-10 hidden group-hover/gbif:block pt-2 pr-2 -mr-2">
                               <div className="bg-zinc-800 dark:bg-zinc-900 border border-zinc-700 rounded-lg shadow-lg p-2 text-xs text-left min-w-[200px]">
                                 <div className="text-zinc-300 font-medium mb-1">Breakdown by type:</div>
                                 <div className="space-y-0.5 text-zinc-400">
@@ -1112,7 +1112,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                             {details.gbifOccurrencesSinceAssessment.toLocaleString()}
                           </a>
                           {details?.gbifNewByRecordType && (
-                            <div className="absolute right-0 top-full z-10 hidden group-hover/newgbif:block pt-1">
+                            <div className="absolute right-0 top-full z-10 hidden group-hover/newgbif:block pt-2 pr-2 -mr-2">
                               <div className="bg-zinc-800 dark:bg-zinc-900 border border-zinc-700 rounded-lg shadow-lg p-2 text-xs text-left min-w-[200px]">
                                 <div className="text-zinc-300 font-medium mb-1">After {assessmentYear}:</div>
                                 <div className="space-y-0.5 text-zinc-400">
