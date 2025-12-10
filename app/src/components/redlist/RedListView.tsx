@@ -1033,7 +1033,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                                         >
                                           (recent observations)
                                         </a>
-                                        <div className="absolute right-0 bottom-full mb-2 z-20 hidden group-hover/inat:block">
+                                        <div className="absolute right-0 bottom-full z-20 hidden group-hover/inat:block pb-2">
                                           <InatObservationPreview
                                             observations={details.recentInatObservations}
                                             currentIndex={inatIndex[s.sis_taxon_id] || 0}
@@ -1139,7 +1139,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                                         >
                                           (recent observations)
                                         </a>
-                                        <div className="absolute right-0 bottom-full mb-2 z-20 hidden group-hover/inat2:block">
+                                        <div className="absolute right-0 bottom-full z-20 hidden group-hover/inat2:block pb-2">
                                           <InatObservationPreview
                                             observations={details.recentInatObservations}
                                             currentIndex={inatIndex[s.sis_taxon_id] || 0}
