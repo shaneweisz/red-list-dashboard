@@ -135,7 +135,8 @@ function InatObservationPreview({
       {observations.length > 1 && (
         <div className="flex items-center justify-between mb-2 text-[10px] text-zinc-400">
           <button
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onNavigate(-1); }}
+            type="button"
+            onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); onNavigate(-1); }}
             disabled={currentIndex === 0}
             className="p-1 hover:bg-zinc-800 rounded disabled:opacity-30 disabled:cursor-not-allowed"
           >
@@ -145,7 +146,8 @@ function InatObservationPreview({
           </button>
           <span>{currentIndex + 1} / {observations.length}{totalCount > observations.length ? ` of ${totalCount.toLocaleString()}` : ''}</span>
           <button
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onNavigate(1); }}
+            type="button"
+            onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); onNavigate(1); }}
             disabled={currentIndex >= observations.length - 1}
             className="p-1 hover:bg-zinc-800 rounded disabled:opacity-30 disabled:cursor-not-allowed"
           >
