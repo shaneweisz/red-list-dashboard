@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import TaxaIcon from "@/components/TaxaIcon";
 
 interface TaxonSummary {
   id: string;
@@ -118,9 +119,11 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
               >
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <div
-                      className="w-3 h-3 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: taxon.color }}
+                    <TaxaIcon
+                      taxonId={taxon.id}
+                      size={18}
+                      className="flex-shrink-0"
+                      style={{ color: taxon.color }}
                     />
                     <span className="font-medium text-zinc-900 dark:text-zinc-100">
                       {taxon.name}
