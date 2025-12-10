@@ -395,48 +395,74 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
     }
   }, [paginatedSpecies, speciesDetails]);
 
-  // Handle category bar click (toggle in/out of set)
-  const handleCategoryClick = (data: { payload?: { code?: string } }) => {
+  // Handle category bar click (Cmd/Ctrl+click for multi-select, regular click replaces)
+  const handleCategoryClick = (data: { payload?: { code?: string } }, event: React.MouseEvent) => {
     const code = data.payload?.code;
     if (!code) return;
+    const isMultiSelect = event.metaKey || event.ctrlKey;
     setSelectedCategories(prev => {
-      const next = new Set(prev);
-      if (next.has(code)) {
-        next.delete(code);
+      if (isMultiSelect) {
+        // Toggle in/out of set
+        const next = new Set(prev);
+        if (next.has(code)) {
+          next.delete(code);
+        } else {
+          next.add(code);
+        }
+        return next;
       } else {
-        next.add(code);
+        // Single select: toggle off if already selected, otherwise replace
+        if (prev.size === 1 && prev.has(code)) {
+          return new Set();
+        }
+        return new Set([code]);
       }
-      return next;
     });
   };
 
-  // Handle year range bar click (toggle in/out of set)
-  const handleYearClick = (data: { payload?: { range?: string } }) => {
+  // Handle year range bar click (Cmd/Ctrl+click for multi-select, regular click replaces)
+  const handleYearClick = (data: { payload?: { range?: string } }, event: React.MouseEvent) => {
     const range = data.payload?.range;
     if (!range) return;
+    const isMultiSelect = event.metaKey || event.ctrlKey;
     setSelectedYearRanges(prev => {
-      const next = new Set(prev);
-      if (next.has(range)) {
-        next.delete(range);
+      if (isMultiSelect) {
+        const next = new Set(prev);
+        if (next.has(range)) {
+          next.delete(range);
+        } else {
+          next.add(range);
+        }
+        return next;
       } else {
-        next.add(range);
+        if (prev.size === 1 && prev.has(range)) {
+          return new Set();
+        }
+        return new Set([range]);
       }
-      return next;
     });
   };
 
-  // Handle assessment count bar click (toggle in/out of set)
-  const handleAssessmentCountClick = (data: { payload?: { range?: string } }) => {
+  // Handle assessment count bar click (Cmd/Ctrl+click for multi-select, regular click replaces)
+  const handleAssessmentCountClick = (data: { payload?: { range?: string } }, event: React.MouseEvent) => {
     const range = data.payload?.range;
     if (!range) return;
+    const isMultiSelect = event.metaKey || event.ctrlKey;
     setSelectedAssessmentCounts(prev => {
-      const next = new Set(prev);
-      if (next.has(range)) {
-        next.delete(range);
+      if (isMultiSelect) {
+        const next = new Set(prev);
+        if (next.has(range)) {
+          next.delete(range);
+        } else {
+          next.add(range);
+        }
+        return next;
       } else {
-        next.add(range);
+        if (prev.size === 1 && prev.has(range)) {
+          return new Set();
+        }
+        return new Set([range]);
       }
-      return next;
     });
   };
 
@@ -546,7 +572,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                   dataKey="count"
                   radius={[0, 4, 4, 0]}
                   cursor="pointer"
-                  onClick={(data) => handleAssessmentCountClick(data)}
+                  onClick={(data, _index, event) => handleAssessmentCountClick(data, event)}
                 >
                   {reassessmentDistribution.map((entry, index) => (
                     <Cell
@@ -619,7 +645,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                   dataKey="count"
                   radius={[0, 4, 4, 0]}
                   cursor="pointer"
-                  onClick={(data) => handleYearClick(data)}
+                  onClick={(data, _index, event) => handleYearClick(data, event)}
                 >
                   {assessments.yearsSinceAssessment.map((entry, index) => (
                     <Cell
@@ -686,7 +712,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                   dataKey="count"
                   radius={[0, 4, 4, 0]}
                   cursor="pointer"
-                  onClick={(data) => handleCategoryClick(data)}
+                  onClick={(data, _index, event) => handleCategoryClick(data, event)}
                 >
                   {categoryDataWithPercent.map((entry, index) => (
                     <Cell
@@ -902,234 +928,236 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                           ))
                         : "—"}
                     </td>
-                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums group/gbif relative">
+                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums">
                       {details === undefined ? (
                         <span className="text-zinc-400 animate-pulse">...</span>
                       ) : details?.gbifOccurrences != null && details?.gbifUrl ? (
-                        <a
-                          href={`https://www.gbif.org/occurrence/search?taxon_key=${details.gbifUrl.split('/').pop()}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
-                        >
-                          {details.gbifOccurrences.toLocaleString()}
-                        </a>
+                        <span className="relative group/gbif">
+                          <a
+                            href={`https://www.gbif.org/occurrence/search?taxon_key=${details.gbifUrl.split('/').pop()}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
+                          >
+                            {details.gbifOccurrences.toLocaleString()}
+                          </a>
+                          {details?.gbifByRecordType && (
+                            <div className="absolute right-0 top-full z-10 hidden group-hover/gbif:block pt-1">
+                              <div className="bg-zinc-800 dark:bg-zinc-900 border border-zinc-700 rounded-lg shadow-lg p-2 text-xs text-left min-w-[200px]">
+                                <div className="text-zinc-300 font-medium mb-1">Breakdown by type:</div>
+                                <div className="space-y-0.5 text-zinc-400">
+                                  <div className="flex justify-between">
+                                    <span>Human observations</span>
+                                    <a
+                                      href={`https://www.gbif.org/occurrence/search?basis_of_record=HUMAN_OBSERVATION&taxon_key=${details.gbifUrl?.split('/').pop()}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-zinc-200 hover:text-blue-400 hover:underline tabular-nums"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      {details.gbifByRecordType.humanObservation.toLocaleString()}
+                                    </a>
+                                  </div>
+                                  {details.latestInatObservation && details.latestInatObservation.count > 0 && (
+                                    <div className="flex justify-between pl-3 text-[11px]">
+                                      <span className="relative group/inat">
+                                        iNaturalist{" "}
+                                        <a
+                                          href={details.latestInatObservation.url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-amber-400 hover:text-amber-300 underline"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          (latest observation)
+                                        </a>
+                                        {details.latestInatObservation.imageUrl && (
+                                          <div className="absolute right-0 bottom-full mb-2 z-20 hidden group-hover/inat:block bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl p-2 min-w-[220px]">
+                                            <img
+                                              src={details.latestInatObservation.imageUrl.replace('/original.', '/medium.')}
+                                              alt="Latest iNaturalist observation"
+                                              className="w-52 h-auto rounded mb-2"
+                                            />
+                                            <div className="text-[10px] text-zinc-300 space-y-0.5">
+                                              {details.latestInatObservation.date && (
+                                                <div>{details.latestInatObservation.date}</div>
+                                              )}
+                                              {details.latestInatObservation.observer && (
+                                                <div className="truncate">{details.latestInatObservation.observer}</div>
+                                              )}
+                                              {details.latestInatObservation.location && (
+                                                <div className="truncate text-zinc-400">{details.latestInatObservation.location}</div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </span>
+                                      <a
+                                        href={`https://www.gbif.org/occurrence/search?dataset_key=50c9509d-22c7-4a22-a47d-8c48425ef4a7&taxon_key=${details.gbifUrl?.split('/').pop()}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-zinc-300 hover:text-amber-400 hover:underline tabular-nums"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        {details.latestInatObservation.count.toLocaleString()}
+                                      </a>
+                                    </div>
+                                  )}
+                                  <div className="flex justify-between">
+                                    <span>Preserved specimens</span>
+                                    <a
+                                      href={`https://www.gbif.org/occurrence/search?basis_of_record=PRESERVED_SPECIMEN&taxon_key=${details.gbifUrl?.split('/').pop()}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-zinc-200 hover:text-blue-400 hover:underline tabular-nums"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      {details.gbifByRecordType.preservedSpecimen.toLocaleString()}
+                                    </a>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span>Machine observations</span>
+                                    <a
+                                      href={`https://www.gbif.org/occurrence/search?basis_of_record=MACHINE_OBSERVATION&taxon_key=${details.gbifUrl?.split('/').pop()}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-zinc-200 hover:text-blue-400 hover:underline tabular-nums"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      {details.gbifByRecordType.machineObservation.toLocaleString()}
+                                    </a>
+                                  </div>
+                                  {details.gbifByRecordType.other > 0 && (
+                                    <div className="flex justify-between">
+                                      <span>Other</span>
+                                      <span className="text-zinc-200 tabular-nums">{details.gbifByRecordType.other.toLocaleString()}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </span>
                       ) : details?.gbifOccurrences != null ? (
                         details.gbifOccurrences.toLocaleString()
                       ) : "—"}
-                      {details?.gbifByRecordType && details.gbifOccurrences != null && (
-                        <div className="absolute right-0 top-full z-10 hidden group-hover/gbif:block pt-1">
-                        <div className="bg-zinc-800 dark:bg-zinc-900 border border-zinc-700 rounded-lg shadow-lg p-2 text-xs text-left min-w-[200px]">
-                          <div className="text-zinc-300 font-medium mb-1">Breakdown by type:</div>
-                          <div className="space-y-0.5 text-zinc-400">
-                            <div className="flex justify-between">
-                              <span>Human observations</span>
-                              <a
-                                href={`https://www.gbif.org/occurrence/search?basis_of_record=HUMAN_OBSERVATION&taxon_key=${details.gbifUrl?.split('/').pop()}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-zinc-200 hover:text-blue-400 hover:underline tabular-nums"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {details.gbifByRecordType.humanObservation.toLocaleString()}
-                              </a>
-                            </div>
-                            {details.latestInatObservation && details.latestInatObservation.count > 0 && (
-                              <div className="flex justify-between pl-3 text-[11px]">
-                                <span className="relative group/inat">
-                                  iNaturalist{" "}
-                                  <a
-                                    href={details.latestInatObservation.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-amber-400 hover:text-amber-300 underline"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    (latest observation)
-                                  </a>
-                                  {details.latestInatObservation.imageUrl && (
-                                    <div className="absolute right-0 bottom-full mb-2 z-20 hidden group-hover/inat:block bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl p-2 min-w-[220px]">
-                                      <img
-                                        src={details.latestInatObservation.imageUrl.replace('/original.', '/medium.')}
-                                        alt="Latest iNaturalist observation"
-                                        className="w-52 h-auto rounded mb-2"
-                                      />
-                                      <div className="text-[10px] text-zinc-300 space-y-0.5">
-                                        {details.latestInatObservation.date && (
-                                          <div>{details.latestInatObservation.date}</div>
-                                        )}
-                                        {details.latestInatObservation.observer && (
-                                          <div className="truncate">{details.latestInatObservation.observer}</div>
-                                        )}
-                                        {details.latestInatObservation.location && (
-                                          <div className="truncate text-zinc-400">{details.latestInatObservation.location}</div>
-                                        )}
-                                      </div>
-                                    </div>
-                                  )}
-                                </span>
-                                <a
-                                  href={`https://www.gbif.org/occurrence/search?dataset_key=50c9509d-22c7-4a22-a47d-8c48425ef4a7&taxon_key=${details.gbifUrl?.split('/').pop()}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-zinc-300 hover:text-amber-400 hover:underline tabular-nums"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  {details.latestInatObservation.count.toLocaleString()}
-                                </a>
-                              </div>
-                            )}
-                            <div className="flex justify-between">
-                              <span>Preserved specimens</span>
-                              <a
-                                href={`https://www.gbif.org/occurrence/search?basis_of_record=PRESERVED_SPECIMEN&taxon_key=${details.gbifUrl?.split('/').pop()}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-zinc-200 hover:text-blue-400 hover:underline tabular-nums"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {details.gbifByRecordType.preservedSpecimen.toLocaleString()}
-                              </a>
-                            </div>
-                            <div className="flex justify-between">
-                              <span>Machine observations</span>
-                              <a
-                                href={`https://www.gbif.org/occurrence/search?basis_of_record=MACHINE_OBSERVATION&taxon_key=${details.gbifUrl?.split('/').pop()}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-zinc-200 hover:text-blue-400 hover:underline tabular-nums"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {details.gbifByRecordType.machineObservation.toLocaleString()}
-                              </a>
-                            </div>
-                            {details.gbifByRecordType.other > 0 && (
-                              <div className="flex justify-between">
-                                <span>Other</span>
-                                <span className="text-zinc-200 tabular-nums">{details.gbifByRecordType.other.toLocaleString()}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        </div>
-                      )}
                     </td>
-                    <td
-                      className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums group/newgbif relative"
-                    >
+                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums">
                       {details === undefined ? (
                         <span className="text-zinc-400 animate-pulse">...</span>
                       ) : details?.gbifOccurrencesSinceAssessment != null && details?.gbifUrl && assessmentYear ? (
-                        <a
-                          href={`https://www.gbif.org/occurrence/search?taxon_key=${details.gbifUrl.split('/').pop()}&year=${assessmentYear + 1},${new Date().getFullYear()}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
-                          title={assessmentMonth ? `Data count includes ${assessmentYear} from month ${assessmentMonth + 1} onwards` : undefined}
-                        >
-                          {details.gbifOccurrencesSinceAssessment.toLocaleString()}
-                        </a>
+                        <span className="relative group/newgbif">
+                          <a
+                            href={`https://www.gbif.org/occurrence/search?taxon_key=${details.gbifUrl.split('/').pop()}&year=${assessmentYear + 1},${new Date().getFullYear()}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
+                            title={assessmentMonth ? `Data count includes ${assessmentYear} from month ${assessmentMonth + 1} onwards` : undefined}
+                          >
+                            {details.gbifOccurrencesSinceAssessment.toLocaleString()}
+                          </a>
+                          {details?.gbifNewByRecordType && (
+                            <div className="absolute right-0 top-full z-10 hidden group-hover/newgbif:block pt-1">
+                              <div className="bg-zinc-800 dark:bg-zinc-900 border border-zinc-700 rounded-lg shadow-lg p-2 text-xs text-left min-w-[200px]">
+                                <div className="text-zinc-300 font-medium mb-1">After {assessmentYear}:</div>
+                                <div className="space-y-0.5 text-zinc-400">
+                                  <div className="flex justify-between">
+                                    <span>Human observations</span>
+                                    <a
+                                      href={`https://www.gbif.org/occurrence/search?basis_of_record=HUMAN_OBSERVATION&taxon_key=${details.gbifUrl?.split('/').pop()}&year=${assessmentYear + 1},${new Date().getFullYear()}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-zinc-200 hover:text-blue-400 hover:underline tabular-nums"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      {details.gbifNewByRecordType.humanObservation.toLocaleString()}
+                                    </a>
+                                  </div>
+                                  {details.gbifNewByRecordType.iNaturalist != null && details.gbifNewByRecordType.iNaturalist > 0 && (
+                                    <div className="flex justify-between pl-3 text-[11px]">
+                                      <span className="relative group/inat2">
+                                        iNaturalist{" "}
+                                        {details.latestInatObservation && (
+                                          <a
+                                            href={details.latestInatObservation.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-amber-400 hover:text-amber-300 underline"
+                                            onClick={(e) => e.stopPropagation()}
+                                          >
+                                            (latest observation)
+                                          </a>
+                                        )}
+                                        {details.latestInatObservation?.imageUrl && (
+                                          <div className="absolute right-0 bottom-full mb-2 z-20 hidden group-hover/inat2:block bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl p-2 min-w-[220px]">
+                                            <img
+                                              src={details.latestInatObservation.imageUrl.replace('/original.', '/medium.')}
+                                              alt="Latest iNaturalist observation"
+                                              className="w-52 h-auto rounded mb-2"
+                                            />
+                                            <div className="text-[10px] text-zinc-300 space-y-0.5">
+                                              {details.latestInatObservation.date && (
+                                                <div>{details.latestInatObservation.date}</div>
+                                              )}
+                                              {details.latestInatObservation.observer && (
+                                                <div className="truncate">{details.latestInatObservation.observer}</div>
+                                              )}
+                                              {details.latestInatObservation.location && (
+                                                <div className="truncate text-zinc-400">{details.latestInatObservation.location}</div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </span>
+                                      <a
+                                        href={`https://www.gbif.org/occurrence/search?dataset_key=50c9509d-22c7-4a22-a47d-8c48425ef4a7&taxon_key=${details.gbifUrl?.split('/').pop()}&year=${assessmentYear + 1},${new Date().getFullYear()}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-zinc-300 hover:text-amber-400 hover:underline tabular-nums"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        {details.gbifNewByRecordType.iNaturalist.toLocaleString()}
+                                      </a>
+                                    </div>
+                                  )}
+                                  <div className="flex justify-between">
+                                    <span>Preserved specimens</span>
+                                    <a
+                                      href={`https://www.gbif.org/occurrence/search?basis_of_record=PRESERVED_SPECIMEN&taxon_key=${details.gbifUrl?.split('/').pop()}&year=${assessmentYear + 1},${new Date().getFullYear()}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-zinc-200 hover:text-blue-400 hover:underline tabular-nums"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      {details.gbifNewByRecordType.preservedSpecimen.toLocaleString()}
+                                    </a>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span>Machine observations</span>
+                                    <a
+                                      href={`https://www.gbif.org/occurrence/search?basis_of_record=MACHINE_OBSERVATION&taxon_key=${details.gbifUrl?.split('/').pop()}&year=${assessmentYear + 1},${new Date().getFullYear()}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-zinc-200 hover:text-blue-400 hover:underline tabular-nums"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      {details.gbifNewByRecordType.machineObservation.toLocaleString()}
+                                    </a>
+                                  </div>
+                                  {details.gbifNewByRecordType.other > 0 && (
+                                    <div className="flex justify-between">
+                                      <span>Other</span>
+                                      <span className="text-zinc-200 tabular-nums">{details.gbifNewByRecordType.other.toLocaleString()}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </span>
                       ) : details?.gbifOccurrencesSinceAssessment != null ? (
                         details.gbifOccurrencesSinceAssessment.toLocaleString()
                       ) : "—"}
-                      {details?.gbifNewByRecordType && details.gbifOccurrencesSinceAssessment != null && assessmentYear && (
-                        <div className="absolute right-0 top-full z-10 hidden group-hover/newgbif:block pt-1">
-                        <div className="bg-zinc-800 dark:bg-zinc-900 border border-zinc-700 rounded-lg shadow-lg p-2 text-xs text-left min-w-[200px]">
-                          <div className="text-zinc-300 font-medium mb-1">After {assessmentYear}:</div>
-                          <div className="space-y-0.5 text-zinc-400">
-                            <div className="flex justify-between">
-                              <span>Human observations</span>
-                              <a
-                                href={`https://www.gbif.org/occurrence/search?basis_of_record=HUMAN_OBSERVATION&taxon_key=${details.gbifUrl?.split('/').pop()}&year=${assessmentYear + 1},${new Date().getFullYear()}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-zinc-200 hover:text-blue-400 hover:underline tabular-nums"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {details.gbifNewByRecordType.humanObservation.toLocaleString()}
-                              </a>
-                            </div>
-                            {details.gbifNewByRecordType.iNaturalist != null && details.gbifNewByRecordType.iNaturalist > 0 && (
-                              <div className="flex justify-between pl-3 text-[11px]">
-                                <span className="relative group/inat2">
-                                  iNaturalist{" "}
-                                  {details.latestInatObservation && (
-                                    <a
-                                      href={details.latestInatObservation.url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-amber-400 hover:text-amber-300 underline"
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      (latest observation)
-                                    </a>
-                                  )}
-                                  {details.latestInatObservation?.imageUrl && (
-                                    <div className="absolute right-0 bottom-full mb-2 z-20 hidden group-hover/inat2:block bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl p-2 min-w-[220px]">
-                                      <img
-                                        src={details.latestInatObservation.imageUrl.replace('/original.', '/medium.')}
-                                        alt="Latest iNaturalist observation"
-                                        className="w-52 h-auto rounded mb-2"
-                                      />
-                                      <div className="text-[10px] text-zinc-300 space-y-0.5">
-                                        {details.latestInatObservation.date && (
-                                          <div>{details.latestInatObservation.date}</div>
-                                        )}
-                                        {details.latestInatObservation.observer && (
-                                          <div className="truncate">{details.latestInatObservation.observer}</div>
-                                        )}
-                                        {details.latestInatObservation.location && (
-                                          <div className="truncate text-zinc-400">{details.latestInatObservation.location}</div>
-                                        )}
-                                      </div>
-                                    </div>
-                                  )}
-                                </span>
-                                <a
-                                  href={`https://www.gbif.org/occurrence/search?dataset_key=50c9509d-22c7-4a22-a47d-8c48425ef4a7&taxon_key=${details.gbifUrl?.split('/').pop()}&year=${assessmentYear + 1},${new Date().getFullYear()}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-zinc-300 hover:text-amber-400 hover:underline tabular-nums"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  {details.gbifNewByRecordType.iNaturalist.toLocaleString()}
-                                </a>
-                              </div>
-                            )}
-                            <div className="flex justify-between">
-                              <span>Preserved specimens</span>
-                              <a
-                                href={`https://www.gbif.org/occurrence/search?basis_of_record=PRESERVED_SPECIMEN&taxon_key=${details.gbifUrl?.split('/').pop()}&year=${assessmentYear + 1},${new Date().getFullYear()}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-zinc-200 hover:text-blue-400 hover:underline tabular-nums"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {details.gbifNewByRecordType.preservedSpecimen.toLocaleString()}
-                              </a>
-                            </div>
-                            <div className="flex justify-between">
-                              <span>Machine observations</span>
-                              <a
-                                href={`https://www.gbif.org/occurrence/search?basis_of_record=MACHINE_OBSERVATION&taxon_key=${details.gbifUrl?.split('/').pop()}&year=${assessmentYear + 1},${new Date().getFullYear()}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-zinc-200 hover:text-blue-400 hover:underline tabular-nums"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {details.gbifNewByRecordType.machineObservation.toLocaleString()}
-                              </a>
-                            </div>
-                            {details.gbifNewByRecordType.other > 0 && (
-                              <div className="flex justify-between">
-                                <span>Other</span>
-                                <span className="text-zinc-200 tabular-nums">{details.gbifNewByRecordType.other.toLocaleString()}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        </div>
-                      )}
                     </td>
                   </tr>
                 );
