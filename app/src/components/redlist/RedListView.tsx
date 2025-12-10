@@ -130,7 +130,7 @@ function InatObservationPreview({
   if (!obs?.imageUrl) return null;
 
   return (
-    <div className="bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl p-2 min-w-[220px]">
+    <div className="bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl p-2 w-56">
       {/* Navigation header */}
       {observations.length > 1 && (
         <div className="flex items-center justify-between mb-2 text-[10px] text-zinc-400">
@@ -161,7 +161,7 @@ function InatObservationPreview({
         <img
           src={obs.imageUrl.replace('/original.', '/medium.')}
           alt="iNaturalist observation"
-          className="w-52 h-auto rounded mb-2 hover:opacity-90"
+          className="w-full max-h-52 object-cover rounded mb-2 hover:opacity-90"
         />
       </a>
       <div className="text-[10px] text-zinc-300 space-y-0.5">
