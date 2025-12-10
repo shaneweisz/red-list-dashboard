@@ -74,11 +74,29 @@ interface Species {
   previous_assessments: PreviousAssessment[];
 }
 
+interface GbifByRecordType {
+  humanObservation: number;
+  preservedSpecimen: number;
+  machineObservation: number;
+  other: number;
+  iNaturalist?: number;
+}
+
+interface LatestInatObservation {
+  url: string;
+  date: string | null;
+  count: number;
+}
+
 interface SpeciesDetails {
   criteria: string | null;
   commonName: string | null;
   gbifUrl: string | null;
   gbifOccurrences: number | null;
+  gbifOccurrencesSinceAssessment: number | null;
+  gbifByRecordType: GbifByRecordType | null;
+  gbifNewByRecordType: GbifByRecordType | null;
+  latestInatObservation: LatestInatObservation | null;
 }
 
 interface SpeciesResponse {
@@ -322,8 +340,12 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
 
       const detailPromises = speciesToFetch.map(async (s) => {
         try {
+          // Extract assessment year and month for GBIF filtering
+          const assessmentDate = s.assessment_date ? new Date(s.assessment_date) : null;
+          const assessmentYear = assessmentDate ? assessmentDate.getFullYear().toString() : "";
+          const assessmentMonth = assessmentDate ? (assessmentDate.getMonth() + 1).toString() : ""; // 1-12
           const res = await fetch(
-            `/api/redlist/species/${s.sis_taxon_id}?assessmentId=${s.assessment_id}&name=${encodeURIComponent(s.scientific_name)}`
+            `/api/redlist/species/${s.sis_taxon_id}?assessmentId=${s.assessment_id}&name=${encodeURIComponent(s.scientific_name)}&assessmentYear=${assessmentYear}&assessmentMonth=${assessmentMonth}`
           );
           if (res.ok) {
             const data = await res.json();
@@ -345,6 +367,10 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
             commonName: result.data.commonName,
             gbifUrl: result.data.gbifUrl,
             gbifOccurrences: result.data.gbifOccurrences,
+            gbifOccurrencesSinceAssessment: result.data.gbifOccurrencesSinceAssessment,
+            gbifByRecordType: result.data.gbifByRecordType,
+            gbifNewByRecordType: result.data.gbifNewByRecordType,
+            latestInatObservation: result.data.latestInatObservation,
           };
         }
       });
@@ -763,24 +789,31 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                   Previous Assessments
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                  GBIF Occurrences
+                  GBIF Occurrences All
                 </th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                  Links
+                <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                  GBIF Occurrences Since Assessed
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
               {paginatedSpecies.map((s) => {
-                const assessmentYear = s.assessment_date ? new Date(s.assessment_date).getFullYear() : null;
+                const assessmentDateObj = s.assessment_date ? new Date(s.assessment_date) : null;
+                const assessmentYear = assessmentDateObj ? assessmentDateObj.getFullYear() : null;
+                const assessmentMonth = assessmentDateObj ? assessmentDateObj.getMonth() + 1 : null; // 1-12
                 const yearsSinceAssessment = assessmentYear ? currentYear - assessmentYear : null;
                 const details = speciesDetails[s.sis_taxon_id];
                 return (
                   <tr key={s.sis_taxon_id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
                     <td className="px-4 py-3">
-                      <span className="italic font-medium text-zinc-900 dark:text-zinc-100">
+                      <a
+                        href={s.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="italic font-medium text-zinc-900 dark:text-zinc-100 hover:text-red-600 dark:hover:text-red-400 hover:underline"
+                      >
                         {s.scientific_name}
-                      </span>
+                      </a>
                       {details?.commonName && (
                         <span className="text-zinc-500 dark:text-zinc-400 text-sm ml-2">
                           ({details.commonName})
@@ -788,8 +821,11 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <span
-                        className="px-2 py-0.5 text-xs font-medium rounded"
+                      <a
+                        href={s.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-2 py-0.5 text-xs font-medium rounded hover:ring-2 hover:ring-red-400"
                         style={{
                           backgroundColor: CATEGORY_COLORS[s.category] + "20",
                           color: s.category === "EX" || s.category === "EW" ? "#fff" : CATEGORY_COLORS[s.category],
@@ -797,25 +833,48 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                         }}
                       >
                         {s.category}
-                      </span>
+                      </a>
                     </td>
                     <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400 text-xs">
-                      {details?.criteria || "—"}
+                      {details?.criteria ? (
+                        <a
+                          href={s.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="hover:text-red-500 hover:underline"
+                        >
+                          {details.criteria}
+                        </a>
+                      ) : "—"}
                     </td>
                     <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
-                      {s.assessment_date
-                        ? new Date(s.assessment_date).toLocaleDateString("en-GB", {
-                            day: "numeric",
-                            month: "short",
-                            year: "numeric",
-                          })
-                        : "—"}
+                      <a
+                        href={s.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:text-red-500 hover:underline"
+                      >
+                        {s.assessment_date
+                          ? new Date(s.assessment_date).toLocaleDateString("en-GB", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                            })
+                          : "—"}
+                      </a>
                       {yearsSinceAssessment !== null && yearsSinceAssessment > 10 && (
                         <span className="ml-1 text-xs text-amber-600">({yearsSinceAssessment}y ago)</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
-                      {s.year_published}
+                      <a
+                        href={s.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:text-red-500 hover:underline"
+                      >
+                        {s.year_published}
+                      </a>
                     </td>
                     <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400 text-sm">
                       {s.previous_assessments.length > 0
@@ -837,45 +896,197 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                           ))
                         : "—"}
                     </td>
-                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums">
-                      {details?.gbifOccurrences != null
-                        ? details.gbifOccurrences.toLocaleString()
-                        : "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-center gap-3">
-                        {details?.gbifUrl && (
-                          <a
-                            href={details.gbifUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-1 text-xs text-green-600 hover:text-green-700 hover:underline"
-                          >
-                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-                              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
-                            </svg>
-                            GBIF
-                          </a>
-                        )}
+                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums group/gbif relative">
+                      {details === undefined ? (
+                        <span className="text-zinc-400 animate-pulse">...</span>
+                      ) : details?.gbifOccurrences != null && details?.gbifUrl ? (
                         <a
-                          href={s.url}
+                          href={`https://www.gbif.org/occurrence/search?taxon_key=${details.gbifUrl.split('/').pop()}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-xs text-red-600 hover:text-red-700 hover:underline"
+                          className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
                         >
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                          </svg>
-                          Red List
+                          {details.gbifOccurrences.toLocaleString()}
                         </a>
-                      </div>
+                      ) : details?.gbifOccurrences != null ? (
+                        details.gbifOccurrences.toLocaleString()
+                      ) : "—"}
+                      {details?.gbifByRecordType && details.gbifOccurrences != null && (
+                        <div className="absolute right-0 top-full mt-1 z-10 hidden group-hover/gbif:block bg-zinc-800 dark:bg-zinc-900 border border-zinc-700 rounded-lg shadow-lg p-2 text-xs text-left min-w-[200px]">
+                          <div className="text-zinc-300 font-medium mb-1">Breakdown by type:</div>
+                          <div className="space-y-0.5 text-zinc-400">
+                            <div className="flex justify-between">
+                              <span>Human observations</span>
+                              <a
+                                href={`https://www.gbif.org/occurrence/search?basis_of_record=HUMAN_OBSERVATION&taxon_key=${details.gbifUrl?.split('/').pop()}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-zinc-200 hover:text-blue-400 hover:underline tabular-nums"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {details.gbifByRecordType.humanObservation.toLocaleString()}
+                              </a>
+                            </div>
+                            {details.latestInatObservation && details.latestInatObservation.count > 0 && (
+                              <div className="flex justify-between pl-3 text-[11px]">
+                                <span>
+                                  iNaturalist{" "}
+                                  <a
+                                    href={details.latestInatObservation.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-amber-400 hover:text-amber-300 underline"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    (latest observation)
+                                  </a>
+                                </span>
+                                <a
+                                  href={`https://www.gbif.org/occurrence/search?dataset_key=50c9509d-22c7-4a22-a47d-8c48425ef4a7&taxon_key=${details.gbifUrl?.split('/').pop()}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-zinc-300 hover:text-amber-400 hover:underline tabular-nums"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  {details.latestInatObservation.count.toLocaleString()}
+                                </a>
+                              </div>
+                            )}
+                            <div className="flex justify-between">
+                              <span>Preserved specimens</span>
+                              <a
+                                href={`https://www.gbif.org/occurrence/search?basis_of_record=PRESERVED_SPECIMEN&taxon_key=${details.gbifUrl?.split('/').pop()}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-zinc-200 hover:text-blue-400 hover:underline tabular-nums"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {details.gbifByRecordType.preservedSpecimen.toLocaleString()}
+                              </a>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Machine observations</span>
+                              <a
+                                href={`https://www.gbif.org/occurrence/search?basis_of_record=MACHINE_OBSERVATION&taxon_key=${details.gbifUrl?.split('/').pop()}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-zinc-200 hover:text-blue-400 hover:underline tabular-nums"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {details.gbifByRecordType.machineObservation.toLocaleString()}
+                              </a>
+                            </div>
+                            {details.gbifByRecordType.other > 0 && (
+                              <div className="flex justify-between">
+                                <span>Other</span>
+                                <span className="text-zinc-200 tabular-nums">{details.gbifByRecordType.other.toLocaleString()}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </td>
+                    <td
+                      className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums group/newgbif relative"
+                    >
+                      {details === undefined ? (
+                        <span className="text-zinc-400 animate-pulse">...</span>
+                      ) : details?.gbifOccurrencesSinceAssessment != null && details?.gbifUrl && assessmentYear ? (
+                        <a
+                          href={`https://www.gbif.org/occurrence/search?taxon_key=${details.gbifUrl.split('/').pop()}&year=${assessmentYear + 1},${new Date().getFullYear()}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
+                          title={assessmentMonth ? `Data count includes ${assessmentYear} from month ${assessmentMonth + 1} onwards` : undefined}
+                        >
+                          {details.gbifOccurrencesSinceAssessment.toLocaleString()}
+                        </a>
+                      ) : details?.gbifOccurrencesSinceAssessment != null ? (
+                        details.gbifOccurrencesSinceAssessment.toLocaleString()
+                      ) : "—"}
+                      {details?.gbifNewByRecordType && details.gbifOccurrencesSinceAssessment != null && assessmentYear && (
+                        <div className="absolute right-0 top-full mt-1 z-10 hidden group-hover/newgbif:block bg-zinc-800 dark:bg-zinc-900 border border-zinc-700 rounded-lg shadow-lg p-2 text-xs text-left min-w-[200px]">
+                          <div className="text-zinc-300 font-medium mb-1">After {assessmentYear}:</div>
+                          <div className="space-y-0.5 text-zinc-400">
+                            <div className="flex justify-between">
+                              <span>Human observations</span>
+                              <a
+                                href={`https://www.gbif.org/occurrence/search?basis_of_record=HUMAN_OBSERVATION&taxon_key=${details.gbifUrl?.split('/').pop()}&year=${assessmentYear + 1},${new Date().getFullYear()}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-zinc-200 hover:text-blue-400 hover:underline tabular-nums"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {details.gbifNewByRecordType.humanObservation.toLocaleString()}
+                              </a>
+                            </div>
+                            {details.gbifNewByRecordType.iNaturalist != null && details.gbifNewByRecordType.iNaturalist > 0 && (
+                              <div className="flex justify-between pl-3 text-[11px]">
+                                <span>
+                                  iNaturalist{" "}
+                                  {details.latestInatObservation && (
+                                    <a
+                                      href={details.latestInatObservation.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-amber-400 hover:text-amber-300 underline"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      (latest observation)
+                                    </a>
+                                  )}
+                                </span>
+                                <a
+                                  href={`https://www.gbif.org/occurrence/search?dataset_key=50c9509d-22c7-4a22-a47d-8c48425ef4a7&taxon_key=${details.gbifUrl?.split('/').pop()}&year=${assessmentYear + 1},${new Date().getFullYear()}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-zinc-300 hover:text-amber-400 hover:underline tabular-nums"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  {details.gbifNewByRecordType.iNaturalist.toLocaleString()}
+                                </a>
+                              </div>
+                            )}
+                            <div className="flex justify-between">
+                              <span>Preserved specimens</span>
+                              <a
+                                href={`https://www.gbif.org/occurrence/search?basis_of_record=PRESERVED_SPECIMEN&taxon_key=${details.gbifUrl?.split('/').pop()}&year=${assessmentYear + 1},${new Date().getFullYear()}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-zinc-200 hover:text-blue-400 hover:underline tabular-nums"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {details.gbifNewByRecordType.preservedSpecimen.toLocaleString()}
+                              </a>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Machine observations</span>
+                              <a
+                                href={`https://www.gbif.org/occurrence/search?basis_of_record=MACHINE_OBSERVATION&taxon_key=${details.gbifUrl?.split('/').pop()}&year=${assessmentYear + 1},${new Date().getFullYear()}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-zinc-200 hover:text-blue-400 hover:underline tabular-nums"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {details.gbifNewByRecordType.machineObservation.toLocaleString()}
+                              </a>
+                            </div>
+                            {details.gbifNewByRecordType.other > 0 && (
+                              <div className="flex justify-between">
+                                <span>Other</span>
+                                <span className="text-zinc-200 tabular-nums">{details.gbifNewByRecordType.other.toLocaleString()}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );
               })}
               {filteredSpecies.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-zinc-500">
+                  <td colSpan={8} className="px-4 py-8 text-center text-zinc-500">
                     No species found
                   </td>
                 </tr>
