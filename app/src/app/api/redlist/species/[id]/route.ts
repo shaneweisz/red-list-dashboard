@@ -99,7 +99,8 @@ export async function GET(
     let gbifOccurrencesSinceAssessment: number | null = null;
     let gbifByRecordType: { humanObservation: number; preservedSpecimen: number; machineObservation: number; other: number } | null = null;
     let gbifNewByRecordType: { humanObservation: number; preservedSpecimen: number; machineObservation: number; other: number; iNaturalist: number } | null = null;
-    let latestInatObservation: { url: string; date: string | null; count: number; imageUrl: string | null; location: string | null; observer: string | null } | null = null;
+    let recentInatObservations: { url: string; date: string | null; imageUrl: string | null; location: string | null; observer: string | null }[] = [];
+    let inatTotalCount = 0;
 
     const gbifIndex = 1;
     if (scientificName && responses[gbifIndex]?.ok) {
@@ -123,12 +124,12 @@ export async function GET(
             fetch(`https://api.gbif.org/v1/occurrence/count?taxonKey=${taxonKey}&basisOfRecord=MACHINE_OBSERVATION`),
           ];
 
-          // Fetch iNaturalist count and most recent observation
+          // Fetch iNaturalist count and recent observations (up to 5 for navigation)
           const inatCountPromise = fetch(
             `https://api.gbif.org/v1/occurrence/count?taxonKey=${taxonKey}&datasetKey=${INAT_DATASET_KEY}`
           );
-          const inatLatestPromise = fetch(
-            `https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&datasetKey=${INAT_DATASET_KEY}&limit=1`
+          const inatRecentPromise = fetch(
+            `https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&datasetKey=${INAT_DATASET_KEY}&limit=5`
           );
 
           // Add since-assessment queries if we have assessment year
@@ -174,10 +175,10 @@ export async function GET(
             }
           }
 
-          const [gbifResponses, inatCountResponse, inatLatestResponse, inatNewCountResponse, sameYearResponses] = await Promise.all([
+          const [gbifResponses, inatCountResponse, inatRecentResponse, inatNewCountResponse, sameYearResponses] = await Promise.all([
             Promise.all(gbifPromises),
             inatCountPromise,
-            inatLatestPromise,
+            inatRecentPromise,
             inatNewCountPromise || Promise.resolve(null),
             sameYearPromises.length > 0 ? Promise.all(sameYearPromises) : Promise.resolve([]),
           ]);
@@ -187,31 +188,27 @@ export async function GET(
             gbifOccurrences = await gbifResponses[0].json();
           }
 
-          // Parse iNaturalist count and most recent observation
-          let inatCount = 0;
+          // Parse iNaturalist count and recent observations
           if (inatCountResponse?.ok) {
-            inatCount = await inatCountResponse.json();
+            inatTotalCount = await inatCountResponse.json();
           }
-          if (inatLatestResponse?.ok) {
-            const inatData = await inatLatestResponse.json();
+          if (inatRecentResponse?.ok) {
+            const inatData = await inatRecentResponse.json();
             if (inatData.results && inatData.results.length > 0) {
-              const obs = inatData.results[0];
-              if (obs.references) {
-                // Extract image URL from media array
-                const imageUrl = obs.media?.[0]?.identifier || null;
-                // Build location string from available fields
-                const locationParts = [obs.verbatimLocality, obs.stateProvince, obs.country].filter(Boolean);
-                const location = locationParts.length > 0 ? locationParts.join(', ') : null;
-
-                latestInatObservation = {
-                  url: obs.references,
-                  date: obs.eventDate ? obs.eventDate.split('T')[0] : null,
-                  count: inatCount,
-                  imageUrl,
-                  location,
-                  observer: obs.recordedBy || null,
-                };
-              }
+              recentInatObservations = inatData.results
+                .filter((obs: { references?: string }) => obs.references)
+                .map((obs: { references: string; eventDate?: string; media?: { identifier?: string }[]; verbatimLocality?: string; stateProvince?: string; country?: string; recordedBy?: string }) => {
+                  const imageUrl = obs.media?.[0]?.identifier || null;
+                  const locationParts = [obs.verbatimLocality, obs.stateProvince, obs.country].filter(Boolean);
+                  const location = locationParts.length > 0 ? locationParts.join(', ') : null;
+                  return {
+                    url: obs.references,
+                    date: obs.eventDate ? obs.eventDate.split('T')[0] : null,
+                    imageUrl,
+                    location,
+                    observer: obs.recordedBy || null,
+                  };
+                });
             }
           }
 
@@ -299,7 +296,8 @@ export async function GET(
       gbifOccurrencesSinceAssessment,
       gbifByRecordType,
       gbifNewByRecordType,
-      latestInatObservation,
+      recentInatObservations,
+      inatTotalCount,
       assessmentCount,
     };
 

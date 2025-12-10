@@ -82,10 +82,9 @@ interface GbifByRecordType {
   iNaturalist?: number;
 }
 
-interface LatestInatObservation {
+interface InatObservation {
   url: string;
   date: string | null;
-  count: number;
   imageUrl: string | null;
   location: string | null;
   observer: string | null;
@@ -99,7 +98,8 @@ interface SpeciesDetails {
   gbifOccurrencesSinceAssessment: number | null;
   gbifByRecordType: GbifByRecordType | null;
   gbifNewByRecordType: GbifByRecordType | null;
-  latestInatObservation: LatestInatObservation | null;
+  recentInatObservations: InatObservation[];
+  inatTotalCount: number;
 }
 
 interface SpeciesResponse {
@@ -111,6 +111,64 @@ interface SpeciesResponse {
 
 interface RedListViewProps {
   onTaxonChange?: (taxonName: string | null) => void;
+}
+
+// Component for iNaturalist observation preview with navigation
+function InatObservationPreview({
+  observations,
+  currentIndex,
+  onNavigate,
+  totalCount,
+}: {
+  observations: InatObservation[];
+  currentIndex: number;
+  onNavigate: (delta: number) => void;
+  totalCount: number;
+}) {
+  if (observations.length === 0) return null;
+  const obs = observations[currentIndex] || observations[0];
+  if (!obs?.imageUrl) return null;
+
+  return (
+    <div className="bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl p-2 min-w-[220px]">
+      {/* Navigation header */}
+      {observations.length > 1 && (
+        <div className="flex items-center justify-between mb-2 text-[10px] text-zinc-400">
+          <button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onNavigate(-1); }}
+            disabled={currentIndex === 0}
+            className="p-1 hover:bg-zinc-800 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <span>{currentIndex + 1} / {observations.length}{totalCount > observations.length ? ` of ${totalCount.toLocaleString()}` : ''}</span>
+          <button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onNavigate(1); }}
+            disabled={currentIndex >= observations.length - 1}
+            className="p-1 hover:bg-zinc-800 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+      )}
+      <a href={obs.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+        <img
+          src={obs.imageUrl.replace('/original.', '/medium.')}
+          alt="iNaturalist observation"
+          className="w-52 h-auto rounded mb-2 hover:opacity-90"
+        />
+      </a>
+      <div className="text-[10px] text-zinc-300 space-y-0.5">
+        {obs.date && <div>{obs.date}</div>}
+        {obs.observer && <div className="truncate">{obs.observer}</div>}
+        {obs.location && <div className="truncate text-zinc-400">{obs.location}</div>}
+      </div>
+    </div>
+  );
 }
 
 export default function RedListView({ onTaxonChange }: RedListViewProps) {
@@ -169,6 +227,9 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
 
   // Species details cache (images, criteria, common names)
   const [speciesDetails, setSpeciesDetails] = useState<Record<number, SpeciesDetails>>({});
+
+  // Track current iNat observation index per species (for navigation)
+  const [inatIndex, setInatIndex] = useState<Record<number, number>>({});
 
   // Load stats and assessments when taxon changes
   useEffect(() => {
@@ -380,7 +441,8 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
             gbifOccurrencesSinceAssessment: result.data.gbifOccurrencesSinceAssessment,
             gbifByRecordType: result.data.gbifByRecordType,
             gbifNewByRecordType: result.data.gbifNewByRecordType,
-            latestInatObservation: result.data.latestInatObservation,
+            recentInatObservations: result.data.recentInatObservations || [],
+            inatTotalCount: result.data.inatTotalCount || 0,
           };
         }
       });
@@ -958,39 +1020,30 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                                       {details.gbifByRecordType.humanObservation.toLocaleString()}
                                     </a>
                                   </div>
-                                  {details.latestInatObservation && details.latestInatObservation.count > 0 && (
+                                  {details.recentInatObservations.length > 0 && details.inatTotalCount > 0 && (
                                     <div className="flex justify-between pl-3 text-[11px]">
                                       <span className="relative group/inat">
                                         iNaturalist{" "}
                                         <a
-                                          href={details.latestInatObservation.url}
+                                          href={details.recentInatObservations[0]?.url}
                                           target="_blank"
                                           rel="noopener noreferrer"
                                           className="text-amber-400 hover:text-amber-300 underline"
                                           onClick={(e) => e.stopPropagation()}
                                         >
-                                          (latest observation)
+                                          (recent observations)
                                         </a>
-                                        {details.latestInatObservation.imageUrl && (
-                                          <div className="absolute right-0 bottom-full mb-2 z-20 hidden group-hover/inat:block bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl p-2 min-w-[220px]">
-                                            <img
-                                              src={details.latestInatObservation.imageUrl.replace('/original.', '/medium.')}
-                                              alt="Latest iNaturalist observation"
-                                              className="w-52 h-auto rounded mb-2"
-                                            />
-                                            <div className="text-[10px] text-zinc-300 space-y-0.5">
-                                              {details.latestInatObservation.date && (
-                                                <div>{details.latestInatObservation.date}</div>
-                                              )}
-                                              {details.latestInatObservation.observer && (
-                                                <div className="truncate">{details.latestInatObservation.observer}</div>
-                                              )}
-                                              {details.latestInatObservation.location && (
-                                                <div className="truncate text-zinc-400">{details.latestInatObservation.location}</div>
-                                              )}
-                                            </div>
-                                          </div>
-                                        )}
+                                        <div className="absolute right-0 bottom-full mb-2 z-20 hidden group-hover/inat:block">
+                                          <InatObservationPreview
+                                            observations={details.recentInatObservations}
+                                            currentIndex={inatIndex[s.sis_taxon_id] || 0}
+                                            onNavigate={(delta) => setInatIndex(prev => ({
+                                              ...prev,
+                                              [s.sis_taxon_id]: Math.max(0, Math.min(details.recentInatObservations.length - 1, (prev[s.sis_taxon_id] || 0) + delta))
+                                            }))}
+                                            totalCount={details.inatTotalCount}
+                                          />
+                                        </div>
                                       </span>
                                       <a
                                         href={`https://www.gbif.org/occurrence/search?dataset_key=50c9509d-22c7-4a22-a47d-8c48425ef4a7&taxon_key=${details.gbifUrl?.split('/').pop()}`}
@@ -999,7 +1052,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                                         className="text-zinc-300 hover:text-amber-400 hover:underline tabular-nums"
                                         onClick={(e) => e.stopPropagation()}
                                       >
-                                        {details.latestInatObservation.count.toLocaleString()}
+                                        {details.inatTotalCount.toLocaleString()}
                                       </a>
                                     </div>
                                   )}
@@ -1073,41 +1126,30 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                                       {details.gbifNewByRecordType.humanObservation.toLocaleString()}
                                     </a>
                                   </div>
-                                  {details.gbifNewByRecordType.iNaturalist != null && details.gbifNewByRecordType.iNaturalist > 0 && (
+                                  {details.gbifNewByRecordType.iNaturalist != null && details.gbifNewByRecordType.iNaturalist > 0 && details.recentInatObservations.length > 0 && (
                                     <div className="flex justify-between pl-3 text-[11px]">
                                       <span className="relative group/inat2">
                                         iNaturalist{" "}
-                                        {details.latestInatObservation && (
-                                          <a
-                                            href={details.latestInatObservation.url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="text-amber-400 hover:text-amber-300 underline"
-                                            onClick={(e) => e.stopPropagation()}
-                                          >
-                                            (latest observation)
-                                          </a>
-                                        )}
-                                        {details.latestInatObservation?.imageUrl && (
-                                          <div className="absolute right-0 bottom-full mb-2 z-20 hidden group-hover/inat2:block bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl p-2 min-w-[220px]">
-                                            <img
-                                              src={details.latestInatObservation.imageUrl.replace('/original.', '/medium.')}
-                                              alt="Latest iNaturalist observation"
-                                              className="w-52 h-auto rounded mb-2"
-                                            />
-                                            <div className="text-[10px] text-zinc-300 space-y-0.5">
-                                              {details.latestInatObservation.date && (
-                                                <div>{details.latestInatObservation.date}</div>
-                                              )}
-                                              {details.latestInatObservation.observer && (
-                                                <div className="truncate">{details.latestInatObservation.observer}</div>
-                                              )}
-                                              {details.latestInatObservation.location && (
-                                                <div className="truncate text-zinc-400">{details.latestInatObservation.location}</div>
-                                              )}
-                                            </div>
-                                          </div>
-                                        )}
+                                        <a
+                                          href={details.recentInatObservations[0]?.url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-amber-400 hover:text-amber-300 underline"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          (recent observations)
+                                        </a>
+                                        <div className="absolute right-0 bottom-full mb-2 z-20 hidden group-hover/inat2:block">
+                                          <InatObservationPreview
+                                            observations={details.recentInatObservations}
+                                            currentIndex={inatIndex[s.sis_taxon_id] || 0}
+                                            onNavigate={(delta) => setInatIndex(prev => ({
+                                              ...prev,
+                                              [s.sis_taxon_id]: Math.max(0, Math.min(details.recentInatObservations.length - 1, (prev[s.sis_taxon_id] || 0) + delta))
+                                            }))}
+                                            totalCount={details.inatTotalCount}
+                                          />
+                                        </div>
                                       </span>
                                       <a
                                         href={`https://www.gbif.org/occurrence/search?dataset_key=50c9509d-22c7-4a22-a47d-8c48425ef4a7&taxon_key=${details.gbifUrl?.split('/').pop()}&year=${assessmentYear + 1},${new Date().getFullYear()}`}
