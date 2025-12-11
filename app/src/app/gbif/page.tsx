@@ -825,7 +825,7 @@ export default function Home() {
                 <circle cx="12" cy="12" r="9" strokeWidth={2} />
               </svg>
             )}
-            No Red List Assessment
+            Not Evaluated
           </button>
           {availableCandidates.length > 0 && (
             <button
