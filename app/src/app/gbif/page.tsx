@@ -699,6 +699,7 @@ export default function Home() {
                 selectedCountry={selectedCountry}
                 onCountrySelect={handleCountrySelect}
                 onClearSelection={handleClearCountry}
+                selectedTaxon={selectedTaxon}
               />
             </div>
           )}

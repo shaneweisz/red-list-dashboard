@@ -108,17 +108,25 @@ interface WorldMapProps {
   selectedCountry: string | null;
   onCountrySelect: (countryCode: string, countryName: string) => void;
   onClearSelection: () => void;
+  selectedTaxon?: string | null;
 }
 
-function WorldMap({ selectedCountry, onCountrySelect, onClearSelection }: WorldMapProps) {
+function WorldMap({ selectedCountry, onCountrySelect, onClearSelection, selectedTaxon }: WorldMapProps) {
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoveredCountryCode, setHoveredCountryCode] = useState<string | null>(null);
   const [countryStats, setCountryStats] = useState<CountryStats>({});
   const [loading, setLoading] = useState(true);
 
-  // Fetch country stats on mount
+  // Fetch country stats when taxon changes
   useEffect(() => {
-    fetch("/api/country/stats")
+    if (!selectedTaxon) {
+      setCountryStats({});
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    fetch(`/api/country/stats?taxon=${encodeURIComponent(selectedTaxon)}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.stats) {
@@ -127,7 +135,7 @@ function WorldMap({ selectedCountry, onCountrySelect, onClearSelection }: WorldM
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, []);
+  }, [selectedTaxon]);
 
   // Calculate max value for heatmap scaling
   const maxOccurrences = Object.values(countryStats).reduce(
