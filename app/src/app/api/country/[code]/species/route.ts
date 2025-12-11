@@ -29,9 +29,19 @@ export async function GET(
       hasGeospatialIssue: "false",
     });
 
-    // Add taxon filter - use classKey if available, otherwise kingdomKey
+    // Add taxon filter - use classKey(s) if available, otherwise kingdomKey
     if (taxon.gbifClassKey) {
       gbifParams.set("classKey", taxon.gbifClassKey.toString());
+    } else if (taxon.gbifClassKeys && taxon.gbifClassKeys.length > 0) {
+      // Multiple class keys - add each as a separate param
+      taxon.gbifClassKeys.forEach(key => {
+        gbifParams.append("classKey", key.toString());
+      });
+    } else if (taxon.gbifOrderKeys && taxon.gbifOrderKeys.length > 0) {
+      // Multiple order keys (e.g., fishes)
+      taxon.gbifOrderKeys.forEach(key => {
+        gbifParams.append("orderKey", key.toString());
+      });
     } else if (taxon.gbifKingdomKey) {
       gbifParams.set("kingdomKey", taxon.gbifKingdomKey.toString());
     }
