@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import {
   BarChart,
   Bar,
@@ -13,6 +14,12 @@ import {
 } from "recharts";
 import TaxaSummary from "./TaxaSummary";
 import { CATEGORY_COLORS } from "@/config/taxa";
+
+// Dynamically import OccurrenceMapRow to avoid SSR issues with Leaflet
+const OccurrenceMapRow = dynamic(
+  () => import("../OccurrenceMapRow"),
+  { ssr: false }
+);
 
 interface CategoryStats {
   code: string;
@@ -238,6 +245,14 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
 
   // Track current iNat observation index per species (for navigation)
   const [inatIndex, setInatIndex] = useState<Record<number, number>>({});
+
+  // Row expansion state
+  const [selectedSpeciesKey, setSelectedSpeciesKey] = useState<number | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Load stats and assessments when taxon changes
   useEffect(() => {
@@ -931,8 +946,13 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                 const assessmentMonth = assessmentDateObj ? assessmentDateObj.getMonth() + 1 : null; // 1-12
                 const yearsSinceAssessment = assessmentYear ? currentYear - assessmentYear : null;
                 const details = speciesDetails[s.sis_taxon_id];
+                const gbifSpeciesKey = details?.gbifUrl ? parseInt(details.gbifUrl.split('/').pop() || '0') : null;
                 return (
-                  <tr key={s.sis_taxon_id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
+                  <React.Fragment key={s.sis_taxon_id}>
+                  <tr
+                    className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer ${selectedSpeciesKey === s.sis_taxon_id ? "bg-zinc-100 dark:bg-zinc-800" : ""}`}
+                    onClick={() => setSelectedSpeciesKey(selectedSpeciesKey === s.sis_taxon_id ? null : s.sis_taxon_id)}
+                  >
                     <td className="hidden md:table-cell px-4 py-2">
                       {details === undefined ? (
                         <div className="w-10 h-10 bg-zinc-200 dark:bg-zinc-700 rounded animate-pulse" />
@@ -969,6 +989,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                         target="_blank"
                         rel="noopener noreferrer"
                         className="italic font-medium text-zinc-900 dark:text-zinc-100 hover:text-red-600 dark:hover:text-red-400 hover:underline"
+                        onClick={(e) => e.stopPropagation()}
                       >
                         {s.scientific_name}
                       </a>
@@ -999,6 +1020,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                         target="_blank"
                         rel="noopener noreferrer"
                         className="hover:text-red-500 hover:underline"
+                        onClick={(e) => e.stopPropagation()}
                       >
                         {s.assessment_date
                           ? new Date(s.assessment_date).toLocaleDateString("en-GB", {
@@ -1024,6 +1046,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="hover:underline"
+                                onClick={(e) => e.stopPropagation()}
                               >
                                 {pa.year}
                                 <span className="ml-0.5 text-[10px]">
@@ -1045,6 +1068,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
+                            onClick={(e) => e.stopPropagation()}
                           >
                             {details.gbifOccurrences.toLocaleString()}
                           </a>
@@ -1142,6 +1166,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                             rel="noopener noreferrer"
                             className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
                             title={assessmentMonth ? `Data count includes ${assessmentYear} from month ${assessmentMonth + 1} onwards` : undefined}
+                            onClick={(e) => e.stopPropagation()}
                           >
                             {details.gbifOccurrencesSinceAssessment.toLocaleString()}
                           </a>
@@ -1235,6 +1260,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                         rel="noopener noreferrer"
                         className="inline-flex items-center justify-center text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
                         title="View on IUCN Red List"
+                        onClick={(e) => e.stopPropagation()}
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -1242,6 +1268,15 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                       </a>
                     </td>
                   </tr>
+                  {selectedSpeciesKey === s.sis_taxon_id && gbifSpeciesKey && (
+                    <OccurrenceMapRow
+                      speciesKey={gbifSpeciesKey}
+                      speciesName={s.scientific_name.toLowerCase()}
+                      mounted={mounted}
+                      colSpan={10}
+                    />
+                  )}
+                  </React.Fragment>
                 );
               })}
               {filteredSpecies.length === 0 && (
