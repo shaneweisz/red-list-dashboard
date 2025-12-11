@@ -994,15 +994,23 @@ export default function Home() {
                         </td>
                         <td className="hidden sm:table-cell px-2 sm:px-4 py-2 text-center">
                           {record.redlist_category ? (
-                            <span
-                              className="px-1.5 py-0.5 text-xs font-medium rounded"
-                              style={{
-                                backgroundColor: CATEGORY_COLORS[record.redlist_category] || "#6b7280",
-                                color: ["LC", "NT", "VU"].includes(record.redlist_category) ? "#000" : "#fff",
-                              }}
+                            <a
+                              href={`https://www.iucnredlist.org/search?query=${encodeURIComponent(displayName)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="hover:opacity-80 transition-opacity"
                             >
-                              {record.redlist_category}
-                            </span>
+                              <span
+                                className="px-1.5 py-0.5 text-xs font-medium rounded"
+                                style={{
+                                  backgroundColor: CATEGORY_COLORS[record.redlist_category] || "#6b7280",
+                                  color: ["LC", "NT", "VU"].includes(record.redlist_category) ? "#000" : "#fff",
+                                }}
+                              >
+                                {record.redlist_category}
+                              </span>
+                            </a>
                           ) : (
                             <span className="text-xs text-zinc-400">—</span>
                           )}
