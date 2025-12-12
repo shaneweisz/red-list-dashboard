@@ -126,21 +126,24 @@ export async function GET(
           // iNaturalist dataset key in GBIF
           const INAT_DATASET_KEY = "50c9509d-22c7-4a22-a47d-8c48425ef4a7";
 
+          // Base params for geo-referenced occurrences only
+          const geoParams = "hasCoordinate=true&hasGeospatialIssue=false";
+
           const gbifPromises: Promise<Response>[] = [
-            // Index 0: Total occurrences
-            fetch(`https://api.gbif.org/v1/occurrence/count?taxonKey=${taxonKey}`),
-            // Index 1-3: By record type
-            fetch(`https://api.gbif.org/v1/occurrence/count?taxonKey=${taxonKey}&basisOfRecord=HUMAN_OBSERVATION`),
-            fetch(`https://api.gbif.org/v1/occurrence/count?taxonKey=${taxonKey}&basisOfRecord=PRESERVED_SPECIMEN`),
-            fetch(`https://api.gbif.org/v1/occurrence/count?taxonKey=${taxonKey}&basisOfRecord=MACHINE_OBSERVATION`),
+            // Index 0: Total occurrences (geo-referenced only)
+            fetch(`https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&${geoParams}&limit=0`),
+            // Index 1-3: By record type (geo-referenced only)
+            fetch(`https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&${geoParams}&basisOfRecord=HUMAN_OBSERVATION&limit=0`),
+            fetch(`https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&${geoParams}&basisOfRecord=PRESERVED_SPECIMEN&limit=0`),
+            fetch(`https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&${geoParams}&basisOfRecord=MACHINE_OBSERVATION&limit=0`),
           ];
 
           // Fetch iNaturalist count and recent observations (up to 5 for navigation)
           const inatCountPromise = fetch(
-            `https://api.gbif.org/v1/occurrence/count?taxonKey=${taxonKey}&datasetKey=${INAT_DATASET_KEY}`
+            `https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&datasetKey=${INAT_DATASET_KEY}&${geoParams}&limit=0`
           );
           const inatRecentPromise = fetch(
-            `https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&datasetKey=${INAT_DATASET_KEY}&limit=5`
+            `https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&datasetKey=${INAT_DATASET_KEY}&${geoParams}&limit=5`
           );
 
           // Add since-assessment queries if we have assessment year
@@ -159,29 +162,29 @@ export async function GET(
             if (parsedMonth && parsedMonth < 12) {
               const monthRange = `${parsedMonth + 1},12`; // Months after assessment in same year
               sameYearPromises = [
-                // Same year, later months - total
-                fetch(`https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&year=${parsedYear}&month=${monthRange}&limit=0`),
-                // Same year, later months - by record type
-                fetch(`https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&year=${parsedYear}&month=${monthRange}&basisOfRecord=HUMAN_OBSERVATION&limit=0`),
-                fetch(`https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&year=${parsedYear}&month=${monthRange}&basisOfRecord=PRESERVED_SPECIMEN&limit=0`),
-                fetch(`https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&year=${parsedYear}&month=${monthRange}&basisOfRecord=MACHINE_OBSERVATION&limit=0`),
-                // Same year, later months - iNaturalist
-                fetch(`https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&year=${parsedYear}&month=${monthRange}&datasetKey=${INAT_DATASET_KEY}&limit=0`),
+                // Same year, later months - total (geo-referenced only)
+                fetch(`https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&year=${parsedYear}&month=${monthRange}&${geoParams}&limit=0`),
+                // Same year, later months - by record type (geo-referenced only)
+                fetch(`https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&year=${parsedYear}&month=${monthRange}&${geoParams}&basisOfRecord=HUMAN_OBSERVATION&limit=0`),
+                fetch(`https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&year=${parsedYear}&month=${monthRange}&${geoParams}&basisOfRecord=PRESERVED_SPECIMEN&limit=0`),
+                fetch(`https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&year=${parsedYear}&month=${monthRange}&${geoParams}&basisOfRecord=MACHINE_OBSERVATION&limit=0`),
+                // Same year, later months - iNaturalist (geo-referenced only)
+                fetch(`https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&year=${parsedYear}&month=${monthRange}&${geoParams}&datasetKey=${INAT_DATASET_KEY}&limit=0`),
               ];
             }
 
             if (yearRange) {
               gbifPromises.push(
-                // Index 4: Total new occurrences (full years after)
-                fetch(`https://api.gbif.org/v1/occurrence/count?taxonKey=${taxonKey}&year=${yearRange}`),
-                // Index 5-7: New occurrences by record type (full years after)
-                fetch(`https://api.gbif.org/v1/occurrence/count?taxonKey=${taxonKey}&year=${yearRange}&basisOfRecord=HUMAN_OBSERVATION`),
-                fetch(`https://api.gbif.org/v1/occurrence/count?taxonKey=${taxonKey}&year=${yearRange}&basisOfRecord=PRESERVED_SPECIMEN`),
-                fetch(`https://api.gbif.org/v1/occurrence/count?taxonKey=${taxonKey}&year=${yearRange}&basisOfRecord=MACHINE_OBSERVATION`)
+                // Index 4: Total new occurrences (full years after, geo-referenced only)
+                fetch(`https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&year=${yearRange}&${geoParams}&limit=0`),
+                // Index 5-7: New occurrences by record type (full years after, geo-referenced only)
+                fetch(`https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&year=${yearRange}&${geoParams}&basisOfRecord=HUMAN_OBSERVATION&limit=0`),
+                fetch(`https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&year=${yearRange}&${geoParams}&basisOfRecord=PRESERVED_SPECIMEN&limit=0`),
+                fetch(`https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&year=${yearRange}&${geoParams}&basisOfRecord=MACHINE_OBSERVATION&limit=0`)
               );
-              // iNaturalist count for full years after
+              // iNaturalist count for full years after (geo-referenced only)
               inatNewCountPromise = fetch(
-                `https://api.gbif.org/v1/occurrence/count?taxonKey=${taxonKey}&datasetKey=${INAT_DATASET_KEY}&year=${yearRange}`
+                `https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&datasetKey=${INAT_DATASET_KEY}&year=${yearRange}&${geoParams}&limit=0`
               );
             }
           }
@@ -200,14 +203,16 @@ export async function GET(
             inatTaxaPromise,
           ]);
 
-          // Parse responses
+          // Parse responses (search endpoint returns {count: N})
           if (gbifResponses[0]?.ok) {
-            gbifOccurrences = await gbifResponses[0].json();
+            const data = await gbifResponses[0].json();
+            gbifOccurrences = data.count || 0;
           }
 
           // Parse iNaturalist count and recent observations
           if (inatCountResponse?.ok) {
-            inatTotalCount = await inatCountResponse.json();
+            const data = await inatCountResponse.json();
+            inatTotalCount = data.count || 0;
           }
 
           // Parse iNaturalist default species image
@@ -241,11 +246,11 @@ export async function GET(
             }
           }
 
-          // Parse record type breakdown
+          // Parse record type breakdown (search endpoint returns {count: N})
           const [, humanResp, specimenResp, machineResp] = gbifResponses;
-          const humanObs = humanResp?.ok ? await humanResp.json() : 0;
-          const specimen = specimenResp?.ok ? await specimenResp.json() : 0;
-          const machine = machineResp?.ok ? await machineResp.json() : 0;
+          const humanObs = humanResp?.ok ? (await humanResp.json()).count || 0 : 0;
+          const specimen = specimenResp?.ok ? (await specimenResp.json()).count || 0 : 0;
+          const machine = machineResp?.ok ? (await machineResp.json()).count || 0 : 0;
           const other = (gbifOccurrences || 0) - humanObs - specimen - machine;
 
           gbifByRecordType = {
@@ -277,14 +282,14 @@ export async function GET(
               ]);
             }
 
-            // Parse full-years-after counts (from count endpoint)
+            // Parse full-years-after counts (search endpoint returns {count: N})
             let afterYearsTotal = 0, afterYearsHuman = 0, afterYearsSpecimen = 0, afterYearsMachine = 0, afterYearsInat = 0;
             if (gbifResponses[4]?.ok) {
-              afterYearsTotal = await gbifResponses[4].json();
-              afterYearsHuman = gbifResponses[5]?.ok ? await gbifResponses[5].json() : 0;
-              afterYearsSpecimen = gbifResponses[6]?.ok ? await gbifResponses[6].json() : 0;
-              afterYearsMachine = gbifResponses[7]?.ok ? await gbifResponses[7].json() : 0;
-              afterYearsInat = inatNewCountResponse?.ok ? await inatNewCountResponse.json() : 0;
+              afterYearsTotal = (await gbifResponses[4].json()).count || 0;
+              afterYearsHuman = gbifResponses[5]?.ok ? (await gbifResponses[5].json()).count || 0 : 0;
+              afterYearsSpecimen = gbifResponses[6]?.ok ? (await gbifResponses[6].json()).count || 0 : 0;
+              afterYearsMachine = gbifResponses[7]?.ok ? (await gbifResponses[7].json()).count || 0 : 0;
+              afterYearsInat = inatNewCountResponse?.ok ? (await inatNewCountResponse.json()).count || 0 : 0;
             }
 
             // Combine same-year + after-years counts
