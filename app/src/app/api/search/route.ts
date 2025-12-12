@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getTaxonConfig } from "@/config/taxa";
 
 interface GBIFSpeciesResult {
   key: number;
@@ -21,18 +22,36 @@ interface GBIFOccurrence {
   media?: GBIFMedia[];
 }
 
-// Search for plant species in GBIF
+// Search for species in GBIF based on selected taxon
 export async function GET(request: NextRequest) {
   const query = request.nextUrl.searchParams.get("q");
+  const taxonId = request.nextUrl.searchParams.get("taxon");
 
   if (!query || query.length < 2) {
     return NextResponse.json({ results: [] });
   }
 
+  // Build taxon filter based on selected taxon
+  let taxonFilter = "";
+  if (taxonId) {
+    const taxonConfig = getTaxonConfig(taxonId);
+    if (taxonConfig.gbifClassKey) {
+      // Single class key
+      taxonFilter = `&highertaxonKey=${taxonConfig.gbifClassKey}`;
+    } else if (taxonConfig.gbifClassKeys && taxonConfig.gbifClassKeys.length > 0) {
+      // Multiple class keys - use the first one for simplicity (GBIF doesn't support OR in highertaxonKey)
+      // For comprehensive search, we'd need to make multiple requests
+      taxonFilter = `&highertaxonKey=${taxonConfig.gbifClassKeys[0]}`;
+    } else if (taxonConfig.gbifKingdomKey) {
+      // Fall back to kingdom key
+      taxonFilter = `&highertaxonKey=${taxonConfig.gbifKingdomKey}`;
+    }
+  }
+
   try {
-    // Search GBIF species API for plants (kingdom key 6 = Plantae)
+    // Search GBIF species API with appropriate taxon filter
     const searchResponse = await fetch(
-      `https://api.gbif.org/v1/species/search?q=${encodeURIComponent(query)}&rank=SPECIES&highertaxonKey=6&limit=10`
+      `https://api.gbif.org/v1/species/search?q=${encodeURIComponent(query)}&rank=SPECIES${taxonFilter}&limit=10`
     );
 
     if (!searchResponse.ok) {

@@ -822,7 +822,11 @@ export default function Home() {
 
     setSearching(true);
     try {
-      const response = await fetch(`${SEARCH_ENDPOINT}?q=${encodeURIComponent(searchQuery)}`);
+      const params = new URLSearchParams({ q: searchQuery });
+      if (selectedTaxon) {
+        params.set("taxon", selectedTaxon);
+      }
+      const response = await fetch(`${SEARCH_ENDPOINT}?${params}`);
       const data = await response.json();
       let results = data.results || [];
 
