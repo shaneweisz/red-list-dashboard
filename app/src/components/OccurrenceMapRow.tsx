@@ -199,7 +199,10 @@ export default function OccurrenceMapRow({
   const [showCandidates, setShowCandidates] = useState(true);
   const [heatmapOpacity, setHeatmapOpacity] = useState(0.7);
 
-  // Fetch occurrences immediately
+  // Total occurrences count (from API metadata)
+  const [totalOccurrences, setTotalOccurrences] = useState<number | null>(null);
+
+  // Fetch occurrences immediately (limited sample for performance)
   useEffect(() => {
     setLoadingOccurrences(true);
     const params = new URLSearchParams({
@@ -211,7 +214,10 @@ export default function OccurrenceMapRow({
     }
     fetch(`/api/occurrences?${params}`)
       .then((res) => res.json())
-      .then((data) => setOccurrences(data.features || []))
+      .then((data) => {
+        setOccurrences(data.features || []);
+        setTotalOccurrences(data.metadata?.total ?? null);
+      })
       .catch(console.error)
       .finally(() => setLoadingOccurrences(false));
   }, [speciesKey, countryCode]);
@@ -265,38 +271,66 @@ export default function OccurrenceMapRow({
                   <div className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">Observation Types</div>
                   {loadingBreakdown ? (
                     <div className="text-zinc-400 text-sm animate-pulse">Loading...</div>
-                  ) : breakdown ? (
+                  ) : breakdown ? (() => {
+                    const baseParams = `taxon_key=${speciesKey}&has_coordinate=true&has_geospatial_issue=false${countryCode ? `&country=${countryCode}` : ''}`;
+                    return (
                     <div className="space-y-1 text-sm">
-                      <div className="flex justify-between text-zinc-600 dark:text-zinc-400">
+                      <a
+                        href={`https://www.gbif.org/occurrence/search?${baseParams}&basis_of_record=HUMAN_OBSERVATION`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex justify-between text-zinc-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
+                      >
                         <span>Human observations</span>
                         <span className="tabular-nums">{breakdown.humanObservation.toLocaleString()}</span>
-                      </div>
+                      </a>
                       {breakdown.iNaturalist > 0 && (
-                        <div className="flex justify-between text-zinc-500 dark:text-zinc-400 pl-3 text-xs">
+                        <a
+                          href={`https://www.gbif.org/occurrence/search?${baseParams}&dataset_key=50c9509d-22c7-4a22-a47d-8c48425ef4a7`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex justify-between text-zinc-500 dark:text-zinc-400 pl-3 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
+                        >
                           <span>iNaturalist</span>
                           <span className="tabular-nums">{breakdown.iNaturalist.toLocaleString()}</span>
-                        </div>
+                        </a>
                       )}
-                      <div className="flex justify-between text-zinc-600 dark:text-zinc-400">
+                      <a
+                        href={`https://www.gbif.org/occurrence/search?${baseParams}&basis_of_record=PRESERVED_SPECIMEN`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex justify-between text-zinc-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
+                      >
                         <span>Preserved specimens</span>
                         <span className="tabular-nums">{breakdown.preservedSpecimen.toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between text-zinc-600 dark:text-zinc-400">
+                      </a>
+                      <a
+                        href={`https://www.gbif.org/occurrence/search?${baseParams}&basis_of_record=MACHINE_OBSERVATION`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex justify-between text-zinc-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
+                      >
                         <span>Machine observations</span>
                         <span className="tabular-nums">{breakdown.machineObservation.toLocaleString()}</span>
-                      </div>
+                      </a>
                       {breakdown.other > 0 && (
                         <div className="flex justify-between text-zinc-600 dark:text-zinc-400">
                           <span>Other</span>
                           <span className="tabular-nums">{breakdown.other.toLocaleString()}</span>
                         </div>
                       )}
-                      <div className="border-t border-zinc-200 dark:border-zinc-700 pt-1 mt-1 flex justify-between font-medium text-zinc-700 dark:text-zinc-300">
+                      <a
+                        href={`https://www.gbif.org/occurrence/search?${baseParams}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="border-t border-zinc-200 dark:border-zinc-700 pt-1 mt-1 flex justify-between font-medium text-zinc-700 dark:text-zinc-300 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
+                      >
                         <span>Total</span>
                         <span className="tabular-nums">{breakdown.total?.toLocaleString() || (breakdown.humanObservation + breakdown.preservedSpecimen + breakdown.machineObservation + breakdown.other).toLocaleString()}</span>
-                      </div>
+                      </a>
                     </div>
-                  ) : null}
+                    );
+                  })() : null}
                 </div>
 
                 {/* iNaturalist photos grid */}
@@ -465,7 +499,9 @@ export default function OccurrenceMapRow({
               ) : null}
               {!loadingOccurrences && (
                 <div className="absolute bottom-2 left-2 bg-white dark:bg-zinc-800 px-2 py-1 rounded text-xs text-zinc-600 dark:text-zinc-300 shadow">
-                  {occurrences.length} occurrences
+                  {totalOccurrences && totalOccurrences > occurrences.length
+                    ? `${occurrences.length} of ${totalOccurrences.toLocaleString()} occurrences`
+                    : `${occurrences.length} occurrences`}
                   {hasCandidates &&
                     showCandidates &&
                     ` • ${candidates.length} predictions`}

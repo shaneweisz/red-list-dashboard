@@ -116,7 +116,11 @@ export async function GET(
     const gbifIndex = 1;
     if (scientificName && responses[gbifIndex]?.ok) {
       const gbifMatch = await responses[gbifIndex].json();
-      if (gbifMatch.usageKey) {
+      // Only use GBIF key if it's a good match (EXACT, FUZZY, or VARIANT)
+      // HIGHERRANK means it matched to a higher taxonomic rank (e.g., genus instead of species)
+      // which would return occurrences for the entire genus, not the specific species
+      const goodMatchTypes = ['EXACT', 'FUZZY', 'VARIANT'];
+      if (gbifMatch.usageKey && goodMatchTypes.includes(gbifMatch.matchType)) {
         gbifUrl = `https://www.gbif.org/species/${gbifMatch.usageKey}`;
         const taxonKey = gbifMatch.usageKey;
 
