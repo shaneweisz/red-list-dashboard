@@ -1,14 +1,12 @@
-# Flora Explorer
+# Red List Dashboard
 
-A web application for exploring plant biodiversity data, combining GBIF occurrence data with IUCN Red List conservation status.
+A web application for breaking down IUCN Red List Assessment data, linked to GBIF. 
 
 ## Features
 
-- **GBIF Explorer**: Search and browse plant species with occurrence data, images, and distribution maps
-- **Red List Stats**: View IUCN Red List statistics for plant species including:
-  - Distribution by conservation category
-  - Assessment recency analysis
-  - Species browser with filtering, sorting, and pagination
+- Browse species for a given taxon with filtering, sorting, and pagination
+- View conservation category distribution and assessment recency
+- Explore species occurrence data and distribution maps via GBIF integration
 
 ## Getting Started
 
