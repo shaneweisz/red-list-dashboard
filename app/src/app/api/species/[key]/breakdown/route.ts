@@ -129,7 +129,9 @@ export async function GET(
       const inatRecentData = await inatRecentResp.json();
       if (inatRecentData.results && inatRecentData.results.length > 0) {
         recentInatObservations = inatRecentData.results
-          .filter((obs: { references?: string }) => obs.references)
+          // Only include observations that have both a reference URL and an image
+          .filter((obs: { references?: string; media?: { identifier?: string }[] }) =>
+            obs.references && obs.media?.[0]?.identifier)
           .map((obs: {
             references: string;
             eventDate?: string;

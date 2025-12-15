@@ -245,7 +245,9 @@ export async function GET(
             const inatData = await inatRecentResponse.json();
             if (inatData.results && inatData.results.length > 0) {
               recentInatObservations = inatData.results
-                .filter((obs: { references?: string }) => obs.references)
+                // Only include observations that have both a reference URL and an image
+                .filter((obs: { references?: string; media?: { identifier?: string }[] }) =>
+                  obs.references && obs.media?.[0]?.identifier)
                 .map((obs: { references: string; eventDate?: string; media?: { identifier?: string }[]; verbatimLocality?: string; stateProvince?: string; country?: string; recordedBy?: string }) => {
                   const imageUrl = obs.media?.[0]?.identifier || null;
                   const locationParts = [obs.verbatimLocality, obs.stateProvince, obs.country].filter(Boolean);
