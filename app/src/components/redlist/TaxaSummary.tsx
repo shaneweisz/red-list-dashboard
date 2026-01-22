@@ -118,19 +118,19 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
         {/* Name with icon */}
         <div className="flex items-center gap-2">
           <TaxaIcon taxonId={id} size={22} className="flex-shrink-0" style={{ color }} />
-          <span className="font-semibold text-zinc-900 dark:text-zinc-100">{name}</span>
+          <span className="font-medium text-zinc-900 dark:text-zinc-100">{name}</span>
         </div>
 
         {/* Est. Described */}
         <div className="text-right">
-          <span className="text-base font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">
+          <span className="text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
             {estimatedDescribed.toLocaleString()}
           </span>
         </div>
 
         {/* Assessed */}
         <div className="text-right">
-          <span className="text-base font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">
+          <span className="text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
             {assessed.toLocaleString()}
           </span>
         </div>
@@ -138,7 +138,7 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
         {/* % Assessed */}
         <div className="text-right">
           <span
-            className="text-base font-semibold px-2 py-0.5 rounded tabular-nums"
+            className="text-base font-medium px-2 py-0.5 rounded tabular-nums"
             style={getAssessedStyle(percentAssessed)}
           >
             {percentAssessed.toFixed(1)}%
@@ -147,7 +147,7 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
 
         {/* Outdated */}
         <div className="text-right">
-          <span className="text-base font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">
+          <span className="text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
             {outdated.toLocaleString()}
           </span>
         </div>
@@ -155,7 +155,7 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
         {/* % Outdated */}
         <div className="text-right">
           <span
-            className="text-base font-semibold px-2 py-0.5 rounded tabular-nums"
+            className="text-base font-medium px-2 py-0.5 rounded tabular-nums"
             style={getOutdatedStyle(percentOutdated)}
           >
             {percentOutdated.toFixed(1)}%
@@ -287,21 +287,21 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
                       className="flex-shrink-0"
                       style={{ color: taxon.color }}
                     />
-                    <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+                    <span className="font-medium text-zinc-900 dark:text-zinc-100">
                       {taxon.name}
                     </span>
                   </div>
 
                   {/* Est. Described */}
                   <div className="text-right">
-                    <span className="text-base font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">
+                    <span className="text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
                       {taxon.estimatedDescribed.toLocaleString()}
                     </span>
                   </div>
 
                   {/* Assessed */}
                   <div className="text-right">
-                    <span className="text-base font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">
+                    <span className="text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
                       {taxon.available ? taxon.totalAssessed.toLocaleString() : "—"}
                     </span>
                   </div>
@@ -310,7 +310,7 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
                   <div className="text-right">
                     {taxon.available ? (
                       <span
-                        className="text-base font-semibold px-2 py-0.5 rounded tabular-nums"
+                        className="text-base font-medium px-2 py-0.5 rounded tabular-nums"
                         style={getAssessedStyle(taxon.percentAssessed)}
                       >
                         {taxon.percentAssessed.toFixed(1)}%
@@ -322,7 +322,7 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
 
                   {/* Outdated */}
                   <div className="text-right">
-                    <span className="text-base font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">
+                    <span className="text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
                       {taxon.available ? taxon.outdated.toLocaleString() : "—"}
                     </span>
                   </div>
@@ -331,7 +331,7 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
                   <div className="text-right">
                     {taxon.available ? (
                       <span
-                        className="text-base font-semibold px-2 py-0.5 rounded tabular-nums"
+                        className="text-base font-medium px-2 py-0.5 rounded tabular-nums"
                         style={getOutdatedStyle(taxon.percentOutdated)}
                       >
                         {taxon.percentOutdated.toFixed(1)}%

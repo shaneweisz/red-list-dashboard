@@ -80,8 +80,11 @@ function computeStats(data: SpeciesRecord[]) {
 }
 
 export async function GET() {
+  // Filter out "all" taxon - it's only used in Red List dashboard
+  const filteredTaxa = TAXA.filter((taxon) => taxon.id !== "all");
+
   const summaries: TaxonSummary[] = await Promise.all(
-    TAXA.map(async (taxon) => {
+    filteredTaxa.map(async (taxon) => {
       const data = await loadTaxonData(taxon);
       const stats = computeStats(data);
 
