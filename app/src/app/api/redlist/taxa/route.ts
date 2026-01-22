@@ -104,7 +104,8 @@ function loadTaxonData(taxon: TaxonConfig): PrecomputedData | null {
 }
 
 function buildSummary(): TaxonSummary[] {
-  return TAXA.map((taxon) => {
+  // Filter out "all" - it's a meta-taxon for viewing all species, not a real taxon
+  return TAXA.filter((taxon) => taxon.id !== "all").map((taxon) => {
     const data = loadTaxonData(taxon);
 
     if (!data) {

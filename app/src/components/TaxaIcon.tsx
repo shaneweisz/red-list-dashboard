@@ -3,7 +3,7 @@
  */
 
 import { CSSProperties } from "react";
-import { FaPaw, FaDove, FaFish, FaFrog, FaLeaf, FaBug } from "react-icons/fa";
+import { FaPaw, FaDove, FaFish, FaFrog, FaLeaf, FaBug, FaGlobeAmericas } from "react-icons/fa";
 import { GiMushroom, GiSnake } from "react-icons/gi";
 
 interface TaxaIconProps {
@@ -21,6 +21,9 @@ export default function TaxaIcon({ taxonId, className = "", size = 16, style }: 
   };
 
   switch (taxonId) {
+    case "all":
+      return <FaGlobeAmericas {...iconProps} />;
+
     case "mammalia":
       return <FaPaw {...iconProps} />;
 

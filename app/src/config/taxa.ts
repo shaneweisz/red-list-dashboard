@@ -40,6 +40,34 @@ const IUCN_SOURCE_URL = "https://nc.iucnredlist.org/redlist/content/attachment_f
 
 export const TAXA: TaxonConfig[] = [
   {
+    id: "all",
+    name: "All Species",
+    apiEndpoint: "kingdom/Animalia", // Not used directly
+    estimatedDescribed: 2174939, // Sum of all taxa
+    estimatedSource: "IUCN 2025-2",
+    estimatedSourceUrl: "https://nc.iucnredlist.org/redlist/content/attachment_files/2025-2_RL_Table1a.pdf",
+    dataFile: "redlist-all.json", // Not used - we merge all files
+    dataFiles: [
+      "redlist-mammalia.json",
+      "redlist-aves.json",
+      "redlist-reptilia.json",
+      "redlist-amphibia.json",
+      "redlist-actinopterygii.json",
+      "redlist-chondrichthyes.json",
+      "redlist-insecta.json",
+      "redlist-arachnida.json",
+      "redlist-gastropoda.json",
+      "redlist-bivalvia.json",
+      "redlist-malacostraca.json",
+      "redlist-anthozoa.json",
+      "redlist-plantae.json",
+      "redlist-ascomycota.json",
+      "redlist-basidiomycota.json",
+    ],
+    gbifDataFile: "gbif-all.csv",
+    color: "#dc2626", // red-600
+  },
+  {
     id: "mammalia",
     name: "Mammals",
     apiEndpoint: "class/Mammalia",
