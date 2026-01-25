@@ -124,6 +124,8 @@ interface SpeciesDetails {
   inatDefaultImage: InatDefaultImage | null;
   // OpenAlex literature count
   openAlexPaperCount: number | null;
+  // Papers at time of assessment
+  papersAtAssessment: number | null;
 }
 
 interface SpeciesResponse {
@@ -195,6 +197,36 @@ function InatObservationPreview({
       </div>
     </div>
   );
+}
+
+// Explain IUCN Red List criteria codes
+// See: https://www.iucnredlist.org/resources/categories-and-criteria
+function explainCriteria(criteria: string): string {
+  if (!criteria) return "";
+
+  const explanations: string[] = [];
+
+  // Criterion A: Population size reduction
+  if (criteria.includes("A1")) explanations.push("past population reduction, reversible");
+  else if (criteria.includes("A2")) explanations.push("past population reduction, may not be reversible");
+  else if (criteria.includes("A3")) explanations.push("future population reduction projected");
+  else if (criteria.includes("A4")) explanations.push("population reduction past & future");
+  else if (criteria.startsWith("A")) explanations.push("population reduction");
+
+  // Criterion B: Geographic range (small range + fragmented/declining/fluctuating)
+  if (criteria.includes("B1")) explanations.push("restricted extent of occurrence");
+  if (criteria.includes("B2")) explanations.push("restricted area of occupancy");
+
+  // Criterion C: Small population size and decline
+  if (criteria.startsWith("C") || criteria.includes("+C")) explanations.push("small declining population");
+
+  // Criterion D: Very small or restricted population
+  if (criteria.startsWith("D") || criteria.includes("+D")) explanations.push("very small/restricted population");
+
+  // Criterion E: Quantitative analysis
+  if (criteria.startsWith("E") || criteria.includes("+E")) explanations.push("extinction probability analysis");
+
+  return explanations.length > 0 ? ` (${explanations.join("; ")})` : "";
 }
 
 // Quick hover tooltip using portal
@@ -554,13 +586,15 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
 
           if (iucnRes.ok) {
             const data = await iucnRes.json();
-            // Add paper count from literature API
+            // Add paper counts from literature API
             let openAlexPaperCount: number | null = null;
+            let papersAtAssessment: number | null = null;
             if (litRes?.ok) {
               const litData = await litRes.json();
               openAlexPaperCount = litData.totalPapersSinceAssessment ?? null;
+              papersAtAssessment = litData.papersAtAssessment ?? null;
             }
-            return { id: s.sis_taxon_id, data: { ...data, openAlexPaperCount } };
+            return { id: s.sis_taxon_id, data: { ...data, openAlexPaperCount, papersAtAssessment } };
           }
         } catch {
           // Ignore errors for individual species
@@ -586,6 +620,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
             inatTotalCount: result.data.inatTotalCount || 0,
             inatDefaultImage: result.data.inatDefaultImage || null,
             openAlexPaperCount: result.data.openAlexPaperCount ?? null,
+            papersAtAssessment: result.data.papersAtAssessment ?? null,
           };
         }
       });
@@ -922,14 +957,11 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                   onClick={() => handleSort("category")}
                 >
                   <span className="flex items-center gap-1">
-                    Category
+                    Risk
                     {sortField === "category" && (
                       <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
                     )}
                   </span>
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                  Criteria
                 </th>
                 <th
                   className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
@@ -942,17 +974,14 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                     )}
                   </span>
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                  Published Year
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                  Previous Assessments
-                </th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                  GBIF Records At Assessment
+                  GBIF Records When Assessed
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
                   New GBIF Records
+                </th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                  Papers When Assessed
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
                   New Papers
@@ -1023,63 +1052,54 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <span
-                        className="px-2 py-0.5 text-xs font-medium rounded"
-                        style={{
-                          backgroundColor: CATEGORY_COLORS[s.category] + "20",
-                          color: s.category === "EX" || s.category === "EW" ? "#fff" : CATEGORY_COLORS[s.category],
-                          ...(s.category === "EX" || s.category === "EW" ? { backgroundColor: CATEGORY_COLORS[s.category] } : {})
-                        }}
-                      >
-                        {s.category}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400 text-xs">
-                      {details?.criteria || "—"}
-                    </td>
-                    <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
-                      <a
-                        href={s.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="hover:text-red-500 hover:underline"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {s.assessment_date
-                          ? new Date(s.assessment_date).toLocaleDateString("en-GB", {
-                              day: "numeric",
-                              month: "short",
-                              year: "numeric",
-                            })
-                          : "—"}
-                      </a>
-                      {yearsSinceAssessment !== null && yearsSinceAssessment > 10 && (
-                        <span className="ml-1 text-xs text-amber-600">({yearsSinceAssessment}y ago)</span>
+                      {details?.criteria && !["DD", "LC", "NT", "EX", "EW"].includes(s.category) ? (
+                        <HoverTooltip text={`${details.criteria}${explainCriteria(details.criteria)}`}>
+                          <span
+                            className="px-2 py-0.5 text-xs font-medium rounded cursor-help"
+                            style={{
+                              backgroundColor: CATEGORY_COLORS[s.category] + "20",
+                              color: CATEGORY_COLORS[s.category],
+                            }}
+                          >
+                            {s.category}
+                          </span>
+                        </HoverTooltip>
+                      ) : (
+                        <span
+                          className="px-2 py-0.5 text-xs font-medium rounded"
+                          style={{
+                            backgroundColor: CATEGORY_COLORS[s.category] + "20",
+                            color: s.category === "EX" || s.category === "EW" ? "#fff" : CATEGORY_COLORS[s.category],
+                            ...(s.category === "EX" || s.category === "EW" ? { backgroundColor: CATEGORY_COLORS[s.category] } : {})
+                          }}
+                        >
+                          {s.category}
+                        </span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
-                      {s.year_published}
-                    </td>
-                    <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400 text-sm">
-                      {s.previous_assessments.length > 0
-                        ? s.previous_assessments.map((pa, idx) => (
-                            <span key={pa.assessment_id}>
-                              <a
-                                href={`https://www.iucnredlist.org/species/${s.sis_taxon_id}/${pa.assessment_id}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="hover:underline"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {pa.year}
-                                <span className="ml-0.5 text-[10px]">
-                                  ({pa.category})
-                                </span>
-                              </a>
-                              {idx < s.previous_assessments.length - 1 && ", "}
-                            </span>
-                          ))
-                        : "—"}
+                      <HoverTooltip
+                        text={`Published: ${s.year_published}${s.previous_assessments.length > 0 ? ` | Previous: ${s.previous_assessments.slice().reverse().map(pa => `${pa.year} (${pa.category})`).join(", ")}` : ""}`}
+                      >
+                        <a
+                          href={s.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="hover:text-red-500 hover:underline cursor-help"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {s.assessment_date
+                            ? new Date(s.assessment_date).toLocaleDateString("en-GB", {
+                                day: "numeric",
+                                month: "short",
+                                year: "numeric",
+                              })
+                            : "—"}
+                        </a>
+                      </HoverTooltip>
+                      {yearsSinceAssessment !== null && yearsSinceAssessment > 10 && (
+                        <span className="ml-1 text-xs text-amber-600">({yearsSinceAssessment}y ago)</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums">
                       {details === undefined ? (
@@ -1284,6 +1304,24 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                         </HoverTooltip>
                       ) : "—"}
                     </td>
+                    {/* Papers When Assessed */}
+                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums">
+                      {details === undefined ? (
+                        <span className="text-zinc-400 animate-pulse">...</span>
+                      ) : details?.papersAtAssessment != null && assessmentYear ? (
+                        <a
+                          href={`https://openalex.org/works?page=1&filter=default.search%3A%22${encodeURIComponent(s.scientific_name)}%22,publication_year%3A%3C%3D${assessmentYear},type%3A%21dataset&sort=publication_date%3Adesc`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
+                          title={`OpenAlex: search="${s.scientific_name}" AND year<=${assessmentYear} AND type!=dataset`}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {details.papersAtAssessment.toLocaleString()}
+                        </a>
+                      ) : "—"}
+                    </td>
+                    {/* New Papers */}
                     <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums">
                       {details === undefined ? (
                         <span className="text-zinc-400 animate-pulse">...</span>
@@ -1322,12 +1360,12 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                           speciesKey={gbifSpeciesKey}
                           speciesName={s.scientific_name.toLowerCase()}
                           mounted={mounted}
-                          colSpan={11}
+                          colSpan={9}
                         />
                       )}
                       {assessmentYear && (
                         <tr>
-                          <td colSpan={11} className="p-4 bg-zinc-50 dark:bg-zinc-800/30">
+                          <td colSpan={9} className="p-4 bg-zinc-50 dark:bg-zinc-800/30">
                             <NewLiteratureSinceAssessment
                               scientificName={s.scientific_name}
                               assessmentYear={assessmentYear}
@@ -1342,7 +1380,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
               })}
               {filteredSpecies.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="px-4 py-8 text-center text-zinc-500">
+                  <td colSpan={9} className="px-4 py-8 text-center text-zinc-500">
                     No species found
                   </td>
                 </tr>

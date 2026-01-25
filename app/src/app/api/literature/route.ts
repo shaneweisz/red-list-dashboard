@@ -107,6 +107,26 @@ async function searchOpenAlexSinceYear(
   return { count: data.meta.count, results };
 }
 
+// Get count of papers published up to and including a given year
+async function getOpenAlexCountUpToYear(
+  scientificName: string,
+  upToYear: number
+): Promise<number> {
+  // Use < (year+1) instead of <= year to avoid encoding issues
+  const filter = encodeURIComponent(`publication_year:<${upToYear + 1},type:!dataset`);
+  const search = encodeURIComponent(scientificName);
+  const url = `https://api.openalex.org/works?search=${search}&filter=${filter}&per_page=1&mailto=red-list-dashboard@example.com`;
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    console.error("OpenAlex API error:", response.status);
+    return 0;
+  }
+
+  const data: OpenAlexResponse = await response.json();
+  return data.meta.count;
+}
+
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const scientificName = searchParams.get("scientificName");
@@ -136,13 +156,18 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const { count, results } = await searchOpenAlexSinceYear(scientificName, sinceYear, limit);
+    // Fetch both counts in parallel
+    const [newPapers, papersAtAssessment] = await Promise.all([
+      searchOpenAlexSinceYear(scientificName, sinceYear, limit),
+      getOpenAlexCountUpToYear(scientificName, sinceYear),
+    ]);
 
     return NextResponse.json({
       scientificName,
       assessmentYear: sinceYear,
-      totalPapersSinceAssessment: count,
-      topPapers: results,
+      totalPapersSinceAssessment: newPapers.count,
+      papersAtAssessment,
+      topPapers: newPapers.results,
     });
   } catch (error) {
     console.error("Literature search error:", error);
