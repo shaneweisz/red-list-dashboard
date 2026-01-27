@@ -51,10 +51,34 @@ const NAME_TO_ALPHA2: Record<string, string> = {
   "Falkland Is.": "FK",
 };
 
-// Reverse mapping: alpha-2 to country name for display
-export const ALPHA2_TO_NAME: Record<string, string> = Object.fromEntries(
-  Object.entries(NAME_TO_ALPHA2).map(([name, code]) => [code, name])
-);
+// Complete ISO 3166-1 alpha-2 to country name mapping (for display)
+// Includes all countries, territories, and small island nations
+export const ALPHA2_TO_NAME: Record<string, string> = {
+  // From TopoJSON (use these names for map consistency)
+  ...Object.fromEntries(Object.entries(NAME_TO_ALPHA2).map(([name, code]) => [code, name])),
+  // Additional countries and territories not in TopoJSON
+  "AD": "Andorra", "AG": "Antigua and Barbuda", "AI": "Anguilla", "AQ": "Antarctica",
+  "AS": "American Samoa", "AW": "Aruba", "AX": "Åland Islands", "BB": "Barbados",
+  "BH": "Bahrain", "BL": "Saint Barthélemy", "BM": "Bermuda", "BQ": "Bonaire",
+  "BS": "Bahamas", "BV": "Bouvet Island", "BZ": "Belize", "CC": "Cocos Islands",
+  "CK": "Cook Islands", "CV": "Cape Verde", "CW": "Curaçao", "CX": "Christmas Island",
+  "DM": "Dominica", "FK": "Falkland Islands", "FM": "Micronesia", "FO": "Faroe Islands",
+  "GD": "Grenada", "GF": "French Guiana", "GG": "Guernsey", "GI": "Gibraltar",
+  "GP": "Guadeloupe", "GS": "South Georgia", "GU": "Guam", "HK": "Hong Kong",
+  "HM": "Heard Island", "IM": "Isle of Man", "IO": "British Indian Ocean Territory",
+  "JE": "Jersey", "KI": "Kiribati", "KM": "Comoros", "KN": "Saint Kitts and Nevis",
+  "KY": "Cayman Islands", "LC": "Saint Lucia", "LI": "Liechtenstein", "MC": "Monaco",
+  "MF": "Saint Martin", "MH": "Marshall Islands", "MO": "Macao", "MP": "Northern Mariana Islands",
+  "MQ": "Martinique", "MS": "Montserrat", "MT": "Malta", "MU": "Mauritius", "MV": "Maldives",
+  "NF": "Norfolk Island", "NR": "Nauru", "NU": "Niue", "PF": "French Polynesia",
+  "PM": "Saint Pierre and Miquelon", "PN": "Pitcairn", "PW": "Palau", "RE": "Réunion",
+  "SC": "Seychelles", "SH": "Saint Helena", "SJ": "Svalbard", "SM": "San Marino",
+  "ST": "São Tomé and Príncipe", "SV": "El Salvador", "SX": "Sint Maarten",
+  "TC": "Turks and Caicos", "TK": "Tokelau", "TO": "Tonga", "TV": "Tuvalu",
+  "UM": "U.S. Minor Outlying Islands", "VA": "Vatican City", "VC": "Saint Vincent and the Grenadines",
+  "VG": "British Virgin Islands", "VI": "U.S. Virgin Islands", "WF": "Wallis and Futuna",
+  "WS": "Samoa", "YT": "Mayotte",
+};
 
 interface CountryStats {
   [countryCode: string]: {
