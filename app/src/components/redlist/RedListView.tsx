@@ -416,9 +416,40 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
   const [selectedSpeciesKey, setSelectedSpeciesKey] = useState<number | null>(null);
   const [mounted, setMounted] = useState(false);
 
+  // Pinned species (persisted to localStorage)
+  const [pinnedSpecies, setPinnedSpecies] = useState<Set<number>>(new Set());
+
   useEffect(() => {
     setMounted(true);
+    // Load pinned species from localStorage
+    try {
+      const stored = localStorage.getItem("redlist-pinned-species");
+      if (stored) {
+        setPinnedSpecies(new Set(JSON.parse(stored)));
+      }
+    } catch {
+      // Ignore localStorage errors
+    }
   }, []);
+
+  // Save pinned species to localStorage when changed
+  const togglePinned = (speciesId: number) => {
+    setPinnedSpecies(prev => {
+      const next = new Set(prev);
+      if (next.has(speciesId)) {
+        next.delete(speciesId);
+      } else {
+        next.add(speciesId);
+      }
+      // Persist to localStorage
+      try {
+        localStorage.setItem("redlist-pinned-species", JSON.stringify([...next]));
+      } catch {
+        // Ignore localStorage errors
+      }
+      return next;
+    });
+  };
 
   // Load stats and assessments when taxon changes
   useEffect(() => {
@@ -517,6 +548,13 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
 
   // Sort filtered species
   const sortedSpecies = [...filteredSpecies].sort((a, b) => {
+    // Pinned species always come first
+    const aPinned = pinnedSpecies.has(a.sis_taxon_id);
+    const bPinned = pinnedSpecies.has(b.sis_taxon_id);
+    if (aPinned && !bPinned) return -1;
+    if (!aPinned && bPinned) return 1;
+
+    // Then apply regular sorting
     if (!sortField) return 0;
 
     let comparison = 0;
@@ -939,6 +977,11 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
             )}
             <span className="text-sm text-zinc-500">
               {filteredSpecies.length} species
+              {pinnedSpecies.size > 0 && (
+                <span className="ml-2 text-amber-600 dark:text-amber-400">
+                  ({pinnedSpecies.size} pinned)
+                </span>
+              )}
             </span>
           </div>
         </div>
@@ -948,6 +991,11 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
           <table className="w-full text-sm">
             <thead className="bg-zinc-50 dark:bg-zinc-800">
               <tr>
+                <th className="px-2 py-3 text-center text-xs font-medium text-zinc-500 uppercase tracking-wider w-10">
+                  <svg className="w-4 h-4 mx-auto text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                  </svg>
+                </th>
                 <th className="hidden md:table-cell px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider w-14">
                   Image
                 </th>
@@ -998,12 +1046,27 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                 const yearsSinceAssessment = assessmentYear ? currentYear - assessmentYear : null;
                 const details = speciesDetails[s.sis_taxon_id];
                 const gbifSpeciesKey = details?.gbifUrl ? parseInt(details.gbifUrl.split('/').pop() || '0') : null;
+                const isPinned = pinnedSpecies.has(s.sis_taxon_id);
                 return (
                   <React.Fragment key={s.sis_taxon_id}>
                   <tr
-                    className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer ${selectedSpeciesKey === s.sis_taxon_id ? "bg-zinc-100 dark:bg-zinc-800" : ""}`}
+                    className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer ${selectedSpeciesKey === s.sis_taxon_id ? "bg-zinc-100 dark:bg-zinc-800" : ""} ${isPinned ? "bg-amber-50 dark:bg-amber-900/10" : ""}`}
                     onClick={() => setSelectedSpeciesKey(selectedSpeciesKey === s.sis_taxon_id ? null : s.sis_taxon_id)}
                   >
+                    <td className="px-2 py-2 text-center">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          togglePinned(s.sis_taxon_id);
+                        }}
+                        className={`p-1 rounded transition-colors ${isPinned ? "text-amber-500 hover:text-amber-600" : "text-zinc-300 hover:text-amber-400 dark:text-zinc-600 dark:hover:text-amber-400"}`}
+                        title={isPinned ? "Unpin species" : "Pin species"}
+                      >
+                        <svg className="w-4 h-4" fill={isPinned ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                        </svg>
+                      </button>
+                    </td>
                     <td className="hidden md:table-cell px-4 py-2">
                       {details === undefined ? (
                         <div className="w-10 h-10 bg-zinc-200 dark:bg-zinc-700 rounded animate-pulse" />
@@ -1358,13 +1421,13 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                           speciesKey={gbifSpeciesKey}
                           speciesName={s.scientific_name.toLowerCase()}
                           mounted={mounted}
-                          colSpan={8}
+                          colSpan={9}
                           assessmentYear={assessmentYear}
                         />
                       )}
                       {assessmentYear && (
                         <tr>
-                          <td colSpan={8} className="p-4 bg-zinc-50 dark:bg-zinc-800/30">
+                          <td colSpan={9} className="p-4 bg-zinc-50 dark:bg-zinc-800/30">
                             <NewLiteratureSinceAssessment
                               scientificName={s.scientific_name}
                               assessmentYear={assessmentYear}
@@ -1379,7 +1442,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
               })}
               {filteredSpecies.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-zinc-500">
+                  <td colSpan={9} className="px-4 py-8 text-center text-zinc-500">
                     No species found
                   </td>
                 </tr>
