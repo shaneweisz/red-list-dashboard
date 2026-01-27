@@ -417,8 +417,13 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
   const [selectedSpeciesKey, setSelectedSpeciesKey] = useState<number | null>(null);
   const [mounted, setMounted] = useState(false);
 
-  // Pinned species (persisted to localStorage)
-  const [pinnedSpecies, setPinnedSpecies] = useState<Set<number>>(new Set());
+  // Pinned species as ordered array (persisted to localStorage)
+  const [pinnedSpecies, setPinnedSpecies] = useState<number[]>([]);
+  const pinnedSet = new Set(pinnedSpecies); // For O(1) lookup
+
+  // Drag state for reordering pinned species
+  const [draggedSpecies, setDraggedSpecies] = useState<number | null>(null);
+  const [dragOverSpecies, setDragOverSpecies] = useState<number | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -426,30 +431,79 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
     try {
       const stored = localStorage.getItem("redlist-pinned-species");
       if (stored) {
-        setPinnedSpecies(new Set(JSON.parse(stored)));
+        setPinnedSpecies(JSON.parse(stored));
       }
     } catch {
       // Ignore localStorage errors
     }
   }, []);
 
-  // Save pinned species to localStorage when changed
+  // Save pinned species to localStorage
+  const savePinnedSpecies = (newPinned: number[]) => {
+    setPinnedSpecies(newPinned);
+    try {
+      localStorage.setItem("redlist-pinned-species", JSON.stringify(newPinned));
+    } catch {
+      // Ignore localStorage errors
+    }
+  };
+
+  // Toggle pin status
   const togglePinned = (speciesId: number) => {
-    setPinnedSpecies(prev => {
-      const next = new Set(prev);
-      if (next.has(speciesId)) {
-        next.delete(speciesId);
-      } else {
-        next.add(speciesId);
-      }
-      // Persist to localStorage
-      try {
-        localStorage.setItem("redlist-pinned-species", JSON.stringify([...next]));
-      } catch {
-        // Ignore localStorage errors
-      }
-      return next;
-    });
+    if (pinnedSet.has(speciesId)) {
+      savePinnedSpecies(pinnedSpecies.filter(id => id !== speciesId));
+    } else {
+      savePinnedSpecies([...pinnedSpecies, speciesId]);
+    }
+  };
+
+  // Drag handlers for reordering
+  const handleDragStart = (e: React.DragEvent, speciesId: number) => {
+    if (!pinnedSet.has(speciesId)) return;
+    setDraggedSpecies(speciesId);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent, speciesId: number) => {
+    e.preventDefault();
+    if (!draggedSpecies || !pinnedSet.has(speciesId)) return;
+    setDragOverSpecies(speciesId);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverSpecies(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetId: number) => {
+    e.preventDefault();
+    if (!draggedSpecies || draggedSpecies === targetId) {
+      setDraggedSpecies(null);
+      setDragOverSpecies(null);
+      return;
+    }
+
+    const draggedIdx = pinnedSpecies.indexOf(draggedSpecies);
+    const targetIdx = pinnedSpecies.indexOf(targetId);
+
+    if (draggedIdx === -1 || targetIdx === -1) {
+      setDraggedSpecies(null);
+      setDragOverSpecies(null);
+      return;
+    }
+
+    // Reorder the array
+    const newPinned = [...pinnedSpecies];
+    newPinned.splice(draggedIdx, 1);
+    newPinned.splice(targetIdx, 0, draggedSpecies);
+    savePinnedSpecies(newPinned);
+
+    setDraggedSpecies(null);
+    setDragOverSpecies(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedSpecies(null);
+    setDragOverSpecies(null);
   };
 
   // Load stats and assessments when taxon changes
@@ -539,7 +593,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
     const matchesYear = matchesYearRangeFilter(s.assessment_date);
     const matchesSearch = !searchQuery ||
       s.scientific_name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStarred = !showOnlyStarred || pinnedSpecies.has(s.sis_taxon_id);
+    const matchesStarred = !showOnlyStarred || pinnedSet.has(s.sis_taxon_id);
     return matchesCategory && matchesYear && matchesSearch && matchesStarred;
   });
 
@@ -550,6 +604,13 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
 
   // Sort filtered species
   const sortedSpecies = [...filteredSpecies].sort((a, b) => {
+    // When showing only starred, sort by pinned order
+    if (showOnlyStarred) {
+      const aIdx = pinnedSpecies.indexOf(a.sis_taxon_id);
+      const bIdx = pinnedSpecies.indexOf(b.sis_taxon_id);
+      return aIdx - bIdx;
+    }
+
     if (!sortField) return 0;
 
     let comparison = 0;
@@ -941,7 +1002,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
-            {pinnedSpecies.size > 0 && (
+            {pinnedSpecies.length > 0 && (
               <button
                 onClick={() => setShowOnlyStarred(!showOnlyStarred)}
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${
@@ -953,7 +1014,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                 <svg className="w-4 h-4" fill={showOnlyStarred ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                 </svg>
-                Starred ({pinnedSpecies.size})
+                Starred ({pinnedSpecies.length})
               </button>
             )}
             {Array.from(selectedCategories).map(cat => (
@@ -1051,26 +1112,43 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                 const yearsSinceAssessment = assessmentYear ? currentYear - assessmentYear : null;
                 const details = speciesDetails[s.sis_taxon_id];
                 const gbifSpeciesKey = details?.gbifUrl ? parseInt(details.gbifUrl.split('/').pop() || '0') : null;
-                const isPinned = pinnedSpecies.has(s.sis_taxon_id);
+                const isPinned = pinnedSet.has(s.sis_taxon_id);
+                const isDragging = draggedSpecies === s.sis_taxon_id;
+                const isDragOver = dragOverSpecies === s.sis_taxon_id && draggedSpecies !== s.sis_taxon_id;
                 return (
                   <React.Fragment key={s.sis_taxon_id}>
                   <tr
-                    className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer ${selectedSpeciesKey === s.sis_taxon_id ? "bg-zinc-100 dark:bg-zinc-800" : ""}`}
+                    className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer ${selectedSpeciesKey === s.sis_taxon_id ? "bg-zinc-100 dark:bg-zinc-800" : ""} ${isDragging ? "opacity-50" : ""} ${isDragOver ? "border-t-2 border-amber-500" : ""}`}
                     onClick={() => setSelectedSpeciesKey(selectedSpeciesKey === s.sis_taxon_id ? null : s.sis_taxon_id)}
+                    draggable={isPinned && showOnlyStarred}
+                    onDragStart={(e) => handleDragStart(e, s.sis_taxon_id)}
+                    onDragOver={(e) => handleDragOver(e, s.sis_taxon_id)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, s.sis_taxon_id)}
+                    onDragEnd={handleDragEnd}
                   >
                     <td className="px-2 py-2 text-center">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          togglePinned(s.sis_taxon_id);
-                        }}
-                        className={`p-1 rounded transition-colors ${isPinned ? "text-amber-500 hover:text-amber-600" : "text-zinc-300 hover:text-amber-400 dark:text-zinc-600 dark:hover:text-amber-400"}`}
-                        title={isPinned ? "Unpin species" : "Pin species"}
-                      >
-                        <svg className="w-4 h-4" fill={isPinned ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                        </svg>
-                      </button>
+                      <div className="flex items-center justify-center gap-1">
+                        {isPinned && showOnlyStarred && (
+                          <span className="cursor-grab text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300" title="Drag to reorder">
+                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M8 6a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm0 6a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm0 6a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm8-12a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm0 6a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm0 6a2 2 0 1 1-4 0 2 2 0 0 1 4 0z" />
+                            </svg>
+                          </span>
+                        )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            togglePinned(s.sis_taxon_id);
+                          }}
+                          className={`p-1 rounded transition-colors ${isPinned ? "text-amber-500 hover:text-amber-600" : "text-zinc-300 hover:text-amber-400 dark:text-zinc-600 dark:hover:text-amber-400"}`}
+                          title={isPinned ? "Unpin species" : "Pin species"}
+                        >
+                          <svg className="w-4 h-4" fill={isPinned ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                          </svg>
+                        </button>
+                      </div>
                     </td>
                     <td className="hidden md:table-cell px-4 py-2">
                       {details === undefined ? (
