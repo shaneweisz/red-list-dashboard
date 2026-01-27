@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { ThemeToggle } from "../../components/ThemeToggle";
 import { getTaxonConfig, CATEGORY_COLORS } from "@/config/taxa";
+import TaxaIcon from "../../components/TaxaIcon";
 
 // Dynamically import GBIFTaxaSummary component
 const GBIFTaxaSummary = dynamic(
@@ -56,11 +57,45 @@ interface SpeciesDetails {
   canonicalName: string;
   vernacularName?: string;
   kingdom: string;
+  phylum?: string;
+  class?: string;
   family: string;
   genus: string;
   gbifUrl: string;
   imageUrl?: string;
   occurrenceCount?: number;
+}
+
+// Map GBIF class/kingdom to taxon ID for icons
+function getTaxonIdFromSpecies(details: SpeciesDetails | undefined): string {
+  if (!details) return "all";
+
+  const className = details.class?.toLowerCase();
+  const kingdom = details.kingdom?.toLowerCase();
+  const phylum = details.phylum?.toLowerCase();
+
+  // Check class first (for animals)
+  if (className === "mammalia") return "mammalia";
+  if (className === "aves") return "aves";
+  if (className === "amphibia") return "amphibia";
+  // Reptilia in GBIF is split into multiple classes
+  if (className === "squamata" || className === "crocodylia" || className === "testudines" || className === "reptilia") return "reptilia";
+  // Fish classes
+  if (className === "actinopterygii" || className === "chondrichthyes" || className === "elasmobranchii" || className === "holocephali") return "fishes";
+  // Invertebrate classes
+  if (className === "insecta" || className === "arachnida" || className === "gastropoda" || className === "bivalvia" || className === "malacostraca" || className === "anthozoa") return "invertebrates";
+
+  // Check kingdom
+  if (kingdom === "plantae") return "plantae";
+  if (kingdom === "fungi") return "fungi";
+
+  // Check phylum for fungi
+  if (phylum === "ascomycota" || phylum === "basidiomycota") return "fungi";
+
+  // Default for other animals (invertebrates)
+  if (kingdom === "animalia") return "invertebrates";
+
+  return "all";
 }
 
 interface OccurrenceFeature {
@@ -1435,7 +1470,9 @@ export default function Home() {
                             }}
                           />
                         ) : (
-                          <div className="w-10 h-10 bg-zinc-100 dark:bg-zinc-800 rounded" />
+                          <div className="w-10 h-10 bg-zinc-100 dark:bg-zinc-800 rounded flex items-center justify-center text-zinc-400">
+                            <TaxaIcon taxonId={getTaxonIdFromSpecies(species)} size={20} />
+                          </div>
                         )}
                       </td>
                       <td className="px-2 sm:px-4 py-2">
@@ -1533,7 +1570,9 @@ export default function Home() {
                               }}
                             />
                           ) : (
-                            <div className="w-10 h-10 bg-zinc-100 dark:bg-zinc-800 rounded" />
+                            <div className="w-10 h-10 bg-zinc-100 dark:bg-zinc-800 rounded flex items-center justify-center text-zinc-400">
+                              <TaxaIcon taxonId={cached ? getTaxonIdFromSpecies(cached) : (selectedTaxon || "all")} size={20} />
+                            </div>
                           )}
                         </td>
                         <td className="px-2 sm:px-4 py-2">

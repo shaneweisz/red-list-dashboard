@@ -15,6 +15,7 @@ import {
 } from "recharts";
 import TaxaSummary from "./TaxaSummary";
 import NewLiteratureSinceAssessment from "../LiteratureSearch";
+import TaxaIcon from "../TaxaIcon";
 import { CATEGORY_COLORS } from "@/config/taxa";
 
 // Dynamically import OccurrenceMapRow to avoid SSR issues with Leaflet
@@ -81,6 +82,7 @@ interface Species {
   countries: string[];
   assessment_count: number;
   previous_assessments: PreviousAssessment[];
+  taxon_id?: string; // Present when viewing "all" taxa
 }
 
 interface GbifByRecordType {
@@ -1032,7 +1034,9 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                           }}
                         />
                       ) : (
-                        <div className="w-10 h-10 bg-zinc-100 dark:bg-zinc-800 rounded" />
+                        <div className="w-10 h-10 bg-zinc-100 dark:bg-zinc-800 rounded flex items-center justify-center text-zinc-400">
+                          <TaxaIcon taxonId={s.taxon_id || selectedTaxon || "all"} size={20} />
+                        </div>
                       )}
                     </td>
                     <td className="px-4 py-3">

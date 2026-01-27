@@ -22,6 +22,7 @@ interface Species {
   countries: string[];
   assessment_count: number;
   previous_assessments: PreviousAssessment[];
+  taxon_id?: string; // Added when merging from multiple files
 }
 
 interface PrecomputedData {
@@ -57,12 +58,35 @@ function loadPrecomputedData(taxonId: string): PrecomputedData | null {
       const byCategory: Record<string, number> = {};
       let latestFetchedAt = "";
 
+      // Map data file names to taxon IDs for tagging species
+      const fileToTaxonId: Record<string, string> = {
+        "redlist-mammalia.json": "mammalia",
+        "redlist-aves.json": "aves",
+        "redlist-reptilia.json": "reptilia",
+        "redlist-amphibia.json": "amphibia",
+        "redlist-actinopterygii.json": "fishes",
+        "redlist-chondrichthyes.json": "fishes",
+        "redlist-insecta.json": "invertebrates",
+        "redlist-arachnida.json": "invertebrates",
+        "redlist-gastropoda.json": "invertebrates",
+        "redlist-bivalvia.json": "invertebrates",
+        "redlist-malacostraca.json": "invertebrates",
+        "redlist-anthozoa.json": "invertebrates",
+        "redlist-plantae.json": "plantae",
+        "redlist-ascomycota.json": "fungi",
+        "redlist-basidiomycota.json": "fungi",
+      };
+
       for (const fileName of taxon.dataFiles) {
         const filePath = path.join(process.cwd(), "data", fileName);
         if (fs.existsSync(filePath)) {
           const fileContent = fs.readFileSync(filePath, "utf-8");
           const data = JSON.parse(fileContent) as PrecomputedData;
-          allSpecies.push(...data.species);
+
+          // Tag each species with its source taxon ID
+          const sourceTaxonId = fileToTaxonId[fileName] || "all";
+          const taggedSpecies = data.species.map(s => ({ ...s, taxon_id: sourceTaxonId }));
+          allSpecies.push(...taggedSpecies);
 
           // Merge category counts
           for (const [cat, count] of Object.entries(data.metadata.byCategory)) {
