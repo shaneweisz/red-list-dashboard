@@ -52,7 +52,7 @@ const NAME_TO_ALPHA2: Record<string, string> = {
 };
 
 // Reverse mapping: alpha-2 to country name for display
-const ALPHA2_TO_NAME: Record<string, string> = Object.fromEntries(
+export const ALPHA2_TO_NAME: Record<string, string> = Object.fromEntries(
   Object.entries(NAME_TO_ALPHA2).map(([name, code]) => [code, name])
 );
 

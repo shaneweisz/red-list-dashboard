@@ -16,6 +16,7 @@ import {
 import TaxaSummary from "./TaxaSummary";
 import NewLiteratureSinceAssessment from "../LiteratureSearch";
 import TaxaIcon from "../TaxaIcon";
+import { ALPHA2_TO_NAME } from "../WorldMap";
 import { CATEGORY_COLORS } from "@/config/taxa";
 
 // Dynamically import OccurrenceMapRow to avoid SSR issues with Leaflet
@@ -589,17 +590,24 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
     return false;
   };
 
-  // Get unique countries from species data, sorted by species count
+  // Get unique countries from species data, sorted alphabetically by name
   const countryCounts = species.reduce((acc, s) => {
-    s.countries.forEach(country => {
-      acc[country] = (acc[country] || 0) + 1;
+    s.countries.forEach(code => {
+      acc[code] = (acc[code] || 0) + 1;
     });
     return acc;
   }, {} as Record<string, number>);
 
   const uniqueCountries = Object.entries(countryCounts)
-    .sort((a, b) => b[1] - a[1]) // Sort by count descending
-    .map(([country]) => country);
+    .sort((a, b) => {
+      const nameA = ALPHA2_TO_NAME[a[0]] || a[0];
+      const nameB = ALPHA2_TO_NAME[b[0]] || b[0];
+      return nameA.localeCompare(nameB);
+    })
+    .map(([code]) => code);
+
+  // Helper to get country display name
+  const getCountryName = (code: string) => ALPHA2_TO_NAME[code] || code;
 
   // Filter species based on category, year range, country, and search
   const filteredSpecies = species.filter((s) => {
@@ -1025,9 +1033,9 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                 className="px-3 py-2 pr-8 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 appearance-none cursor-pointer"
               >
                 <option value="">All countries</option>
-                {uniqueCountries.map(country => (
-                  <option key={country} value={country}>
-                    {country} ({countryCounts[country]})
+                {uniqueCountries.map(code => (
+                  <option key={code} value={code}>
+                    {getCountryName(code)} ({countryCounts[code]})
                   </option>
                 ))}
               </select>
@@ -1081,7 +1089,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                 onClick={() => setSelectedCountry(null)}
                 className="px-3 py-1 text-sm rounded-full bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 flex items-center gap-1 hover:opacity-80"
               >
-                {selectedCountry}
+                {getCountryName(selectedCountry)}
                 <span className="text-xs">×</span>
               </button>
             )}
