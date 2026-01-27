@@ -401,7 +401,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
   // Filters (multi-select using Sets)
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
   const [selectedYearRanges, setSelectedYearRanges] = useState<Set<string>>(new Set());
-  const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
+  const [selectedCountries, setSelectedCountries] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
   const [showOnlyStarred, setShowOnlyStarred] = useState(false);
 
@@ -569,7 +569,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
   useEffect(() => {
     setSelectedCategories(new Set());
     setSelectedYearRanges(new Set());
-    setSelectedCountry(null);
+    setSelectedCountries(new Set());
     setSearchQuery("");
     setCurrentPage(1);
     setSpeciesDetails({});
@@ -623,24 +623,38 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
   // Helper to get country display name
   const getCountryName = (code: string) => ALPHA2_TO_NAME[code] || code;
 
-  // Map selection handlers
-  const handleCountrySelect = (countryCode: string) => {
-    if (selectedCountry === countryCode) {
-      setSelectedCountry(null);
-    } else {
-      setSelectedCountry(countryCode);
-    }
+  // Map selection handlers (Cmd/Ctrl+click for multi-select, regular click replaces)
+  const handleCountrySelect = (countryCode: string, _countryName: string, event: React.MouseEvent) => {
+    const isMultiSelect = event.metaKey || event.ctrlKey;
+    setSelectedCountries(prev => {
+      if (isMultiSelect) {
+        // Toggle in/out of set
+        const next = new Set(prev);
+        if (next.has(countryCode)) {
+          next.delete(countryCode);
+        } else {
+          next.add(countryCode);
+        }
+        return next;
+      } else {
+        // Single select: toggle off if already selected, otherwise replace
+        if (prev.size === 1 && prev.has(countryCode)) {
+          return new Set();
+        }
+        return new Set([countryCode]);
+      }
+    });
   };
 
   const handleClearCountry = () => {
-    setSelectedCountry(null);
+    setSelectedCountries(new Set());
   };
 
   // Filter species based on category, year range, country, and search
   const filteredSpecies = species.filter((s) => {
     const matchesCategory = selectedCategories.size === 0 || selectedCategories.has(s.category);
     const matchesYear = matchesYearRangeFilter(s.assessment_date);
-    const matchesCountry = !selectedCountry || s.countries.includes(selectedCountry);
+    const matchesCountry = selectedCountries.size === 0 || s.countries.some(c => selectedCountries.has(c));
     const matchesSearch = !searchQuery ||
       s.scientific_name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStarred = !showOnlyStarred || pinnedSet.has(s.sis_taxon_id);
@@ -893,7 +907,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
         <div className="lg:col-span-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
           <div className="flex items-center justify-between mb-1">
             <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Years Since Last Assessed <span className="font-normal text-zinc-400">(click to filter)</span>
+              Filter by Years Since Last Assessed <span className="font-normal text-[10px] text-zinc-400">(cmd/ctrl+click to multi-select)</span>
             </h3>
             {selectedYearRanges.size > 0 && (
               <button
@@ -966,7 +980,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
         <div className="lg:col-span-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
           <div className="flex items-center justify-between mb-1">
             <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Distribution by Category <span className="font-normal text-zinc-400">(click to filter)</span>
+              Filter by Category <span className="font-normal text-[10px] text-zinc-400">(cmd/ctrl+click to multi-select)</span>
             </h3>
             {selectedCategories.size > 0 && (
               <button
@@ -1032,7 +1046,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
         {/* Country Map - 3 columns */}
         <div className="lg:col-span-3">
           <WorldMap
-            selectedCountry={selectedCountry}
+            selectedCountries={selectedCountries}
             onCountrySelect={handleCountrySelect}
             onClearSelection={handleClearCountry}
             precomputedStats={countryStatsForMap}
@@ -1066,12 +1080,16 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
             {/* Country filter dropdown */}
             <div className="relative">
               <select
-                value={selectedCountry || ""}
-                onChange={(e) => setSelectedCountry(e.target.value || null)}
+                value=""
+                onChange={(e) => {
+                  if (e.target.value) {
+                    setSelectedCountries(prev => new Set([...prev, e.target.value]));
+                  }
+                }}
                 className="px-3 py-2 pr-8 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 appearance-none cursor-pointer"
               >
-                <option value="">All countries</option>
-                {uniqueCountries.map(code => (
+                <option value="">{selectedCountries.size > 0 ? `${selectedCountries.size} selected` : "All countries"}</option>
+                {uniqueCountries.filter(code => !selectedCountries.has(code)).map(code => (
                   <option key={code} value={code}>
                     {getCountryName(code)} ({countryCounts[code]})
                   </option>
@@ -1122,18 +1140,19 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                 <span className="text-xs">×</span>
               </button>
             ))}
-            {selectedCountry && (
+            {Array.from(selectedCountries).map(code => (
               <button
-                onClick={() => setSelectedCountry(null)}
+                key={code}
+                onClick={() => setSelectedCountries(prev => { const next = new Set(prev); next.delete(code); return next; })}
                 className="px-3 py-1 text-sm rounded-full bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 flex items-center gap-1 hover:opacity-80"
               >
-                {getCountryName(selectedCountry)}
+                {getCountryName(code)}
                 <span className="text-xs">×</span>
               </button>
-            )}
-            {(selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedCountry || showOnlyStarred) && (
+            ))}
+            {(selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedCountries.size > 0 || showOnlyStarred) && (
               <button
-                onClick={() => { setSelectedCategories(new Set()); setSelectedYearRanges(new Set()); setSelectedCountry(null); setShowOnlyStarred(false); }}
+                onClick={() => { setSelectedCategories(new Set()); setSelectedYearRanges(new Set()); setSelectedCountries(new Set()); setShowOnlyStarred(false); }}
                 className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 underline"
               >
                 Clear all

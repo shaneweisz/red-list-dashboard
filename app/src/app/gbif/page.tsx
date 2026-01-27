@@ -905,7 +905,7 @@ export default function Home() {
     setPagination((prev) => ({ ...prev, page: 1 }));
   };
 
-  const handleCountrySelect = (countryCode: string, countryName: string) => {
+  const handleCountrySelect = (countryCode: string, countryName: string, _event: React.MouseEvent) => {
     // If clicking the same country, revert to global
     if (selectedCountry === countryCode) {
       setSelectedCountry(null);
@@ -926,6 +926,9 @@ export default function Home() {
     setDataSourceFilter("all");
     setFilterStats(null);
   };
+
+  // Convert single country to Set for WorldMap component
+  const selectedCountriesSet = selectedCountry ? new Set([selectedCountry]) : new Set<string>();
 
   const handleClearCountry = () => {
     setSelectedCountry(null);
@@ -1054,7 +1057,7 @@ export default function Home() {
           {mounted && (
             <div className="lg:col-span-3">
               <WorldMap
-                selectedCountry={selectedCountry}
+                selectedCountries={selectedCountriesSet}
                 onCountrySelect={handleCountrySelect}
                 onClearSelection={handleClearCountry}
                 selectedTaxon={selectedTaxon}

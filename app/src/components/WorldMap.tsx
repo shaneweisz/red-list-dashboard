@@ -129,8 +129,8 @@ function formatNumber(num: number): string {
 }
 
 interface WorldMapProps {
-  selectedCountry: string | null;
-  onCountrySelect: (countryCode: string, countryName: string) => void;
+  selectedCountries: Set<string>;
+  onCountrySelect: (countryCode: string, countryName: string, event: React.MouseEvent) => void;
   onClearSelection: () => void;
   selectedTaxon?: string | null;
   // Optional pre-computed stats (for Red List - avoids API call)
@@ -139,7 +139,7 @@ interface WorldMapProps {
   statLabel?: string;
 }
 
-function WorldMap({ selectedCountry, onCountrySelect, onClearSelection, selectedTaxon, precomputedStats, statLabel = "Occurrences" }: WorldMapProps) {
+function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, selectedTaxon, precomputedStats, statLabel = "Occurrences" }: WorldMapProps) {
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoveredCountryCode, setHoveredCountryCode] = useState<string | null>(null);
   const [countryStats, setCountryStats] = useState<CountryStats>({});
@@ -178,7 +178,7 @@ function WorldMap({ selectedCountry, onCountrySelect, onClearSelection, selected
   );
 
   const getCountryColor = (alpha2: string | undefined, isSelected: boolean): string => {
-    if (isSelected) return "#22c55e";
+    if (isSelected) return "#3b82f6"; // blue-500 for selected
     if (!alpha2) return "#f4f4f5";
 
     const stats = countryStats[alpha2];
@@ -188,6 +188,7 @@ function WorldMap({ selectedCountry, onCountrySelect, onClearSelection, selected
   };
 
   const hoveredStats = hoveredCountryCode ? countryStats[hoveredCountryCode] : null;
+  const selectedCount = selectedCountries.size;
 
   return (
     <div className="relative bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 p-3 h-full flex flex-col">
@@ -195,13 +196,13 @@ function WorldMap({ selectedCountry, onCountrySelect, onClearSelection, selected
       <div className="flex items-center justify-between mb-0">
         <div>
           <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-            Explore by Country
+            Filter by Country <span className="font-normal text-[10px] text-zinc-400">(cmd/ctrl+click to multi-select)</span>
           </h2>
-          <p className="text-xs text-zinc-500">
-            {selectedCountry
-              ? `${ALPHA2_TO_NAME[selectedCountry] || selectedCountry} · Click to deselect`
-              : "Click a country to filter"}
-          </p>
+          {selectedCount > 0 && (
+            <p className="text-xs text-zinc-500">
+              {selectedCount} {selectedCount === 1 ? 'country' : 'countries'} selected
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {/* Legend in header */}
@@ -215,7 +216,7 @@ function WorldMap({ selectedCountry, onCountrySelect, onClearSelection, selected
             />
             <span className="text-zinc-400">High</span>
           </div>
-          {selectedCountry && (
+          {selectedCount > 0 && (
             <button
               onClick={onClearSelection}
               className="px-2 py-1 text-xs text-zinc-600 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded transition-colors"
@@ -272,7 +273,7 @@ function WorldMap({ selectedCountry, onCountrySelect, onClearSelection, selected
                   .map((geo) => {
                   const countryName = geo.properties.name;
                   const alpha2 = NAME_TO_ALPHA2[countryName];
-                  const isSelected = selectedCountry === alpha2;
+                  const isSelected = alpha2 ? selectedCountries.has(alpha2) : false;
                   const fillColor = getCountryColor(alpha2, isSelected);
 
                   return (
@@ -287,9 +288,9 @@ function WorldMap({ selectedCountry, onCountrySelect, onClearSelection, selected
                         setHoveredCountry(null);
                         setHoveredCountryCode(null);
                       }}
-                      onClick={() => {
+                      onClick={(event) => {
                         if (alpha2) {
-                          onCountrySelect(alpha2, countryName);
+                          onCountrySelect(alpha2, countryName, event);
                         }
                       }}
                       style={{
@@ -301,14 +302,14 @@ function WorldMap({ selectedCountry, onCountrySelect, onClearSelection, selected
                           cursor: alpha2 ? "pointer" : "default",
                         },
                         hover: {
-                          fill: isSelected ? "#16a34a" : alpha2 ? "#a3e635" : "#f4f4f5",
+                          fill: isSelected ? "#2563eb" : alpha2 ? "#a3e635" : "#f4f4f5",
                           stroke: "#71717a",
                           strokeWidth: 0.75,
                           outline: "none",
                           cursor: alpha2 ? "pointer" : "default",
                         },
                         pressed: {
-                          fill: "#16a34a",
+                          fill: "#1d4ed8",
                           stroke: "#52525b",
                           strokeWidth: 1,
                           outline: "none",
