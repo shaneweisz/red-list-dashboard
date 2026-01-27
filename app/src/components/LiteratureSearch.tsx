@@ -15,52 +15,102 @@ interface LiteratureResult {
   authors: string | null;
 }
 
-// Paper card with collapsible abstract
-function PaperCard({ paper }: { paper: LiteratureResult }) {
-  const [showAbstract, setShowAbstract] = useState(false);
-
+// Paper row with expandable details
+function PaperRow({
+  paper,
+  isExpanded,
+  onToggle
+}: {
+  paper: LiteratureResult;
+  isExpanded: boolean;
+  onToggle: () => void;
+}) {
   return (
-    <div className="bg-white dark:bg-zinc-800/50 rounded-lg p-3 border border-zinc-200 dark:border-zinc-700">
-      <a
-        href={paper.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-sm text-zinc-900 dark:text-zinc-100 hover:text-blue-600 dark:hover:text-blue-400 line-clamp-2 leading-snug"
+    <>
+      <tr
+        className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer border-b border-zinc-100 dark:border-zinc-800 ${isExpanded ? "bg-zinc-50 dark:bg-zinc-800/30" : ""}`}
+        onClick={onToggle}
       >
-        {paper.title}
-      </a>
-      <div className="flex items-center gap-2 mt-1.5 text-xs text-zinc-500 flex-wrap">
-        {paper.year && (
-          <span className="font-medium text-zinc-600 dark:text-zinc-400">{paper.year}</span>
-        )}
-        {paper.source && (
-          <span className="text-zinc-400 dark:text-zinc-500">{paper.source}</span>
-        )}
-        {paper.citations !== null && paper.citations > 0 && (
-          <span className="text-amber-600 dark:text-amber-500">
-            {paper.citations.toLocaleString()} citations
-          </span>
-        )}
-        {paper.abstract && (
-          <button
-            onClick={() => setShowAbstract(!showAbstract)}
-            className="text-blue-500 hover:text-blue-600 dark:hover:text-blue-400"
-          >
-            {showAbstract ? "Hide abstract" : "Abstract"}
-          </button>
-        )}
-      </div>
-      {paper.authors && (
-        <div className="text-xs text-zinc-400 mt-1 truncate">
-          {paper.authors}
-        </div>
+        {/* Title */}
+        <td className="py-2 px-3">
+          <div className="flex items-start gap-2">
+            <svg
+              className={`w-3 h-3 mt-1 flex-shrink-0 text-zinc-400 transition-transform ${isExpanded ? "rotate-90" : ""}`}
+              fill="currentColor"
+              viewBox="0 0 20 20"
+            >
+              <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+            </svg>
+            <span className="text-sm text-zinc-800 dark:text-zinc-200 line-clamp-2 leading-snug">
+              {paper.title}
+            </span>
+          </div>
+        </td>
+        {/* Year */}
+        <td className="py-2 px-3 text-sm text-zinc-500 whitespace-nowrap">
+          {paper.year || "—"}
+        </td>
+        {/* Journal */}
+        <td className="py-2 px-3 text-xs text-zinc-400 max-w-[150px] truncate hidden md:table-cell">
+          {paper.source || "—"}
+        </td>
+        {/* Citations */}
+        <td className="py-2 px-3 text-sm text-right whitespace-nowrap">
+          {paper.citations !== null && paper.citations > 0 ? (
+            <span className="text-amber-600 dark:text-amber-500 tabular-nums">
+              {paper.citations.toLocaleString()}
+            </span>
+          ) : (
+            <span className="text-zinc-300 dark:text-zinc-600">—</span>
+          )}
+        </td>
+      </tr>
+      {/* Expanded details row */}
+      {isExpanded && (
+        <tr className="bg-zinc-50 dark:bg-zinc-800/30">
+          <td colSpan={4} className="px-3 py-3 pl-8">
+            <div className="space-y-2">
+              {/* Authors */}
+              {paper.authors && (
+                <div className="text-xs text-zinc-500">
+                  <span className="font-medium text-zinc-600 dark:text-zinc-400">Authors:</span>{" "}
+                  {paper.authors}
+                </div>
+              )}
+              {/* Journal (shown on mobile since hidden in table) */}
+              {paper.source && (
+                <div className="text-xs text-zinc-500 md:hidden">
+                  <span className="font-medium text-zinc-600 dark:text-zinc-400">Journal:</span>{" "}
+                  {paper.source}
+                </div>
+              )}
+              {/* Abstract */}
+              {paper.abstract && (
+                <div className="text-xs text-zinc-500 leading-relaxed">
+                  <span className="font-medium text-zinc-600 dark:text-zinc-400">Abstract:</span>{" "}
+                  {paper.abstract}
+                </div>
+              )}
+              {/* Link to paper */}
+              <div className="pt-1">
+                <a
+                  href={paper.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 dark:hover:text-blue-400"
+                >
+                  View paper
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
+              </div>
+            </div>
+          </td>
+        </tr>
       )}
-      {showAbstract && paper.abstract && (
-        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-2 leading-relaxed">
-          {paper.abstract}
-        </p>
-      )}
-    </div>
+    </>
   );
 }
 
@@ -94,6 +144,7 @@ export default function NewLiteratureSinceAssessment({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(true); // Auto-expand to show papers
+  const [expandedRowIndex, setExpandedRowIndex] = useState<number | null>(null);
 
   const openAlexUrl = buildOpenAlexUrl(scientificName, assessmentYear);
 
@@ -151,7 +202,7 @@ export default function NewLiteratureSinceAssessment({
   return (
     <div className={`${className}`}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
             Literature
@@ -181,25 +232,42 @@ export default function NewLiteratureSinceAssessment({
         OpenAlex: {queryDescription}
       </div>
 
-      {/* Papers list */}
+      {/* Papers table */}
       {expanded && topPapers.length > 0 && (
-        <div className="space-y-2">
-          {topPapers.map((paper, index) => (
-            <PaperCard key={index} paper={paper} />
-          ))}
+        <div className="border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden">
+          <table className="w-full text-left">
+            <thead className="bg-zinc-100 dark:bg-zinc-800">
+              <tr className="text-xs text-zinc-500 uppercase tracking-wider">
+                <th className="py-2 px-3 font-medium">Title</th>
+                <th className="py-2 px-3 font-medium w-16">Year</th>
+                <th className="py-2 px-3 font-medium hidden md:table-cell">Journal</th>
+                <th className="py-2 px-3 font-medium text-right w-20">Citations</th>
+              </tr>
+            </thead>
+            <tbody>
+              {topPapers.map((paper, index) => (
+                <PaperRow
+                  key={index}
+                  paper={paper}
+                  isExpanded={expandedRowIndex === index}
+                  onToggle={() => setExpandedRowIndex(expandedRowIndex === index ? null : index)}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
-          {totalPapersSinceAssessment > topPapers.length && (
-            <div className="text-center pt-1">
-              <a
-                href={openAlexUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-blue-500 hover:underline"
-              >
-                + {(totalPapersSinceAssessment - topPapers.length).toLocaleString()} more on OpenAlex
-              </a>
-            </div>
-          )}
+      {expanded && topPapers.length > 0 && totalPapersSinceAssessment > topPapers.length && (
+        <div className="text-center pt-2">
+          <a
+            href={openAlexUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-blue-500 hover:underline"
+          >
+            + {(totalPapersSinceAssessment - topPapers.length).toLocaleString()} more on OpenAlex
+          </a>
         </div>
       )}
 
@@ -214,7 +282,7 @@ export default function NewLiteratureSinceAssessment({
 
       {/* Subtle note at bottom */}
       {expanded && (
-        <p className="text-[10px] text-zinc-400 mt-3">
+        <p className="text-[10px] text-zinc-400 mt-2">
           Simple text search — may miss synonyms or indirect references
         </p>
       )}
