@@ -843,13 +843,74 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
     });
   };
 
-  // Render loading state for details section
+  // Skeleton loader for bar chart
+  const SkeletonBarChart = ({ bars = 5, horizontal = true }: { bars?: number; horizontal?: boolean }) => (
+    <div className={`flex ${horizontal ? 'flex-col' : 'items-end'} gap-2 p-2`}>
+      {Array.from({ length: bars }).map((_, i) => (
+        <div key={i} className={`flex items-center gap-2 ${horizontal ? '' : 'flex-col'}`}>
+          <div className="w-8 h-3 bg-zinc-200 dark:bg-zinc-700 rounded animate-pulse" />
+          <div
+            className="h-4 bg-zinc-200 dark:bg-zinc-700 rounded animate-pulse"
+            style={{ width: `${Math.random() * 60 + 40}%`, animationDelay: `${i * 100}ms` }}
+          />
+        </div>
+      ))}
+    </div>
+  );
+
+  // Skeleton loader for map
+  const SkeletonMap = () => (
+    <div className="relative h-full min-h-[200px] bg-zinc-100 dark:bg-zinc-800 rounded-lg overflow-hidden">
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-2">
+          <svg className="w-8 h-8 text-zinc-300 dark:text-zinc-600 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+          </svg>
+          <span className="text-xs text-zinc-400">Loading map...</span>
+        </div>
+      </div>
+      {/* Fake continents */}
+      <div className="absolute top-[20%] left-[15%] w-[25%] h-[30%] bg-zinc-200 dark:bg-zinc-700 rounded-lg animate-pulse" style={{ animationDelay: '0ms' }} />
+      <div className="absolute top-[25%] left-[45%] w-[15%] h-[25%] bg-zinc-200 dark:bg-zinc-700 rounded-lg animate-pulse" style={{ animationDelay: '100ms' }} />
+      <div className="absolute top-[15%] left-[62%] w-[25%] h-[35%] bg-zinc-200 dark:bg-zinc-700 rounded-lg animate-pulse" style={{ animationDelay: '200ms' }} />
+      <div className="absolute top-[55%] left-[20%] w-[12%] h-[30%] bg-zinc-200 dark:bg-zinc-700 rounded-lg animate-pulse" style={{ animationDelay: '300ms' }} />
+      <div className="absolute top-[50%] left-[70%] w-[18%] h-[25%] bg-zinc-200 dark:bg-zinc-700 rounded-lg animate-pulse" style={{ animationDelay: '400ms' }} />
+    </div>
+  );
+
+  // Render loading state for details section with skeleton cards
   const renderDetailsLoading = () => (
-    <div className="flex flex-col items-center justify-center py-12">
-      <div className="animate-spin h-8 w-8 border-4 border-red-600 border-t-transparent rounded-full" />
-      <p className="mt-4 text-zinc-500 dark:text-zinc-400">
-        Loading Red List statistics...
-      </p>
+    <div className="grid grid-cols-1 lg:grid-cols-7 gap-4">
+      {/* Years skeleton - 2 columns */}
+      <div className="lg:col-span-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+        <div className="flex items-center justify-between mb-2">
+          <div className="h-4 w-48 bg-zinc-200 dark:bg-zinc-700 rounded animate-pulse" />
+        </div>
+        <div className="flex-1 min-h-[150px]">
+          <SkeletonBarChart bars={5} />
+        </div>
+      </div>
+
+      {/* Category skeleton - 2 columns */}
+      <div className="lg:col-span-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+        <div className="flex items-center justify-between mb-2">
+          <div className="h-4 w-40 bg-zinc-200 dark:bg-zinc-700 rounded animate-pulse" />
+        </div>
+        <div className="flex-1 min-h-[200px]">
+          <SkeletonBarChart bars={8} />
+        </div>
+      </div>
+
+      {/* Map skeleton - 3 columns */}
+      <div className="lg:col-span-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+        <div className="flex items-center justify-between mb-2">
+          <div className="h-4 w-32 bg-zinc-200 dark:bg-zinc-700 rounded animate-pulse" />
+          <div className="h-3 w-20 bg-zinc-200 dark:bg-zinc-700 rounded animate-pulse" />
+        </div>
+        <div className="flex-1">
+          <SkeletonMap />
+        </div>
+      </div>
     </div>
   );
 

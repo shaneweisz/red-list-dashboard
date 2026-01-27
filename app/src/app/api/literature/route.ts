@@ -74,14 +74,12 @@ async function searchOpenAlexSinceYear(
   sinceYear: number,
   limit: number = 5
 ): Promise<{ count: number; results: LiteratureResult[] }> {
-  // OpenAlex filter: publication_year > sinceYear, exclude datasets (GBIF occurrence downloads)
+  // OpenAlex filter: use default.search for exact phrase matching (same as website)
+  // publication_year > sinceYear, exclude datasets (GBIF occurrence downloads)
   // Sorted by most recent first
   // Note: per_page must be >= 1 for the API to work, even for count-only requests
-  // Build URL manually to ensure proper encoding of negation filter
-  // Exclude datasets (which includes GBIF Occurrence Downloads)
-  const filter = encodeURIComponent(`publication_year:>${sinceYear},type:!dataset`);
-  const search = encodeURIComponent(scientificName);
-  const url = `https://api.openalex.org/works?search=${search}&filter=${filter}&sort=publication_date:desc&per_page=${Math.max(1, limit)}&mailto=red-list-dashboard@example.com`;
+  const filter = encodeURIComponent(`default.search:"${scientificName}",publication_year:>${sinceYear},type:!dataset`);
+  const url = `https://api.openalex.org/works?filter=${filter}&sort=publication_date:desc&per_page=${Math.max(1, limit)}&mailto=red-list-dashboard@example.com`;
 
   const response = await fetch(url);
   if (!response.ok) {
@@ -112,10 +110,10 @@ async function getOpenAlexCountUpToYear(
   scientificName: string,
   upToYear: number
 ): Promise<number> {
+  // Use default.search for exact phrase matching (same as website)
   // Use < (year+1) instead of <= year to avoid encoding issues
-  const filter = encodeURIComponent(`publication_year:<${upToYear + 1},type:!dataset`);
-  const search = encodeURIComponent(scientificName);
-  const url = `https://api.openalex.org/works?search=${search}&filter=${filter}&per_page=1&mailto=red-list-dashboard@example.com`;
+  const filter = encodeURIComponent(`default.search:"${scientificName}",publication_year:<${upToYear + 1},type:!dataset`);
+  const url = `https://api.openalex.org/works?filter=${filter}&per_page=1&mailto=red-list-dashboard@example.com`;
 
   const response = await fetch(url);
   if (!response.ok) {
