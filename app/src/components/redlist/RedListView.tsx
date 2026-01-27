@@ -959,7 +959,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                   onClick={() => handleSort("category")}
                 >
                   <span className="flex items-center gap-1">
-                    Risk
+                    Risk Category
                     {sortField === "category" && (
                       <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
                     )}
@@ -987,9 +987,6 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
                   New Papers
-                </th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                  Red List
                 </th>
               </tr>
             </thead>
@@ -1353,20 +1350,6 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                         </a>
                       ) : "—"}
                     </td>
-                    <td className="px-4 py-3 text-center">
-                      <a
-                        href={s.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center justify-center text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
-                        title="View on IUCN Red List"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                        </svg>
-                      </a>
-                    </td>
                   </tr>
                   {selectedSpeciesKey === s.sis_taxon_id && (
                     <>
@@ -1375,13 +1358,13 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                           speciesKey={gbifSpeciesKey}
                           speciesName={s.scientific_name.toLowerCase()}
                           mounted={mounted}
-                          colSpan={9}
+                          colSpan={8}
                           assessmentYear={assessmentYear}
                         />
                       )}
                       {assessmentYear && (
                         <tr>
-                          <td colSpan={9} className="p-4 bg-zinc-50 dark:bg-zinc-800/30">
+                          <td colSpan={8} className="p-4 bg-zinc-50 dark:bg-zinc-800/30">
                             <NewLiteratureSinceAssessment
                               scientificName={s.scientific_name}
                               assessmentYear={assessmentYear}
@@ -1396,7 +1379,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
               })}
               {filteredSpecies.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-zinc-500">
+                  <td colSpan={8} className="px-4 py-8 text-center text-zinc-500">
                     No species found
                   </td>
                 </tr>
