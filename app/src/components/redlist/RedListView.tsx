@@ -394,6 +394,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
   // Filters (multi-select using Sets)
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
   const [selectedYearRanges, setSelectedYearRanges] = useState<Set<string>>(new Set());
+  const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [showOnlyStarred, setShowOnlyStarred] = useState(false);
 
@@ -561,6 +562,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
   useEffect(() => {
     setSelectedCategories(new Set());
     setSelectedYearRanges(new Set());
+    setSelectedCountry(null);
     setSearchQuery("");
     setCurrentPage(1);
     setSpeciesDetails({});
@@ -587,14 +589,27 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
     return false;
   };
 
-  // Filter species based on category, year range, and search
+  // Get unique countries from species data, sorted by species count
+  const countryCounts = species.reduce((acc, s) => {
+    s.countries.forEach(country => {
+      acc[country] = (acc[country] || 0) + 1;
+    });
+    return acc;
+  }, {} as Record<string, number>);
+
+  const uniqueCountries = Object.entries(countryCounts)
+    .sort((a, b) => b[1] - a[1]) // Sort by count descending
+    .map(([country]) => country);
+
+  // Filter species based on category, year range, country, and search
   const filteredSpecies = species.filter((s) => {
     const matchesCategory = selectedCategories.size === 0 || selectedCategories.has(s.category);
     const matchesYear = matchesYearRangeFilter(s.assessment_date);
+    const matchesCountry = !selectedCountry || s.countries.includes(selectedCountry);
     const matchesSearch = !searchQuery ||
       s.scientific_name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStarred = !showOnlyStarred || pinnedSet.has(s.sis_taxon_id);
-    return matchesCategory && matchesYear && matchesSearch && matchesStarred;
+    return matchesCategory && matchesYear && matchesCountry && matchesSearch && matchesStarred;
   });
 
   // Category order for sorting (most threatened first)
@@ -1002,6 +1017,29 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
+            {/* Country filter dropdown */}
+            <div className="relative">
+              <select
+                value={selectedCountry || ""}
+                onChange={(e) => setSelectedCountry(e.target.value || null)}
+                className="px-3 py-2 pr-8 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 appearance-none cursor-pointer"
+              >
+                <option value="">All countries</option>
+                {uniqueCountries.map(country => (
+                  <option key={country} value={country}>
+                    {country} ({countryCounts[country]})
+                  </option>
+                ))}
+              </select>
+              <svg
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 pointer-events-none"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
             {pinnedSpecies.length > 0 && (
               <button
                 onClick={() => setShowOnlyStarred(!showOnlyStarred)}
@@ -1038,9 +1076,18 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                 <span className="text-xs">×</span>
               </button>
             ))}
-            {(selectedCategories.size > 0 || selectedYearRanges.size > 0 || showOnlyStarred) && (
+            {selectedCountry && (
               <button
-                onClick={() => { setSelectedCategories(new Set()); setSelectedYearRanges(new Set()); setShowOnlyStarred(false); }}
+                onClick={() => setSelectedCountry(null)}
+                className="px-3 py-1 text-sm rounded-full bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 flex items-center gap-1 hover:opacity-80"
+              >
+                {selectedCountry}
+                <span className="text-xs">×</span>
+              </button>
+            )}
+            {(selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedCountry || showOnlyStarred) && (
+              <button
+                onClick={() => { setSelectedCategories(new Set()); setSelectedYearRanges(new Set()); setSelectedCountry(null); setShowOnlyStarred(false); }}
                 className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 underline"
               >
                 Clear all
