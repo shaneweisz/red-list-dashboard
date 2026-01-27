@@ -880,9 +880,9 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
 
   // Render loading state for details section with skeleton cards
   const renderDetailsLoading = () => (
-    <div className="grid grid-cols-1 lg:grid-cols-7 gap-4">
-      {/* Years skeleton - 2 columns */}
-      <div className="lg:col-span-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* Years skeleton - 1 column */}
+      <div className="lg:col-span-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
         <div className="flex items-center justify-between mb-2">
           <div className="h-4 w-48 bg-zinc-200 dark:bg-zinc-700 rounded animate-pulse" />
         </div>
@@ -891,8 +891,8 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
         </div>
       </div>
 
-      {/* Category skeleton - 2 columns */}
-      <div className="lg:col-span-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+      {/* Category skeleton - 1 column */}
+      <div className="lg:col-span-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
         <div className="flex items-center justify-between mb-2">
           <div className="h-4 w-40 bg-zinc-200 dark:bg-zinc-700 rounded animate-pulse" />
         </div>
@@ -901,8 +901,8 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
         </div>
       </div>
 
-      {/* Map skeleton - 3 columns */}
-      <div className="lg:col-span-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+      {/* Map skeleton - 1 column */}
+      <div className="lg:col-span-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
         <div className="flex items-center justify-between mb-2">
           <div className="h-4 w-32 bg-zinc-200 dark:bg-zinc-700 rounded animate-pulse" />
           <div className="h-3 w-20 bg-zinc-200 dark:bg-zinc-700 rounded animate-pulse" />
@@ -963,11 +963,11 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
           {!loading && !error && stats && assessments && taxonInfo && (
             <>
               {/* Charts and map - all on same row */}
-      <div className="grid grid-cols-1 lg:grid-cols-7 gap-4">
-        {/* Years Since Assessment chart - 2 columns */}
-        <div className="lg:col-span-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Years Since Assessment chart - 1 column */}
+        <div className="lg:col-span-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
           <div className="flex items-center justify-between mb-1">
-            <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
               Filter by Years Since Last Assessed <span className="font-normal text-[10px] text-zinc-400">(cmd/ctrl+click to multi-select)</span>
             </h3>
             {selectedYearRanges.size > 0 && (
@@ -1037,10 +1037,10 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
           </div>
         </div>
 
-        {/* Category distribution - 2 columns */}
-        <div className="lg:col-span-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+        {/* Category distribution - 1 column */}
+        <div className="lg:col-span-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
           <div className="flex items-center justify-between mb-1">
-            <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
               Filter by Category <span className="font-normal text-[10px] text-zinc-400">(cmd/ctrl+click to multi-select)</span>
             </h3>
             {selectedCategories.size > 0 && (
@@ -1104,8 +1104,8 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
           </div>
         </div>
 
-        {/* Country Map - 3 columns */}
-        <div className="lg:col-span-3">
+        {/* Country Map - 1 column */}
+        <div className="lg:col-span-1">
           <WorldMap
             selectedCountries={selectedCountries}
             onCountrySelect={handleCountrySelect}
