@@ -1395,8 +1395,8 @@ export default function Home() {
         </div>
 
         {/* Table */}
-        <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-hidden mb-6">
-          <table className="w-full">
+        <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-x-auto mb-6">
+          <table className="w-full min-w-[800px]">
             <thead className="bg-zinc-50 dark:bg-zinc-800">
               <tr>
                 {searchResults === null && (

@@ -171,7 +171,8 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
     if (!taxon) return null;
 
     return (
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
+      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto">
+        <div className="min-w-[700px]">
         {/* Column headers */}
         <div className="px-4 py-2 bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
           <div className="grid grid-cols-6 gap-4 text-xs font-medium text-zinc-500 uppercase tracking-wider">
@@ -211,12 +212,14 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
           taxon.percentOutdated,
           true
         )}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
+    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto">
+      <div className="min-w-[700px]">
       {/* Column headers */}
       <div className="px-4 py-2 bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
         <div className="grid grid-cols-6 gap-4 text-xs font-medium text-zinc-500 uppercase tracking-wider">
@@ -346,6 +349,7 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
           </div>
         </>
       )}
+      </div>
     </div>
   );
 }

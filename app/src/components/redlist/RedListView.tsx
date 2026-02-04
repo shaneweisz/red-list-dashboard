@@ -1194,8 +1194,8 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
         </div>
 
         {/* Species table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-x-auto">
+          <table className="w-full min-w-[900px] text-sm">
             <thead className="bg-zinc-50 dark:bg-zinc-800">
               <tr>
                 <th className="px-2 py-3 text-center text-xs font-medium text-zinc-500 uppercase tracking-wider w-10">
