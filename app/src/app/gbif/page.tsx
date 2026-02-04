@@ -1,12 +1,16 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import useSWR from "swr";
 import { ThemeToggle } from "../../components/ThemeToggle";
 import { getTaxonConfig, CATEGORY_COLORS } from "@/config/taxa";
 import TaxaIcon from "../../components/TaxaIcon";
+
+// SWR fetcher
+const fetcher = (url: string) => fetch(url).then(res => res.json());
 
 // Dynamically import GBIFTaxaSummary component
 const GBIFTaxaSummary = dynamic(
@@ -351,71 +355,54 @@ interface ExpandedRowProps {
 }
 
 function ExpandedRow({ speciesKey, speciesName, regionMode, countryCode, mounted, colSpan, hasCandidates, maxUncertainty, dataSource, activeBasisOfRecord }: ExpandedRowProps) {
-  const [occurrences, setOccurrences] = useState<OccurrenceFeature[]>([]);
-  const [candidates, setCandidates] = useState<CandidateFeature[]>([]);
-  const [breakdown, setBreakdown] = useState<RecordTypeBreakdown | null>(null);
-  const [loadingOccurrences, setLoadingOccurrences] = useState(true);
-  const [loadingCandidates, setLoadingCandidates] = useState(false);
-  const [loadingBreakdown, setLoadingBreakdown] = useState(true);
   const [showCandidates, setShowCandidates] = useState(true);
   const [heatmapOpacity, setHeatmapOpacity] = useState(0.7);
   const [inatIndex, setInatIndex] = useState(0);
 
-  // Build occurrences endpoint - add country filter if in country mode
-  const occurrencesEndpoint = "/api/occurrences";
+  // Build URLs for SWR
+  const occurrencesParams = useMemo(() => {
+    const params = new URLSearchParams({ speciesKey: speciesKey.toString(), limit: "500" });
+    if (regionMode === "country" && countryCode) params.set("country", countryCode);
+    return params.toString();
+  }, [speciesKey, regionMode, countryCode]);
 
-  // Fetch occurrences immediately
-  useEffect(() => {
-    setLoadingOccurrences(true);
-    const params = new URLSearchParams({
-      speciesKey: speciesKey.toString(),
-      limit: "500",
-    });
-    if (regionMode === "country" && countryCode) {
-      params.set("country", countryCode);
-    }
-    fetch(`${occurrencesEndpoint}?${params}`)
-      .then((res) => res.json())
-      .then((data) => setOccurrences(data.features || []))
-      .catch(console.error)
-      .finally(() => setLoadingOccurrences(false));
-  }, [speciesKey, occurrencesEndpoint, regionMode, countryCode]);
-
-  // Fetch ALL candidates (no threshold) for heatmap
-  useEffect(() => {
-    if (!hasCandidates || !speciesName) return;
-
-    setLoadingCandidates(true);
-    fetch(`/api/candidates?species=${encodeURIComponent(speciesName)}&minProb=0`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (!data.error) {
-          setCandidates(data.features || []);
-        }
-      })
-      .catch(console.error)
-      .finally(() => setLoadingCandidates(false));
-  }, [speciesName, hasCandidates]);
-
-  // Fetch breakdown data
-  useEffect(() => {
-    setLoadingBreakdown(true);
+  const breakdownParams = useMemo(() => {
     const params = new URLSearchParams();
-    if (regionMode === "country" && countryCode) {
-      params.set("country", countryCode);
-    }
+    if (regionMode === "country" && countryCode) params.set("country", countryCode);
     if (maxUncertainty) params.set("maxUncertainty", maxUncertainty);
     if (dataSource) params.set("dataSource", dataSource);
+    return params.toString();
+  }, [regionMode, countryCode, maxUncertainty, dataSource]);
 
-    fetch(`/api/species/${speciesKey}/breakdown?${params}`)
-      .then((res) => res.json())
-      .then((data) => setBreakdown(data))
-      .catch(console.error)
-      .finally(() => setLoadingBreakdown(false));
-  }, [speciesKey, regionMode, countryCode, maxUncertainty, dataSource]);
+  // Use SWR for data fetching with automatic caching and deduplication
+  const { data: occurrencesData, isLoading: loadingOccurrences } = useSWR(
+    `/api/occurrences?${occurrencesParams}`,
+    fetcher,
+    { revalidateOnFocus: false, dedupingInterval: 60000 }
+  );
+
+  const { data: breakdownData, isLoading: loadingBreakdown } = useSWR(
+    `/api/species/${speciesKey}/breakdown?${breakdownParams}`,
+    fetcher,
+    { revalidateOnFocus: false, dedupingInterval: 60000 }
+  );
+
+  const { data: candidatesData, isLoading: loadingCandidates } = useSWR(
+    hasCandidates && speciesName ? `/api/candidates?species=${encodeURIComponent(speciesName)}&minProb=0` : null,
+    fetcher,
+    { revalidateOnFocus: false, dedupingInterval: 60000 }
+  );
+
+  // Extract data from SWR responses
+  const occurrences: OccurrenceFeature[] = occurrencesData?.features || [];
+  const breakdown: RecordTypeBreakdown | null = breakdownData || null;
+  const candidates: CandidateFeature[] = candidatesData?.error ? [] : (candidatesData?.features || []);
 
   // Sort candidates by probability (low first so high prob renders on top)
-  const sortedCandidates = [...candidates].sort((a, b) => a.properties.probability - b.properties.probability);
+  const sortedCandidates = useMemo(
+    () => [...candidates].sort((a, b) => a.properties.probability - b.properties.probability),
+    [candidates]
+  );
 
   const handleInatNavigate = (delta: number) => {
     if (!breakdown?.recentInatObservations) return;
@@ -583,7 +570,7 @@ function ExpandedRow({ speciesKey, speciesName, regionMode, countryCode, mounted
                     const [lon, lat] = feature.geometry.coordinates;
                     return (
                       <CircleMarker
-                        key={feature.properties.gbifID || idx}
+                        key={`occ-${feature.properties.gbifID}-${idx}`}
                         center={[lat, lon]}
                         radius={5}
                         pathOptions={{

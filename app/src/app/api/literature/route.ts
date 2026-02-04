@@ -52,6 +52,10 @@ interface LiteratureResult {
   authors: string | null;
 }
 
+// Cache for literature results (1 hour)
+const literatureCache = new Map<string, { data: object; timestamp: number }>();
+const CACHE_DURATION = 60 * 60 * 1000; // 1 hour
+
 // Reconstruct abstract from OpenAlex inverted index
 function reconstructAbstract(invertedIndex: Record<string, number[]> | undefined, maxWords = 100): string | null {
   if (!invertedIndex) return null;
@@ -153,6 +157,13 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // Check cache
+  const cacheKey = `${scientificName.toLowerCase()}-${sinceYear}-${limit}`;
+  const cached = literatureCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    return NextResponse.json({ ...cached.data, cached: true });
+  }
+
   try {
     // Fetch both counts in parallel
     const [newPapers, papersAtAssessment] = await Promise.all([
@@ -160,13 +171,18 @@ export async function GET(request: NextRequest) {
       getOpenAlexCountUpToYear(scientificName, sinceYear),
     ]);
 
-    return NextResponse.json({
+    const result = {
       scientificName,
       assessmentYear: sinceYear,
       totalPapersSinceAssessment: newPapers.count,
       papersAtAssessment,
       topPapers: newPapers.results,
-    });
+    };
+
+    // Cache the result
+    literatureCache.set(cacheKey, { data: result, timestamp: Date.now() });
+
+    return NextResponse.json(result);
   } catch (error) {
     console.error("Literature search error:", error);
     return NextResponse.json(

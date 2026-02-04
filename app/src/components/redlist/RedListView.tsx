@@ -3,16 +3,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-  LabelList,
-} from "recharts";
 import TaxaSummary from "./TaxaSummary";
 import NewLiteratureSinceAssessment from "../LiteratureSearch";
 import TaxaIcon from "../TaxaIcon";
@@ -29,6 +19,12 @@ const OccurrenceMapRow = dynamic(
 const WorldMap = dynamic(
   () => import("../WorldMap"),
   { ssr: false }
+);
+
+// Dynamically import FilterBarChart to reduce initial bundle size (recharts is ~200KB)
+const FilterBarChart = dynamic(
+  () => import("./FilterBarChart"),
+  { ssr: false, loading: () => <div className="h-full animate-pulse bg-zinc-200 dark:bg-zinc-800 rounded" /> }
 );
 
 interface CategoryStats {
@@ -980,60 +976,22 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
             )}
           </div>
           <div className="flex-1 min-h-[150px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={assessments.yearsSinceAssessment.map(y => {
-                  const totalYears = assessments.yearsSinceAssessment.reduce((sum, item) => sum + item.count, 0);
-                  return {
-                    ...y,
-                    shortRange: y.range.replace(' years', 'y').replace('20+y', '>20y'),
-                    label: `${y.count.toLocaleString()} (${totalYears > 0 ? ((y.count / totalYears) * 100).toFixed(1) : 0}%)`
-                  };
-                })}
-                layout="vertical"
-                margin={{ top: 5, right: 85, left: 5, bottom: 5 }}
-                barCategoryGap={4}
-              >
-                <XAxis type="number" hide />
-                <YAxis
-                  type="category"
-                  dataKey="shortRange"
-                  tick={{ fontSize: 11, fill: "#a1a1aa" }}
-                  tickLine={false}
-                  axisLine={false}
-                  width={36}
-                />
-                <Tooltip
-                  formatter={(value: number) => [value, "Species"]}
-                  contentStyle={{
-                    backgroundColor: "#18181b",
-                    border: "1px solid #3f3f46",
-                    borderRadius: "8px",
-                  }}
-                  itemStyle={{ color: "#fff" }}
-                  labelStyle={{ color: "#a1a1aa" }}
-                />
-                <Bar
-                  dataKey="count"
-                  radius={[0, 4, 4, 0]}
-                  cursor="pointer"
-                  onClick={(data, _index, event) => handleYearClick(data, event)}
-                >
-                  {assessments.yearsSinceAssessment.map((entry, index) => (
-                    <Cell
-                      key={`year-cell-${index}`}
-                      fill="#3b82f6"
-                      opacity={selectedYearRanges.size > 0 && !selectedYearRanges.has(entry.range) ? 0.3 : 1}
-                    />
-                  ))}
-                  <LabelList
-                    dataKey="label"
-                    position="right"
-                    style={{ fontSize: 11, fill: "#a1a1aa" }}
-                  />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            <FilterBarChart
+              data={assessments.yearsSinceAssessment.map(y => {
+                const totalYears = assessments.yearsSinceAssessment.reduce((sum, item) => sum + item.count, 0);
+                return {
+                  ...y,
+                  shortRange: y.range.replace(' years', 'y').replace('20+y', '>20y'),
+                  label: `${y.count.toLocaleString()} (${totalYears > 0 ? ((y.count / totalYears) * 100).toFixed(1) : 0}%)`
+                };
+              })}
+              dataKey="shortRange"
+              selectedItems={selectedYearRanges}
+              onBarClick={handleYearClick}
+              barColor="#3b82f6"
+              yAxisWidth={36}
+              rightMargin={85}
+            />
           </div>
         </div>
 
@@ -1053,54 +1011,14 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
             )}
           </div>
           <div className="flex-1 min-h-[200px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={categoryDataWithPercent}
-                layout="vertical"
-                margin={{ top: 5, right: 75, left: 5, bottom: 5 }}
-                barCategoryGap={4}
-              >
-                <XAxis type="number" hide />
-                <YAxis
-                  type="category"
-                  dataKey="code"
-                  tick={{ fontSize: 11, fill: "#a1a1aa" }}
-                  tickLine={false}
-                  axisLine={false}
-                  width={26}
-                  interval={0}
-                />
-                <Tooltip
-                  formatter={(value: number) => [`${value} species`, "Count"]}
-                  contentStyle={{
-                    backgroundColor: "#18181b",
-                    border: "1px solid #3f3f46",
-                    borderRadius: "8px",
-                  }}
-                  itemStyle={{ color: "#fff" }}
-                  labelStyle={{ color: "#a1a1aa" }}
-                />
-                <Bar
-                  dataKey="count"
-                  radius={[0, 4, 4, 0]}
-                  cursor="pointer"
-                  onClick={(data, _index, event) => handleCategoryClick(data, event)}
-                >
-                  {categoryDataWithPercent.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={entry.color}
-                      opacity={selectedCategories.size > 0 && !selectedCategories.has(entry.code) ? 0.3 : 1}
-                    />
-                  ))}
-                  <LabelList
-                    dataKey="label"
-                    position="right"
-                    style={{ fontSize: 11, fill: "#a1a1aa" }}
-                  />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            <FilterBarChart
+              data={categoryDataWithPercent}
+              dataKey="code"
+              selectedItems={selectedCategories}
+              onBarClick={handleCategoryClick}
+              yAxisWidth={26}
+              rightMargin={75}
+            />
           </div>
         </div>
 
