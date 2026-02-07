@@ -108,21 +108,21 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
     <div
       key={id}
       onClick={() => onSelectTaxon(isSelected ? null : id)}
-      className={`px-4 py-3 cursor-pointer transition-colors ${
+      className={`px-3 md:px-4 py-2.5 md:py-3 cursor-pointer transition-colors ${
         isSelected
           ? "bg-zinc-100 dark:bg-zinc-800"
           : "hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
       }`}
     >
-      <div className="grid grid-cols-6 gap-4 items-center">
+      <div className="grid grid-cols-3 md:grid-cols-6 gap-2 md:gap-4 items-center">
         {/* Name with icon */}
         <div className="flex items-center gap-2">
           <TaxaIcon taxonId={id} size={22} className="flex-shrink-0" style={{ color }} />
-          <span className="font-medium text-zinc-900 dark:text-zinc-100">{name}</span>
+          <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{name}</span>
         </div>
 
-        {/* Est. Described */}
-        <div className="text-right">
+        {/* Est. Described - hidden on mobile */}
+        <div className="hidden md:block text-right">
           <span className="text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
             {estimatedDescribed.toLocaleString()}
           </span>
@@ -130,7 +130,7 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
 
         {/* Assessed */}
         <div className="text-right">
-          <span className="text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+          <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
             {assessed.toLocaleString()}
           </span>
         </div>
@@ -138,22 +138,22 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
         {/* % Assessed */}
         <div className="text-right">
           <span
-            className="text-base font-medium px-2 py-0.5 rounded tabular-nums"
+            className="text-sm md:text-base font-medium px-1.5 md:px-2 py-0.5 rounded tabular-nums"
             style={getAssessedStyle(percentAssessed)}
           >
             {percentAssessed.toFixed(1)}%
           </span>
         </div>
 
-        {/* Outdated */}
-        <div className="text-right">
+        {/* Outdated - hidden on mobile */}
+        <div className="hidden md:block text-right">
           <span className="text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
             {outdated.toLocaleString()}
           </span>
         </div>
 
-        {/* % Outdated */}
-        <div className="text-right">
+        {/* % Outdated - hidden on mobile */}
+        <div className="hidden md:block text-right">
           <span
             className="text-base font-medium px-2 py-0.5 rounded tabular-nums"
             style={getOutdatedStyle(percentOutdated)}
@@ -171,13 +171,12 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
     if (!taxon) return null;
 
     return (
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto">
-        <div className="min-w-[700px]">
+      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
         {/* Column headers */}
-        <div className="px-4 py-2 bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
-          <div className="grid grid-cols-6 gap-4 text-xs font-medium text-zinc-500 uppercase tracking-wider">
+        <div className="px-3 md:px-4 py-2 bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-2 md:gap-4 text-xs font-medium text-zinc-500 uppercase tracking-wider">
             <div>Taxon</div>
-            <div className="text-right flex items-center justify-end gap-1 overflow-visible">
+            <div className="hidden md:flex text-right items-center justify-end gap-1">
               Est. Described
               <span className="relative group">
                 <a
@@ -196,8 +195,8 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
             </div>
             <div className="text-right">Assessed</div>
             <div className="text-right">% Assessed</div>
-            <div className="text-right">Outdated (10+y)</div>
-            <div className="text-right">% Outdated</div>
+            <div className="hidden md:block text-right">Outdated (10+y)</div>
+            <div className="hidden md:block text-right">% Outdated</div>
           </div>
         </div>
 
@@ -212,19 +211,17 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
           taxon.percentOutdated,
           true
         )}
-        </div>
       </div>
     );
   }
 
   return (
-    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto">
-      <div className="min-w-[700px]">
+    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
       {/* Column headers */}
-      <div className="px-4 py-2 bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
-        <div className="grid grid-cols-6 gap-4 text-xs font-medium text-zinc-500 uppercase tracking-wider">
+      <div className="px-3 md:px-4 py-2 bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
+        <div className="grid grid-cols-3 md:grid-cols-6 gap-2 md:gap-4 text-xs font-medium text-zinc-500 uppercase tracking-wider">
           <div>Taxon</div>
-          <div className="text-right flex items-center justify-end gap-1 overflow-visible">
+          <div className="hidden md:flex text-right items-center justify-end gap-1">
               Est. Described
               <span className="relative group">
                 <a
@@ -243,8 +240,8 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
             </div>
           <div className="text-right">Assessed</div>
           <div className="text-right">% Assessed</div>
-          <div className="text-right">Outdated (10+y)</div>
-          <div className="text-right">% Outdated</div>
+          <div className="hidden md:block text-right">Outdated (10+y)</div>
+          <div className="hidden md:block text-right">% Outdated</div>
         </div>
       </div>
 
@@ -275,13 +272,13 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
                   if (!taxon.available) return;
                   onSelectTaxon(taxon.id);
                 }}
-                className={`px-4 py-3 transition-colors ${
+                className={`px-3 md:px-4 py-2.5 md:py-3 transition-colors ${
                   taxon.available
                     ? "cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
                     : "opacity-50 cursor-not-allowed"
                 }`}
               >
-                <div className="grid grid-cols-6 gap-4 items-center">
+                <div className="grid grid-cols-3 md:grid-cols-6 gap-2 md:gap-4 items-center">
                   {/* Taxon name with icon */}
                   <div className="flex items-center gap-2">
                     <TaxaIcon
@@ -290,13 +287,13 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
                       className="flex-shrink-0"
                       style={{ color: taxon.color }}
                     />
-                    <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                    <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">
                       {taxon.name}
                     </span>
                   </div>
 
-                  {/* Est. Described */}
-                  <div className="text-right">
+                  {/* Est. Described - hidden on mobile */}
+                  <div className="hidden md:block text-right">
                     <span className="text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
                       {taxon.estimatedDescribed.toLocaleString()}
                     </span>
@@ -304,7 +301,7 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
 
                   {/* Assessed */}
                   <div className="text-right">
-                    <span className="text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+                    <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
                       {taxon.available ? taxon.totalAssessed.toLocaleString() : "—"}
                     </span>
                   </div>
@@ -313,25 +310,25 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
                   <div className="text-right">
                     {taxon.available ? (
                       <span
-                        className="text-base font-medium px-2 py-0.5 rounded tabular-nums"
+                        className="text-sm md:text-base font-medium px-1.5 md:px-2 py-0.5 rounded tabular-nums"
                         style={getAssessedStyle(taxon.percentAssessed)}
                       >
                         {taxon.percentAssessed.toFixed(1)}%
                       </span>
                     ) : (
-                      <span className="text-base text-zinc-400">—</span>
+                      <span className="text-sm md:text-base text-zinc-400">—</span>
                     )}
                   </div>
 
-                  {/* Outdated */}
-                  <div className="text-right">
+                  {/* Outdated - hidden on mobile */}
+                  <div className="hidden md:block text-right">
                     <span className="text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
                       {taxon.available ? taxon.outdated.toLocaleString() : "—"}
                     </span>
                   </div>
 
-                  {/* % Outdated */}
-                  <div className="text-right">
+                  {/* % Outdated - hidden on mobile */}
+                  <div className="hidden md:block text-right">
                     {taxon.available ? (
                       <span
                         className="text-base font-medium px-2 py-0.5 rounded tabular-nums"
@@ -349,7 +346,6 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
           </div>
         </>
       )}
-      </div>
     </div>
   );
 }
