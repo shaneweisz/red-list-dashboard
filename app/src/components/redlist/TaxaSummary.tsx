@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { FaInfoCircle } from "react-icons/fa";
 import TaxaIcon from "@/components/TaxaIcon";
 
@@ -49,6 +49,24 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to show Assessed column on mobile (skip past Est. Described)
+  const autoScroll = useCallback((el: HTMLDivElement) => {
+    if (window.innerWidth < 768) {
+      // Find the Est. Described column header to know how wide it is
+      const firstDataTh = el.querySelector('thead th:nth-child(2)') as HTMLElement;
+      if (firstDataTh) {
+        el.scrollLeft = firstDataTh.offsetWidth;
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (scrollRef.current && taxa.length > 0) {
+      autoScroll(scrollRef.current);
+    }
+  }, [taxa, autoScroll]);
 
   useEffect(() => {
     async function fetchTaxa() {
@@ -95,6 +113,10 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
   // Check if "all" is selected or a specific taxon
   const isAllSelected = selectedTaxon === "all";
   const hasSpecificTaxon = selectedTaxon && selectedTaxon !== "all";
+
+  // Column order: Taxon (sticky) | Est. Described | Assessed | % Assessed | Outdated | % Outdated
+  // On mobile, auto-scrolled so Assessed is the first visible column after Taxon.
+  // Scroll left to see Est. Described, scroll right to see Outdated / % Outdated.
 
   // Render a data row
   const renderRow = (
@@ -222,7 +244,7 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
     if (!taxon) return null;
 
     return (
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto">
+      <div ref={scrollRef} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto">
         <table className="w-full">
           {renderHead()}
           <tbody>
@@ -244,7 +266,7 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
   }
 
   return (
-    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto">
+    <div ref={scrollRef} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto">
       <table className="w-full">
         {renderHead()}
         <tbody>

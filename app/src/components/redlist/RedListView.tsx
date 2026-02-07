@@ -1198,51 +1198,46 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
           <table className="w-full text-sm">
             <thead className="bg-zinc-50 dark:bg-zinc-800">
               <tr>
-                <th className="px-2 py-3 text-center text-xs font-medium text-zinc-500 uppercase tracking-wider w-10">
+                <th className="sticky left-0 z-10 bg-zinc-50 dark:bg-zinc-800 px-2 py-3 text-center text-xs font-medium text-zinc-500 uppercase tracking-wider w-10">
                   <svg className="w-4 h-4 mx-auto text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                   </svg>
                 </th>
-                <th className="hidden md:table-cell px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider w-14">
-                  Image
-                </th>
-                <th className="px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                <th className="sticky left-[40px] z-10 bg-zinc-50 dark:bg-zinc-800 px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
                   Species
                 </th>
                 <th
-                  className="px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
+                  className="px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
                   onClick={() => handleSort("category")}
                 >
                   <span className="flex items-center gap-1">
-                    <span className="hidden md:inline">Risk Category</span>
-                    <span className="md:hidden">Cat.</span>
+                    Risk Category
                     {sortField === "category" && (
                       <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
                     )}
                   </span>
                 </th>
                 <th
-                  className="hidden sm:table-cell px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
+                  className="px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
                   onClick={() => handleSort("year")}
                 >
                   <span className="flex items-center gap-1">
-                    <span className="hidden md:inline">Assessment Date</span>
-                    <span className="md:hidden">Date</span>
+                    Assessment Date
                     {sortField === "year" && (
                       <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
                     )}
                   </span>
                 </th>
-                <th className="hidden lg:table-cell px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
                   GBIF Records When Assessed
                 </th>
-                <th className="hidden lg:table-cell px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
                   New GBIF Records
                 </th>
-                <th className="hidden xl:table-cell px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
                   OpenAlex Papers When Assessed
                 </th>
-                <th className="hidden xl:table-cell px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
                   New OpenAlex Papers
                 </th>
               </tr>
@@ -1270,7 +1265,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                     onDrop={(e) => handleDrop(e, s.sis_taxon_id)}
                     onDragEnd={handleDragEnd}
                   >
-                    <td className="px-2 py-2 text-center">
+                    <td className={`sticky left-0 z-10 px-2 py-2 text-center ${selectedSpeciesKey === s.sis_taxon_id ? "bg-zinc-100 dark:bg-zinc-800" : "bg-white dark:bg-zinc-900"}`}>
                       <div className="flex items-center justify-center gap-1">
                         {isPinned && showOnlyStarred && (
                           <span className="cursor-grab text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300" title="Drag to reorder">
@@ -1293,55 +1288,58 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                         </button>
                       </div>
                     </td>
-                    <td className="hidden md:table-cell px-4 py-2">
-                      {details === undefined ? (
-                        <div className="w-10 h-10 bg-zinc-200 dark:bg-zinc-700 rounded animate-pulse" />
-                      ) : details?.inatDefaultImage?.squareUrl ? (
-                        <img
-                          src={details.inatDefaultImage.squareUrl}
-                          alt=""
-                          className="w-10 h-10 object-cover rounded cursor-pointer hover:ring-2 hover:ring-red-400"
-                          onMouseEnter={(e) => {
-                            const img = e.currentTarget;
-                            const rect = img.getBoundingClientRect();
-                            const preview = document.getElementById('image-preview');
-                            if (preview) {
-                              (preview as HTMLImageElement).src = details.inatDefaultImage?.mediumUrl || details.inatDefaultImage?.squareUrl || '';
-                              preview.style.display = 'block';
-                              preview.style.top = `${rect.top - 192 - 8}px`; // 192px = w-48, 8px gap
-                              preview.style.left = `${rect.left}px`;
-                            }
-                          }}
-                          onMouseLeave={() => {
-                            const preview = document.getElementById('image-preview');
-                            if (preview) {
-                              preview.style.display = 'none';
-                            }
-                          }}
-                        />
-                      ) : (
-                        <div className="w-10 h-10 bg-zinc-100 dark:bg-zinc-800 rounded flex items-center justify-center text-zinc-400">
-                          <TaxaIcon taxonId={s.taxon_id || selectedTaxon || "all"} size={20} />
+                    <td className={`sticky left-[40px] z-10 px-2 md:px-4 py-2 ${selectedSpeciesKey === s.sis_taxon_id ? "bg-zinc-100 dark:bg-zinc-800" : "bg-white dark:bg-zinc-900"}`}>
+                      <div className="flex items-center gap-2">
+                        {/* iNat profile pic */}
+                        {details === undefined ? (
+                          <div className="w-8 h-8 md:w-10 md:h-10 bg-zinc-200 dark:bg-zinc-700 rounded animate-pulse flex-shrink-0" />
+                        ) : details?.inatDefaultImage?.squareUrl ? (
+                          <img
+                            src={details.inatDefaultImage.squareUrl}
+                            alt=""
+                            className="w-8 h-8 md:w-10 md:h-10 object-cover rounded flex-shrink-0 cursor-pointer hover:ring-2 hover:ring-red-400"
+                            onMouseEnter={(e) => {
+                              const img = e.currentTarget;
+                              const rect = img.getBoundingClientRect();
+                              const preview = document.getElementById('image-preview');
+                              if (preview) {
+                                (preview as HTMLImageElement).src = details.inatDefaultImage?.mediumUrl || details.inatDefaultImage?.squareUrl || '';
+                                preview.style.display = 'block';
+                                preview.style.top = `${rect.top - 192 - 8}px`;
+                                preview.style.left = `${rect.left}px`;
+                              }
+                            }}
+                            onMouseLeave={() => {
+                              const preview = document.getElementById('image-preview');
+                              if (preview) {
+                                preview.style.display = 'none';
+                              }
+                            }}
+                          />
+                        ) : (
+                          <div className="w-8 h-8 md:w-10 md:h-10 bg-zinc-100 dark:bg-zinc-800 rounded flex items-center justify-center text-zinc-400 flex-shrink-0">
+                            <TaxaIcon taxonId={s.taxon_id || selectedTaxon || "all"} size={18} />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <a
+                            href={s.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="italic font-medium text-zinc-900 dark:text-zinc-100 hover:text-red-600 dark:hover:text-red-400 hover:underline text-xs md:text-sm"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {s.scientific_name}
+                          </a>
+                          {details?.commonName && (
+                            <div className="text-zinc-500 dark:text-zinc-400 text-xs truncate max-w-[140px] md:max-w-none">
+                              {details.commonName}
+                            </div>
+                          )}
                         </div>
-                      )}
+                      </div>
                     </td>
-                    <td className="px-2 md:px-4 py-3">
-                      <a
-                        href={s.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="italic font-medium text-zinc-900 dark:text-zinc-100 hover:text-red-600 dark:hover:text-red-400 hover:underline text-xs md:text-sm"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {s.scientific_name}
-                      </a>
-                      {details?.commonName && (
-                        <span className="text-zinc-500 dark:text-zinc-400 text-xs md:text-sm ml-1 md:ml-2">
-                          ({details.commonName})
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-2 md:px-4 py-3">
+                    <td className="px-2 md:px-4 py-3 whitespace-nowrap">
                       {details?.criteria && !["DD", "LC", "NT", "EX", "EW"].includes(s.category) ? (
                         <HoverTooltip text={`${details.criteria}${explainCriteria(details.criteria)}`}>
                           <span
@@ -1367,7 +1365,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                         </span>
                       )}
                     </td>
-                    <td className="hidden sm:table-cell px-2 md:px-4 py-3 text-zinc-600 dark:text-zinc-400">
+                    <td className="px-2 md:px-4 py-3 text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
                       <HoverTooltip
                         text={`Published: ${s.year_published}${s.previous_assessments.length > 0 ? ` | Previous: ${s.previous_assessments.slice().reverse().map(pa => `${pa.year} (${pa.category})`).join(", ")}` : ""}`}
                       >
@@ -1391,7 +1389,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                         <span className="ml-1 text-xs text-amber-600">({yearsSinceAssessment}y ago)</span>
                       )}
                     </td>
-                    <td className="hidden lg:table-cell px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums">
+                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
                       {details === undefined ? (
                         <span className="inline-block animate-spin h-4 w-4 border-2 border-zinc-400 border-t-transparent rounded-full" />
                       ) : details?.gbifOccurrences != null && details?.gbifUrl ? (() => {
@@ -1503,7 +1501,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                         </HoverTooltip>
                       ) : "—"}
                     </td>
-                    <td className="hidden lg:table-cell px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums">
+                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
                       {details === undefined ? (
                         <span className="inline-block animate-spin h-4 w-4 border-2 border-zinc-400 border-t-transparent rounded-full" />
                       ) : details?.gbifOccurrencesSinceAssessment != null && details?.gbifUrl && assessmentYear ? (() => {
@@ -1606,7 +1604,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                       ) : "—"}
                     </td>
                     {/* Papers When Assessed */}
-                    <td className="hidden xl:table-cell px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums">
+                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
                       {details === undefined ? (
                         <span className="inline-block animate-spin h-4 w-4 border-2 border-zinc-400 border-t-transparent rounded-full" />
                       ) : details?.papersAtAssessment != null && assessmentYear ? (
@@ -1623,7 +1621,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                       ) : "—"}
                     </td>
                     {/* New Papers */}
-                    <td className="hidden xl:table-cell px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums">
+                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
                       {details === undefined ? (
                         <span className="inline-block animate-spin h-4 w-4 border-2 border-zinc-400 border-t-transparent rounded-full" />
                       ) : details?.openAlexPaperCount != null && assessmentYear ? (
@@ -1647,13 +1645,13 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                           speciesKey={gbifSpeciesKey}
                           speciesName={s.scientific_name.toLowerCase()}
                           mounted={mounted}
-                          colSpan={9}
+                          colSpan={8}
                           assessmentYear={assessmentYear}
                         />
                       )}
                       {assessmentYear && (
                         <tr>
-                          <td colSpan={9} className="p-4 bg-zinc-50 dark:bg-zinc-800/30">
+                          <td colSpan={8} className="p-4 bg-zinc-50 dark:bg-zinc-800/30">
                             <NewLiteratureSinceAssessment
                               scientificName={s.scientific_name}
                               assessmentYear={assessmentYear}
@@ -1668,7 +1666,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
               })}
               {filteredSpecies.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-zinc-500">
+                  <td colSpan={8} className="px-4 py-8 text-center text-zinc-500">
                     No species found
                   </td>
                 </tr>
