@@ -156,7 +156,7 @@ function InatPhotoWithPreview({ obs, idx }: { obs: InatObservation; idx: number 
           <img
             src={obs.imageUrl}
             alt={`iNaturalist observation ${idx + 1}`}
-            className={`w-full h-full object-cover rounded ring-1 ring-zinc-200 dark:ring-zinc-700 transition-all ${isHovered ? 'ring-2 ring-blue-500' : ''}`}
+            className={`w-full h-full object-contain rounded ring-1 ring-zinc-200 dark:ring-zinc-700 transition-all bg-zinc-50 dark:bg-zinc-800 ${isHovered ? 'ring-2 ring-blue-500' : ''}`}
           />
         ) : (
           <div className="w-full h-full bg-zinc-100 dark:bg-zinc-800 rounded flex items-center justify-center text-zinc-400 text-xs">
