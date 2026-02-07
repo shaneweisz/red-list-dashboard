@@ -27,26 +27,26 @@ export default function RedListPage() {
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 p-4 md:p-8">
       <main className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="mb-6 flex items-start justify-between">
+        <div className="mb-4 md:mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
           <div>
-            <h1 className="text-3xl font-bold text-zinc-900 dark:text-zinc-100 mb-2">
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-zinc-900 dark:text-zinc-100 mb-1 md:mb-2">
               IUCN Red List Assessments Dashboard
             </h1>
-            <p className="text-zinc-600 dark:text-zinc-400">
+            <p className="text-sm md:text-base text-zinc-600 dark:text-zinc-400">
               Click a taxon row for details, click again to return
             </p>
           </div>
           <div className="flex items-center gap-2">
             {/* Tab Navigation */}
             <div className="flex gap-1 bg-zinc-100 dark:bg-zinc-800 rounded-lg p-1">
-              <div className="px-4 py-1.5 rounded-md text-sm font-medium bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm">
-                Red List Dashboard
+              <div className="px-3 md:px-4 py-1.5 rounded-md text-xs md:text-sm font-medium bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm">
+                Red List
               </div>
               <Link
                 href="/gbif"
-                className="px-4 py-1.5 rounded-md text-sm font-medium transition-colors text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200"
+                className="px-3 md:px-4 py-1.5 rounded-md text-xs md:text-sm font-medium transition-colors text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200"
               >
-                GBIF Dashboard
+                GBIF
               </Link>
             </div>
             <ThemeToggle />

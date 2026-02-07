@@ -33,3 +33,14 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Sticky column shadow for scrollable tables */
+td.sticky,
+th.sticky {
+  box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.08);
+}
+
+.dark td.sticky,
+.dark th.sticky {
+  box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.3);
+}

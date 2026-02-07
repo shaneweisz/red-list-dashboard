@@ -96,27 +96,60 @@ interface OccurrenceMapRowProps {
   assessmentYear?: number | null;
 }
 
-// iNat photo thumbnail with hover preview using portal
+// Convert iNaturalist photo URLs to a smaller size for thumbnails
+// e.g. .../photos/123/original.jpeg -> .../photos/123/small.jpeg (240px)
+function getThumbUrl(url: string): string {
+  return url.replace(/\/original\./, '/small.');
+}
+
+// iNat photo thumbnail with hover preview using portal (desktop only)
 function InatPhotoWithPreview({ obs, idx }: { obs: InatObservation; idx: number }) {
   const [isHovered, setIsHovered] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
   const thumbRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (isHovered && thumbRef.current) {
+    // Detect touch devices to disable hover preview
+    setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
+  }, []);
+
+  useEffect(() => {
+    if (isHovered && thumbRef.current && !isTouchDevice) {
       const rect = thumbRef.current.getBoundingClientRect();
-      setPosition({
-        top: rect.top,
-        left: rect.right - 4,
-      });
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const previewWidth = 208; // w-52 = 13rem = 208px
+      const previewHeight = 220; // approximate height
+
+      // Position to the right of the thumbnail by default
+      let left = rect.right + 4;
+      let top = rect.top;
+
+      // If preview would overflow right edge, position to the left
+      if (left + previewWidth > viewportWidth) {
+        left = rect.left - previewWidth - 4;
+      }
+
+      // If preview would overflow bottom, shift up
+      if (top + previewHeight > viewportHeight) {
+        top = viewportHeight - previewHeight - 8;
+      }
+
+      // Ensure it doesn't go above the viewport
+      if (top < 8) {
+        top = 8;
+      }
+
+      setPosition({ top, left });
     }
-  }, [isHovered]);
+  }, [isHovered, isTouchDevice]);
 
   return (
     <div
       ref={thumbRef}
       className="aspect-square relative"
-      onMouseEnter={() => setIsHovered(true)}
+      onMouseEnter={() => !isTouchDevice && setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       <a
@@ -127,7 +160,7 @@ function InatPhotoWithPreview({ obs, idx }: { obs: InatObservation; idx: number 
       >
         {obs.imageUrl ? (
           <img
-            src={obs.imageUrl}
+            src={getThumbUrl(obs.imageUrl)}
             alt={`iNaturalist observation ${idx + 1}`}
             className={`w-full h-full object-cover rounded ring-1 ring-zinc-200 dark:ring-zinc-700 transition-all ${isHovered ? 'ring-2 ring-blue-500' : ''}`}
           />
@@ -137,10 +170,10 @@ function InatPhotoWithPreview({ obs, idx }: { obs: InatObservation; idx: number 
           </div>
         )}
       </a>
-      {isHovered && obs.imageUrl && typeof document !== 'undefined' && createPortal(
+      {!isTouchDevice && isHovered && obs.imageUrl && typeof document !== 'undefined' && createPortal(
         <div
           className="fixed z-[99999]"
-          style={{ top: position.top, left: position.left, transform: 'translateY(-100%) translateY(8px)' }}
+          style={{ top: position.top, left: position.left }}
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
         >
@@ -283,14 +316,17 @@ export default function OccurrenceMapRow({
   const oldRecords = filteredOccurrences.filter((o) => !isPreserved(o.properties.basisOfRecord) && !isNewRecord(o.properties.eventDate));
 
   return (
-    <tr className="overflow-visible">
-      <td colSpan={colSpan} className="p-0 overflow-visible">
-        <div className="bg-zinc-50 dark:bg-zinc-800/50 border-t border-zinc-200 dark:border-zinc-700 overflow-visible">
-          <div className="p-2 overflow-visible">
+    <tr>
+      <td colSpan={colSpan} className="p-0">
+        <div
+          className="bg-zinc-50 dark:bg-zinc-800/50 border-t border-zinc-200 dark:border-zinc-700"
+          style={{ maxWidth: 'calc(100vw - 2rem)', transform: 'translateX(var(--scroll-left, 0px))' }}
+        >
+          <div className="p-2">
             {/* Main layout: 1/3 left (breakdown + photos), 2/3 right (map) */}
-            <div className="flex flex-col lg:flex-row gap-3 overflow-visible">
+            <div className="flex flex-col lg:flex-row gap-3">
               {/* Left column: Breakdown + iNat photos (1/3 width) */}
-              <div className="lg:w-1/3 flex flex-col gap-3 overflow-visible relative z-10">
+              <div className="lg:w-1/3 flex flex-col gap-3 relative z-10">
                 {/* Observation type breakdown */}
                 <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700">
                   <div className="flex items-center justify-between mb-2">
@@ -371,12 +407,12 @@ export default function OccurrenceMapRow({
 
                 {/* iNaturalist photos grid */}
                 {breakdown?.recentInatObservations && breakdown.recentInatObservations.length > 0 && (
-                  <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 flex-1 overflow-visible">
+                  <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 flex-1 overflow-hidden">
                     <div className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2 flex items-center gap-2">
                       <span>iNaturalist</span>
                       <span className="text-zinc-400 text-xs">({breakdown.inatTotalCount?.toLocaleString() || breakdown.iNaturalist.toLocaleString()} total)</span>
                     </div>
-                    <div className="grid grid-cols-5 gap-1 overflow-visible">
+                    <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-1.5 sm:gap-1">
                       {breakdown.recentInatObservations.map((obs, idx) => (
                         <InatPhotoWithPreview key={idx} obs={obs} idx={idx} />
                       ))}

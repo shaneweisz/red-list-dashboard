@@ -1037,18 +1037,18 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
       {/* Search and Species Table */}
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
         {/* Search bar */}
-        <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 rounded-t-xl">
-          <div className="flex items-center gap-4">
-            <div className="relative flex-1 max-w-md">
+        <div className="p-3 md:p-4 border-b border-zinc-200 dark:border-zinc-800 rounded-t-xl">
+          <div className="flex flex-wrap items-center gap-2 md:gap-4">
+            <div className="relative flex-1 min-w-[140px] max-w-md">
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search by scientific name..."
-                className="w-full px-4 py-2 pl-10 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm"
+                placeholder="Search species..."
+                className="w-full px-3 md:px-4 py-2 pl-9 md:pl-10 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm"
               />
               <svg
-                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400"
+                className="absolute left-2.5 md:left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -1065,7 +1065,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                     setSelectedCountries(prev => new Set([...prev, e.target.value]));
                   }
                 }}
-                className="px-3 py-2 pr-8 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 appearance-none cursor-pointer"
+                className="px-2 md:px-3 py-2 pr-7 md:pr-8 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 text-xs md:text-sm focus:outline-none focus:ring-2 focus:ring-red-500 appearance-none cursor-pointer"
               >
                 <option value="">{selectedCountries.size > 0 ? `${selectedCountries.size} selected` : "All countries"}</option>
                 {uniqueCountries.filter(code => !selectedCountries.has(code)).map(code => (
@@ -1087,7 +1087,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
               <>
                 <button
                   onClick={() => setShowOnlyStarred(!showOnlyStarred)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                  className={`px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1 md:gap-1.5 ${
                     showOnlyStarred
                       ? "bg-amber-500 text-white"
                       : "bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700"
@@ -1096,7 +1096,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                   <svg className="w-4 h-4" fill={showOnlyStarred ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                   </svg>
-                  Starred ({pinnedSpecies.length})
+                  <span className="hidden sm:inline">Starred</span> ({pinnedSpecies.length})
                 </button>
                 <button
                   onClick={() => {
@@ -1152,7 +1152,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
               <button
                 key={cat}
                 onClick={() => setSelectedCategories(prev => { const next = new Set(prev); next.delete(cat); return next; })}
-                className="px-3 py-1 text-sm rounded-full flex items-center gap-1 hover:opacity-80"
+                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full flex items-center gap-1 hover:opacity-80"
                 style={{ backgroundColor: CATEGORY_COLORS[cat] + "20", color: CATEGORY_COLORS[cat] }}
               >
                 {cat}
@@ -1163,7 +1163,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
               <button
                 key={range}
                 onClick={() => setSelectedYearRanges(prev => { const next = new Set(prev); next.delete(range); return next; })}
-                className="px-3 py-1 text-sm rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 flex items-center gap-1 hover:opacity-80"
+                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 flex items-center gap-1 hover:opacity-80"
               >
                 {range}
                 <span className="text-xs">×</span>
@@ -1173,7 +1173,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
               <button
                 key={code}
                 onClick={() => setSelectedCountries(prev => { const next = new Set(prev); next.delete(code); return next; })}
-                className="px-3 py-1 text-sm rounded-full bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 flex items-center gap-1 hover:opacity-80"
+                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 flex items-center gap-1 hover:opacity-80"
               >
                 {getCountryName(code)}
                 <span className="text-xs">×</span>
@@ -1187,61 +1187,63 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                 Clear all
               </button>
             )}
-            <span className="text-sm text-zinc-500">
+            <span className="text-xs md:text-sm text-zinc-500">
               {filteredSpecies.length} species
             </span>
           </div>
         </div>
 
         {/* Species table */}
-        <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-x-auto">
-          <table className="w-full min-w-[900px] text-sm">
+        <div
+          className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-x-auto"
+          onScroll={(e) => {
+            e.currentTarget.style.setProperty('--scroll-left', `${e.currentTarget.scrollLeft}px`);
+          }}
+        >
+          <table className="w-full text-sm">
             <thead className="bg-zinc-50 dark:bg-zinc-800">
               <tr>
-                <th className="px-2 py-3 text-center text-xs font-medium text-zinc-500 uppercase tracking-wider w-10">
+                <th className="sticky left-0 z-10 bg-zinc-50 dark:bg-zinc-800 px-2 py-3 text-center text-xs font-medium text-zinc-500 uppercase tracking-wider w-10">
                   <svg className="w-4 h-4 mx-auto text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                   </svg>
                 </th>
-                <th className="hidden md:table-cell px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider w-14">
-                  Image
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                <th className="sticky left-[40px] z-10 bg-zinc-50 dark:bg-zinc-800 px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
                   Species
                 </th>
                 <th
-                  className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
+                  className="px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
                   onClick={() => handleSort("category")}
                 >
                   <span className="flex items-center gap-1">
-                    Risk Category
+                    Category
                     {sortField === "category" && (
                       <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
                     )}
                   </span>
                 </th>
                 <th
-                  className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
+                  className="px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
                   onClick={() => handleSort("year")}
                 >
                   <span className="flex items-center gap-1">
-                    Assessment Date
+                    Date
                     {sortField === "year" && (
                       <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
                     )}
                   </span>
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                  GBIF Records When Assessed
+                <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
+                  GBIF at Assess.
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                  New GBIF Records
+                <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
+                  New GBIF
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                  OpenAlex Papers When Assessed
+                <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
+                  Papers at Assess.
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                  New OpenAlex Papers
+                <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
+                  New Papers
                 </th>
               </tr>
             </thead>
@@ -1268,7 +1270,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                     onDrop={(e) => handleDrop(e, s.sis_taxon_id)}
                     onDragEnd={handleDragEnd}
                   >
-                    <td className="px-2 py-2 text-center">
+                    <td className={`sticky left-0 z-10 px-2 py-2 text-center ${selectedSpeciesKey === s.sis_taxon_id ? "bg-zinc-100 dark:bg-zinc-800" : "bg-white dark:bg-zinc-900"}`}>
                       <div className="flex items-center justify-center gap-1">
                         {isPinned && showOnlyStarred && (
                           <span className="cursor-grab text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300" title="Drag to reorder">
@@ -1291,55 +1293,58 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                         </button>
                       </div>
                     </td>
-                    <td className="hidden md:table-cell px-4 py-2">
-                      {details === undefined ? (
-                        <div className="w-10 h-10 bg-zinc-200 dark:bg-zinc-700 rounded animate-pulse" />
-                      ) : details?.inatDefaultImage?.squareUrl ? (
-                        <img
-                          src={details.inatDefaultImage.squareUrl}
-                          alt=""
-                          className="w-10 h-10 object-cover rounded cursor-pointer hover:ring-2 hover:ring-red-400"
-                          onMouseEnter={(e) => {
-                            const img = e.currentTarget;
-                            const rect = img.getBoundingClientRect();
-                            const preview = document.getElementById('image-preview');
-                            if (preview) {
-                              (preview as HTMLImageElement).src = details.inatDefaultImage?.mediumUrl || details.inatDefaultImage?.squareUrl || '';
-                              preview.style.display = 'block';
-                              preview.style.top = `${rect.top - 192 - 8}px`; // 192px = w-48, 8px gap
-                              preview.style.left = `${rect.left}px`;
-                            }
-                          }}
-                          onMouseLeave={() => {
-                            const preview = document.getElementById('image-preview');
-                            if (preview) {
-                              preview.style.display = 'none';
-                            }
-                          }}
-                        />
-                      ) : (
-                        <div className="w-10 h-10 bg-zinc-100 dark:bg-zinc-800 rounded flex items-center justify-center text-zinc-400">
-                          <TaxaIcon taxonId={s.taxon_id || selectedTaxon || "all"} size={20} />
+                    <td className={`sticky left-[40px] z-10 px-2 md:px-4 py-2 ${selectedSpeciesKey === s.sis_taxon_id ? "bg-zinc-100 dark:bg-zinc-800" : "bg-white dark:bg-zinc-900"}`}>
+                      <div className="flex items-center gap-2">
+                        {/* iNat profile pic */}
+                        {details === undefined ? (
+                          <div className="w-8 h-8 md:w-10 md:h-10 bg-zinc-200 dark:bg-zinc-700 rounded animate-pulse flex-shrink-0" />
+                        ) : details?.inatDefaultImage?.squareUrl ? (
+                          <img
+                            src={details.inatDefaultImage.squareUrl}
+                            alt=""
+                            className="w-8 h-8 md:w-10 md:h-10 object-cover rounded flex-shrink-0 cursor-pointer hover:ring-2 hover:ring-red-400"
+                            onMouseEnter={(e) => {
+                              const img = e.currentTarget;
+                              const rect = img.getBoundingClientRect();
+                              const preview = document.getElementById('image-preview');
+                              if (preview) {
+                                (preview as HTMLImageElement).src = details.inatDefaultImage?.mediumUrl || details.inatDefaultImage?.squareUrl || '';
+                                preview.style.display = 'block';
+                                preview.style.top = `${rect.top - 192 - 8}px`;
+                                preview.style.left = `${rect.left}px`;
+                              }
+                            }}
+                            onMouseLeave={() => {
+                              const preview = document.getElementById('image-preview');
+                              if (preview) {
+                                preview.style.display = 'none';
+                              }
+                            }}
+                          />
+                        ) : (
+                          <div className="w-8 h-8 md:w-10 md:h-10 bg-zinc-100 dark:bg-zinc-800 rounded flex items-center justify-center text-zinc-400 flex-shrink-0">
+                            <TaxaIcon taxonId={s.taxon_id || selectedTaxon || "all"} size={18} />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <a
+                            href={s.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="italic font-medium text-zinc-900 dark:text-zinc-100 hover:text-red-600 dark:hover:text-red-400 hover:underline text-xs md:text-sm"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {s.scientific_name}
+                          </a>
+                          {details?.commonName && (
+                            <div className="text-zinc-500 dark:text-zinc-400 text-xs truncate max-w-[140px] md:max-w-none">
+                              {details.commonName}
+                            </div>
+                          )}
                         </div>
-                      )}
+                      </div>
                     </td>
-                    <td className="px-4 py-3">
-                      <a
-                        href={s.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="italic font-medium text-zinc-900 dark:text-zinc-100 hover:text-red-600 dark:hover:text-red-400 hover:underline"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {s.scientific_name}
-                      </a>
-                      {details?.commonName && (
-                        <span className="text-zinc-500 dark:text-zinc-400 text-sm ml-2">
-                          ({details.commonName})
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
+                    <td className="px-2 md:px-4 py-3 whitespace-nowrap">
                       {details?.criteria && !["DD", "LC", "NT", "EX", "EW"].includes(s.category) ? (
                         <HoverTooltip text={`${details.criteria}${explainCriteria(details.criteria)}`}>
                           <span
@@ -1365,7 +1370,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
+                    <td className="px-2 md:px-4 py-3 text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
                       <HoverTooltip
                         text={`Published: ${s.year_published}${s.previous_assessments.length > 0 ? ` | Previous: ${s.previous_assessments.slice().reverse().map(pa => `${pa.year} (${pa.category})`).join(", ")}` : ""}`}
                       >
@@ -1389,7 +1394,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                         <span className="ml-1 text-xs text-amber-600">({yearsSinceAssessment}y ago)</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums">
+                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
                       {details === undefined ? (
                         <span className="inline-block animate-spin h-4 w-4 border-2 border-zinc-400 border-t-transparent rounded-full" />
                       ) : details?.gbifOccurrences != null && details?.gbifUrl ? (() => {
@@ -1501,7 +1506,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                         </HoverTooltip>
                       ) : "—"}
                     </td>
-                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums">
+                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
                       {details === undefined ? (
                         <span className="inline-block animate-spin h-4 w-4 border-2 border-zinc-400 border-t-transparent rounded-full" />
                       ) : details?.gbifOccurrencesSinceAssessment != null && details?.gbifUrl && assessmentYear ? (() => {
@@ -1604,7 +1609,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                       ) : "—"}
                     </td>
                     {/* Papers When Assessed */}
-                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums">
+                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
                       {details === undefined ? (
                         <span className="inline-block animate-spin h-4 w-4 border-2 border-zinc-400 border-t-transparent rounded-full" />
                       ) : details?.papersAtAssessment != null && assessmentYear ? (
@@ -1621,7 +1626,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                       ) : "—"}
                     </td>
                     {/* New Papers */}
-                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums">
+                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
                       {details === undefined ? (
                         <span className="inline-block animate-spin h-4 w-4 border-2 border-zinc-400 border-t-transparent rounded-full" />
                       ) : details?.openAlexPaperCount != null && assessmentYear ? (
@@ -1645,17 +1650,19 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                           speciesKey={gbifSpeciesKey}
                           speciesName={s.scientific_name.toLowerCase()}
                           mounted={mounted}
-                          colSpan={9}
+                          colSpan={8}
                           assessmentYear={assessmentYear}
                         />
                       )}
                       {assessmentYear && (
                         <tr>
-                          <td colSpan={9} className="p-4 bg-zinc-50 dark:bg-zinc-800/30">
+                          <td colSpan={8} className="p-0 bg-zinc-50 dark:bg-zinc-800/30">
+                            <div className="p-4" style={{ maxWidth: 'calc(100vw - 2rem)', transform: 'translateX(var(--scroll-left, 0px))' }}>
                             <NewLiteratureSinceAssessment
                               scientificName={s.scientific_name}
                               assessmentYear={assessmentYear}
                             />
+                            </div>
                           </td>
                         </tr>
                       )}
@@ -1666,7 +1673,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
               })}
               {filteredSpecies.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-zinc-500">
+                  <td colSpan={8} className="px-4 py-8 text-center text-zinc-500">
                     No species found
                   </td>
                 </tr>
@@ -1677,9 +1684,9 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-zinc-200 dark:border-zinc-800">
-            <div className="text-sm text-zinc-500">
-              Showing {(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, filteredSpecies.length)} of {filteredSpecies.length}
+          <div className="flex flex-col sm:flex-row items-center justify-between px-3 md:px-4 py-3 border-t border-zinc-200 dark:border-zinc-800 gap-2">
+            <div className="text-xs md:text-sm text-zinc-500">
+              {(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, filteredSpecies.length)} of {filteredSpecies.length}
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -1687,10 +1694,10 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                 disabled={currentPage === 1}
                 className="px-3 py-1 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-zinc-50 dark:hover:bg-zinc-800"
               >
-                Previous
+                Prev
               </button>
-              <span className="text-sm text-zinc-600 dark:text-zinc-400">
-                Page {currentPage} of {totalPages}
+              <span className="text-xs md:text-sm text-zinc-600 dark:text-zinc-400">
+                {currentPage} / {totalPages}
               </span>
               <button
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
