@@ -1211,7 +1211,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                   onClick={() => handleSort("category")}
                 >
                   <span className="flex items-center gap-1">
-                    Risk Category
+                    Category
                     {sortField === "category" && (
                       <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
                     )}
@@ -1222,23 +1222,23 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                   onClick={() => handleSort("year")}
                 >
                   <span className="flex items-center gap-1">
-                    Assessment Date
+                    Date
                     {sortField === "year" && (
                       <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
                     )}
                   </span>
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
-                  GBIF Records When Assessed
+                <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
+                  GBIF at Assess.
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
-                  New GBIF Records
+                <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
+                  New GBIF
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
-                  OpenAlex Papers When Assessed
+                <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
+                  Papers at Assess.
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
-                  New OpenAlex Papers
+                <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
+                  New Papers
                 </th>
               </tr>
             </thead>
