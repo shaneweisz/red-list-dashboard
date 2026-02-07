@@ -25,6 +25,10 @@ const LocateControl = dynamic(
   () => import("./LocateControl"),
   { ssr: false }
 );
+const FitBounds = dynamic(
+  () => import("./FitBounds"),
+  { ssr: false }
+);
 
 interface OccurrenceFeature {
   type: "Feature";
@@ -237,6 +241,8 @@ export default function OccurrenceMapRow({
 
   // Total occurrences count (from API metadata)
   const [totalOccurrences, setTotalOccurrences] = useState<number | null>(null);
+  // Bounding box from API: [minLon, minLat, maxLon, maxLat]
+  const [bbox, setBbox] = useState<[number, number, number, number] | null>(null);
 
   // Fetch occurrences immediately (limited sample for performance)
   useEffect(() => {
@@ -253,6 +259,7 @@ export default function OccurrenceMapRow({
       .then((data) => {
         setOccurrences(data.features || []);
         setTotalOccurrences(data.metadata?.total ?? null);
+        setBbox(data.metadata?.bbox ?? null);
       })
       .catch(console.error)
       .finally(() => setLoadingOccurrences(false));
@@ -488,6 +495,7 @@ export default function OccurrenceMapRow({
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   />
                   <LocateControl />
+                  {bbox && <FitBounds bbox={bbox} />}
                   {/* Render candidates as heatmap (sorted low-to-high so high prob on top) */}
                   {showCandidates &&
                     sortedCandidates.map((feature, idx) => {
