@@ -1651,7 +1651,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                       )}
                       {assessmentYear && (
                         <tr>
-                          <td colSpan={8} className="p-4 bg-zinc-50 dark:bg-zinc-800/30">
+                          <td colSpan={8} className="p-4 bg-zinc-50 dark:bg-zinc-800/30 sticky left-0" style={{ maxWidth: 'calc(100vw - 2rem)' }}>
                             <NewLiteratureSinceAssessment
                               scientificName={s.scientific_name}
                               assessmentYear={assessmentYear}
