@@ -196,7 +196,7 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
       <div className="flex items-center justify-between mb-0">
         <div>
           <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-            Filter by Country <span className="font-normal text-[10px] text-zinc-400">(cmd/ctrl+click to multi-select)</span>
+            Click to Filter by Country <span className="font-normal text-[10px] text-zinc-400">(cmd/ctrl+click to multi-select)</span>
           </h2>
           {selectedCount > 0 && (
             <p className="text-xs text-zinc-500">
