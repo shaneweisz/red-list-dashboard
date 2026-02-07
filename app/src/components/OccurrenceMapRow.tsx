@@ -317,8 +317,11 @@ export default function OccurrenceMapRow({
 
   return (
     <tr>
-      <td colSpan={colSpan} className="p-0 sticky left-0">
-        <div className="bg-zinc-50 dark:bg-zinc-800/50 border-t border-zinc-200 dark:border-zinc-700" style={{ maxWidth: 'calc(100vw - 2rem)' }}>
+      <td colSpan={colSpan} className="p-0">
+        <div
+          className="bg-zinc-50 dark:bg-zinc-800/50 border-t border-zinc-200 dark:border-zinc-700"
+          style={{ maxWidth: 'calc(100vw - 2rem)', transform: 'translateX(var(--scroll-left, 0px))' }}
+        >
           <div className="p-2">
             {/* Main layout: 1/3 left (breakdown + photos), 2/3 right (map) */}
             <div className="flex flex-col lg:flex-row gap-3">

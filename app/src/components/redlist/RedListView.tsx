@@ -1194,7 +1194,12 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
         </div>
 
         {/* Species table */}
-        <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-x-auto">
+        <div
+          className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-x-auto"
+          onScroll={(e) => {
+            e.currentTarget.style.setProperty('--scroll-left', `${e.currentTarget.scrollLeft}px`);
+          }}
+        >
           <table className="w-full text-sm">
             <thead className="bg-zinc-50 dark:bg-zinc-800">
               <tr>
@@ -1651,11 +1656,13 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                       )}
                       {assessmentYear && (
                         <tr>
-                          <td colSpan={8} className="p-4 bg-zinc-50 dark:bg-zinc-800/30 sticky left-0" style={{ maxWidth: 'calc(100vw - 2rem)' }}>
+                          <td colSpan={8} className="p-0 bg-zinc-50 dark:bg-zinc-800/30">
+                            <div className="p-4" style={{ maxWidth: 'calc(100vw - 2rem)', transform: 'translateX(var(--scroll-left, 0px))' }}>
                             <NewLiteratureSinceAssessment
                               scientificName={s.scientific_name}
                               assessmentYear={assessmentYear}
                             />
+                            </div>
                           </td>
                         </tr>
                       )}
