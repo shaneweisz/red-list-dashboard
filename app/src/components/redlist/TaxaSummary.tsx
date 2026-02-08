@@ -38,24 +38,8 @@ const getAssessedBarColor = (percent: number) =>
 const getOutdatedBarColor = (percent: number) =>
   percent < 10 ? "#22c55e" : percent <= 50 ? "#eab308" : "#ef4444";
 
-// Text color classes with dark mode support
-const getAssessedTextClasses = (percent: number) =>
-  percent >= 50
-    ? "text-green-600 dark:text-green-400"
-    : percent >= 20
-    ? "text-yellow-600 dark:text-yellow-400"
-    : "text-red-600 dark:text-red-400";
-
-const getOutdatedTextClasses = (percent: number) =>
-  percent < 10
-    ? "text-green-600 dark:text-green-400"
-    : percent <= 50
-    ? "text-yellow-600 dark:text-yellow-400"
-    : "text-red-600 dark:text-red-400";
-
-// Neutral colors for the All Species summary row
+// Neutral color for the All Species summary row
 const NEUTRAL_BAR_COLOR = "#a1a1aa"; // zinc-400
-const NEUTRAL_TEXT_CLASSES = "text-zinc-600 dark:text-zinc-400";
 
 // Sticky cell classes for the pinned taxon column
 const stickyClasses = "sticky left-0 z-10";
@@ -113,13 +97,13 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
   const isAllSelected = selectedTaxon === "all";
   const hasSpecificTaxon = selectedTaxon && selectedTaxon !== "all";
 
-  // Render a bar + percentage + count inside a table cell
+  // Render a bar + percentage inside a table cell
+  // Count labels shown on hover only to reduce clutter
   const renderBarCell = (
     percent: number,
     numerator: number,
     denominator: number,
     barColor: string,
-    textClasses: string,
     available: boolean,
     visibleOn: MobileColumn
   ) => {
@@ -130,16 +114,16 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
 
     if (!available) {
       return (
-        <td className={`px-3 md:px-4 py-2.5 md:py-3 ${mobileVisibility}`}>
+        <td className={`px-3 md:px-4 py-3.5 md:py-4 ${mobileVisibility}`}>
           <span className="text-sm text-zinc-400">—</span>
         </td>
       );
     }
 
     return (
-      <td className={`px-3 md:px-4 py-2.5 md:py-3 min-w-[200px] md:min-w-[240px] ${mobileVisibility}`}>
-        <div className="flex items-center gap-2 mb-0.5">
-          <div className="flex-1 h-2 bg-zinc-200 dark:bg-zinc-700 rounded-full overflow-hidden">
+      <td className={`px-3 md:px-4 py-3.5 md:py-4 ${mobileVisibility}`}>
+        <div className="flex items-center gap-3">
+          <div className="flex-1 h-2 bg-zinc-200 dark:bg-zinc-700 rounded-full overflow-hidden min-w-[100px]">
             <div
               className="h-full rounded-full transition-all duration-500"
               style={{
@@ -149,11 +133,11 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
               }}
             />
           </div>
-          <span className={`text-sm font-semibold tabular-nums whitespace-nowrap ${textClasses}`}>
+          <span className="text-sm font-semibold tabular-nums whitespace-nowrap text-zinc-800 dark:text-zinc-200 w-[52px] text-right">
             {percent.toFixed(1)}%
           </span>
         </div>
-        <div className="text-xs text-zinc-500 dark:text-zinc-400 tabular-nums">
+        <div className="text-xs text-zinc-400 dark:text-zinc-500 tabular-nums mt-0.5 opacity-0 group-hover/row:opacity-100 transition-opacity">
           {numerator.toLocaleString()} of {denominator.toLocaleString()}
         </div>
       </td>
@@ -174,15 +158,25 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
     available = true,
     neutral = false
   ) => {
-    const rowBg = isSelected ? "bg-zinc-100 dark:bg-zinc-800" : "";
+    const isAll = id === "all";
+    const rowBg = isSelected
+      ? "bg-zinc-100 dark:bg-zinc-800"
+      : isAll
+      ? "bg-zinc-50/70 dark:bg-zinc-800/40"
+      : "";
     const hoverClass = available
-      ? "hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer"
+      ? "hover:bg-zinc-100 dark:hover:bg-zinc-800/70 cursor-pointer"
       : "opacity-50 cursor-not-allowed";
 
     const assessedBarColor = neutral ? NEUTRAL_BAR_COLOR : getAssessedBarColor(percentAssessed);
-    const assessedTextCls = neutral ? NEUTRAL_TEXT_CLASSES : getAssessedTextClasses(percentAssessed);
     const outdatedBarColor = neutral ? NEUTRAL_BAR_COLOR : getOutdatedBarColor(percentOutdated);
-    const outdatedTextCls = neutral ? NEUTRAL_TEXT_CLASSES : getOutdatedTextClasses(percentOutdated);
+
+    // Sticky cell bg must match the row bg
+    const stickyBg = isSelected
+      ? "bg-zinc-100 dark:bg-zinc-800"
+      : isAll
+      ? "bg-zinc-50/70 dark:bg-zinc-800/40"
+      : "bg-white dark:bg-zinc-900";
 
     return (
       <tr
@@ -191,12 +185,12 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
           if (!available) return;
           onSelectTaxon(isSelected ? null : id);
         }}
-        className={`transition-colors ${rowBg} ${hoverClass}`}
+        className={`transition-colors group/row ${rowBg} ${hoverClass}`}
       >
-        <td className={`${stickyClasses} px-3 md:px-4 py-2.5 md:py-3 whitespace-nowrap ${isSelected ? "bg-zinc-100 dark:bg-zinc-800" : "bg-white dark:bg-zinc-900"}`}>
+        <td className={`${stickyClasses} px-3 md:px-4 py-3.5 md:py-4 whitespace-nowrap ${stickyBg}`}>
           <div className="flex items-center gap-2">
             <TaxaIcon taxonId={id} size={22} className="flex-shrink-0" style={{ color }} />
-            <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{name}</span>
+            <span className={`font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100 ${isAll ? "font-semibold" : ""}`}>{name}</span>
           </div>
         </td>
         {renderBarCell(
@@ -204,7 +198,6 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
           assessed,
           estimatedDescribed,
           assessedBarColor,
-          assessedTextCls,
           available,
           "assessed"
         )}
@@ -213,7 +206,6 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
           outdated,
           assessed,
           outdatedBarColor,
-          outdatedTextCls,
           available,
           "outdated"
         )}
@@ -225,13 +217,13 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
   const renderHead = () => (
     <thead>
       <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
-        <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap`}>
+        <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 px-3 md:px-4 py-2.5 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap`}>
           Taxon
         </th>
-        <th className={`px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap ${mobileColumn === "assessed" ? "table-cell" : "hidden md:table-cell"}`}>
+        <th className={`px-3 md:px-4 py-2.5 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap ${mobileColumn === "assessed" ? "table-cell" : "hidden md:table-cell"}`}>
           <span className="inline-flex items-center gap-1">
             % Assessed
-            <span className="relative group">
+            <span className="relative group/tip">
               <a
                 href={IUCN_SOURCE_URL}
                 target="_blank"
@@ -241,13 +233,13 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
               >
                 <FaInfoCircle size={12} />
               </a>
-              <span className="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible z-50 shadow-lg normal-case">
-                Source: IUCN Red List Table 1a (2025-2)
+              <span className="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover/tip:opacity-100 group-hover/tip:visible z-50 shadow-lg normal-case">
+                Source for Counts of Described Species: IUCN Red List Table 1a (2025-2)
               </span>
             </span>
           </span>
         </th>
-        <th className={`px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap ${mobileColumn === "outdated" ? "table-cell" : "hidden md:table-cell"}`}>
+        <th className={`px-3 md:px-4 py-2.5 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap ${mobileColumn === "outdated" ? "table-cell" : "hidden md:table-cell"}`}>
           % Outdated (10+y)
         </th>
       </tr>
@@ -314,7 +306,7 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
       <table className="w-full">
         {renderHead()}
         <tbody>
-          {/* All Species row (neutral colors) */}
+          {/* All Species row (neutral colors, subtle background) */}
           {renderRow(
             "all",
             "All Species",
