@@ -808,11 +808,16 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
         try {
           // NE species: use GBIF species key directly, skip IUCN API
           if (s.category === "NE" && s.gbif_species_key) {
-            // Fetch iNaturalist image for the species
+            // Fetch iNaturalist image and total paper count in parallel
             try {
-              const inatRes = await fetch(
-                `https://api.inaturalist.org/v1/taxa?q=${encodeURIComponent(s.scientific_name)}&rank=species&per_page=1`
-              );
+              const [inatRes, litRes] = await Promise.all([
+                fetch(
+                  `https://api.inaturalist.org/v1/taxa?q=${encodeURIComponent(s.scientific_name)}&rank=species&per_page=1`
+                ),
+                fetch(
+                  `/api/literature?scientificName=${encodeURIComponent(s.scientific_name)}&assessmentYear=0&limit=1`
+                ),
+              ]);
               let inatDefaultImage: { squareUrl: string | null; mediumUrl: string | null } | null = null;
               if (inatRes.ok) {
                 const inatData = await inatRes.json();
@@ -823,6 +828,11 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                     mediumUrl: defaultPhoto.medium_url || defaultPhoto.url || null,
                   };
                 }
+              }
+              let openAlexPaperCount: number | null = null;
+              if (litRes.ok) {
+                const litData = await litRes.json();
+                openAlexPaperCount = litData.totalPapersSinceAssessment ?? null;
               }
               return {
                 id: s.sis_taxon_id,
@@ -838,7 +848,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                   recentInatObservations: [],
                   inatTotalCount: 0,
                   inatDefaultImage,
-                  openAlexPaperCount: null,
+                  openAlexPaperCount,
                   papersAtAssessment: null,
                 },
               };
@@ -1400,7 +1410,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                 </th>
                 )}
                 <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
-                  New GBIF
+                  {showingOnlyNE ? "GBIF Records" : "New GBIF"}
                 </th>
                 {!showingOnlyNE && (
                 <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
@@ -1408,7 +1418,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                 </th>
                 )}
                 <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
-                  New Papers
+                  {showingOnlyNE ? "Papers" : "New Papers"}
                 </th>
               </tr>
             </thead>
@@ -1816,15 +1826,21 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                     )}
                     {/* New Papers */}
                     <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
-                      {s.category === "NE" ? "—" : details === undefined ? (
+                      {details === undefined ? (
                         <span className="inline-block animate-spin h-4 w-4 border-2 border-zinc-400 border-t-transparent rounded-full" />
-                      ) : details?.openAlexPaperCount != null && assessmentYear ? (
+                      ) : details?.openAlexPaperCount != null ? (
                         <a
-                          href={`https://openalex.org/works?page=1&filter=default.search%3A%22${encodeURIComponent(s.scientific_name)}%22,publication_year%3A%3E${assessmentYear},type%3A%21dataset&sort=publication_date%3Adesc`}
+                          href={s.category === "NE"
+                            ? `https://openalex.org/works?page=1&filter=default.search%3A%22${encodeURIComponent(s.scientific_name)}%22,type%3A%21dataset&sort=publication_date%3Adesc`
+                            : `https://openalex.org/works?page=1&filter=default.search%3A%22${encodeURIComponent(s.scientific_name)}%22,publication_year%3A%3E${assessmentYear},type%3A%21dataset&sort=publication_date%3Adesc`
+                          }
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
-                          title={`OpenAlex: search="${s.scientific_name}" AND year>${assessmentYear} AND type!=dataset`}
+                          title={s.category === "NE"
+                            ? `OpenAlex: search="${s.scientific_name}" AND type!=dataset`
+                            : `OpenAlex: search="${s.scientific_name}" AND year>${assessmentYear} AND type!=dataset`
+                          }
                           onClick={(e) => e.stopPropagation()}
                         >
                           {details.openAlexPaperCount.toLocaleString()}
@@ -1842,13 +1858,13 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                           assessmentYear={assessmentYear}
                         />
                       )}
-                      {assessmentYear && (
+                      {(assessmentYear || s.category === "NE") && (
                         <tr>
                           <td colSpan={showingOnlyNE ? 5 : 8} className="p-0 bg-zinc-50 dark:bg-zinc-800/30">
                             <div className="p-4" style={{ maxWidth: 'calc(100vw - 2rem)', transform: 'translateX(var(--scroll-left, 0px))' }}>
                             <NewLiteratureSinceAssessment
                               scientificName={s.scientific_name}
-                              assessmentYear={assessmentYear}
+                              assessmentYear={assessmentYear ?? 0}
                             />
                             </div>
                           </td>

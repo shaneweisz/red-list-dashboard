@@ -146,10 +146,15 @@ export default function NewLiteratureSinceAssessment({
   const [expanded, setExpanded] = useState(true); // Auto-expand to show papers
   const [expandedRowIndex, setExpandedRowIndex] = useState<number | null>(null);
 
-  const openAlexUrl = buildOpenAlexUrl(scientificName, assessmentYear);
+  const isAllTime = assessmentYear === 0;
+  const openAlexUrl = isAllTime
+    ? `https://openalex.org/works?page=1&filter=default.search%3A%22${encodeURIComponent(scientificName)}%22,type%3A%21dataset&sort=publication_date%3Adesc`
+    : buildOpenAlexUrl(scientificName, assessmentYear);
 
   // Human-readable query description
-  const queryDescription = `search="${scientificName}" AND year>${assessmentYear} AND type!=dataset`;
+  const queryDescription = isAllTime
+    ? `search="${scientificName}" AND type!=dataset`
+    : `search="${scientificName}" AND year>${assessmentYear} AND type!=dataset`;
 
   useEffect(() => {
     async function fetchLiterature() {
@@ -176,7 +181,7 @@ export default function NewLiteratureSinceAssessment({
       }
     }
 
-    if (scientificName && assessmentYear) {
+    if (scientificName && assessmentYear != null) {
       fetchLiterature();
     }
   }, [scientificName, assessmentYear]);
@@ -208,7 +213,7 @@ export default function NewLiteratureSinceAssessment({
             Literature
           </h3>
           <span className="text-sm text-zinc-500">
-            {totalPapersSinceAssessment.toLocaleString()} paper{totalPapersSinceAssessment !== 1 ? "s" : ""} since {assessmentYear}
+            {totalPapersSinceAssessment.toLocaleString()} paper{totalPapersSinceAssessment !== 1 ? "s" : ""}{isAllTime ? "" : ` since ${assessmentYear}`}
           </span>
           <a
             href={openAlexUrl}
