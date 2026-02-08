@@ -139,7 +139,7 @@ function InatPhotoWithPreview({ obs, idx }: { obs: InatObservation; idx: number 
   return (
     <div
       ref={thumbRef}
-      className="aspect-square relative"
+      className="aspect-[3/4] relative"
       onMouseEnter={() => !isTouchDevice && setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
