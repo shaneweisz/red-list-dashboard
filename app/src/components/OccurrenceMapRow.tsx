@@ -1,8 +1,26 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
+
+// Hook to get responsive grid column count: 3 (mobile), 4 (sm/landscape), 5 (lg/desktop)
+function useGridColumns() {
+  const [cols, setCols] = useState(5);
+  useEffect(() => {
+    const lgQuery = window.matchMedia("(min-width: 1024px)");
+    const smQuery = window.matchMedia("(min-width: 640px)");
+    const update = () => setCols(lgQuery.matches ? 5 : smQuery.matches ? 4 : 3);
+    update();
+    lgQuery.addEventListener("change", update);
+    smQuery.addEventListener("change", update);
+    return () => {
+      lgQuery.removeEventListener("change", update);
+      smQuery.removeEventListener("change", update);
+    };
+  }, []);
+  return cols;
+}
 
 // Dynamically import Leaflet components
 const MapContainer = dynamic(
@@ -223,12 +241,15 @@ export default function OccurrenceMapRow({
     other: false,
   });
 
+  // Responsive grid columns and page size (always 2 rows)
+  const gridCols = useGridColumns();
+  const pageSize = gridCols * 2;
+
   // iNat photos pagination
   const [inatPage, setInatPage] = useState(0);
   const [inatPhotos, setInatPhotos] = useState<InatObservation[]>([]);
   const [inatTotalCount, setInatTotalCount] = useState(0);
   const [loadingInatPhotos, setLoadingInatPhotos] = useState(false);
-  const INAT_PAGE_SIZE = 10;
 
   // Total occurrences count (from API metadata)
   const [totalOccurrences, setTotalOccurrences] = useState<number | null>(null);
@@ -267,23 +288,18 @@ export default function OccurrenceMapRow({
       .then((res) => res.json())
       .then((data) => {
         setBreakdown(data);
-        // Initialize iNat photos from breakdown response
-        if (data.recentInatObservations) {
-          setInatPhotos(data.recentInatObservations);
-          setInatTotalCount(data.inatTotalCount || data.iNaturalist || 0);
-          setInatPage(0);
-        }
+        setInatTotalCount(data.inatTotalCount || data.iNaturalist || 0);
       })
       .catch(console.error)
       .finally(() => setLoadingBreakdown(false));
   }, [speciesKey, countryCode]);
 
-  // Fetch iNat photos for subsequent pages
-  const fetchInatPhotos = (page: number) => {
+  // Fetch iNat photos for a given page
+  const fetchInatPhotos = useCallback((page: number, limit: number) => {
     setLoadingInatPhotos(true);
     const params = new URLSearchParams({
-      offset: (page * INAT_PAGE_SIZE).toString(),
-      limit: INAT_PAGE_SIZE.toString(),
+      offset: (page * limit).toString(),
+      limit: limit.toString(),
     });
     if (countryCode) {
       params.set("country", countryCode);
@@ -298,7 +314,14 @@ export default function OccurrenceMapRow({
       })
       .catch(console.error)
       .finally(() => setLoadingInatPhotos(false));
-  };
+  }, [speciesKey, countryCode]);
+
+  // Re-fetch when screen size changes (page size changes)
+  useEffect(() => {
+    // Reset to page 0 and re-fetch with new page size
+    setInatPage(0);
+    fetchInatPhotos(0, pageSize);
+  }, [pageSize, fetchInatPhotos]);
 
   // Helper to check if a record is a preserved specimen or material sample
   const isPreserved = (basisOfRecord?: string): boolean => {
@@ -481,13 +504,13 @@ export default function OccurrenceMapRow({
                         <span className="text-zinc-400 text-xs">({inatTotalCount.toLocaleString()} total)</span>
                       </div>
                       {/* Pagination controls */}
-                      {inatTotalCount > INAT_PAGE_SIZE && (
+                      {inatTotalCount > pageSize && (
                         <div className="flex items-center gap-1.5">
                           <button
                             onClick={() => {
                               const newPage = inatPage - 1;
                               setInatPage(newPage);
-                              fetchInatPhotos(newPage);
+                              fetchInatPhotos(newPage, pageSize);
                             }}
                             disabled={inatPage === 0 || loadingInatPhotos}
                             className="px-1.5 py-0.5 text-xs rounded border border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
@@ -495,15 +518,15 @@ export default function OccurrenceMapRow({
                             ‹ Prev
                           </button>
                           <span className="text-xs text-zinc-400 tabular-nums">
-                            {inatPage + 1} / {Math.ceil(inatTotalCount / INAT_PAGE_SIZE)}
+                            {inatPage + 1} / {Math.ceil(inatTotalCount / pageSize)}
                           </span>
                           <button
                             onClick={() => {
                               const newPage = inatPage + 1;
                               setInatPage(newPage);
-                              fetchInatPhotos(newPage);
+                              fetchInatPhotos(newPage, pageSize);
                             }}
-                            disabled={(inatPage + 1) * INAT_PAGE_SIZE >= inatTotalCount || loadingInatPhotos}
+                            disabled={(inatPage + 1) * pageSize >= inatTotalCount || loadingInatPhotos}
                             className="px-1.5 py-0.5 text-xs rounded border border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
                           >
                             Next ›
@@ -511,8 +534,8 @@ export default function OccurrenceMapRow({
                         </div>
                       )}
                     </div>
-                    <div className={`grid grid-cols-2 lg:grid-cols-5 gap-1.5 ${loadingInatPhotos ? 'opacity-50' : ''}`}>
-                      {inatPhotos.map((obs, idx) => (
+                    <div className={`grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-1.5 ${loadingInatPhotos ? 'opacity-50' : ''}`}>
+                      {inatPhotos.slice(0, pageSize).map((obs, idx) => (
                         <InatPhotoWithPreview key={`${inatPage}-${idx}`} obs={obs} idx={idx} />
                       ))}
                     </div>
