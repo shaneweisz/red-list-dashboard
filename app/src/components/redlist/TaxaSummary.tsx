@@ -36,7 +36,7 @@ const getAssessedBarColor = (percent: number) =>
   percent >= 50 ? "#22c55e" : percent >= 20 ? "#eab308" : "#ef4444";
 
 const getOutdatedBarColor = (percent: number) =>
-  percent < 10 ? "#22c55e" : percent <= 30 ? "#eab308" : "#ef4444";
+  percent < 10 ? "#22c55e" : percent <= 50 ? "#eab308" : "#ef4444";
 
 // Text color classes with dark mode support
 const getAssessedTextClasses = (percent: number) =>
@@ -49,7 +49,7 @@ const getAssessedTextClasses = (percent: number) =>
 const getOutdatedTextClasses = (percent: number) =>
   percent < 10
     ? "text-green-600 dark:text-green-400"
-    : percent <= 30
+    : percent <= 50
     ? "text-yellow-600 dark:text-yellow-400"
     : "text-red-600 dark:text-red-400";
 
