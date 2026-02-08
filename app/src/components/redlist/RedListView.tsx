@@ -1007,7 +1007,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
         <div className="lg:col-span-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
           <div className="flex items-center justify-between mb-1">
             <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-              Click to Filter by Years Since Assessed <span className="font-normal text-[10px] text-zinc-400">(cmd/ctrl+click to multi-select)</span>
+              Years Since Assessed (click to filter) <span className="font-normal text-[10px] text-zinc-400">cmd/ctrl+click to multiselect</span>
             </h3>
             {selectedYearRanges.size > 0 && (
               <button
@@ -1042,7 +1042,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
         <div className="lg:col-span-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
           <div className="flex items-center justify-between mb-1">
             <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-              Click to Filter by Risk Category <span className="font-normal text-[10px] text-zinc-400">(cmd/ctrl+click to multi-select)</span>
+              Risk Category (click to filter) <span className="font-normal text-[10px] text-zinc-400">cmd/ctrl+click to multiselect</span>
             </h3>
             {selectedCategories.size > 0 && (
               <button
