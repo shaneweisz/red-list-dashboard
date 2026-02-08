@@ -5,6 +5,7 @@ import { TAXA, CATEGORY_COLORS, TaxonConfig } from "@/config/taxa";
 
 interface SpeciesRecord {
   sis_taxon_id: number;
+  scientific_name?: string;
   category: string;
   assessment_date?: string;
 }
@@ -103,6 +104,34 @@ function loadTaxonData(taxon: TaxonConfig): PrecomputedData | null {
   return loadSingleDataFile(taxon.dataFile);
 }
 
+function countNESpecies(taxon: TaxonConfig, redListSpecies: SpeciesRecord[]): number {
+  try {
+    const gbifCsvPath = path.join(process.cwd(), "data", taxon.gbifDataFile);
+    if (!fs.existsSync(gbifCsvPath)) return 0;
+
+    const redListNames = new Set(
+      redListSpecies.map((s) => s.scientific_name?.toLowerCase?.().trim() || "").filter(Boolean)
+    );
+
+    const csvContent = fs.readFileSync(gbifCsvPath, "utf-8");
+    const lines = csvContent.trim().split("\n");
+    const header = lines[0];
+    if (!header.includes("scientific_name")) return 0;
+
+    let count = 0;
+    for (let i = 1; i < lines.length; i++) {
+      const parts = lines[i].split(",");
+      const scientificName = parts[2]?.toLowerCase?.().trim();
+      if (scientificName && !redListNames.has(scientificName)) {
+        count++;
+      }
+    }
+    return count;
+  } catch {
+    return 0;
+  }
+}
+
 function buildSummary(): TaxonSummary[] {
   // Filter out "all" - it's a meta-taxon for viewing all species, not a real taxon
   return TAXA.filter((taxon) => taxon.id !== "all").map((taxon) => {
@@ -126,9 +155,12 @@ function buildSummary(): TaxonSummary[] {
       };
     }
 
-    const byCategory = ["EX", "EW", "CR", "EN", "VU", "NT", "LC", "DD"].map((code) => ({
+    // Count NE species (in GBIF but not in Red List)
+    const neCount = countNESpecies(taxon, data.species);
+
+    const byCategory = ["EX", "EW", "CR", "EN", "VU", "NT", "LC", "DD", "NE"].map((code) => ({
       code,
-      count: data.metadata.byCategory[code] || 0,
+      count: code === "NE" ? neCount : (data.metadata.byCategory[code] || 0),
       color: CATEGORY_COLORS[code],
     }));
 
