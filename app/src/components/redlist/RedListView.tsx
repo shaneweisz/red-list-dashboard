@@ -601,6 +601,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
 
   // Track whether NE species have been fetched for the current taxon
   const [neSpeciesFetched, setNeSpeciesFetched] = useState<string | null>(null);
+  const [neLoading, setNeLoading] = useState(false);
 
   // Reset filters when taxon changes
   useEffect(() => {
@@ -619,6 +620,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
     if (neSpeciesFetched === selectedTaxon) return; // already fetched for this taxon
 
     async function fetchNESpecies() {
+      setNeLoading(true);
       try {
         const res = await fetch(`/api/redlist/species?taxon=${selectedTaxon}&category=NE`);
         if (res.ok) {
@@ -634,6 +636,8 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
         }
       } catch {
         // Ignore errors fetching NE species
+      } finally {
+        setNeLoading(false);
       }
     }
 
@@ -1050,11 +1054,15 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
     .filter((c) => ["CR", "EN", "VU"].includes(c.code))
     .reduce((sum, c) => sum + c.count, 0) ?? 0;
 
-  const categoryDataWithPercent = stats?.byCategory.map((cat) => ({
-    ...cat,
-    percent: ((cat.count / stats.sampleSize) * 100).toFixed(1),
-    label: `${cat.count} (${((cat.count / stats.sampleSize) * 100).toFixed(1)}%)`,
-  })) ?? [];
+  const categoryDataWithPercent = stats?.byCategory
+    .filter((cat) => cat.code !== "NE")
+    .map((cat) => ({
+      ...cat,
+      percent: ((cat.count / stats.sampleSize) * 100).toFixed(1),
+      label: `${cat.count} (${((cat.count / stats.sampleSize) * 100).toFixed(1)}%)`,
+    })) ?? [];
+
+  const neCategory = stats?.byCategory.find((cat) => cat.code === "NE");
 
   const outdatedCount = assessments?.yearsSinceAssessment
     .filter((y) => y.minYear > 10)
@@ -1064,6 +1072,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
   const assessedPercent = stats && taxonInfo ? ((stats.sampleSize / taxonInfo.estimatedDescribed) * 100).toFixed(1) : "0";
 
   const currentYear = new Date().getFullYear();
+  const showingOnlyNE = selectedCategories.size === 1 && selectedCategories.has("NE");
 
   return (
     <div className="space-y-4">
@@ -1274,7 +1283,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                 }}
               />
             </label>
-            {Array.from(selectedCategories).map(cat => (
+            {Array.from(selectedCategories).filter(cat => cat !== "NE").map(cat => (
               <button
                 key={cat}
                 onClick={() => setSelectedCategories(prev => { const next = new Set(prev); next.delete(cat); return next; })}
@@ -1316,6 +1325,30 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
             <span className="text-xs md:text-sm text-zinc-500">
               {filteredSpecies.length} species
             </span>
+            {neCategory && neCategory.count > 0 && (
+              <button
+                onClick={() => {
+                  setSelectedCategories(prev => {
+                    const next = new Set(prev);
+                    if (next.has("NE")) {
+                      next.delete("NE");
+                    } else {
+                      next.add("NE");
+                    }
+                    return next;
+                  });
+                }}
+                className={`ml-auto px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1 md:gap-1.5 ${
+                  selectedCategories.has("NE")
+                    ? "bg-zinc-500 text-white"
+                    : "bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700"
+                }`}
+                title="Show Not Evaluated species from GBIF"
+              >
+                Not Evaluated
+                <span className="text-[10px] opacity-70">({neCategory.count.toLocaleString()})</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -1348,6 +1381,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                     )}
                   </span>
                 </th>
+                {!showingOnlyNE && (
                 <th
                   className="px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
                   onClick={() => handleSort("year")}
@@ -1359,15 +1393,20 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                     )}
                   </span>
                 </th>
+                )}
+                {!showingOnlyNE && (
                 <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
                   GBIF at Assess.
                 </th>
+                )}
                 <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
                   New GBIF
                 </th>
+                {!showingOnlyNE && (
                 <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
                   Papers at Assess.
                 </th>
+                )}
                 <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
                   New Papers
                 </th>
@@ -1498,6 +1537,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                         </span>
                       )}
                     </td>
+                    {!showingOnlyNE && (
                     <td className="px-2 md:px-4 py-3 text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
                       {s.category === "NE" ? "—" : (
                         <>
@@ -1526,6 +1566,8 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                         </>
                       )}
                     </td>
+                    )}
+                    {!showingOnlyNE && (
                     <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
                       {s.category === "NE" ? "—" : details === undefined ? (
                         <span className="inline-block animate-spin h-4 w-4 border-2 border-zinc-400 border-t-transparent rounded-full" />
@@ -1638,6 +1680,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                         </HoverTooltip>
                       ) : "—"}
                     </td>
+                    )}
                     <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
                       {s.category === "NE" && s.gbif_occurrence_count != null ? (
                         <a
@@ -1750,6 +1793,8 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                         </HoverTooltip>
                       ) : "—"}
                     </td>
+                    {!showingOnlyNE && (
+                    <>
                     {/* Papers When Assessed */}
                     <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
                       {s.category === "NE" ? "—" : details === undefined ? (
@@ -1767,6 +1812,8 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                         </a>
                       ) : "—"}
                     </td>
+                    </>
+                    )}
                     {/* New Papers */}
                     <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
                       {s.category === "NE" ? "—" : details === undefined ? (
@@ -1791,13 +1838,13 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                         <OccurrenceMapRow
                           speciesKey={gbifSpeciesKey}
                           mounted={mounted}
-                          colSpan={8}
+                          colSpan={showingOnlyNE ? 5 : 8}
                           assessmentYear={assessmentYear}
                         />
                       )}
                       {assessmentYear && (
                         <tr>
-                          <td colSpan={8} className="p-0 bg-zinc-50 dark:bg-zinc-800/30">
+                          <td colSpan={showingOnlyNE ? 5 : 8} className="p-0 bg-zinc-50 dark:bg-zinc-800/30">
                             <div className="p-4" style={{ maxWidth: 'calc(100vw - 2rem)', transform: 'translateX(var(--scroll-left, 0px))' }}>
                             <NewLiteratureSinceAssessment
                               scientificName={s.scientific_name}
@@ -1814,8 +1861,18 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
               })}
               {filteredSpecies.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-zinc-500">
-                    No species found
+                  <td colSpan={showingOnlyNE ? 5 : 8} className="px-4 py-8 text-center text-zinc-500">
+                    {neLoading ? (
+                      <div className="flex items-center justify-center gap-2">
+                        <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        Loading NE species...
+                      </div>
+                    ) : (
+                      "No species found"
+                    )}
                   </td>
                 </tr>
               )}
