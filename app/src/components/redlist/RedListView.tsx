@@ -76,6 +76,7 @@ interface Species {
   sis_taxon_id: number;
   assessment_id: number;
   scientific_name: string;
+  common_name?: string | null;
   family: string | null;
   category: string;
   assessment_date: string | null;
@@ -651,8 +652,10 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
     const matchesCategory = selectedCategories.size === 0 || selectedCategories.has(s.category);
     const matchesYear = matchesYearRangeFilter(s.assessment_date);
     const matchesCountry = selectedCountries.size === 0 || s.countries.some(c => selectedCountries.has(c));
-    const matchesSearch = !searchQuery ||
-      s.scientific_name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch =
+      !searchQuery ||
+      s.scientific_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.common_name?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStarred = !showOnlyStarred || pinnedSet.has(s.sis_taxon_id);
     return matchesCategory && matchesYear && matchesCountry && matchesSearch && matchesStarred;
   });
@@ -1336,9 +1339,9 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                           >
                             {s.scientific_name}
                           </a>
-                          {details?.commonName && (
+                          {s.common_name && (
                             <div className="text-zinc-500 dark:text-zinc-400 text-xs truncate max-w-[140px] md:max-w-none">
-                              {details.commonName}
+                              {s.common_name}
                             </div>
                           )}
                         </div>

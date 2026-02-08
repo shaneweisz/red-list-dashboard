@@ -13,6 +13,7 @@ interface Species {
   sis_taxon_id: number;
   assessment_id: number;
   scientific_name: string;
+  common_name?: string | null;
   family: string | null;
   category: string;
   assessment_date: string | null;
@@ -205,8 +206,10 @@ export async function GET(request: NextRequest) {
   }
 
   if (search) {
-    filtered = filtered.filter((s) =>
-      s.scientific_name.toLowerCase().includes(search)
+    filtered = filtered.filter(
+      (s) =>
+        s.scientific_name.toLowerCase().includes(search) ||
+        s.common_name?.toLowerCase().includes(search)
     );
   }
 
