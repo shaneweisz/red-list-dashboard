@@ -824,7 +824,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                 id: s.sis_taxon_id,
                 data: {
                   criteria: null,
-                  commonName: null,
+                  commonName: s.common_name || null,
                   gbifUrl: `https://www.gbif.org/species/${s.gbif_species_key}`,
                   gbifOccurrences: s.gbif_occurrence_count || null,
                   gbifOccurrencesSinceAssessment: null,
@@ -842,7 +842,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
               return {
                 id: s.sis_taxon_id,
                 data: {
-                  criteria: null, commonName: null, gbifUrl: `https://www.gbif.org/species/${s.gbif_species_key}`,
+                  criteria: null, commonName: s.common_name || null, gbifUrl: `https://www.gbif.org/species/${s.gbif_species_key}`,
                   gbifOccurrences: s.gbif_occurrence_count || null, gbifOccurrencesSinceAssessment: null,
                   gbifByRecordType: null, gbifNewByRecordType: null, gbifMatchStatus: null,
                   recentInatObservations: [], inatTotalCount: 0, inatDefaultImage: null,
