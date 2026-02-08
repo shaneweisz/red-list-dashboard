@@ -4,20 +4,15 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 
-// Hook to get responsive grid column count: 3 (mobile), 4 (sm/landscape), 5 (lg/desktop)
+// Hook to get responsive grid column count: 3 (mobile portrait), 5 (landscape/sm+)
 function useGridColumns() {
   const [cols, setCols] = useState(5);
   useEffect(() => {
-    const lgQuery = window.matchMedia("(min-width: 1024px)");
     const smQuery = window.matchMedia("(min-width: 640px)");
-    const update = () => setCols(lgQuery.matches ? 5 : smQuery.matches ? 4 : 3);
+    const update = () => setCols(smQuery.matches ? 5 : 3);
     update();
-    lgQuery.addEventListener("change", update);
     smQuery.addEventListener("change", update);
-    return () => {
-      lgQuery.removeEventListener("change", update);
-      smQuery.removeEventListener("change", update);
-    };
+    return () => smQuery.removeEventListener("change", update);
   }, []);
   return cols;
 }
@@ -160,7 +155,7 @@ function InatPhotoWithPreview({ obs, idx }: { obs: InatObservation; idx: number 
   return (
     <div
       ref={thumbRef}
-      className="aspect-[3/4] relative"
+      className="aspect-[3/4] sm:aspect-square relative"
       onMouseEnter={() => !isTouchDevice && setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -534,7 +529,7 @@ export default function OccurrenceMapRow({
                         </div>
                       )}
                     </div>
-                    <div className={`grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-1.5 ${loadingInatPhotos ? 'opacity-50' : ''}`}>
+                    <div className={`grid grid-cols-3 sm:grid-cols-5 gap-1.5 ${loadingInatPhotos ? 'opacity-50' : ''}`}>
                       {inatPhotos.slice(0, pageSize).map((obs, idx) => (
                         <InatPhotoWithPreview key={`${inatPage}-${idx}`} obs={obs} idx={idx} />
                       ))}
