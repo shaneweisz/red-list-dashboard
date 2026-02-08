@@ -599,6 +599,9 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
     onTaxonChange?.(taxonInfo?.name || null);
   }, [taxonInfo, onTaxonChange]);
 
+  // Track whether NE species have been fetched for the current taxon
+  const [neSpeciesFetched, setNeSpeciesFetched] = useState<string | null>(null);
+
   // Reset filters when taxon changes
   useEffect(() => {
     setSelectedCategories(new Set());
@@ -607,7 +610,35 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
     setSearchFilter("");
     setCurrentPage(1);
     setSpeciesDetails({});
+    setNeSpeciesFetched(null);
   }, [selectedTaxon]);
+
+  // Fetch NE species when NE category is selected
+  useEffect(() => {
+    if (!selectedCategories.has("NE") || !selectedTaxon) return;
+    if (neSpeciesFetched === selectedTaxon) return; // already fetched for this taxon
+
+    async function fetchNESpecies() {
+      try {
+        const res = await fetch(`/api/redlist/species?taxon=${selectedTaxon}&category=NE`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.species && data.species.length > 0) {
+            setSpecies(prev => {
+              // Remove any existing NE species (in case of refetch) and add new ones
+              const nonNE = prev.filter(s => s.category !== "NE");
+              return [...nonNE, ...data.species];
+            });
+          }
+          setNeSpeciesFetched(selectedTaxon!);
+        }
+      } catch {
+        // Ignore errors fetching NE species
+      }
+    }
+
+    fetchNESpecies();
+  }, [selectedCategories, selectedTaxon, neSpeciesFetched]);
 
   // Helper to check if species matches year range filter (based on assessment date)
   const matchesYearRangeFilter = (assessmentDate: string | null): boolean => {
@@ -686,7 +717,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
 
   // Category order for sorting (most threatened first)
   const CATEGORY_ORDER: Record<string, number> = {
-    EX: 0, EW: 1, CR: 2, EN: 3, VU: 4, NT: 5, LC: 6, DD: 7,
+    EX: 0, EW: 1, CR: 2, EN: 3, VU: 4, NT: 5, LC: 6, DD: 7, NE: 8,
   };
 
   // Memoized filter and sort for performance with large datasets
@@ -694,7 +725,8 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
     // Filter species based on category, year range, country, and search
     const filtered = species.filter((s) => {
       const matchesCategory = selectedCategories.size === 0 || selectedCategories.has(s.category);
-      const matchesYear = matchesYearRangeFilter(s.assessment_date);
+      // NE species have no assessment date, so skip year range filter for them
+      const matchesYear = s.category === "NE" || matchesYearRangeFilter(s.assessment_date);
       const matchesCountry = selectedCountries.size === 0 || s.countries.some(c => selectedCountries.has(c));
       const matchesSearch =
         !searchFilter ||
