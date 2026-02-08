@@ -209,7 +209,9 @@ async function validateSpeciesKeys(speciesKeys: number[]): Promise<Map<number, V
     const results = await Promise.all(
       batch.map(async (key) => {
         try {
-          const response = await fetch(`https://api.gbif.org/v1/species/${key}`);
+          const response = await fetch(`https://api.gbif.org/v1/species/${key}`, {
+            headers: { "Accept-Language": "en" },
+          });
           if (!response.ok) {
             return { key, rank: "UNKNOWN", taxonomicStatus: "UNKNOWN", scientificName: "Unknown", canonicalName: "", vernacularName: "" };
           }
@@ -540,12 +542,17 @@ interface SpeciesCountWithName extends SpeciesCount {
   commonName: string;
 }
 
+function toTitleCase(s: string): string {
+  return s.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+}
+
 function saveToCsv(results: SpeciesCountWithName[], outputFile: string): void {
   const header = "species_key,occurrence_count,scientific_name,common_name";
   const rows = results.map((r) => {
     // Escape fields if they contain commas
     const safeName = r.scientificName.includes(",") ? `"${r.scientificName}"` : r.scientificName;
-    const safeCommon = r.commonName.includes(",") ? `"${r.commonName}"` : r.commonName;
+    const commonName = r.commonName ? toTitleCase(r.commonName) : "";
+    const safeCommon = commonName.includes(",") ? `"${commonName}"` : commonName;
     return `${r.speciesKey},${r.count},${safeName},${safeCommon}`;
   });
   const content = [header, ...rows].join("\n");
