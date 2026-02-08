@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import TaxaSummary from "./TaxaSummary";
@@ -143,6 +143,36 @@ interface SpeciesResponse {
 
 interface RedListViewProps {
   onTaxonChange?: (taxonName: string | null) => void;
+}
+
+// Debounced search input - manages own state for instant typing, debounces parent updates
+function DebouncedSearchInput({
+  onSearch,
+  placeholder = "Search species...",
+  className,
+}: {
+  onSearch: (value: string) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  const [localValue, setLocalValue] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onSearch(localValue.toLowerCase());
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [localValue, onSearch]);
+
+  return (
+    <input
+      type="text"
+      value={localValue}
+      onChange={(e) => setLocalValue(e.target.value)}
+      placeholder={placeholder}
+      className={className}
+    />
+  );
 }
 
 // Component for iNaturalist observation preview with navigation
@@ -399,8 +429,13 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
   const [selectedYearRanges, setSelectedYearRanges] = useState<Set<string>>(new Set());
   const [selectedCountries, setSelectedCountries] = useState<Set<string>>(new Set());
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchFilter, setSearchFilter] = useState("");
   const [showOnlyStarred, setShowOnlyStarred] = useState(false);
+
+  // Stable callback for debounced search input
+  const handleSearch = useCallback((value: string) => {
+    setSearchFilter(value);
+  }, []);
 
   // Sorting
   type SortField = "year" | "category" | null;
@@ -567,7 +602,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
     setSelectedCategories(new Set());
     setSelectedYearRanges(new Set());
     setSelectedCountries(new Set());
-    setSearchQuery("");
+    setSearchFilter("");
     setCurrentPage(1);
     setSpeciesDetails({});
   }, [selectedTaxon]);
@@ -647,47 +682,52 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
     setSelectedCountries(new Set());
   };
 
-  // Filter species based on category, year range, country, and search
-  const filteredSpecies = species.filter((s) => {
-    const matchesCategory = selectedCategories.size === 0 || selectedCategories.has(s.category);
-    const matchesYear = matchesYearRangeFilter(s.assessment_date);
-    const matchesCountry = selectedCountries.size === 0 || s.countries.some(c => selectedCountries.has(c));
-    const matchesSearch =
-      !searchQuery ||
-      s.scientific_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.common_name?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStarred = !showOnlyStarred || pinnedSet.has(s.sis_taxon_id);
-    return matchesCategory && matchesYear && matchesCountry && matchesSearch && matchesStarred;
-  });
-
   // Category order for sorting (most threatened first)
   const CATEGORY_ORDER: Record<string, number> = {
     EX: 0, EW: 1, CR: 2, EN: 3, VU: 4, NT: 5, LC: 6, DD: 7,
   };
 
-  // Sort filtered species
-  const sortedSpecies = [...filteredSpecies].sort((a, b) => {
-    // When showing only starred, sort by pinned order
-    if (showOnlyStarred) {
-      const aIdx = pinnedSpecies.indexOf(a.sis_taxon_id);
-      const bIdx = pinnedSpecies.indexOf(b.sis_taxon_id);
-      return aIdx - bIdx;
-    }
+  // Memoized filter and sort for performance with large datasets
+  const { filteredSpecies, sortedSpecies } = useMemo(() => {
+    // Filter species based on category, year range, country, and search
+    const filtered = species.filter((s) => {
+      const matchesCategory = selectedCategories.size === 0 || selectedCategories.has(s.category);
+      const matchesYear = matchesYearRangeFilter(s.assessment_date);
+      const matchesCountry = selectedCountries.size === 0 || s.countries.some(c => selectedCountries.has(c));
+      const matchesSearch =
+        !searchFilter ||
+        s.scientific_name.toLowerCase().includes(searchFilter) ||
+        s.common_name?.toLowerCase().includes(searchFilter);
+      const matchesStarred = !showOnlyStarred || pinnedSet.has(s.sis_taxon_id);
+      return matchesCategory && matchesYear && matchesCountry && matchesSearch && matchesStarred;
+    });
 
-    if (!sortField) return 0;
+    // Sort filtered species
+    const sorted = [...filtered].sort((a, b) => {
+      // When showing only starred, sort by pinned order
+      if (showOnlyStarred) {
+        const aIdx = pinnedSpecies.indexOf(a.sis_taxon_id);
+        const bIdx = pinnedSpecies.indexOf(b.sis_taxon_id);
+        return aIdx - bIdx;
+      }
 
-    let comparison = 0;
-    if (sortField === "year") {
-      // Sort by assessment date
-      const dateA = a.assessment_date ? new Date(a.assessment_date).getTime() : 0;
-      const dateB = b.assessment_date ? new Date(b.assessment_date).getTime() : 0;
-      comparison = dateA - dateB;
-    } else if (sortField === "category") {
-      comparison = (CATEGORY_ORDER[a.category] ?? 99) - (CATEGORY_ORDER[b.category] ?? 99);
-    }
+      if (!sortField) return 0;
 
-    return sortDirection === "asc" ? comparison : -comparison;
-  });
+      let comparison = 0;
+      if (sortField === "year") {
+        // Sort by assessment date
+        const dateA = a.assessment_date ? new Date(a.assessment_date).getTime() : 0;
+        const dateB = b.assessment_date ? new Date(b.assessment_date).getTime() : 0;
+        comparison = dateA - dateB;
+      } else if (sortField === "category") {
+        comparison = (CATEGORY_ORDER[a.category] ?? 99) - (CATEGORY_ORDER[b.category] ?? 99);
+      }
+
+      return sortDirection === "asc" ? comparison : -comparison;
+    });
+
+    return { filteredSpecies: filtered, sortedSpecies: sorted };
+  }, [species, selectedCategories, selectedYearRanges, selectedCountries, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection]);
 
   // Pagination calculations
   const totalPages = Math.ceil(sortedSpecies.length / PAGE_SIZE);
@@ -715,7 +755,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedCategories, selectedYearRanges, searchQuery]);
+  }, [selectedCategories, selectedYearRanges, searchFilter]);
 
   // Fetch details for visible species
   useEffect(() => {
@@ -1043,15 +1083,14 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
         <div className="p-3 md:p-4 border-b border-zinc-200 dark:border-zinc-800 rounded-t-xl">
           <div className="flex flex-wrap items-center gap-2 md:gap-4">
             <div className="relative flex-1 min-w-[140px] max-w-md">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+              <DebouncedSearchInput
+                key={selectedTaxon}
+                onSearch={handleSearch}
                 placeholder="Search species..."
                 className="w-full px-3 md:px-4 py-2 pl-9 md:pl-10 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm"
               />
               <svg
-                className="absolute left-2.5 md:left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400"
+                className="absolute left-2.5 md:left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 pointer-events-none"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -1300,7 +1339,9 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                       <div className="flex items-center gap-2">
                         {/* iNat profile pic */}
                         {details === undefined ? (
-                          <div className="w-8 h-8 md:w-10 md:h-10 bg-zinc-200 dark:bg-zinc-700 rounded animate-pulse flex-shrink-0" />
+                          <div className="w-8 h-8 md:w-10 md:h-10 bg-zinc-100 dark:bg-zinc-800 rounded flex-shrink-0 flex items-center justify-center">
+                            <span className="inline-block animate-spin h-4 w-4 border-2 border-zinc-400 border-t-transparent rounded-full" />
+                          </div>
                         ) : details?.inatDefaultImage?.squareUrl ? (
                           <img
                             src={details.inatDefaultImage.squareUrl}
