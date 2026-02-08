@@ -1,50 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { promises as fs } from "fs";
-import path from "path";
-
-// Cache for loaded occurrence files
-const occurrenceCache: Record<string, object> = {};
-
-async function loadOccurrencesFromFile(species: string): Promise<object | null> {
-  const cacheKey = species.toLowerCase().replace(/\s+/g, "_");
-
-  if (occurrenceCache[cacheKey]) {
-    return occurrenceCache[cacheKey];
-  }
-
-  // Look for occurrence file in data/occurrences directory
-  const dataDir = path.join(process.cwd(), "..", "data", "occurrences");
-  const filename = `${cacheKey}_cambridge.geojson`;
-  const filePath = path.join(dataDir, filename);
-
-  try {
-    const content = await fs.readFile(filePath, "utf-8");
-    const geojson = JSON.parse(content);
-    occurrenceCache[cacheKey] = geojson;
-    return geojson;
-  } catch {
-    return null;
-  }
-}
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const speciesKey = searchParams.get("speciesKey");
-  const species = searchParams.get("species");
   const country = searchParams.get("country");
   const limit = parseInt(searchParams.get("limit") || "500");
 
-  // If species name is provided, try to load from local file first
-  if (species) {
-    const localData = await loadOccurrencesFromFile(species);
-    if (localData) {
-      return NextResponse.json(localData);
-    }
-  }
-
   if (!speciesKey) {
     return NextResponse.json(
-      { error: "speciesKey or species parameter is required" },
+      { error: "speciesKey parameter is required" },
       { status: 400 }
     );
   }

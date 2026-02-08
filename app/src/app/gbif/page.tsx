@@ -132,17 +132,6 @@ function formatBasisOfRecord(basis?: string): string {
   return labels[basis] || basis.replace(/_/g, " ").toLowerCase();
 }
 
-interface CandidateFeature {
-  type: "Feature";
-  properties: {
-    probability: number;
-  };
-  geometry: {
-    type: "Point";
-    coordinates: [number, number];
-  };
-}
-
 interface Stats {
   total: number;
   filtered: number;
@@ -219,21 +208,6 @@ const SEARCH_ENDPOINT = "/api/search";
 
 const formatNumber = (num: number) => num.toLocaleString();
 const getPercentage = (count: number, total: number) => ((count / total) * 100).toFixed(1);
-
-// Color scale from grey (low prob) to red (high prob)
-function getProbabilityColor(probability: number): string {
-  // Grey: rgb(180, 180, 180) -> Red: rgb(220, 38, 38)
-  const r = Math.round(180 + (220 - 180) * probability);
-  const g = Math.round(180 - (180 - 38) * probability);
-  const b = Math.round(180 - (180 - 38) * probability);
-  return `rgb(${r}, ${g}, ${b})`;
-}
-
-// Get candidate key from canonical name (just lowercase it to match API format)
-function getCandidateKey(canonicalName: string | undefined): string | undefined {
-  if (!canonicalName) return undefined;
-  return canonicalName.toLowerCase();
-}
 
 // ============================================================================
 // Components
@@ -348,15 +322,12 @@ interface ExpandedRowProps {
   countryCode?: string | null;
   mounted: boolean;
   colSpan: number;
-  hasCandidates?: boolean;
   maxUncertainty?: string | null;
   dataSource?: string | null;
   activeBasisOfRecord?: string | null;
 }
 
-function ExpandedRow({ speciesKey, speciesName, regionMode, countryCode, mounted, colSpan, hasCandidates, maxUncertainty, dataSource, activeBasisOfRecord }: ExpandedRowProps) {
-  const [showCandidates, setShowCandidates] = useState(true);
-  const [heatmapOpacity, setHeatmapOpacity] = useState(0.7);
+function ExpandedRow({ speciesKey, speciesName, regionMode, countryCode, mounted, colSpan, maxUncertainty, dataSource, activeBasisOfRecord }: ExpandedRowProps) {
   const [inatIndex, setInatIndex] = useState(0);
 
   // Build URLs for SWR
@@ -387,22 +358,9 @@ function ExpandedRow({ speciesKey, speciesName, regionMode, countryCode, mounted
     { revalidateOnFocus: false, dedupingInterval: 60000 }
   );
 
-  const { data: candidatesData, isLoading: loadingCandidates } = useSWR(
-    hasCandidates && speciesName ? `/api/candidates?species=${encodeURIComponent(speciesName)}&minProb=0` : null,
-    fetcher,
-    { revalidateOnFocus: false, dedupingInterval: 60000 }
-  );
-
   // Extract data from SWR responses
   const occurrences: OccurrenceFeature[] = occurrencesData?.features || [];
   const breakdown: RecordTypeBreakdown | null = breakdownData || null;
-  const candidates: CandidateFeature[] = candidatesData?.error ? [] : (candidatesData?.features || []);
-
-  // Sort candidates by probability (low first so high prob renders on top)
-  const sortedCandidates = useMemo(
-    () => [...candidates].sort((a, b) => a.properties.probability - b.properties.probability),
-    [candidates]
-  );
 
   const handleInatNavigate = (delta: number) => {
     if (!breakdown?.recentInatObservations) return;
@@ -474,49 +432,8 @@ function ExpandedRow({ speciesKey, speciesName, regionMode, countryCode, mounted
                 )}
               </div>
 
-              {/* Right column: Map + controls (2/3 width) */}
+              {/* Right column: Map (2/3 width) */}
               <div className="lg:w-2/3 flex flex-col gap-2">
-                {/* Controls for candidates */}
-            {hasCandidates && (
-              <div className="flex flex-wrap items-center gap-4 mb-2 p-2 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={showCandidates}
-                    onChange={(e) => setShowCandidates(e.target.checked)}
-                    className="w-4 h-4 rounded accent-orange-500"
-                  />
-                  <span className="text-sm text-zinc-700 dark:text-zinc-300">
-                    Show heatmap ({loadingCandidates ? "..." : candidates.length} points)
-                  </span>
-                </label>
-                {showCandidates && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-zinc-500">Opacity:</span>
-                    <input
-                      type="range"
-                      min="0.1"
-                      max="1"
-                      step="0.1"
-                      value={heatmapOpacity}
-                      onChange={(e) => setHeatmapOpacity(parseFloat(e.target.value))}
-                      className="w-20 accent-orange-500"
-                    />
-                  </div>
-                )}
-                <div className="flex items-center gap-3 ml-auto text-xs">
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded-full bg-blue-500 border-2 border-blue-700" />
-                    <span className="text-zinc-500">GBIF record</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-12 h-3 rounded" style={{background: "linear-gradient(to right, rgb(180,180,180), rgb(220,38,38))"}} />
-                    <span className="text-zinc-500">Low → High prob</span>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Map */}
             <div className="h-[300px] md:h-[400px] rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 relative isolate z-0">
               {loadingOccurrences ? (
@@ -534,38 +451,7 @@ function ExpandedRow({ speciesKey, speciesName, regionMode, countryCode, mounted
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   />
                   <LocateControl />
-                  {/* Render candidates as heatmap (sorted low-to-high so high prob on top) */}
-                  {showCandidates && sortedCandidates.map((feature, idx) => {
-                    const [lon, lat] = feature.geometry.coordinates;
-                    const prob = feature.properties.probability;
-                    const color = getProbabilityColor(prob);
-                    // Opacity scales with probability: low prob = more transparent
-                    const opacity = 0.2 + (prob * 0.8 * heatmapOpacity);
-                    return (
-                      <CircleMarker
-                        key={`candidate-${idx}`}
-                        center={[lat, lon]}
-                        radius={6}
-                        pathOptions={{
-                          color: "transparent",
-                          fillColor: color,
-                          fillOpacity: opacity,
-                          weight: 0,
-                        }}
-                      >
-                        <Popup>
-                          <div className="text-sm">
-                            <div className="font-medium text-orange-600">Predicted Location</div>
-                            <div>Probability: {(prob * 100).toFixed(1)}%</div>
-                            <div className="text-xs text-gray-500">
-                              {lat.toFixed(4)}, {lon.toFixed(4)}
-                            </div>
-                          </div>
-                        </Popup>
-                      </CircleMarker>
-                    );
-                  })}
-                  {/* Render occurrences on top with distinct style */}
+                  {/* Render occurrences */}
                   {occurrences.map((feature, idx) => {
                     const [lon, lat] = feature.geometry.coordinates;
                     return (
@@ -612,7 +498,6 @@ function ExpandedRow({ speciesKey, speciesName, regionMode, countryCode, mounted
               {!loadingOccurrences && (
                 <div className="absolute bottom-2 left-2 bg-white dark:bg-zinc-800 px-2 py-1 rounded text-xs text-zinc-600 dark:text-zinc-300 shadow">
                   {occurrences.length} occurrences
-                  {hasCandidates && showCandidates && ` • ${candidates.length} predictions`}
                 </div>
               )}
             </div>
@@ -667,10 +552,6 @@ export default function Home() {
   const [selectedSpeciesKey, setSelectedSpeciesKey] = useState<number | null>(null);
   const [mounted, setMounted] = useState(false);
 
-  // Candidates
-  const [availableCandidates, setAvailableCandidates] = useState<string[]>([]);
-  const [showOnlyWithCandidates, setShowOnlyWithCandidates] = useState(false);
-
   // Get taxon config
   const taxonConfig = selectedTaxon ? getTaxonConfig(selectedTaxon) : null;
 
@@ -681,18 +562,6 @@ export default function Home() {
 
   useEffect(() => {
     setMounted(true);
-  }, []);
-
-  // Fetch available candidates list
-  useEffect(() => {
-    fetch("/api/candidates")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.available) {
-          setAvailableCandidates(data.available.map((s: string) => s.toLowerCase()));
-        }
-      })
-      .catch(console.error);
   }, []);
 
   // Reset state when taxon changes
@@ -1017,15 +886,6 @@ export default function Home() {
               </div>
             </div>
             <ThemeToggle />
-            <a
-              href="/experiment"
-              className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-              title="Classification Experiment"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-              </svg>
-            </a>
           </div>
         </div>
 
@@ -1362,21 +1222,6 @@ export default function Home() {
             <option value="EW">EW - Extinct in Wild</option>
             <option value="EX">EX - Extinct</option>
           </select>
-          {availableCandidates.length > 0 && (
-            <button
-              onClick={() => setShowOnlyWithCandidates(!showOnlyWithCandidates)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
-                showOnlyWithCandidates
-                  ? "bg-orange-500 text-white"
-                  : "bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700"
-              }`}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-              </svg>
-              Has Predictions
-            </button>
-          )}
           <select
             value={sortOrder}
             onChange={(e) => setSortOrder(e.target.value as "asc" | "desc")}
@@ -1491,12 +1336,10 @@ export default function Home() {
                     {selectedSpeciesKey === species.key && (
                       <ExpandedRow
                         speciesKey={species.key}
-                        speciesName={getCandidateKey(species.canonicalName)}
                         regionMode={regionMode}
                         countryCode={selectedCountry}
                         mounted={mounted}
                         colSpan={5}
-                        hasCandidates={!!getCandidateKey(species.canonicalName) && availableCandidates.includes(getCandidateKey(species.canonicalName) ?? "")}
                         maxUncertainty={uncertaintyFilter !== "all" ? uncertaintyFilter : null}
                         dataSource={dataSourceFilter !== "all" ? dataSourceFilter : null}
                         activeBasisOfRecord={basisOfRecordFilter !== "all" ? basisOfRecordFilter : null}
@@ -1506,12 +1349,6 @@ export default function Home() {
                 ))
               ) : (
                 data
-                  .filter((record) => {
-                    if (!showOnlyWithCandidates) return true;
-                    const name = speciesCache[record.species_key]?.canonicalName || record.canonicalName;
-                    const candidateKey = getCandidateKey(name);
-                    return candidateKey && availableCandidates.includes(candidateKey);
-                  })
                   .map((record, index) => {
                   const rank =
                     sortOrder === "desc"
@@ -1523,8 +1360,6 @@ export default function Home() {
                   // Use cached data if available, otherwise use inline data from API
                   const displayName = cached?.canonicalName || record.canonicalName || (isLoading ? "Loading..." : "—");
                   const commonName = cached?.vernacularName || record.vernacularName || (isLoading ? "..." : "—");
-                  const candidateKey = getCandidateKey(displayName);
-                  const hasCandidates = !!(candidateKey && availableCandidates.includes(candidateKey));
 
                   return (
                     <React.Fragment key={record.species_key}>
@@ -1566,17 +1401,10 @@ export default function Home() {
                           )}
                         </td>
                         <td className="px-2 sm:px-4 py-2">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm text-zinc-900 dark:text-zinc-100">
-                              <span className="italic">{displayName}</span>
-                              {commonName && commonName !== "—" && <span className="text-zinc-500 ml-1">({commonName})</span>}
-                            </span>
-                            {hasCandidates && (
-                              <span className="px-1.5 py-0.5 text-[10px] font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 rounded">
-                                AI
-                              </span>
-                            )}
-                          </div>
+                          <span className="text-sm text-zinc-900 dark:text-zinc-100">
+                            <span className="italic">{displayName}</span>
+                            {commonName && commonName !== "—" && <span className="text-zinc-500 ml-1">({commonName})</span>}
+                          </span>
                         </td>
                         <td className="px-2 sm:px-4 py-2 text-sm text-right font-medium text-zinc-900 dark:text-zinc-100 tabular-nums">
                           {formatNumber(record.occurrence_count)}
@@ -1621,12 +1449,10 @@ export default function Home() {
                       {selectedSpeciesKey === record.species_key && (
                         <ExpandedRow
                           speciesKey={record.species_key}
-                          speciesName={candidateKey}
                           regionMode={regionMode}
                           countryCode={selectedCountry}
                           mounted={mounted}
                           colSpan={7}
-                          hasCandidates={hasCandidates}
                           maxUncertainty={uncertaintyFilter !== "all" ? uncertaintyFilter : null}
                           dataSource={dataSourceFilter !== "all" ? dataSourceFilter : null}
                           activeBasisOfRecord={basisOfRecordFilter !== "all" ? basisOfRecordFilter : null}
