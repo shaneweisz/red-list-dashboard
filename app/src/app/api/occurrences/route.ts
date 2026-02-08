@@ -51,6 +51,7 @@ export async function GET(request: NextRequest) {
         decimalLatitude: number;
         country?: string;
         basisOfRecord?: string;
+        datasetKey?: string;
       }) => ({
         type: "Feature",
         properties: {
@@ -60,6 +61,7 @@ export async function GET(request: NextRequest) {
           recordedBy: r.recordedBy,
           country: r.country,
           basisOfRecord: r.basisOfRecord,
+          datasetKey: r.datasetKey,
         },
         geometry: {
           type: "Point",

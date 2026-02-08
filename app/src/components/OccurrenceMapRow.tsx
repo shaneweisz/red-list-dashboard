@@ -1,8 +1,21 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
+
+// Hook to get responsive grid column count: 3 (mobile portrait), 5 (landscape/sm+)
+function useGridColumns() {
+  const [cols, setCols] = useState(5);
+  useEffect(() => {
+    const smQuery = window.matchMedia("(min-width: 640px)");
+    const update = () => setCols(smQuery.matches ? 5 : 3);
+    update();
+    smQuery.addEventListener("change", update);
+    return () => smQuery.removeEventListener("change", update);
+  }, []);
+  return cols;
+}
 
 // Dynamically import Leaflet components
 const MapContainer = dynamic(
@@ -30,6 +43,8 @@ const FitBounds = dynamic(
   { ssr: false }
 );
 
+const INAT_DATASET_KEY = "50c9509d-22c7-4a22-a47d-8c48425ef4a7";
+
 interface OccurrenceFeature {
   type: "Feature";
   properties: {
@@ -37,6 +52,7 @@ interface OccurrenceFeature {
     species: string;
     eventDate?: string;
     basisOfRecord?: string;
+    datasetKey?: string;
   };
   geometry: {
     type: "Point";
@@ -139,7 +155,7 @@ function InatPhotoWithPreview({ obs, idx }: { obs: InatObservation; idx: number 
   return (
     <div
       ref={thumbRef}
-      className="aspect-square relative"
+      className="aspect-[3/4] sm:aspect-square relative"
       onMouseEnter={() => !isTouchDevice && setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -210,7 +226,25 @@ export default function OccurrenceMapRow({
   const [breakdown, setBreakdown] = useState<RecordTypeBreakdown | null>(null);
   const [loadingOccurrences, setLoadingOccurrences] = useState(true);
   const [loadingBreakdown, setLoadingBreakdown] = useState(true);
-  const [showPreservedSpecimens, setShowPreservedSpecimens] = useState(false);
+
+  // Checkbox state for each observation type category (default: all checked except preserved & other)
+  const [checkedTypes, setCheckedTypes] = useState({
+    iNaturalist: true,
+    humanOther: true,
+    machineObservation: true,
+    preservedSpecimen: false,
+    other: false,
+  });
+
+  // Responsive grid columns and page size (always 2 rows)
+  const gridCols = useGridColumns();
+  const pageSize = gridCols * 2;
+
+  // iNat photos pagination
+  const [inatPage, setInatPage] = useState(0);
+  const [inatPhotos, setInatPhotos] = useState<InatObservation[]>([]);
+  const [inatTotalCount, setInatTotalCount] = useState(0);
+  const [loadingInatPhotos, setLoadingInatPhotos] = useState(false);
 
   // Total occurrences count (from API metadata)
   const [totalOccurrences, setTotalOccurrences] = useState<number | null>(null);
@@ -247,20 +281,64 @@ export default function OccurrenceMapRow({
     }
     fetch(`/api/species/${speciesKey}/breakdown?${params}`)
       .then((res) => res.json())
-      .then((data) => setBreakdown(data))
+      .then((data) => {
+        setBreakdown(data);
+        setInatTotalCount(data.inatTotalCount || data.iNaturalist || 0);
+      })
       .catch(console.error)
       .finally(() => setLoadingBreakdown(false));
   }, [speciesKey, countryCode]);
+
+  // Fetch iNat photos for a given page
+  const fetchInatPhotos = useCallback((page: number, limit: number) => {
+    setLoadingInatPhotos(true);
+    const params = new URLSearchParams({
+      offset: (page * limit).toString(),
+      limit: limit.toString(),
+    });
+    if (countryCode) {
+      params.set("country", countryCode);
+    }
+    fetch(`/api/species/${speciesKey}/inat-photos?${params}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.observations) {
+          setInatPhotos(data.observations);
+          if (data.totalCount) setInatTotalCount(data.totalCount);
+        }
+      })
+      .catch(console.error)
+      .finally(() => setLoadingInatPhotos(false));
+  }, [speciesKey, countryCode]);
+
+  // Re-fetch when screen size changes (page size changes)
+  useEffect(() => {
+    // Reset to page 0 and re-fetch with new page size
+    setInatPage(0);
+    fetchInatPhotos(0, pageSize);
+  }, [pageSize, fetchInatPhotos]);
 
   // Helper to check if a record is a preserved specimen or material sample
   const isPreserved = (basisOfRecord?: string): boolean => {
     return basisOfRecord === "PRESERVED_SPECIMEN" || basisOfRecord === "MATERIAL_SAMPLE";
   };
 
-  // Filter occurrences to exclude preserved specimens and material samples when toggle is off
-  const filteredOccurrences = showPreservedSpecimens
-    ? occurrences
-    : occurrences.filter((o) => !isPreserved(o.properties.basisOfRecord));
+  // Classify an occurrence into one of the 5 checkbox categories
+  const getCategory = (o: OccurrenceFeature): keyof typeof checkedTypes => {
+    const basis = o.properties.basisOfRecord;
+    if (basis === "HUMAN_OBSERVATION") {
+      return o.properties.datasetKey === INAT_DATASET_KEY ? "iNaturalist" : "humanOther";
+    }
+    if (basis === "MACHINE_OBSERVATION") return "machineObservation";
+    if (isPreserved(basis)) return "preservedSpecimen";
+    return "other";
+  };
+
+  // Filter occurrences based on which checkboxes are ticked
+  const filteredOccurrences = occurrences.filter((o) => checkedTypes[getCategory(o)]);
+
+  // Derive showPreservedSpecimens from checkbox state (for map legend)
+  const showPreservedSpecimens = checkedTypes.preservedSpecimen;
 
   // Helper to check if an occurrence is after the assessment year
   const isNewRecord = (eventDate?: string): boolean => {
@@ -288,92 +366,172 @@ export default function OccurrenceMapRow({
               <div className="lg:w-1/3 flex flex-col gap-3 relative z-10">
                 {/* Observation type breakdown */}
                 <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Observation Types</div>
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={showPreservedSpecimens}
-                        onChange={(e) => setShowPreservedSpecimens(e.target.checked)}
-                        className="w-3.5 h-3.5 rounded accent-blue-500"
-                      />
-                      <span className="text-xs text-zinc-500 dark:text-zinc-400">Include preserved specimens/samples</span>
-                    </label>
-                  </div>
+                  <div className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">Observation Types</div>
                   {loadingBreakdown ? (
                     <div className="text-zinc-400 text-sm animate-pulse">Loading...</div>
                   ) : breakdown ? (() => {
                     const baseParams = `taxon_key=${speciesKey}&has_coordinate=true&has_geospatial_issue=false${countryCode ? `&country=${countryCode}` : ''}`;
+                    const humanOtherCount = Math.max(0, breakdown.humanObservation - breakdown.iNaturalist);
+
+                    // Calculate total from checked types only
+                    const checkedTotal =
+                      (checkedTypes.iNaturalist ? breakdown.iNaturalist : 0) +
+                      (checkedTypes.humanOther ? humanOtherCount : 0) +
+                      (checkedTypes.machineObservation ? breakdown.machineObservation : 0) +
+                      (checkedTypes.preservedSpecimen ? breakdown.preservedSpecimen : 0) +
+                      (checkedTypes.other ? breakdown.other : 0);
+
+                    const toggleType = (key: keyof typeof checkedTypes) => {
+                      setCheckedTypes((prev) => ({ ...prev, [key]: !prev[key] }));
+                    };
+
+                    const rowClass = (checked: boolean) =>
+                      `flex items-center gap-2 transition-opacity ${checked ? '' : 'opacity-40'}`;
+
                     return (
-                    <div className="space-y-1 text-sm">
-                      <a
-                        href={`https://www.gbif.org/occurrence/search?${baseParams}&basis_of_record=HUMAN_OBSERVATION`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex justify-between text-zinc-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
-                      >
-                        <span>Human observations</span>
-                        <span className="tabular-nums">{breakdown.humanObservation.toLocaleString()}</span>
-                      </a>
-                      {breakdown.iNaturalist > 0 && (
+                    <div className="space-y-1.5 text-sm">
+                      {/* Human Observations (iNaturalist) */}
+                      <div className={rowClass(checkedTypes.iNaturalist)}>
+                        <input
+                          type="checkbox"
+                          checked={checkedTypes.iNaturalist}
+                          onChange={() => toggleType('iNaturalist')}
+                          className="w-3.5 h-3.5 rounded accent-blue-500 shrink-0"
+                        />
                         <a
                           href={`https://www.gbif.org/occurrence/search?${baseParams}&dataset_key=50c9509d-22c7-4a22-a47d-8c48425ef4a7`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex justify-between text-zinc-500 dark:text-zinc-400 pl-3 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
+                          className="flex justify-between flex-1 text-zinc-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
                         >
-                          <span>iNaturalist</span>
+                          <span>Human Observations (iNaturalist)</span>
                           <span className="tabular-nums">{breakdown.iNaturalist.toLocaleString()}</span>
                         </a>
-                      )}
-                      <a
-                        href={`https://www.gbif.org/occurrence/search?${baseParams}&basis_of_record=PRESERVED_SPECIMEN`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex justify-between text-zinc-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
-                      >
-                        <span>Preserved specimens</span>
-                        <span className="tabular-nums">{breakdown.preservedSpecimen.toLocaleString()}</span>
-                      </a>
-                      <a
-                        href={`https://www.gbif.org/occurrence/search?${baseParams}&basis_of_record=MACHINE_OBSERVATION`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex justify-between text-zinc-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
-                      >
-                        <span>Machine observations</span>
-                        <span className="tabular-nums">{breakdown.machineObservation.toLocaleString()}</span>
-                      </a>
-                      {breakdown.other > 0 && (
-                        <div className="flex justify-between text-zinc-600 dark:text-zinc-400">
+                      </div>
+
+                      {/* Human Observations (other) */}
+                      <div className={rowClass(checkedTypes.humanOther)}>
+                        <input
+                          type="checkbox"
+                          checked={checkedTypes.humanOther}
+                          onChange={() => toggleType('humanOther')}
+                          className="w-3.5 h-3.5 rounded accent-blue-500 shrink-0"
+                        />
+                        <a
+                          href={`https://www.gbif.org/occurrence/search?${baseParams}&basis_of_record=HUMAN_OBSERVATION`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex justify-between flex-1 text-zinc-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
+                        >
+                          <span>Human Observations (other)</span>
+                          <span className="tabular-nums">{humanOtherCount.toLocaleString()}</span>
+                        </a>
+                      </div>
+
+                      {/* Machine Observations */}
+                      <div className={rowClass(checkedTypes.machineObservation)}>
+                        <input
+                          type="checkbox"
+                          checked={checkedTypes.machineObservation}
+                          onChange={() => toggleType('machineObservation')}
+                          className="w-3.5 h-3.5 rounded accent-blue-500 shrink-0"
+                        />
+                        <a
+                          href={`https://www.gbif.org/occurrence/search?${baseParams}&basis_of_record=MACHINE_OBSERVATION`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex justify-between flex-1 text-zinc-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
+                        >
+                          <span>Machine Observations</span>
+                          <span className="tabular-nums">{breakdown.machineObservation.toLocaleString()}</span>
+                        </a>
+                      </div>
+
+                      {/* Preserved Specimens / Material Samples */}
+                      <div className={rowClass(checkedTypes.preservedSpecimen)}>
+                        <input
+                          type="checkbox"
+                          checked={checkedTypes.preservedSpecimen}
+                          onChange={() => toggleType('preservedSpecimen')}
+                          className="w-3.5 h-3.5 rounded accent-blue-500 shrink-0"
+                        />
+                        <a
+                          href={`https://www.gbif.org/occurrence/search?${baseParams}&basis_of_record=PRESERVED_SPECIMEN`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex justify-between flex-1 text-zinc-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
+                        >
+                          <span>Preserved Specimens / Material Samples</span>
+                          <span className="tabular-nums">{breakdown.preservedSpecimen.toLocaleString()}</span>
+                        </a>
+                      </div>
+
+                      {/* Other */}
+                      <div className={rowClass(checkedTypes.other)}>
+                        <input
+                          type="checkbox"
+                          checked={checkedTypes.other}
+                          onChange={() => toggleType('other')}
+                          className="w-3.5 h-3.5 rounded accent-blue-500 shrink-0"
+                        />
+                        <div className="flex justify-between flex-1 text-zinc-600 dark:text-zinc-400">
                           <span>Other</span>
                           <span className="tabular-nums">{breakdown.other.toLocaleString()}</span>
                         </div>
-                      )}
-                      <a
-                        href={`https://www.gbif.org/occurrence/search?${baseParams}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="border-t border-zinc-200 dark:border-zinc-700 pt-1 mt-1 flex justify-between font-medium text-zinc-700 dark:text-zinc-300 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
-                      >
+                      </div>
+
+                      {/* Total (of checked types) */}
+                      <div className="border-t border-zinc-200 dark:border-zinc-700 pt-1 mt-1 flex justify-between font-medium text-zinc-700 dark:text-zinc-300">
                         <span>Total</span>
-                        <span className="tabular-nums">{breakdown.total?.toLocaleString() || (breakdown.humanObservation + breakdown.preservedSpecimen + breakdown.machineObservation + breakdown.other).toLocaleString()}</span>
-                      </a>
+                        <span className="tabular-nums">{checkedTotal.toLocaleString()}</span>
+                      </div>
                     </div>
                     );
                   })() : null}
                 </div>
 
-                {/* iNaturalist photos grid */}
-                {breakdown?.recentInatObservations && breakdown.recentInatObservations.length > 0 && (
+                {/* iNaturalist photos grid with pagination */}
+                {inatPhotos.length > 0 && (
                   <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 flex-1 overflow-hidden">
-                    <div className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2 flex items-center gap-2">
-                      <span>iNaturalist</span>
-                      <span className="text-zinc-400 text-xs">({breakdown.inatTotalCount?.toLocaleString() || breakdown.iNaturalist.toLocaleString()} total)</span>
+                    <div className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span>iNaturalist</span>
+                        <span className="text-zinc-400 text-xs">({inatTotalCount.toLocaleString()} total)</span>
+                      </div>
+                      {/* Pagination controls */}
+                      {inatTotalCount > pageSize && (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => {
+                              const newPage = inatPage - 1;
+                              setInatPage(newPage);
+                              fetchInatPhotos(newPage, pageSize);
+                            }}
+                            disabled={inatPage === 0 || loadingInatPhotos}
+                            className="px-1.5 py-0.5 text-xs rounded border border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
+                          >
+                            ‹ Prev
+                          </button>
+                          <span className="text-xs text-zinc-400 tabular-nums">
+                            {inatPage + 1} / {Math.ceil(inatTotalCount / pageSize)}
+                          </span>
+                          <button
+                            onClick={() => {
+                              const newPage = inatPage + 1;
+                              setInatPage(newPage);
+                              fetchInatPhotos(newPage, pageSize);
+                            }}
+                            disabled={(inatPage + 1) * pageSize >= inatTotalCount || loadingInatPhotos}
+                            className="px-1.5 py-0.5 text-xs rounded border border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
+                          >
+                            Next ›
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-1.5 sm:gap-1">
-                      {breakdown.recentInatObservations.map((obs, idx) => (
-                        <InatPhotoWithPreview key={idx} obs={obs} idx={idx} />
+                    <div className={`grid grid-cols-3 sm:grid-cols-5 gap-1.5 ${loadingInatPhotos ? 'opacity-50' : ''}`}>
+                      {inatPhotos.slice(0, pageSize).map((obs, idx) => (
+                        <InatPhotoWithPreview key={`${inatPage}-${idx}`} obs={obs} idx={idx} />
                       ))}
                     </div>
                   </div>
