@@ -31,16 +31,12 @@ interface Props {
   selectedTaxon: string | null;
 }
 
-// Helper to get color styling for percentages
-const getAssessedStyle = (percent: number) => ({
-  backgroundColor: percent >= 50 ? "rgba(34, 197, 94, 0.15)" : percent >= 20 ? "rgba(234, 179, 8, 0.15)" : "rgba(239, 68, 68, 0.15)",
-  color: percent >= 50 ? "#16a34a" : percent >= 20 ? "#ca8a04" : "#dc2626",
-});
+// Bar color helpers
+const getAssessedBarColor = (percent: number) =>
+  percent >= 50 ? "#22c55e" : percent >= 20 ? "#eab308" : "#ef4444";
 
-const getOutdatedStyle = (percent: number) => ({
-  backgroundColor: percent < 20 ? "rgba(34, 197, 94, 0.15)" : percent < 40 ? "rgba(234, 179, 8, 0.15)" : "rgba(239, 68, 68, 0.15)",
-  color: percent < 20 ? "#16a34a" : percent < 40 ? "#ca8a04" : "#dc2626",
-});
+const getOutdatedBarColor = (percent: number) =>
+  percent < 10 ? "#22c55e" : percent < 50 ? "#eab308" : "#ef4444";
 
 // Sticky cell classes for the pinned taxon column
 const stickyClasses = "sticky left-0 z-10";
@@ -118,6 +114,25 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
   // On mobile, auto-scrolled so Assessed is the first visible column after Taxon.
   // Scroll left to see Est. Described, scroll right to see Outdated / % Outdated.
 
+  // Render a percentage bar
+  const renderBar = (percent: number, barColor: string, isAll: boolean) => {
+    const clampedPercent = Math.min(100, Math.max(0, percent));
+    const fillColor = isAll ? "rgba(255,255,255,0.25)" : barColor;
+    return (
+      <div className="flex items-center gap-2 min-w-[120px] md:min-w-[160px]">
+        <div className="flex-1 h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all"
+            style={{ width: `${clampedPercent}%`, backgroundColor: fillColor }}
+          />
+        </div>
+        <span className="text-sm md:text-base font-medium tabular-nums text-zinc-700 dark:text-zinc-300 w-[52px] text-right">
+          {percent.toFixed(1)}%
+        </span>
+      </div>
+    );
+  };
+
   // Render a data row
   const renderRow = (
     id: string,
@@ -129,14 +144,23 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
     outdated: number,
     percentOutdated: number,
     isSelected?: boolean,
-    available = true
+    available = true,
+    isAllRow = false
   ) => {
-    const rowBg = isSelected
-      ? "bg-zinc-100 dark:bg-zinc-800"
-      : "";
+    const rowBg = isAllRow
+      ? "bg-zinc-50/80 dark:bg-zinc-800/60"
+      : isSelected
+        ? "bg-zinc-100 dark:bg-zinc-800"
+        : "";
     const hoverClass = available
       ? "hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer"
       : "opacity-50 cursor-not-allowed";
+
+    const stickyBg = isAllRow
+      ? "bg-zinc-50 dark:bg-zinc-800/60"
+      : isSelected
+        ? "bg-zinc-100 dark:bg-zinc-800"
+        : "bg-white dark:bg-zinc-900";
 
     return (
       <tr
@@ -147,7 +171,7 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
         }}
         className={`transition-colors ${rowBg} ${hoverClass}`}
       >
-        <td className={`${stickyClasses} px-3 md:px-4 py-2.5 md:py-3 whitespace-nowrap ${isSelected ? "bg-zinc-100 dark:bg-zinc-800" : "bg-white dark:bg-zinc-900"}`}>
+        <td className={`${stickyClasses} px-3 md:px-4 py-2.5 md:py-3 whitespace-nowrap ${stickyBg}`}>
           <div className="flex items-center gap-2">
             <TaxaIcon taxonId={id} size={22} className="flex-shrink-0" style={{ color }} />
             <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{name}</span>
@@ -163,14 +187,9 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
             {available ? assessed.toLocaleString() : "—"}
           </span>
         </td>
-        <td className="px-3 md:px-4 py-2.5 md:py-3 text-right whitespace-nowrap">
+        <td className="px-3 md:px-4 py-2.5 md:py-3 whitespace-nowrap">
           {available ? (
-            <span
-              className="text-sm md:text-base font-medium px-1.5 md:px-2 py-0.5 rounded tabular-nums"
-              style={getAssessedStyle(percentAssessed)}
-            >
-              {percentAssessed.toFixed(1)}%
-            </span>
+            renderBar(percentAssessed, getAssessedBarColor(percentAssessed), isAllRow)
           ) : (
             <span className="text-sm md:text-base text-zinc-400">—</span>
           )}
@@ -180,14 +199,9 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
             {available ? outdated.toLocaleString() : "—"}
           </span>
         </td>
-        <td className="px-3 md:px-4 py-2.5 md:py-3 text-right whitespace-nowrap">
+        <td className="px-3 md:px-4 py-2.5 md:py-3 whitespace-nowrap">
           {available ? (
-            <span
-              className="text-sm md:text-base font-medium px-1.5 md:px-2 py-0.5 rounded tabular-nums"
-              style={getOutdatedStyle(percentOutdated)}
-            >
-              {percentOutdated.toFixed(1)}%
-            </span>
+            renderBar(percentOutdated, getOutdatedBarColor(percentOutdated), isAllRow)
           ) : (
             <span className="text-sm md:text-base text-zinc-400">—</span>
           )}
@@ -225,13 +239,13 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
         <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
           Assessed
         </th>
-        <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
+        <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
           % Assessed
         </th>
         <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
           Outdated (10+y)
         </th>
-        <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
+        <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
           % Outdated
         </th>
       </tr>
@@ -280,7 +294,9 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
             totalPercentAssessed,
             totalOutdated,
             totalPercentOutdated,
-            isAllSelected
+            isAllSelected,
+            true,
+            true
           )}
 
           {/* Separator */}
