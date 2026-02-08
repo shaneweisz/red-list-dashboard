@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as fs from "fs";
+import * as fsPromises from "fs/promises";
 import * as path from "path";
 import { getTaxonConfig, CATEGORY_COLORS, CATEGORY_NAMES } from "@/config/taxa";
 
@@ -145,25 +146,29 @@ export async function GET(request: NextRequest) {
     // Support multiple GBIF files (for "all" taxon) or single file
     const gbifFiles = taxon.gbifDataFiles || [taxon.gbifDataFile];
 
-    for (const gbifFile of gbifFiles) {
+    // Load and process files in parallel for better performance
+    const countPromises = gbifFiles.map(async (gbifFile) => {
       const gbifCsvPath = path.join(process.cwd(), "data", gbifFile);
-      if (fs.existsSync(gbifCsvPath)) {
-        const csvContent = fs.readFileSync(gbifCsvPath, "utf-8");
-        const lines = csvContent.trim().split("\n");
-        const header = lines[0];
-        const hasScientificName = header.includes("scientific_name");
+      if (!fs.existsSync(gbifCsvPath)) return 0;
 
-        if (hasScientificName) {
-          for (let i = 1; i < lines.length; i++) {
-            const parts = lines[i].split(",");
-            const scientificName = parts[2]?.toLowerCase?.().trim();
-            if (scientificName && !redListNames.has(scientificName)) {
-              neCount++;
-            }
-          }
+      const csvContent = await fsPromises.readFile(gbifCsvPath, "utf-8");
+      const lines = csvContent.trim().split("\n");
+      const header = lines[0];
+      if (!header.includes("scientific_name")) return 0;
+
+      let count = 0;
+      for (let i = 1; i < lines.length; i++) {
+        const parts = lines[i].split(",");
+        const scientificName = parts[2]?.toLowerCase?.().trim();
+        if (scientificName && !redListNames.has(scientificName)) {
+          count++;
         }
       }
-    }
+      return count;
+    });
+
+    const counts = await Promise.all(countPromises);
+    neCount = counts.reduce((sum, c) => sum + c, 0);
   } catch {
     // Ignore errors counting NE species
   }

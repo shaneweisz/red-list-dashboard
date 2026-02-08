@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as fs from "fs";
+import * as fsPromises from "fs/promises";
 import * as path from "path";
 import { TAXA, getTaxonConfig } from "@/config/taxa";
 
@@ -235,15 +236,17 @@ export async function GET(request: NextRequest) {
         "gbif-fungi.csv": "fungi",
       };
 
-      for (const gbifFile of existingFiles) {
+      // Load and process files in parallel for better performance
+      const speciesPromises = existingFiles.map(async (gbifFile) => {
         const gbifCsvPath = path.join(process.cwd(), "data", gbifFile);
-        const csvContent = fs.readFileSync(gbifCsvPath, "utf-8");
+        const csvContent = await fsPromises.readFile(gbifCsvPath, "utf-8");
         const lines = csvContent.trim().split("\n");
         const header = lines[0];
         const hasScientificName = header.includes("scientific_name");
         const hasCommonName = header.includes("common_name");
         const sourceTaxonId = fileToTaxonId[gbifFile] || taxon.id;
 
+        const fileSpecies: Species[] = [];
         if (hasScientificName) {
           for (let i = 1; i < lines.length; i++) {
             const parts = lines[i].split(",");
@@ -257,7 +260,7 @@ export async function GET(request: NextRequest) {
               commonName = raw.replace(/^"|"$/g, "") || null;
             }
             if (scientificName && !redListNames.has(scientificName.toLowerCase())) {
-              neSpecies.push({
+              fileSpecies.push({
                 sis_taxon_id: speciesKey, // Use GBIF species key as ID
                 assessment_id: 0,
                 scientific_name: scientificName,
@@ -278,7 +281,11 @@ export async function GET(request: NextRequest) {
             }
           }
         }
-      }
+        return fileSpecies;
+      });
+
+      const speciesArrays = await Promise.all(speciesPromises);
+      neSpecies = speciesArrays.flat();
 
       // Apply search filter
       if (search) {
