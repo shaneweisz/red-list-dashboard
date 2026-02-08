@@ -30,6 +30,8 @@ const FitBounds = dynamic(
   { ssr: false }
 );
 
+const INAT_DATASET_KEY = "50c9509d-22c7-4a22-a47d-8c48425ef4a7";
+
 interface OccurrenceFeature {
   type: "Feature";
   properties: {
@@ -37,6 +39,7 @@ interface OccurrenceFeature {
     species: string;
     eventDate?: string;
     basisOfRecord?: string;
+    datasetKey?: string;
   };
   geometry: {
     type: "Point";
@@ -302,13 +305,22 @@ export default function OccurrenceMapRow({
     return basisOfRecord === "PRESERVED_SPECIMEN" || basisOfRecord === "MATERIAL_SAMPLE";
   };
 
-  // Derive showPreservedSpecimens from checkbox state
-  const showPreservedSpecimens = checkedTypes.preservedSpecimen;
+  // Classify an occurrence into one of the 5 checkbox categories
+  const getCategory = (o: OccurrenceFeature): keyof typeof checkedTypes => {
+    const basis = o.properties.basisOfRecord;
+    if (basis === "HUMAN_OBSERVATION") {
+      return o.properties.datasetKey === INAT_DATASET_KEY ? "iNaturalist" : "humanOther";
+    }
+    if (basis === "MACHINE_OBSERVATION") return "machineObservation";
+    if (isPreserved(basis)) return "preservedSpecimen";
+    return "other";
+  };
 
-  // Filter occurrences to exclude preserved specimens and material samples when toggle is off
-  const filteredOccurrences = showPreservedSpecimens
-    ? occurrences
-    : occurrences.filter((o) => !isPreserved(o.properties.basisOfRecord));
+  // Filter occurrences based on which checkboxes are ticked
+  const filteredOccurrences = occurrences.filter((o) => checkedTypes[getCategory(o)]);
+
+  // Derive showPreservedSpecimens from checkbox state (for map legend)
+  const showPreservedSpecimens = checkedTypes.preservedSpecimen;
 
   // Helper to check if an occurrence is after the assessment year
   const isNewRecord = (eventDate?: string): boolean => {
