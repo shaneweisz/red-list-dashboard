@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
-import Link from "next/link";
 import { ThemeToggle } from "../components/ThemeToggle";
 
 // Dynamically import RedListView component
@@ -37,18 +36,6 @@ export default function RedListPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {/* Tab Navigation */}
-            <div className="flex gap-1 bg-zinc-100 dark:bg-zinc-800 rounded-lg p-1">
-              <div className="px-3 md:px-4 py-1.5 rounded-md text-xs md:text-sm font-medium bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm">
-                Red List
-              </div>
-              <Link
-                href="/gbif"
-                className="px-3 md:px-4 py-1.5 rounded-md text-xs md:text-sm font-medium transition-colors text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200"
-              >
-                GBIF
-              </Link>
-            </div>
             <ThemeToggle />
           </div>
         </div>

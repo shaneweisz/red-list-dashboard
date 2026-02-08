@@ -3,8 +3,8 @@ import * as fs from "fs";
 import * as path from "path";
 import { getTaxonConfig, CATEGORY_COLORS, CATEGORY_NAMES } from "@/config/taxa";
 
-// Category order for display (most threatened first)
-const CATEGORY_ORDER = ["EX", "EW", "CR", "EN", "VU", "NT", "LC", "DD"];
+// Category order for display (most threatened first, NE last)
+const CATEGORY_ORDER = ["EX", "EW", "CR", "EN", "VU", "NT", "LC", "DD", "NE"];
 
 interface CategoryStats {
   code: string;
@@ -15,6 +15,7 @@ interface CategoryStats {
 
 interface Species {
   sis_taxon_id: number;
+  scientific_name?: string;
   category: string;
   year_published: string;
 }
@@ -133,18 +134,50 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // Count NE species from GBIF CSV (species in GBIF but not in Red List)
+  let neCount = 0;
+  try {
+    const gbifCsvPath = path.join(process.cwd(), "data", taxon.gbifDataFile);
+    if (fs.existsSync(gbifCsvPath)) {
+      // Build set of Red List scientific names for matching
+      const redListNames = new Set(
+        data.species.map((s) => s.scientific_name?.toLowerCase?.() || "").filter(Boolean)
+      );
+
+      const csvContent = fs.readFileSync(gbifCsvPath, "utf-8");
+      const lines = csvContent.trim().split("\n");
+      const header = lines[0];
+      const hasScientificName = header.includes("scientific_name");
+
+      if (hasScientificName) {
+        for (let i = 1; i < lines.length; i++) {
+          const parts = lines[i].split(",");
+          const scientificName = parts[2]?.toLowerCase?.().trim();
+          if (scientificName && !redListNames.has(scientificName)) {
+            neCount++;
+          }
+        }
+      }
+    }
+  } catch {
+    // Ignore errors counting NE species
+  }
+
   // Build category stats from precomputed data
+  const byCategoryData: Record<string, number> = { ...data.metadata.byCategory, NE: neCount };
   const byCategory: CategoryStats[] = CATEGORY_ORDER.map((code) => ({
     code,
     name: CATEGORY_NAMES[code],
-    count: data.metadata.byCategory[code] || 0,
+    count: byCategoryData[code] || 0,
     color: CATEGORY_COLORS[code],
   }));
+
+  const totalWithNE = data.metadata.totalSpecies + neCount;
 
   return NextResponse.json({
     totalAssessed: data.metadata.totalSpecies,
     byCategory,
-    sampleSize: data.metadata.totalSpecies,
+    sampleSize: totalWithNE,
     lastUpdated: data.metadata.fetchedAt,
     cached: true,
     taxon: {

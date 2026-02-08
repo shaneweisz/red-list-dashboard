@@ -200,6 +200,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
   NT: "#cce226",
   LC: "#60c659",
   DD: "#6b7280",
+  NE: "#a3a3a3",
 };
 
 // Category order for sorting (most threatened first)
@@ -212,6 +213,7 @@ export const CATEGORY_ORDER: Record<string, number> = {
   NT: 5,
   LC: 6,
   DD: 7,
+  NE: 8,
 };
 
 // Category full names
@@ -224,4 +226,5 @@ export const CATEGORY_NAMES: Record<string, string> = {
   NT: "Near Threatened",
   LC: "Least Concern",
   DD: "Data Deficient",
+  NE: "Not Evaluated",
 };

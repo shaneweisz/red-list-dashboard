@@ -165,11 +165,13 @@ interface SpeciesInfo {
   taxonomicStatus: string;
   scientificName: string;
   canonicalName: string;
+  vernacularName: string;
 }
 
 interface ValidatedSpecies {
   key: number;
   canonicalName: string;
+  vernacularName: string;
 }
 
 /**
@@ -193,10 +195,10 @@ interface ValidatedSpecies {
  * - Plants: ~4% filtered (synonyms + infraspecific taxa)
  * - Invertebrates: ~0.5% filtered (mostly data quality issues)
  *
- * @returns Map of valid species keys to their canonical names
+ * @returns Map of valid species keys to their canonical and vernacular names
  */
-async function validateSpeciesKeys(speciesKeys: number[]): Promise<Map<number, string>> {
-  const validSpecies = new Map<number, string>();
+async function validateSpeciesKeys(speciesKeys: number[]): Promise<Map<number, ValidatedSpecies>> {
+  const validSpecies = new Map<number, ValidatedSpecies>();
   const invalidKeys: Array<{ key: number; reason: string }> = [];
 
   console.log(`\nValidating ${speciesKeys.length} species keys...`);
@@ -207,9 +209,11 @@ async function validateSpeciesKeys(speciesKeys: number[]): Promise<Map<number, s
     const results = await Promise.all(
       batch.map(async (key) => {
         try {
-          const response = await fetch(`https://api.gbif.org/v1/species/${key}`);
+          const response = await fetch(`https://api.gbif.org/v1/species/${key}`, {
+            headers: { "Accept-Language": "en" },
+          });
           if (!response.ok) {
-            return { key, rank: "UNKNOWN", taxonomicStatus: "UNKNOWN", scientificName: "Unknown", canonicalName: "" };
+            return { key, rank: "UNKNOWN", taxonomicStatus: "UNKNOWN", scientificName: "Unknown", canonicalName: "", vernacularName: "" };
           }
           const data = await response.json();
           return {
@@ -218,16 +222,17 @@ async function validateSpeciesKeys(speciesKeys: number[]): Promise<Map<number, s
             taxonomicStatus: data.taxonomicStatus || "UNKNOWN",
             scientificName: data.scientificName || "Unknown",
             canonicalName: data.canonicalName || data.scientificName || "",
+            vernacularName: data.vernacularName || "",
           };
         } catch {
-          return { key, rank: "ERROR", taxonomicStatus: "ERROR", scientificName: "Error", canonicalName: "" };
+          return { key, rank: "ERROR", taxonomicStatus: "ERROR", scientificName: "Error", canonicalName: "", vernacularName: "" };
         }
       })
     );
 
     for (const info of results) {
       if (info.rank === "SPECIES" && info.taxonomicStatus === "ACCEPTED") {
-        validSpecies.set(info.key, info.canonicalName);
+        validSpecies.set(info.key, { key: info.key, canonicalName: info.canonicalName, vernacularName: info.vernacularName });
       } else {
         invalidKeys.push({
           key: info.key,
@@ -534,14 +539,21 @@ async function fetchAllSpeciesCounts(taxon: TaxonConfig): Promise<SpeciesCount[]
 
 interface SpeciesCountWithName extends SpeciesCount {
   scientificName: string;
+  commonName: string;
+}
+
+function toTitleCase(s: string): string {
+  return s.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
 }
 
 function saveToCsv(results: SpeciesCountWithName[], outputFile: string): void {
-  const header = "species_key,occurrence_count,scientific_name";
+  const header = "species_key,occurrence_count,scientific_name,common_name";
   const rows = results.map((r) => {
-    // Escape scientific name if it contains commas (shouldn't happen, but safe)
+    // Escape fields if they contain commas
     const safeName = r.scientificName.includes(",") ? `"${r.scientificName}"` : r.scientificName;
-    return `${r.speciesKey},${r.count},${safeName}`;
+    const commonName = r.commonName ? toTitleCase(r.commonName) : "";
+    const safeCommon = commonName.includes(",") ? `"${commonName}"` : commonName;
+    return `${r.speciesKey},${r.count},${safeName},${safeCommon}`;
   });
   const content = [header, ...rows].join("\n");
   fs.writeFileSync(outputFile, content);
@@ -594,13 +606,17 @@ async function main() {
     const speciesKeys = rawResults.map((r) => r.speciesKey);
     const validSpecies = await validateSpeciesKeys(speciesKeys);
 
-    // Filter results to only include validated species, and add scientific names
+    // Filter results to only include validated species, and add scientific/common names
     const results: SpeciesCountWithName[] = rawResults
       .filter((r) => validSpecies.has(r.speciesKey))
-      .map((r) => ({
-        ...r,
-        scientificName: validSpecies.get(r.speciesKey) || "",
-      }));
+      .map((r) => {
+        const info = validSpecies.get(r.speciesKey)!;
+        return {
+          ...r,
+          scientificName: info.canonicalName,
+          commonName: info.vernacularName,
+        };
+      });
 
     console.log(`\nFinal species count (after validation): ${results.length}`);
 
