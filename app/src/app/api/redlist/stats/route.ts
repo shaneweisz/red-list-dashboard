@@ -137,24 +137,29 @@ export async function GET(request: NextRequest) {
   // Count NE species from GBIF CSV (species in GBIF but not in Red List)
   let neCount = 0;
   try {
-    const gbifCsvPath = path.join(process.cwd(), "data", taxon.gbifDataFile);
-    if (fs.existsSync(gbifCsvPath)) {
-      // Build set of Red List scientific names for matching
-      const redListNames = new Set(
-        data.species.map((s) => s.scientific_name?.toLowerCase?.() || "").filter(Boolean)
-      );
+    // Build set of Red List scientific names for matching
+    const redListNames = new Set(
+      data.species.map((s) => s.scientific_name?.toLowerCase?.() || "").filter(Boolean)
+    );
 
-      const csvContent = fs.readFileSync(gbifCsvPath, "utf-8");
-      const lines = csvContent.trim().split("\n");
-      const header = lines[0];
-      const hasScientificName = header.includes("scientific_name");
+    // Support multiple GBIF files (for "all" taxon) or single file
+    const gbifFiles = taxon.gbifDataFiles || [taxon.gbifDataFile];
 
-      if (hasScientificName) {
-        for (let i = 1; i < lines.length; i++) {
-          const parts = lines[i].split(",");
-          const scientificName = parts[2]?.toLowerCase?.().trim();
-          if (scientificName && !redListNames.has(scientificName)) {
-            neCount++;
+    for (const gbifFile of gbifFiles) {
+      const gbifCsvPath = path.join(process.cwd(), "data", gbifFile);
+      if (fs.existsSync(gbifCsvPath)) {
+        const csvContent = fs.readFileSync(gbifCsvPath, "utf-8");
+        const lines = csvContent.trim().split("\n");
+        const header = lines[0];
+        const hasScientificName = header.includes("scientific_name");
+
+        if (hasScientificName) {
+          for (let i = 1; i < lines.length; i++) {
+            const parts = lines[i].split(",");
+            const scientificName = parts[2]?.toLowerCase?.().trim();
+            if (scientificName && !redListNames.has(scientificName)) {
+              neCount++;
+            }
           }
         }
       }
