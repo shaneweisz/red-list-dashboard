@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { FaInfoCircle } from "react-icons/fa";
 import TaxaIcon from "@/components/TaxaIcon";
 
@@ -31,42 +31,17 @@ interface Props {
   selectedTaxon: string | null;
 }
 
-// Helper to get color styling for percentages
-const getAssessedStyle = (percent: number) => ({
-  backgroundColor: percent >= 50 ? "rgba(34, 197, 94, 0.15)" : percent >= 20 ? "rgba(234, 179, 8, 0.15)" : "rgba(239, 68, 68, 0.15)",
-  color: percent >= 50 ? "#16a34a" : percent >= 20 ? "#ca8a04" : "#dc2626",
-});
+// Color for percentage text based on coverage level
+const getAssessedColor = (percent: number) =>
+  percent >= 50 ? "#16a34a" : percent >= 20 ? "#ca8a04" : "#dc2626";
 
-const getOutdatedStyle = (percent: number) => ({
-  backgroundColor: percent < 20 ? "rgba(34, 197, 94, 0.15)" : percent < 40 ? "rgba(234, 179, 8, 0.15)" : "rgba(239, 68, 68, 0.15)",
-  color: percent < 20 ? "#16a34a" : percent < 40 ? "#ca8a04" : "#dc2626",
-});
-
-// Sticky cell classes for the pinned taxon column
-const stickyClasses = "sticky left-0 z-10";
+const getAssessedColorDark = (percent: number) =>
+  percent >= 50 ? "#4ade80" : percent >= 20 ? "#facc15" : "#f87171";
 
 export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  // Auto-scroll to show Assessed column on mobile (skip past Est. Described)
-  const autoScroll = useCallback((el: HTMLDivElement) => {
-    if (window.innerWidth < 768) {
-      // Find the Est. Described column header to know how wide it is
-      const firstDataTh = el.querySelector('thead th:nth-child(2)') as HTMLElement;
-      if (firstDataTh) {
-        el.scrollLeft = firstDataTh.offsetWidth;
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    if (scrollRef.current && taxa.length > 0) {
-      autoScroll(scrollRef.current);
-    }
-  }, [taxa, autoScroll]);
 
   useEffect(() => {
     async function fetchTaxa() {
@@ -105,210 +80,154 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
 
   // Calculate totals
   const totalAssessed = taxa.reduce((sum, t) => sum + t.totalAssessed, 0);
-  const totalOutdated = taxa.reduce((sum, t) => sum + t.outdated, 0);
   const totalDescribed = taxa.reduce((sum, t) => sum + t.estimatedDescribed, 0);
   const totalPercentAssessed = (totalAssessed / totalDescribed) * 100;
-  const totalPercentOutdated = (totalOutdated / totalAssessed) * 100;
 
-  // Check if "all" is selected or a specific taxon
   const isAllSelected = selectedTaxon === "all";
   const hasSpecificTaxon = selectedTaxon && selectedTaxon !== "all";
 
-  // Column order: Taxon (sticky) | Est. Described | Assessed | % Assessed | Outdated | % Outdated
-  // On mobile, auto-scrolled so Assessed is the first visible column after Taxon.
-  // Scroll left to see Est. Described, scroll right to see Outdated / % Outdated.
-
-  // Render a data row
-  const renderRow = (
+  // Render a single bar row
+  const renderBarRow = (
     id: string,
     name: string,
     color: string,
     estimatedDescribed: number,
     assessed: number,
     percentAssessed: number,
-    outdated: number,
-    percentOutdated: number,
     isSelected?: boolean,
     available = true
   ) => {
-    const rowBg = isSelected
-      ? "bg-zinc-100 dark:bg-zinc-800"
-      : "";
     const hoverClass = available
       ? "hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer"
       : "opacity-50 cursor-not-allowed";
 
     return (
-      <tr
+      <div
         key={id}
         onClick={() => {
           if (!available) return;
           onSelectTaxon(isSelected ? null : id);
         }}
-        className={`transition-colors ${rowBg} ${hoverClass}`}
+        className={`px-3 md:px-4 py-2.5 md:py-3 transition-colors ${
+          isSelected ? "bg-zinc-100 dark:bg-zinc-800" : ""
+        } ${hoverClass}`}
       >
-        <td className={`${stickyClasses} px-3 md:px-4 py-2.5 md:py-3 whitespace-nowrap ${isSelected ? "bg-zinc-100 dark:bg-zinc-800" : "bg-white dark:bg-zinc-900"}`}>
+        {/* Row header: icon + name on left, percentage + counts on right */}
+        <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-2">
-            <TaxaIcon taxonId={id} size={22} className="flex-shrink-0" style={{ color }} />
-            <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{name}</span>
+            <TaxaIcon taxonId={id} size={20} className="flex-shrink-0" style={{ color }} />
+            <span className="font-medium text-sm text-zinc-900 dark:text-zinc-100">{name}</span>
           </div>
-        </td>
-        <td className="px-3 md:px-4 py-2.5 md:py-3 text-right whitespace-nowrap">
-          <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
-            {estimatedDescribed.toLocaleString()}
-          </span>
-        </td>
-        <td className="px-3 md:px-4 py-2.5 md:py-3 text-right whitespace-nowrap">
-          <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
-            {available ? assessed.toLocaleString() : "—"}
-          </span>
-        </td>
-        <td className="px-3 md:px-4 py-2.5 md:py-3 text-right whitespace-nowrap">
-          {available ? (
-            <span
-              className="text-sm md:text-base font-medium px-1.5 md:px-2 py-0.5 rounded tabular-nums"
-              style={getAssessedStyle(percentAssessed)}
-            >
-              {percentAssessed.toFixed(1)}%
-            </span>
-          ) : (
-            <span className="text-sm md:text-base text-zinc-400">—</span>
-          )}
-        </td>
-        <td className="px-3 md:px-4 py-2.5 md:py-3 text-right whitespace-nowrap">
-          <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
-            {available ? outdated.toLocaleString() : "—"}
-          </span>
-        </td>
-        <td className="px-3 md:px-4 py-2.5 md:py-3 text-right whitespace-nowrap">
-          {available ? (
-            <span
-              className="text-sm md:text-base font-medium px-1.5 md:px-2 py-0.5 rounded tabular-nums"
-              style={getOutdatedStyle(percentOutdated)}
-            >
-              {percentOutdated.toFixed(1)}%
-            </span>
-          ) : (
-            <span className="text-sm md:text-base text-zinc-400">—</span>
-          )}
-        </td>
-      </tr>
+          <div className="flex items-baseline gap-1.5">
+            {available ? (
+              <>
+                <span
+                  className="font-semibold text-sm tabular-nums dark:hidden"
+                  style={{ color: getAssessedColor(percentAssessed) }}
+                >
+                  {percentAssessed.toFixed(1)}%
+                </span>
+                <span
+                  className="font-semibold text-sm tabular-nums hidden dark:inline"
+                  style={{ color: getAssessedColorDark(percentAssessed) }}
+                >
+                  {percentAssessed.toFixed(1)}%
+                </span>
+                <span className="text-xs text-zinc-500 dark:text-zinc-400 tabular-nums">
+                  ({assessed.toLocaleString()} of {estimatedDescribed.toLocaleString()})
+                </span>
+              </>
+            ) : (
+              <span className="text-sm text-zinc-400">—</span>
+            )}
+          </div>
+        </div>
+
+        {/* Progress bar */}
+        {available && (
+          <div className="w-full h-2 bg-zinc-200 dark:bg-zinc-700 rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{
+                width: `${percentAssessed}%`,
+                minWidth: percentAssessed > 0 ? "4px" : "0",
+                backgroundColor: color,
+              }}
+            />
+          </div>
+        )}
+      </div>
     );
   };
 
-  // Table header
-  const renderHead = () => (
-    <thead>
-      <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
-        <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap`}>
-          Taxon
-        </th>
-        <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
-          <span className="inline-flex items-center gap-1">
-            Est. Described
-            <span className="relative group">
-              <a
-                href={IUCN_SOURCE_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-              >
-                <FaInfoCircle size={12} />
-              </a>
-              <span className="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible z-50 shadow-lg normal-case">
-                Source: IUCN Red List Table 1a (2025-2)
-              </span>
-            </span>
-          </span>
-        </th>
-        <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
-          Assessed
-        </th>
-        <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
-          % Assessed
-        </th>
-        <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
-          Outdated (10+y)
-        </th>
-        <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
-          % Outdated
-        </th>
-      </tr>
-    </thead>
-  );
-
-  // If a specific taxon is selected (not "all"), show just that taxon
+  // If a specific taxon is selected, show just that one
   if (hasSpecificTaxon) {
     const taxon = taxa.find(t => t.id === selectedTaxon);
     if (!taxon) return null;
 
     return (
-      <div ref={scrollRef} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto">
-        <table className="w-full">
-          {renderHead()}
-          <tbody>
-            {renderRow(
-              taxon.id,
-              taxon.name,
-              taxon.color,
-              taxon.estimatedDescribed,
-              taxon.totalAssessed,
-              taxon.percentAssessed,
-              taxon.outdated,
-              taxon.percentOutdated,
-              true
-            )}
-          </tbody>
-        </table>
+      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
+        {renderBarRow(
+          taxon.id,
+          taxon.name,
+          taxon.color,
+          taxon.estimatedDescribed,
+          taxon.totalAssessed,
+          taxon.percentAssessed,
+          true
+        )}
       </div>
     );
   }
 
   return (
-    <div ref={scrollRef} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto">
-      <table className="w-full">
-        {renderHead()}
-        <tbody>
-          {/* All Species row */}
-          {renderRow(
-            "all",
-            "All Species",
-            "#22c55e",
-            totalDescribed,
-            totalAssessed,
-            totalPercentAssessed,
-            totalOutdated,
-            totalPercentOutdated,
-            isAllSelected
-          )}
+    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
+      {/* Header with source link */}
+      <div className="px-3 md:px-4 pt-3 pb-1 flex items-center justify-between">
+        <h3 className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+          Assessment Coverage
+        </h3>
+        <a
+          href={IUCN_SOURCE_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 flex items-center gap-1"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <FaInfoCircle size={12} />
+          <span className="text-xs">IUCN 2025-2</span>
+        </a>
+      </div>
 
-          {/* Separator */}
-          {!isAllSelected && (
-            <tr>
-              <td colSpan={6} className="p-0">
-                <div className="border-b-2 border-zinc-200 dark:border-zinc-700" />
-              </td>
-            </tr>
-          )}
+      {/* All Species row */}
+      {renderBarRow(
+        "all",
+        "All Species",
+        "#22c55e",
+        totalDescribed,
+        totalAssessed,
+        totalPercentAssessed,
+        isAllSelected
+      )}
 
-          {/* Individual taxa rows */}
-          {!isAllSelected && taxa.map((taxon) =>
-            renderRow(
-              taxon.id,
-              taxon.name,
-              taxon.color,
-              taxon.estimatedDescribed,
-              taxon.totalAssessed,
-              taxon.percentAssessed,
-              taxon.outdated,
-              taxon.percentOutdated,
-              false,
-              taxon.available
-            )
-          )}
-        </tbody>
-      </table>
+      {/* Separator */}
+      {!isAllSelected && (
+        <div className="mx-3 md:mx-4 border-b-2 border-zinc-200 dark:border-zinc-700" />
+      )}
+
+      {/* Individual taxa rows */}
+      {!isAllSelected && taxa.map((taxon) =>
+        renderBarRow(
+          taxon.id,
+          taxon.name,
+          taxon.color,
+          taxon.estimatedDescribed,
+          taxon.totalAssessed,
+          taxon.percentAssessed,
+          false,
+          taxon.available
+        )
+      )}
     </div>
   );
 }
