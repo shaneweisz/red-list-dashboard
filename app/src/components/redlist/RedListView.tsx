@@ -1651,7 +1651,6 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                       {gbifSpeciesKey && (
                         <OccurrenceMapRow
                           speciesKey={gbifSpeciesKey}
-                          speciesName={s.scientific_name.toLowerCase()}
                           mounted={mounted}
                           colSpan={8}
                           assessmentYear={assessmentYear}
