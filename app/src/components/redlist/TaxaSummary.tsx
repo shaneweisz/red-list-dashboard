@@ -36,7 +36,7 @@ const getAssessedBarColor = (percent: number) =>
   percent >= 50 ? "#22c55e" : percent >= 20 ? "#eab308" : "#ef4444";
 
 const getOutdatedBarColor = (percent: number) =>
-  percent < 20 ? "#22c55e" : percent < 40 ? "#eab308" : "#ef4444";
+  percent < 10 ? "#22c55e" : percent <= 30 ? "#eab308" : "#ef4444";
 
 // Text color classes with dark mode support
 const getAssessedTextClasses = (percent: number) =>
@@ -47,19 +47,26 @@ const getAssessedTextClasses = (percent: number) =>
     : "text-red-600 dark:text-red-400";
 
 const getOutdatedTextClasses = (percent: number) =>
-  percent < 20
+  percent < 10
     ? "text-green-600 dark:text-green-400"
-    : percent < 40
+    : percent <= 30
     ? "text-yellow-600 dark:text-yellow-400"
     : "text-red-600 dark:text-red-400";
 
+// Neutral colors for the All Species summary row
+const NEUTRAL_BAR_COLOR = "#a1a1aa"; // zinc-400
+const NEUTRAL_TEXT_CLASSES = "text-zinc-600 dark:text-zinc-400";
+
 // Sticky cell classes for the pinned taxon column
 const stickyClasses = "sticky left-0 z-10";
+
+type MobileColumn = "assessed" | "outdated";
 
 export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [mobileColumn, setMobileColumn] = useState<MobileColumn>("assessed");
 
   useEffect(() => {
     async function fetchTaxa() {
@@ -113,18 +120,24 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
     denominator: number,
     barColor: string,
     textClasses: string,
-    available: boolean
+    available: boolean,
+    visibleOn: MobileColumn
   ) => {
+    // On mobile, hide the column that isn't active; always show on md+
+    const mobileVisibility = mobileColumn === visibleOn
+      ? "table-cell"
+      : "hidden md:table-cell";
+
     if (!available) {
       return (
-        <td className="px-3 md:px-4 py-2.5 md:py-3">
+        <td className={`px-3 md:px-4 py-2.5 md:py-3 ${mobileVisibility}`}>
           <span className="text-sm text-zinc-400">—</span>
         </td>
       );
     }
 
     return (
-      <td className="px-3 md:px-4 py-2.5 md:py-3 min-w-[180px]">
+      <td className={`px-3 md:px-4 py-2.5 md:py-3 min-w-[200px] md:min-w-[240px] ${mobileVisibility}`}>
         <div className="flex items-center gap-2 mb-0.5">
           <div className="flex-1 h-2 bg-zinc-200 dark:bg-zinc-700 rounded-full overflow-hidden">
             <div
@@ -158,12 +171,18 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
     outdated: number,
     percentOutdated: number,
     isSelected?: boolean,
-    available = true
+    available = true,
+    neutral = false
   ) => {
     const rowBg = isSelected ? "bg-zinc-100 dark:bg-zinc-800" : "";
     const hoverClass = available
       ? "hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer"
       : "opacity-50 cursor-not-allowed";
+
+    const assessedBarColor = neutral ? NEUTRAL_BAR_COLOR : getAssessedBarColor(percentAssessed);
+    const assessedTextCls = neutral ? NEUTRAL_TEXT_CLASSES : getAssessedTextClasses(percentAssessed);
+    const outdatedBarColor = neutral ? NEUTRAL_BAR_COLOR : getOutdatedBarColor(percentOutdated);
+    const outdatedTextCls = neutral ? NEUTRAL_TEXT_CLASSES : getOutdatedTextClasses(percentOutdated);
 
     return (
       <tr
@@ -184,17 +203,19 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
           percentAssessed,
           assessed,
           estimatedDescribed,
-          getAssessedBarColor(percentAssessed),
-          getAssessedTextClasses(percentAssessed),
-          available
+          assessedBarColor,
+          assessedTextCls,
+          available,
+          "assessed"
         )}
         {renderBarCell(
           percentOutdated,
           outdated,
           assessed,
-          getOutdatedBarColor(percentOutdated),
-          getOutdatedTextClasses(percentOutdated),
-          available
+          outdatedBarColor,
+          outdatedTextCls,
+          available,
+          "outdated"
         )}
       </tr>
     );
@@ -207,7 +228,7 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
         <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap`}>
           Taxon
         </th>
-        <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
+        <th className={`px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap ${mobileColumn === "assessed" ? "table-cell" : "hidden md:table-cell"}`}>
           <span className="inline-flex items-center gap-1">
             % Assessed
             <span className="relative group">
@@ -226,11 +247,37 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
             </span>
           </span>
         </th>
-        <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
+        <th className={`px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap ${mobileColumn === "outdated" ? "table-cell" : "hidden md:table-cell"}`}>
           % Outdated (10+y)
         </th>
       </tr>
     </thead>
+  );
+
+  // Mobile column toggle (visible only below md)
+  const renderMobileToggle = () => (
+    <div className="md:hidden flex border-b border-zinc-200 dark:border-zinc-700">
+      <button
+        onClick={(e) => { e.stopPropagation(); setMobileColumn("assessed"); }}
+        className={`flex-1 px-3 py-2 text-xs font-medium uppercase tracking-wider transition-colors ${
+          mobileColumn === "assessed"
+            ? "text-zinc-900 dark:text-zinc-100 border-b-2 border-zinc-900 dark:border-zinc-100"
+            : "text-zinc-400 dark:text-zinc-500"
+        }`}
+      >
+        % Assessed
+      </button>
+      <button
+        onClick={(e) => { e.stopPropagation(); setMobileColumn("outdated"); }}
+        className={`flex-1 px-3 py-2 text-xs font-medium uppercase tracking-wider transition-colors ${
+          mobileColumn === "outdated"
+            ? "text-zinc-900 dark:text-zinc-100 border-b-2 border-zinc-900 dark:border-zinc-100"
+            : "text-zinc-400 dark:text-zinc-500"
+        }`}
+      >
+        % Outdated (10+y)
+      </button>
+    </div>
   );
 
   // Single taxon selected view
@@ -240,6 +287,7 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
 
     return (
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto">
+        {renderMobileToggle()}
         <table className="w-full">
           {renderHead()}
           <tbody>
@@ -262,10 +310,11 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
 
   return (
     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto">
+      {renderMobileToggle()}
       <table className="w-full">
         {renderHead()}
         <tbody>
-          {/* All Species row */}
+          {/* All Species row (neutral colors) */}
           {renderRow(
             "all",
             "All Species",
@@ -275,7 +324,9 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
             totalPercentAssessed,
             totalOutdated,
             totalPercentOutdated,
-            isAllSelected
+            isAllSelected,
+            true,
+            true
           )}
 
           {/* Separator */}
