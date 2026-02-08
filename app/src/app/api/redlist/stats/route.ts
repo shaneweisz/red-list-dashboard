@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as fs from "fs";
-import * as fsPromises from "fs/promises";
 import * as path from "path";
 import { getTaxonConfig, CATEGORY_COLORS, CATEGORY_NAMES } from "@/config/taxa";
 
@@ -138,37 +137,28 @@ export async function GET(request: NextRequest) {
   // Count NE species from GBIF CSV (species in GBIF but not in Red List)
   let neCount = 0;
   try {
-    // Build set of Red List scientific names for matching
-    const redListNames = new Set(
-      data.species.map((s) => s.scientific_name?.toLowerCase?.() || "").filter(Boolean)
-    );
+    const gbifCsvPath = path.join(process.cwd(), "data", taxon.gbifDataFile);
+    if (fs.existsSync(gbifCsvPath)) {
+      // Build set of Red List scientific names for matching
+      const redListNames = new Set(
+        data.species.map((s) => s.scientific_name?.toLowerCase?.() || "").filter(Boolean)
+      );
 
-    // Support multiple GBIF files (for "all" taxon) or single file
-    const gbifFiles = taxon.gbifDataFiles || [taxon.gbifDataFile];
-
-    // Load and process files in parallel for better performance
-    const countPromises = gbifFiles.map(async (gbifFile) => {
-      const gbifCsvPath = path.join(process.cwd(), "data", gbifFile);
-      if (!fs.existsSync(gbifCsvPath)) return 0;
-
-      const csvContent = await fsPromises.readFile(gbifCsvPath, "utf-8");
+      const csvContent = fs.readFileSync(gbifCsvPath, "utf-8");
       const lines = csvContent.trim().split("\n");
       const header = lines[0];
-      if (!header.includes("scientific_name")) return 0;
+      const hasScientificName = header.includes("scientific_name");
 
-      let count = 0;
-      for (let i = 1; i < lines.length; i++) {
-        const parts = lines[i].split(",");
-        const scientificName = parts[2]?.toLowerCase?.().trim();
-        if (scientificName && !redListNames.has(scientificName)) {
-          count++;
+      if (hasScientificName) {
+        for (let i = 1; i < lines.length; i++) {
+          const parts = lines[i].split(",");
+          const scientificName = parts[2]?.toLowerCase?.().trim();
+          if (scientificName && !redListNames.has(scientificName)) {
+            neCount++;
+          }
         }
       }
-      return count;
-    });
-
-    const counts = await Promise.all(countPromises);
-    neCount = counts.reduce((sum, c) => sum + c, 0);
+    }
   } catch {
     // Ignore errors counting NE species
   }

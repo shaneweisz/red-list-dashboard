@@ -24,8 +24,7 @@ export interface TaxonConfig {
   estimatedSourceUrl?: string;
   dataFile: string; // Primary data file
   dataFiles?: string[]; // Multiple data files for combined taxa
-  gbifDataFile: string; // Primary GBIF data file
-  gbifDataFiles?: string[]; // Multiple GBIF data files for combined taxa
+  gbifDataFile: string;
   gbifKingdomKey?: number;
   gbifClassKey?: number;
   gbifClassKeys?: number[]; // Multiple class keys for taxa like Reptilia
@@ -65,17 +64,7 @@ export const TAXA: TaxonConfig[] = [
       "redlist-ascomycota.json",
       "redlist-basidiomycota.json",
     ],
-    gbifDataFile: "gbif-all.csv", // Not used - we merge all files
-    gbifDataFiles: [
-      "gbif-mammalia.csv",
-      "gbif-aves.csv",
-      "gbif-reptilia.csv",
-      "gbif-amphibia.csv",
-      "gbif-fishes.csv",
-      "gbif-invertebrates.csv",
-      "gbif-plantae.csv",
-      "gbif-fungi.csv",
-    ],
+    gbifDataFile: "gbif-all.csv",
     color: "#dc2626", // red-600
   },
   {

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as fs from "fs";
-import * as fsPromises from "fs/promises";
 import * as path from "path";
 import { TAXA, getTaxonConfig } from "@/config/taxa";
 
@@ -204,12 +203,8 @@ export async function GET(request: NextRequest) {
   // Handle NE category: serve species from GBIF CSV that aren't in Red List
   if (category === "NE") {
     try {
-      // Support multiple GBIF files (for "all" taxon) or single file
-      const gbifFiles = taxon.gbifDataFiles || [taxon.gbifDataFile];
-
-      // Check if at least one file exists
-      const existingFiles = gbifFiles.filter(f => fs.existsSync(path.join(process.cwd(), "data", f)));
-      if (existingFiles.length === 0) {
+      const gbifCsvPath = path.join(process.cwd(), "data", taxon.gbifDataFile);
+      if (!fs.existsSync(gbifCsvPath)) {
         return NextResponse.json({
           species: [],
           total: 0,
@@ -222,70 +217,46 @@ export async function GET(request: NextRequest) {
         data.species.map((s) => s.scientific_name.toLowerCase().trim())
       );
 
+      const csvContent = fs.readFileSync(gbifCsvPath, "utf-8");
+      const lines = csvContent.trim().split("\n");
+      const header = lines[0];
+      const hasScientificName = header.includes("scientific_name");
+      const hasCommonName = header.includes("common_name");
+
       let neSpecies: Species[] = [];
-
-      // Map GBIF files to taxon IDs for tagging species
-      const fileToTaxonId: Record<string, string> = {
-        "gbif-mammalia.csv": "mammalia",
-        "gbif-aves.csv": "aves",
-        "gbif-reptilia.csv": "reptilia",
-        "gbif-amphibia.csv": "amphibia",
-        "gbif-fishes.csv": "fishes",
-        "gbif-invertebrates.csv": "invertebrates",
-        "gbif-plantae.csv": "plantae",
-        "gbif-fungi.csv": "fungi",
-      };
-
-      // Load and process files in parallel for better performance
-      const speciesPromises = existingFiles.map(async (gbifFile) => {
-        const gbifCsvPath = path.join(process.cwd(), "data", gbifFile);
-        const csvContent = await fsPromises.readFile(gbifCsvPath, "utf-8");
-        const lines = csvContent.trim().split("\n");
-        const header = lines[0];
-        const hasScientificName = header.includes("scientific_name");
-        const hasCommonName = header.includes("common_name");
-        const sourceTaxonId = fileToTaxonId[gbifFile] || taxon.id;
-
-        const fileSpecies: Species[] = [];
-        if (hasScientificName) {
-          for (let i = 1; i < lines.length; i++) {
-            const parts = lines[i].split(",");
-            const speciesKey = parseInt(parts[0], 10);
-            const occurrenceCount = parseInt(parts[1], 10);
-            const scientificName = parts[2]?.trim() || "";
-            // Common name is in column 3 if present; handle quoted values
-            let commonName: string | null = null;
-            if (hasCommonName) {
-              const raw = parts.slice(3).join(",").trim();
-              commonName = raw.replace(/^"|"$/g, "") || null;
-            }
-            if (scientificName && !redListNames.has(scientificName.toLowerCase())) {
-              fileSpecies.push({
-                sis_taxon_id: speciesKey, // Use GBIF species key as ID
-                assessment_id: 0,
-                scientific_name: scientificName,
-                common_name: commonName,
-                family: null,
-                category: "NE",
-                assessment_date: null,
-                year_published: "",
-                url: `https://www.gbif.org/species/${speciesKey}`,
-                population_trend: null,
-                countries: [],
-                assessment_count: 0,
-                previous_assessments: [],
-                gbif_species_key: speciesKey,
-                gbif_occurrence_count: occurrenceCount,
-                taxon_id: sourceTaxonId,
-              } as Species);
-            }
+      if (hasScientificName) {
+        for (let i = 1; i < lines.length; i++) {
+          const parts = lines[i].split(",");
+          const speciesKey = parseInt(parts[0], 10);
+          const occurrenceCount = parseInt(parts[1], 10);
+          const scientificName = parts[2]?.trim() || "";
+          // Common name is in column 3 if present; handle quoted values
+          let commonName: string | null = null;
+          if (hasCommonName) {
+            const raw = parts.slice(3).join(",").trim();
+            commonName = raw.replace(/^"|"$/g, "") || null;
+          }
+          if (scientificName && !redListNames.has(scientificName.toLowerCase())) {
+            neSpecies.push({
+              sis_taxon_id: speciesKey, // Use GBIF species key as ID
+              assessment_id: 0,
+              scientific_name: scientificName,
+              common_name: commonName,
+              family: null,
+              category: "NE",
+              assessment_date: null,
+              year_published: "",
+              url: `https://www.gbif.org/species/${speciesKey}`,
+              population_trend: null,
+              countries: [],
+              assessment_count: 0,
+              previous_assessments: [],
+              gbif_species_key: speciesKey,
+              gbif_occurrence_count: occurrenceCount,
+            } as Species);
           }
         }
-        return fileSpecies;
-      });
-
-      const speciesArrays = await Promise.all(speciesPromises);
-      neSpecies = speciesArrays.flat();
+      }
 
       // Apply search filter
       if (search) {
