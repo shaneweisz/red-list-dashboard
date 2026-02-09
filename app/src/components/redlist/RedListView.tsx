@@ -457,6 +457,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
 
   // Row expansion state
   const [selectedSpeciesKey, setSelectedSpeciesKey] = useState<number | null>(null);
+  const [activeDetailTab, setActiveDetailTab] = useState<"gbif" | "literature">("gbif");
   const [mounted, setMounted] = useState(false);
 
   // Pinned species as ordered array (persisted to localStorage)
@@ -1437,7 +1438,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                   <React.Fragment key={s.sis_taxon_id}>
                   <tr
                     className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer ${selectedSpeciesKey === s.sis_taxon_id ? "bg-zinc-100 dark:bg-zinc-800" : ""} ${isDragging ? "opacity-50" : ""} ${isDragOver ? "border-t-2 border-amber-500" : ""}`}
-                    onClick={() => setSelectedSpeciesKey(selectedSpeciesKey === s.sis_taxon_id ? null : s.sis_taxon_id)}
+                    onClick={() => { const opening = selectedSpeciesKey !== s.sis_taxon_id; setSelectedSpeciesKey(opening ? s.sis_taxon_id : null); if (opening) setActiveDetailTab(gbifSpeciesKey ? "gbif" : "literature"); }}
                     draggable={isPinned && showOnlyStarred}
                     onDragStart={(e) => handleDragStart(e, s.sis_taxon_id)}
                     onDragOver={(e) => handleDragOver(e, s.sis_taxon_id)}
@@ -1849,28 +1850,47 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                     </td>
                   </tr>
                   {selectedSpeciesKey === s.sis_taxon_id && (
-                    <>
-                      {gbifSpeciesKey && (
-                        <OccurrenceMapRow
-                          speciesKey={gbifSpeciesKey}
-                          mounted={mounted}
-                          colSpan={showingOnlyNE ? 5 : 8}
-                          assessmentYear={assessmentYear}
-                        />
-                      )}
-                      {(assessmentYear || s.category === "NE") && (
-                        <tr>
-                          <td colSpan={showingOnlyNE ? 5 : 8} className="p-0 bg-zinc-50 dark:bg-zinc-800/30">
-                            <div className="p-4" style={{ maxWidth: 'calc(100vw - 2rem)', transform: 'translateX(var(--scroll-left, 0px))' }}>
-                            <NewLiteratureSinceAssessment
-                              scientificName={s.scientific_name}
-                              assessmentYear={assessmentYear ?? 0}
+                    <tr>
+                      <td colSpan={showingOnlyNE ? 5 : 8} className="p-0 bg-zinc-50 dark:bg-zinc-800/30">
+                        <div style={{ maxWidth: 'calc(100vw - 2rem)', transform: 'translateX(var(--scroll-left, 0px))' }}>
+                          {/* Tab buttons */}
+                          <div className="flex border-b border-zinc-200 dark:border-zinc-700" onClick={(e) => e.stopPropagation()}>
+                            {gbifSpeciesKey && (
+                              <button
+                                className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "gbif" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                onClick={() => setActiveDetailTab("gbif")}
+                              >
+                                GBIF + iNaturalist
+                              </button>
+                            )}
+                            {(assessmentYear || s.category === "NE") && (
+                              <button
+                                className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "literature" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                onClick={() => setActiveDetailTab("literature")}
+                              >
+                                Literature
+                              </button>
+                            )}
+                          </div>
+                          {/* Tab content */}
+                          {activeDetailTab === "gbif" && gbifSpeciesKey && (
+                            <OccurrenceMapRow
+                              speciesKey={gbifSpeciesKey}
+                              mounted={mounted}
+                              assessmentYear={assessmentYear}
                             />
+                          )}
+                          {activeDetailTab === "literature" && (assessmentYear || s.category === "NE") && (
+                            <div className="p-4">
+                              <NewLiteratureSinceAssessment
+                                scientificName={s.scientific_name}
+                                assessmentYear={assessmentYear ?? 0}
+                              />
                             </div>
-                          </td>
-                        </tr>
-                      )}
-                    </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
                   )}
                   </React.Fragment>
                 );
