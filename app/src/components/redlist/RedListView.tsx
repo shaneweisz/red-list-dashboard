@@ -793,7 +793,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedCategories, selectedYearRanges, searchFilter]);
+  }, [selectedCategories, selectedYearRanges, searchFilter, selectedCountries, showOnlyStarred]);
 
   // Fetch details for visible species
   useEffect(() => {
