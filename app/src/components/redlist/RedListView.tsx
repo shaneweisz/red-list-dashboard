@@ -1895,8 +1895,8 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                               No GBIF match found for <span className="italic">{s.scientific_name}</span>. Occurrence data is unavailable.
                             </div>
                           )}
-                          {activeDetailTab === "literature" && (assessmentYear || s.category === "NE") && (
-                            <div className="p-4">
+                          {(assessmentYear || s.category === "NE") && (
+                            <div className="p-4" style={{ display: activeDetailTab === "literature" ? undefined : "none" }}>
                               <NewLiteratureSinceAssessment
                                 scientificName={s.scientific_name}
                                 assessmentYear={assessmentYear ?? 0}
