@@ -1883,14 +1883,15 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                             )}
                           </div>
                           {/* Tab content */}
-                          {activeDetailTab === "gbif" && gbifSpeciesKey && (
-                            <OccurrenceMapRow
-                              speciesKey={gbifSpeciesKey}
-                              mounted={mounted}
-                              assessmentYear={assessmentYear}
-                            />
-                          )}
-                          {activeDetailTab === "gbif" && !gbifSpeciesKey && (
+                          {gbifSpeciesKey ? (
+                            <div style={{ display: activeDetailTab === "gbif" ? undefined : "none" }}>
+                              <OccurrenceMapRow
+                                speciesKey={gbifSpeciesKey}
+                                mounted={mounted}
+                                assessmentYear={assessmentYear}
+                              />
+                            </div>
+                          ) : activeDetailTab === "gbif" && (
                             <div className="p-6 text-sm text-zinc-500 dark:text-zinc-400">
                               No GBIF match found for <span className="italic">{s.scientific_name}</span>. Occurrence data is unavailable.
                             </div>
