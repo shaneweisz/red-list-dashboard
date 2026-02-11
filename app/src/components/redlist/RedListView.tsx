@@ -458,6 +458,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
   // Row expansion state
   const [selectedSpeciesKey, setSelectedSpeciesKey] = useState<number | null>(null);
   const [activeDetailTab, setActiveDetailTab] = useState<"gbif" | "literature">("gbif");
+  const [stackedDetailView, setStackedDetailView] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   // Pinned species as ordered array (persisted to localStorage)
@@ -1865,39 +1866,58 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                     <tr>
                       <td colSpan={showingOnlyNE ? 5 : 8} className="p-0 bg-zinc-50 dark:bg-zinc-800/30">
                         <div style={{ maxWidth: 'calc(100vw - 2rem)', transform: 'translateX(var(--scroll-left, 0px))' }}>
-                          {/* Tab buttons */}
-                          <div className="flex border-b border-zinc-200 dark:border-zinc-700" onClick={(e) => e.stopPropagation()}>
-                            <button
-                              className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "gbif" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"} ${!gbifSpeciesKey ? "opacity-50 cursor-default" : ""}`}
-                              onClick={() => gbifSpeciesKey && setActiveDetailTab("gbif")}
-                            >
-                              GBIF + iNaturalist{!gbifSpeciesKey && <span className="ml-1 text-xs text-zinc-400">(no match)</span>}
-                            </button>
-                            {(assessmentYear || s.category === "NE") && (
-                              <button
-                                className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "literature" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
-                                onClick={() => setActiveDetailTab("literature")}
-                              >
-                                Literature
-                              </button>
+                          {/* Tab bar */}
+                          <div className="flex items-center border-b border-zinc-200 dark:border-zinc-700" onClick={(e) => e.stopPropagation()}>
+                            {!stackedDetailView && (
+                              <>
+                                <button
+                                  className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "gbif" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"} ${!gbifSpeciesKey ? "opacity-50 cursor-default" : ""}`}
+                                  onClick={() => gbifSpeciesKey && setActiveDetailTab("gbif")}
+                                >
+                                  GBIF + iNaturalist{!gbifSpeciesKey && <span className="ml-1 text-xs text-zinc-400">(no match)</span>}
+                                </button>
+                                {(assessmentYear || s.category === "NE") && (
+                                  <button
+                                    className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "literature" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                    onClick={() => setActiveDetailTab("literature")}
+                                  >
+                                    Literature
+                                  </button>
+                                )}
+                              </>
                             )}
+                            {stackedDetailView && (
+                              <span className="px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">All Sections</span>
+                            )}
+                            <button
+                              className="ml-auto px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 flex items-center gap-1"
+                              onClick={() => setStackedDetailView(!stackedDetailView)}
+                              title={stackedDetailView ? "Switch to tabbed view" : "Switch to stacked view"}
+                            >
+                              {stackedDetailView ? (
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" strokeWidth="2"/><path d="M9 3v18" strokeWidth="2"/></svg>
+                              ) : (
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" strokeWidth="2"/><path d="M3 12h18" strokeWidth="2"/></svg>
+                              )}
+                              {stackedDetailView ? "Tabbed" : "Stacked"}
+                            </button>
                           </div>
-                          {/* Tab content */}
+                          {/* Content */}
                           {gbifSpeciesKey ? (
-                            <div style={{ display: activeDetailTab === "gbif" ? undefined : "none" }}>
+                            <div style={{ display: stackedDetailView || activeDetailTab === "gbif" ? undefined : "none" }}>
                               <OccurrenceMapRow
                                 speciesKey={gbifSpeciesKey}
                                 mounted={mounted}
                                 assessmentYear={assessmentYear}
                               />
                             </div>
-                          ) : activeDetailTab === "gbif" && (
+                          ) : (stackedDetailView || activeDetailTab === "gbif") && (
                             <div className="p-6 text-sm text-zinc-500 dark:text-zinc-400">
                               No GBIF match found for <span className="italic">{s.scientific_name}</span>. Occurrence data is unavailable.
                             </div>
                           )}
                           {(assessmentYear || s.category === "NE") && (
-                            <div className="p-4" style={{ display: activeDetailTab === "literature" ? undefined : "none" }}>
+                            <div className="p-4" style={{ display: stackedDetailView || activeDetailTab === "literature" ? undefined : "none" }}>
                               <NewLiteratureSinceAssessment
                                 scientificName={s.scientific_name}
                                 assessmentYear={assessmentYear ?? 0}

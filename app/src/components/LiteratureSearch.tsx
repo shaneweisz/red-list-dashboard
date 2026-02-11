@@ -143,7 +143,6 @@ export default function NewLiteratureSinceAssessment({
   const [data, setData] = useState<LiteratureResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(true); // Auto-expand to show papers
   const [expandedRowIndex, setExpandedRowIndex] = useState<number | null>(null);
 
   const isAllTime = assessmentYear === 0;
@@ -207,29 +206,21 @@ export default function NewLiteratureSinceAssessment({
   return (
     <div className={`${className}`}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            Literature
-          </h3>
-          <span className="text-sm text-zinc-500">
-            {totalPapersSinceAssessment.toLocaleString()} paper{totalPapersSinceAssessment !== 1 ? "s" : ""}{isAllTime ? "" : ` since ${assessmentYear}`}
-          </span>
-          <a
-            href={openAlexUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-blue-500 hover:underline"
-          >
-            View on OpenAlex →
-          </a>
-        </div>
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+      <div className="flex items-center gap-2 mb-2">
+        <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          Literature
+        </h3>
+        <span className="text-sm text-zinc-500">
+          {totalPapersSinceAssessment.toLocaleString()} paper{totalPapersSinceAssessment !== 1 ? "s" : ""}{isAllTime ? "" : ` since ${assessmentYear}`}
+        </span>
+        <a
+          href={openAlexUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-blue-500 hover:underline"
         >
-          {expanded ? "Collapse" : "Expand"}
-        </button>
+          View on OpenAlex →
+        </a>
       </div>
 
       {/* Query info - subtle */}
@@ -238,7 +229,7 @@ export default function NewLiteratureSinceAssessment({
       </div>
 
       {/* Papers table */}
-      {expanded && topPapers.length > 0 && (
+      {topPapers.length > 0 && (
         <div className="border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden">
           <table className="w-full text-left">
             <thead className="bg-zinc-100 dark:bg-zinc-800">
@@ -263,7 +254,7 @@ export default function NewLiteratureSinceAssessment({
         </div>
       )}
 
-      {expanded && topPapers.length > 0 && totalPapersSinceAssessment > topPapers.length && (
+      {topPapers.length > 0 && totalPapersSinceAssessment > topPapers.length && (
         <div className="text-center pt-2">
           <a
             href={openAlexUrl}
@@ -276,7 +267,7 @@ export default function NewLiteratureSinceAssessment({
         </div>
       )}
 
-      {expanded && topPapers.length === 0 && (
+      {topPapers.length === 0 && (
         <div className="text-sm text-zinc-500 py-2">
           No papers found.{" "}
           <a href={openAlexUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
@@ -286,11 +277,9 @@ export default function NewLiteratureSinceAssessment({
       )}
 
       {/* Subtle note at bottom */}
-      {expanded && (
-        <p className="text-[10px] text-zinc-400 mt-2">
-          Simple text search — may miss synonyms or indirect references
-        </p>
-      )}
+      <p className="text-[10px] text-zinc-400 mt-2">
+        Simple text search — may miss synonyms or indirect references
+      </p>
     </div>
   );
 }
