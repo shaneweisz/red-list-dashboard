@@ -29,7 +29,7 @@ export default function RedListPage() {
         <div className="mb-4 md:mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
           <div>
             <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-zinc-900 dark:text-zinc-100 mb-1 md:mb-2">
-              IUCN Red List Assessments Dashboard
+              IUCN Red List Dashboard
             </h1>
             <p className="text-sm md:text-base text-zinc-600 dark:text-zinc-400">
               Click a taxon row for details, click again to return
