@@ -1412,7 +1412,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                   onClick={() => handleSort("year")}
                 >
                   <span className="flex items-center gap-1">
-                    Date
+                    Assess. Date
                     {sortField === "year" && (
                       <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
                     )}
