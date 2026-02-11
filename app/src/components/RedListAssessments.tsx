@@ -323,7 +323,7 @@ export default function RedListAssessments({
   previousAssessments,
   speciesUrl,
 }: RedListAssessmentsProps) {
-  // All assessments timeline: current + previous, sorted newest-first
+  // All assessments timeline: current + previous, sorted oldest-first (left to right)
   const allAssessments = [
     {
       year: currentAssessmentDate?.split("-")[0] || "Current",
@@ -331,9 +331,9 @@ export default function RedListAssessments({
       category: currentCategory,
     },
     ...previousAssessments,
-  ].sort((a, b) => (b.year || "0").localeCompare(a.year || "0"));
+  ].sort((a, b) => (a.year || "0").localeCompare(b.year || "0"));
 
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [selectedIndex, setSelectedIndex] = useState(allAssessments.length - 1);
   const [compareMode, setCompareMode] = useState(false);
   const [assessmentDetails, setAssessmentDetails] = useState<Record<number, AssessmentDetail>>({});
   const [loadingIds, setLoadingIds] = useState<Set<number>>(new Set());
@@ -377,15 +377,15 @@ export default function RedListAssessments({
     if (selected) {
       fetchAssessment(selected.assessment_id);
     }
-    // In compare mode, also fetch the next (older) assessment
-    if (compareMode && selectedIndex < allAssessments.length - 1) {
-      fetchAssessment(allAssessments[selectedIndex + 1].assessment_id);
+    // In compare mode, also fetch the previous (older) assessment
+    if (compareMode && selectedIndex > 0) {
+      fetchAssessment(allAssessments[selectedIndex - 1].assessment_id);
     }
   }, [selectedIndex, compareMode, allAssessments, fetchAssessment]);
 
   const selectedAssessment = allAssessments[selectedIndex];
   const selectedDetail = selectedAssessment ? assessmentDetails[selectedAssessment.assessment_id] : null;
-  const olderAssessment = selectedIndex < allAssessments.length - 1 ? allAssessments[selectedIndex + 1] : null;
+  const olderAssessment = selectedIndex > 0 ? allAssessments[selectedIndex - 1] : null;
   const olderDetail = olderAssessment ? assessmentDetails[olderAssessment.assessment_id] : null;
 
   const isLoading = selectedAssessment && loadingIds.has(selectedAssessment.assessment_id);
@@ -441,7 +441,7 @@ export default function RedListAssessments({
           const normalized = normalizeCategory(a.category);
           const color = CATEGORY_COLORS[normalized] || "#6b7280";
           const isSelected = i === selectedIndex;
-          const isCompareTarget = compareMode && i === selectedIndex + 1;
+          const isCompareTarget = compareMode && i === selectedIndex - 1;
 
           return (
             <button

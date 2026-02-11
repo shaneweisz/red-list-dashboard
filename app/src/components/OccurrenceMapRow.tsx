@@ -363,7 +363,13 @@ export default function OccurrenceMapRow({
                 <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700">
                   <div className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">Observation Types</div>
                   {loadingBreakdown ? (
-                    <div className="text-zinc-400 text-sm animate-pulse">Loading...</div>
+                    <div className="flex items-center gap-2 text-zinc-400 text-sm py-1">
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Loading...
+                    </div>
                   ) : breakdown ? (() => {
                     const baseParams = `taxon_key=${speciesKey}&has_coordinate=true&has_geospatial_issue=false${countryCode ? `&country=${countryCode}` : ''}`;
                     const humanOtherCount = Math.max(0, breakdown.humanObservation - breakdown.iNaturalist);
@@ -539,7 +545,13 @@ export default function OccurrenceMapRow({
                 <div className="h-[300px] md:h-[400px] rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 relative isolate z-0">
               {loadingOccurrences ? (
                 <div className="flex items-center justify-center h-full bg-zinc-100 dark:bg-zinc-800">
-                  <div className="text-zinc-400">Loading occurrences...</div>
+                  <div className="flex items-center gap-2 text-zinc-400 text-sm">
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Loading occurrences...
+                  </div>
                 </div>
               ) : mounted ? (
                 <MapContainer
