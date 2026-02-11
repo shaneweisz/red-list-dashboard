@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import TaxaSummary from "./TaxaSummary";
 import NewLiteratureSinceAssessment from "../LiteratureSearch";
+import RedListAssessments from "../RedListAssessments";
 import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME } from "../WorldMap";
 import { CATEGORY_COLORS } from "@/config/taxa";
@@ -457,7 +458,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
 
   // Row expansion state
   const [selectedSpeciesKey, setSelectedSpeciesKey] = useState<number | null>(null);
-  const [activeDetailTab, setActiveDetailTab] = useState<"gbif" | "literature">("gbif");
+  const [activeDetailTab, setActiveDetailTab] = useState<"gbif" | "literature" | "redlist">("gbif");
   const [stackedDetailView, setStackedDetailView] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -1884,6 +1885,14 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                                     Literature
                                   </button>
                                 )}
+                                {s.category !== "NE" && (
+                                  <button
+                                    className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "redlist" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                    onClick={() => setActiveDetailTab("redlist")}
+                                  >
+                                    Red List
+                                  </button>
+                                )}
                               </>
                             )}
                             {stackedDetailView && (
@@ -1921,6 +1930,18 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                               <NewLiteratureSinceAssessment
                                 scientificName={s.scientific_name}
                                 assessmentYear={assessmentYear ?? 0}
+                              />
+                            </div>
+                          )}
+                          {s.category !== "NE" && (
+                            <div style={{ display: stackedDetailView || activeDetailTab === "redlist" ? undefined : "none" }}>
+                              <RedListAssessments
+                                sisTaxonId={s.sis_taxon_id}
+                                currentAssessmentId={s.assessment_id}
+                                currentCategory={s.category}
+                                currentAssessmentDate={s.assessment_date}
+                                previousAssessments={s.previous_assessments}
+                                speciesUrl={s.url}
                               />
                             </div>
                           )}
