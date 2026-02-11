@@ -99,7 +99,6 @@ interface OccurrenceMapRowProps {
   speciesKey: number;
   countryCode?: string | null;
   mounted: boolean;
-  colSpan: number;
   assessmentYear?: number | null;
 }
 
@@ -219,7 +218,6 @@ export default function OccurrenceMapRow({
   speciesKey,
   countryCode,
   mounted,
-  colSpan,
   assessmentYear,
 }: OccurrenceMapRowProps) {
   const [occurrences, setOccurrences] = useState<OccurrenceFeature[]>([]);
@@ -353,11 +351,8 @@ export default function OccurrenceMapRow({
   const oldRecords = filteredOccurrences.filter((o) => !isPreserved(o.properties.basisOfRecord) && !isNewRecord(o.properties.eventDate));
 
   return (
-    <tr>
-      <td colSpan={colSpan} className="p-0">
         <div
-          className="bg-zinc-50 dark:bg-zinc-800/50 border-t border-zinc-200 dark:border-zinc-700"
-          style={{ maxWidth: 'calc(100vw - 2rem)', transform: 'translateX(var(--scroll-left, 0px))' }}
+          className="bg-zinc-50 dark:bg-zinc-800/50"
         >
           <div className="p-2">
             {/* Main layout: 1/3 left (breakdown + photos), 2/3 right (map) */}
@@ -645,7 +640,5 @@ export default function OccurrenceMapRow({
             </div>
           </div>
         </div>
-      </td>
-    </tr>
   );
 }
