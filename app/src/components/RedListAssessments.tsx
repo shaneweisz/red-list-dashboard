@@ -28,7 +28,7 @@ interface AssessmentDetail {
   range: string | null;
   population_trend: { code: string; description?: string } | string | null;
   habitats: ({ code: string; name: string; suitability?: string; major_importance?: boolean } | string)[] | null;
-  threat_classification: ({ code: string; name: string; timing?: string; scope?: string; severity?: string } | string)[] | null;
+  threat_classification: ({ code: string; name: string; timing?: string | null; scope?: string | null; severity?: string | null; score?: string | null; stresses?: string[] | null } | string)[] | null;
   conservation_actions_classification: ({ code: string; name: string } | string)[] | null;
   systems: ({ code: string; description?: string } | string)[] | null;
   scopes: ({ code: string; description?: string } | string)[] | null;
@@ -62,6 +62,17 @@ interface RedListAssessmentsProps {
   currentAssessmentDate: string | null;
   previousAssessments: PreviousAssessment[];
   speciesUrl: string;
+}
+
+// Format ISO date string to human-readable form (e.g. "25 July 2022")
+function formatDate(iso: string): string {
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  } catch {
+    return iso;
+  }
 }
 
 // Map category code to a normalized form (handle legacy codes like LR/lc, LR/nt, V)
@@ -689,7 +700,7 @@ function AssessmentDetailView({
       {/* Date and systems */}
       <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-400">
         {detail.assessment_date && (
-          <span>Assessed: {detail.assessment_date}</span>
+          <span>Assessed: {formatDate(detail.assessment_date)}</span>
         )}
         {detail.year_published && (
           <span>Published: {detail.year_published}</span>
@@ -745,15 +756,34 @@ function AssessmentDetailView({
           <h4 className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1">Threat Classification</h4>
           <div className="flex flex-wrap gap-1">
             {detail.threat_classification.map((t, i) => {
-              const name = typeof t === "string" ? t : t.name;
-              const title = typeof t === "string" ? t : `${t.name}${t.timing ? ` (${t.timing})` : ""}${t.scope ? ` - ${t.scope}` : ""}${t.severity ? ` - ${t.severity}` : ""}`;
+              if (typeof t === "string") {
+                return (
+                  <span key={i} className="text-xs px-2 py-0.5 rounded bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400">
+                    {t}
+                  </span>
+                );
+              }
+              const tooltipParts = [t.name];
+              if (t.timing) tooltipParts.push(`Timing: ${t.timing}`);
+              if (t.scope) tooltipParts.push(`Scope: ${t.scope}`);
+              if (t.severity) tooltipParts.push(`Severity: ${t.severity}`);
+              if (t.score) tooltipParts.push(`Impact: ${t.score}`);
+              if (t.stresses && t.stresses.length > 0) tooltipParts.push(`Stresses: ${t.stresses.join(", ")}`);
+              const isOngoing = t.timing?.toLowerCase().includes("ongoing");
+              const isSevere = t.severity?.toLowerCase().includes("rapid") || t.severity?.toLowerCase().includes("very rapid");
               return (
                 <span
                   key={i}
-                  className="text-xs px-2 py-0.5 rounded bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400"
-                  title={title}
+                  className={`text-xs px-2 py-0.5 rounded ${
+                    isOngoing && isSevere
+                      ? "bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300 font-medium"
+                      : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400"
+                  }`}
+                  title={tooltipParts.join("\n")}
                 >
-                  {name}
+                  {t.code && <span className="opacity-50 mr-1">{t.code}</span>}
+                  {t.name}
+                  {t.timing && <span className="ml-1 opacity-50">({t.timing})</span>}
                 </span>
               );
             })}

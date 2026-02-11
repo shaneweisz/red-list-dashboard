@@ -116,34 +116,56 @@ export async function GET(
           )
         : null,
       // Structured data: threats array
+      // IUCN v4: threats have `title` (threat name) and `description` (classification level)
       threat_classification: Array.isArray(data.threats)
         ? data.threats.map(
             (t: {
               code?: string;
+              title?: { en?: string } | string;
               description?: { en?: string } | string;
               timing?: string;
               scope?: string;
               severity?: string;
+              score?: string;
+              stresses?: { code?: string; description?: { en?: string } | string }[];
             }) => ({
               code: t.code || "",
-              name: getLocalizedText(t.description) || t.code || "",
+              name:
+                getLocalizedText(t.title) ||
+                getLocalizedText(t.description) ||
+                t.code ||
+                "",
               timing: t.timing || null,
               scope: t.scope || null,
               severity: t.severity || null,
+              score: t.score || null,
+              stresses: Array.isArray(t.stresses)
+                ? t.stresses
+                    .map(
+                      (s) => getLocalizedText(s.description) || s.code || ""
+                    )
+                    .filter(Boolean)
+                : null,
             })
           )
         : null,
       // Structured data: conservation actions array
+      // IUCN v4: conservation actions may use `title` or `description`
       conservation_actions_classification: Array.isArray(
         data.conservation_actions
       )
         ? data.conservation_actions.map(
             (c: {
               code?: string;
+              title?: { en?: string } | string;
               description?: { en?: string } | string;
             }) => ({
               code: c.code || "",
-              name: getLocalizedText(c.description) || c.code || "",
+              name:
+                getLocalizedText(c.title) ||
+                getLocalizedText(c.description) ||
+                c.code ||
+                "",
             })
           )
         : null,
