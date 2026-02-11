@@ -17,6 +17,15 @@ async function fetchWithAuth(url: string): Promise<Response> {
   });
 }
 
+// IUCN API v4 uses { en: "text" } for description fields
+function getLocalizedText(
+  desc: { en?: string } | string | null | undefined
+): string | null {
+  if (!desc) return null;
+  if (typeof desc === "string") return desc;
+  return desc.en || null;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -56,38 +65,112 @@ export async function GET(
     }
 
     const data = await response.json();
+    const doc = data.documentation || {};
 
-    // Extract the fields we need from the assessment response
+    // Extract the fields we need, normalizing the IUCN API v4 structure
     const result = {
       assessment_id: data.assessment_id,
       sis_taxon_id: data.sis_taxon_id,
       url: data.url,
-      // Category & criteria
-      red_list_category: data.red_list_category,
-      criteria: data.criteria,
-      assessment_date: data.assessment_date,
-      year_published: data.year_published,
-      possibly_extinct: data.possibly_extinct,
-      possibly_extinct_in_the_wild: data.possibly_extinct_in_the_wild,
-      // Narratives
-      rationale: data.rationale,
-      population: data.population,
-      habitat: data.habitat,
-      threats: data.threats,
-      conservation_actions: data.conservation_actions,
-      use_trade: data.use_trade,
-      range: data.range,
-      // Population trend
-      population_trend: data.population_trend,
-      // Structured data
-      habitats: data.habitats,
-      threat_classification: data.threats_classification,
-      conservation_actions_classification:
-        data.conservation_actions_classification,
-      // Systems (marine, freshwater, terrestrial)
-      systems: data.systems,
+      // Category & criteria - normalize { code, description: { en } } to { code, description }
+      red_list_category: data.red_list_category
+        ? {
+            code: data.red_list_category.code,
+            description: getLocalizedText(data.red_list_category.description),
+          }
+        : null,
+      criteria: data.criteria || null,
+      assessment_date: data.assessment_date || null,
+      year_published: data.year_published || null,
+      possibly_extinct: data.possibly_extinct || false,
+      possibly_extinct_in_the_wild: data.possibly_extinct_in_the_wild || false,
+      // Narratives are under documentation.*
+      rationale: doc.rationale || null,
+      population: doc.population || null,
+      habitat: doc.habitats || null,
+      threats: doc.threats || null,
+      conservation_actions: doc.measures || null,
+      use_trade: doc.use_trade || null,
+      range: doc.range || null,
+      // Population trend - normalize { code, description: { en } }
+      population_trend: data.population_trend
+        ? {
+            code: data.population_trend.code,
+            description: getLocalizedText(data.population_trend.description),
+          }
+        : null,
+      // Structured data: habitats array
+      habitats: Array.isArray(data.habitats)
+        ? data.habitats.map(
+            (h: {
+              code?: string;
+              description?: { en?: string } | string;
+              suitability?: string;
+              majorImportance?: string;
+            }) => ({
+              code: h.code || "",
+              name: getLocalizedText(h.description) || h.code || "",
+              suitability: h.suitability || null,
+              major_importance: h.majorImportance === "Yes",
+            })
+          )
+        : null,
+      // Structured data: threats array
+      threat_classification: Array.isArray(data.threats)
+        ? data.threats.map(
+            (t: {
+              code?: string;
+              description?: { en?: string } | string;
+              timing?: string;
+              scope?: string;
+              severity?: string;
+            }) => ({
+              code: t.code || "",
+              name: getLocalizedText(t.description) || t.code || "",
+              timing: t.timing || null,
+              scope: t.scope || null,
+              severity: t.severity || null,
+            })
+          )
+        : null,
+      // Structured data: conservation actions array
+      conservation_actions_classification: Array.isArray(
+        data.conservation_actions
+      )
+        ? data.conservation_actions.map(
+            (c: {
+              code?: string;
+              description?: { en?: string } | string;
+            }) => ({
+              code: c.code || "",
+              name: getLocalizedText(c.description) || c.code || "",
+            })
+          )
+        : null,
+      // Systems (terrestrial, marine, freshwater)
+      systems: Array.isArray(data.systems)
+        ? data.systems.map(
+            (s: {
+              code?: string;
+              description?: { en?: string } | string;
+            }) => ({
+              code: s.code || "",
+              description: getLocalizedText(s.description) || s.code || "",
+            })
+          )
+        : null,
       // Scopes
-      scopes: data.scopes,
+      scopes: Array.isArray(data.scopes)
+        ? data.scopes.map(
+            (s: {
+              code?: string;
+              description?: { en?: string } | string;
+            }) => ({
+              code: s.code || "",
+              description: getLocalizedText(s.description) || s.code || "",
+            })
+          )
+        : null,
     };
 
     // Cache the result
