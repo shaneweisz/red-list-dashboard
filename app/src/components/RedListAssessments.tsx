@@ -13,7 +13,7 @@ interface AssessmentDetail {
   assessment_id: number;
   sis_taxon_id: number;
   url: string;
-  red_list_category: { code: string; description?: string } | null;
+  red_list_category: { code: string; description?: string } | string | null;
   criteria: string | null;
   assessment_date: string | null;
   year_published: string | null;
@@ -26,12 +26,12 @@ interface AssessmentDetail {
   conservation_actions: string | null;
   use_trade: string | null;
   range: string | null;
-  population_trend: { code: string; description?: string } | null;
-  habitats: { code: string; name: string; suitability?: string; major_importance?: boolean }[] | null;
-  threat_classification: { code: string; name: string; timing?: string; scope?: string; severity?: string }[] | null;
-  conservation_actions_classification: { code: string; name: string }[] | null;
-  systems: { code: string; description?: string }[] | null;
-  scopes: { code: string; description?: string }[] | null;
+  population_trend: { code: string; description?: string } | string | null;
+  habitats: ({ code: string; name: string; suitability?: string; major_importance?: boolean } | string)[] | null;
+  threat_classification: ({ code: string; name: string; timing?: string; scope?: string; severity?: string } | string)[] | null;
+  conservation_actions_classification: ({ code: string; name: string } | string)[] | null;
+  systems: ({ code: string; description?: string } | string)[] | null;
+  scopes: ({ code: string; description?: string } | string)[] | null;
   cached?: boolean;
   error?: string;
 }
@@ -58,6 +58,20 @@ function normalizeCategory(code: string): string {
   if (code === "E") return "EN";
   if (code === "R") return "VU";
   return code;
+}
+
+// Safely extract category code from red_list_category (can be string or object)
+function getCategoryCode(cat: AssessmentDetail["red_list_category"]): string {
+  if (!cat) return "?";
+  if (typeof cat === "string") return cat;
+  return cat.code || "?";
+}
+
+// Safely extract population trend text (can be string or object)
+function getTrendText(trend: AssessmentDetail["population_trend"]): string {
+  if (!trend) return "";
+  if (typeof trend === "string") return trend;
+  return trend.description || trend.code || "";
 }
 
 function CategoryBadge({ code, small }: { code: string; small?: boolean }) {
@@ -131,8 +145,8 @@ function AssessmentComparison({
   older: AssessmentDetail;
   newer: AssessmentDetail;
 }) {
-  const olderCat = older.red_list_category?.code || "?";
-  const newerCat = newer.red_list_category?.code || "?";
+  const olderCat = getCategoryCode(older.red_list_category);
+  const newerCat = getCategoryCode(newer.red_list_category);
   const olderNorm = normalizeCategory(olderCat);
   const newerNorm = normalizeCategory(newerCat);
 
@@ -499,7 +513,8 @@ function AssessmentDetailView({
   detail: AssessmentDetail;
   assessment: { year: string; assessment_id: number; category: string };
 }) {
-  const catCode = detail.red_list_category?.code || assessment.category;
+  const catCode = getCategoryCode(detail.red_list_category) !== "?" ? getCategoryCode(detail.red_list_category) : assessment.category;
+  const trendText = getTrendText(detail.population_trend);
 
   return (
     <div className="space-y-3">
@@ -511,17 +526,17 @@ function AssessmentDetailView({
             Criteria: {detail.criteria}
           </span>
         )}
-        {detail.population_trend && (
+        {trendText && (
           <span className="text-xs text-zinc-400 flex items-center gap-1">
             Trend:{" "}
             <span className={
-              detail.population_trend.code === "decreasing" || detail.population_trend.description?.toLowerCase().includes("decreasing")
+              trendText.toLowerCase().includes("decreasing")
                 ? "text-red-500"
-                : detail.population_trend.code === "increasing" || detail.population_trend.description?.toLowerCase().includes("increasing")
+                : trendText.toLowerCase().includes("increasing")
                 ? "text-green-500"
                 : "text-zinc-500"
             }>
-              {detail.population_trend.description || detail.population_trend.code}
+              {trendText}
             </span>
           </span>
         )}
@@ -547,7 +562,7 @@ function AssessmentDetailView({
         )}
         {detail.systems && detail.systems.length > 0 && (
           <span>
-            Systems: {detail.systems.map((s) => s.description || s.code).join(", ")}
+            Systems: {detail.systems.map((s) => typeof s === "string" ? s : (s.description || s.code)).join(", ")}
           </span>
         )}
       </div>
@@ -568,16 +583,21 @@ function AssessmentDetailView({
         <div>
           <h4 className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1">Habitats</h4>
           <div className="flex flex-wrap gap-1">
-            {detail.habitats.map((h, i) => (
-              <span
-                key={i}
-                className="text-xs px-2 py-0.5 rounded bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400"
-                title={`${h.name}${h.suitability ? ` (${h.suitability})` : ""}${h.major_importance ? " - Major importance" : ""}`}
-              >
-                {h.name}
-                {h.major_importance && <span className="ml-0.5 opacity-60">*</span>}
-              </span>
-            ))}
+            {detail.habitats.map((h, i) => {
+              const name = typeof h === "string" ? h : h.name;
+              const title = typeof h === "string" ? h : `${h.name}${h.suitability ? ` (${h.suitability})` : ""}${h.major_importance ? " - Major importance" : ""}`;
+              const majorImportance = typeof h === "string" ? false : h.major_importance;
+              return (
+                <span
+                  key={i}
+                  className="text-xs px-2 py-0.5 rounded bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400"
+                  title={title}
+                >
+                  {name}
+                  {majorImportance && <span className="ml-0.5 opacity-60">*</span>}
+                </span>
+              );
+            })}
           </div>
         </div>
       )}
@@ -587,15 +607,19 @@ function AssessmentDetailView({
         <div>
           <h4 className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1">Threat Classification</h4>
           <div className="flex flex-wrap gap-1">
-            {detail.threat_classification.map((t, i) => (
-              <span
-                key={i}
-                className="text-xs px-2 py-0.5 rounded bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400"
-                title={`${t.name}${t.timing ? ` (${t.timing})` : ""}${t.scope ? ` - ${t.scope}` : ""}${t.severity ? ` - ${t.severity}` : ""}`}
-              >
-                {t.name}
-              </span>
-            ))}
+            {detail.threat_classification.map((t, i) => {
+              const name = typeof t === "string" ? t : t.name;
+              const title = typeof t === "string" ? t : `${t.name}${t.timing ? ` (${t.timing})` : ""}${t.scope ? ` - ${t.scope}` : ""}${t.severity ? ` - ${t.severity}` : ""}`;
+              return (
+                <span
+                  key={i}
+                  className="text-xs px-2 py-0.5 rounded bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400"
+                  title={title}
+                >
+                  {name}
+                </span>
+              );
+            })}
           </div>
         </div>
       )}
@@ -610,7 +634,7 @@ function AssessmentDetailView({
                 key={i}
                 className="text-xs px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400"
               >
-                {c.name}
+                {typeof c === "string" ? c : c.name}
               </span>
             ))}
           </div>
