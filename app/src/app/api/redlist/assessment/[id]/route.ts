@@ -171,6 +171,48 @@ export async function GET(
             })
           )
         : null,
+      // Supplementary info: quantitative metrics
+      supplementary_info: data.supplementary_info
+        ? {
+            estimated_extent_of_occurence:
+              data.supplementary_info.estimated_extent_of_occurence ?? null,
+            estimated_area_of_occupancy:
+              data.supplementary_info.estimated_area_of_occupancy ?? null,
+            population_size:
+              data.supplementary_info.population_size ?? null,
+            number_of_locations:
+              data.supplementary_info.number_of_locations ?? null,
+            no_of_subpopulations:
+              data.supplementary_info.no_of_subpopulations ?? null,
+            generational_length:
+              data.supplementary_info.generational_length ?? null,
+            upper_elevation_limit:
+              data.supplementary_info.upper_elevation_limit ?? null,
+            lower_elevation_limit:
+              data.supplementary_info.lower_elevation_limit ?? null,
+            upper_depth_limit:
+              data.supplementary_info.upper_depth_limit ?? null,
+            lower_depth_limit:
+              data.supplementary_info.lower_depth_limit ?? null,
+            movement_patterns:
+              data.supplementary_info.movement_patterns ?? null,
+            congregatory:
+              data.supplementary_info.congregatory ?? null,
+            population_severely_fragmented:
+              data.supplementary_info.population_severely_fragmented ?? null,
+            population_continuing_decline:
+              data.supplementary_info.population_continuing_decline ?? null,
+            continuing_decline_in_extent_of_occurence:
+              data.supplementary_info
+                .continuing_decline_in_extent_of_occurence ?? null,
+            continuing_decline_in_area_of_occupancy:
+              data.supplementary_info
+                .continuing_decline_in_area_of_occupancy ?? null,
+            continuing_decline_in_number_of_locations:
+              data.supplementary_info
+                .continuing_decline_in_number_of_locations ?? null,
+          }
+        : null,
     };
 
     // Cache the result
