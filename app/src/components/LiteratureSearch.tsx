@@ -117,9 +117,11 @@ function PaperRow({
 interface LiteratureResponse {
   scientificName: string;
   assessmentYear: number;
+  mode: string;
   totalPapersSinceAssessment: number;
+  papersAtAssessment: number;
+  totalPapers: number;
   topPapers: LiteratureResult[];
-  openAlexSearchUrl: string;
 }
 
 interface NewLiteratureSinceAssessmentProps {
@@ -128,11 +130,14 @@ interface NewLiteratureSinceAssessmentProps {
   className?: string;
 }
 
-// Build the OpenAlex search URL for a species name after a given year
-function buildOpenAlexUrl(scientificName: string, sinceYear: number): string {
-  // OpenAlex uses this URL format for their web UI
-  // Excludes datasets (GBIF occurrence downloads), sorted by most recent
+// Build OpenAlex search URL for papers after a given year (sorted by most recent)
+function buildOpenAlexUrlAfter(scientificName: string, sinceYear: number): string {
   return `https://openalex.org/works?page=1&filter=default.search%3A%22${encodeURIComponent(scientificName)}%22,publication_year%3A%3E${sinceYear},type%3A%21dataset&sort=publication_date%3Adesc`;
+}
+
+// Build OpenAlex search URL for papers up to a given year (sorted by most cited)
+function buildOpenAlexUrlBefore(scientificName: string, upToYear: number): string {
+  return `https://openalex.org/works?page=1&filter=default.search%3A%22${encodeURIComponent(scientificName)}%22,publication_year%3A%3C%3D${upToYear},type%3A%21dataset&sort=cited_by_count%3Adesc`;
 }
 
 export default function NewLiteratureSinceAssessment({
@@ -140,20 +145,26 @@ export default function NewLiteratureSinceAssessment({
   assessmentYear,
   className = "",
 }: NewLiteratureSinceAssessmentProps) {
+  const [mode, setMode] = useState<"after" | "before">("after");
   const [data, setData] = useState<LiteratureResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedRowIndex, setExpandedRowIndex] = useState<number | null>(null);
 
   const isAllTime = assessmentYear === 0;
+
   const openAlexUrl = isAllTime
     ? `https://openalex.org/works?page=1&filter=default.search%3A%22${encodeURIComponent(scientificName)}%22,type%3A%21dataset&sort=publication_date%3Adesc`
-    : buildOpenAlexUrl(scientificName, assessmentYear);
+    : mode === "after"
+    ? buildOpenAlexUrlAfter(scientificName, assessmentYear)
+    : buildOpenAlexUrlBefore(scientificName, assessmentYear);
 
   // Human-readable query description
   const queryDescription = isAllTime
     ? `search="${scientificName}" AND type!=dataset`
-    : `search="${scientificName}" AND year>${assessmentYear} AND type!=dataset`;
+    : mode === "after"
+    ? `search="${scientificName}" AND year>${assessmentYear} AND type!=dataset`
+    : `search="${scientificName}" AND year<=${assessmentYear} AND type!=dataset`;
 
   useEffect(() => {
     async function fetchLiterature() {
@@ -164,6 +175,7 @@ export default function NewLiteratureSinceAssessment({
         const params = new URLSearchParams({
           scientificName,
           assessmentYear: assessmentYear.toString(),
+          mode: isAllTime ? "after" : mode,
           limit: "5",
         });
 
@@ -183,44 +195,64 @@ export default function NewLiteratureSinceAssessment({
     if (scientificName && assessmentYear != null) {
       fetchLiterature();
     }
-  }, [scientificName, assessmentYear]);
+  }, [scientificName, assessmentYear, mode, isAllTime]);
 
-  if (loading) {
-    return (
-      <div className={`flex items-center gap-2 text-sm text-zinc-400 ${className}`}>
-        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-        </svg>
-        Checking OpenAlex...
-      </div>
-    );
-  }
+  // Reset expanded row when switching modes
+  useEffect(() => {
+    setExpandedRowIndex(null);
+  }, [mode]);
 
-  if (error || !data) {
-    return null; // Silently fail - don't clutter UI
-  }
-
-  const { totalPapersSinceAssessment, topPapers } = data;
+  const totalPapers = data?.totalPapers ?? 0;
+  const topPapers = data?.topPapers ?? [];
 
   return (
     <div className={`${className}`}>
-      {/* Header */}
-      <div className="flex items-center gap-2 mb-2">
-        <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-          Literature
-        </h3>
-        <span className="text-sm text-zinc-500">
-          {totalPapersSinceAssessment.toLocaleString()} paper{totalPapersSinceAssessment !== 1 ? "s" : ""}{isAllTime ? "" : ` since ${assessmentYear}`}
-        </span>
-        <a
-          href={openAlexUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs text-blue-500 hover:underline"
-        >
-          View on OpenAlex →
-        </a>
+      {/* Header with mode toggle */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            Literature
+          </h3>
+          {!isAllTime && (
+            <div className="flex items-center rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden text-xs">
+              <button
+                className={`px-2.5 py-1 transition-colors ${
+                  mode === "before"
+                    ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-medium"
+                    : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                }`}
+                onClick={() => setMode("before")}
+              >
+                Pre-assessment
+              </button>
+              <button
+                className={`px-2.5 py-1 transition-colors ${
+                  mode === "after"
+                    ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-medium"
+                    : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                }`}
+                onClick={() => setMode("after")}
+              >
+                Post-assessment
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {!loading && data && (
+            <span className="text-sm text-zinc-500">
+              {totalPapers.toLocaleString()} paper{totalPapers !== 1 ? "s" : ""}{isAllTime ? "" : mode === "after" ? ` since ${assessmentYear}` : ` up to ${assessmentYear}`}
+            </span>
+          )}
+          <a
+            href={openAlexUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-blue-500 hover:underline"
+          >
+            View on OpenAlex →
+          </a>
+        </div>
       </div>
 
       {/* Query info - subtle */}
@@ -228,8 +260,22 @@ export default function NewLiteratureSinceAssessment({
         OpenAlex: {queryDescription}
       </div>
 
+      {/* Loading state */}
+      {loading && (
+        <div className="flex items-center gap-2 text-sm text-zinc-400 py-2">
+          <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+          </svg>
+          Checking OpenAlex...
+        </div>
+      )}
+
+      {/* Error state */}
+      {!loading && (error || !data) && null}
+
       {/* Papers table */}
-      {topPapers.length > 0 && (
+      {!loading && data && topPapers.length > 0 && (
         <div className="border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden">
           <table className="w-full text-left">
             <thead className="bg-zinc-100 dark:bg-zinc-800">
@@ -254,7 +300,7 @@ export default function NewLiteratureSinceAssessment({
         </div>
       )}
 
-      {topPapers.length > 0 && totalPapersSinceAssessment > topPapers.length && (
+      {!loading && data && topPapers.length > 0 && totalPapers > topPapers.length && (
         <div className="text-center pt-2">
           <a
             href={openAlexUrl}
@@ -262,12 +308,12 @@ export default function NewLiteratureSinceAssessment({
             rel="noopener noreferrer"
             className="text-xs text-blue-500 hover:underline"
           >
-            + {(totalPapersSinceAssessment - topPapers.length).toLocaleString()} more on OpenAlex
+            + {(totalPapers - topPapers.length).toLocaleString()} more on OpenAlex
           </a>
         </div>
       )}
 
-      {topPapers.length === 0 && (
+      {!loading && data && topPapers.length === 0 && (
         <div className="text-sm text-zinc-500 py-2">
           No papers found.{" "}
           <a href={openAlexUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
@@ -277,9 +323,11 @@ export default function NewLiteratureSinceAssessment({
       )}
 
       {/* Subtle note at bottom */}
-      <p className="text-[10px] text-zinc-400 mt-2">
-        Simple text search — may miss synonyms or indirect references
-      </p>
+      {!loading && data && (
+        <p className="text-[10px] text-zinc-400 mt-2">
+          {mode === "before" ? "Sorted by most cited" : "Sorted by most recent"} — simple text search, may miss synonyms or indirect references
+        </p>
+      )}
     </div>
   );
 }

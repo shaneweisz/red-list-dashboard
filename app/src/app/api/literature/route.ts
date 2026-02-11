@@ -109,24 +109,40 @@ async function searchOpenAlexSinceYear(
   return { count: data.meta.count, results };
 }
 
-// Get count of papers published up to and including a given year
-async function getOpenAlexCountUpToYear(
+// Search OpenAlex for papers published up to and including a given year
+async function searchOpenAlexUpToYear(
   scientificName: string,
-  upToYear: number
-): Promise<number> {
+  upToYear: number,
+  limit: number = 5
+): Promise<{ count: number; results: LiteratureResult[] }> {
   // Use default.search for exact phrase matching (same as website)
   // Use < (year+1) instead of <= year to avoid encoding issues
+  // Sorted by most cited first for pre-assessment papers
   const filter = encodeURIComponent(`default.search:"${scientificName}",publication_year:<${upToYear + 1},type:!dataset`);
-  const url = `https://api.openalex.org/works?filter=${filter}&per_page=1&mailto=red-list-dashboard@example.com`;
+  const url = `https://api.openalex.org/works?filter=${filter}&sort=cited_by_count:desc&per_page=${Math.max(1, limit)}&mailto=red-list-dashboard@example.com`;
 
   const response = await fetch(url);
   if (!response.ok) {
     console.error("OpenAlex API error:", response.status);
-    return 0;
+    return { count: 0, results: [] };
   }
 
   const data: OpenAlexResponse = await response.json();
-  return data.meta.count;
+
+  const results = data.results.map((work) => ({
+    title: work.title,
+    url: work.doi ? `https://doi.org/${work.doi.replace("https://doi.org/", "")}` : work.id,
+    doi: work.doi,
+    year: work.publication_year,
+    date: work.publication_date,
+    citations: work.cited_by_count,
+    source: work.primary_location?.source?.display_name || "Unknown",
+    sourceType: "academic" as const,
+    abstract: reconstructAbstract(work.abstract_inverted_index),
+    authors: work.authorships?.slice(0, 3).map(a => a.author.display_name).join(", ") || null,
+  }));
+
+  return { count: data.meta.count, results };
 }
 
 export async function GET(request: NextRequest) {
@@ -134,6 +150,7 @@ export async function GET(request: NextRequest) {
   const scientificName = searchParams.get("scientificName");
   const assessmentYear = searchParams.get("assessmentYear");
   const limit = Math.min(parseInt(searchParams.get("limit") || "5"), 20);
+  const mode = searchParams.get("mode") || "after"; // "after" or "before"
 
   if (!scientificName) {
     return NextResponse.json(
@@ -158,25 +175,42 @@ export async function GET(request: NextRequest) {
   }
 
   // Check cache
-  const cacheKey = `${scientificName.toLowerCase()}-${sinceYear}-${limit}`;
+  const cacheKey = `${scientificName.toLowerCase()}-${sinceYear}-${limit}-${mode}`;
   const cached = literatureCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
     return NextResponse.json({ ...cached.data, cached: true });
   }
 
   try {
-    // Fetch both counts in parallel
-    const [newPapers, papersAtAssessment] = await Promise.all([
-      searchOpenAlexSinceYear(scientificName, sinceYear, limit),
-      getOpenAlexCountUpToYear(scientificName, sinceYear),
-    ]);
+    let papers: { count: number; results: LiteratureResult[] };
+    let otherCount: number;
+
+    if (mode === "before") {
+      // Pre-assessment: fetch papers up to assessment year, and count of post-assessment
+      const [prePapers, postPapers] = await Promise.all([
+        searchOpenAlexUpToYear(scientificName, sinceYear, limit),
+        searchOpenAlexSinceYear(scientificName, sinceYear, 1),
+      ]);
+      papers = prePapers;
+      otherCount = postPapers.count;
+    } else {
+      // Post-assessment (default): fetch papers after assessment year, and count of pre-assessment
+      const [postPapers, prePapers] = await Promise.all([
+        searchOpenAlexSinceYear(scientificName, sinceYear, limit),
+        searchOpenAlexUpToYear(scientificName, sinceYear, 1),
+      ]);
+      papers = postPapers;
+      otherCount = prePapers.count;
+    }
 
     const result = {
       scientificName,
       assessmentYear: sinceYear,
-      totalPapersSinceAssessment: newPapers.count,
-      papersAtAssessment,
-      topPapers: newPapers.results,
+      mode,
+      totalPapersSinceAssessment: mode === "after" ? papers.count : otherCount,
+      papersAtAssessment: mode === "before" ? papers.count : otherCount,
+      totalPapers: papers.count,
+      topPapers: papers.results,
     };
 
     // Cache the result
