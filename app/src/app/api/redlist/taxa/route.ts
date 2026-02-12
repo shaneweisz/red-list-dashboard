@@ -1,12 +1,9 @@
 import { NextResponse } from "next/server";
 import * as fs from "fs";
 import * as path from "path";
-import { TAXA, CATEGORY_COLORS, TaxonConfig } from "@/config/taxa";
+import { TAXA, TaxonConfig } from "@/config/taxa";
 
 interface SpeciesRecord {
-  sis_taxon_id: number;
-  scientific_name?: string;
-  category: string;
   assessment_date?: string;
 }
 
@@ -15,7 +12,6 @@ interface PrecomputedData {
   metadata: {
     totalSpecies: number;
     fetchedAt: string;
-    byCategory: Record<string, number>;
   };
 }
 
@@ -29,11 +25,6 @@ interface TaxonSummary {
   available: boolean;
   totalAssessed: number;
   percentAssessed: number;
-  byCategory: {
-    code: string;
-    count: number;
-    color: string;
-  }[];
   outdated: number;
   percentOutdated: number;
   lastUpdated: string | null;
@@ -76,13 +67,6 @@ function loadTaxonData(taxon: TaxonConfig): PrecomputedData | null {
 
     // Merge all data files
     const mergedSpecies = allData.flatMap(d => d.species);
-    const mergedByCategory: Record<string, number> = {};
-
-    for (const data of allData) {
-      for (const [cat, count] of Object.entries(data.metadata.byCategory)) {
-        mergedByCategory[cat] = (mergedByCategory[cat] || 0) + count;
-      }
-    }
 
     // Use the most recent fetchedAt
     const latestFetchedAt = allData
@@ -95,41 +79,12 @@ function loadTaxonData(taxon: TaxonConfig): PrecomputedData | null {
       metadata: {
         totalSpecies: mergedSpecies.length,
         fetchedAt: latestFetchedAt,
-        byCategory: mergedByCategory,
       },
     };
   }
 
   // Single data file
   return loadSingleDataFile(taxon.dataFile);
-}
-
-function countNESpecies(taxon: TaxonConfig, redListSpecies: SpeciesRecord[]): number {
-  try {
-    const gbifCsvPath = path.join(process.cwd(), "data", taxon.gbifDataFile);
-    if (!fs.existsSync(gbifCsvPath)) return 0;
-
-    const redListNames = new Set(
-      redListSpecies.map((s) => s.scientific_name?.toLowerCase?.().trim() || "").filter(Boolean)
-    );
-
-    const csvContent = fs.readFileSync(gbifCsvPath, "utf-8");
-    const lines = csvContent.trim().split("\n");
-    const header = lines[0];
-    if (!header.includes("scientific_name")) return 0;
-
-    let count = 0;
-    for (let i = 1; i < lines.length; i++) {
-      const parts = lines[i].split(",");
-      const scientificName = parts[2]?.toLowerCase?.().trim();
-      if (scientificName && !redListNames.has(scientificName)) {
-        count++;
-      }
-    }
-    return count;
-  } catch {
-    return 0;
-  }
 }
 
 function buildSummary(): TaxonSummary[] {
@@ -148,21 +103,11 @@ function buildSummary(): TaxonSummary[] {
         available: false,
         totalAssessed: 0,
         percentAssessed: 0,
-        byCategory: [],
         outdated: 0,
         percentOutdated: 0,
         lastUpdated: null,
       };
     }
-
-    // Count NE species (in GBIF but not in Red List)
-    const neCount = countNESpecies(taxon, data.species);
-
-    const byCategory = ["EX", "EW", "CR", "EN", "VU", "NT", "LC", "DD", "NE"].map((code) => ({
-      code,
-      count: code === "NE" ? neCount : (data.metadata.byCategory[code] || 0),
-      color: CATEGORY_COLORS[code],
-    }));
 
     // Calculate outdated assessments (>10 years old based on assessment_date)
     const currentYear = new Date().getFullYear();
@@ -192,7 +137,6 @@ function buildSummary(): TaxonSummary[] {
       available: true,
       totalAssessed: data.metadata.totalSpecies,
       percentAssessed: Math.round(percentAssessed * 10) / 10,
-      byCategory,
       outdated,
       percentOutdated: Math.round(percentOutdated * 10) / 10,
       lastUpdated: data.metadata.fetchedAt,
