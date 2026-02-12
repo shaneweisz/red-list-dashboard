@@ -38,10 +38,6 @@ const LocateControl = dynamic(
   () => import("./LocateControl"),
   { ssr: false }
 );
-const Tooltip = dynamic(
-  () => import("react-leaflet").then((mod) => mod.Tooltip),
-  { ssr: false }
-);
 const FitBounds = dynamic(
   () => import("./FitBounds"),
   { ssr: false }
@@ -220,21 +216,21 @@ function InatPhotoWithPreview({ obs, idx, onHover, onLeave }: { obs: InatObserva
     if (isHovered && thumbRef.current && !isTouchDevice) {
       const rect = thumbRef.current.getBoundingClientRect();
       const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
       const previewWidth = 208;
       const previewHeight = hasAudio ? 270 : 220;
 
-      let left = rect.right + 4;
-      let top = rect.top;
+      // Center above the thumbnail
+      let left = rect.left + rect.width / 2 - previewWidth / 2;
+      let top = rect.top - previewHeight - 4;
 
-      if (left + previewWidth > viewportWidth) {
-        left = rect.left - previewWidth - 4;
+      // If preview would overflow left/right edges, clamp
+      if (left < 8) left = 8;
+      if (left + previewWidth > viewportWidth - 8) {
+        left = viewportWidth - 8 - previewWidth;
       }
-      if (top + previewHeight > viewportHeight) {
-        top = viewportHeight - previewHeight - 8;
-      }
+      // If not enough room above, show below
       if (top < 8) {
-        top = 8;
+        top = rect.bottom + 4;
       }
 
       setPosition({ top, left });
@@ -717,26 +713,6 @@ export default function OccurrenceMapRow({
                           weight: isHighlighted ? 3 : 2,
                         }}
                       >
-                        <Tooltip direction="top" offset={[0, -6]}>
-                          <div style={{ maxWidth: 180 }}>
-                            {inatMatch?.imageUrl && (
-                              <img
-                                src={getThumbUrl(inatMatch.imageUrl)}
-                                alt=""
-                                style={{ width: 180, height: 90, objectFit: 'cover', borderRadius: '4px 4px 0 0', display: 'block', marginTop: -8, marginLeft: -8, marginRight: -8, marginBottom: 4 }}
-                              />
-                            )}
-                            <div style={{ fontSize: 11 }}>
-                              <div style={{ fontStyle: 'italic', fontWeight: 500 }}>{feature.properties.species}</div>
-                              {feature.properties.eventDate && (
-                                <div style={{ color: '#6b7280' }}>{feature.properties.eventDate}</div>
-                              )}
-                              {inatMatch?.observer && (
-                                <div style={{ color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>by {inatMatch.observer}</div>
-                              )}
-                            </div>
-                          </div>
-                        </Tooltip>
                         <Popup>
                           <div className="text-sm" style={{ maxWidth: 220 }}>
                             {inatMatch?.imageUrl && (
