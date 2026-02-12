@@ -167,6 +167,74 @@ function getAvailableTaxa(): { id: string; name: string; available: boolean; spe
   });
 }
 
+// Maximum NE species to return in a single response to stay within memory/response size limits.
+// The total count is always returned so the frontend knows the actual number.
+const NE_SPECIES_LIMIT = 50000;
+
+// Helper: collect NE species from a single taxon's GBIF CSV
+function collectNESpeciesFromCSV(
+  processTaxon: { id: string; gbifDataFile: string },
+  redListNames: Set<string>,
+  search: string | undefined,
+  neSpecies: Species[],
+  tagTaxonId: boolean,
+): number {
+  let count = 0;
+  const gbifCsvPath = path.join(process.cwd(), "data", processTaxon.gbifDataFile);
+  if (!fs.existsSync(gbifCsvPath)) return 0;
+
+  const csvContent = fs.readFileSync(gbifCsvPath, "utf-8");
+  const lines = csvContent.trim().split("\n");
+  const header = lines[0];
+  const hasScientificName = header.includes("scientific_name");
+  const hasCommonName = header.includes("common_name");
+
+  if (!hasScientificName) return 0;
+
+  for (let i = 1; i < lines.length; i++) {
+    const parts = lines[i].split(",");
+    const speciesKey = parseInt(parts[0], 10);
+    const occurrenceCount = parseInt(parts[1], 10);
+    const scientificName = parts[2]?.trim() || "";
+    let commonName: string | null = null;
+    if (hasCommonName) {
+      const raw = parts.slice(3).join(",").trim();
+      commonName = raw.replace(/^"|"$/g, "") || null;
+    }
+    if (scientificName && !redListNames.has(scientificName.toLowerCase())) {
+      // Apply search filter inline to avoid accumulating unwanted entries
+      if (search && !(
+        scientificName.toLowerCase().includes(search) ||
+        commonName?.toLowerCase().includes(search)
+      )) {
+        continue;
+      }
+      count++;
+      if (neSpecies.length < NE_SPECIES_LIMIT) {
+        neSpecies.push({
+          sis_taxon_id: speciesKey,
+          assessment_id: 0,
+          scientific_name: scientificName,
+          common_name: commonName,
+          family: null,
+          category: "NE",
+          assessment_date: null,
+          year_published: "",
+          url: `https://www.gbif.org/species/${speciesKey}`,
+          population_trend: null,
+          countries: [],
+          assessment_count: 0,
+          previous_assessments: [],
+          gbif_species_key: speciesKey,
+          gbif_occurrence_count: occurrenceCount,
+          ...(tagTaxonId ? { taxon_id: processTaxon.id } : {}),
+        } as Species);
+      }
+    }
+  }
+  return count;
+}
+
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const taxonId = searchParams.get("taxon") || "plantae";
@@ -181,6 +249,45 @@ export async function GET(request: NextRequest) {
   }
 
   const taxon = getTaxonConfig(taxonId);
+
+  // Handle NE category for "all" taxon BEFORE loading merged data.
+  // Loading all 15 JSON files (~100MB) plus accumulating ~900K NE species exceeds
+  // Vercel's memory limits. Process each sub-taxon individually instead.
+  if (category === "NE" && taxonId === "all") {
+    try {
+      const subTaxa = TAXA.filter(t => t.id !== "all");
+      const neSpecies: Species[] = [];
+      let totalNECount = 0;
+
+      for (const subTaxon of subTaxa) {
+        const subData = getSpeciesData(subTaxon.id);
+        if (!subData) continue;
+
+        const redListNames = new Set(
+          subData.species.map((s) => s.scientific_name.toLowerCase().trim())
+        );
+
+        totalNECount += collectNESpeciesFromCSV(
+          subTaxon, redListNames, search, neSpecies, true
+        );
+      }
+
+      return NextResponse.json({
+        species: neSpecies,
+        total: neSpecies.length,
+        totalNE: totalNECount,
+        taxon: { id: taxon.id, name: taxon.name, estimatedDescribed: taxon.estimatedDescribed, estimatedSource: taxon.estimatedSource, color: taxon.color },
+      });
+    } catch (error) {
+      console.error("Error loading NE species for all taxa:", error);
+      return NextResponse.json({
+        species: [],
+        total: 0,
+        taxon: { id: taxon.id, name: taxon.name, estimatedDescribed: taxon.estimatedDescribed, estimatedSource: taxon.estimatedSource, color: taxon.color },
+      });
+    }
+  }
+
   const data = getSpeciesData(taxonId);
 
   if (!data) {
@@ -200,83 +307,22 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Handle NE category: serve species from GBIF CSV that aren't in Red List
+  // Handle NE category for individual taxa
   if (category === "NE") {
     try {
-      // For "all" taxon, process each sub-taxon's GBIF CSV individually
-      // to avoid loading the massive gbif-all.csv (35MB+) which can exceed Vercel memory/timeout limits
-      const taxonsToProcess = taxonId === "all"
-        ? TAXA.filter(t => t.id !== "all")
-        : [taxon];
+      const redListNames = new Set(
+        data.species.map((s) => s.scientific_name.toLowerCase().trim())
+      );
 
-      let neSpecies: Species[] = [];
-
-      for (const processTaxon of taxonsToProcess) {
-        const gbifCsvPath = path.join(process.cwd(), "data", processTaxon.gbifDataFile);
-        if (!fs.existsSync(gbifCsvPath)) continue;
-
-        // For sub-taxa, load their own Red List data; for single taxon use existing data
-        const taxonData = taxonId === "all" ? getSpeciesData(processTaxon.id) : data;
-        if (!taxonData) continue;
-
-        // Build set of Red List scientific names
-        const redListNames = new Set(
-          taxonData.species.map((s) => s.scientific_name.toLowerCase().trim())
-        );
-
-        const csvContent = fs.readFileSync(gbifCsvPath, "utf-8");
-        const lines = csvContent.trim().split("\n");
-        const header = lines[0];
-        const hasScientificName = header.includes("scientific_name");
-        const hasCommonName = header.includes("common_name");
-
-        if (hasScientificName) {
-          for (let i = 1; i < lines.length; i++) {
-            const parts = lines[i].split(",");
-            const speciesKey = parseInt(parts[0], 10);
-            const occurrenceCount = parseInt(parts[1], 10);
-            const scientificName = parts[2]?.trim() || "";
-            // Common name is in column 3 if present; handle quoted values
-            let commonName: string | null = null;
-            if (hasCommonName) {
-              const raw = parts.slice(3).join(",").trim();
-              commonName = raw.replace(/^"|"$/g, "") || null;
-            }
-            if (scientificName && !redListNames.has(scientificName.toLowerCase())) {
-              neSpecies.push({
-                sis_taxon_id: speciesKey, // Use GBIF species key as ID
-                assessment_id: 0,
-                scientific_name: scientificName,
-                common_name: commonName,
-                family: null,
-                category: "NE",
-                assessment_date: null,
-                year_published: "",
-                url: `https://www.gbif.org/species/${speciesKey}`,
-                population_trend: null,
-                countries: [],
-                assessment_count: 0,
-                previous_assessments: [],
-                gbif_species_key: speciesKey,
-                gbif_occurrence_count: occurrenceCount,
-                ...(taxonId === "all" ? { taxon_id: processTaxon.id } : {}),
-              } as Species);
-            }
-          }
-        }
-      }
-
-      // Apply search filter
-      if (search) {
-        neSpecies = neSpecies.filter((s) =>
-          s.scientific_name.toLowerCase().includes(search) ||
-          s.common_name?.toLowerCase().includes(search)
-        );
-      }
+      const neSpecies: Species[] = [];
+      const totalNECount = collectNESpeciesFromCSV(
+        taxon, redListNames, search, neSpecies, false
+      );
 
       return NextResponse.json({
         species: neSpecies,
         total: neSpecies.length,
+        totalNE: totalNECount,
         metadata: data.metadata,
         taxon: { id: taxon.id, name: taxon.name, estimatedDescribed: taxon.estimatedDescribed, estimatedSource: taxon.estimatedSource, color: taxon.color },
       });

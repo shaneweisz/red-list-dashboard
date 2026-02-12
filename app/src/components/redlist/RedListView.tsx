@@ -617,6 +617,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
   // Track whether NE species have been fetched for the current taxon
   const [neSpeciesFetched, setNeSpeciesFetched] = useState<string | null>(null);
   const [neLoading, setNeLoading] = useState(false);
+  const [neTotalCount, setNeTotalCount] = useState<number | null>(null); // Total NE count (may exceed returned species)
 
   // Reset filters when taxon changes
   useEffect(() => {
@@ -627,6 +628,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
     setCurrentPage(1);
     setSpeciesDetails({});
     setNeSpeciesFetched(null);
+    setNeTotalCount(null);
   }, [selectedTaxon]);
 
   // Fetch NE species when NE category is selected
@@ -646,6 +648,9 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
               const nonNE = prev.filter(s => s.category !== "NE");
               return [...nonNE, ...data.species];
             });
+          }
+          if (data.totalNE != null) {
+            setNeTotalCount(data.totalNE);
           }
           setNeSpeciesFetched(selectedTaxon!);
         }
@@ -1376,6 +1381,13 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
             )}
           </div>
         </div>
+
+        {/* Truncation notice for limited NE results */}
+        {neTotalCount != null && selectedCategories.has("NE") && neTotalCount > filteredSpecies.filter(s => s.category === "NE").length && (
+          <div className="px-3 md:px-4 py-2 text-xs text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700 rounded-t-xl">
+            Showing {filteredSpecies.filter(s => s.category === "NE").length.toLocaleString()} of {neTotalCount.toLocaleString()} Not Evaluated species. Select a specific taxon to browse all NE species for that group.
+          </div>
+        )}
 
         {/* Species table */}
         <div
