@@ -409,36 +409,22 @@ function GbifBreakdownPopup({
 }
 
 export default function RedListView({ onTaxonChange }: RedListViewProps) {
-  // Selected taxon (null = show summary table), synced with URL hash
-  // Initialize to null to avoid hydration mismatch, then read hash in useEffect
-  const [selectedTaxon, setSelectedTaxon] = useState<string | null>(null);
+  // Filters synced with URL search params for shareable links
+  const {
+    selectedTaxon, setSelectedTaxon,
+    selectedCategories, setSelectedCategories,
+    selectedYearRanges, setSelectedYearRanges,
+    selectedCountries, setSelectedCountries,
+    searchFilter, setSearchFilter,
+    sortField, sortDirection, setSort,
+    clearAllFilters,
+  } = useFilterParams();
 
-  // Read initial hash and sync URL hash with selected taxon
-  useEffect(() => {
-    // Read initial hash on mount
-    const hash = window.location.hash.slice(1);
-    if (hash) {
-      setSelectedTaxon(hash);
-    }
-
-    const handleHashChange = () => {
-      const newHash = window.location.hash.slice(1);
-      setSelectedTaxon(newHash || null);
-    };
-
-    window.addEventListener("hashchange", handleHashChange);
-    return () => window.removeEventListener("hashchange", handleHashChange);
-  }, []);
-
-  // Update URL hash when taxon changes (and push to history for back button)
+  // Taxon selection handler (used by TaxaSummary and back navigation)
   const handleTaxonSelect = (taxonId: string | null) => {
-    if (taxonId) {
-      window.history.pushState(null, "", `#${taxonId}`);
-    } else {
-      window.history.pushState(null, "", window.location.pathname);
-    }
     setSelectedTaxon(taxonId);
   };
+
   const [taxonInfo, setTaxonInfo] = useState<TaxonInfo | null>(null);
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [assessments, setAssessments] = useState<AssessmentsResponse | null>(null);
@@ -450,16 +436,6 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
 
   // Combined loading state for backwards compatibility
   const loading = statsLoading || assessmentsLoading || speciesLoading;
-
-  // Filters synced with URL search params for shareable links
-  const {
-    selectedCategories, setSelectedCategories,
-    selectedYearRanges, setSelectedYearRanges,
-    selectedCountries, setSelectedCountries,
-    searchFilter, setSearchFilter,
-    sortField, sortDirection, setSort,
-    clearAllFilters,
-  } = useFilterParams();
 
   const [showOnlyStarred, setShowOnlyStarred] = useState(false);
 

@@ -9,16 +9,23 @@ import { useCallback, useMemo, useRef } from "react";
  *
  * Reads initial values from URL on mount and provides setters
  * that update both React state and URL simultaneously.
+ *
+ * Example URL: /?taxa=mammalia&categories=CR,EN&years=11-20+years&search=shrew
  */
 export function useFilterParams() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
 
-  // Track whether we're currently updating to avoid loops
-  const isUpdatingRef = useRef(false);
+  // Keep a ref to the latest params so rapid updates don't read stale state.
+  // After each URL update we write the new params here immediately, so the
+  // next update within the same render cycle sees the correct baseline.
+  const pendingParamsRef = useRef<URLSearchParams | null>(null);
 
-  // Parse current URL params into filter state
+  // --- Read current URL params into filter state ---
+
+  const taxa = searchParams.get("taxa") || null;
+
   const categories = useMemo(() => {
     const val = searchParams.get("categories");
     return val ? new Set(val.split(",").filter(Boolean)) : new Set<string>();
@@ -45,10 +52,25 @@ export function useFilterParams() {
     "year"; // default when absent or "year"
   const dir = (searchParams.get("dir") as "asc" | "desc") || "desc";
 
-  // Build new URL from params, preserving the hash
-  const buildUrl = useCallback(
-    (updates: Record<string, string | null>) => {
-      const params = new URLSearchParams(searchParams.toString());
+  // --- URL update helpers ---
+
+  // Get the current baseline params — either from a pending (not yet reflected)
+  // update, or from the actual current URL.
+  const getCurrentParams = useCallback(() => {
+    if (pendingParamsRef.current) {
+      return new URLSearchParams(pendingParamsRef.current.toString());
+    }
+    // Read from window.location for freshness (searchParams from the hook
+    // may lag behind after router.replace).
+    if (typeof window !== "undefined") {
+      return new URLSearchParams(window.location.search);
+    }
+    return new URLSearchParams(searchParams.toString());
+  }, [searchParams]);
+
+  const applyUpdates = useCallback(
+    (updates: Record<string, string | null>, push = false) => {
+      const params = getCurrentParams();
       for (const [key, value] of Object.entries(updates)) {
         if (value === null || value === "") {
           params.delete(key);
@@ -56,77 +78,85 @@ export function useFilterParams() {
           params.set(key, value);
         }
       }
-      const qs = params.toString();
-      const hash = typeof window !== "undefined" ? window.location.hash : "";
-      return `${pathname}${qs ? `?${qs}` : ""}${hash}`;
-    },
-    [searchParams, pathname]
-  );
 
-  const updateUrl = useCallback(
-    (updates: Record<string, string | null>) => {
-      if (isUpdatingRef.current) return;
-      isUpdatingRef.current = true;
-      // Use replace to avoid polluting browser history on every filter click
-      router.replace(buildUrl(updates), { scroll: false });
-      // Reset flag after a tick
+      // Store as pending so subsequent calls in the same tick see this state
+      pendingParamsRef.current = params;
+
+      const qs = params.toString();
+      const url = `${pathname}${qs ? `?${qs}` : ""}`;
+
+      if (push) {
+        router.push(url, { scroll: false });
+      } else {
+        router.replace(url, { scroll: false });
+      }
+
+      // Clear pending ref after React has a chance to re-render with new searchParams
       requestAnimationFrame(() => {
-        isUpdatingRef.current = false;
+        pendingParamsRef.current = null;
       });
     },
-    [router, buildUrl]
+    [getCurrentParams, pathname, router]
   );
 
-  // Setters that update URL
+  // --- Setters ---
+
+  const setTaxa = useCallback(
+    (value: string | null) => {
+      // Use push for taxon changes so the back button works
+      applyUpdates({ taxa: value }, true);
+    },
+    [applyUpdates]
+  );
 
   const setCategories = useCallback(
     (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
       const next = typeof updater === "function" ? updater(categories) : updater;
       const val = [...next].join(",");
-      updateUrl({ categories: val || null });
+      applyUpdates({ categories: val || null });
     },
-    [categories, updateUrl]
+    [categories, applyUpdates]
   );
 
   const setYearRanges = useCallback(
     (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
       const next = typeof updater === "function" ? updater(yearRanges) : updater;
       const val = [...next].join(",");
-      updateUrl({ years: val || null });
+      applyUpdates({ years: val || null });
     },
-    [yearRanges, updateUrl]
+    [yearRanges, applyUpdates]
   );
 
   const setCountries = useCallback(
     (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
       const next = typeof updater === "function" ? updater(countries) : updater;
       const val = [...next].join(",");
-      updateUrl({ countries: val || null });
+      applyUpdates({ countries: val || null });
     },
-    [countries, updateUrl]
+    [countries, applyUpdates]
   );
 
   const setSearch = useCallback(
     (value: string) => {
-      updateUrl({ search: value || null });
+      applyUpdates({ search: value || null });
     },
-    [updateUrl]
+    [applyUpdates]
   );
 
   const setSort = useCallback(
     (field: "year" | "category" | null, direction: "asc" | "desc") => {
-      updateUrl({
+      applyUpdates({
         // "year" is the default so we can omit it to keep URLs clean.
         // "none" means explicitly no sort.
         sort: field === null ? "none" : field === "year" ? null : field,
         dir: field ? direction : null,
       });
     },
-    [updateUrl]
+    [applyUpdates]
   );
 
   const clearAllFilters = useCallback(() => {
-    updateUrl({
+    applyUpdates({
       categories: null,
       years: null,
       countries: null,
@@ -134,10 +164,11 @@ export function useFilterParams() {
       sort: null,
       dir: null,
     });
-  }, [updateUrl]);
+  }, [applyUpdates]);
 
   return {
     // Current values (derived from URL)
+    selectedTaxon: taxa,
     selectedCategories: categories,
     selectedYearRanges: yearRanges,
     selectedCountries: countries,
@@ -146,6 +177,7 @@ export function useFilterParams() {
     sortDirection: dir,
 
     // Setters (update URL)
+    setSelectedTaxon: setTaxa,
     setSelectedCategories: setCategories,
     setSelectedYearRanges: setYearRanges,
     setSelectedCountries: setCountries,
