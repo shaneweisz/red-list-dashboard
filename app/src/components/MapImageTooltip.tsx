@@ -58,7 +58,8 @@ export default function MapImageTooltip({
         alt=""
         style={{
           width: 80,
-          objectFit: "contain",
+          height: 60,
+          objectFit: "cover",
           borderRadius: 6,
           border: "2px solid #3b82f6",
           boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
