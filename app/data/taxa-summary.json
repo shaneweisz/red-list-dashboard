@@ -1,0 +1,101 @@
+{
+  "taxa": [
+    {
+      "id": "mammalia",
+      "name": "Mammals",
+      "color": "#f97316",
+      "estimatedDescribed": 6819,
+      "available": true,
+      "totalAssessed": 6036,
+      "percentAssessed": 88.5,
+      "outdated": 1065,
+      "percentOutdated": 17.6,
+      "lastUpdated": "2025-12-09T18:07:00.062Z"
+    },
+    {
+      "id": "aves",
+      "name": "Birds",
+      "color": "#3b82f6",
+      "estimatedDescribed": 11185,
+      "available": true,
+      "totalAssessed": 11185,
+      "percentAssessed": 100,
+      "outdated": 0,
+      "percentOutdated": 0,
+      "lastUpdated": "2025-12-09T18:50:00.992Z"
+    },
+    {
+      "id": "reptilia",
+      "name": "Reptiles",
+      "color": "#84cc16",
+      "estimatedDescribed": 12502,
+      "available": true,
+      "totalAssessed": 10368,
+      "percentAssessed": 82.9,
+      "outdated": 5394,
+      "percentOutdated": 52,
+      "lastUpdated": "2025-12-09T19:24:33.342Z"
+    },
+    {
+      "id": "amphibia",
+      "name": "Amphibians",
+      "color": "#14b8a6",
+      "estimatedDescribed": 8918,
+      "available": true,
+      "totalAssessed": 8051,
+      "percentAssessed": 90.3,
+      "outdated": 862,
+      "percentOutdated": 10.7,
+      "lastUpdated": "2025-12-09T19:51:56.737Z"
+    },
+    {
+      "id": "fishes",
+      "name": "Fishes",
+      "color": "#06b6d4",
+      "estimatedDescribed": 37288,
+      "available": true,
+      "totalAssessed": 28982,
+      "percentAssessed": 77.7,
+      "outdated": 11159,
+      "percentOutdated": 38.5,
+      "lastUpdated": "2025-12-09T21:32:08.161Z"
+    },
+    {
+      "id": "invertebrates",
+      "name": "Invertebrates",
+      "color": "#78716c",
+      "estimatedDescribed": 1508442,
+      "available": true,
+      "totalAssessed": 27584,
+      "percentAssessed": 1.8,
+      "outdated": 12368,
+      "percentOutdated": 44.8,
+      "lastUpdated": "2025-12-09T23:02:06.424Z"
+    },
+    {
+      "id": "plantae",
+      "name": "Plants",
+      "color": "#22c55e",
+      "estimatedDescribed": 426132,
+      "available": true,
+      "totalAssessed": 76864,
+      "percentAssessed": 18,
+      "outdated": 18432,
+      "percentOutdated": 24,
+      "lastUpdated": "2025-12-09T17:38:11.550Z"
+    },
+    {
+      "id": "fungi",
+      "name": "Fungi",
+      "color": "#d97706",
+      "estimatedDescribed": 162653,
+      "available": true,
+      "totalAssessed": 1302,
+      "percentAssessed": 0.8,
+      "outdated": 45,
+      "percentOutdated": 3.5,
+      "lastUpdated": "2025-12-09T17:43:03.096Z"
+    }
+  ],
+  "generatedAt": "2026-02-12T10:41:54.470Z"
+}
