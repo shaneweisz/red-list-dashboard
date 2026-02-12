@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { useState } from "react";
 import dynamic from "next/dynamic";
 import { ThemeToggle } from "../components/ThemeToggle";
 
@@ -40,15 +40,8 @@ export default function RedListPage() {
           </div>
         </div>
 
-        {/* Red List Content — Suspense needed for useSearchParams in filter URL sync */}
-        <Suspense fallback={
-          <div className="flex flex-col items-center justify-center py-20">
-            <div className="animate-spin h-10 w-10 border-4 border-red-600 border-t-transparent rounded-full" />
-            <p className="mt-4 text-zinc-500 dark:text-zinc-400">Loading Red List view...</p>
-          </div>
-        }>
-          <RedListView onTaxonChange={setSelectedTaxonName} />
-        </Suspense>
+        {/* Red List Content */}
+        <RedListView onTaxonChange={setSelectedTaxonName} />
       </main>
     </div>
   );

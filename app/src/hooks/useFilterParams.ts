@@ -1,187 +1,201 @@
 "use client";
 
-import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { useCallback, useMemo, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
+
+// --- URL parsing helpers ---
+
+function parseParams(search: string) {
+  const p = new URLSearchParams(search);
+  const sortParam = p.get("sort");
+  return {
+    taxa: p.get("taxa") || null,
+    categories: p.get("categories")
+      ? new Set(p.get("categories")!.split(",").filter(Boolean))
+      : new Set<string>(),
+    yearRanges: p.get("years")
+      ? new Set(p.get("years")!.split(",").filter(Boolean))
+      : new Set<string>(),
+    countries: p.get("countries")
+      ? new Set(p.get("countries")!.split(",").filter(Boolean))
+      : new Set<string>(),
+    search: p.get("search") || "",
+    sortField: (
+      sortParam === "none" ? null :
+      sortParam === "category" ? "category" :
+      "year"
+    ) as "year" | "category" | null,
+    sortDirection: (p.get("dir") === "asc" ? "asc" : "desc") as "asc" | "desc",
+  };
+}
+
+function buildQs(state: {
+  taxa: string | null;
+  categories: Set<string>;
+  yearRanges: Set<string>;
+  countries: Set<string>;
+  search: string;
+  sortField: "year" | "category" | null;
+  sortDirection: "asc" | "desc";
+}): string {
+  const p = new URLSearchParams();
+  if (state.taxa) p.set("taxa", state.taxa);
+  if (state.categories.size > 0) p.set("categories", [...state.categories].join(","));
+  if (state.yearRanges.size > 0) p.set("years", [...state.yearRanges].join(","));
+  if (state.countries.size > 0) p.set("countries", [...state.countries].join(","));
+  if (state.search) p.set("search", state.search);
+  // "year" desc is the default — only write non-default sort to URL
+  if (state.sortField === null) {
+    p.set("sort", "none");
+  } else if (state.sortField === "category") {
+    p.set("sort", "category");
+    if (state.sortDirection !== "desc") p.set("dir", state.sortDirection);
+  } else if (state.sortDirection !== "desc") {
+    // sortField is "year" (default) but direction is non-default
+    p.set("dir", state.sortDirection);
+  }
+  const qs = p.toString();
+  return qs ? `?${qs}` : "";
+}
 
 /**
  * Hook that syncs filter state with URL search parameters,
  * enabling shareable/bookmarkable filtered views.
  *
- * Reads initial values from URL on mount and provides setters
- * that update both React state and URL simultaneously.
+ * Uses local useState for instant UI updates and native
+ * history.replaceState/pushState to sync the URL — no Next.js
+ * router overhead.
  *
  * Example URL: /?taxa=mammalia&categories=CR,EN&years=11-20+years&search=shrew
  */
 export function useFilterParams() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname();
-
-  // Keep a ref to the latest params so rapid updates don't read stale state.
-  // After each URL update we write the new params here immediately, so the
-  // next update within the same render cycle sees the correct baseline.
-  const pendingParamsRef = useRef<URLSearchParams | null>(null);
-
-  // --- Read current URL params into filter state ---
-
-  const taxa = searchParams.get("taxa") || null;
-
-  const categories = useMemo(() => {
-    const val = searchParams.get("categories");
-    return val ? new Set(val.split(",").filter(Boolean)) : new Set<string>();
-  }, [searchParams]);
-
-  const yearRanges = useMemo(() => {
-    const val = searchParams.get("years");
-    return val ? new Set(val.split(",").map(decodeURIComponent).filter(Boolean)) : new Set<string>();
-  }, [searchParams]);
-
-  const countries = useMemo(() => {
-    const val = searchParams.get("countries");
-    return val ? new Set(val.split(",").filter(Boolean)) : new Set<string>();
-  }, [searchParams]);
-
-  const search = searchParams.get("search") || "";
-
-  // Default sort is by year descending (matching original behavior).
-  // "none" in URL means explicitly no sort; absent param means default (year).
-  const sortParam = searchParams.get("sort");
-  const sort: "year" | "category" | null =
-    sortParam === "none" ? null :
-    sortParam === "category" ? "category" :
-    "year"; // default when absent or "year"
-  const dir = (searchParams.get("dir") as "asc" | "desc") || "desc";
-
-  // --- URL update helpers ---
-
-  // Get the current baseline params — either from a pending (not yet reflected)
-  // update, or from the actual current URL.
-  const getCurrentParams = useCallback(() => {
-    if (pendingParamsRef.current) {
-      return new URLSearchParams(pendingParamsRef.current.toString());
-    }
-    // Read from window.location for freshness (searchParams from the hook
-    // may lag behind after router.replace).
+  // Initialize state from URL on first render (SSR-safe: default to empty)
+  const [state, setState] = useState(() => {
     if (typeof window !== "undefined") {
-      return new URLSearchParams(window.location.search);
+      return parseParams(window.location.search);
     }
-    return new URLSearchParams(searchParams.toString());
-  }, [searchParams]);
+    return parseParams("");
+  });
 
-  const applyUpdates = useCallback(
-    (updates: Record<string, string | null>, push = false) => {
-      const params = getCurrentParams();
-      for (const [key, value] of Object.entries(updates)) {
-        if (value === null || value === "") {
-          params.delete(key);
-        } else {
-          params.set(key, value);
-        }
-      }
+  // Sync URL → state on popstate (back/forward button)
+  useEffect(() => {
+    const onPopState = () => {
+      setState(parseParams(window.location.search));
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
 
-      // Store as pending so subsequent calls in the same tick see this state
-      pendingParamsRef.current = params;
+  // Write URL silently (no Next.js navigation, no re-render loop)
+  const syncUrl = useCallback((newState: typeof state, push: boolean) => {
+    const url = window.location.pathname + buildQs(newState);
+    if (push) {
+      window.history.pushState(null, "", url);
+    } else {
+      window.history.replaceState(null, "", url);
+    }
+  }, []);
 
-      const qs = params.toString();
-      const url = `${pathname}${qs ? `?${qs}` : ""}`;
+  // --- Setters: update local state instantly, sync URL in background ---
 
-      if (push) {
-        router.push(url, { scroll: false });
-      } else {
-        router.replace(url, { scroll: false });
-      }
-
-      // Clear pending ref after React has a chance to re-render with new searchParams
-      requestAnimationFrame(() => {
-        pendingParamsRef.current = null;
+  const setSelectedTaxon = useCallback(
+    (value: string | null) => {
+      setState(prev => {
+        const next = { ...prev, taxa: value };
+        syncUrl(next, true); // push so back button works
+        return next;
       });
     },
-    [getCurrentParams, pathname, router]
+    [syncUrl]
   );
 
-  // --- Setters ---
-
-  const setTaxa = useCallback(
-    (value: string | null) => {
-      // Use push for taxon changes so the back button works
-      applyUpdates({ taxa: value }, true);
-    },
-    [applyUpdates]
-  );
-
-  const setCategories = useCallback(
+  const setSelectedCategories = useCallback(
     (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
-      const next = typeof updater === "function" ? updater(categories) : updater;
-      const val = [...next].join(",");
-      applyUpdates({ categories: val || null });
+      setState(prev => {
+        const nextCats = typeof updater === "function" ? updater(prev.categories) : updater;
+        const next = { ...prev, categories: nextCats };
+        syncUrl(next, false);
+        return next;
+      });
     },
-    [categories, applyUpdates]
+    [syncUrl]
   );
 
-  const setYearRanges = useCallback(
+  const setSelectedYearRanges = useCallback(
     (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
-      const next = typeof updater === "function" ? updater(yearRanges) : updater;
-      const val = [...next].join(",");
-      applyUpdates({ years: val || null });
+      setState(prev => {
+        const nextYears = typeof updater === "function" ? updater(prev.yearRanges) : updater;
+        const next = { ...prev, yearRanges: nextYears };
+        syncUrl(next, false);
+        return next;
+      });
     },
-    [yearRanges, applyUpdates]
+    [syncUrl]
   );
 
-  const setCountries = useCallback(
+  const setSelectedCountries = useCallback(
     (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
-      const next = typeof updater === "function" ? updater(countries) : updater;
-      const val = [...next].join(",");
-      applyUpdates({ countries: val || null });
+      setState(prev => {
+        const nextCountries = typeof updater === "function" ? updater(prev.countries) : updater;
+        const next = { ...prev, countries: nextCountries };
+        syncUrl(next, false);
+        return next;
+      });
     },
-    [countries, applyUpdates]
+    [syncUrl]
   );
 
-  const setSearch = useCallback(
+  const setSearchFilter = useCallback(
     (value: string) => {
-      applyUpdates({ search: value || null });
+      setState(prev => {
+        const next = { ...prev, search: value };
+        syncUrl(next, false);
+        return next;
+      });
     },
-    [applyUpdates]
+    [syncUrl]
   );
 
   const setSort = useCallback(
     (field: "year" | "category" | null, direction: "asc" | "desc") => {
-      applyUpdates({
-        // "year" is the default so we can omit it to keep URLs clean.
-        // "none" means explicitly no sort.
-        sort: field === null ? "none" : field === "year" ? null : field,
-        dir: field ? direction : null,
+      setState(prev => {
+        const next = { ...prev, sortField: field, sortDirection: direction };
+        syncUrl(next, false);
+        return next;
       });
     },
-    [applyUpdates]
+    [syncUrl]
   );
 
   const clearAllFilters = useCallback(() => {
-    applyUpdates({
-      categories: null,
-      years: null,
-      countries: null,
-      search: null,
-      sort: null,
-      dir: null,
+    setState(prev => {
+      const next = {
+        ...prev,
+        categories: new Set<string>(),
+        yearRanges: new Set<string>(),
+        countries: new Set<string>(),
+        search: "",
+        sortField: "year" as const,
+        sortDirection: "desc" as const,
+      };
+      syncUrl(next, false);
+      return next;
     });
-  }, [applyUpdates]);
+  }, [syncUrl]);
 
   return {
-    // Current values (derived from URL)
-    selectedTaxon: taxa,
-    selectedCategories: categories,
-    selectedYearRanges: yearRanges,
-    selectedCountries: countries,
-    searchFilter: search,
-    sortField: sort,
-    sortDirection: dir,
+    selectedTaxon: state.taxa,
+    selectedCategories: state.categories,
+    selectedYearRanges: state.yearRanges,
+    selectedCountries: state.countries,
+    searchFilter: state.search,
+    sortField: state.sortField,
+    sortDirection: state.sortDirection,
 
-    // Setters (update URL)
-    setSelectedTaxon: setTaxa,
-    setSelectedCategories: setCategories,
-    setSelectedYearRanges: setYearRanges,
-    setSelectedCountries: setCountries,
-    setSearchFilter: setSearch,
+    setSelectedTaxon,
+    setSelectedCategories,
+    setSelectedYearRanges,
+    setSelectedCountries,
+    setSearchFilter,
     setSort,
     clearAllFilters,
   };
