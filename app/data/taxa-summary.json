@@ -10,7 +10,17 @@
       "percentAssessed": 88.5,
       "outdated": 1065,
       "percentOutdated": 17.6,
-      "lastUpdated": "2025-12-09T18:07:00.062Z"
+      "lastUpdated": "2025-12-09T18:07:00.062Z",
+      "byCategory": {
+        "DD": 789,
+        "VU": 567,
+        "EN": 559,
+        "LC": 3391,
+        "NT": 401,
+        "CR": 238,
+        "EX": 90,
+        "EW": 1
+      }
     },
     {
       "id": "aves",
@@ -22,7 +32,17 @@
       "percentAssessed": 100,
       "outdated": 0,
       "percentOutdated": 0,
-      "lastUpdated": "2025-12-09T18:50:00.992Z"
+      "lastUpdated": "2025-12-09T18:50:00.992Z",
+      "byCategory": {
+        "LC": 8757,
+        "VU": 668,
+        "DD": 36,
+        "NT": 967,
+        "EN": 372,
+        "CR": 216,
+        "EW": 5,
+        "EX": 164
+      }
     },
     {
       "id": "reptilia",
@@ -34,7 +54,17 @@
       "percentAssessed": 82.9,
       "outdated": 5394,
       "percentOutdated": 52,
-      "lastUpdated": "2025-12-09T19:24:33.342Z"
+      "lastUpdated": "2025-12-09T19:24:33.342Z",
+      "byCategory": {
+        "CR": 432,
+        "DD": 1502,
+        "LC": 6406,
+        "EN": 800,
+        "VU": 627,
+        "NT": 567,
+        "EX": 32,
+        "EW": 2
+      }
     },
     {
       "id": "amphibia",
@@ -46,7 +76,17 @@
       "percentAssessed": 90.3,
       "outdated": 862,
       "percentOutdated": 10.7,
-      "lastUpdated": "2025-12-09T19:51:56.737Z"
+      "lastUpdated": "2025-12-09T19:51:56.737Z",
+      "byCategory": {
+        "EN": 1291,
+        "LC": 3733,
+        "CR": 825,
+        "VU": 814,
+        "DD": 896,
+        "NT": 453,
+        "EW": 2,
+        "EX": 37
+      }
     },
     {
       "id": "fishes",
@@ -58,7 +98,17 @@
       "percentAssessed": 77.7,
       "outdated": 11159,
       "percentOutdated": 38.5,
-      "lastUpdated": "2025-12-09T21:32:08.161Z"
+      "lastUpdated": "2025-12-09T21:32:08.161Z",
+      "byCategory": {
+        "CR": 875,
+        "DD": 5387,
+        "VU": 1698,
+        "LC": 18409,
+        "EN": 1487,
+        "EX": 91,
+        "EW": 11,
+        "NT": 1024
+      }
     },
     {
       "id": "invertebrates",
@@ -70,7 +120,17 @@
       "percentAssessed": 1.8,
       "outdated": 12368,
       "percentOutdated": 44.8,
-      "lastUpdated": "2025-12-09T23:02:06.424Z"
+      "lastUpdated": "2025-12-09T23:02:06.424Z",
+      "byCategory": {
+        "CR": 1603,
+        "EN": 2423,
+        "VU": 2625,
+        "DD": 6505,
+        "LC": 12173,
+        "NT": 1871,
+        "EX": 370,
+        "EW": 14
+      }
     },
     {
       "id": "plantae",
@@ -82,7 +142,17 @@
       "percentAssessed": 18,
       "outdated": 18432,
       "percentOutdated": 24,
-      "lastUpdated": "2025-12-09T17:38:11.550Z"
+      "lastUpdated": "2025-12-09T17:38:11.550Z",
+      "byCategory": {
+        "EN": 12707,
+        "CR": 6445,
+        "LC": 35732,
+        "NT": 4880,
+        "VU": 10596,
+        "DD": 6317,
+        "EW": 46,
+        "EX": 141
+      }
     },
     {
       "id": "fungi",
@@ -94,8 +164,16 @@
       "percentAssessed": 0.8,
       "outdated": 45,
       "percentOutdated": 3.5,
-      "lastUpdated": "2025-12-09T17:43:03.096Z"
+      "lastUpdated": "2025-12-09T17:43:03.096Z",
+      "byCategory": {
+        "EN": 129,
+        "CR": 48,
+        "NT": 110,
+        "DD": 290,
+        "LC": 491,
+        "VU": 234
+      }
     }
   ],
-  "generatedAt": "2026-02-12T10:41:54.470Z"
+  "generatedAt": "2026-02-12T20:41:13.354Z"
 }
