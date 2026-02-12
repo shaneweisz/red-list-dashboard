@@ -8,6 +8,9 @@ interface InatObservation {
   observer: string | null;
   mediaType: "StillImage" | "Sound" | "MovingImage" | null;
   audioUrl: string | null;
+  gbifID: number | null;
+  decimalLatitude: number | null;
+  decimalLongitude: number | null;
 }
 
 interface RecordTypeBreakdown {
@@ -135,9 +138,12 @@ export async function GET(
           .filter((obs: { references?: string; media?: { type?: string; identifier?: string }[] }) =>
             obs.references && obs.media && obs.media.length > 0 && obs.media[0]?.identifier)
           .map((obs: {
+            key?: number;
             references: string;
             eventDate?: string;
             media?: { type?: string; identifier?: string; format?: string }[];
+            decimalLatitude?: number;
+            decimalLongitude?: number;
             verbatimLocality?: string;
             stateProvince?: string;
             country?: string;
@@ -159,6 +165,9 @@ export async function GET(
               mediaType: primaryType,
               location,
               observer: obs.recordedBy || null,
+              gbifID: obs.key ?? null,
+              decimalLatitude: obs.decimalLatitude ?? null,
+              decimalLongitude: obs.decimalLongitude ?? null,
             };
           });
       }

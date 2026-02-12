@@ -8,6 +8,9 @@ interface InatObservation {
   observer: string | null;
   mediaType: "StillImage" | "Sound" | "MovingImage" | null;
   audioUrl: string | null;
+  gbifID: number | null;
+  decimalLatitude: number | null;
+  decimalLongitude: number | null;
 }
 
 const INAT_DATASET_KEY = "50c9509d-22c7-4a22-a47d-8c48425ef4a7";
@@ -51,9 +54,12 @@ export async function GET(
       )
       .map(
         (obs: {
+          key?: number;
           references: string;
           eventDate?: string;
           media?: { type?: string; identifier?: string; format?: string }[];
+          decimalLatitude?: number;
+          decimalLongitude?: number;
           verbatimLocality?: string;
           stateProvince?: string;
           country?: string;
@@ -82,6 +88,9 @@ export async function GET(
             mediaType: primaryType,
             location,
             observer: obs.recordedBy || null,
+            gbifID: obs.key ?? null,
+            decimalLatitude: obs.decimalLatitude ?? null,
+            decimalLongitude: obs.decimalLongitude ?? null,
           };
         }
       );

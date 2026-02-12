@@ -38,6 +38,10 @@ const LocateControl = dynamic(
   () => import("./LocateControl"),
   { ssr: false }
 );
+const Tooltip = dynamic(
+  () => import("react-leaflet").then((mod) => mod.Tooltip),
+  { ssr: false }
+);
 const FitBounds = dynamic(
   () => import("./FitBounds"),
   { ssr: false }
@@ -84,6 +88,9 @@ interface InatObservation {
   observer: string | null;
   mediaType?: "StillImage" | "Sound" | "MovingImage" | null;
   audioUrl?: string | null;
+  gbifID?: number | null;
+  decimalLatitude?: number | null;
+  decimalLongitude?: number | null;
 }
 
 interface RecordTypeBreakdown {
@@ -111,7 +118,7 @@ function getThumbUrl(url: string): string {
 }
 
 // Audio player card for sound-only observations
-function InatAudioCard({ obs, idx }: { obs: InatObservation; idx: number }) {
+function InatAudioCard({ obs, idx, onHover, onLeave }: { obs: InatObservation; idx: number; onHover?: () => void; onLeave?: () => void }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
 
@@ -128,7 +135,11 @@ function InatAudioCard({ obs, idx }: { obs: InatObservation; idx: number }) {
   };
 
   return (
-    <div className="aspect-[3/4] sm:aspect-square relative group">
+    <div
+      className="aspect-[3/4] sm:aspect-square relative group"
+      onMouseEnter={onHover}
+      onMouseLeave={onLeave}
+    >
       <a
         href={obs.url}
         target="_blank"
@@ -189,10 +200,10 @@ function InatAudioCard({ obs, idx }: { obs: InatObservation; idx: number }) {
 }
 
 // iNat photo thumbnail with hover preview using portal (desktop only)
-function InatPhotoWithPreview({ obs, idx }: { obs: InatObservation; idx: number }) {
+function InatPhotoWithPreview({ obs, idx, onHover, onLeave }: { obs: InatObservation; idx: number; onHover?: () => void; onLeave?: () => void }) {
   // If this is an audio-only observation (no image), render the audio card
   if (!obs.imageUrl && obs.audioUrl) {
-    return <InatAudioCard obs={obs} idx={idx} />;
+    return <InatAudioCard obs={obs} idx={idx} onHover={onHover} onLeave={onLeave} />;
   }
 
   const [isHovered, setIsHovered] = useState(false);
@@ -241,8 +252,8 @@ function InatPhotoWithPreview({ obs, idx }: { obs: InatObservation; idx: number 
     <div
       ref={thumbRef}
       className="aspect-[3/4] sm:aspect-square relative"
-      onMouseEnter={() => !isTouchDevice && setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseEnter={() => { if (!isTouchDevice) { setIsHovered(true); onHover?.(); } }}
+      onMouseLeave={() => { setIsHovered(false); onLeave?.(); }}
     >
       <a
         href={obs.url}
@@ -351,6 +362,9 @@ export default function OccurrenceMapRow({
   const [inatPhotos, setInatPhotos] = useState<InatObservation[]>([]);
   const [inatTotalCount, setInatTotalCount] = useState(0);
   const [loadingInatPhotos, setLoadingInatPhotos] = useState(false);
+
+  // Hovered iNat observation (for map highlight)
+  const [hoveredObs, setHoveredObs] = useState<InatObservation | null>(null);
 
   // Total occurrences count (from API metadata)
   const [totalOccurrences, setTotalOccurrences] = useState<number | null>(null);
@@ -640,7 +654,13 @@ export default function OccurrenceMapRow({
                     </div>
                     <div className={`grid grid-cols-3 sm:grid-cols-5 gap-1.5 ${loadingInatPhotos ? 'opacity-50' : ''}`}>
                       {inatPhotos.slice(0, pageSize).map((obs, idx) => (
-                        <InatPhotoWithPreview key={`${inatPage}-${idx}`} obs={obs} idx={idx} />
+                        <InatPhotoWithPreview
+                          key={`${inatPage}-${idx}`}
+                          obs={obs}
+                          idx={idx}
+                          onHover={() => setHoveredObs(obs)}
+                          onLeave={() => setHoveredObs(null)}
+                        />
                       ))}
                     </div>
                   </div>
@@ -678,19 +698,20 @@ export default function OccurrenceMapRow({
                     const [lon, lat] = feature.geometry.coordinates;
                     const preserved = isPreserved(feature.properties.basisOfRecord);
                     const isNew = isNewRecord(feature.properties.eventDate);
-                    // Color: preserved=amber, new=green, old=grey
-                    const strokeColor = preserved ? "#b45309" : isNew ? "#15803d" : "#6b7280";
-                    const fillColor = preserved ? "#f59e0b" : isNew ? "#22c55e" : "#9ca3af";
+                    const isHighlighted = hoveredObs?.gbifID != null && feature.properties.gbifID === hoveredObs.gbifID;
+                    // Color: highlighted=blue, preserved=amber, new=green, old=grey
+                    const strokeColor = isHighlighted ? "#1d4ed8" : preserved ? "#b45309" : isNew ? "#15803d" : "#6b7280";
+                    const fillColor = isHighlighted ? "#3b82f6" : preserved ? "#f59e0b" : isNew ? "#22c55e" : "#9ca3af";
                     return (
                       <CircleMarker
                         key={feature.properties.gbifID || idx}
                         center={[lat, lon]}
-                        radius={5}
+                        radius={isHighlighted ? 9 : 5}
                         pathOptions={{
                           color: strokeColor,
                           fillColor: fillColor,
-                          fillOpacity: 0.9,
-                          weight: 2,
+                          fillOpacity: isHighlighted ? 1 : 0.9,
+                          weight: isHighlighted ? 3 : 2,
                         }}
                       >
                         <Popup>
@@ -724,6 +745,41 @@ export default function OccurrenceMapRow({
                       </CircleMarker>
                     );
                   })}
+                  {/* Highlighted observation marker with image/audio preview tooltip */}
+                  {hoveredObs && hoveredObs.decimalLatitude != null && hoveredObs.decimalLongitude != null && (
+                    <CircleMarker
+                      center={[hoveredObs.decimalLatitude, hoveredObs.decimalLongitude]}
+                      radius={12}
+                      pathOptions={{
+                        color: "#1d4ed8",
+                        fillColor: "#3b82f6",
+                        fillOpacity: 0.3,
+                        weight: 3,
+                      }}
+                    >
+                      <Tooltip permanent direction="top" offset={[0, -14]}>
+                        <div style={{ minWidth: 100, maxWidth: 160 }}>
+                          {hoveredObs.imageUrl ? (
+                            <img
+                              src={getThumbUrl(hoveredObs.imageUrl)}
+                              alt="Observation"
+                              style={{ width: '100%', height: 100, objectFit: 'cover', borderRadius: 4, display: 'block' }}
+                            />
+                          ) : hoveredObs.audioUrl ? (
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 60, background: '#ecfdf5', borderRadius: 4 }}>
+                              <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="#10b981" strokeWidth={1.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
+                              </svg>
+                            </div>
+                          ) : null}
+                          <div style={{ padding: '4px 2px 2px', fontSize: 11, color: '#6b7280' }}>
+                            {hoveredObs.date && <div>{hoveredObs.date}</div>}
+                            {hoveredObs.observer && <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{hoveredObs.observer}</div>}
+                          </div>
+                        </div>
+                      </Tooltip>
+                    </CircleMarker>
+                  )}
                 </MapContainer>
               ) : null}
               {!loadingOccurrences && (

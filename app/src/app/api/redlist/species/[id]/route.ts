@@ -110,7 +110,7 @@ export async function GET(
     let gbifOccurrencesSinceAssessment: number | null = null;
     let gbifByRecordType: { humanObservation: number; preservedSpecimen: number; machineObservation: number; other: number; iNaturalist: number } | null = null;
     let gbifNewByRecordType: { humanObservation: number; preservedSpecimen: number; machineObservation: number; other: number; iNaturalist: number } | null = null;
-    let recentInatObservations: { url: string; date: string | null; imageUrl: string | null; location: string | null; observer: string | null; mediaType: "StillImage" | "Sound" | "MovingImage" | null; audioUrl: string | null }[] = [];
+    let recentInatObservations: { url: string; date: string | null; imageUrl: string | null; location: string | null; observer: string | null; mediaType: "StillImage" | "Sound" | "MovingImage" | null; audioUrl: string | null; gbifID: number | null; decimalLatitude: number | null; decimalLongitude: number | null }[] = [];
     let inatTotalCount = 0;
 
     // Track GBIF match status to inform users of matching issues
@@ -248,7 +248,7 @@ export async function GET(
                 // Include observations that have a reference URL and any media
                 .filter((obs: { references?: string; media?: { type?: string; identifier?: string }[] }) =>
                   obs.references && obs.media && obs.media.length > 0 && obs.media[0]?.identifier)
-                .map((obs: { references: string; eventDate?: string; media?: { type?: string; identifier?: string; format?: string }[]; verbatimLocality?: string; stateProvince?: string; country?: string; recordedBy?: string }) => {
+                .map((obs: { key?: number; references: string; eventDate?: string; media?: { type?: string; identifier?: string; format?: string }[]; decimalLatitude?: number; decimalLongitude?: number; verbatimLocality?: string; stateProvince?: string; country?: string; recordedBy?: string }) => {
                   const media = obs.media || [];
                   const imageMedia = media.find((m) => m.type === "StillImage");
                   const audioMedia = media.find((m) => m.type === "Sound");
@@ -265,6 +265,9 @@ export async function GET(
                     mediaType: primaryType,
                     location,
                     observer: obs.recordedBy || null,
+                    gbifID: obs.key ?? null,
+                    decimalLatitude: obs.decimalLatitude ?? null,
+                    decimalLongitude: obs.decimalLongitude ?? null,
                   };
                 });
             }
