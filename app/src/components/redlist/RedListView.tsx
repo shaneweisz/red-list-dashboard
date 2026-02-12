@@ -28,6 +28,21 @@ const FilterBarChart = dynamic(
   { ssr: false, loading: () => <div className="h-full animate-pulse bg-zinc-200 dark:bg-zinc-800 rounded" /> }
 );
 
+// Simple spinner component for loading states
+function Spinner({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      className={`animate-spin h-5 w-5 text-zinc-400 ${className}`}
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+    </svg>
+  );
+}
+
 interface CategoryStats {
   code: string;
   name: string;
@@ -425,8 +440,13 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [assessments, setAssessments] = useState<AssessmentsResponse | null>(null);
   const [species, setSpecies] = useState<Species[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [assessmentsLoading, setAssessmentsLoading] = useState(false);
+  const [speciesLoading, setSpeciesLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Combined loading state for backwards compatibility
+  const loading = statsLoading || assessmentsLoading || speciesLoading;
 
   // Filters (multi-select using Sets)
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
@@ -551,11 +571,13 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
     setDragOverSpecies(null);
   };
 
-  // Load stats and assessments when taxon changes
+  // Load stats, assessments, and species independently when taxon changes
   useEffect(() => {
     // If no taxon selected, don't fetch detailed data
     if (!selectedTaxon) {
-      setLoading(false);
+      setStatsLoading(false);
+      setAssessmentsLoading(false);
+      setSpeciesLoading(false);
       setStats(null);
       setAssessments(null);
       setSpecies([]);
@@ -563,50 +585,66 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
       return;
     }
 
-    async function fetchData() {
-      setLoading(true);
-      setError(null);
+    const taxonParam = `?taxon=${selectedTaxon}`;
+    setError(null);
 
-      try {
-        const taxonParam = `?taxon=${selectedTaxon}`;
-        const [statsRes, assessmentsRes, speciesRes] = await Promise.all([
-          fetch(`/api/redlist/stats${taxonParam}`),
-          fetch(`/api/redlist/assessments${taxonParam}`),
-          fetch(`/api/redlist/species${taxonParam}`),
-        ]);
-
-        // Check for non-OK responses before parsing JSON (avoids Safari
-        // throwing an opaque "The string did not match the expected pattern"
-        // when the response body is HTML instead of JSON)
-        for (const [label, res] of [["Stats", statsRes], ["Assessments", assessmentsRes], ["Species", speciesRes]] as const) {
-          if (!res.ok) {
-            const text = await res.text().catch(() => "");
-            let msg: string;
-            try { msg = JSON.parse(text)?.error; } catch { msg = ""; }
-            throw new Error(msg || `${label} API returned ${res.status}`);
-          }
+    // Fetch stats independently
+    setStatsLoading(true);
+    fetch(`/api/redlist/stats${taxonParam}`)
+      .then(async (res) => {
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          let msg: string;
+          try { msg = JSON.parse(text)?.error; } catch { msg = ""; }
+          throw new Error(msg || `Stats API returned ${res.status}`);
         }
+        return res.json();
+      })
+      .then((data) => {
+        if (data.error) throw new Error(data.error);
+        setStats(data);
+        setTaxonInfo(data.taxon || null);
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load stats"))
+      .finally(() => setStatsLoading(false));
 
-        const statsData = await statsRes.json();
-        const assessmentsData = await assessmentsRes.json();
-        const speciesData: SpeciesResponse = await speciesRes.json();
+    // Fetch assessments independently
+    setAssessmentsLoading(true);
+    fetch(`/api/redlist/assessments${taxonParam}`)
+      .then(async (res) => {
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          let msg: string;
+          try { msg = JSON.parse(text)?.error; } catch { msg = ""; }
+          throw new Error(msg || `Assessments API returned ${res.status}`);
+        }
+        return res.json();
+      })
+      .then((data) => {
+        if (data.error) throw new Error(data.error);
+        setAssessments(data);
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load assessments"))
+      .finally(() => setAssessmentsLoading(false));
 
-        if (statsData.error) throw new Error(statsData.error);
-        if (assessmentsData.error) throw new Error(assessmentsData.error);
-        if (speciesData.error) throw new Error(speciesData.error);
-
-        setStats(statsData);
-        setAssessments(assessmentsData);
-        setSpecies(speciesData.species);
-        setTaxonInfo(statsData.taxon || null);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load data");
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchData();
+    // Fetch species independently
+    setSpeciesLoading(true);
+    fetch(`/api/redlist/species${taxonParam}`)
+      .then(async (res) => {
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          let msg: string;
+          try { msg = JSON.parse(text)?.error; } catch { msg = ""; }
+          throw new Error(msg || `Species API returned ${res.status}`);
+        }
+        return res.json();
+      })
+      .then((data: SpeciesResponse) => {
+        if (data.error) throw new Error(data.error);
+        setSpecies(data.species);
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load species"))
+      .finally(() => setSpeciesLoading(false));
   }, [selectedTaxon]);
 
   // Notify parent when taxon changes
@@ -994,78 +1032,6 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
       }
     });
   };
-
-  // Skeleton loader for bar chart
-  const SkeletonBarChart = ({ bars = 5, horizontal = true }: { bars?: number; horizontal?: boolean }) => (
-    <div className={`flex ${horizontal ? 'flex-col' : 'items-end'} gap-2 p-2`}>
-      {Array.from({ length: bars }).map((_, i) => (
-        <div key={i} className={`flex items-center gap-2 ${horizontal ? '' : 'flex-col'}`}>
-          <div className="w-8 h-3 bg-zinc-200 dark:bg-zinc-700 rounded animate-pulse" />
-          <div
-            className="h-4 bg-zinc-200 dark:bg-zinc-700 rounded animate-pulse"
-            style={{ width: `${Math.random() * 60 + 40}%`, animationDelay: `${i * 100}ms` }}
-          />
-        </div>
-      ))}
-    </div>
-  );
-
-  // Skeleton loader for map
-  const SkeletonMap = () => (
-    <div className="relative h-full min-h-[200px] bg-zinc-100 dark:bg-zinc-800 rounded-lg overflow-hidden">
-      <div className="absolute inset-0 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-2">
-          <svg className="w-8 h-8 text-zinc-300 dark:text-zinc-600 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-          </svg>
-          <span className="text-xs text-zinc-400">Loading map...</span>
-        </div>
-      </div>
-      {/* Fake continents */}
-      <div className="absolute top-[20%] left-[15%] w-[25%] h-[30%] bg-zinc-200 dark:bg-zinc-700 rounded-lg animate-pulse" style={{ animationDelay: '0ms' }} />
-      <div className="absolute top-[25%] left-[45%] w-[15%] h-[25%] bg-zinc-200 dark:bg-zinc-700 rounded-lg animate-pulse" style={{ animationDelay: '100ms' }} />
-      <div className="absolute top-[15%] left-[62%] w-[25%] h-[35%] bg-zinc-200 dark:bg-zinc-700 rounded-lg animate-pulse" style={{ animationDelay: '200ms' }} />
-      <div className="absolute top-[55%] left-[20%] w-[12%] h-[30%] bg-zinc-200 dark:bg-zinc-700 rounded-lg animate-pulse" style={{ animationDelay: '300ms' }} />
-      <div className="absolute top-[50%] left-[70%] w-[18%] h-[25%] bg-zinc-200 dark:bg-zinc-700 rounded-lg animate-pulse" style={{ animationDelay: '400ms' }} />
-    </div>
-  );
-
-  // Render loading state for details section with skeleton cards
-  const renderDetailsLoading = () => (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      {/* Years skeleton - 1 column */}
-      <div className="lg:col-span-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
-        <div className="flex items-center justify-between mb-2">
-          <div className="h-4 w-48 bg-zinc-200 dark:bg-zinc-700 rounded animate-pulse" />
-        </div>
-        <div className="flex-1 min-h-[150px]">
-          <SkeletonBarChart bars={5} />
-        </div>
-      </div>
-
-      {/* Category skeleton - 1 column */}
-      <div className="lg:col-span-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
-        <div className="flex items-center justify-between mb-2">
-          <div className="h-4 w-40 bg-zinc-200 dark:bg-zinc-700 rounded animate-pulse" />
-        </div>
-        <div className="flex-1 min-h-[200px]">
-          <SkeletonBarChart bars={8} />
-        </div>
-      </div>
-
-      {/* Map skeleton - 1 column */}
-      <div className="lg:col-span-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
-        <div className="flex items-center justify-between mb-2">
-          <div className="h-4 w-32 bg-zinc-200 dark:bg-zinc-700 rounded animate-pulse" />
-          <div className="h-3 w-20 bg-zinc-200 dark:bg-zinc-700 rounded animate-pulse" />
-        </div>
-        <div className="flex-1">
-          <SkeletonMap />
-        </div>
-      </div>
-    </div>
-  );
-
   // Render error state for details section
   const renderDetailsError = () => (
     <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 px-6 py-4 rounded-lg">
@@ -1110,90 +1076,98 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
       {/* Show details below when a taxon is selected */}
       {selectedTaxon && (
         <div className="space-y-3">
-          {/* Loading state */}
-          {loading && renderDetailsLoading()}
-
           {/* Error state */}
           {error && renderDetailsError()}
 
-          {/* Details content */}
-          {!loading && !error && stats && assessments && taxonInfo && (
-            <>
-              {/* Charts and map - all on same row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Years Since Assessment chart - 1 column */}
-        <div className="lg:col-span-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
-          <div className="flex items-center justify-between mb-1">
-            <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-              Years Since Assessed (click to filter) <span className="font-normal text-[10px] text-zinc-400">cmd/ctrl+click to multiselect</span>
-            </h3>
-            {selectedYearRanges.size > 0 && (
-              <button
-                onClick={() => setSelectedYearRanges(new Set())}
-                className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400"
-              >
-                Clear
-              </button>
-            )}
-          </div>
-          <div className="flex-1 min-h-[150px]">
-            <FilterBarChart
-              data={assessments.yearsSinceAssessment.map(y => {
-                const totalYears = assessments.yearsSinceAssessment.reduce((sum, item) => sum + item.count, 0);
-                return {
-                  ...y,
-                  shortRange: y.range.replace(' years', 'y').replace('20+y', '>20y'),
-                  label: `${y.count.toLocaleString()} (${totalYears > 0 ? ((y.count / totalYears) * 100).toFixed(1) : 0}%)`
-                };
-              })}
-              dataKey="shortRange"
-              selectedItems={selectedYearRanges}
-              onBarClick={handleYearClick}
-              barColor="#3b82f6"
-              yAxisWidth={36}
-              rightMargin={85}
-            />
-          </div>
-        </div>
+          {/* Charts and map - load independently */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Category distribution - 1 column */}
+            <div className="lg:col-span-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                  Risk Category (click to filter) <span className="font-normal text-[10px] text-zinc-400">cmd/ctrl+click to multiselect</span>
+                </h3>
+                {selectedCategories.size > 0 && (
+                  <button
+                    onClick={() => setSelectedCategories(new Set())}
+                    className="text-xs text-red-600 hover:text-red-700 dark:text-red-400"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              <div className="flex-1 min-h-[225px] flex items-center justify-center">
+                {statsLoading ? (
+                  <Spinner />
+                ) : stats ? (
+                  <FilterBarChart
+                    data={categoryDataWithPercent}
+                    dataKey="code"
+                    selectedItems={selectedCategories}
+                    onBarClick={handleCategoryClick}
+                    yAxisWidth={26}
+                    rightMargin={75}
+                  />
+                ) : null}
+              </div>
+            </div>
 
-        {/* Category distribution - 1 column */}
-        <div className="lg:col-span-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
-          <div className="flex items-center justify-between mb-1">
-            <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-              Risk Category (click to filter) <span className="font-normal text-[10px] text-zinc-400">cmd/ctrl+click to multiselect</span>
-            </h3>
-            {selectedCategories.size > 0 && (
-              <button
-                onClick={() => setSelectedCategories(new Set())}
-                className="text-xs text-red-600 hover:text-red-700 dark:text-red-400"
-              >
-                Clear
-              </button>
-            )}
-          </div>
-          <div className="flex-1 min-h-[225px]">
-            <FilterBarChart
-              data={categoryDataWithPercent}
-              dataKey="code"
-              selectedItems={selectedCategories}
-              onBarClick={handleCategoryClick}
-              yAxisWidth={26}
-              rightMargin={75}
-            />
-          </div>
-        </div>
+            {/* Years Since Assessment chart - 1 column */}
+            <div className="lg:col-span-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                  Years Since Assessed (click to filter) <span className="font-normal text-[10px] text-zinc-400">cmd/ctrl+click to multiselect</span>
+                </h3>
+                {selectedYearRanges.size > 0 && (
+                  <button
+                    onClick={() => setSelectedYearRanges(new Set())}
+                    className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              <div className="flex-1 min-h-[150px] flex items-center justify-center">
+                {assessmentsLoading ? (
+                  <Spinner />
+                ) : assessments ? (
+                  <FilterBarChart
+                    data={assessments.yearsSinceAssessment.map(y => {
+                      const totalYears = assessments.yearsSinceAssessment.reduce((sum, item) => sum + item.count, 0);
+                      return {
+                        ...y,
+                        shortRange: y.range.replace(' years', 'y').replace('20+y', '>20y'),
+                        label: `${y.count.toLocaleString()} (${totalYears > 0 ? ((y.count / totalYears) * 100).toFixed(1) : 0}%)`
+                      };
+                    })}
+                    dataKey="shortRange"
+                    selectedItems={selectedYearRanges}
+                    onBarClick={handleYearClick}
+                    barColor="#3b82f6"
+                    yAxisWidth={36}
+                    rightMargin={85}
+                  />
+                ) : null}
+              </div>
+            </div>
 
-        {/* Country Map - 1 column */}
-        <div className="lg:col-span-1">
-          <WorldMap
-            selectedCountries={selectedCountries}
-            onCountrySelect={handleCountrySelect}
-            onClearSelection={handleClearCountry}
-            precomputedStats={countryStatsForMap}
-            statLabel="Species"
-          />
-        </div>
-      </div>
+            {/* Country Map - 1 column */}
+            <div className="lg:col-span-1">
+              {speciesLoading ? (
+                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 min-h-[280px] flex items-center justify-center">
+                  <Spinner />
+                </div>
+              ) : (
+                <WorldMap
+                  selectedCountries={selectedCountries}
+                  onCountrySelect={handleCountrySelect}
+                  onClearSelection={handleClearCountry}
+                  precomputedStats={countryStatsForMap}
+                  statLabel="Species"
+                />
+              )}
+            </div>
+          </div>
 
       {/* Search and Species Table */}
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
@@ -1378,6 +1352,12 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
         </div>
 
         {/* Species table */}
+        {speciesLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Spinner className="h-6 w-6" />
+          </div>
+        ) : (
+        <>
         <div
           className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-x-auto"
           onScroll={(e) => {
@@ -2000,9 +1980,9 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
             </div>
           </div>
         )}
+        </>
+        )}
       </div>
-            </>
-          )}
         </div>
       )}
 
