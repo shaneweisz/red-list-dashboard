@@ -763,12 +763,12 @@ export default function OccurrenceMapRow({
                   {hoveredObs && hoveredObs.decimalLatitude != null && hoveredObs.decimalLongitude != null && (
                     <CircleMarker
                       center={[hoveredObs.decimalLatitude, hoveredObs.decimalLongitude]}
-                      radius={10}
+                      radius={7}
                       pathOptions={{
                         color: "#1d4ed8",
                         fillColor: "#3b82f6",
                         fillOpacity: 0.4,
-                        weight: 3,
+                        weight: 2,
                       }}
                     />
                   )}
