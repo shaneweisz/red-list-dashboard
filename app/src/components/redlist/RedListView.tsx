@@ -438,6 +438,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
   // Stable callback for debounced search input
   const handleSearch = useCallback((value: string) => {
     setSearchFilter(value);
+    setNeServerPage(1); // Reset server NE page on search change
   }, []);
 
   // Sorting
@@ -614,10 +615,15 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
     onTaxonChange?.(taxonInfo?.name || null);
   }, [taxonInfo, onTaxonChange]);
 
-  // Track whether NE species have been fetched for the current taxon
+  // Track whether NE species have been fetched for the current taxon (client-side mode for individual taxa)
   const [neSpeciesFetched, setNeSpeciesFetched] = useState<string | null>(null);
   const [neLoading, setNeLoading] = useState(false);
-  const [neTotalCount, setNeTotalCount] = useState<number | null>(null); // Total NE count (may exceed returned species)
+
+  // Server-side NE pagination state (used for "all" taxon where NE data is too large for client)
+  const [neServerSpecies, setNeServerSpecies] = useState<Species[]>([]);
+  const [neServerTotal, setNeServerTotal] = useState(0);
+  const [neServerPage, setNeServerPage] = useState(1);
+  const useServerNE = selectedTaxon === "all";
 
   // Reset filters when taxon changes
   useEffect(() => {
@@ -628,41 +634,71 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
     setCurrentPage(1);
     setSpeciesDetails({});
     setNeSpeciesFetched(null);
-    setNeTotalCount(null);
+    setNeServerSpecies([]);
+    setNeServerTotal(0);
+    setNeServerPage(1);
   }, [selectedTaxon]);
 
-  // Fetch NE species when NE category is selected
+  // Fetch NE species when NE category is selected.
+  // For "all" taxon (useServerNE), fetch one page at a time from the server.
+  // For individual taxa, fetch all NE species at once (small enough for client).
   useEffect(() => {
     if (!selectedCategories.has("NE") || !selectedTaxon) return;
-    if (neSpeciesFetched === selectedTaxon) return; // already fetched for this taxon
 
-    async function fetchNESpecies() {
-      setNeLoading(true);
-      try {
-        const res = await fetch(`/api/redlist/species?taxon=${selectedTaxon}&category=NE`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.species && data.species.length > 0) {
-            setSpecies(prev => {
-              // Remove any existing NE species (in case of refetch) and add new ones
-              const nonNE = prev.filter(s => s.category !== "NE");
-              return [...nonNE, ...data.species];
-            });
+    if (useServerNE) {
+      // Server-side NE pagination: fetch the current page with search
+      let cancelled = false;
+      async function fetchNEPage() {
+        setNeLoading(true);
+        try {
+          const params = new URLSearchParams({
+            taxon: selectedTaxon!,
+            category: "NE",
+            page: String(neServerPage),
+            pageSize: String(PAGE_SIZE),
+          });
+          if (searchFilter) params.set("search", searchFilter);
+          const res = await fetch(`/api/redlist/species?${params}`);
+          if (res.ok && !cancelled) {
+            const data = await res.json();
+            setNeServerSpecies(data.species || []);
+            setNeServerTotal(data.total || 0);
           }
-          if (data.totalNE != null) {
-            setNeTotalCount(data.totalNE);
-          }
-          setNeSpeciesFetched(selectedTaxon!);
+        } catch {
+          // Ignore errors
+        } finally {
+          if (!cancelled) setNeLoading(false);
         }
-      } catch {
-        // Ignore errors fetching NE species
-      } finally {
-        setNeLoading(false);
       }
+      fetchNEPage();
+      return () => { cancelled = true; };
+    } else {
+      // Client-side: fetch all NE species at once (individual taxa are small enough)
+      if (neSpeciesFetched === selectedTaxon) return;
+      async function fetchNESpecies() {
+        setNeLoading(true);
+        try {
+          const res = await fetch(`/api/redlist/species?taxon=${selectedTaxon}&category=NE`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.species && data.species.length > 0) {
+              setSpecies(prev => {
+                const nonNE = prev.filter(s => s.category !== "NE");
+                return [...nonNE, ...data.species];
+              });
+            }
+            setNeSpeciesFetched(selectedTaxon!);
+          }
+        } catch {
+          // Ignore errors
+        } finally {
+          setNeLoading(false);
+        }
+      }
+      fetchNESpecies();
     }
-
-    fetchNESpecies();
-  }, [selectedCategories, selectedTaxon, neSpeciesFetched]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCategories, selectedTaxon, neSpeciesFetched, useServerNE, neServerPage, searchFilter]);
 
   // Helper to check if species matches year range filter (based on assessment date)
   const matchesYearRangeFilter = (assessmentDate: string | null): boolean => {
@@ -744,10 +780,18 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
     EX: 0, EW: 1, CR: 2, EN: 3, VU: 4, NT: 5, LC: 6, DD: 7, NE: 8,
   };
 
-  // Memoized filter and sort for performance with large datasets
+  // Whether we're in server-side NE mode right now (NE selected + "all" taxon)
+  const showingServerNE = useServerNE && selectedCategories.has("NE");
+  // Whether NE is the ONLY selected category (exclusive NE view)
+  const exclusiveServerNE = showingServerNE && selectedCategories.size === 1;
+
+  // Memoized filter and sort for performance with large datasets.
+  // When useServerNE, exclude NE species from client-side filtering (they come from the server).
   const { filteredSpecies, sortedSpecies } = useMemo(() => {
     // Filter species based on category, year range, country, and search
     const filtered = species.filter((s) => {
+      // In server NE mode, skip NE species in the client array (server provides them)
+      if (useServerNE && s.category === "NE") return false;
       const matchesCategory = selectedCategories.size === 0 || selectedCategories.has(s.category);
       // NE species have no assessment date, so skip year range filter for them
       const matchesYear = s.category === "NE" || matchesYearRangeFilter(s.assessment_date);
@@ -785,14 +829,18 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
     });
 
     return { filteredSpecies: filtered, sortedSpecies: sorted };
-  }, [species, selectedCategories, selectedYearRanges, selectedCountries, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection]);
+  }, [species, selectedCategories, selectedYearRanges, selectedCountries, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection, useServerNE]);
 
-  // Pagination calculations
-  const totalPages = Math.ceil(sortedSpecies.length / PAGE_SIZE);
-  const paginatedSpecies = sortedSpecies.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE
-  );
+  // Pagination: in exclusive server NE mode, pagination is driven by the server.
+  // Otherwise, client-side pagination as usual.
+  const effectiveTotalCount = exclusiveServerNE ? neServerTotal : sortedSpecies.length;
+  const totalPages = Math.ceil(effectiveTotalCount / PAGE_SIZE);
+  const paginatedSpecies = exclusiveServerNE
+    ? neServerSpecies  // Server already returned exactly one page
+    : sortedSpecies.slice(
+        (currentPage - 1) * PAGE_SIZE,
+        currentPage * PAGE_SIZE
+      );
 
   // Handle sort toggle
   const handleSort = (field: "year" | "category") => {
@@ -1353,7 +1401,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
               </button>
             )}
             <span className="text-xs md:text-sm text-zinc-500">
-              {filteredSpecies.length} species
+              {effectiveTotalCount.toLocaleString()} species
             </span>
             {neCategory && neCategory.count > 0 && (
               <button
@@ -1381,13 +1429,6 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
             )}
           </div>
         </div>
-
-        {/* Truncation notice for limited NE results */}
-        {neTotalCount != null && selectedCategories.has("NE") && neTotalCount > filteredSpecies.filter(s => s.category === "NE").length && (
-          <div className="px-3 md:px-4 py-2 text-xs text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700 rounded-t-xl">
-            Showing {filteredSpecies.filter(s => s.category === "NE").length.toLocaleString()} of {neTotalCount.toLocaleString()} Not Evaluated species. Select a specific taxon to browse all NE species for that group.
-          </div>
-        )}
 
         {/* Species table */}
         <div
@@ -1964,7 +2005,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                   </React.Fragment>
                 );
               })}
-              {filteredSpecies.length === 0 && (
+              {paginatedSpecies.length === 0 && (
                 <tr>
                   <td colSpan={showingOnlyNE ? 5 : 8} className="px-4 py-8 text-center text-zinc-500">
                     {neLoading ? (
@@ -1989,22 +2030,22 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
         {totalPages > 1 && (
           <div className="flex flex-col sm:flex-row items-center justify-between px-3 md:px-4 py-3 border-t border-zinc-200 dark:border-zinc-800 gap-2">
             <div className="text-xs md:text-sm text-zinc-500">
-              {(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, filteredSpecies.length)} of {filteredSpecies.length}
+              {((exclusiveServerNE ? neServerPage : currentPage) - 1) * PAGE_SIZE + 1}-{Math.min((exclusiveServerNE ? neServerPage : currentPage) * PAGE_SIZE, effectiveTotalCount)} of {effectiveTotalCount.toLocaleString()}
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
+                onClick={() => exclusiveServerNE ? setNeServerPage((p) => Math.max(1, p - 1)) : setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={(exclusiveServerNE ? neServerPage : currentPage) === 1}
                 className="px-3 py-1 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-zinc-50 dark:hover:bg-zinc-800"
               >
                 Prev
               </button>
               <span className="text-xs md:text-sm text-zinc-600 dark:text-zinc-400">
-                {currentPage} / {totalPages}
+                {exclusiveServerNE ? neServerPage : currentPage} / {totalPages.toLocaleString()}
               </span>
               <button
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
+                onClick={() => exclusiveServerNE ? setNeServerPage((p) => Math.min(totalPages, p + 1)) : setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={(exclusiveServerNE ? neServerPage : currentPage) === totalPages}
                 className="px-3 py-1 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-zinc-50 dark:hover:bg-zinc-800"
               >
                 Next

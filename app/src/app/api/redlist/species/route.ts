@@ -167,19 +167,38 @@ function getAvailableTaxa(): { id: string; name: string; available: boolean; spe
   });
 }
 
-// Maximum NE species to return in a single response to stay within memory/response size limits.
-// The total count is always returned so the frontend knows the actual number.
-const NE_SPECIES_LIMIT = 50000;
+// Cache of Red List name sets per taxon (derived from getSpeciesData, avoids rebuilding on every request)
+const redListNameSetsCache: Map<string, Set<string>> = new Map();
+const redListNameSetsTimes: Map<string, number> = new Map();
 
-// Helper: collect NE species from a single taxon's GBIF CSV
-function collectNESpeciesFromCSV(
+function getRedListNames(taxonId: string): Set<string> | null {
+  const cacheTime = redListNameSetsTimes.get(taxonId) || 0;
+  if (redListNameSetsCache.has(taxonId) && Date.now() - cacheTime < CACHE_RELOAD_INTERVAL) {
+    return redListNameSetsCache.get(taxonId)!;
+  }
+  const data = getSpeciesData(taxonId);
+  if (!data) return null;
+  const names = new Set(data.species.map(s => s.scientific_name.toLowerCase().trim()));
+  redListNameSetsCache.set(taxonId, names);
+  redListNameSetsTimes.set(taxonId, Date.now());
+  return names;
+}
+
+// Scan a single taxon's GBIF CSV for NE species with pagination.
+// Counts all matches but only creates Species objects within the page window
+// (localOffset..localOffset+N where N fills neSpecies up to maxEntries).
+// `localOffset`: how many matches to skip within THIS taxon's CSV.
+// `maxEntries`: maximum total entries allowed in neSpecies (shared across taxa).
+function scanNESpeciesFromCSV(
   processTaxon: { id: string; gbifDataFile: string },
   redListNames: Set<string>,
   search: string | undefined,
+  localOffset: number,
+  maxEntries: number,
   neSpecies: Species[],
   tagTaxonId: boolean,
 ): number {
-  let count = 0;
+  let matchCount = 0;
   const gbifCsvPath = path.join(process.cwd(), "data", processTaxon.gbifDataFile);
   if (!fs.existsSync(gbifCsvPath)) return 0;
 
@@ -193,46 +212,48 @@ function collectNESpeciesFromCSV(
 
   for (let i = 1; i < lines.length; i++) {
     const parts = lines[i].split(",");
-    const speciesKey = parseInt(parts[0], 10);
-    const occurrenceCount = parseInt(parts[1], 10);
     const scientificName = parts[2]?.trim() || "";
+    if (!scientificName || redListNames.has(scientificName.toLowerCase())) continue;
+
+    // Apply search filter
     let commonName: string | null = null;
     if (hasCommonName) {
       const raw = parts.slice(3).join(",").trim();
       commonName = raw.replace(/^"|"$/g, "") || null;
     }
-    if (scientificName && !redListNames.has(scientificName.toLowerCase())) {
-      // Apply search filter inline to avoid accumulating unwanted entries
-      if (search && !(
-        scientificName.toLowerCase().includes(search) ||
-        commonName?.toLowerCase().includes(search)
-      )) {
-        continue;
-      }
-      count++;
-      if (neSpecies.length < NE_SPECIES_LIMIT) {
-        neSpecies.push({
-          sis_taxon_id: speciesKey,
-          assessment_id: 0,
-          scientific_name: scientificName,
-          common_name: commonName,
-          family: null,
-          category: "NE",
-          assessment_date: null,
-          year_published: "",
-          url: `https://www.gbif.org/species/${speciesKey}`,
-          population_trend: null,
-          countries: [],
-          assessment_count: 0,
-          previous_assessments: [],
-          gbif_species_key: speciesKey,
-          gbif_occurrence_count: occurrenceCount,
-          ...(tagTaxonId ? { taxon_id: processTaxon.id } : {}),
-        } as Species);
-      }
+    if (search && !(
+      scientificName.toLowerCase().includes(search) ||
+      commonName?.toLowerCase().includes(search)
+    )) {
+      continue;
     }
+
+    // This line is an NE match — only create a Species object if it falls in the page window
+    if (matchCount >= localOffset && neSpecies.length < maxEntries) {
+      const speciesKey = parseInt(parts[0], 10);
+      const occurrenceCount = parseInt(parts[1], 10);
+      neSpecies.push({
+        sis_taxon_id: speciesKey,
+        assessment_id: 0,
+        scientific_name: scientificName,
+        common_name: commonName,
+        family: null,
+        category: "NE",
+        assessment_date: null,
+        year_published: "",
+        url: `https://www.gbif.org/species/${speciesKey}`,
+        population_trend: null,
+        countries: [],
+        assessment_count: 0,
+        previous_assessments: [],
+        gbif_species_key: speciesKey,
+        gbif_occurrence_count: occurrenceCount,
+        ...(tagTaxonId ? { taxon_id: processTaxon.id } : {}),
+      } as Species);
+    }
+    matchCount++;
   }
-  return count;
+  return matchCount;
 }
 
 export async function GET(request: NextRequest) {
@@ -250,39 +271,53 @@ export async function GET(request: NextRequest) {
 
   const taxon = getTaxonConfig(taxonId);
 
-  // Handle NE category for "all" taxon BEFORE loading merged data.
-  // Loading all 15 JSON files (~100MB) plus accumulating ~900K NE species exceeds
-  // Vercel's memory limits. Process each sub-taxon individually instead.
-  if (category === "NE" && taxonId === "all") {
+  // Handle NE category with server-side pagination.
+  // NE species are computed by scanning GBIF CSVs for species not in the Red List.
+  // For "all" taxon, this is done BEFORE loading merged data to avoid ~100MB memory spike.
+  // Only Species objects for the requested page are created, keeping memory bounded.
+  if (category === "NE") {
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+    const pageSize = Math.min(200, Math.max(1, parseInt(searchParams.get("pageSize") || "50", 10)));
+    const offset = (page - 1) * pageSize;
+
     try {
-      const subTaxa = TAXA.filter(t => t.id !== "all");
+      // Determine which taxa to scan
+      const isAll = taxonId === "all";
+      const taxaToScan = isAll
+        ? TAXA.filter(t => t.id !== "all")
+        : [taxon];
+
       const neSpecies: Species[] = [];
       let totalNECount = 0;
 
-      for (const subTaxon of subTaxa) {
-        const subData = getSpeciesData(subTaxon.id);
-        if (!subData) continue;
+      for (const scanTaxon of taxaToScan) {
+        const redListNames = getRedListNames(scanTaxon.id);
+        if (!redListNames) continue;
 
-        const redListNames = new Set(
-          subData.species.map((s) => s.scientific_name.toLowerCase().trim())
-        );
+        // Adjust offset for multi-taxon scan: skip entries already counted in previous taxa
+        const localOffset = Math.max(0, offset - totalNECount);
 
-        totalNECount += collectNESpeciesFromCSV(
-          subTaxon, redListNames, search, neSpecies, true
+        totalNECount += scanNESpeciesFromCSV(
+          scanTaxon, redListNames, search,
+          localOffset, pageSize,
+          neSpecies, isAll
         );
       }
 
       return NextResponse.json({
         species: neSpecies,
-        total: neSpecies.length,
-        totalNE: totalNECount,
+        total: totalNECount,
+        page,
+        pageSize,
         taxon: { id: taxon.id, name: taxon.name, estimatedDescribed: taxon.estimatedDescribed, estimatedSource: taxon.estimatedSource, color: taxon.color },
       });
     } catch (error) {
-      console.error("Error loading NE species for all taxa:", error);
+      console.error("Error loading NE species:", error);
       return NextResponse.json({
         species: [],
         total: 0,
+        page,
+        pageSize,
         taxon: { id: taxon.id, name: taxon.name, estimatedDescribed: taxon.estimatedDescribed, estimatedSource: taxon.estimatedSource, color: taxon.color },
       });
     }
@@ -305,35 +340,6 @@ export async function GET(request: NextRequest) {
       },
       { status: 503 }
     );
-  }
-
-  // Handle NE category for individual taxa
-  if (category === "NE") {
-    try {
-      const redListNames = new Set(
-        data.species.map((s) => s.scientific_name.toLowerCase().trim())
-      );
-
-      const neSpecies: Species[] = [];
-      const totalNECount = collectNESpeciesFromCSV(
-        taxon, redListNames, search, neSpecies, false
-      );
-
-      return NextResponse.json({
-        species: neSpecies,
-        total: neSpecies.length,
-        totalNE: totalNECount,
-        metadata: data.metadata,
-        taxon: { id: taxon.id, name: taxon.name, estimatedDescribed: taxon.estimatedDescribed, estimatedSource: taxon.estimatedSource, color: taxon.color },
-      });
-    } catch (error) {
-      console.error("Error loading NE species:", error);
-      return NextResponse.json({
-        species: [],
-        total: 0,
-        taxon: { id: taxon.id, name: taxon.name, estimatedDescribed: taxon.estimatedDescribed, estimatedSource: taxon.estimatedSource, color: taxon.color },
-      });
-    }
   }
 
   // Filter by category if specified
