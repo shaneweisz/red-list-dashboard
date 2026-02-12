@@ -172,25 +172,34 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
         </div>
         {/* Hover zones + tooltips (outside overflow-hidden so tooltips aren't clipped) */}
         <div className="absolute inset-0 flex">
-          {segments.map((seg) => (
-            <div
-              key={seg.cat}
-              className="group/seg relative h-full"
-              style={{ width: `${seg.pct}%`, minWidth: seg.pct > 0 ? "2px" : 0 }}
-            >
-              <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-2 py-1 text-xs bg-zinc-800 dark:bg-zinc-700 text-white rounded-lg shadow-lg opacity-0 invisible group-hover/seg:opacity-100 group-hover/seg:visible z-50 whitespace-nowrap pointer-events-none">
-                <div className="flex items-center gap-1.5">
-                  <span
-                    className="inline-block w-2.5 h-2.5 rounded-sm flex-shrink-0"
-                    style={{ backgroundColor: seg.color }}
-                  />
-                  <span className="text-zinc-300">{seg.name}</span>
-                  <span className="font-medium pl-1">{seg.count.toLocaleString()}</span>
-                  <span className="text-zinc-400">({seg.pct.toFixed(1)}%)</span>
+          {segments.map((seg, i) => {
+            const isLast = i === segments.length - 1;
+            const isFirst = i === 0;
+            const posClass = isLast && !isFirst
+              ? "right-0"
+              : isFirst && !isLast
+                ? "left-0"
+                : "left-1/2 -translate-x-1/2";
+            return (
+              <div
+                key={seg.cat}
+                className="group/seg relative h-full"
+                style={{ width: `${seg.pct}%`, minWidth: seg.pct > 0 ? "2px" : 0 }}
+              >
+                <div className={`absolute ${posClass} bottom-full mb-2 px-2 py-1 text-xs bg-zinc-800 dark:bg-zinc-700 text-white rounded-lg shadow-lg opacity-0 invisible group-hover/seg:opacity-100 group-hover/seg:visible z-50 whitespace-nowrap pointer-events-none`}>
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className="inline-block w-2.5 h-2.5 rounded-sm flex-shrink-0"
+                      style={{ backgroundColor: seg.color }}
+                    />
+                    <span className="text-zinc-300">{seg.name}</span>
+                    <span className="font-medium pl-1">{seg.count.toLocaleString()}</span>
+                    <span className="text-zinc-400">({seg.pct.toFixed(1)}%)</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     );
