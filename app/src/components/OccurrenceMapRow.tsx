@@ -112,34 +112,78 @@ function getThumbUrl(url: string): string {
 
 // Audio player card for sound-only observations
 function InatAudioCard({ obs, idx }: { obs: InatObservation; idx: number }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
+
+  const togglePlay = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (playing) {
+      audio.pause();
+    } else {
+      audio.play();
+    }
+  };
+
   return (
-    <div className="aspect-[3/4] sm:aspect-square relative">
-      <div className="w-full h-full bg-zinc-100 dark:bg-zinc-800 rounded ring-1 ring-zinc-200 dark:ring-zinc-700 flex flex-col items-center justify-center gap-1.5 p-1.5">
-        <a
-          href={obs.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-zinc-400 hover:text-blue-500 transition-colors"
-          title="View on iNaturalist"
-        >
-          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
-          </svg>
-        </a>
-        {obs.audioUrl && (
+    <div className="aspect-[3/4] sm:aspect-square relative group">
+      <a
+        href={obs.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block w-full h-full"
+      >
+        <div className="w-full h-full bg-gradient-to-br from-emerald-50 to-teal-100 dark:from-emerald-950 dark:to-teal-900 rounded ring-1 ring-emerald-200 dark:ring-emerald-800 flex flex-col items-center justify-center gap-1 p-2 transition-all group-hover:ring-2 group-hover:ring-emerald-400 dark:group-hover:ring-emerald-600">
+          {/* Waveform-style icon */}
+          <div className="flex items-end gap-[2px] h-6 mb-0.5">
+            {[40, 70, 55, 85, 45, 75, 50].map((h, i) => (
+              <div
+                key={i}
+                className={`w-[3px] rounded-full ${playing ? 'animate-pulse' : ''}`}
+                style={{
+                  height: `${h}%`,
+                  backgroundColor: playing ? '#10b981' : '#6ee7b7',
+                  animationDelay: `${i * 0.1}s`,
+                }}
+              />
+            ))}
+          </div>
+          {obs.date && (
+            <div className="text-[10px] text-emerald-600 dark:text-emerald-400 truncate max-w-full">{obs.date}</div>
+          )}
+        </div>
+      </a>
+      {obs.audioUrl && (
+        <>
           <audio
-            controls
+            ref={audioRef}
             preload="none"
-            className="w-full max-w-[120px] h-7 [&::-webkit-media-controls-panel]:bg-zinc-200 dark:[&::-webkit-media-controls-panel]:bg-zinc-700"
+            onPlay={() => setPlaying(true)}
+            onPause={() => setPlaying(false)}
+            onEnded={() => setPlaying(false)}
             aria-label={`Audio observation ${idx + 1}`}
           >
             <source src={obs.audioUrl} />
           </audio>
-        )}
-        {obs.date && (
-          <div className="text-[10px] text-zinc-400 truncate max-w-full">{obs.date}</div>
-        )}
-      </div>
+          <button
+            onClick={togglePlay}
+            className="absolute bottom-1.5 right-1.5 w-6 h-6 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center shadow-sm transition-colors"
+            title={playing ? "Pause" : "Play audio"}
+          >
+            {playing ? (
+              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+              </svg>
+            ) : (
+              <svg className="w-3 h-3 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            )}
+          </button>
+        </>
+      )}
     </div>
   );
 }
