@@ -1,23 +1,10 @@
 import { NextResponse } from "next/server";
-import * as fs from "fs";
-import * as path from "path";
-import { TAXA, CATEGORY_COLORS, TaxonConfig } from "@/config/taxa";
-
-interface SpeciesRecord {
-  sis_taxon_id: number;
-  scientific_name?: string;
-  category: string;
-  assessment_date?: string;
-}
-
-interface PrecomputedData {
-  species: SpeciesRecord[];
-  metadata: {
-    totalSpecies: number;
-    fetchedAt: string;
-    byCategory: Record<string, number>;
-  };
-}
+import { TAXA, CATEGORY_COLORS } from "@/config/taxa";
+import {
+  loadTaxonData,
+  countNESpecies,
+  ensureCacheWarmed,
+} from "@/lib/dataLoader";
 
 interface TaxonSummary {
   id: string;
@@ -39,105 +26,70 @@ interface TaxonSummary {
   lastUpdated: string | null;
 }
 
-// In-memory cache for summary data
+// In-memory cache for the final summary response
 let cachedSummary: TaxonSummary[] | null = null;
 let cacheTime = 0;
 const CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
-function loadSingleDataFile(dataFile: string): PrecomputedData | null {
-  const dataPath = path.join(process.cwd(), "data", dataFile);
+async function buildSummary(): Promise<TaxonSummary[]> {
+  // Warm all data caches in parallel (loads all JSON files + computes NE counts
+  // concurrently). Subsequent calls are no-ops since the cache is already warm.
+  await ensureCacheWarmed();
 
-  try {
-    if (!fs.existsSync(dataPath)) {
-      return null;
-    }
-    const content = fs.readFileSync(dataPath, "utf-8");
-    return JSON.parse(content) as PrecomputedData;
-  } catch {
-    return null;
-  }
-}
+  const realTaxa = TAXA.filter((taxon) => taxon.id !== "all");
 
-function loadTaxonData(taxon: TaxonConfig): PrecomputedData | null {
-  // If taxon has multiple data files (combined taxa like Fishes, Invertebrates)
-  if (taxon.dataFiles && taxon.dataFiles.length > 0) {
-    const allData: PrecomputedData[] = [];
+  // Process all taxa in parallel – data is already cached from warmup
+  const summaries = await Promise.all(
+    realTaxa.map(async (taxon) => {
+      const data = await loadTaxonData(taxon.id);
 
-    for (const dataFile of taxon.dataFiles) {
-      const data = loadSingleDataFile(dataFile);
-      if (data) {
-        allData.push(data);
+      if (!data) {
+        return {
+          id: taxon.id,
+          name: taxon.name,
+          color: taxon.color,
+          estimatedDescribed: taxon.estimatedDescribed,
+          estimatedSource: taxon.estimatedSource,
+          estimatedSourceUrl: taxon.estimatedSourceUrl,
+          available: false,
+          totalAssessed: 0,
+          percentAssessed: 0,
+          byCategory: [],
+          outdated: 0,
+          percentOutdated: 0,
+          lastUpdated: null,
+        };
       }
-    }
 
-    if (allData.length === 0) {
-      return null;
-    }
+      // NE count is already cached from warmup
+      const neCount = await countNESpecies(taxon.id, data.species);
 
-    // Merge all data files
-    const mergedSpecies = allData.flatMap(d => d.species);
-    const mergedByCategory: Record<string, number> = {};
+      const byCategory = ["EX", "EW", "CR", "EN", "VU", "NT", "LC", "DD", "NE"].map((code) => ({
+        code,
+        count: code === "NE" ? neCount : (data.metadata.byCategory[code] || 0),
+        color: CATEGORY_COLORS[code],
+      }));
 
-    for (const data of allData) {
-      for (const [cat, count] of Object.entries(data.metadata.byCategory)) {
-        mergedByCategory[cat] = (mergedByCategory[cat] || 0) + count;
+      // Calculate outdated assessments (>10 years old)
+      const currentYear = new Date().getFullYear();
+      let outdated = 0;
+      for (const s of data.species) {
+        if (s.assessment_date) {
+          const assessmentYear = new Date(s.assessment_date).getFullYear();
+          if (currentYear - assessmentYear > 10) outdated++;
+        }
       }
-    }
 
-    // Use the most recent fetchedAt
-    const latestFetchedAt = allData
-      .map(d => d.metadata.fetchedAt)
-      .sort()
-      .pop() || allData[0].metadata.fetchedAt;
+      const percentAssessed =
+        taxon.estimatedDescribed > 0
+          ? (data.metadata.totalSpecies / taxon.estimatedDescribed) * 100
+          : 0;
 
-    return {
-      species: mergedSpecies,
-      metadata: {
-        totalSpecies: mergedSpecies.length,
-        fetchedAt: latestFetchedAt,
-        byCategory: mergedByCategory,
-      },
-    };
-  }
+      const percentOutdated =
+        data.metadata.totalSpecies > 0
+          ? (outdated / data.metadata.totalSpecies) * 100
+          : 0;
 
-  // Single data file
-  return loadSingleDataFile(taxon.dataFile);
-}
-
-function countNESpecies(taxon: TaxonConfig, redListSpecies: SpeciesRecord[]): number {
-  try {
-    const gbifCsvPath = path.join(process.cwd(), "data", taxon.gbifDataFile);
-    if (!fs.existsSync(gbifCsvPath)) return 0;
-
-    const redListNames = new Set(
-      redListSpecies.map((s) => s.scientific_name?.toLowerCase?.().trim() || "").filter(Boolean)
-    );
-
-    const csvContent = fs.readFileSync(gbifCsvPath, "utf-8");
-    const lines = csvContent.trim().split("\n");
-    const header = lines[0];
-    if (!header.includes("scientific_name")) return 0;
-
-    let count = 0;
-    for (let i = 1; i < lines.length; i++) {
-      const parts = lines[i].split(",");
-      const scientificName = parts[2]?.toLowerCase?.().trim();
-      if (scientificName && !redListNames.has(scientificName)) {
-        count++;
-      }
-    }
-    return count;
-  } catch {
-    return 0;
-  }
-}
-
-function buildSummary(): TaxonSummary[] {
-  // Filter out "all" - it's a meta-taxon for viewing all species, not a real taxon
-  return TAXA.filter((taxon) => taxon.id !== "all").map((taxon) => {
-    const data = loadTaxonData(taxon);
-
-    if (!data) {
       return {
         id: taxon.id,
         name: taxon.name,
@@ -145,59 +97,18 @@ function buildSummary(): TaxonSummary[] {
         estimatedDescribed: taxon.estimatedDescribed,
         estimatedSource: taxon.estimatedSource,
         estimatedSourceUrl: taxon.estimatedSourceUrl,
-        available: false,
-        totalAssessed: 0,
-        percentAssessed: 0,
-        byCategory: [],
-        outdated: 0,
-        percentOutdated: 0,
-        lastUpdated: null,
+        available: true,
+        totalAssessed: data.metadata.totalSpecies,
+        percentAssessed: Math.round(percentAssessed * 10) / 10,
+        byCategory,
+        outdated,
+        percentOutdated: Math.round(percentOutdated * 10) / 10,
+        lastUpdated: data.metadata.fetchedAt,
       };
-    }
+    }),
+  );
 
-    // Count NE species (in GBIF but not in Red List)
-    const neCount = countNESpecies(taxon, data.species);
-
-    const byCategory = ["EX", "EW", "CR", "EN", "VU", "NT", "LC", "DD", "NE"].map((code) => ({
-      code,
-      count: code === "NE" ? neCount : (data.metadata.byCategory[code] || 0),
-      color: CATEGORY_COLORS[code],
-    }));
-
-    // Calculate outdated assessments (>10 years old based on assessment_date)
-    const currentYear = new Date().getFullYear();
-    const outdated = data.species.filter((s) => {
-      if (!s.assessment_date) return false;
-      const assessmentYear = new Date(s.assessment_date).getFullYear();
-      return currentYear - assessmentYear > 10;
-    }).length;
-
-    const percentAssessed =
-      taxon.estimatedDescribed > 0
-        ? (data.metadata.totalSpecies / taxon.estimatedDescribed) * 100
-        : 0;
-
-    const percentOutdated =
-      data.metadata.totalSpecies > 0
-        ? (outdated / data.metadata.totalSpecies) * 100
-        : 0;
-
-    return {
-      id: taxon.id,
-      name: taxon.name,
-      color: taxon.color,
-      estimatedDescribed: taxon.estimatedDescribed,
-      estimatedSource: taxon.estimatedSource,
-      estimatedSourceUrl: taxon.estimatedSourceUrl,
-      available: true,
-      totalAssessed: data.metadata.totalSpecies,
-      percentAssessed: Math.round(percentAssessed * 10) / 10,
-      byCategory,
-      outdated,
-      percentOutdated: Math.round(percentOutdated * 10) / 10,
-      lastUpdated: data.metadata.fetchedAt,
-    };
-  });
+  return summaries;
 }
 
 export async function GET() {
@@ -206,8 +117,8 @@ export async function GET() {
     return NextResponse.json({ taxa: cachedSummary, cached: true });
   }
 
-  // Build fresh summary
-  cachedSummary = buildSummary();
+  // Build fresh summary (parallel + shared cache)
+  cachedSummary = await buildSummary();
   cacheTime = Date.now();
 
   return NextResponse.json({ taxa: cachedSummary, cached: false });
