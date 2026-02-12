@@ -16,11 +16,6 @@ interface TaxonSummary {
   available: boolean;
   totalAssessed: number;
   percentAssessed: number;
-  byCategory: {
-    code: string;
-    count: number;
-    color: string;
-  }[];
   outdated: number;
   percentOutdated: number;
   lastUpdated: string | null;
