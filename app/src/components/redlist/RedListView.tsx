@@ -638,8 +638,11 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
   const [neSpeciesFetched, setNeSpeciesFetched] = useState<string | null>(null);
   const [neLoading, setNeLoading] = useState(false);
 
-  // Reset filters when taxon changes
+  // Reset filters when taxon changes (but not on initial mount, so URL filters survive refresh)
+  const prevTaxonRef = useRef(selectedTaxon);
   useEffect(() => {
+    if (prevTaxonRef.current === selectedTaxon) return;
+    prevTaxonRef.current = selectedTaxon;
     clearAllFilters();
     setCurrentPage(1);
     setSpeciesDetails({});
