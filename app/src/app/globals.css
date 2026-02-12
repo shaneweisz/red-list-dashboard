@@ -43,7 +43,7 @@ body {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 .leaflet-tooltip.leaflet-tooltip::before {
-  border-top-color: #3b82f6;
+  display: none;
 }
 
 /* Sticky column shadow for scrollable tables */

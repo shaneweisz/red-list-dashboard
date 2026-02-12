@@ -207,7 +207,7 @@ function InatPhotoWithPreview({ obs, idx, onHover, onLeave }: { obs: InatObserva
   }
 
   const [isHovered, setIsHovered] = useState(false);
-  const [position, setPosition] = useState({ top: 0, left: 0 });
+  const [position, setPosition] = useState({ anchorTop: 0, left: 0, showBelow: false });
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const thumbRef = useRef<HTMLDivElement>(null);
   const hasAudio = !!obs.audioUrl;
@@ -221,23 +221,19 @@ function InatPhotoWithPreview({ obs, idx, onHover, onLeave }: { obs: InatObserva
       const rect = thumbRef.current.getBoundingClientRect();
       const viewportWidth = window.innerWidth;
       const previewWidth = 208;
-      const previewHeight = hasAudio ? 270 : 220;
 
-      // Center above the thumbnail
+      // Center horizontally on the thumbnail
       let left = rect.left + rect.width / 2 - previewWidth / 2;
-      let top = rect.top - previewHeight - 4;
-
-      // If preview would overflow left/right edges, clamp
       if (left < 8) left = 8;
       if (left + previewWidth > viewportWidth - 8) {
         left = viewportWidth - 8 - previewWidth;
       }
-      // If not enough room above, show below
-      if (top < 8) {
-        top = rect.bottom + 4;
-      }
 
-      setPosition({ top, left });
+      // If not enough room above (~100px min), show below instead
+      const showBelow = rect.top < 100;
+      const anchorTop = showBelow ? rect.bottom + 4 : rect.top - 4;
+
+      setPosition({ anchorTop, left, showBelow });
     }
   }, [isHovered, isTouchDevice, hasAudio]);
 
@@ -277,7 +273,11 @@ function InatPhotoWithPreview({ obs, idx, onHover, onLeave }: { obs: InatObserva
       {!isTouchDevice && isHovered && (obs.imageUrl || obs.audioUrl) && typeof document !== 'undefined' && createPortal(
         <div
           className="fixed z-[99999]"
-          style={{ top: position.top, left: position.left }}
+          style={{
+            top: position.anchorTop,
+            left: position.left,
+            ...(position.showBelow ? {} : { transform: 'translateY(-100%)' }),
+          }}
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
         >
