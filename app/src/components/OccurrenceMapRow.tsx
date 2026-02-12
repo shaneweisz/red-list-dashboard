@@ -283,7 +283,7 @@ function InatPhotoWithPreview({ obs, idx, onHover, onLeave }: { obs: InatObserva
                 <img
                   src={obs.imageUrl}
                   alt={`iNaturalist observation ${idx + 1}`}
-                  className="w-full h-40 object-cover hover:opacity-90 cursor-pointer"
+                  className="w-full hover:opacity-90 cursor-pointer"
                 />
               </a>
             )}
