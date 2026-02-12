@@ -765,23 +765,25 @@ export default function OccurrenceMapRow({
                   })}
                   {/* Highlighted dot when hovering an iNat thumbnail */}
                   {hoveredObs && hoveredObs.decimalLatitude != null && hoveredObs.decimalLongitude != null && (
-                    <CircleMarker
-                      center={[hoveredObs.decimalLatitude, hoveredObs.decimalLongitude]}
-                      radius={7}
-                      pathOptions={{
-                        color: "#1d4ed8",
-                        fillColor: "#3b82f6",
-                        fillOpacity: 0.4,
-                        weight: 2,
-                      }}
-                    />
-                    {hoveredObs.imageUrl && (
-                      <MapImageTooltip
-                        lat={hoveredObs.decimalLatitude!}
-                        lng={hoveredObs.decimalLongitude!}
-                        imageUrl={getThumbUrl(hoveredObs.imageUrl)}
+                    <>
+                      <CircleMarker
+                        center={[hoveredObs.decimalLatitude, hoveredObs.decimalLongitude]}
+                        radius={7}
+                        pathOptions={{
+                          color: "#1d4ed8",
+                          fillColor: "#3b82f6",
+                          fillOpacity: 0.4,
+                          weight: 2,
+                        }}
                       />
-                    )}
+                      {hoveredObs.imageUrl && (
+                        <MapImageTooltip
+                          lat={hoveredObs.decimalLatitude!}
+                          lng={hoveredObs.decimalLongitude!}
+                          imageUrl={getThumbUrl(hoveredObs.imageUrl)}
+                        />
+                      )}
+                    </>
                   )}
                 </MapContainer>
               ) : null}
