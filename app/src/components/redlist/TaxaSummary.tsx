@@ -155,19 +155,29 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
       }));
 
     return (
-      <div className="min-w-[180px] md:min-w-[240px]">
+      <div className="min-w-[180px] md:min-w-[240px] relative">
+        {/* Visible bar (clipped for rounded corners) */}
         <div className="flex h-3 rounded-full overflow-hidden bg-zinc-200 dark:bg-zinc-700">
           {segments.map((seg) => (
             <div
               key={seg.cat}
-              className="group/seg relative h-full transition-all"
+              className="h-full"
               style={{
                 width: `${seg.pct}%`,
                 backgroundColor: seg.color,
                 minWidth: seg.pct > 0 ? "2px" : 0,
               }}
+            />
+          ))}
+        </div>
+        {/* Hover zones + tooltips (outside overflow-hidden so tooltips aren't clipped) */}
+        <div className="absolute inset-0 flex">
+          {segments.map((seg) => (
+            <div
+              key={seg.cat}
+              className="group/seg relative h-full"
+              style={{ width: `${seg.pct}%`, minWidth: seg.pct > 0 ? "2px" : 0 }}
             >
-              {/* Per-segment tooltip */}
               <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-2 py-1 text-xs bg-zinc-800 dark:bg-zinc-700 text-white rounded-lg shadow-lg opacity-0 invisible group-hover/seg:opacity-100 group-hover/seg:visible z-50 whitespace-nowrap pointer-events-none">
                 <div className="flex items-center gap-1.5">
                   <span
