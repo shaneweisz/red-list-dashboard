@@ -38,6 +38,10 @@ const LocateControl = dynamic(
   () => import("./LocateControl"),
   { ssr: false }
 );
+const Tooltip = dynamic(
+  () => import("react-leaflet").then((mod) => mod.Tooltip),
+  { ssr: false }
+);
 const FitBounds = dynamic(
   () => import("./FitBounds"),
   { ssr: false }
@@ -770,7 +774,17 @@ export default function OccurrenceMapRow({
                         fillOpacity: 0.4,
                         weight: 2,
                       }}
-                    />
+                    >
+                      {hoveredObs.imageUrl && (
+                        <Tooltip direction="top" offset={[0, -8]} opacity={1} permanent>
+                          <img
+                            src={getThumbUrl(hoveredObs.imageUrl)}
+                            alt="observation"
+                            style={{ width: 80, height: 60, objectFit: 'cover', borderRadius: 4, display: 'block' }}
+                          />
+                        </Tooltip>
+                      )}
+                    </CircleMarker>
                   )}
                 </MapContainer>
               ) : null}
