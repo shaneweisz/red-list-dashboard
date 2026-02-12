@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 
@@ -36,6 +36,10 @@ const Popup = dynamic(
 );
 const LocateControl = dynamic(
   () => import("./LocateControl"),
+  { ssr: false }
+);
+const MapImageTooltip = dynamic(
+  () => import("./MapImageTooltip"),
   { ssr: false }
 );
 const FitBounds = dynamic(
@@ -82,6 +86,11 @@ interface InatObservation {
   imageUrl: string | null;
   location: string | null;
   observer: string | null;
+  mediaType?: "StillImage" | "Sound" | "MovingImage" | null;
+  audioUrl?: string | null;
+  gbifID?: number | null;
+  decimalLatitude?: number | null;
+  decimalLongitude?: number | null;
 }
 
 interface RecordTypeBreakdown {
@@ -108,15 +117,102 @@ function getThumbUrl(url: string): string {
   return url.replace(/\/original\./, '/small.');
 }
 
+// Audio player card for sound-only observations
+function InatAudioCard({ obs, idx, onHover, onLeave }: { obs: InatObservation; idx: number; onHover?: () => void; onLeave?: () => void }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
+
+  const togglePlay = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (playing) {
+      audio.pause();
+    } else {
+      audio.play();
+    }
+  };
+
+  return (
+    <div
+      className="aspect-[3/4] sm:aspect-square relative group"
+      onMouseEnter={onHover}
+      onMouseLeave={onLeave}
+    >
+      <a
+        href={obs.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block w-full h-full"
+      >
+        <div className="w-full h-full bg-gradient-to-br from-emerald-50 to-teal-100 dark:from-emerald-950 dark:to-teal-900 rounded ring-1 ring-emerald-200 dark:ring-emerald-800 flex flex-col items-center justify-center gap-1 p-2 transition-all group-hover:ring-2 group-hover:ring-emerald-400 dark:group-hover:ring-emerald-600">
+          {/* Waveform-style icon */}
+          <div className="flex items-end gap-[2px] h-6 mb-0.5">
+            {[40, 70, 55, 85, 45, 75, 50].map((h, i) => (
+              <div
+                key={i}
+                className={`w-[3px] rounded-full ${playing ? 'animate-pulse' : ''}`}
+                style={{
+                  height: `${h}%`,
+                  backgroundColor: playing ? '#10b981' : '#6ee7b7',
+                  animationDelay: `${i * 0.1}s`,
+                }}
+              />
+            ))}
+          </div>
+          {obs.date && (
+            <div className="text-[10px] text-emerald-600 dark:text-emerald-400 truncate max-w-full">{obs.date}</div>
+          )}
+        </div>
+      </a>
+      {obs.audioUrl && (
+        <>
+          <audio
+            ref={audioRef}
+            preload="none"
+            onPlay={() => setPlaying(true)}
+            onPause={() => setPlaying(false)}
+            onEnded={() => setPlaying(false)}
+            aria-label={`Audio observation ${idx + 1}`}
+          >
+            <source src={obs.audioUrl} />
+          </audio>
+          <button
+            onClick={togglePlay}
+            className="absolute bottom-1.5 right-1.5 w-6 h-6 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center shadow-sm transition-colors"
+            title={playing ? "Pause" : "Play audio"}
+          >
+            {playing ? (
+              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+              </svg>
+            ) : (
+              <svg className="w-3 h-3 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            )}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
 // iNat photo thumbnail with hover preview using portal (desktop only)
-function InatPhotoWithPreview({ obs, idx }: { obs: InatObservation; idx: number }) {
+function InatPhotoWithPreview({ obs, idx, onHover, onLeave }: { obs: InatObservation; idx: number; onHover?: () => void; onLeave?: () => void }) {
+  // If this is an audio-only observation (no image), render the audio card
+  if (!obs.imageUrl && obs.audioUrl) {
+    return <InatAudioCard obs={obs} idx={idx} onHover={onHover} onLeave={onLeave} />;
+  }
+
   const [isHovered, setIsHovered] = useState(false);
-  const [position, setPosition] = useState({ top: 0, left: 0 });
+  const [position, setPosition] = useState({ anchorTop: 0, left: 0, showBelow: false });
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const thumbRef = useRef<HTMLDivElement>(null);
+  const hasAudio = !!obs.audioUrl;
 
   useEffect(() => {
-    // Detect touch devices to disable hover preview
     setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
   }, []);
 
@@ -124,39 +220,29 @@ function InatPhotoWithPreview({ obs, idx }: { obs: InatObservation; idx: number 
     if (isHovered && thumbRef.current && !isTouchDevice) {
       const rect = thumbRef.current.getBoundingClientRect();
       const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
-      const previewWidth = 208; // w-52 = 13rem = 208px
-      const previewHeight = 220; // approximate height
+      const previewWidth = 208;
 
-      // Position to the right of the thumbnail by default
-      let left = rect.right + 4;
-      let top = rect.top;
-
-      // If preview would overflow right edge, position to the left
-      if (left + previewWidth > viewportWidth) {
-        left = rect.left - previewWidth - 4;
+      // Center horizontally on the thumbnail
+      let left = rect.left + rect.width / 2 - previewWidth / 2;
+      if (left < 8) left = 8;
+      if (left + previewWidth > viewportWidth - 8) {
+        left = viewportWidth - 8 - previewWidth;
       }
 
-      // If preview would overflow bottom, shift up
-      if (top + previewHeight > viewportHeight) {
-        top = viewportHeight - previewHeight - 8;
-      }
+      // If not enough room above (~100px min), show below instead
+      const showBelow = rect.top < 100;
+      const anchorTop = showBelow ? rect.bottom + 4 : rect.top - 4;
 
-      // Ensure it doesn't go above the viewport
-      if (top < 8) {
-        top = 8;
-      }
-
-      setPosition({ top, left });
+      setPosition({ anchorTop, left, showBelow });
     }
-  }, [isHovered, isTouchDevice]);
+  }, [isHovered, isTouchDevice, hasAudio]);
 
   return (
     <div
       ref={thumbRef}
       className="aspect-[3/4] sm:aspect-square relative"
-      onMouseEnter={() => !isTouchDevice && setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseEnter={() => { if (!isTouchDevice) setIsHovered(true); onHover?.(); }}
+      onMouseLeave={() => { setIsHovered(false); onLeave?.(); }}
     >
       <a
         href={obs.url}
@@ -176,21 +262,47 @@ function InatPhotoWithPreview({ obs, idx }: { obs: InatObservation; idx: number 
           </div>
         )}
       </a>
-      {!isTouchDevice && isHovered && obs.imageUrl && typeof document !== 'undefined' && createPortal(
+      {/* Audio badge for observations that have both image and audio */}
+      {hasAudio && obs.imageUrl && (
+        <div className="absolute bottom-1 right-1 bg-black/60 rounded-full p-1" title="Has audio">
+          <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
+          </svg>
+        </div>
+      )}
+      {!isTouchDevice && isHovered && (obs.imageUrl || obs.audioUrl) && typeof document !== 'undefined' && createPortal(
         <div
           className="fixed z-[99999]"
-          style={{ top: position.top, left: position.left }}
+          style={{
+            top: position.anchorTop,
+            left: position.left,
+            ...(position.showBelow ? {} : { transform: 'translateY(-100%)' }),
+          }}
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
         >
           <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-2xl border border-zinc-200 dark:border-zinc-700 overflow-hidden w-52">
-            <a href={obs.url} target="_blank" rel="noopener noreferrer">
-              <img
-                src={obs.imageUrl}
-                alt={`iNaturalist observation ${idx + 1}`}
-                className="w-full h-40 object-cover hover:opacity-90 cursor-pointer"
-              />
-            </a>
+            {obs.imageUrl && (
+              <a href={obs.url} target="_blank" rel="noopener noreferrer">
+                <img
+                  src={obs.imageUrl}
+                  alt={`iNaturalist observation ${idx + 1}`}
+                  className="w-full hover:opacity-90 cursor-pointer"
+                />
+              </a>
+            )}
+            {hasAudio && (
+              <div className="px-2 pt-2">
+                <audio
+                  controls
+                  preload="none"
+                  className="w-full h-8"
+                  aria-label={`Audio for observation ${idx + 1}`}
+                >
+                  <source src={obs.audioUrl!} />
+                </audio>
+              </div>
+            )}
             <div className="p-2 text-xs space-y-1">
               {obs.date && (
                 <div className="text-zinc-500 dark:text-zinc-400">{obs.date}</div>
@@ -243,6 +355,18 @@ export default function OccurrenceMapRow({
   const [inatPhotos, setInatPhotos] = useState<InatObservation[]>([]);
   const [inatTotalCount, setInatTotalCount] = useState(0);
   const [loadingInatPhotos, setLoadingInatPhotos] = useState(false);
+
+  // Hovered iNat observation (for map highlight)
+  const [hoveredObs, setHoveredObs] = useState<InatObservation | null>(null);
+
+  // Lookup: gbifID → InatObservation (for showing photos in map popups)
+  const inatPhotosByGbifId = useMemo(() => {
+    const m = new Map<number, InatObservation>();
+    for (const obs of inatPhotos) {
+      if (obs.gbifID) m.set(obs.gbifID, obs);
+    }
+    return m;
+  }, [inatPhotos]);
 
   // Total occurrences count (from API metadata)
   const [totalOccurrences, setTotalOccurrences] = useState<number | null>(null);
@@ -532,7 +656,13 @@ export default function OccurrenceMapRow({
                     </div>
                     <div className={`grid grid-cols-3 sm:grid-cols-5 gap-1.5 ${loadingInatPhotos ? 'opacity-50' : ''}`}>
                       {inatPhotos.slice(0, pageSize).map((obs, idx) => (
-                        <InatPhotoWithPreview key={`${inatPage}-${idx}`} obs={obs} idx={idx} />
+                        <InatPhotoWithPreview
+                          key={`${inatPage}-${idx}`}
+                          obs={obs}
+                          idx={idx}
+                          onHover={() => setHoveredObs(obs)}
+                          onLeave={() => setHoveredObs(null)}
+                        />
                       ))}
                     </div>
                   </div>
@@ -570,23 +700,34 @@ export default function OccurrenceMapRow({
                     const [lon, lat] = feature.geometry.coordinates;
                     const preserved = isPreserved(feature.properties.basisOfRecord);
                     const isNew = isNewRecord(feature.properties.eventDate);
-                    // Color: preserved=amber, new=green, old=grey
-                    const strokeColor = preserved ? "#b45309" : isNew ? "#15803d" : "#6b7280";
-                    const fillColor = preserved ? "#f59e0b" : isNew ? "#22c55e" : "#9ca3af";
+                    const isHighlighted = hoveredObs?.gbifID != null && feature.properties.gbifID === hoveredObs.gbifID;
+                    // Color: highlighted=blue, preserved=amber, new=green, old=grey
+                    const strokeColor = isHighlighted ? "#1d4ed8" : preserved ? "#b45309" : isNew ? "#15803d" : "#6b7280";
+                    const fillColor = isHighlighted ? "#3b82f6" : preserved ? "#f59e0b" : isNew ? "#22c55e" : "#9ca3af";
+                    const inatMatch = inatPhotosByGbifId.get(feature.properties.gbifID);
                     return (
                       <CircleMarker
                         key={feature.properties.gbifID || idx}
                         center={[lat, lon]}
-                        radius={5}
+                        radius={isHighlighted ? 9 : 5}
                         pathOptions={{
                           color: strokeColor,
                           fillColor: fillColor,
-                          fillOpacity: 0.9,
-                          weight: 2,
+                          fillOpacity: isHighlighted ? 1 : 0.9,
+                          weight: isHighlighted ? 3 : 2,
                         }}
                       >
                         <Popup>
-                          <div className="text-sm">
+                          <div className="text-sm" style={{ maxWidth: 220 }}>
+                            {inatMatch?.imageUrl && (
+                              <a href={inatMatch.url} target="_blank" rel="noopener noreferrer">
+                                <img
+                                  src={inatMatch.imageUrl}
+                                  alt={`${feature.properties.species} observation`}
+                                  className="w-full h-32 object-cover rounded mb-2 hover:opacity-90 cursor-pointer"
+                                />
+                              </a>
+                            )}
                             <div className="font-medium italic">
                               {feature.properties.species}
                             </div>
@@ -599,6 +740,12 @@ export default function OccurrenceMapRow({
                               <div className="text-xs">
                                 {feature.properties.eventDate}
                               </div>
+                            )}
+                            {inatMatch?.observer && (
+                              <div className="text-xs text-gray-600">by {inatMatch.observer}</div>
+                            )}
+                            {inatMatch?.location && (
+                              <div className="text-xs text-gray-500 truncate" title={inatMatch.location}>{inatMatch.location}</div>
                             )}
                             <div className="text-xs text-gray-500">
                               {lat.toFixed(4)}, {lon.toFixed(4)}
@@ -616,6 +763,28 @@ export default function OccurrenceMapRow({
                       </CircleMarker>
                     );
                   })}
+                  {/* Highlighted dot when hovering an iNat thumbnail */}
+                  {hoveredObs && hoveredObs.decimalLatitude != null && hoveredObs.decimalLongitude != null && (
+                    <>
+                      <CircleMarker
+                        center={[hoveredObs.decimalLatitude, hoveredObs.decimalLongitude]}
+                        radius={7}
+                        pathOptions={{
+                          color: "#1d4ed8",
+                          fillColor: "#3b82f6",
+                          fillOpacity: 0.4,
+                          weight: 2,
+                        }}
+                      />
+                      {hoveredObs.imageUrl && (
+                        <MapImageTooltip
+                          lat={hoveredObs.decimalLatitude!}
+                          lng={hoveredObs.decimalLongitude!}
+                          imageUrl={getThumbUrl(hoveredObs.imageUrl)}
+                        />
+                      )}
+                    </>
+                  )}
                 </MapContainer>
               ) : null}
               {!loadingOccurrences && (
