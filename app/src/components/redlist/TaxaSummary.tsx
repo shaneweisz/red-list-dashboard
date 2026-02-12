@@ -11,8 +11,6 @@ interface TaxonSummary {
   name: string;
   color: string;
   estimatedDescribed: number;
-  estimatedSource: string;
-  estimatedSourceUrl?: string;
   available: boolean;
   totalAssessed: number;
   percentAssessed: number;
