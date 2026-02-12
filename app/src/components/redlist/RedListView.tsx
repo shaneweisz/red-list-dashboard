@@ -1121,6 +1121,33 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
             <>
               {/* Charts and map - all on same row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Category distribution - 1 column */}
+        <div className="lg:col-span-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+          <div className="flex items-center justify-between mb-1">
+            <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+              Risk Category (click to filter) <span className="font-normal text-[10px] text-zinc-400">cmd/ctrl+click to multiselect</span>
+            </h3>
+            {selectedCategories.size > 0 && (
+              <button
+                onClick={() => setSelectedCategories(new Set())}
+                className="text-xs text-red-600 hover:text-red-700 dark:text-red-400"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          <div className="flex-1 min-h-[225px]">
+            <FilterBarChart
+              data={categoryDataWithPercent}
+              dataKey="code"
+              selectedItems={selectedCategories}
+              onBarClick={handleCategoryClick}
+              yAxisWidth={26}
+              rightMargin={75}
+            />
+          </div>
+        </div>
+
         {/* Years Since Assessment chart - 1 column */}
         <div className="lg:col-span-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
           <div className="flex items-center justify-between mb-1">
@@ -1152,33 +1179,6 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
               barColor="#3b82f6"
               yAxisWidth={36}
               rightMargin={85}
-            />
-          </div>
-        </div>
-
-        {/* Category distribution - 1 column */}
-        <div className="lg:col-span-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
-          <div className="flex items-center justify-between mb-1">
-            <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-              Risk Category (click to filter) <span className="font-normal text-[10px] text-zinc-400">cmd/ctrl+click to multiselect</span>
-            </h3>
-            {selectedCategories.size > 0 && (
-              <button
-                onClick={() => setSelectedCategories(new Set())}
-                className="text-xs text-red-600 hover:text-red-700 dark:text-red-400"
-              >
-                Clear
-              </button>
-            )}
-          </div>
-          <div className="flex-1 min-h-[225px]">
-            <FilterBarChart
-              data={categoryDataWithPercent}
-              dataKey="code"
-              selectedItems={selectedCategories}
-              onBarClick={handleCategoryClick}
-              yAxisWidth={26}
-              rightMargin={75}
             />
           </div>
         </div>
