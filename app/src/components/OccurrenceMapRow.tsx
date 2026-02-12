@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 
 // Hook to get responsive grid column count: 3 (mobile portrait), 5 (landscape/sm+)
@@ -38,8 +37,8 @@ const LocateControl = dynamic(
   () => import("./LocateControl"),
   { ssr: false }
 );
-const Tooltip = dynamic(
-  () => import("react-leaflet").then((mod) => mod.Tooltip),
+const HoverPreviewOverlay = dynamic(
+  () => import("./HoverPreviewOverlay"),
   { ssr: false }
 );
 const FitBounds = dynamic(
@@ -199,7 +198,7 @@ function InatAudioCard({ obs, idx, onHover, onLeave }: { obs: InatObservation; i
   );
 }
 
-// iNat photo thumbnail with hover preview using portal (desktop only)
+// iNat photo thumbnail (hover triggers map highlight via onHover/onLeave)
 function InatPhotoWithPreview({ obs, idx, onHover, onLeave }: { obs: InatObservation; idx: number; onHover?: () => void; onLeave?: () => void }) {
   // If this is an audio-only observation (no image), render the audio card
   if (!obs.imageUrl && obs.audioUrl) {
@@ -207,52 +206,12 @@ function InatPhotoWithPreview({ obs, idx, onHover, onLeave }: { obs: InatObserva
   }
 
   const [isHovered, setIsHovered] = useState(false);
-  const [position, setPosition] = useState({ top: 0, left: 0 });
-  const [isTouchDevice, setIsTouchDevice] = useState(false);
-  const thumbRef = useRef<HTMLDivElement>(null);
   const hasAudio = !!obs.audioUrl;
-
-  useEffect(() => {
-    // Detect touch devices to disable hover preview
-    setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
-  }, []);
-
-  useEffect(() => {
-    if (isHovered && thumbRef.current && !isTouchDevice) {
-      const rect = thumbRef.current.getBoundingClientRect();
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
-      const previewWidth = 208; // w-52 = 13rem = 208px
-      const previewHeight = hasAudio ? 270 : 220; // taller preview when audio is present
-
-      // Position to the right of the thumbnail by default
-      let left = rect.right + 4;
-      let top = rect.top;
-
-      // If preview would overflow right edge, position to the left
-      if (left + previewWidth > viewportWidth) {
-        left = rect.left - previewWidth - 4;
-      }
-
-      // If preview would overflow bottom, shift up
-      if (top + previewHeight > viewportHeight) {
-        top = viewportHeight - previewHeight - 8;
-      }
-
-      // Ensure it doesn't go above the viewport
-      if (top < 8) {
-        top = 8;
-      }
-
-      setPosition({ top, left });
-    }
-  }, [isHovered, isTouchDevice, hasAudio]);
 
   return (
     <div
-      ref={thumbRef}
       className="aspect-[3/4] sm:aspect-square relative"
-      onMouseEnter={() => { if (!isTouchDevice) { setIsHovered(true); onHover?.(); } }}
+      onMouseEnter={() => { setIsHovered(true); onHover?.(); }}
       onMouseLeave={() => { setIsHovered(false); onLeave?.(); }}
     >
       <a
@@ -280,54 +239,6 @@ function InatPhotoWithPreview({ obs, idx, onHover, onLeave }: { obs: InatObserva
             <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
           </svg>
         </div>
-      )}
-      {!isTouchDevice && isHovered && (obs.imageUrl || obs.audioUrl) && typeof document !== 'undefined' && createPortal(
-        <div
-          className="fixed z-[99999]"
-          style={{ top: position.top, left: position.left }}
-          onMouseEnter={() => setIsHovered(true)}
-          onMouseLeave={() => setIsHovered(false)}
-        >
-          <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-2xl border border-zinc-200 dark:border-zinc-700 overflow-hidden w-52">
-            {obs.imageUrl && (
-              <a href={obs.url} target="_blank" rel="noopener noreferrer">
-                <img
-                  src={obs.imageUrl}
-                  alt={`iNaturalist observation ${idx + 1}`}
-                  className="w-full h-40 object-cover hover:opacity-90 cursor-pointer"
-                />
-              </a>
-            )}
-            {hasAudio && (
-              <div className="px-2 pt-2">
-                <audio
-                  controls
-                  preload="none"
-                  className="w-full h-8"
-                  aria-label={`Audio for observation ${idx + 1}`}
-                >
-                  <source src={obs.audioUrl!} />
-                </audio>
-              </div>
-            )}
-            <div className="p-2 text-xs space-y-1">
-              {obs.date && (
-                <div className="text-zinc-500 dark:text-zinc-400">{obs.date}</div>
-              )}
-              {obs.observer && (
-                <div className="text-zinc-700 dark:text-zinc-300 truncate">
-                  <span className="text-zinc-400">by</span> {obs.observer}
-                </div>
-              )}
-              {obs.location && (
-                <div className="text-zinc-600 dark:text-zinc-400 truncate" title={obs.location}>
-                  {obs.location}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>,
-        document.body
       )}
     </div>
   );
@@ -745,7 +656,7 @@ export default function OccurrenceMapRow({
                       </CircleMarker>
                     );
                   })}
-                  {/* Highlighted observation marker with image/audio preview tooltip */}
+                  {/* Highlighted observation marker (blue ring) */}
                   {hoveredObs && hoveredObs.decimalLatitude != null && hoveredObs.decimalLongitude != null && (
                     <CircleMarker
                       center={[hoveredObs.decimalLatitude, hoveredObs.decimalLongitude]}
@@ -756,30 +667,10 @@ export default function OccurrenceMapRow({
                         fillOpacity: 0.3,
                         weight: 3,
                       }}
-                    >
-                      <Tooltip permanent direction="top" offset={[0, -14]}>
-                        <div style={{ minWidth: 100, maxWidth: 160 }}>
-                          {hoveredObs.imageUrl ? (
-                            <img
-                              src={getThumbUrl(hoveredObs.imageUrl)}
-                              alt="Observation"
-                              style={{ width: '100%', height: 100, objectFit: 'cover', borderRadius: 4, display: 'block' }}
-                            />
-                          ) : hoveredObs.audioUrl ? (
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 60, background: '#ecfdf5', borderRadius: 4 }}>
-                              <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="#10b981" strokeWidth={1.5}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
-                              </svg>
-                            </div>
-                          ) : null}
-                          <div style={{ padding: '4px 2px 2px', fontSize: 11, color: '#6b7280' }}>
-                            {hoveredObs.date && <div>{hoveredObs.date}</div>}
-                            {hoveredObs.observer && <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{hoveredObs.observer}</div>}
-                          </div>
-                        </div>
-                      </Tooltip>
-                    </CircleMarker>
+                    />
                   )}
+                  {/* Image/audio preview rendered as a portal so it is not clipped by the map container */}
+                  <HoverPreviewOverlay hoveredObs={hoveredObs} />
                 </MapContainer>
               ) : null}
               {!loadingOccurrences && (
