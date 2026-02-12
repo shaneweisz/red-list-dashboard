@@ -9,6 +9,7 @@ import RedListAssessments from "../RedListAssessments";
 import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME } from "../WorldMap";
 import { CATEGORY_COLORS } from "@/config/taxa";
+import { useFilterParams } from "@/hooks/useFilterParams";
 
 // Dynamically import OccurrenceMapRow to avoid SSR issues with Leaflet
 const OccurrenceMapRow = dynamic(
@@ -166,14 +167,16 @@ interface RedListViewProps {
 // Debounced search input - manages own state for instant typing, debounces parent updates
 function DebouncedSearchInput({
   onSearch,
+  initialValue = "",
   placeholder = "Search species...",
   className,
 }: {
   onSearch: (value: string) => void;
+  initialValue?: string;
   placeholder?: string;
   className?: string;
 }) {
-  const [localValue, setLocalValue] = useState("");
+  const [localValue, setLocalValue] = useState(initialValue);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -406,36 +409,22 @@ function GbifBreakdownPopup({
 }
 
 export default function RedListView({ onTaxonChange }: RedListViewProps) {
-  // Selected taxon (null = show summary table), synced with URL hash
-  // Initialize to null to avoid hydration mismatch, then read hash in useEffect
-  const [selectedTaxon, setSelectedTaxon] = useState<string | null>(null);
+  // Filters synced with URL search params for shareable links
+  const {
+    selectedTaxon, setSelectedTaxon,
+    selectedCategories, setSelectedCategories,
+    selectedYearRanges, setSelectedYearRanges,
+    selectedCountries, setSelectedCountries,
+    searchFilter, setSearchFilter,
+    sortField, sortDirection, setSort,
+    clearAllFilters,
+  } = useFilterParams();
 
-  // Read initial hash and sync URL hash with selected taxon
-  useEffect(() => {
-    // Read initial hash on mount
-    const hash = window.location.hash.slice(1);
-    if (hash) {
-      setSelectedTaxon(hash);
-    }
-
-    const handleHashChange = () => {
-      const newHash = window.location.hash.slice(1);
-      setSelectedTaxon(newHash || null);
-    };
-
-    window.addEventListener("hashchange", handleHashChange);
-    return () => window.removeEventListener("hashchange", handleHashChange);
-  }, []);
-
-  // Update URL hash when taxon changes (and push to history for back button)
+  // Taxon selection handler (used by TaxaSummary and back navigation)
   const handleTaxonSelect = (taxonId: string | null) => {
-    if (taxonId) {
-      window.history.pushState(null, "", `#${taxonId}`);
-    } else {
-      window.history.pushState(null, "", window.location.pathname);
-    }
     setSelectedTaxon(taxonId);
   };
+
   const [taxonInfo, setTaxonInfo] = useState<TaxonInfo | null>(null);
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [assessments, setAssessments] = useState<AssessmentsResponse | null>(null);
@@ -448,23 +437,16 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
   // Combined loading state for backwards compatibility
   const loading = statsLoading || assessmentsLoading || speciesLoading;
 
-  // Filters (multi-select using Sets)
-  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
-  const [selectedYearRanges, setSelectedYearRanges] = useState<Set<string>>(new Set());
-  const [selectedCountries, setSelectedCountries] = useState<Set<string>>(new Set());
-  const [searchFilter, setSearchFilter] = useState("");
   const [showOnlyStarred, setShowOnlyStarred] = useState(false);
 
   // Stable callback for debounced search input
   const handleSearch = useCallback((value: string) => {
     setSearchFilter(value);
-  }, []);
+  }, [setSearchFilter]);
 
-  // Sorting
+  // Sort type aliases (used elsewhere in component)
   type SortField = "year" | "category" | null;
   type SortDirection = "asc" | "desc";
-  const [sortField, setSortField] = useState<SortField>("year");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -656,16 +638,16 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
   const [neSpeciesFetched, setNeSpeciesFetched] = useState<string | null>(null);
   const [neLoading, setNeLoading] = useState(false);
 
-  // Reset filters when taxon changes
+  // Reset filters when taxon changes (but not on initial mount, so URL filters survive refresh)
+  const prevTaxonRef = useRef(selectedTaxon);
   useEffect(() => {
-    setSelectedCategories(new Set());
-    setSelectedYearRanges(new Set());
-    setSelectedCountries(new Set());
-    setSearchFilter("");
+    if (prevTaxonRef.current === selectedTaxon) return;
+    prevTaxonRef.current = selectedTaxon;
+    clearAllFilters();
     setCurrentPage(1);
     setSpeciesDetails({});
     setNeSpeciesFetched(null);
-  }, [selectedTaxon]);
+  }, [selectedTaxon]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch NE species when NE category is selected
   useEffect(() => {
@@ -832,13 +814,12 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
     if (sortField === field) {
       // Toggle direction or clear sort
       if (sortDirection === "desc") {
-        setSortDirection("asc");
+        setSort(field, "asc");
       } else {
-        setSortField(null);
+        setSort(null, "desc");
       }
     } else {
-      setSortField(field);
-      setSortDirection("desc");
+      setSort(field, "desc");
     }
     setCurrentPage(1);
   };
@@ -1178,6 +1159,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
               <DebouncedSearchInput
                 key={selectedTaxon}
                 onSearch={handleSearch}
+                initialValue={searchFilter}
                 placeholder="Search species..."
                 className="w-full px-3 md:px-4 py-2 pl-9 md:pl-10 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm"
               />
@@ -1315,7 +1297,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
             ))}
             {(selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedCountries.size > 0 || showOnlyStarred) && (
               <button
-                onClick={() => { setSelectedCategories(new Set()); setSelectedYearRanges(new Set()); setSelectedCountries(new Set()); setShowOnlyStarred(false); }}
+                onClick={() => { clearAllFilters(); setShowOnlyStarred(false); }}
                 className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 underline"
               >
                 Clear all
