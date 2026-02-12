@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useMap } from "react-leaflet";
-import L from "leaflet";
 
-/** Renders a small photo tooltip above a lat/lng point on the map using native Leaflet. */
+/**
+ * Renders a small photo tooltip above a lat/lng point on the map.
+ * Uses useMap() to convert coordinates to pixel position, then
+ * portals a plain HTML img into the map container.
+ */
 export default function MapImageTooltip({
   lat,
   lng,
@@ -15,24 +19,55 @@ export default function MapImageTooltip({
   imageUrl: string;
 }) {
   const map = useMap();
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
-    const tooltip = L.tooltip({
-      permanent: true,
-      direction: "top",
-      offset: [0, -10],
-      opacity: 1,
-    })
-      .setLatLng([lat, lng])
-      .setContent(
-        `<img src="${imageUrl}" style="width:80px;height:60px;object-fit:cover;border-radius:4px;display:block" alt="" />`
-      )
-      .addTo(map);
-
-    return () => {
-      map.removeLayer(tooltip);
+    const update = () => {
+      const point = map.latLngToContainerPoint([lat, lng]);
+      setPos({ x: point.x, y: point.y });
     };
-  }, [map, lat, lng, imageUrl]);
+    update();
+    map.on("move", update);
+    map.on("zoom", update);
+    map.on("moveend", update);
+    map.on("zoomend", update);
+    return () => {
+      map.off("move", update);
+      map.off("zoom", update);
+      map.off("moveend", update);
+      map.off("zoomend", update);
+    };
+  }, [map, lat, lng]);
 
-  return null;
+  if (!pos) return null;
+
+  const container = map.getContainer();
+
+  return createPortal(
+    <div
+      style={{
+        position: "absolute",
+        left: pos.x - 42,
+        top: pos.y - 72,
+        zIndex: 1000,
+        pointerEvents: "none",
+      }}
+    >
+      <img
+        src={imageUrl}
+        alt=""
+        style={{
+          width: 80,
+          height: 60,
+          objectFit: "cover",
+          borderRadius: 6,
+          border: "2px solid #3b82f6",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
+          display: "block",
+          background: "white",
+        }}
+      />
+    </div>,
+    container
+  );
 }
