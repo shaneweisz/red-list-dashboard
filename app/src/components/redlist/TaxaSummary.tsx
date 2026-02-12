@@ -140,7 +140,7 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
   };
 
   // Render a stacked category breakdown bar
-  const renderBreakdownBar = (byCategory: Record<string, number>, isAllRow: boolean) => {
+  const renderBreakdownBar = (byCategory: Record<string, number>) => {
     const total = Object.values(byCategory).reduce((sum, n) => sum + n, 0);
     if (total === 0) return <span className="text-sm md:text-base text-zinc-400">—</span>;
 
@@ -156,36 +156,31 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
 
     return (
       <div className="min-w-[180px] md:min-w-[240px]">
-        <div className="group/bar relative">
-          <div className="flex h-3 rounded-full overflow-hidden bg-zinc-200 dark:bg-zinc-700">
-            {segments.map((seg) => (
-              <div
-                key={seg.cat}
-                className="h-full transition-all"
-                style={{
-                  width: `${seg.pct}%`,
-                  backgroundColor: isAllRow ? "rgba(255,255,255,0.25)" : seg.color,
-                  minWidth: seg.pct > 0 ? "2px" : 0,
-                }}
-              />
-            ))}
-          </div>
-          {/* Tooltip on hover */}
-          <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-3 py-2 text-xs bg-zinc-800 dark:bg-zinc-700 text-white rounded-lg shadow-lg opacity-0 invisible group-hover/bar:opacity-100 group-hover/bar:visible z-50 whitespace-nowrap pointer-events-none">
-            <div className="space-y-0.5">
-              {segments.map((seg) => (
-                <div key={seg.cat} className="flex items-center gap-1.5">
+        <div className="flex h-3 rounded-full overflow-hidden bg-zinc-200 dark:bg-zinc-700">
+          {segments.map((seg) => (
+            <div
+              key={seg.cat}
+              className="group/seg relative h-full transition-all"
+              style={{
+                width: `${seg.pct}%`,
+                backgroundColor: seg.color,
+                minWidth: seg.pct > 0 ? "2px" : 0,
+              }}
+            >
+              {/* Per-segment tooltip */}
+              <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-2 py-1 text-xs bg-zinc-800 dark:bg-zinc-700 text-white rounded-lg shadow-lg opacity-0 invisible group-hover/seg:opacity-100 group-hover/seg:visible z-50 whitespace-nowrap pointer-events-none">
+                <div className="flex items-center gap-1.5">
                   <span
                     className="inline-block w-2.5 h-2.5 rounded-sm flex-shrink-0"
                     style={{ backgroundColor: seg.color }}
                   />
                   <span className="text-zinc-300">{seg.name}</span>
-                  <span className="font-medium ml-auto pl-3">{seg.count.toLocaleString()}</span>
+                  <span className="font-medium pl-1">{seg.count.toLocaleString()}</span>
                   <span className="text-zinc-400">({seg.pct.toFixed(1)}%)</span>
                 </div>
-              ))}
+              </div>
             </div>
-          </div>
+          ))}
         </div>
       </div>
     );
@@ -267,7 +262,7 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
         </td>
         <td className="px-3 md:px-4 py-2.5 md:py-3 whitespace-nowrap">
           {available ? (
-            renderBreakdownBar(byCategory, isAllRow)
+            renderBreakdownBar(byCategory)
           ) : (
             <span className="text-sm md:text-base text-zinc-400">—</span>
           )}
