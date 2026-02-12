@@ -8,7 +8,7 @@ import NewLiteratureSinceAssessment from "../LiteratureSearch";
 import RedListAssessments from "../RedListAssessments";
 import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME } from "../WorldMap";
-import { CATEGORY_COLORS } from "@/config/taxa";
+import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
 import { useFilterParams } from "@/hooks/useFilterParams";
 
 // Dynamically import OccurrenceMapRow to avoid SSR issues with Leaflet
@@ -69,19 +69,6 @@ interface StatsResponse {
   taxon?: TaxonInfo;
 }
 
-interface YearRange {
-  range: string;
-  count: number;
-  minYear: number;
-}
-
-interface AssessmentsResponse {
-  yearsSinceAssessment: YearRange[];
-  sampleSize: number;
-  lastUpdated: string;
-  cached: boolean;
-  error?: string;
-}
 
 interface PreviousAssessment {
   year: string;
@@ -160,9 +147,7 @@ interface SpeciesResponse {
   taxon?: TaxonInfo;
 }
 
-interface RedListViewProps {
-  onTaxonChange?: (taxonName: string | null) => void;
-}
+
 
 // Debounced search input - manages own state for instant typing, debounces parent updates
 function DebouncedSearchInput({
@@ -408,10 +393,10 @@ function GbifBreakdownPopup({
   );
 }
 
-export default function RedListView({ onTaxonChange }: RedListViewProps) {
+export default function RedListView() {
   // Filters synced with URL search params for shareable links
   const {
-    selectedTaxon, setSelectedTaxon,
+    selectedTaxa, setSelectedTaxa,
     selectedCategories, setSelectedCategories,
     selectedYearRanges, setSelectedYearRanges,
     selectedCountries, setSelectedCountries,
@@ -420,22 +405,23 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
     clearAllFilters,
   } = useFilterParams();
 
-  // Taxon selection handler (used by TaxaSummary and back navigation)
-  const handleTaxonSelect = (taxonId: string | null) => {
-    setSelectedTaxon(taxonId);
-  };
+  // Taxon toggle handler (used by TaxaSummary for multi-select filtering)
+  const handleToggleTaxon = useCallback((taxonId: string) => {
+    setSelectedTaxa(prev => {
+      const next = new Set(prev);
+      if (next.has(taxonId)) {
+        next.delete(taxonId);
+      } else {
+        next.add(taxonId);
+      }
+      return next;
+    });
+  }, [setSelectedTaxa]);
 
-  const [taxonInfo, setTaxonInfo] = useState<TaxonInfo | null>(null);
-  const [stats, setStats] = useState<StatsResponse | null>(null);
-  const [assessments, setAssessments] = useState<AssessmentsResponse | null>(null);
   const [species, setSpecies] = useState<Species[]>([]);
-  const [statsLoading, setStatsLoading] = useState(false);
-  const [assessmentsLoading, setAssessmentsLoading] = useState(false);
-  const [speciesLoading, setSpeciesLoading] = useState(false);
+  const [speciesLoading, setSpeciesLoading] = useState(true);
+  const [neCount, setNeCount] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
-
-  // Combined loading state for backwards compatibility
-  const loading = statsLoading || assessmentsLoading || speciesLoading;
 
   const [showOnlyStarred, setShowOnlyStarred] = useState(false);
 
@@ -443,10 +429,6 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
   const handleSearch = useCallback((value: string) => {
     setSearchFilter(value);
   }, [setSearchFilter]);
-
-  // Sort type aliases (used elsewhere in component)
-  type SortField = "year" | "category" | null;
-  type SortDirection = "asc" | "desc";
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -553,121 +535,63 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
     setDragOverSpecies(null);
   };
 
-  // Load stats, assessments, and species independently when taxon changes
+  // Load all species on mount (taxon=all)
   useEffect(() => {
-    // If no taxon selected, don't fetch detailed data
-    if (!selectedTaxon) {
-      setStatsLoading(false);
-      setAssessmentsLoading(false);
-      setSpeciesLoading(false);
-      setStats(null);
-      setAssessments(null);
-      setSpecies([]);
-      setTaxonInfo(null);
-      return;
-    }
-
-    const taxonParam = `?taxon=${selectedTaxon}`;
     setError(null);
-
-    // Fetch stats independently
-    setStatsLoading(true);
-    fetch(`/api/redlist/stats${taxonParam}`)
-      .then(async (res) => {
-        if (!res.ok) {
-          const text = await res.text().catch(() => "");
-          let msg: string;
-          try { msg = JSON.parse(text)?.error; } catch { msg = ""; }
-          throw new Error(msg || `Stats API returned ${res.status}`);
-        }
-        return res.json();
-      })
-      .then((data) => {
-        if (data.error) throw new Error(data.error);
-        setStats(data);
-        setTaxonInfo(data.taxon || null);
-      })
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load stats"))
-      .finally(() => setStatsLoading(false));
-
-    // Fetch assessments independently
-    setAssessmentsLoading(true);
-    fetch(`/api/redlist/assessments${taxonParam}`)
-      .then(async (res) => {
-        if (!res.ok) {
-          const text = await res.text().catch(() => "");
-          let msg: string;
-          try { msg = JSON.parse(text)?.error; } catch { msg = ""; }
-          throw new Error(msg || `Assessments API returned ${res.status}`);
-        }
-        return res.json();
-      })
-      .then((data) => {
-        if (data.error) throw new Error(data.error);
-        setAssessments(data);
-      })
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load assessments"))
-      .finally(() => setAssessmentsLoading(false));
-
-    // Fetch species independently
     setSpeciesLoading(true);
-    fetch(`/api/redlist/species${taxonParam}`)
-      .then(async (res) => {
-        if (!res.ok) {
-          const text = await res.text().catch(() => "");
-          let msg: string;
-          try { msg = JSON.parse(text)?.error; } catch { msg = ""; }
-          throw new Error(msg || `Species API returned ${res.status}`);
-        }
-        return res.json();
-      })
-      .then((data: SpeciesResponse) => {
-        if (data.error) throw new Error(data.error);
-        setSpecies(data.species);
+
+    // Fetch all species and NE count in parallel
+    Promise.all([
+      fetch("/api/redlist/species?taxon=all")
+        .then(async (res) => {
+          if (!res.ok) {
+            const text = await res.text().catch(() => "");
+            let msg: string;
+            try { msg = JSON.parse(text)?.error; } catch { msg = ""; }
+            throw new Error(msg || `Species API returned ${res.status}`);
+          }
+          return res.json();
+        }),
+      fetch("/api/redlist/stats?taxon=all")
+        .then(async (res) => {
+          if (!res.ok) return null;
+          return res.json();
+        })
+        .catch(() => null),
+    ])
+      .then(([speciesData, statsData]: [SpeciesResponse, StatsResponse | null]) => {
+        if (speciesData.error) throw new Error(speciesData.error);
+        setSpecies(speciesData.species);
+        // Extract NE count from stats (computed server-side from GBIF CSVs)
+        const ne = statsData?.byCategory?.find((c: CategoryStats) => c.code === "NE");
+        if (ne) setNeCount(ne.count);
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load species"))
       .finally(() => setSpeciesLoading(false));
-  }, [selectedTaxon]);
+  }, []);
 
-  // Notify parent when taxon changes
-  useEffect(() => {
-    onTaxonChange?.(taxonInfo?.name || null);
-  }, [taxonInfo, onTaxonChange]);
-
-  // Track whether NE species have been fetched for the current taxon
-  const [neSpeciesFetched, setNeSpeciesFetched] = useState<string | null>(null);
+  // Track whether NE species have been fetched
+  const [neSpeciesFetched, setNeSpeciesFetched] = useState(false);
   const [neLoading, setNeLoading] = useState(false);
-
-  // Reset filters when taxon changes (but not on initial mount, so URL filters survive refresh)
-  const prevTaxonRef = useRef(selectedTaxon);
-  useEffect(() => {
-    if (prevTaxonRef.current === selectedTaxon) return;
-    prevTaxonRef.current = selectedTaxon;
-    clearAllFilters();
-    setCurrentPage(1);
-    setSpeciesDetails({});
-    setNeSpeciesFetched(null);
-  }, [selectedTaxon]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch NE species when NE category is selected
   useEffect(() => {
-    if (!selectedCategories.has("NE") || !selectedTaxon) return;
-    if (neSpeciesFetched === selectedTaxon) return; // already fetched for this taxon
+    if (!selectedCategories.has("NE")) return;
+    if (neSpeciesFetched) return;
 
     async function fetchNESpecies() {
       setNeLoading(true);
       try {
-        const res = await fetch(`/api/redlist/species?taxon=${selectedTaxon}&category=NE`);
+        const res = await fetch("/api/redlist/species?taxon=all&category=NE");
         if (res.ok) {
           const data = await res.json();
           if (data.species && data.species.length > 0) {
             setSpecies(prev => {
-              // Remove any existing NE species (in case of refetch) and add new ones
               const nonNE = prev.filter(s => s.category !== "NE");
               return [...nonNE, ...data.species];
             });
           }
-          setNeSpeciesFetched(selectedTaxon!);
+          setNeSpeciesFetched(true);
         }
       } catch {
         // Ignore errors fetching NE species
@@ -677,7 +601,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
     }
 
     fetchNESpecies();
-  }, [selectedCategories, selectedTaxon, neSpeciesFetched]);
+  }, [selectedCategories, neSpeciesFetched]);
 
   // Helper to check if species matches year range filter (based on assessment date)
   const matchesYearRangeFilter = (assessmentDate: string | null): boolean => {
@@ -700,8 +624,63 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
     return false;
   };
 
-  // Get unique countries from species data, sorted alphabetically by name
-  const countryCounts = species.reduce((acc, s) => {
+  // Filter species by selected taxa (first level filter before charts)
+  const taxaFilteredSpecies = useMemo(() => {
+    if (selectedTaxa.size === 0) return species;
+    return species.filter(s => s.taxon_id && selectedTaxa.has(s.taxon_id));
+  }, [species, selectedTaxa]);
+
+  // Compute category stats client-side from taxa-filtered species
+  const categoryDataWithPercent = useMemo(() => {
+    const counts: Record<string, number> = {};
+    taxaFilteredSpecies.forEach(s => {
+      if (s.category !== "NE") {
+        counts[s.category] = (counts[s.category] || 0) + 1;
+      }
+    });
+    const total = taxaFilteredSpecies.filter(s => s.category !== "NE").length;
+    const DISPLAY_ORDER = ["EX", "EW", "CR", "EN", "VU", "NT", "LC", "DD"];
+    return DISPLAY_ORDER
+      .filter(code => (counts[code] || 0) > 0)
+      .map(code => ({
+        code,
+        name: code,
+        count: counts[code] || 0,
+        color: CATEGORY_COLORS[code] || "#999",
+        percent: total > 0 ? ((counts[code] / total) * 100).toFixed(1) : "0",
+        label: `${(counts[code] || 0).toLocaleString()} (${total > 0 ? ((counts[code] / total) * 100).toFixed(1) : 0}%)`,
+      }));
+  }, [taxaFilteredSpecies]);
+
+  // Compute years-since-assessment stats client-side from taxa-filtered species
+  const assessmentYearData = useMemo(() => {
+    const currentYr = new Date().getFullYear();
+    const ranges = [
+      { range: "0-1 years", shortRange: "0-1y", count: 0, minYear: 0 },
+      { range: "2-5 years", shortRange: "2-5y", count: 0, minYear: 2 },
+      { range: "6-10 years", shortRange: "6-10y", count: 0, minYear: 6 },
+      { range: "11-20 years", shortRange: "11-20y", count: 0, minYear: 11 },
+      { range: "20+ years", shortRange: ">20y", count: 0, minYear: 21 },
+    ];
+    taxaFilteredSpecies.forEach(s => {
+      if (!s.assessment_date || s.category === "NE") return;
+      const yr = new Date(s.assessment_date).getFullYear();
+      const diff = currentYr - yr;
+      if (diff <= 1) ranges[0].count++;
+      else if (diff <= 5) ranges[1].count++;
+      else if (diff <= 10) ranges[2].count++;
+      else if (diff <= 20) ranges[3].count++;
+      else ranges[4].count++;
+    });
+    const total = ranges.reduce((sum, r) => sum + r.count, 0);
+    return ranges.map(r => ({
+      ...r,
+      label: `${r.count.toLocaleString()} (${total > 0 ? ((r.count / total) * 100).toFixed(1) : 0}%)`,
+    }));
+  }, [taxaFilteredSpecies]);
+
+  // Get unique countries from taxa-filtered species data, sorted alphabetically by name
+  const countryCounts = taxaFilteredSpecies.reduce((acc, s) => {
     s.countries.forEach(code => {
       acc[code] = (acc[code] || 0) + 1;
     });
@@ -761,8 +740,8 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
 
   // Memoized filter and sort for performance with large datasets
   const { filteredSpecies, sortedSpecies } = useMemo(() => {
-    // Filter species based on category, year range, country, and search
-    const filtered = species.filter((s) => {
+    // Filter taxa-filtered species based on category, year range, country, and search
+    const filtered = taxaFilteredSpecies.filter((s) => {
       const matchesCategory = selectedCategories.size === 0 || selectedCategories.has(s.category);
       // NE species have no assessment date, so skip year range filter for them
       const matchesYear = s.category === "NE" || matchesYearRangeFilter(s.assessment_date);
@@ -800,7 +779,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
     });
 
     return { filteredSpecies: filtered, sortedSpecies: sorted };
-  }, [species, selectedCategories, selectedYearRanges, selectedCountries, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedCountries, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection]);
 
   // Pagination calculations
   const totalPages = Math.ceil(sortedSpecies.length / PAGE_SIZE);
@@ -827,7 +806,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedCategories, selectedYearRanges, searchFilter, selectedCountries, showOnlyStarred]);
+  }, [selectedTaxa, selectedCategories, selectedYearRanges, searchFilter, selectedCountries, showOnlyStarred]);
 
   // Fetch details for visible species
   useEffect(() => {
@@ -1013,36 +992,6 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
       }
     });
   };
-  // Render error state for details section
-  const renderDetailsError = () => (
-    <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 px-6 py-4 rounded-lg">
-      <p className="font-medium">Failed to load Red List data</p>
-      <p className="text-sm mt-1">{error}</p>
-    </div>
-  );
-
-  // Calculate values only when data is available
-  const threatenedCount = stats?.byCategory
-    .filter((c) => ["CR", "EN", "VU"].includes(c.code))
-    .reduce((sum, c) => sum + c.count, 0) ?? 0;
-
-  const categoryDataWithPercent = stats?.byCategory
-    .filter((cat) => cat.code !== "NE")
-    .map((cat) => ({
-      ...cat,
-      percent: ((cat.count / stats.sampleSize) * 100).toFixed(1),
-      label: `${cat.count} (${((cat.count / stats.sampleSize) * 100).toFixed(1)}%)`,
-    })) ?? [];
-
-  const neCategory = stats?.byCategory.find((cat) => cat.code === "NE");
-
-  const outdatedCount = assessments?.yearsSinceAssessment
-    .filter((y) => y.minYear > 10)
-    .reduce((sum, y) => sum + y.count, 0) ?? 0;
-  const outdatedPercent = assessments && stats ? ((outdatedCount / assessments.sampleSize) * 100).toFixed(0) : "0";
-
-  const assessedPercent = stats && taxonInfo ? ((stats.sampleSize / taxonInfo.estimatedDescribed) * 100).toFixed(1) : "0";
-
   const currentYear = new Date().getFullYear();
   const showingOnlyNE = selectedCategories.size === 1 && selectedCategories.has("NE");
 
@@ -1050,17 +999,22 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
     <div className="space-y-4">
       {/* Always show Taxa Summary table */}
       <TaxaSummary
-        onSelectTaxon={handleTaxonSelect}
-        selectedTaxon={selectedTaxon}
+        onToggleTaxon={handleToggleTaxon}
+        selectedTaxa={selectedTaxa}
       />
 
-      {/* Show details below when a taxon is selected */}
-      {selectedTaxon && (
-        <div className="space-y-3">
-          {/* Error state */}
-          {error && renderDetailsError()}
+      {/* Error state */}
+      {error && (
+        <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 px-6 py-4 rounded-lg">
+          <p className="font-medium">Failed to load Red List data</p>
+          <p className="text-sm mt-1">{error}</p>
+        </div>
+      )}
 
-          {/* Charts and map - load independently */}
+      {/* Charts, search, and species table - always visible below summary */}
+      <div className="space-y-3">
+
+          {/* Charts and map */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Category distribution - 1 column */}
             <div className="lg:col-span-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
@@ -1078,9 +1032,9 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                 )}
               </div>
               <div className="flex-1 min-h-[225px] flex items-center justify-center">
-                {statsLoading ? (
+                {speciesLoading ? (
                   <Spinner />
-                ) : stats ? (
+                ) : categoryDataWithPercent.length > 0 ? (
                   <FilterBarChart
                     data={categoryDataWithPercent}
                     dataKey="code"
@@ -1109,18 +1063,11 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                 )}
               </div>
               <div className="flex-1 min-h-[150px] flex items-center justify-center">
-                {assessmentsLoading ? (
+                {speciesLoading ? (
                   <Spinner />
-                ) : assessments ? (
+                ) : assessmentYearData.some(y => y.count > 0) ? (
                   <FilterBarChart
-                    data={assessments.yearsSinceAssessment.map(y => {
-                      const totalYears = assessments.yearsSinceAssessment.reduce((sum, item) => sum + item.count, 0);
-                      return {
-                        ...y,
-                        shortRange: y.range.replace(' years', 'y').replace('20+y', '>20y'),
-                        label: `${y.count.toLocaleString()} (${totalYears > 0 ? ((y.count / totalYears) * 100).toFixed(1) : 0}%)`
-                      };
-                    })}
+                    data={assessmentYearData}
                     dataKey="shortRange"
                     selectedItems={selectedYearRanges}
                     onBarClick={handleYearClick}
@@ -1157,7 +1104,6 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
           <div className="flex flex-wrap items-center gap-2 md:gap-4">
             <div className="relative flex-1 min-w-[140px] max-w-md">
               <DebouncedSearchInput
-                key={selectedTaxon}
                 onSearch={handleSearch}
                 initialValue={searchFilter}
                 placeholder="Search species..."
@@ -1264,6 +1210,17 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                 }}
               />
             </label>
+            {Array.from(selectedTaxa).map(taxonId => (
+              <button
+                key={taxonId}
+                onClick={() => handleToggleTaxon(taxonId)}
+                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full flex items-center gap-1 hover:opacity-80"
+                style={{ backgroundColor: (TAXA_BY_ID[taxonId]?.color || "#666") + "20", color: TAXA_BY_ID[taxonId]?.color || "#666" }}
+              >
+                {TAXA_BY_ID[taxonId]?.name || taxonId}
+                <span className="text-xs">×</span>
+              </button>
+            ))}
             {Array.from(selectedCategories).filter(cat => cat !== "NE").map(cat => (
               <button
                 key={cat}
@@ -1295,9 +1252,9 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                 <span className="text-xs">×</span>
               </button>
             ))}
-            {(selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedCountries.size > 0 || showOnlyStarred) && (
+            {(selectedTaxa.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedCountries.size > 0 || showOnlyStarred) && (
               <button
-                onClick={() => { clearAllFilters(); setShowOnlyStarred(false); }}
+                onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setShowOnlyStarred(false); }}
                 className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 underline"
               >
                 Clear all
@@ -1306,7 +1263,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
             <span className="text-xs md:text-sm text-zinc-500">
               {filteredSpecies.length} species
             </span>
-            {neCategory && neCategory.count > 0 && (
+            {neCount > 0 && (
               <button
                 onClick={() => {
                   setSelectedCategories(prev => {
@@ -1327,7 +1284,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                 title="Show Not Evaluated species from GBIF"
               >
                 Not Evaluated
-                <span className="text-[10px] opacity-70">({neCategory.count.toLocaleString()})</span>
+                <span className="text-[10px] opacity-70">({neCount.toLocaleString()})</span>
               </button>
             )}
           </div>
@@ -1477,7 +1434,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
                           />
                         ) : (
                           <div className="w-8 h-8 md:w-10 md:h-10 bg-zinc-100 dark:bg-zinc-800 rounded flex items-center justify-center text-zinc-400 flex-shrink-0">
-                            <TaxaIcon taxonId={s.taxon_id || selectedTaxon || "all"} size={18} />
+                            <TaxaIcon taxonId={s.taxon_id || "all"} size={18} />
                           </div>
                         )}
                         <div className="min-w-0">
@@ -1965,8 +1922,7 @@ export default function RedListView({ onTaxonChange }: RedListViewProps) {
         </>
         )}
       </div>
-        </div>
-      )}
+      </div>
 
       {/* Fixed image preview portal */}
       <img

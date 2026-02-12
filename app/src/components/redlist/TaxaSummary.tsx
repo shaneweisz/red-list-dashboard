@@ -20,8 +20,8 @@ interface TaxonSummary {
 }
 
 interface Props {
-  onSelectTaxon: (taxonId: string | null) => void;
-  selectedTaxon: string | null;
+  onToggleTaxon: (taxonId: string) => void;
+  selectedTaxa: Set<string>;
 }
 
 // Bar color helpers
@@ -34,7 +34,7 @@ const getOutdatedBarColor = (percent: number) =>
 // Sticky cell classes for the pinned taxon column
 const stickyClasses = "sticky left-0 z-10";
 
-export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
+export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -99,9 +99,7 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
   const totalPercentAssessed = (totalAssessed / totalDescribed) * 100;
   const totalPercentOutdated = (totalOutdated / totalAssessed) * 100;
 
-  // Check if "all" is selected or a specific taxon
-  const isAllSelected = selectedTaxon === "all";
-  const hasSpecificTaxon = selectedTaxon && selectedTaxon !== "all";
+  const hasAnySelected = selectedTaxa.size > 0;
 
   // Column order: Taxon (sticky) | Est. Described | Assessed | % Assessed | Outdated | % Outdated
   // On mobile, auto-scrolled so Assessed is the first visible column after Taxon.
@@ -145,9 +143,11 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
       : isSelected
         ? "bg-zinc-100 dark:bg-zinc-800"
         : "";
-    const hoverClass = available
-      ? "hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer"
-      : "opacity-50 cursor-not-allowed";
+    const hoverClass = isAllRow
+      ? ""
+      : available
+        ? "hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer"
+        : "opacity-50 cursor-not-allowed";
 
     const stickyBg = isAllRow
       ? "bg-zinc-50 dark:bg-zinc-800/60"
@@ -159,8 +159,8 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
       <tr
         key={id}
         onClick={() => {
-          if (!available) return;
-          onSelectTaxon(isSelected ? null : id);
+          if (isAllRow || !available) return;
+          onToggleTaxon(id);
         }}
         className={`transition-colors ${rowBg} ${hoverClass}`}
       >
@@ -245,39 +245,12 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
     </thead>
   );
 
-  // If a specific taxon is selected (not "all"), show just that taxon
-  if (hasSpecificTaxon) {
-    const taxon = taxa.find(t => t.id === selectedTaxon);
-    if (!taxon) return null;
-
-    return (
-      <div ref={scrollRef} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto">
-        <table className="w-full">
-          {renderHead()}
-          <tbody>
-            {renderRow(
-              taxon.id,
-              taxon.name,
-              taxon.color,
-              taxon.estimatedDescribed,
-              taxon.totalAssessed,
-              taxon.percentAssessed,
-              taxon.outdated,
-              taxon.percentOutdated,
-              true
-            )}
-          </tbody>
-        </table>
-      </div>
-    );
-  }
-
   return (
     <div ref={scrollRef} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto">
       <table className="w-full">
         {renderHead()}
         <tbody>
-          {/* All Species row */}
+          {/* All Species totals row (non-clickable) */}
           {renderRow(
             "all",
             "All Species",
@@ -287,22 +260,20 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
             totalPercentAssessed,
             totalOutdated,
             totalPercentOutdated,
-            isAllSelected,
+            false,
             true,
             true
           )}
 
           {/* Separator */}
-          {!isAllSelected && (
-            <tr>
-              <td colSpan={6} className="p-0">
-                <div className="border-b-2 border-zinc-200 dark:border-zinc-700" />
-              </td>
-            </tr>
-          )}
+          <tr>
+            <td colSpan={6} className="p-0">
+              <div className="border-b-2 border-zinc-200 dark:border-zinc-700" />
+            </td>
+          </tr>
 
-          {/* Individual taxa rows */}
-          {!isAllSelected && taxa.map((taxon) =>
+          {/* Individual taxa rows - click to toggle filter */}
+          {taxa.map((taxon) =>
             renderRow(
               taxon.id,
               taxon.name,
@@ -312,7 +283,7 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
               taxon.percentAssessed,
               taxon.outdated,
               taxon.percentOutdated,
-              false,
+              selectedTaxa.has(taxon.id),
               taxon.available
             )
           )}
