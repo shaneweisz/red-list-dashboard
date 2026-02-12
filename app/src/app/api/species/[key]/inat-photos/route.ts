@@ -6,6 +6,8 @@ interface InatObservation {
   imageUrl: string | null;
   location: string | null;
   observer: string | null;
+  mediaType: "StillImage" | "Sound" | "MovingImage" | null;
+  audioUrl: string | null;
 }
 
 const INAT_DATASET_KEY = "50c9509d-22c7-4a22-a47d-8c48425ef4a7";
@@ -44,20 +46,27 @@ export async function GET(
 
     const observations: InatObservation[] = (data.results || [])
       .filter(
-        (obs: { references?: string; media?: { identifier?: string }[] }) =>
-          obs.references && obs.media?.[0]?.identifier
+        (obs: { references?: string; media?: { type?: string; identifier?: string }[] }) =>
+          obs.references && obs.media && obs.media.length > 0 && obs.media[0]?.identifier
       )
       .map(
         (obs: {
           references: string;
           eventDate?: string;
-          media?: { identifier?: string }[];
+          media?: { type?: string; identifier?: string; format?: string }[];
           verbatimLocality?: string;
           stateProvince?: string;
           country?: string;
           recordedBy?: string;
         }) => {
-          const imageUrl = obs.media?.[0]?.identifier || null;
+          const media = obs.media || [];
+          const imageMedia = media.find((m) => m.type === "StillImage");
+          const audioMedia = media.find((m) => m.type === "Sound");
+          const primaryType = (media[0]?.type as InatObservation["mediaType"]) || null;
+
+          const imageUrl = imageMedia?.identifier || null;
+          const audioUrl = audioMedia?.identifier || null;
+
           const locationParts = [
             obs.verbatimLocality,
             obs.stateProvince,
@@ -69,6 +78,8 @@ export async function GET(
             url: obs.references,
             date: obs.eventDate ? obs.eventDate.split("T")[0] : null,
             imageUrl,
+            audioUrl,
+            mediaType: primaryType,
             location,
             observer: obs.recordedBy || null,
           };

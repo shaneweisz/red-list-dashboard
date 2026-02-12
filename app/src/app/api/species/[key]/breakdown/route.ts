@@ -6,6 +6,8 @@ interface InatObservation {
   imageUrl: string | null;
   location: string | null;
   observer: string | null;
+  mediaType: "StillImage" | "Sound" | "MovingImage" | null;
+  audioUrl: string | null;
 }
 
 interface RecordTypeBreakdown {
@@ -129,25 +131,32 @@ export async function GET(
       const inatRecentData = await inatRecentResp.json();
       if (inatRecentData.results && inatRecentData.results.length > 0) {
         recentInatObservations = inatRecentData.results
-          // Only include observations that have both a reference URL and an image
-          .filter((obs: { references?: string; media?: { identifier?: string }[] }) =>
-            obs.references && obs.media?.[0]?.identifier)
+          // Include observations that have a reference URL and any media
+          .filter((obs: { references?: string; media?: { type?: string; identifier?: string }[] }) =>
+            obs.references && obs.media && obs.media.length > 0 && obs.media[0]?.identifier)
           .map((obs: {
             references: string;
             eventDate?: string;
-            media?: { identifier?: string }[];
+            media?: { type?: string; identifier?: string; format?: string }[];
             verbatimLocality?: string;
             stateProvince?: string;
             country?: string;
             recordedBy?: string;
           }) => {
-            const imageUrl = obs.media?.[0]?.identifier || null;
+            const media = obs.media || [];
+            const imageMedia = media.find((m) => m.type === "StillImage");
+            const audioMedia = media.find((m) => m.type === "Sound");
+            const primaryType = (media[0]?.type as InatObservation["mediaType"]) || null;
+            const imageUrl = imageMedia?.identifier || null;
+            const audioUrl = audioMedia?.identifier || null;
             const locationParts = [obs.verbatimLocality, obs.stateProvince, obs.country].filter(Boolean);
             const location = locationParts.length > 0 ? locationParts.join(', ') : null;
             return {
               url: obs.references,
               date: obs.eventDate ? obs.eventDate.split('T')[0] : null,
               imageUrl,
+              audioUrl,
+              mediaType: primaryType,
               location,
               observer: obs.recordedBy || null,
             };
