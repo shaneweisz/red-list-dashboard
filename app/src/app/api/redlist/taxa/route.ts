@@ -13,6 +13,7 @@ interface TaxonSummary {
   outdated: number;
   percentOutdated: number;
   lastUpdated: string | null;
+  byCategory: Record<string, number>;
 }
 
 interface SummaryFile {
