@@ -47,13 +47,12 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to show Assessed column on mobile (skip past Category Breakdown + Est. Described)
+  // Auto-scroll to show Assessed column on mobile (skip past Est. Described)
   const autoScroll = useCallback((el: HTMLDivElement) => {
     if (window.innerWidth < 768) {
-      const breakdownTh = el.querySelector('thead th:nth-child(2)') as HTMLElement;
-      const describedTh = el.querySelector('thead th:nth-child(3)') as HTMLElement;
-      if (breakdownTh && describedTh) {
-        el.scrollLeft = breakdownTh.offsetWidth + describedTh.offsetWidth;
+      const firstDataTh = el.querySelector('thead th:nth-child(2)') as HTMLElement;
+      if (firstDataTh) {
+        el.scrollLeft = firstDataTh.offsetWidth;
       }
     }
   }, []);
@@ -116,7 +115,7 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
   const isAllSelected = selectedTaxon === "all";
   const hasSpecificTaxon = selectedTaxon && selectedTaxon !== "all";
 
-  // Column order: Taxon (sticky) | Category Breakdown | Est. Described | Assessed | % Assessed | Outdated | % Outdated
+  // Column order: Taxon (sticky) | Est. Described | Assessed | % Assessed | Outdated | % Outdated | Category Breakdown
 
   // Render a percentage bar
   const renderBar = (percent: number, barColor: string, isAll: boolean) => {
@@ -153,7 +152,7 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
       }));
 
     return (
-      <div className="min-w-[90px] md:min-w-[120px] relative">
+      <div className="min-w-[120px] md:min-w-[160px] relative">
         {/* Visible bar (clipped for rounded corners) */}
         <div className="flex h-3 rounded-full overflow-hidden bg-zinc-200 dark:bg-zinc-700">
           {segments.map((seg) => (
@@ -248,13 +247,6 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
             <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{name}</span>
           </div>
         </td>
-        <td className="px-3 md:px-4 py-2.5 md:py-3 whitespace-nowrap">
-          {available ? (
-            renderBreakdownBar(byCategory)
-          ) : (
-            <span className="text-sm md:text-base text-zinc-400">—</span>
-          )}
-        </td>
         <td className="px-3 md:px-4 py-2.5 md:py-3 text-right whitespace-nowrap">
           <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
             {estimatedDescribed.toLocaleString()}
@@ -284,6 +276,13 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
             <span className="text-sm md:text-base text-zinc-400">—</span>
           )}
         </td>
+        <td className="px-3 md:px-4 py-2.5 md:py-3 whitespace-nowrap">
+          {available ? (
+            renderBreakdownBar(byCategory)
+          ) : (
+            <span className="text-sm md:text-base text-zinc-400">—</span>
+          )}
+        </td>
       </tr>
     );
   };
@@ -294,9 +293,6 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
       <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
         <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap`}>
           Taxon
-        </th>
-        <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
-          Category Breakdown
         </th>
         <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
           <span className="inline-flex items-center gap-1">
@@ -328,6 +324,9 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
         </th>
         <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
           % Outdated
+        </th>
+        <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
+          Category Breakdown
         </th>
       </tr>
     </thead>
