@@ -251,64 +251,23 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
         {renderHead()}
         <tbody>
           {hasAnySelected ? (
-            /* Collapsed: show totals row for selected taxa + selected rows */
-            <>
-              {/* Totals row for selected taxa */}
-              {renderRow(
-                "all",
-                selectedTaxa.size === 1
-                  ? taxa.find(t => selectedTaxa.has(t.id))?.name || "Selected"
-                  : `${selectedTaxa.size} Taxa`,
-                selectedTaxa.size === 1
-                  ? taxa.find(t => selectedTaxa.has(t.id))?.color || "#22c55e"
-                  : "#22c55e",
-                taxa.filter(t => selectedTaxa.has(t.id)).reduce((s, t) => s + t.estimatedDescribed, 0),
-                taxa.filter(t => selectedTaxa.has(t.id)).reduce((s, t) => s + t.totalAssessed, 0),
-                (() => {
-                  const sel = taxa.filter(t => selectedTaxa.has(t.id));
-                  const desc = sel.reduce((s, t) => s + t.estimatedDescribed, 0);
-                  const assessed = sel.reduce((s, t) => s + t.totalAssessed, 0);
-                  return desc > 0 ? (assessed / desc) * 100 : 0;
-                })(),
-                taxa.filter(t => selectedTaxa.has(t.id)).reduce((s, t) => s + t.outdated, 0),
-                (() => {
-                  const sel = taxa.filter(t => selectedTaxa.has(t.id));
-                  const assessed = sel.reduce((s, t) => s + t.totalAssessed, 0);
-                  const outdated = sel.reduce((s, t) => s + t.outdated, 0);
-                  return assessed > 0 ? (outdated / assessed) * 100 : 0;
-                })(),
-                false,
-                true,
-                true
-              )}
-
-              {/* Separator (only when multiple selected) */}
-              {selectedTaxa.size > 1 && (
-                <tr>
-                  <td colSpan={6} className="p-0">
-                    <div className="border-b-2 border-zinc-200 dark:border-zinc-700" />
-                  </td>
-                </tr>
-              )}
-
-              {/* Selected taxa rows (only when multiple selected) */}
-              {selectedTaxa.size > 1 && taxa
-                .filter((taxon) => selectedTaxa.has(taxon.id))
-                .map((taxon) =>
-                  renderRow(
-                    taxon.id,
-                    taxon.name,
-                    taxon.color,
-                    taxon.estimatedDescribed,
-                    taxon.totalAssessed,
-                    taxon.percentAssessed,
-                    taxon.outdated,
-                    taxon.percentOutdated,
-                    true,
-                    taxon.available
-                  )
-                )}
-            </>
+            /* Collapsed: only show selected taxa rows */
+            taxa
+              .filter((taxon) => selectedTaxa.has(taxon.id))
+              .map((taxon) =>
+                renderRow(
+                  taxon.id,
+                  taxon.name,
+                  taxon.color,
+                  taxon.estimatedDescribed,
+                  taxon.totalAssessed,
+                  taxon.percentAssessed,
+                  taxon.outdated,
+                  taxon.percentOutdated,
+                  true,
+                  taxon.available
+                )
+              )
           ) : (
             <>
               {/* All Species totals row (non-clickable) */}
