@@ -405,16 +405,26 @@ export default function RedListView() {
     clearAllFilters,
   } = useFilterParams();
 
-  // Taxon toggle handler (used by TaxaSummary for multi-select filtering)
-  const handleToggleTaxon = useCallback((taxonId: string) => {
+  // Taxon toggle handler (used by TaxaSummary)
+  // Regular click: select only that taxon (or deselect if already sole selection)
+  // Cmd/Ctrl+Click: multi-select toggle
+  const handleToggleTaxon = useCallback((taxonId: string, event: React.MouseEvent) => {
+    const isMulti = event.metaKey || event.ctrlKey;
     setSelectedTaxa(prev => {
-      const next = new Set(prev);
-      if (next.has(taxonId)) {
-        next.delete(taxonId);
-      } else {
-        next.add(taxonId);
+      if (isMulti) {
+        const next = new Set(prev);
+        if (next.has(taxonId)) {
+          next.delete(taxonId);
+        } else {
+          next.add(taxonId);
+        }
+        return next;
       }
-      return next;
+      // Single click: select only this taxon, or deselect if it's the only one
+      if (prev.size === 1 && prev.has(taxonId)) {
+        return new Set<string>();
+      }
+      return new Set([taxonId]);
     });
   }, [setSelectedTaxa]);
 
@@ -1221,7 +1231,7 @@ export default function RedListView() {
             {Array.from(selectedTaxa).map(taxonId => (
               <button
                 key={taxonId}
-                onClick={() => handleToggleTaxon(taxonId)}
+                onClick={() => setSelectedTaxa(prev => { const next = new Set(prev); next.delete(taxonId); return next; })}
                 className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full flex items-center gap-1 hover:opacity-80"
                 style={{ backgroundColor: (TAXA_BY_ID[taxonId]?.color || "#666") + "20", color: TAXA_BY_ID[taxonId]?.color || "#666" }}
               >

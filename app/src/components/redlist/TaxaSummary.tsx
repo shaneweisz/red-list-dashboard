@@ -20,7 +20,7 @@ interface TaxonSummary {
 }
 
 interface Props {
-  onToggleTaxon: (taxonId: string) => void;
+  onToggleTaxon: (taxonId: string, event: React.MouseEvent) => void;
   selectedTaxa: Set<string>;
 }
 
@@ -158,9 +158,9 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
     return (
       <tr
         key={id}
-        onClick={() => {
+        onClick={(e) => {
           if (isAllRow || !available) return;
-          onToggleTaxon(id);
+          onToggleTaxon(id, e);
         }}
         className={`transition-colors ${rowBg} ${hoverClass}`}
       >
