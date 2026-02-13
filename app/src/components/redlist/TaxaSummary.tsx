@@ -314,19 +314,19 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
           </span>
         </th>
         <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
-          Assessed
+          # Assessed
         </th>
         <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
           % Assessed
         </th>
         <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
-          Outdated (10+y)
+          # Outdated (10+Y)
         </th>
         <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
           % Outdated
         </th>
         <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
-          Category Breakdown
+          Risk Category Breakdown
         </th>
       </tr>
     </thead>
