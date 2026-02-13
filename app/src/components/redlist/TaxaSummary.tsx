@@ -153,7 +153,7 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
       }));
 
     return (
-      <div className="min-w-[180px] md:min-w-[240px] relative">
+      <div className="min-w-[90px] md:min-w-[120px] relative">
         {/* Visible bar (clipped for rounded corners) */}
         <div className="flex h-3 rounded-full overflow-hidden bg-zinc-200 dark:bg-zinc-700">
           {segments.map((seg) => (
