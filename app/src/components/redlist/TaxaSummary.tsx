@@ -111,7 +111,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
     }
   }
 
-  const hasAnySelected = selectedTaxa.size > 0;
 
   // Column order: Taxon (sticky) | Est. Described | Assessed | % Assessed | Outdated | % Outdated | Category Breakdown
 
@@ -360,41 +359,20 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
             </td>
           </tr>
 
-          {hasAnySelected ? (
-            /* Collapsed: only show selected taxa rows */
-            taxa
-              .filter((taxon) => selectedTaxa.has(taxon.id))
-              .map((taxon) =>
-                renderRow(
-                  taxon.id,
-                  taxon.name,
-                  taxon.color,
-                  taxon.estimatedDescribed,
-                  taxon.totalAssessed,
-                  taxon.percentAssessed,
-                  taxon.outdated,
-                  taxon.percentOutdated,
-                  taxon.byCategory || {},
-                  true,
-                  taxon.available
-                )
-              )
-          ) : (
-            /* Expanded: all individual taxa rows */
-            taxa.map((taxon) =>
-              renderRow(
-                taxon.id,
-                taxon.name,
-                taxon.color,
-                taxon.estimatedDescribed,
-                taxon.totalAssessed,
-                taxon.percentAssessed,
-                taxon.outdated,
-                taxon.percentOutdated,
-                taxon.byCategory || {},
-                false,
-                taxon.available
-              )
+          {/* Individual taxa rows (always visible, selected ones highlighted) */}
+          {taxa.map((taxon) =>
+            renderRow(
+              taxon.id,
+              taxon.name,
+              taxon.color,
+              taxon.estimatedDescribed,
+              taxon.totalAssessed,
+              taxon.percentAssessed,
+              taxon.outdated,
+              taxon.percentOutdated,
+              taxon.byCategory || {},
+              selectedTaxa.has(taxon.id),
+              taxon.available
             )
           )}
         </tbody>
