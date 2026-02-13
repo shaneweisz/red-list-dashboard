@@ -296,7 +296,7 @@ export default function TaxaSummary({ onSelectTaxon, selectedTaxon }: Props) {
         </th>
         <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
           <span className="inline-flex items-center gap-1">
-            Est. Described
+            Est. # Described
             <span className="relative group">
               <a
                 href={IUCN_SOURCE_URL}
