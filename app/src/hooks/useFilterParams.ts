@@ -8,7 +8,9 @@ function parseParams(search: string) {
   const p = new URLSearchParams(search);
   const sortParam = p.get("sort");
   return {
-    taxa: p.get("taxa") || null,
+    taxa: p.get("taxa")
+      ? new Set(p.get("taxa")!.split(",").filter(Boolean))
+      : new Set<string>(),
     categories: p.get("categories")
       ? new Set(p.get("categories")!.split(",").filter(Boolean))
       : new Set<string>(),
@@ -29,7 +31,7 @@ function parseParams(search: string) {
 }
 
 function buildQs(state: {
-  taxa: string | null;
+  taxa: Set<string>;
   categories: Set<string>;
   yearRanges: Set<string>;
   countries: Set<string>;
@@ -38,7 +40,7 @@ function buildQs(state: {
   sortDirection: "asc" | "desc";
 }): string {
   const p = new URLSearchParams();
-  if (state.taxa) p.set("taxa", state.taxa);
+  if (state.taxa.size > 0) p.set("taxa", [...state.taxa].join(","));
   if (state.categories.size > 0) p.set("categories", [...state.categories].join(","));
   if (state.yearRanges.size > 0) p.set("years", [...state.yearRanges].join(","));
   if (state.countries.size > 0) p.set("countries", [...state.countries].join(","));
@@ -97,10 +99,11 @@ export function useFilterParams() {
 
   // --- Setters: update local state instantly, sync URL in background ---
 
-  const setSelectedTaxon = useCallback(
-    (value: string | null) => {
+  const setSelectedTaxa = useCallback(
+    (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
       setState(prev => {
-        const next = { ...prev, taxa: value };
+        const nextTaxa = typeof updater === "function" ? updater(prev.taxa) : updater;
+        const next = { ...prev, taxa: nextTaxa };
         syncUrl(next, true); // push so back button works
         return next;
       });
@@ -182,8 +185,25 @@ export function useFilterParams() {
     });
   }, [syncUrl]);
 
+  const clearAllFiltersAndTaxa = useCallback(() => {
+    setState(prev => {
+      const next = {
+        ...prev,
+        taxa: new Set<string>(),
+        categories: new Set<string>(),
+        yearRanges: new Set<string>(),
+        countries: new Set<string>(),
+        search: "",
+        sortField: "year" as const,
+        sortDirection: "desc" as const,
+      };
+      syncUrl(next, true);
+      return next;
+    });
+  }, [syncUrl]);
+
   return {
-    selectedTaxon: state.taxa,
+    selectedTaxa: state.taxa,
     selectedCategories: state.categories,
     selectedYearRanges: state.yearRanges,
     selectedCountries: state.countries,
@@ -191,12 +211,13 @@ export function useFilterParams() {
     sortField: state.sortField,
     sortDirection: state.sortDirection,
 
-    setSelectedTaxon,
+    setSelectedTaxa,
     setSelectedCategories,
     setSelectedYearRanges,
     setSelectedCountries,
     setSearchFilter,
     setSort,
     clearAllFilters,
+    clearAllFiltersAndTaxa,
   };
 }
