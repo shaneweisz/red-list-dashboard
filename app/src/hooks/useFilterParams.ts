@@ -104,7 +104,7 @@ export function useFilterParams() {
       setState(prev => {
         const nextTaxa = typeof updater === "function" ? updater(prev.taxa) : updater;
         const next = { ...prev, taxa: nextTaxa };
-        syncUrl(next, true); // push so back button works
+        queueMicrotask(() => syncUrl(next, true)); // push so back button works
         return next;
       });
     },
@@ -116,7 +116,7 @@ export function useFilterParams() {
       setState(prev => {
         const nextCats = typeof updater === "function" ? updater(prev.categories) : updater;
         const next = { ...prev, categories: nextCats };
-        syncUrl(next, false);
+        queueMicrotask(() => syncUrl(next, false));
         return next;
       });
     },
@@ -128,7 +128,7 @@ export function useFilterParams() {
       setState(prev => {
         const nextYears = typeof updater === "function" ? updater(prev.yearRanges) : updater;
         const next = { ...prev, yearRanges: nextYears };
-        syncUrl(next, false);
+        queueMicrotask(() => syncUrl(next, false));
         return next;
       });
     },
@@ -140,7 +140,7 @@ export function useFilterParams() {
       setState(prev => {
         const nextCountries = typeof updater === "function" ? updater(prev.countries) : updater;
         const next = { ...prev, countries: nextCountries };
-        syncUrl(next, false);
+        queueMicrotask(() => syncUrl(next, false));
         return next;
       });
     },
@@ -151,7 +151,7 @@ export function useFilterParams() {
     (value: string) => {
       setState(prev => {
         const next = { ...prev, search: value };
-        syncUrl(next, false);
+        queueMicrotask(() => syncUrl(next, false));
         return next;
       });
     },
@@ -162,7 +162,7 @@ export function useFilterParams() {
     (field: "year" | "category" | null, direction: "asc" | "desc") => {
       setState(prev => {
         const next = { ...prev, sortField: field, sortDirection: direction };
-        syncUrl(next, false);
+        queueMicrotask(() => syncUrl(next, false));
         return next;
       });
     },
@@ -180,7 +180,7 @@ export function useFilterParams() {
         sortField: "year" as const,
         sortDirection: "desc" as const,
       };
-      syncUrl(next, false);
+      queueMicrotask(() => syncUrl(next, false));
       return next;
     });
   }, [syncUrl]);
@@ -197,7 +197,7 @@ export function useFilterParams() {
         sortField: "year" as const,
         sortDirection: "desc" as const,
       };
-      syncUrl(next, true);
+      queueMicrotask(() => syncUrl(next, true));
       return next;
     });
   }, [syncUrl]);
