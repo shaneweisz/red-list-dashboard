@@ -250,6 +250,28 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
       <table className="w-full">
         {renderHead()}
         <tbody>
+          {/* All Species totals row (always visible) */}
+          {renderRow(
+            "all",
+            "All Species",
+            "#22c55e",
+            totalDescribed,
+            totalAssessed,
+            totalPercentAssessed,
+            totalOutdated,
+            totalPercentOutdated,
+            false,
+            true,
+            true
+          )}
+
+          {/* Separator */}
+          <tr>
+            <td colSpan={6} className="p-0">
+              <div className="border-b-2 border-zinc-200 dark:border-zinc-700" />
+            </td>
+          </tr>
+
           {hasAnySelected ? (
             /* Collapsed: only show selected taxa rows */
             taxa
@@ -269,45 +291,21 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
                 )
               )
           ) : (
-            <>
-              {/* All Species totals row (non-clickable) */}
-              {renderRow(
-                "all",
-                "All Species",
-                "#22c55e",
-                totalDescribed,
-                totalAssessed,
-                totalPercentAssessed,
-                totalOutdated,
-                totalPercentOutdated,
+            /* Expanded: all individual taxa rows */
+            taxa.map((taxon) =>
+              renderRow(
+                taxon.id,
+                taxon.name,
+                taxon.color,
+                taxon.estimatedDescribed,
+                taxon.totalAssessed,
+                taxon.percentAssessed,
+                taxon.outdated,
+                taxon.percentOutdated,
                 false,
-                true,
-                true
-              )}
-
-              {/* Separator */}
-              <tr>
-                <td colSpan={6} className="p-0">
-                  <div className="border-b-2 border-zinc-200 dark:border-zinc-700" />
-                </td>
-              </tr>
-
-              {/* Individual taxa rows - click to toggle filter */}
-              {taxa.map((taxon) =>
-                renderRow(
-                  taxon.id,
-                  taxon.name,
-                  taxon.color,
-                  taxon.estimatedDescribed,
-                  taxon.totalAssessed,
-                  taxon.percentAssessed,
-                  taxon.outdated,
-                  taxon.percentOutdated,
-                  false,
-                  taxon.available
-                )
-              )}
-            </>
+                taxon.available
+              )
+            )
           )}
         </tbody>
       </table>
