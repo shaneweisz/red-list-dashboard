@@ -100,12 +100,78 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
   }, []);
 
   if (loading) {
+    // Skeleton rows matching actual table structure
+    const skeletonRows = Array.from({ length: 9 }, (_, i) => (
+      <tr key={i} className={i === 0 ? "bg-zinc-50/80 dark:bg-zinc-800/60" : ""}>
+        <td className={`${stickyClasses} bg-white dark:bg-zinc-900 px-3 md:px-4 py-2.5 md:py-3`}>
+          <div className="flex items-center gap-2">
+            <div className="w-[22px] h-[22px] rounded-full bg-zinc-200 dark:bg-zinc-700" />
+            <div className="h-4 w-20 bg-zinc-200 dark:bg-zinc-700 rounded" />
+          </div>
+        </td>
+        <td className="px-3 md:px-4 py-2.5 md:py-3 text-right">
+          <div className="h-4 w-16 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
+        </td>
+        <td className="px-3 md:px-4 py-2.5 md:py-3 text-right">
+          <div className="h-4 w-14 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
+        </td>
+        <td className="px-3 md:px-4 py-2.5 md:py-3">
+          <div className="flex items-center gap-2 min-w-[120px] md:min-w-[160px]">
+            <div className="flex-1 h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
+            <div className="h-4 w-12 bg-zinc-200 dark:bg-zinc-700 rounded" />
+          </div>
+        </td>
+        <td className="px-3 md:px-4 py-2.5 md:py-3 text-right">
+          <div className="h-4 w-12 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
+        </td>
+        <td className="px-3 md:px-4 py-2.5 md:py-3">
+          <div className="flex items-center gap-2 min-w-[120px] md:min-w-[160px]">
+            <div className="flex-1 h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
+            <div className="h-4 w-12 bg-zinc-200 dark:bg-zinc-700 rounded" />
+          </div>
+        </td>
+        <td className="px-3 md:px-4 py-2.5 md:py-3">
+          <div className="h-3 w-32 md:w-40 bg-zinc-200 dark:bg-zinc-700 rounded-full" />
+        </td>
+      </tr>
+    ));
+
     return (
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6">
-        <div className="animate-pulse space-y-3">
-          <div className="h-4 bg-zinc-200 dark:bg-zinc-700 rounded w-1/4"></div>
-          <div className="h-32 bg-zinc-200 dark:bg-zinc-700 rounded"></div>
+      <div className="relative bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto">
+        {/* Spinner overlay */}
+        <div className="absolute inset-0 flex items-center justify-center bg-white/60 dark:bg-zinc-900/60 z-20">
+          <svg
+            className="animate-spin h-8 w-8 text-zinc-400"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+          </svg>
         </div>
+        <table className="w-full">
+          <thead>
+            <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
+              <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap`}>Taxon</th>
+              <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">Est. # Described</th>
+              <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap"># Assessed</th>
+              <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">% Assessed</th>
+              <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap"># Outdated (10+Y)</th>
+              <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">% Outdated</th>
+              <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">Risk Category Breakdown</th>
+            </tr>
+          </thead>
+          <tbody>
+            {skeletonRows[0]}
+            <tr>
+              <td colSpan={7} className="p-0">
+                <div className="border-b-2 border-zinc-200 dark:border-zinc-700" />
+              </td>
+            </tr>
+            {skeletonRows.slice(1)}
+          </tbody>
+        </table>
       </div>
     );
   }
