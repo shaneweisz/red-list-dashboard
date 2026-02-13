@@ -448,7 +448,7 @@ export default function RedListView() {
 
   // Pinned species as ordered array (persisted to localStorage)
   const [pinnedSpecies, setPinnedSpecies] = useState<number[]>([]);
-  const pinnedSet = new Set(pinnedSpecies); // For O(1) lookup
+  const pinnedSet = useMemo(() => new Set(pinnedSpecies), [pinnedSpecies]); // For O(1) lookup
 
   // Drag state for reordering pinned species
   const [draggedSpecies, setDraggedSpecies] = useState<number | null>(null);
@@ -680,28 +680,31 @@ export default function RedListView() {
   }, [taxaFilteredSpecies]);
 
   // Get unique countries from taxa-filtered species data, sorted alphabetically by name
-  const countryCounts = taxaFilteredSpecies.reduce((acc, s) => {
-    s.countries.forEach(code => {
-      acc[code] = (acc[code] || 0) + 1;
+  const { countryCounts, uniqueCountries, countryStatsForMap } = useMemo(() => {
+    const counts: Record<string, number> = {};
+    taxaFilteredSpecies.forEach(s => {
+      s.countries.forEach(code => {
+        counts[code] = (counts[code] || 0) + 1;
+      });
     });
-    return acc;
-  }, {} as Record<string, number>);
 
-  const uniqueCountries = Object.entries(countryCounts)
-    .sort((a, b) => {
-      const nameA = ALPHA2_TO_NAME[a[0]] || a[0];
-      const nameB = ALPHA2_TO_NAME[b[0]] || b[0];
-      return nameA.localeCompare(nameB);
-    })
-    .map(([code]) => code);
+    const sorted = Object.entries(counts)
+      .sort((a, b) => {
+        const nameA = ALPHA2_TO_NAME[a[0]] || a[0];
+        const nameB = ALPHA2_TO_NAME[b[0]] || b[0];
+        return nameA.localeCompare(nameB);
+      })
+      .map(([code]) => code);
 
-  // Convert to WorldMap stats format
-  const countryStatsForMap = Object.fromEntries(
-    Object.entries(countryCounts).map(([code, count]) => [
-      code,
-      { occurrences: count, species: count }
-    ])
-  );
+    const statsForMap = Object.fromEntries(
+      Object.entries(counts).map(([code, count]) => [
+        code,
+        { occurrences: count, species: count }
+      ])
+    );
+
+    return { countryCounts: counts, uniqueCountries: sorted, countryStatsForMap: statsForMap };
+  }, [taxaFilteredSpecies]);
 
   // Helper to get country display name
   const getCountryName = (code: string) => ALPHA2_TO_NAME[code] || code;
@@ -773,6 +776,11 @@ export default function RedListView() {
         comparison = dateA - dateB;
       } else if (sortField === "category") {
         comparison = (CATEGORY_ORDER[a.category] ?? 99) - (CATEGORY_ORDER[b.category] ?? 99);
+      }
+
+      // Stable tiebreaker by ID to prevent sort instability between renders
+      if (comparison === 0) {
+        comparison = a.sis_taxon_id - b.sis_taxon_id;
       }
 
       return sortDirection === "asc" ? comparison : -comparison;
