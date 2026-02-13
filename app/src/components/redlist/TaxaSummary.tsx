@@ -250,42 +250,64 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
       <table className="w-full">
         {renderHead()}
         <tbody>
-          {/* All Species totals row (non-clickable) */}
-          {renderRow(
-            "all",
-            "All Species",
-            "#22c55e",
-            totalDescribed,
-            totalAssessed,
-            totalPercentAssessed,
-            totalOutdated,
-            totalPercentOutdated,
-            false,
-            true,
-            true
-          )}
+          {hasAnySelected ? (
+            /* Collapsed: only show selected taxa rows */
+            taxa
+              .filter((taxon) => selectedTaxa.has(taxon.id))
+              .map((taxon) =>
+                renderRow(
+                  taxon.id,
+                  taxon.name,
+                  taxon.color,
+                  taxon.estimatedDescribed,
+                  taxon.totalAssessed,
+                  taxon.percentAssessed,
+                  taxon.outdated,
+                  taxon.percentOutdated,
+                  true,
+                  taxon.available
+                )
+              )
+          ) : (
+            <>
+              {/* All Species totals row (non-clickable) */}
+              {renderRow(
+                "all",
+                "All Species",
+                "#22c55e",
+                totalDescribed,
+                totalAssessed,
+                totalPercentAssessed,
+                totalOutdated,
+                totalPercentOutdated,
+                false,
+                true,
+                true
+              )}
 
-          {/* Separator */}
-          <tr>
-            <td colSpan={6} className="p-0">
-              <div className="border-b-2 border-zinc-200 dark:border-zinc-700" />
-            </td>
-          </tr>
+              {/* Separator */}
+              <tr>
+                <td colSpan={6} className="p-0">
+                  <div className="border-b-2 border-zinc-200 dark:border-zinc-700" />
+                </td>
+              </tr>
 
-          {/* Individual taxa rows - click to toggle filter */}
-          {taxa.map((taxon) =>
-            renderRow(
-              taxon.id,
-              taxon.name,
-              taxon.color,
-              taxon.estimatedDescribed,
-              taxon.totalAssessed,
-              taxon.percentAssessed,
-              taxon.outdated,
-              taxon.percentOutdated,
-              selectedTaxa.has(taxon.id),
-              taxon.available
-            )
+              {/* Individual taxa rows - click to toggle filter */}
+              {taxa.map((taxon) =>
+                renderRow(
+                  taxon.id,
+                  taxon.name,
+                  taxon.color,
+                  taxon.estimatedDescribed,
+                  taxon.totalAssessed,
+                  taxon.percentAssessed,
+                  taxon.outdated,
+                  taxon.percentOutdated,
+                  false,
+                  taxon.available
+                )
+              )}
+            </>
           )}
         </tbody>
       </table>
