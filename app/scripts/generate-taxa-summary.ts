@@ -60,8 +60,16 @@ interface DataFile {
   metadata: {
     totalSpecies: number;
     fetchedAt: string;
+    byCategory?: Record<string, number>;
   };
 }
+
+// Map legacy IUCN categories to modern equivalents
+const LEGACY_CATEGORY_MAP: Record<string, string> = {
+  "LR/nt": "NT",
+  "LR/lc": "LC",
+  "LR/cd": "NT",
+};
 
 interface TaxonSummary {
   id: string;
@@ -74,6 +82,7 @@ interface TaxonSummary {
   outdated: number;
   percentOutdated: number;
   lastUpdated: string | null;
+  byCategory: Record<string, number>;
 }
 
 function loadDataFile(filename: string): DataFile | null {
@@ -93,6 +102,7 @@ function computeTaxonSummary(taxon: typeof TAXA[number]): TaxonSummary {
   const currentYear = new Date().getFullYear();
   let allSpecies: SpeciesRecord[] = [];
   let latestFetchedAt: string | null = null;
+  const byCategory: Record<string, number> = {};
 
   // Load data files
   const dataFiles = "dataFiles" in taxon && taxon.dataFiles ? taxon.dataFiles : [(taxon as { dataFile: string }).dataFile];
@@ -102,6 +112,13 @@ function computeTaxonSummary(taxon: typeof TAXA[number]): TaxonSummary {
       allSpecies = allSpecies.concat(data.species);
       if (!latestFetchedAt || data.metadata.fetchedAt > latestFetchedAt) {
         latestFetchedAt = data.metadata.fetchedAt;
+      }
+      // Merge category counts, normalizing legacy categories
+      if (data.metadata.byCategory) {
+        for (const [cat, count] of Object.entries(data.metadata.byCategory)) {
+          const normalizedCat = LEGACY_CATEGORY_MAP[cat] || cat;
+          byCategory[normalizedCat] = (byCategory[normalizedCat] || 0) + count;
+        }
       }
     }
   }
@@ -118,6 +135,7 @@ function computeTaxonSummary(taxon: typeof TAXA[number]): TaxonSummary {
       outdated: 0,
       percentOutdated: 0,
       lastUpdated: null,
+      byCategory: {},
     };
   }
 
@@ -143,6 +161,7 @@ function computeTaxonSummary(taxon: typeof TAXA[number]): TaxonSummary {
     outdated,
     percentOutdated: Math.round(percentOutdated * 10) / 10,
     lastUpdated: latestFetchedAt,
+    byCategory,
   };
 }
 

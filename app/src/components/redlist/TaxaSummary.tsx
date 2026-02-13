@@ -3,8 +3,14 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { FaInfoCircle } from "react-icons/fa";
 import TaxaIcon from "@/components/TaxaIcon";
+import { CATEGORY_COLORS, CATEGORY_NAMES, CATEGORY_ORDER } from "@/config/taxa";
 
 const IUCN_SOURCE_URL = "https://nc.iucnredlist.org/redlist/content/attachment_files/2025-2_RL_Table1a.pdf";
+
+// Ordered categories for the breakdown bar (most threatened first)
+const BAR_CATEGORIES = Object.keys(CATEGORY_ORDER).sort(
+  (a, b) => CATEGORY_ORDER[a] - CATEGORY_ORDER[b]
+);
 
 interface TaxonSummary {
   id: string;
@@ -17,6 +23,7 @@ interface TaxonSummary {
   outdated: number;
   percentOutdated: number;
   lastUpdated: string | null;
+  byCategory: Record<string, number>;
 }
 
 interface Props {
@@ -43,7 +50,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
   // Auto-scroll to show Assessed column on mobile (skip past Est. Described)
   const autoScroll = useCallback((el: HTMLDivElement) => {
     if (window.innerWidth < 768) {
-      // Find the Est. Described column header to know how wide it is
       const firstDataTh = el.querySelector('thead th:nth-child(2)') as HTMLElement;
       if (firstDataTh) {
         el.scrollLeft = firstDataTh.offsetWidth;
@@ -98,12 +104,16 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
   const totalDescribed = taxa.reduce((sum, t) => sum + t.estimatedDescribed, 0);
   const totalPercentAssessed = (totalAssessed / totalDescribed) * 100;
   const totalPercentOutdated = (totalOutdated / totalAssessed) * 100;
+  const totalByCategory: Record<string, number> = {};
+  for (const t of taxa) {
+    for (const [cat, count] of Object.entries(t.byCategory || {})) {
+      totalByCategory[cat] = (totalByCategory[cat] || 0) + count;
+    }
+  }
 
   const hasAnySelected = selectedTaxa.size > 0;
 
-  // Column order: Taxon (sticky) | Est. Described | Assessed | % Assessed | Outdated | % Outdated
-  // On mobile, auto-scrolled so Assessed is the first visible column after Taxon.
-  // Scroll left to see Est. Described, scroll right to see Outdated / % Outdated.
+  // Column order: Taxon (sticky) | Est. Described | Assessed | % Assessed | Outdated | % Outdated | Category Breakdown
 
   // Render a percentage bar
   const renderBar = (percent: number, barColor: string, isAll: boolean) => {
@@ -124,6 +134,72 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
     );
   };
 
+  // Render a stacked category breakdown bar
+  const renderBreakdownBar = (byCategory: Record<string, number>) => {
+    const total = Object.values(byCategory).reduce((sum, n) => sum + n, 0);
+    if (total === 0) return <span className="text-sm md:text-base text-zinc-400">—</span>;
+
+    const segments = BAR_CATEGORIES
+      .filter((cat) => (byCategory[cat] || 0) > 0)
+      .map((cat) => ({
+        cat,
+        count: byCategory[cat],
+        pct: (byCategory[cat] / total) * 100,
+        color: CATEGORY_COLORS[cat] || "#a3a3a3",
+        name: CATEGORY_NAMES[cat] || cat,
+      }));
+
+    return (
+      <div className="min-w-[120px] md:min-w-[160px] relative">
+        {/* Visible bar (clipped for rounded corners) */}
+        <div className="flex h-3 rounded-full overflow-hidden bg-zinc-200 dark:bg-zinc-700">
+          {segments.map((seg) => (
+            <div
+              key={seg.cat}
+              className="h-full"
+              style={{
+                width: `${seg.pct}%`,
+                backgroundColor: seg.color,
+                minWidth: seg.pct > 0 ? "2px" : 0,
+              }}
+            />
+          ))}
+        </div>
+        {/* Hover zones + tooltips (outside overflow-hidden so tooltips aren't clipped) */}
+        <div className="absolute inset-0 flex">
+          {segments.map((seg, i) => {
+            const isLast = i === segments.length - 1;
+            const isFirst = i === 0;
+            const posClass = isLast && !isFirst
+              ? "right-0"
+              : isFirst && !isLast
+                ? "left-0"
+                : "left-1/2 -translate-x-1/2";
+            return (
+              <div
+                key={seg.cat}
+                className="group/seg relative h-full"
+                style={{ width: `${seg.pct}%`, minWidth: seg.pct > 0 ? "2px" : 0 }}
+              >
+                <div className={`absolute ${posClass} bottom-full mb-2 px-2 py-1 text-xs bg-zinc-800 dark:bg-zinc-700 text-white rounded-lg shadow-lg opacity-0 invisible group-hover/seg:opacity-100 group-hover/seg:visible z-50 whitespace-nowrap pointer-events-none`}>
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className="inline-block w-2.5 h-2.5 rounded-sm flex-shrink-0"
+                      style={{ backgroundColor: seg.color }}
+                    />
+                    <span className="text-zinc-300">{seg.name}</span>
+                    <span className="font-medium pl-1">{seg.count.toLocaleString()}</span>
+                    <span className="text-zinc-400">({seg.pct.toFixed(1)}%)</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   // Render a data row
   const renderRow = (
     id: string,
@@ -134,6 +210,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
     percentAssessed: number,
     outdated: number,
     percentOutdated: number,
+    byCategory: Record<string, number>,
     isSelected?: boolean,
     available = true,
     isAllRow = false
@@ -199,6 +276,13 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
             <span className="text-sm md:text-base text-zinc-400">—</span>
           )}
         </td>
+        <td className="px-3 md:px-4 py-2.5 md:py-3 whitespace-nowrap">
+          {available ? (
+            renderBreakdownBar(byCategory)
+          ) : (
+            <span className="text-sm md:text-base text-zinc-400">—</span>
+          )}
+        </td>
       </tr>
     );
   };
@@ -212,7 +296,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
         </th>
         <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
           <span className="inline-flex items-center gap-1">
-            Est. Described
+            Est. # Described
             <span className="relative group">
               <a
                 href={IUCN_SOURCE_URL}
@@ -230,16 +314,19 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
           </span>
         </th>
         <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
-          Assessed
+          # Assessed
         </th>
         <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
           % Assessed
         </th>
         <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
-          Outdated (10+y)
+          # Outdated (10+Y)
         </th>
         <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
           % Outdated
+        </th>
+        <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
+          Risk Category Breakdown
         </th>
       </tr>
     </thead>
@@ -260,6 +347,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
             totalPercentAssessed,
             totalOutdated,
             totalPercentOutdated,
+            totalByCategory,
             false,
             true,
             true
@@ -267,7 +355,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
 
           {/* Separator */}
           <tr>
-            <td colSpan={6} className="p-0">
+            <td colSpan={7} className="p-0">
               <div className="border-b-2 border-zinc-200 dark:border-zinc-700" />
             </td>
           </tr>
@@ -286,6 +374,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
                   taxon.percentAssessed,
                   taxon.outdated,
                   taxon.percentOutdated,
+                  taxon.byCategory || {},
                   true,
                   taxon.available
                 )
@@ -302,6 +391,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
                 taxon.percentAssessed,
                 taxon.outdated,
                 taxon.percentOutdated,
+                taxon.byCategory || {},
                 false,
                 taxon.available
               )
