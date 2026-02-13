@@ -46,6 +46,26 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [modifierHeld, setModifierHeld] = useState(false);
+
+  // Track Cmd/Ctrl key state for delayed collapse
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey) setModifierHeld(true);
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (!e.metaKey && !e.ctrlKey) setModifierHeld(false);
+    };
+    const onBlur = () => setModifierHeld(false);
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, []);
 
   // Auto-scroll to show Assessed column on mobile (skip past Est. Described)
   const autoScroll = useCallback((el: HTMLDivElement) => {
@@ -359,22 +379,41 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
             </td>
           </tr>
 
-          {/* Individual taxa rows (always visible, selected ones highlighted) */}
-          {taxa.map((taxon) =>
-            renderRow(
-              taxon.id,
-              taxon.name,
-              taxon.color,
-              taxon.estimatedDescribed,
-              taxon.totalAssessed,
-              taxon.percentAssessed,
-              taxon.outdated,
-              taxon.percentOutdated,
-              taxon.byCategory || {},
-              selectedTaxa.has(taxon.id),
-              taxon.available
-            )
-          )}
+          {/* Collapse to selected rows only when taxa selected and modifier key not held */}
+          {(selectedTaxa.size > 0 && !modifierHeld)
+            ? taxa
+                .filter((taxon) => selectedTaxa.has(taxon.id))
+                .map((taxon) =>
+                  renderRow(
+                    taxon.id,
+                    taxon.name,
+                    taxon.color,
+                    taxon.estimatedDescribed,
+                    taxon.totalAssessed,
+                    taxon.percentAssessed,
+                    taxon.outdated,
+                    taxon.percentOutdated,
+                    taxon.byCategory || {},
+                    true,
+                    taxon.available
+                  )
+                )
+            : taxa.map((taxon) =>
+                renderRow(
+                  taxon.id,
+                  taxon.name,
+                  taxon.color,
+                  taxon.estimatedDescribed,
+                  taxon.totalAssessed,
+                  taxon.percentAssessed,
+                  taxon.outdated,
+                  taxon.percentOutdated,
+                  taxon.byCategory || {},
+                  selectedTaxa.has(taxon.id),
+                  taxon.available
+                )
+              )
+          }
         </tbody>
       </table>
     </div>
