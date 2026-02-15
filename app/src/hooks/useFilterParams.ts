@@ -24,8 +24,9 @@ function parseParams(search: string) {
     sortField: (
       sortParam === "none" ? null :
       sortParam === "category" ? "category" :
+      sortParam === "newGbif" ? "newGbif" :
       "year"
-    ) as "year" | "category" | null,
+    ) as "year" | "category" | "newGbif" | null,
     sortDirection: (p.get("dir") === "asc" ? "asc" : "desc") as "asc" | "desc",
   };
 }
@@ -36,7 +37,7 @@ function buildQs(state: {
   yearRanges: Set<string>;
   countries: Set<string>;
   search: string;
-  sortField: "year" | "category" | null;
+  sortField: "year" | "category" | "newGbif" | null;
   sortDirection: "asc" | "desc";
 }): string {
   const p = new URLSearchParams();
@@ -50,6 +51,9 @@ function buildQs(state: {
     p.set("sort", "none");
   } else if (state.sortField === "category") {
     p.set("sort", "category");
+    if (state.sortDirection !== "desc") p.set("dir", state.sortDirection);
+  } else if (state.sortField === "newGbif") {
+    p.set("sort", "newGbif");
     if (state.sortDirection !== "desc") p.set("dir", state.sortDirection);
   } else if (state.sortDirection !== "desc") {
     // sortField is "year" (default) but direction is non-default
@@ -159,7 +163,7 @@ export function useFilterParams() {
   );
 
   const setSort = useCallback(
-    (field: "year" | "category" | null, direction: "asc" | "desc") => {
+    (field: "year" | "category" | "newGbif" | null, direction: "asc" | "desc") => {
       setState(prev => {
         const next = { ...prev, sortField: field, sortDirection: direction };
         queueMicrotask(() => syncUrl(next, false));

@@ -93,6 +93,7 @@ interface Species {
   taxon_id?: string; // Present when viewing "all" taxa
   gbif_species_key?: number; // GBIF species key for NE species
   gbif_occurrence_count?: number; // Total GBIF occurrences for NE species
+  gbif_observations_after_assessment_year?: number | null; // Pre-computed from GBIF CSV
 }
 
 interface GbifByRecordType {
@@ -786,6 +787,10 @@ export default function RedListView() {
         comparison = dateA - dateB;
       } else if (sortField === "category") {
         comparison = (CATEGORY_ORDER[a.category] ?? 99) - (CATEGORY_ORDER[b.category] ?? 99);
+      } else if (sortField === "newGbif") {
+        const countA = a.gbif_observations_after_assessment_year ?? -1;
+        const countB = b.gbif_observations_after_assessment_year ?? -1;
+        comparison = countA - countB;
       }
 
       // Stable tiebreaker by ID to prevent sort instability between renders
@@ -807,7 +812,7 @@ export default function RedListView() {
   );
 
   // Handle sort toggle
-  const handleSort = (field: "year" | "category") => {
+  const handleSort = (field: "year" | "category" | "newGbif") => {
     if (sortField === field) {
       // Toggle direction or clear sort
       if (sortDirection === "desc") {
@@ -1361,8 +1366,16 @@ export default function RedListView() {
                   GBIF at Assess.
                 </th>
                 )}
-                <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
-                  {showingOnlyNE ? "GBIF Records" : "New GBIF"}
+                <th
+                  className={`px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]${showingOnlyNE ? "" : " cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"}`}
+                  onClick={showingOnlyNE ? undefined : () => handleSort("newGbif")}
+                >
+                  <span className="flex items-center justify-end gap-1">
+                    {showingOnlyNE ? "GBIF Records" : "New GBIF"}
+                    {!showingOnlyNE && sortField === "newGbif" && (
+                      <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
+                    )}
+                  </span>
                 </th>
                 {!showingOnlyNE && (
                 <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
