@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as fs from "fs";
 import * as path from "path";
-import { getTaxonConfig, CATEGORY_COLORS, CATEGORY_NAMES } from "@/config/taxa";
+import { getTaxonConfig, TAXA, CATEGORY_COLORS, CATEGORY_NAMES } from "@/config/taxa";
 
 // Category order for display (most threatened first, NE last)
 const CATEGORY_ORDER = ["EX", "EW", "CR", "EN", "VU", "NT", "LC", "DD", "NE"];
@@ -137,25 +137,30 @@ export async function GET(request: NextRequest) {
   // Count NE species from GBIF CSV (species in GBIF but not in Red List)
   let neCount = 0;
   try {
-    const gbifCsvPath = path.join(process.cwd(), "data", taxon.gbifDataFile);
-    if (fs.existsSync(gbifCsvPath)) {
-      // Build set of Red List scientific names for matching
-      const redListNames = new Set(
-        data.species.map((s) => s.scientific_name?.toLowerCase?.() || "").filter(Boolean)
-      );
+    // Build set of Red List scientific names for matching
+    const redListNames = new Set(
+      data.species.map((s) => s.scientific_name?.toLowerCase?.() || "").filter(Boolean)
+    );
+
+    // For "all" taxon, read each individual taxon's CSV
+    const csvFiles = taxonId === "all"
+      ? TAXA.filter(t => t.id !== "all").map(t => t.gbifDataFile)
+      : [taxon.gbifDataFile];
+
+    for (const csvFile of csvFiles) {
+      const gbifCsvPath = path.join(process.cwd(), "data", csvFile);
+      if (!fs.existsSync(gbifCsvPath)) continue;
 
       const csvContent = fs.readFileSync(gbifCsvPath, "utf-8");
       const lines = csvContent.trim().split("\n");
       const header = lines[0];
-      const hasScientificName = header.includes("scientific_name");
+      if (!header.includes("scientific_name")) continue;
 
-      if (hasScientificName) {
-        for (let i = 1; i < lines.length; i++) {
-          const parts = lines[i].split(",");
-          const scientificName = parts[2]?.toLowerCase?.().trim();
-          if (scientificName && !redListNames.has(scientificName)) {
-            neCount++;
-          }
+      for (let i = 1; i < lines.length; i++) {
+        const parts = lines[i].split(",");
+        const scientificName = parts[2]?.toLowerCase?.().trim();
+        if (scientificName && !redListNames.has(scientificName)) {
+          neCount++;
         }
       }
     }

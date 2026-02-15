@@ -274,37 +274,42 @@ export async function GET(request: NextRequest) {
   // Handle NE category: serve species from GBIF CSV that aren't in Red List
   if (category === "NE") {
     try {
-      const gbifCsvPath = path.join(process.cwd(), "data", taxon.gbifDataFile);
-      if (!fs.existsSync(gbifCsvPath)) {
-        return NextResponse.json({
-          species: [],
-          total: 0,
-          taxon: { id: taxon.id, name: taxon.name, estimatedDescribed: taxon.estimatedDescribed, estimatedSource: taxon.estimatedSource, color: taxon.color },
-        });
-      }
-
       // Build set of Red List scientific names
       const redListNames = new Set(
         data.species.map((s) => s.scientific_name.toLowerCase().trim())
       );
 
-      const csvContent = fs.readFileSync(gbifCsvPath, "utf-8");
-      const lines = csvContent.trim().split("\n");
-      const header = lines[0];
-      const hasScientificName = header.includes("scientific_name");
-      const hasCommonName = header.includes("common_name");
+      // For "all" taxon, read each individual taxon's CSV
+      const sourceTaxa = taxonId === "all"
+        ? TAXA.filter(t => t.id !== "all")
+        : [taxon];
 
       let neSpecies: Species[] = [];
-      if (hasScientificName) {
+
+      for (const sourceTaxon of sourceTaxa) {
+        const gbifCsvPath = path.join(process.cwd(), "data", sourceTaxon.gbifDataFile);
+        if (!fs.existsSync(gbifCsvPath)) continue;
+
+        const csvContent = fs.readFileSync(gbifCsvPath, "utf-8");
+        const lines = csvContent.trim().split("\n");
+        const header = lines[0];
+        if (!header.includes("scientific_name")) continue;
+        const hasCommonName = header.includes("common_name");
+
         for (let i = 1; i < lines.length; i++) {
           const parts = lines[i].split(",");
           const speciesKey = parseInt(parts[0], 10);
           const occurrenceCount = parseInt(parts[1], 10);
           const scientificName = parts[2]?.trim() || "";
-          // Common name is in column 3 if present; handle quoted values
+          // Common name is in column 3; handle quoted values that may contain commas
           let commonName: string | null = null;
           if (hasCommonName) {
-            const raw = parts.slice(3).join(",").trim();
+            // Column 4 (index 3) is common_name, column 5 is observations_after_assessment_year
+            // Common names may be quoted and contain commas, so rejoin and strip last column
+            const remaining = parts.slice(3);
+            // Last element is observations_after_assessment_year
+            remaining.pop();
+            const raw = remaining.join(",").trim();
             commonName = raw.replace(/^"|"$/g, "") || null;
           }
           if (scientificName && !redListNames.has(scientificName.toLowerCase())) {
@@ -324,6 +329,7 @@ export async function GET(request: NextRequest) {
               previous_assessments: [],
               gbif_species_key: speciesKey,
               gbif_occurrence_count: occurrenceCount,
+              taxon_id: sourceTaxon.id,
             } as Species);
           }
         }
