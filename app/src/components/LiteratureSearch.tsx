@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { generateNameVariants } from "@/lib/nameVariants";
 
 interface LiteratureResult {
   title: string;
@@ -130,14 +131,20 @@ interface NewLiteratureSinceAssessmentProps {
   className?: string;
 }
 
+// Build encoded search terms with quoted name variants for OpenAlex URL
+function buildSearchTerms(scientificName: string): string {
+  const variants = generateNameVariants(scientificName);
+  return variants.map((v) => `%22${encodeURIComponent(v)}%22`).join("%7C");
+}
+
 // Build OpenAlex search URL for papers after a given year (sorted by most recent)
 function buildOpenAlexUrlAfter(scientificName: string, sinceYear: number): string {
-  return `https://openalex.org/works?page=1&filter=default.search%3A%22${encodeURIComponent(scientificName)}%22,publication_year%3A%3E${sinceYear},type%3A%21dataset&sort=publication_date%3Adesc`;
+  return `https://openalex.org/works?page=1&filter=default.search%3A${buildSearchTerms(scientificName)},publication_year%3A%3E${sinceYear},type%3A%21dataset&sort=publication_date%3Adesc`;
 }
 
 // Build OpenAlex search URL for papers up to a given year (sorted by most cited)
 function buildOpenAlexUrlBefore(scientificName: string, upToYear: number): string {
-  return `https://openalex.org/works?page=1&filter=default.search%3A%22${encodeURIComponent(scientificName)}%22,publication_year%3A%3C%3D${upToYear},type%3A%21dataset&sort=cited_by_count%3Adesc`;
+  return `https://openalex.org/works?page=1&filter=default.search%3A${buildSearchTerms(scientificName)},publication_year%3A%3C%3D${upToYear},type%3A%21dataset&sort=cited_by_count%3Adesc`;
 }
 
 export default function NewLiteratureSinceAssessment({
@@ -153,18 +160,24 @@ export default function NewLiteratureSinceAssessment({
 
   const isAllTime = assessmentYear === 0;
 
+  const nameVariants = generateNameVariants(scientificName);
+  const hasVariants = nameVariants.length > 1;
+  const searchDisplay = hasVariants
+    ? `${scientificName} (+ ${nameVariants.length - 1} name variant${nameVariants.length > 2 ? "s" : ""})`
+    : scientificName;
+
   const openAlexUrl = isAllTime
-    ? `https://openalex.org/works?page=1&filter=default.search%3A%22${encodeURIComponent(scientificName)}%22,type%3A%21dataset&sort=publication_date%3Adesc`
+    ? `https://openalex.org/works?page=1&filter=default.search%3A${buildSearchTerms(scientificName)},type%3A%21dataset&sort=publication_date%3Adesc`
     : mode === "after"
     ? buildOpenAlexUrlAfter(scientificName, assessmentYear)
     : buildOpenAlexUrlBefore(scientificName, assessmentYear);
 
   // Human-readable query description
   const queryDescription = isAllTime
-    ? `search="${scientificName}" AND type!=dataset`
+    ? `search=${searchDisplay} AND type!=dataset`
     : mode === "after"
-    ? `search="${scientificName}" AND year>${assessmentYear} AND type!=dataset`
-    : `search="${scientificName}" AND year<=${assessmentYear} AND type!=dataset`;
+    ? `search=${searchDisplay} AND year>${assessmentYear} AND type!=dataset`
+    : `search=${searchDisplay} AND year<=${assessmentYear} AND type!=dataset`;
 
   useEffect(() => {
     async function fetchLiterature() {
@@ -325,7 +338,7 @@ export default function NewLiteratureSinceAssessment({
       {/* Subtle note at bottom */}
       {!loading && data && (
         <p className="text-[10px] text-zinc-400 mt-2">
-          {mode === "before" ? "Sorted by most cited" : "Sorted by most recent"} — simple text search, may miss synonyms or indirect references
+          {mode === "before" ? "Sorted by most cited" : "Sorted by most recent"} — includes Latin gender variants of species name
         </p>
       )}
     </div>
