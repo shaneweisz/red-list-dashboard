@@ -33,18 +33,19 @@
  *
  * ## Expected Runtimes (Feb 2026)
  *
- * | Taxon         | Species | Runtime |
- * |---------------|---------|---------|
- * | Mammals       | 4,832   | ~2 min  |
- * | Birds         | 11,192  | ~3 min  |
- * | Reptiles      | 9,116   | ~4 min  |
- * | Amphibians    | 5,839   | ~2 min  |
- * | Fishes        | 22,945  | ~7 min  |
- * | Fungi         | 52,066  | ~5 min  |
- * | Plants        | 200,419 | ~20 min |
- * | Invertebrates | 325,941 | ~30 min |
+ * | Taxon         | Species | Runtime  |
+ * |---------------|---------|----------|
+ * | Amphibians    | 5,839   | ~15 sec  |
+ * | Birds         | 11,192  | ~45 sec  |
+ * | Reptiles      | 9,116   | ~45 sec  |
+ * | Fungi         | 52,066  | ~50 sec  |
+ * | Mammals       | 4,832   | ~1 min   |
+ * | Plants        | 200,419 | ~5.5 min |
+ * | Fishes        | 22,945  | ~8 min   |
+ * | Invertebrates | 325,941 | ~8.5 min |
  *
  * Bottleneck is species validation (one GBIF API call per species key).
+ * Total for all 8 taxa run in parallel: ~10 min.
  *
  * ## Re-runnability
  *
