@@ -280,14 +280,14 @@ export async function GET(request: NextRequest) {
       );
 
       // For "all" taxon, read each individual taxon's CSV
-      const csvFiles = taxonId === "all"
-        ? TAXA.filter(t => t.id !== "all").map(t => t.gbifDataFile)
-        : [taxon.gbifDataFile];
+      const sourceTaxa = taxonId === "all"
+        ? TAXA.filter(t => t.id !== "all")
+        : [taxon];
 
       let neSpecies: Species[] = [];
 
-      for (const csvFile of csvFiles) {
-        const gbifCsvPath = path.join(process.cwd(), "data", csvFile);
+      for (const sourceTaxon of sourceTaxa) {
+        const gbifCsvPath = path.join(process.cwd(), "data", sourceTaxon.gbifDataFile);
         if (!fs.existsSync(gbifCsvPath)) continue;
 
         const csvContent = fs.readFileSync(gbifCsvPath, "utf-8");
@@ -329,6 +329,7 @@ export async function GET(request: NextRequest) {
               previous_assessments: [],
               gbif_species_key: speciesKey,
               gbif_occurrence_count: occurrenceCount,
+              taxon_id: sourceTaxon.id,
             } as Species);
           }
         }
