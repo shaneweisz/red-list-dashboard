@@ -788,9 +788,14 @@ export default function RedListView() {
       } else if (sortField === "category") {
         comparison = (CATEGORY_ORDER[a.category] ?? 99) - (CATEGORY_ORDER[b.category] ?? 99);
       } else if (sortField === "newGbif") {
-        const countA = a.gbif_observations_after_assessment_year ?? -1;
-        const countB = b.gbif_observations_after_assessment_year ?? -1;
-        comparison = countA - countB;
+        // NE species don't have post-assessment counts; sort by total GBIF records instead
+        if (a.category === "NE" || b.category === "NE") {
+          comparison = (a.gbif_occurrence_count ?? -1) - (b.gbif_occurrence_count ?? -1);
+        } else {
+          const countA = a.gbif_observations_after_assessment_year ?? -1;
+          const countB = b.gbif_observations_after_assessment_year ?? -1;
+          comparison = countA - countB;
+        }
       }
 
       // Stable tiebreaker by ID to prevent sort instability between renders
@@ -1016,7 +1021,7 @@ export default function RedListView() {
     });
   };
   const currentYear = new Date().getFullYear();
-  const showingOnlyNE = selectedCategories.size === 1 && selectedCategories.has("NE");
+  const isNE = (s: Species) => s.category === "NE";
 
   return (
     <div className="space-y-4">
@@ -1348,7 +1353,6 @@ export default function RedListView() {
                     )}
                   </span>
                 </th>
-                {!showingOnlyNE && (
                 <th
                   className="px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
                   onClick={() => handleSort("year")}
@@ -1360,30 +1364,25 @@ export default function RedListView() {
                     )}
                   </span>
                 </th>
-                )}
-                {!showingOnlyNE && (
                 <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
                   GBIF at Assess.
                 </th>
-                )}
                 <th
-                  className={`px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]${showingOnlyNE ? "" : " cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"}`}
-                  onClick={showingOnlyNE ? undefined : () => handleSort("newGbif")}
+                  className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
+                  onClick={() => handleSort("newGbif")}
                 >
                   <span className="flex items-center justify-end gap-1">
-                    {showingOnlyNE ? "GBIF Records" : "New GBIF"}
-                    {!showingOnlyNE && sortField === "newGbif" && (
+                    New GBIF
+                    {sortField === "newGbif" && (
                       <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
                     )}
                   </span>
                 </th>
-                {!showingOnlyNE && (
                 <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
                   Papers at Assess.
                 </th>
-                )}
                 <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
-                  {showingOnlyNE ? "Papers" : "New Papers"}
+                  New Papers
                 </th>
               </tr>
             </thead>
@@ -1512,9 +1511,8 @@ export default function RedListView() {
                         </span>
                       )}
                     </td>
-                    {!showingOnlyNE && (
                     <td className="px-2 md:px-4 py-3 text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
-                      {s.category === "NE" ? "—" : (
+                      {isNE(s) ? <span className="text-zinc-400">N/A</span> : (
                         <>
                           <HoverTooltip
                             text={`Published: ${s.year_published}${s.previous_assessments.length > 0 ? ` | Previous: ${s.previous_assessments.slice().reverse().map(pa => `${pa.year} (${pa.category})`).join(", ")}` : ""}`}
@@ -1541,10 +1539,8 @@ export default function RedListView() {
                         </>
                       )}
                     </td>
-                    )}
-                    {!showingOnlyNE && (
                     <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
-                      {s.category === "NE" ? "—" : details === undefined ? (
+                      {isNE(s) ? <span className="text-zinc-400">N/A</span> : details === undefined ? (
                         <span className="inline-block animate-spin h-4 w-4 border-2 border-zinc-400 border-t-transparent rounded-full" />
                       ) : details?.gbifOccurrences != null && details?.gbifUrl ? (() => {
                         const recordsAtAssessment = details.gbifOccurrences - (details.gbifOccurrencesSinceAssessment ?? 0);
@@ -1655,9 +1651,8 @@ export default function RedListView() {
                         </HoverTooltip>
                       ) : "—"}
                     </td>
-                    )}
                     <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
-                      {s.category === "NE" && s.gbif_occurrence_count != null ? (
+                      {isNE(s) && s.gbif_occurrence_count != null ? (
                         <a
                           href={`https://www.gbif.org/occurrence/search?taxon_key=${s.gbif_species_key}`}
                           target="_blank"
@@ -1768,11 +1763,9 @@ export default function RedListView() {
                         </HoverTooltip>
                       ) : "—"}
                     </td>
-                    {!showingOnlyNE && (
-                    <>
                     {/* Papers When Assessed */}
                     <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
-                      {s.category === "NE" ? "—" : details === undefined ? (
+                      {isNE(s) ? <span className="text-zinc-400">N/A</span> : details === undefined ? (
                         <span className="inline-block animate-spin h-4 w-4 border-2 border-zinc-400 border-t-transparent rounded-full" />
                       ) : details?.papersAtAssessment != null && assessmentYear ? (
                         <a
@@ -1787,8 +1780,6 @@ export default function RedListView() {
                         </a>
                       ) : "—"}
                     </td>
-                    </>
-                    )}
                     {/* New Papers */}
                     <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
                       {details === undefined ? (
@@ -1815,7 +1806,7 @@ export default function RedListView() {
                   </tr>
                   {selectedSpeciesKey === s.sis_taxon_id && (
                     <tr>
-                      <td colSpan={showingOnlyNE ? 5 : 8} className="p-0 bg-zinc-50 dark:bg-zinc-800/30">
+                      <td colSpan={8} className="p-0 bg-zinc-50 dark:bg-zinc-800/30">
                         <div style={{ maxWidth: 'calc(100vw - 2rem)', transform: 'translateX(var(--scroll-left, 0px))' }}>
                           {/* Tab bar */}
                           <div className="flex items-center border-b border-zinc-200 dark:border-zinc-700" onClick={(e) => e.stopPropagation()}>
@@ -1904,7 +1895,7 @@ export default function RedListView() {
               })}
               {filteredSpecies.length === 0 && (
                 <tr>
-                  <td colSpan={showingOnlyNE ? 5 : 8} className="px-4 py-8 text-center text-zinc-500">
+                  <td colSpan={8} className="px-4 py-8 text-center text-zinc-500">
                     {neLoading ? (
                       <div className="flex items-center justify-center gap-2">
                         <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
