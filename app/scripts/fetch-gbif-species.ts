@@ -31,6 +31,21 @@
  * gets counted from 2017 onwards, missing ~9 months of 2016 data. For sorting
  * and ranking purposes this is negligible.
  *
+ * ## Expected Runtimes (Feb 2026)
+ *
+ * | Taxon         | Species | Runtime |
+ * |---------------|---------|---------|
+ * | Mammals       | 4,832   | ~2 min  |
+ * | Birds         | 11,192  | ~3 min  |
+ * | Reptiles      | 9,116   | ~4 min  |
+ * | Amphibians    | 5,839   | ~2 min  |
+ * | Fishes        | 22,945  | ~7 min  |
+ * | Fungi         | 52,066  | ~5 min  |
+ * | Plants        | 200,419 | ~20 min |
+ * | Invertebrates | 325,941 | ~30 min |
+ *
+ * Bottleneck is species validation (one GBIF API call per species key).
+ *
  * ## Re-runnability
  *
  * The script is idempotent — it overwrites the CSV from scratch on each run.
@@ -582,6 +597,8 @@ async function main() {
   const dataDir = path.join(process.cwd(), "data");
   const OUTPUT_FILE = path.join(dataDir, taxonConfig.gbifDataFile);
 
+  const startTime = Date.now();
+
   console.log(`GBIF Species Observation Fetcher - ${taxonConfig.name}`);
   console.log("=".repeat(60));
   console.log(`Taxon: ${taxonConfig.name} (${taxonId})`);
@@ -704,6 +721,11 @@ async function main() {
     console.log(`  ${sinceAssessmentCounts.size} with assessment dates`);
     console.log(`  ${withNewRecords} have new observations since assessment`);
     console.log(`  ${totalNewRecords.toLocaleString()} total new observations`);
+
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
+    const minutes = Math.floor(Number(elapsed) / 60);
+    const seconds = Number(elapsed) % 60;
+    console.log(`  Completed in ${minutes}m ${seconds}s`);
 
   } catch (error) {
     console.error("Error:", error);
