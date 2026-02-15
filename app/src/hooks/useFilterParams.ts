@@ -24,8 +24,9 @@ function parseParams(search: string) {
     sortField: (
       sortParam === "none" ? null :
       sortParam === "category" ? "category" :
-      "year"
-    ) as "year" | "category" | null,
+      sortParam === "year" ? "year" :
+      "newGbif"
+    ) as "year" | "category" | "newGbif" | null,
     sortDirection: (p.get("dir") === "asc" ? "asc" : "desc") as "asc" | "desc",
   };
 }
@@ -36,7 +37,7 @@ function buildQs(state: {
   yearRanges: Set<string>;
   countries: Set<string>;
   search: string;
-  sortField: "year" | "category" | null;
+  sortField: "year" | "category" | "newGbif" | null;
   sortDirection: "asc" | "desc";
 }): string {
   const p = new URLSearchParams();
@@ -45,14 +46,17 @@ function buildQs(state: {
   if (state.yearRanges.size > 0) p.set("years", [...state.yearRanges].join(","));
   if (state.countries.size > 0) p.set("countries", [...state.countries].join(","));
   if (state.search) p.set("search", state.search);
-  // "year" desc is the default — only write non-default sort to URL
+  // "newGbif" desc is the default — only write non-default sort to URL
   if (state.sortField === null) {
     p.set("sort", "none");
   } else if (state.sortField === "category") {
     p.set("sort", "category");
     if (state.sortDirection !== "desc") p.set("dir", state.sortDirection);
+  } else if (state.sortField === "year") {
+    p.set("sort", "year");
+    if (state.sortDirection !== "desc") p.set("dir", state.sortDirection);
   } else if (state.sortDirection !== "desc") {
-    // sortField is "year" (default) but direction is non-default
+    // sortField is "newGbif" (default) but direction is non-default
     p.set("dir", state.sortDirection);
   }
   const qs = p.toString();
@@ -159,7 +163,7 @@ export function useFilterParams() {
   );
 
   const setSort = useCallback(
-    (field: "year" | "category" | null, direction: "asc" | "desc") => {
+    (field: "year" | "category" | "newGbif" | null, direction: "asc" | "desc") => {
       setState(prev => {
         const next = { ...prev, sortField: field, sortDirection: direction };
         queueMicrotask(() => syncUrl(next, false));
@@ -177,7 +181,7 @@ export function useFilterParams() {
         yearRanges: new Set<string>(),
         countries: new Set<string>(),
         search: "",
-        sortField: "year" as const,
+        sortField: "newGbif" as const,
         sortDirection: "desc" as const,
       };
       queueMicrotask(() => syncUrl(next, false));
@@ -194,7 +198,7 @@ export function useFilterParams() {
         yearRanges: new Set<string>(),
         countries: new Set<string>(),
         search: "",
-        sortField: "year" as const,
+        sortField: "newGbif" as const,
         sortDirection: "desc" as const,
       };
       queueMicrotask(() => syncUrl(next, true));

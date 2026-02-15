@@ -26,6 +26,7 @@ interface Species {
   taxon_id?: string; // Added when merging from multiple files
   gbif_species_key?: number; // GBIF species key for NE species
   gbif_occurrence_count?: number; // Total GBIF occurrences for NE species
+  gbif_observations_after_assessment_year?: number | null; // Pre-computed from GBIF CSV
 }
 
 interface PrecomputedData {
@@ -43,6 +44,76 @@ interface PrecomputedData {
 const cachedData: Map<string, PrecomputedData | null> = new Map();
 const cacheLoadTimes: Map<string, number> = new Map();
 const CACHE_RELOAD_INTERVAL = 60 * 60 * 1000; // Reload file every hour
+
+// Cache for GBIF since-assessment lookups (scientific_name_lowercase → count)
+const sinceAssessmentCache: Map<string, Map<string, number>> = new Map();
+const sinceAssessmentCacheLoadTimes: Map<string, number> = new Map();
+
+/**
+ * Load GBIF CSV and build a lookup of scientific_name → observations_after_assessment_year.
+ * The CSV must have been enriched by enrich-gbif-since-assessment.ts.
+ */
+function loadSinceAssessmentLookup(taxonId: string): Map<string, number> {
+  const cacheTime = sinceAssessmentCacheLoadTimes.get(taxonId) || 0;
+  if (sinceAssessmentCache.has(taxonId) && Date.now() - cacheTime < CACHE_RELOAD_INTERVAL) {
+    return sinceAssessmentCache.get(taxonId)!;
+  }
+
+  const lookup = new Map<string, number>();
+  const dataDir = path.join(process.cwd(), "data");
+
+  // For "all" taxon, load each top-level taxon's CSV
+  const csvFiles: string[] = [];
+  if (taxonId === "all") {
+    const topLevelTaxa = TAXA.filter(t => t.id !== "all");
+    for (const t of topLevelTaxa) {
+      csvFiles.push(t.gbifDataFile);
+    }
+  } else {
+    const taxon = getTaxonConfig(taxonId);
+    csvFiles.push(taxon.gbifDataFile);
+  }
+
+  for (const csvFile of csvFiles) {
+    const csvPath = path.join(dataDir, csvFile);
+    if (!fs.existsSync(csvPath)) continue;
+
+    try {
+      const content = fs.readFileSync(csvPath, "utf-8");
+      const lines = content.trim().split("\n");
+      const header = lines[0];
+      if (!header.includes("observations_after_assessment_year") && !header.includes("occurrences_since_assessment")) continue;
+
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i];
+        // Parse: species_key,occurrence_count,scientific_name,common_name,observations_after_assessment_year
+        // The last field is the since-assessment count
+        const lastComma = line.lastIndexOf(",");
+        const sinceStr = line.slice(lastComma + 1).trim();
+        if (!sinceStr) continue;
+
+        const sinceCount = parseInt(sinceStr, 10);
+        if (isNaN(sinceCount)) continue;
+
+        // Extract scientific_name (3rd field)
+        const firstComma = line.indexOf(",");
+        const secondComma = line.indexOf(",", firstComma + 1);
+        const thirdComma = line.indexOf(",", secondComma + 1);
+        const scientificName = line.slice(secondComma + 1, thirdComma).toLowerCase().trim();
+
+        if (scientificName) {
+          lookup.set(scientificName, sinceCount);
+        }
+      }
+    } catch {
+      // CSV not available or malformed, skip
+    }
+  }
+
+  sinceAssessmentCache.set(taxonId, lookup);
+  sinceAssessmentCacheLoadTimes.set(taxonId, Date.now());
+  return lookup;
+}
 
 function loadPrecomputedData(taxonId: string): PrecomputedData | null {
   const taxon = getTaxonConfig(taxonId);
@@ -297,9 +368,18 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // Enrich species with pre-computed GBIF since-assessment counts
+  const sinceAssessmentLookup = loadSinceAssessmentLookup(taxonId);
+  const enriched = sinceAssessmentLookup.size > 0
+    ? filtered.map(s => {
+        const count = sinceAssessmentLookup.get(s.scientific_name.toLowerCase().trim());
+        return count !== undefined ? { ...s, gbif_observations_after_assessment_year: count } : s;
+      })
+    : filtered;
+
   return NextResponse.json({
-    species: filtered,
-    total: filtered.length,
+    species: enriched,
+    total: enriched.length,
     metadata: data.metadata,
     taxon: {
       id: taxon.id,

@@ -6,6 +6,7 @@ import { getTaxonConfig, TaxonConfig } from "@/config/taxa";
 interface SpeciesRecord {
   species_key: number;
   occurrence_count: number;
+  observations_after_assessment_year?: number | null;
   scientific_name?: string;
   redlist_category?: string | null;
 }
@@ -78,12 +79,29 @@ async function loadCsvData(taxonId: string): Promise<SpeciesRecord[]> {
     // Load Red List lookup for this taxon
     const redListLookup = await loadRedListLookup(taxon);
 
+    const hasSinceAssessment = header.includes("observations_after_assessment_year") || header.includes("occurrences_since_assessment");
+
     // Skip header
     dataCache[taxonId] = lines.slice(1).map((line) => {
-      const parts = line.split(",");
-      const species_key = parseInt(parts[0], 10);
-      const occurrence_count = parseInt(parts[1], 10);
-      const scientific_name = hasScientificName ? parts[2] || undefined : undefined;
+      // Parse carefully: last field may be since_assessment, common_name may contain commas
+      const firstComma = line.indexOf(",");
+      const secondComma = line.indexOf(",", firstComma + 1);
+      const thirdComma = line.indexOf(",", secondComma + 1);
+
+      const species_key = parseInt(line.slice(0, firstComma), 10);
+      const occurrence_count = parseInt(line.slice(firstComma + 1, secondComma), 10);
+      const scientific_name = hasScientificName ? line.slice(secondComma + 1, thirdComma) || undefined : undefined;
+
+      // Parse observations_after_assessment_year from the last field if present
+      let observations_after_assessment_year: number | null = null;
+      if (hasSinceAssessment) {
+        const lastComma = line.lastIndexOf(",");
+        const sinceStr = line.slice(lastComma + 1).trim();
+        if (sinceStr) {
+          const parsed = parseInt(sinceStr, 10);
+          if (!isNaN(parsed)) observations_after_assessment_year = parsed;
+        }
+      }
 
       // Look up Red List category by scientific name
       let redlist_category: string | null = null;
@@ -95,6 +113,7 @@ async function loadCsvData(taxonId: string): Promise<SpeciesRecord[]> {
       return {
         species_key,
         occurrence_count,
+        observations_after_assessment_year,
         scientific_name,
         redlist_category,
       };
