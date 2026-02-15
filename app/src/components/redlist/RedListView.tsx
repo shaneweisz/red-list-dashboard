@@ -788,9 +788,14 @@ export default function RedListView() {
       } else if (sortField === "category") {
         comparison = (CATEGORY_ORDER[a.category] ?? 99) - (CATEGORY_ORDER[b.category] ?? 99);
       } else if (sortField === "newGbif") {
-        const countA = a.gbif_observations_after_assessment_year ?? -1;
-        const countB = b.gbif_observations_after_assessment_year ?? -1;
-        comparison = countA - countB;
+        const hasA = a.gbif_observations_after_assessment_year != null;
+        const hasB = b.gbif_observations_after_assessment_year != null;
+        // Push species without data to the bottom regardless of sort direction
+        if (hasA !== hasB) {
+          comparison = hasA ? -1 : 1;
+          return sortDirection === "asc" ? comparison : -comparison;
+        }
+        comparison = (a.gbif_observations_after_assessment_year ?? 0) - (b.gbif_observations_after_assessment_year ?? 0);
       }
 
       // Stable tiebreaker by ID to prevent sort instability between renders
