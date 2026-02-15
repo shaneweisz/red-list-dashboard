@@ -79,13 +79,13 @@ async function searchOpenAlexSinceYear(
   sinceYear: number,
   limit: number = 5
 ): Promise<{ count: number; results: LiteratureResult[] }> {
-  // OpenAlex filter: use default.search for broad matching (no quotes for wider recall)
-  // Includes gender variants of the species epithet (e.g. albocaudata/albocaudatus/albocaudatum)
+  // OpenAlex filter: use quoted default.search for exact phrase matching
+  // OR together gender variants of the species epithet (e.g. "albocaudata"|"albocaudatus"|"albocaudatum")
   // publication_year > sinceYear, exclude datasets (GBIF occurrence downloads)
   // Sorted by most recent first
   // Note: per_page must be >= 1 for the API to work, even for count-only requests
   const nameVariants = generateNameVariants(scientificName);
-  const searchTerms = nameVariants.join("|");
+  const searchTerms = nameVariants.map(v => `"${v}"`).join("|");
   const filter = encodeURIComponent(`default.search:${searchTerms},publication_year:>${sinceYear},type:!dataset`);
   const url = `https://api.openalex.org/works?filter=${filter}&sort=publication_date:desc&per_page=${Math.max(1, limit)}&mailto=red-list-dashboard@example.com`;
 
@@ -119,12 +119,12 @@ async function searchOpenAlexUpToYear(
   upToYear: number,
   limit: number = 5
 ): Promise<{ count: number; results: LiteratureResult[] }> {
-  // Use default.search for broad matching (no quotes for wider recall)
-  // Includes gender variants of the species epithet
+  // Use quoted default.search for exact phrase matching
+  // OR together gender variants of the species epithet
   // Use < (year+1) instead of <= year to avoid encoding issues
   // Sorted by most cited first for pre-assessment papers
   const nameVariants = generateNameVariants(scientificName);
-  const searchTerms = nameVariants.join("|");
+  const searchTerms = nameVariants.map(v => `"${v}"`).join("|");
   const filter = encodeURIComponent(`default.search:${searchTerms},publication_year:<${upToYear + 1},type:!dataset`);
   const url = `https://api.openalex.org/works?filter=${filter}&sort=cited_by_count:desc&per_page=${Math.max(1, limit)}&mailto=red-list-dashboard@example.com`;
 

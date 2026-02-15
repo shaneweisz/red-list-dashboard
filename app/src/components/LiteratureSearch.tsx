@@ -131,10 +131,10 @@ interface NewLiteratureSinceAssessmentProps {
   className?: string;
 }
 
-// Build encoded search terms with name variants for OpenAlex URL
+// Build encoded search terms with quoted name variants for OpenAlex URL
 function buildSearchTerms(scientificName: string): string {
   const variants = generateNameVariants(scientificName);
-  return variants.map((v) => encodeURIComponent(v)).join("%7C");
+  return variants.map((v) => `%22${encodeURIComponent(v)}%22`).join("%7C");
 }
 
 // Build OpenAlex search URL for papers after a given year (sorted by most recent)
