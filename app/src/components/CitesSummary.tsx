@@ -177,14 +177,25 @@ export default function CitesSummary({
             No current CITES listing
           </span>
         )}
-        <a
-          href={`https://www.speciesplus.net/species#/taxon_concepts/${data.citesId}/legal`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs text-blue-600 dark:text-blue-400 hover:underline ml-auto"
-        >
-          View on Species+
-        </a>
+        <div className="flex items-center gap-3 ml-auto">
+          <a
+            href={`https://trade.cites.org/en/cites_trade/download?filters%5Btaxon_concepts_ids%5D%5B%5D=${data.citesId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+          >
+            Trade Database
+          </a>
+          <span className="text-zinc-300 dark:text-zinc-600">|</span>
+          <a
+            href={`https://www.speciesplus.net/species#/taxon_concepts/${data.citesId}/legal`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+          >
+            Species+
+          </a>
+        </div>
       </div>
 
       {/* Current listings detail */}
