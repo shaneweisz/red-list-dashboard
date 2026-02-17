@@ -382,37 +382,49 @@ export default function CitesSummary({
         </div>
       )}
 
-      {/* Footer attribution */}
-      <p className="text-[10px] text-zinc-400 dark:text-zinc-500 pt-1">
-        Data from{" "}
-        <a
-          href="https://www.speciesplus.net"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="hover:underline"
-        >
-          Species+
-        </a>
-        {" / "}
-        <a
-          href="https://cites.org"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="hover:underline"
-        >
-          CITES
-        </a>
-        . Subject to{" "}
-        <a
-          href="https://www.speciesplus.net/terms-of-use"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="hover:underline"
-        >
-          Terms of Use
-        </a>
-        .
-      </p>
+      {/* Footer attribution — required by Species+ Terms of Use */}
+      <div className="text-[10px] text-zinc-400 dark:text-zinc-500 pt-2 space-y-1">
+        <p>
+          UNEP ({new Date().getFullYear()}).{" "}
+          <a
+            href="https://www.speciesplus.net"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:underline"
+          >
+            The Species+ Website
+          </a>
+          . Nairobi, Kenya. Compiled by UNEP-WCMC, Cambridge, UK.
+          Available at:{" "}
+          <a
+            href="https://www.speciesplus.net"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:underline"
+          >
+            www.speciesplus.net
+          </a>
+          . [Accessed{" "}
+          {new Date().toLocaleDateString("en-GB", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+          })}
+          ].
+        </p>
+        <p>
+          Subject to Species+{" "}
+          <a
+            href="https://www.speciesplus.net/terms-of-use"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:underline"
+          >
+            Terms of Use
+          </a>
+          .
+        </p>
+      </div>
     </div>
   );
 }
