@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import CitesTradeSummary from "./CitesTradeSummary";
 
 interface CitesListing {
   appendix: string;
@@ -390,6 +391,16 @@ export default function CitesSummary({
               </button>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Trade overview from CITES Trade Database */}
+      {data.citesId && (
+        <div>
+          <h4 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
+            International Trade
+          </h4>
+          <CitesTradeSummary citesId={data.citesId} />
         </div>
       )}
 
