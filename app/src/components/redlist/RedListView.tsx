@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import TaxaSummary from "./TaxaSummary";
 import NewLiteratureSinceAssessment from "../LiteratureSearch";
 import RedListAssessments from "../RedListAssessments";
+import CitesSummary from "../CitesSummary";
 import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
@@ -453,7 +454,7 @@ export default function RedListView() {
 
   // Row expansion state
   const [selectedSpeciesKey, setSelectedSpeciesKey] = useState<number | null>(null);
-  const [activeDetailTab, setActiveDetailTab] = useState<"gbif" | "literature" | "redlist">("gbif");
+  const [activeDetailTab, setActiveDetailTab] = useState<"gbif" | "literature" | "redlist" | "cites">("gbif");
   const [stackedDetailView, setStackedDetailView] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -1834,6 +1835,12 @@ export default function RedListView() {
                                     IUCN Red List
                                   </button>
                                 )}
+                                <button
+                                  className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "cites" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                  onClick={() => setActiveDetailTab("cites")}
+                                >
+                                  CITES
+                                </button>
                               </>
                             )}
                             {stackedDetailView && (
@@ -1886,6 +1893,9 @@ export default function RedListView() {
                               />
                             </div>
                           )}
+                          <div style={{ display: stackedDetailView || activeDetailTab === "cites" ? undefined : "none" }}>
+                            <CitesSummary scientificName={s.scientific_name} />
+                          </div>
                         </div>
                       </td>
                     </tr>
