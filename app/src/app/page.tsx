@@ -39,6 +39,50 @@ export default function RedListPage() {
 
         {/* Red List Content */}
         <RedListView />
+
+        {/* Footer attribution — required by IUCN Red List Terms of Use */}
+        <footer className="mt-8 pt-4 border-t border-zinc-200 dark:border-zinc-800 text-[11px] text-zinc-400 dark:text-zinc-500 space-y-1">
+          <p>
+            IUCN ({new Date().getFullYear()}).{" "}
+            <em>The IUCN Red List of Threatened Species.</em> Version 2025-2.{" "}
+            <a
+              href="https://www.iucnredlist.org"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:underline"
+            >
+              https://www.iucnredlist.org
+            </a>
+            . Accessed on{" "}
+            {new Date().toLocaleDateString("en-GB", {
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+            })}
+            .
+          </p>
+          <p>
+            Subject to IUCN Red List{" "}
+            <a
+              href="https://www.iucnredlist.org/terms/terms-of-use"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:underline"
+            >
+              Terms of Use
+            </a>
+            . Occurrence data from{" "}
+            <a
+              href="https://www.gbif.org"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:underline"
+            >
+              GBIF.org
+            </a>
+            .
+          </p>
+        </footer>
       </main>
     </div>
   );
