@@ -1,225 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import * as fs from "fs";
-import * as path from "path";
-import { TAXA, getTaxonConfig } from "@/config/taxa";
-
-interface PreviousAssessment {
-  year: string;
-  assessment_id: number;
-  category: string;
-}
-
-interface Species {
-  sis_taxon_id: number;
-  assessment_id: number;
-  scientific_name: string;
-  common_name?: string | null;
-  family: string | null;
-  category: string;
-  assessment_date: string | null;
-  year_published: string;
-  url: string;
-  population_trend: string | null;
-  countries: string[];
-  assessment_count: number;
-  previous_assessments: PreviousAssessment[];
-  taxon_id?: string; // Added when merging from multiple files
-  gbif_species_key?: number; // GBIF species key for NE species
-  gbif_occurrence_count?: number; // Total GBIF occurrences for NE species
-  gbif_observations_after_assessment_year?: number | null; // Pre-computed from GBIF CSV
-}
-
-interface PrecomputedData {
-  species: Species[];
-  metadata: {
-    totalSpecies: number;
-    fetchedAt: string;
-    pagesProcessed: number;
-    byCategory: Record<string, number>;
-    taxonId?: string;
-  };
-}
-
-// In-memory cache of the JSON files (keyed by taxon ID)
-const cachedData: Map<string, PrecomputedData | null> = new Map();
-const cacheLoadTimes: Map<string, number> = new Map();
-const CACHE_RELOAD_INTERVAL = 60 * 60 * 1000; // Reload file every hour
-
-// Cache for GBIF CSV lookups (scientific_name_lowercase → { speciesKey, total, sinceAssessment })
-interface GbifCsvRow {
-  speciesKey: number;
-  observationsTotal: number;
-  observationsAfterAssessment: number;
-}
-const gbifCsvCache: Map<string, Map<string, GbifCsvRow>> = new Map();
-const gbifCsvCacheLoadTimes: Map<string, number> = new Map();
-
-/**
- * Load GBIF CSV and build a lookup of scientific_name → { speciesKey, observationsTotal, observationsAfterAssessment }.
- * CSV format: species_key,observations_total,scientific_name,common_name,observations_after_assessment_year
- */
-function loadGbifCsvLookup(taxonId: string): Map<string, GbifCsvRow> {
-  const cacheTime = gbifCsvCacheLoadTimes.get(taxonId) || 0;
-  if (gbifCsvCache.has(taxonId) && Date.now() - cacheTime < CACHE_RELOAD_INTERVAL) {
-    return gbifCsvCache.get(taxonId)!;
-  }
-
-  const lookup = new Map<string, GbifCsvRow>();
-  const dataDir = path.join(process.cwd(), "data");
-
-  // For "all" taxon, load each top-level taxon's CSV
-  const csvFiles: string[] = [];
-  if (taxonId === "all") {
-    const topLevelTaxa = TAXA.filter(t => t.id !== "all");
-    for (const t of topLevelTaxa) {
-      csvFiles.push(t.gbifDataFile);
-    }
-  } else {
-    const taxon = getTaxonConfig(taxonId);
-    csvFiles.push(taxon.gbifDataFile);
-  }
-
-  for (const csvFile of csvFiles) {
-    const csvPath = path.join(dataDir, csvFile);
-    if (!fs.existsSync(csvPath)) continue;
-
-    try {
-      const content = fs.readFileSync(csvPath, "utf-8");
-      const lines = content.trim().split("\n");
-      const header = lines[0];
-      if (!header.includes("observations_after_assessment_year") && !header.includes("occurrences_since_assessment")) continue;
-
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i];
-        // Parse: species_key,observations_total,scientific_name,common_name,observations_after_assessment_year
-        const firstComma = line.indexOf(",");
-        const secondComma = line.indexOf(",", firstComma + 1);
-        const thirdComma = line.indexOf(",", secondComma + 1);
-        const lastComma = line.lastIndexOf(",");
-
-        const speciesKeyStr = line.slice(0, firstComma).trim();
-        const totalStr = line.slice(firstComma + 1, secondComma).trim();
-        const scientificName = line.slice(secondComma + 1, thirdComma).toLowerCase().trim();
-        const sinceStr = line.slice(lastComma + 1).trim();
-
-        const speciesKey = parseInt(speciesKeyStr, 10);
-        const total = parseInt(totalStr, 10);
-        const sinceCount = parseInt(sinceStr, 10);
-
-        if (scientificName && !isNaN(speciesKey) && !isNaN(total)) {
-          lookup.set(scientificName, {
-            speciesKey,
-            observationsTotal: total,
-            observationsAfterAssessment: isNaN(sinceCount) ? 0 : sinceCount,
-          });
-        }
-      }
-    } catch {
-      // CSV not available or malformed, skip
-    }
-  }
-
-  gbifCsvCache.set(taxonId, lookup);
-  gbifCsvCacheLoadTimes.set(taxonId, Date.now());
-  return lookup;
-}
-
-function loadPrecomputedData(taxonId: string): PrecomputedData | null {
-  const taxon = getTaxonConfig(taxonId);
-  const dataPath = path.join(process.cwd(), "data", taxon.dataFile);
-
-  try {
-    // First try to load the single data file
-    if (fs.existsSync(dataPath)) {
-      const fileContent = fs.readFileSync(dataPath, "utf-8");
-      return JSON.parse(fileContent) as PrecomputedData;
-    }
-
-    // If single file doesn't exist, try to merge multiple data files (for combined taxa)
-    if (taxon.dataFiles && taxon.dataFiles.length > 0) {
-      const allSpecies: Species[] = [];
-      const byCategory: Record<string, number> = {};
-      let latestFetchedAt = "";
-
-      // Map data file names to taxon IDs for tagging species
-      const fileToTaxonId: Record<string, string> = {
-        "redlist-mammalia.json": "mammalia",
-        "redlist-aves.json": "aves",
-        "redlist-reptilia.json": "reptilia",
-        "redlist-amphibia.json": "amphibia",
-        "redlist-actinopterygii.json": "fishes",
-        "redlist-chondrichthyes.json": "fishes",
-        "redlist-insecta.json": "invertebrates",
-        "redlist-arachnida.json": "invertebrates",
-        "redlist-gastropoda.json": "invertebrates",
-        "redlist-bivalvia.json": "invertebrates",
-        "redlist-malacostraca.json": "invertebrates",
-        "redlist-anthozoa.json": "invertebrates",
-        "redlist-plantae.json": "plantae",
-        "redlist-ascomycota.json": "fungi",
-        "redlist-basidiomycota.json": "fungi",
-      };
-
-      for (const fileName of taxon.dataFiles) {
-        const filePath = path.join(process.cwd(), "data", fileName);
-        if (fs.existsSync(filePath)) {
-          const fileContent = fs.readFileSync(filePath, "utf-8");
-          const data = JSON.parse(fileContent) as PrecomputedData;
-
-          // Tag each species with its source taxon ID
-          const sourceTaxonId = fileToTaxonId[fileName] || "all";
-          const taggedSpecies = data.species.map(s => ({ ...s, taxon_id: sourceTaxonId }));
-          allSpecies.push(...taggedSpecies);
-
-          // Merge category counts
-          for (const [cat, count] of Object.entries(data.metadata.byCategory)) {
-            byCategory[cat] = (byCategory[cat] || 0) + count;
-          }
-
-          // Track the latest fetch time
-          if (data.metadata.fetchedAt > latestFetchedAt) {
-            latestFetchedAt = data.metadata.fetchedAt;
-          }
-        }
-      }
-
-      if (allSpecies.length > 0) {
-        return {
-          species: allSpecies,
-          metadata: {
-            totalSpecies: allSpecies.length,
-            fetchedAt: latestFetchedAt,
-            pagesProcessed: 0,
-            byCategory,
-            taxonId,
-          },
-        };
-      }
-    }
-
-    console.warn(`Pre-computed data file not found: ${dataPath}`);
-    return null;
-  } catch (error) {
-    console.error(`Error loading pre-computed data for ${taxonId}:`, error);
-    return null;
-  }
-}
-
-function getSpeciesData(taxonId: string): PrecomputedData | null {
-  const cacheTime = cacheLoadTimes.get(taxonId) || 0;
-  const cached = cachedData.get(taxonId);
-  // Reload from file if cache is stale, empty, or was null (retry failed loads)
-  if (!cachedData.has(taxonId) || cached === null || Date.now() - cacheTime > CACHE_RELOAD_INTERVAL) {
-    const data = loadPrecomputedData(taxonId);
-    // Only cache successful loads
-    if (data) {
-      cachedData.set(taxonId, data);
-      cacheLoadTimes.set(taxonId, Date.now());
-    }
-    return data;
-  }
-  return cached || null;
-}
+import { TAXA, getTaxonConfig, CATEGORY_ORDER } from "@/config/taxa";
+import {
+  getSpeciesData,
+  loadGbifCsvLookup,
+  getNeSpecies,
+  type Species,
+} from "../_shared/data";
 
 // Get list of available taxa with their data status
 function getAvailableTaxa(): { id: string; name: string; available: boolean; speciesCount: number }[] {
@@ -228,7 +14,6 @@ function getAvailableTaxa(): { id: string; name: string; available: boolean; spe
     let speciesCount = 0;
 
     try {
-      // Use getSpeciesData which handles both single and multiple data files
       const data = getSpeciesData(taxon.id);
       if (data) {
         available = true;
@@ -247,11 +32,28 @@ function getAvailableTaxa(): { id: string; name: string; available: boolean; spe
   });
 }
 
+/** Check if a species matches a set of year range filters */
+function matchesYearRangeFilter(assessmentDate: string | null, selectedYearRanges: Set<string>): boolean {
+  if (selectedYearRanges.size === 0) return true;
+  if (!assessmentDate) return false;
+  const currentYear = new Date().getFullYear();
+  const assessmentYear = new Date(assessmentDate).getFullYear();
+  const yearsSince = currentYear - assessmentYear;
+
+  for (const range of selectedYearRanges) {
+    switch (range) {
+      case "0-1 years": if (yearsSince <= 1) return true; break;
+      case "2-5 years": if (yearsSince >= 2 && yearsSince <= 5) return true; break;
+      case "6-10 years": if (yearsSince >= 6 && yearsSince <= 10) return true; break;
+      case "11-20 years": if (yearsSince >= 11 && yearsSince <= 20) return true; break;
+      case "20+ years": if (yearsSince > 20) return true; break;
+    }
+  }
+  return false;
+}
+
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
-  const taxonId = searchParams.get("taxon") || "plantae";
-  const category = searchParams.get("category");
-  const search = searchParams.get("search")?.toLowerCase();
 
   // Special case: return list of available taxa
   if (searchParams.get("list") === "taxa") {
@@ -260,133 +62,154 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  const taxon = getTaxonConfig(taxonId);
-  const data = getSpeciesData(taxonId);
+  // --- Server-side paginated endpoint ---
+  const taxaParam = searchParams.get("taxa");
+  const categoriesParam = searchParams.get("categories");
+  const yearsParam = searchParams.get("years");
+  const countriesParam = searchParams.get("countries");
+  const search = searchParams.get("search")?.toLowerCase();
+  const sortParam = searchParams.get("sort");
+  const sortField = (sortParam === "none" ? null : sortParam) as "year" | "category" | "newGbif" | null;
+  const sortDir = (searchParams.get("dir") || "desc") as "asc" | "desc";
+  const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+  const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") || "10", 10)));
+  const pinnedParam = searchParams.get("pinned");
 
+  // Load all species
+  const data = getSpeciesData("all");
   if (!data) {
     return NextResponse.json(
-      {
-        error: `Species data not available for ${taxon.name}. Run: npx tsx scripts/fetch-redlist-species.ts ${taxonId}`,
-        species: [],
-        total: 0,
-        taxon: {
-          id: taxon.id,
-          name: taxon.name,
-          estimatedDescribed: taxon.estimatedDescribed,
-          estimatedSource: taxon.estimatedSource,
-        },
-      },
+      { error: "Species data not available", species: [], total: 0 },
       { status: 503 }
     );
   }
 
-  // Handle NE category: serve species from GBIF CSV that aren't in Red List
-  if (category === "NE") {
-    try {
-      // Build set of Red List scientific names
-      const redListNames = new Set(
-        data.species.map((s) => s.scientific_name.toLowerCase().trim())
-      );
+  // Parse filter sets
+  const selectedTaxa = taxaParam
+    ? new Set(taxaParam.split(",").filter(Boolean))
+    : null;
+  const selectedCategories = categoriesParam
+    ? new Set(categoriesParam.split(",").filter(Boolean))
+    : null;
+  const selectedYearRanges = yearsParam
+    ? new Set(yearsParam.split(",").filter(Boolean))
+    : null;
+  const selectedCountries = countriesParam
+    ? new Set(countriesParam.split(",").filter(Boolean))
+    : null;
+  const pinnedIds = pinnedParam
+    ? new Set(pinnedParam.split(",").map(id => parseInt(id, 10)).filter(n => !isNaN(n)))
+    : null;
 
-      // For "all" taxon, read each individual taxon's CSV
-      const sourceTaxa = taxonId === "all"
-        ? TAXA.filter(t => t.id !== "all")
-        : [taxon];
+  // 1. Filter by taxa
+  let filtered: Species[] = selectedTaxa
+    ? data.species.filter(s => s.taxon_id && selectedTaxa.has(s.taxon_id))
+    : data.species;
 
-      let neSpecies: Species[] = [];
-
-      for (const sourceTaxon of sourceTaxa) {
-        const gbifCsvPath = path.join(process.cwd(), "data", sourceTaxon.gbifDataFile);
-        if (!fs.existsSync(gbifCsvPath)) continue;
-
-        const csvContent = fs.readFileSync(gbifCsvPath, "utf-8");
-        const lines = csvContent.trim().split("\n");
-        const header = lines[0];
-        if (!header.includes("scientific_name")) continue;
-        const hasCommonName = header.includes("common_name");
-
-        for (let i = 1; i < lines.length; i++) {
-          const parts = lines[i].split(",");
-          const speciesKey = parseInt(parts[0], 10);
-          const occurrenceCount = parseInt(parts[1], 10);
-          const scientificName = parts[2]?.trim() || "";
-          // Common name is in column 3; handle quoted values that may contain commas
-          let commonName: string | null = null;
-          if (hasCommonName) {
-            // Column 4 (index 3) is common_name, column 5 is observations_after_assessment_year
-            // Common names may be quoted and contain commas, so rejoin and strip last column
-            const remaining = parts.slice(3);
-            // Last element is observations_after_assessment_year
-            remaining.pop();
-            const raw = remaining.join(",").trim();
-            commonName = raw.replace(/^"|"$/g, "") || null;
-          }
-          if (scientificName && !redListNames.has(scientificName.toLowerCase())) {
-            neSpecies.push({
-              sis_taxon_id: speciesKey, // Use GBIF species key as ID
-              assessment_id: 0,
-              scientific_name: scientificName,
-              common_name: commonName,
-              family: null,
-              category: "NE",
-              assessment_date: null,
-              year_published: "",
-              url: `https://www.gbif.org/species/${speciesKey}`,
-              population_trend: null,
-              countries: [],
-              assessment_count: 0,
-              previous_assessments: [],
-              gbif_species_key: speciesKey,
-              gbif_occurrence_count: occurrenceCount,
-              taxon_id: sourceTaxon.id,
-            } as Species);
-          }
-        }
-      }
-
-      // Apply search filter
-      if (search) {
-        neSpecies = neSpecies.filter((s) =>
-          s.scientific_name.toLowerCase().includes(search) ||
-          s.common_name?.toLowerCase().includes(search)
-        );
-      }
-
-      return NextResponse.json({
-        species: neSpecies,
-        total: neSpecies.length,
-        metadata: data.metadata,
-        taxon: { id: taxon.id, name: taxon.name, estimatedDescribed: taxon.estimatedDescribed, estimatedSource: taxon.estimatedSource, color: taxon.color },
-      });
-    } catch (error) {
-      console.error("Error loading NE species:", error);
-      return NextResponse.json({
-        species: [],
-        total: 0,
-        taxon: { id: taxon.id, name: taxon.name, estimatedDescribed: taxon.estimatedDescribed, estimatedSource: taxon.estimatedSource, color: taxon.color },
-      });
-    }
+  // 2. If categories includes NE, merge NE species
+  const includesNE = selectedCategories?.has("NE");
+  if (includesNE) {
+    const redListNames = new Set(
+      data.species.map(s => s.scientific_name.toLowerCase().trim())
+    );
+    const neSpecies = getNeSpecies("all", redListNames);
+    // Filter NE species by selected taxa if applicable
+    const filteredNe = selectedTaxa
+      ? neSpecies.filter(s => s.taxon_id && selectedTaxa.has(s.taxon_id))
+      : neSpecies;
+    filtered = [...filtered, ...filteredNe];
   }
 
-  // Filter by category if specified
-  let filtered = data.species;
-
-  if (category) {
-    filtered = filtered.filter((s) => s.category === category);
+  // 3. Apply category filter
+  if (selectedCategories && selectedCategories.size > 0) {
+    filtered = filtered.filter(s => selectedCategories.has(s.category));
   }
 
-  if (search) {
-    filtered = filtered.filter(
-      (s) =>
-        s.scientific_name.toLowerCase().includes(search) ||
-        s.common_name?.toLowerCase().includes(search)
+  // 4. Apply year range filter (NE species skip year filter)
+  if (selectedYearRanges && selectedYearRanges.size > 0) {
+    filtered = filtered.filter(s =>
+      s.category === "NE" || matchesYearRangeFilter(s.assessment_date, selectedYearRanges)
     );
   }
 
-  // Enrich species with pre-computed GBIF data from CSV (species_key, total occurrences, since-assessment count)
-  const gbifLookup = loadGbifCsvLookup(taxonId);
+  // 5. Apply country filter
+  if (selectedCountries && selectedCountries.size > 0) {
+    filtered = filtered.filter(s =>
+      s.countries.some(c => selectedCountries.has(c))
+    );
+  }
+
+  // 6. Apply search filter
+  if (search) {
+    filtered = filtered.filter(s =>
+      s.scientific_name.toLowerCase().includes(search) ||
+      s.common_name?.toLowerCase().includes(search)
+    );
+  }
+
+  // 7. If pinned param provided, filter to only those IDs and preserve pinned order
+  if (pinnedIds && pinnedIds.size > 0) {
+    filtered = filtered.filter(s => pinnedIds.has(s.sis_taxon_id));
+  }
+
+  const total = filtered.length;
+
+  // 8. Load GBIF lookup (cached in memory) - needed for sort by newGbif and page enrichment
+  const gbifLookup = loadGbifCsvLookup("all");
+
+  // Helper to get GBIF after-assessment count for sorting (avoids enriching all 170k species)
+  const getGbifAfterAssessment = (s: Species): number => {
+    if (s.gbif_observations_after_assessment_year != null) return s.gbif_observations_after_assessment_year;
+    const row = gbifLookup.get(s.scientific_name.toLowerCase().trim());
+    return row ? row.observationsAfterAssessment : -1;
+  };
+
+  // 9. Sort
+  const sorted = [...filtered].sort((a, b) => {
+    // When pinned IDs are provided (starred mode), sort by pinned order
+    if (pinnedIds && pinnedIds.size > 0) {
+      const pinnedArr = pinnedParam!.split(",").map(id => parseInt(id, 10));
+      const aIdx = pinnedArr.indexOf(a.sis_taxon_id);
+      const bIdx = pinnedArr.indexOf(b.sis_taxon_id);
+      return aIdx - bIdx;
+    }
+
+    if (!sortField) {
+      // Stable tiebreaker only
+      return a.sis_taxon_id - b.sis_taxon_id;
+    }
+
+    let comparison = 0;
+    if (sortField === "year") {
+      const dateA = a.assessment_date ? new Date(a.assessment_date).getTime() : 0;
+      const dateB = b.assessment_date ? new Date(b.assessment_date).getTime() : 0;
+      comparison = dateA - dateB;
+    } else if (sortField === "category") {
+      comparison = (CATEGORY_ORDER[a.category] ?? 99) - (CATEGORY_ORDER[b.category] ?? 99);
+    } else if (sortField === "newGbif") {
+      if (a.category === "NE" || b.category === "NE") {
+        comparison = (a.gbif_occurrence_count ?? -1) - (b.gbif_occurrence_count ?? -1);
+      } else {
+        comparison = getGbifAfterAssessment(a) - getGbifAfterAssessment(b);
+      }
+    }
+
+    // Stable tiebreaker
+    if (comparison === 0) {
+      comparison = a.sis_taxon_id - b.sis_taxon_id;
+    }
+
+    return sortDir === "asc" ? comparison : -comparison;
+  });
+
+  // 10. Paginate
+  const start = (page - 1) * pageSize;
+  const pageSpecies = sorted.slice(start, start + pageSize);
+
+  // 11. GBIF-enrich only the returned page
   const enriched = gbifLookup.size > 0
-    ? filtered.map(s => {
+    ? pageSpecies.map(s => {
+        if (s.gbif_species_key) return s; // Already enriched (NE species)
         const row = gbifLookup.get(s.scientific_name.toLowerCase().trim());
         if (!row) return s;
         return {
@@ -396,18 +219,12 @@ export async function GET(request: NextRequest) {
           gbif_observations_after_assessment_year: row.observationsAfterAssessment,
         };
       })
-    : filtered;
+    : pageSpecies;
 
   return NextResponse.json({
     species: enriched,
-    total: enriched.length,
-    metadata: data.metadata,
-    taxon: {
-      id: taxon.id,
-      name: taxon.name,
-      estimatedDescribed: taxon.estimatedDescribed,
-      estimatedSource: taxon.estimatedSource,
-      color: taxon.color,
-    },
+    total,
+    page,
+    pageSize,
   });
 }
