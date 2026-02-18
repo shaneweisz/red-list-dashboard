@@ -90,6 +90,24 @@ function BarChart({ data }: { data: YearData[] }) {
   const maxRecords = Math.max(...data.map((d) => d.records));
   if (maxRecords === 0) return null;
 
+  const BAR_HEIGHT = 80;
+  // Pick nice round tick values for y-axis
+  const rawStep = maxRecords / 3;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  const step =
+    rawStep <= magnitude * 1 ? magnitude :
+    rawStep <= magnitude * 2 ? magnitude * 2 :
+    rawStep <= magnitude * 5 ? magnitude * 5 :
+    magnitude * 10;
+  const ticks: number[] = [];
+  for (let v = 0; v <= maxRecords; v += step) {
+    ticks.push(v);
+  }
+  if (ticks[ticks.length - 1] < maxRecords) {
+    ticks.push(ticks[ticks.length - 1] + step);
+  }
+  const yMax = ticks[ticks.length - 1];
+
   return (
     <div className="relative">
       {/* Hover tooltip */}
@@ -98,35 +116,52 @@ function BarChart({ data }: { data: YearData[] }) {
           {data[hovered].year}: {data[hovered].records.toLocaleString()} records
         </div>
       )}
-      {/* Bar area */}
-      <div className="flex items-end gap-[3px]" style={{ height: 80 }}>
-        {data.map((d, i) => {
-          const barH = Math.max(Math.round((d.records / maxRecords) * 80), 2);
-          return (
-            <div
-              key={d.year}
-              className="flex-1 cursor-default"
-              onMouseEnter={() => setHovered(i)}
-              onMouseLeave={() => setHovered(null)}
-            >
+      <div className="flex">
+        {/* Y-axis labels */}
+        <div className="relative shrink-0 w-8 mr-1" style={{ height: BAR_HEIGHT }}>
+          {ticks.map((v) => {
+            const bottom = yMax > 0 ? (v / yMax) * BAR_HEIGHT : 0;
+            return (
+              <span
+                key={v}
+                className="absolute right-0 text-[10px] text-zinc-400 dark:text-zinc-500 tabular-nums leading-none -translate-y-1/2"
+                style={{ bottom }}
+              >
+                {v >= 1000 ? `${(v / 1000).toFixed(v % 1000 === 0 ? 0 : 1)}k` : v}
+              </span>
+            );
+          })}
+        </div>
+        {/* Bar area */}
+        <div className="flex items-end gap-[3px] flex-1" style={{ height: BAR_HEIGHT }}>
+          {data.map((d, i) => {
+            const barH = Math.max(Math.round((d.records / yMax) * BAR_HEIGHT), 2);
+            return (
               <div
-                className={`w-full rounded-t transition-colors ${
-                  hovered === i
-                    ? "bg-blue-500 dark:bg-blue-400"
-                    : "bg-blue-300 dark:bg-blue-600"
-                }`}
-                style={{ height: barH }}
-              />
-            </div>
-          );
-        })}
+                key={d.year}
+                className="flex-1 cursor-default"
+                onMouseEnter={() => setHovered(i)}
+                onMouseLeave={() => setHovered(null)}
+              >
+                <div
+                  className={`w-full rounded-t transition-colors ${
+                    hovered === i
+                      ? "bg-blue-500 dark:bg-blue-400"
+                      : "bg-blue-300 dark:bg-blue-600"
+                  }`}
+                  style={{ height: barH }}
+                />
+              </div>
+            );
+          })}
+        </div>
       </div>
       {/* Year labels */}
-      <div className="flex gap-[3px] mt-1">
+      <div className="flex gap-[3px] mt-1 ml-9">
         {data.map((d) => (
           <div key={d.year} className="flex-1 text-center">
             <span className="text-[10px] text-zinc-400 dark:text-zinc-500 tabular-nums leading-none">
-              {String(d.year).slice(2)}
+              {d.year}
             </span>
           </div>
         ))}
