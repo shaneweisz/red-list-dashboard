@@ -442,11 +442,6 @@ export default function OccurrenceMapRow({
     fetchInatPhotos(0, pageSize);
   }, [pageSize, fetchInatPhotos]);
 
-  // Helper to check if a record is a preserved specimen or material sample (for map coloring)
-  const isPreservedOrMaterial = (basisOfRecord?: string): boolean => {
-    return basisOfRecord === "PRESERVED_SPECIMEN" || basisOfRecord === "MATERIAL_SAMPLE";
-  };
-
   // Classify an occurrence into one of the 6 checkbox categories
   const getCategory = (o: OccurrenceFeature): keyof typeof checkedTypes => {
     const basis = o.properties.basisOfRecord;
@@ -462,9 +457,6 @@ export default function OccurrenceMapRow({
   // Filter occurrences based on which checkboxes are ticked
   const filteredOccurrences = occurrences.filter((o) => checkedTypes[getCategory(o)]);
 
-  // Derive showPreservedSpecimens from checkbox state (for map legend)
-  const showPreservedSpecimens = checkedTypes.preservedSpecimen || checkedTypes.materialSample;
-
   // Helper to check if an occurrence is after the assessment year
   const isNewRecord = (eventDate?: string): boolean => {
     if (!assessmentYear || !eventDate) return false;
@@ -472,10 +464,9 @@ export default function OccurrenceMapRow({
     return recordYear > assessmentYear;
   };
 
-  // Count by category for the legend
-  const preservedRecords = filteredOccurrences.filter((o) => isPreservedOrMaterial(o.properties.basisOfRecord));
-  const newRecords = filteredOccurrences.filter((o) => !isPreservedOrMaterial(o.properties.basisOfRecord) && isNewRecord(o.properties.eventDate));
-  const oldRecords = filteredOccurrences.filter((o) => !isPreservedOrMaterial(o.properties.basisOfRecord) && !isNewRecord(o.properties.eventDate));
+  // Count by category for the legend (just pre/post assessment)
+  const newRecords = filteredOccurrences.filter((o) => isNewRecord(o.properties.eventDate));
+  const oldRecords = filteredOccurrences.filter((o) => !isNewRecord(o.properties.eventDate));
 
   return (
         <div
@@ -718,15 +709,13 @@ export default function OccurrenceMapRow({
                   />
                   <LocateControl />
                   {bbox && <FitBounds bbox={bbox} />}
-                  {/* Render occurrences: preserved (amber), old observations (grey), new observations (green) */}
+                  {/* Render occurrences: old (grey), new since assessment (green) */}
                   {filteredOccurrences.map((feature, idx) => {
                     const [lon, lat] = feature.geometry.coordinates;
-                    const preserved = isPreservedOrMaterial(feature.properties.basisOfRecord);
                     const isNew = isNewRecord(feature.properties.eventDate);
                     const isHighlighted = hoveredObs?.gbifID != null && feature.properties.gbifID === hoveredObs.gbifID;
-                    // Color: highlighted=blue, preserved=amber, new=green, old=grey
-                    const strokeColor = isHighlighted ? "#1d4ed8" : preserved ? "#b45309" : isNew ? "#15803d" : "#6b7280";
-                    const fillColor = isHighlighted ? "#3b82f6" : preserved ? "#f59e0b" : isNew ? "#22c55e" : "#9ca3af";
+                    const strokeColor = isHighlighted ? "#1d4ed8" : isNew ? "#15803d" : "#6b7280";
+                    const fillColor = isHighlighted ? "#3b82f6" : isNew ? "#22c55e" : "#9ca3af";
                     const inatMatch = inatPhotosByGbifId.get(feature.properties.gbifID);
                     return (
                       <CircleMarker
@@ -823,12 +812,6 @@ export default function OccurrenceMapRow({
                         <div className="w-3 h-3 rounded-full bg-green-500 border-2 border-green-700" />
                         <span>New since {assessmentYear} ({newRecords.length})</span>
                       </div>
-                      {showPreservedSpecimens && preservedRecords.length > 0 && (
-                        <div className="flex items-center gap-1">
-                          <div className="w-3 h-3 rounded-full bg-amber-500 border-2 border-amber-700" />
-                          <span>Preserved ({preservedRecords.length})</span>
-                        </div>
-                      )}
                     </>
                   ) : (
                     <span>
