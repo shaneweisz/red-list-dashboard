@@ -98,22 +98,33 @@ function BarChart({ data }: { data: YearData[] }) {
           {data[hovered].year}: {data[hovered].records.toLocaleString()} records
         </div>
       )}
-      <div className="flex items-end gap-[3px] h-24">
-        {data.map((d, i) => (
-          <div
-            key={d.year}
-            className="flex-1 flex flex-col items-center gap-1 cursor-default"
-            onMouseEnter={() => setHovered(i)}
-            onMouseLeave={() => setHovered(null)}
-          >
+      {/* Bar area */}
+      <div className="flex items-end gap-[3px]" style={{ height: 80 }}>
+        {data.map((d, i) => {
+          const barH = Math.max(Math.round((d.records / maxRecords) * 80), 2);
+          return (
             <div
-              className={`w-full rounded-t transition-colors min-h-[2px] ${
-                hovered === i
-                  ? "bg-blue-500 dark:bg-blue-400"
-                  : "bg-blue-300 dark:bg-blue-600"
-              }`}
-              style={{ height: `${(d.records / maxRecords) * 100}%` }}
-            />
+              key={d.year}
+              className="flex-1 cursor-default"
+              onMouseEnter={() => setHovered(i)}
+              onMouseLeave={() => setHovered(null)}
+            >
+              <div
+                className={`w-full rounded-t transition-colors ${
+                  hovered === i
+                    ? "bg-blue-500 dark:bg-blue-400"
+                    : "bg-blue-300 dark:bg-blue-600"
+                }`}
+                style={{ height: barH }}
+              />
+            </div>
+          );
+        })}
+      </div>
+      {/* Year labels */}
+      <div className="flex gap-[3px] mt-1">
+        {data.map((d) => (
+          <div key={d.year} className="flex-1 text-center">
             <span className="text-[10px] text-zinc-400 dark:text-zinc-500 tabular-nums leading-none">
               {String(d.year).slice(2)}
             </span>
@@ -160,64 +171,51 @@ function HorizontalBar({
 function SourceBreakdown({ sources }: { sources: CodedData[] }) {
   const total = sources.reduce((s, d) => s + d.records, 0);
   if (total === 0) return null;
-  const wildRecords = sources
-    .filter((s) => WILD_SOURCE_CODES.has(s.code))
-    .reduce((sum, s) => sum + s.records, 0);
+
+  const wildSources = sources.filter((s) => WILD_SOURCE_CODES.has(s.code));
+  const captiveSources = sources.filter((s) => !WILD_SOURCE_CODES.has(s.code));
+  const wildRecords = wildSources.reduce((sum, s) => sum + s.records, 0);
+  const captiveRecords = captiveSources.reduce((sum, s) => sum + s.records, 0);
   const wildPct = Math.round((wildRecords / total) * 100);
+  const captivePct = 100 - wildPct;
 
   return (
-    <div className="space-y-1.5">
-      {/* Stacked bar showing wild vs captive proportion */}
-      <div className="flex h-5 rounded overflow-hidden text-[10px] font-medium">
-        {sources.map((s) => {
-          const pct = (s.records / total) * 100;
-          if (pct < 1) return null;
-          const isWild = WILD_SOURCE_CODES.has(s.code);
-          return (
+    <div className="space-y-2">
+      {/* Two-bar comparison */}
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-2 text-xs">
+          <span className="w-20 text-zinc-600 dark:text-zinc-300 shrink-0">Wild</span>
+          <div className="flex-1 h-5 bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
             <div
-              key={s.code}
-              className={`flex items-center justify-center overflow-hidden ${
-                isWild
-                  ? "bg-amber-300 dark:bg-amber-600 text-amber-900 dark:text-amber-100"
-                  : "bg-emerald-200 dark:bg-emerald-700 text-emerald-900 dark:text-emerald-100"
-              }`}
-              style={{ width: `${pct}%` }}
-              title={`${s.label}: ${s.records} records (${Math.round(pct)}%)`}
-            >
-              {pct > 8 && <span>{s.code}</span>}
-            </div>
-          );
-        })}
+              className="h-full bg-amber-400 dark:bg-amber-500 rounded"
+              style={{ width: `${Math.max(wildPct, 1)}%` }}
+            />
+          </div>
+          <span className="w-20 text-right text-zinc-500 dark:text-zinc-400 tabular-nums shrink-0">
+            {wildPct}% ({wildRecords.toLocaleString()})
+          </span>
+        </div>
+        <div className="flex items-center gap-2 text-xs">
+          <span className="w-20 text-zinc-600 dark:text-zinc-300 shrink-0">Captive</span>
+          <div className="flex-1 h-5 bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
+            <div
+              className="h-full bg-emerald-300 dark:bg-emerald-600 rounded"
+              style={{ width: `${Math.max(captivePct, 1)}%` }}
+            />
+          </div>
+          <span className="w-20 text-right text-zinc-500 dark:text-zinc-400 tabular-nums shrink-0">
+            {captivePct}% ({captiveRecords.toLocaleString()})
+          </span>
+        </div>
       </div>
-      {/* Legend */}
-      <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">
-        {sources.map((s) => {
-          const isWild = WILD_SOURCE_CODES.has(s.code);
-          return (
-            <span key={s.code} className="flex items-center gap-1">
-              <span
-                className={`inline-block w-2 h-2 rounded-sm ${
-                  isWild
-                    ? "bg-amber-300 dark:bg-amber-600"
-                    : "bg-emerald-200 dark:bg-emerald-700"
-                }`}
-              />
-              {s.label} ({s.records})
-            </span>
-          );
-        })}
+      {/* Detail breakdown */}
+      <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-zinc-400 dark:text-zinc-500">
+        {sources.map((s) => (
+          <span key={s.code}>
+            {s.label}: {s.records.toLocaleString()}
+          </span>
+        ))}
       </div>
-      {wildPct > 0 && (
-        <p
-          className={`text-[11px] font-medium ${
-            wildPct >= 50
-              ? "text-amber-600 dark:text-amber-400"
-              : "text-zinc-500 dark:text-zinc-400"
-          }`}
-        >
-          {wildPct}% of recorded trade is wild-sourced / ranched / unknown
-        </p>
-      )}
     </div>
   );
 }

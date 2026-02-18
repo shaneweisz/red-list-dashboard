@@ -231,40 +231,6 @@ export default function CitesSummary({
         </div>
       )}
 
-      {/* Distribution */}
-      {data.nativeCountries && data.nativeCountries.length > 0 && (
-        <div>
-          <h4 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
-            Distribution ({data.nativeCountries.length} countries
-            {data.extinctCountries && data.extinctCountries.length > 0 && (
-              <>, {data.extinctCountries.length} extinct</>
-            )}
-            )
-          </h4>
-          <div className="flex flex-wrap gap-1.5">
-            {data.nativeCountries.map((c) => (
-              <span
-                key={c.code}
-                className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
-                title={c.name}
-              >
-                {c.code}
-              </span>
-            ))}
-            {data.extinctCountries &&
-              data.extinctCountries.map((c) => (
-                <span
-                  key={c.code}
-                  className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500 line-through"
-                  title={`${c.name} (extinct)`}
-                >
-                  {c.code}
-                </span>
-              ))}
-          </div>
-        </div>
-      )}
-
       {/* Trade suspensions */}
       {data.suspensions && data.suspensions.length > 0 && (
         <div>
