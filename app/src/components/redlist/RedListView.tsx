@@ -547,10 +547,11 @@ export default function RedListView() {
       })
       .map(([code]) => code);
 
+    // Species counts only; GBIF occurrence counts are fetched from the API by WorldMap
     const statsForMap = Object.fromEntries(
       Object.entries(counts).map(([code, count]) => [
         code,
-        { occurrences: count, species: count }
+        { occurrences: 0, species: count }
       ])
     );
 
@@ -1000,7 +1001,7 @@ export default function RedListView() {
                   onCountrySelect={handleCountrySelect}
                   onClearSelection={handleClearCountry}
                   precomputedStats={countryStatsForMap}
-                  statLabel="Species"
+                  selectedTaxa={selectedTaxa}
                 />
               )}
             </div>
