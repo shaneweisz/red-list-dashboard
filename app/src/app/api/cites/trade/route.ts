@@ -66,6 +66,8 @@ interface TradeSummary {
   topExporters: { code: string; records: number; quantity: number }[];
   /** Top importing countries */
   topImporters: { code: string; records: number; quantity: number }[];
+  /** Top bilateral trade flows (exporter → importer) */
+  topFlows: { from: string; to: string; records: number; quantity: number }[];
 }
 
 function parseQty(val: string | null): number {
@@ -172,6 +174,27 @@ function summarize(rows: TradeRow[]): TradeSummary {
     .slice(0, 8)
     .map(([code, v]) => ({ code, ...v }));
 
+  // Bilateral flows (exporter → importer pairs)
+  const flowMap = new Map<string, { records: number; quantity: number }>();
+  for (const r of rows) {
+    if (!r.Exporter || !r.Importer) continue;
+    const key = `${r.Exporter}->${r.Importer}`;
+    const entry = flowMap.get(key) || { records: 0, quantity: 0 };
+    entry.records++;
+    entry.quantity += Math.max(
+      parseQty(r["Importer reported quantity"]),
+      parseQty(r["Exporter reported quantity"])
+    );
+    flowMap.set(key, entry);
+  }
+  const topFlows = Array.from(flowMap.entries())
+    .sort(([, a], [, b]) => b.records - a.records)
+    .slice(0, 12)
+    .map(([key, v]) => {
+      const [from, to] = key.split("->");
+      return { from, to, ...v };
+    });
+
   return {
     totalRecords: rows.length,
     yearRange,
@@ -181,6 +204,7 @@ function summarize(rows: TradeRow[]): TradeSummary {
     topSources,
     topExporters,
     topImporters,
+    topFlows,
   };
 }
 
