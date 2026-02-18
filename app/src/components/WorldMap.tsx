@@ -187,10 +187,9 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
     return Array.from(selectedTaxa).sort().join(",");
   }, [selectedTaxa]);
 
-  // Fetch real per-country occurrence counts from GBIF API when occurrences mode is active
+  // Fetch real per-country occurrence counts from GBIF API in the background
+  // Starts immediately so data is ready when the user toggles to occurrences mode
   useEffect(() => {
-    if (colorMode !== "occurrences") return;
-
     // Use cached result if available
     if (occurrenceCacheRef.current[taxaKey]) {
       setOccurrenceStats(occurrenceCacheRef.current[taxaKey]);
@@ -225,7 +224,7 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
     });
 
     return () => controller.abort();
-  }, [colorMode, taxaKey]);
+  }, [taxaKey]);
 
   // Invalidate occurrence cache when taxa change
   useEffect(() => {
@@ -339,9 +338,17 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
 
       {/* Map */}
       <div className="flex-1 rounded-lg overflow-hidden relative" style={{ minHeight: "200px" }}>
-        {(loading || (occurrenceLoading && colorMode === "occurrences")) && (
+        {loading && (
           <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-zinc-900/50 z-10">
-            <div className="text-sm text-zinc-500">{occurrenceLoading ? "Loading GBIF occurrence data..." : "Loading heatmap data..."}</div>
+            <div className="text-sm text-zinc-500">Loading heatmap data...</div>
+          </div>
+        )}
+        {occurrenceLoading && colorMode === "occurrences" && !loading && (
+          <div className="absolute top-2 right-2 z-10">
+            <svg className="animate-spin h-4 w-4 text-zinc-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
           </div>
         )}
         <ComposableMap
