@@ -96,22 +96,6 @@ interface Species {
   gbif_observations_after_assessment_year?: number | null; // Pre-computed from GBIF CSV
 }
 
-interface GbifByRecordType {
-  humanObservation: number;
-  preservedSpecimen: number;
-  machineObservation: number;
-  other: number;
-  iNaturalist?: number;
-}
-
-interface InatObservation {
-  url: string;
-  date: string | null;
-  imageUrl: string | null;
-  location: string | null;
-  observer: string | null;
-}
-
 interface InatDefaultImage {
   squareUrl: string | null;
   mediumUrl: string | null;
@@ -136,8 +120,9 @@ interface SpeciesDetails {
   openAlexPaperCount: number | null | undefined;
   // undefined = still loading (show spinner), null = fetched, no data
   papersAtAssessment: number | null | undefined;
-  // Whether criteria has been fetched (to avoid re-fetching on null)
-  _criteriaFetched?: boolean;
+  // Whether criteria/gbifMatchStatus have been fetched (to avoid re-fetching on null)
+  criteriaFetched?: boolean;
+  gbifMatchFetched?: boolean;
 }
 
 interface SpeciesResponse {
@@ -178,66 +163,6 @@ function DebouncedSearchInput({
       placeholder={placeholder}
       className={className}
     />
-  );
-}
-
-// Component for iNaturalist observation preview with navigation
-function InatObservationPreview({
-  observations,
-  currentIndex,
-  onNavigate,
-  totalCount,
-}: {
-  observations: InatObservation[];
-  currentIndex: number;
-  onNavigate: (delta: number) => void;
-  totalCount: number;
-}) {
-  if (observations.length === 0) return null;
-  const obs = observations[currentIndex] || observations[0];
-  if (!obs?.imageUrl) return null;
-
-  return (
-    <div className="bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl p-2 w-56">
-      {/* Navigation header */}
-      {observations.length > 1 && (
-        <div className="flex items-center justify-between mb-2 text-[10px] text-zinc-400">
-          <button
-            type="button"
-            onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); onNavigate(-1); }}
-            disabled={currentIndex === 0}
-            className="p-1 hover:bg-zinc-800 rounded disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <span>{currentIndex + 1} / {observations.length}{totalCount > observations.length ? ` of ${totalCount.toLocaleString()}` : ''}</span>
-          <button
-            type="button"
-            onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); onNavigate(1); }}
-            disabled={currentIndex >= observations.length - 1}
-            className="p-1 hover:bg-zinc-800 rounded disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-        </div>
-      )}
-      <a href={obs.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
-        <img
-          src={obs.imageUrl.replace('/original.', '/medium.')}
-          alt="iNaturalist observation"
-          className="w-full h-40 object-cover rounded mb-2 hover:opacity-90"
-        />
-      </a>
-      <div className="text-[10px] text-zinc-300 space-y-0.5">
-        {obs.date && <div>{obs.date}</div>}
-        {obs.observer && <div className="truncate">{obs.observer}</div>}
-        {obs.location && <div className="truncate text-zinc-400">{obs.location}</div>}
-      </div>
-    </div>
   );
 }
 
@@ -790,6 +715,7 @@ export default function RedListView() {
   }, [paginatedSpecies, speciesDetails]);
 
   // Fetch iNat profile pic + OpenAlex paper counts for visible species (lightweight per-page calls)
+  // Also resolve GBIF match status for species not found in CSV (HIGHERRANK vs NONE)
   useEffect(() => {
     const speciesToFetch = paginatedSpecies.filter(
       (s) => {
@@ -800,23 +726,34 @@ export default function RedListView() {
     );
     if (speciesToFetch.length === 0) return;
 
+    const controller = new AbortController();
+    const { signal } = controller;
+
     async function fetchLightweightDetails() {
       const promises = speciesToFetch.map(async (s) => {
         try {
           const assessmentDate = s.assessment_date ? new Date(s.assessment_date) : null;
           const assessmentYear = assessmentDate ? assessmentDate.getFullYear().toString() : "";
 
-          // Fetch iNat image + OpenAlex papers in parallel
-          const [inatRes, litRes] = await Promise.all([
+          // Build parallel fetch list: iNat image + OpenAlex papers
+          // + GBIF match check for species not in CSV
+          const fetchPromises: [Promise<Response>, Promise<Response | null>, Promise<Response | null>] = [
             fetch(
-              `https://api.inaturalist.org/v1/taxa?q=${encodeURIComponent(s.scientific_name)}&rank=species&per_page=1`
+              `https://api.inaturalist.org/v1/taxa?q=${encodeURIComponent(s.scientific_name)}&rank=species&per_page=1`,
+              { signal }
             ),
             s.category === "NE"
-              ? fetch(`/api/literature?scientificName=${encodeURIComponent(s.scientific_name)}&assessmentYear=0&limit=1`)
+              ? fetch(`/api/literature?scientificName=${encodeURIComponent(s.scientific_name)}&assessmentYear=0&limit=1`, { signal })
               : assessmentYear
-                ? fetch(`/api/literature?scientificName=${encodeURIComponent(s.scientific_name)}&assessmentYear=${assessmentYear}&limit=1`)
+                ? fetch(`/api/literature?scientificName=${encodeURIComponent(s.scientific_name)}&assessmentYear=${assessmentYear}&limit=1`, { signal })
                 : Promise.resolve(null),
-          ]);
+            // Check GBIF match status for species missing from CSV
+            !s.gbif_species_key
+              ? fetch(`https://api.gbif.org/v1/species/match?name=${encodeURIComponent(s.scientific_name)}`, { signal })
+              : Promise.resolve(null),
+          ];
+
+          const [inatRes, litRes, gbifMatchRes] = await Promise.all(fetchPromises);
 
           let inatDefaultImage: InatDefaultImage | null = null;
           if (inatRes.ok) {
@@ -838,19 +775,34 @@ export default function RedListView() {
             papersAtAssessment = litData.papersAtAssessment ?? null;
           }
 
-          return { id: s.sis_taxon_id, inatDefaultImage, openAlexPaperCount, papersAtAssessment };
-        } catch {
-          return { id: s.sis_taxon_id, inatDefaultImage: null, openAlexPaperCount: null, papersAtAssessment: null };
+          let gbifMatchStatus: GbifMatchStatus | null = null;
+          if (gbifMatchRes?.ok) {
+            const gbifMatch = await gbifMatchRes.json();
+            gbifMatchStatus = {
+              matchType: gbifMatch.matchType || 'NONE',
+              matchedName: gbifMatch.scientificName,
+              matchedRank: gbifMatch.rank,
+            };
+          }
+
+          return { id: s.sis_taxon_id, inatDefaultImage, openAlexPaperCount, papersAtAssessment, gbifMatchStatus };
+        } catch (err) {
+          if (signal.aborted) throw err;
+          return { id: s.sis_taxon_id, inatDefaultImage: null, openAlexPaperCount: null, papersAtAssessment: null, gbifMatchStatus: null };
         }
       });
 
       const results = await Promise.all(promises);
+      if (signal.aborted) return;
+
       const updates: Record<number, Partial<SpeciesDetails>> = {};
       for (const r of results) {
         updates[r.id] = {
           inatDefaultImage: r.inatDefaultImage,
           openAlexPaperCount: r.openAlexPaperCount,
           papersAtAssessment: r.papersAtAssessment,
+          gbifMatchFetched: true,
+          ...(r.gbifMatchStatus ? { gbifMatchStatus: r.gbifMatchStatus } : {}),
         };
       }
       setSpeciesDetails((prev) => {
@@ -866,6 +818,7 @@ export default function RedListView() {
     }
 
     fetchLightweightDetails();
+    return () => controller.abort();
   }, [paginatedSpecies, speciesDetails]);
 
   // Fetch IUCN criteria on row expansion (lightweight — no GBIF calls; the map handles those)
@@ -874,7 +827,7 @@ export default function RedListView() {
     const s = paginatedSpecies.find((sp) => sp.sis_taxon_id === selectedSpeciesKey);
     if (!s || s.category === "NE") return;
     const existing = speciesDetails[s.sis_taxon_id];
-    if (!existing || existing._criteriaFetched) return;
+    if (!existing || existing.criteriaFetched) return;
 
     async function fetchCriteria() {
       if (!s || !s.assessment_id) return;
@@ -889,7 +842,7 @@ export default function RedListView() {
             [s.sis_taxon_id]: {
               ...prev[s.sis_taxon_id],
               criteria: data.criteria || null,
-              _criteriaFetched: true,
+              criteriaFetched: true,
             },
           }));
         }
@@ -1481,9 +1434,11 @@ export default function RedListView() {
                             {recordsAtAssessment.toLocaleString()}
                           </a>
                         );
-                      })() : details?.gbifMatchStatus?.matchType === 'NONE' ? (
+                      })() : details?.gbifMatchStatus?.matchType === 'HIGHERRANK' || details?.gbifMatchStatus?.matchType === 'NONE' ? (
                         <HoverTooltip
-                          text="Species not found in GBIF. May be due to a taxonomic split, synonym, or naming difference."
+                          text={details.gbifMatchStatus.matchType === 'HIGHERRANK'
+                            ? `Name not found in GBIF (matched to ${details.gbifMatchStatus.matchedRank?.toLowerCase() || 'higher rank'} instead). May be due to a taxonomic split, synonym, or naming difference.`
+                            : "Species not found in GBIF. May be due to a taxonomic split, synonym, or naming difference."}
                         >
                           <span className="text-zinc-400 cursor-help">?</span>
                         </HoverTooltip>
@@ -1511,9 +1466,11 @@ export default function RedListView() {
                         >
                           {details.gbifOccurrencesSinceAssessment.toLocaleString()}
                         </a>
-                      ) : details?.gbifMatchStatus?.matchType === 'NONE' ? (
+                      ) : details?.gbifMatchStatus?.matchType === 'HIGHERRANK' || details?.gbifMatchStatus?.matchType === 'NONE' ? (
                         <HoverTooltip
-                          text="Species not found in GBIF. May be due to a taxonomic split, synonym, or naming difference."
+                          text={details.gbifMatchStatus.matchType === 'HIGHERRANK'
+                            ? `Name not found in GBIF (matched to ${details.gbifMatchStatus.matchedRank?.toLowerCase() || 'higher rank'} instead). May be due to a taxonomic split, synonym, or naming difference.`
+                            : "Species not found in GBIF. May be due to a taxonomic split, synonym, or naming difference."}
                         >
                           <span className="text-zinc-400 cursor-help">?</span>
                         </HoverTooltip>
