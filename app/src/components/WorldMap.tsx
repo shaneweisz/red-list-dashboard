@@ -146,9 +146,9 @@ interface WorldMapProps {
 function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, selectedTaxon, precomputedStats, selectedTaxa }: WorldMapProps) {
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoveredCountryCode, setHoveredCountryCode] = useState<string | null>(null);
-  const [speciesStats, setSpeciesStats] = useState<CountryStats>({});
+  const [speciesStats, setSpeciesStats] = useState<CountryStats>(precomputedStats || {});
   const [occurrenceStats, setOccurrenceStats] = useState<CountryStats | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!precomputedStats);
   const [occurrenceLoading, setOccurrenceLoading] = useState(false);
   const [colorMode, setColorMode] = useState<ColorMode>("species");
 
