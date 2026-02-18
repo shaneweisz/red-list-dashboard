@@ -188,7 +188,7 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
   }, [selectedTaxa]);
 
   // Fetch real per-country occurrence counts from GBIF API in the background
-  // Each taxon's results merge in progressively as they arrive
+  // All taxa fire in parallel; map updates once when all resolve
   useEffect(() => {
     // Use cached result if available
     if (occurrenceCacheRef.current[taxaKey]) {
@@ -197,36 +197,31 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
     }
 
     const taxaToFetch = taxaKey === "all" ? ALL_TAXA_IDS : taxaKey.split(",");
-    let pending = taxaToFetch.length;
-    const combined: CountryStats = {};
 
     setOccurrenceLoading(true);
-    setOccurrenceStats({});
     const controller = new AbortController();
 
-    for (const taxon of taxaToFetch) {
-      fetch(`/api/country/stats?taxon=${encodeURIComponent(taxon)}`, { signal: controller.signal })
-        .then(res => res.json())
-        .then(data => {
-          if (controller.signal.aborted) return;
-          const stats = (data.stats || {}) as CountryStats;
-          for (const [code, stat] of Object.entries(stats)) {
-            if (!combined[code]) combined[code] = { occurrences: 0, species: 0 };
-            combined[code].occurrences += stat.occurrences;
-          }
-          // Spread to create a new object so React sees the state change
-          setOccurrenceStats({ ...combined });
-        })
-        .catch(() => {})
-        .finally(() => {
-          if (controller.signal.aborted) return;
-          pending--;
-          if (pending === 0) {
-            occurrenceCacheRef.current[taxaKey] = { ...combined };
-            setOccurrenceLoading(false);
-          }
-        });
-    }
+    Promise.all(
+      taxaToFetch.map(taxon =>
+        fetch(`/api/country/stats?taxon=${encodeURIComponent(taxon)}`, { signal: controller.signal })
+          .then(res => res.json())
+          .then(data => (data.stats || {}) as CountryStats)
+          .catch(() => ({} as CountryStats))
+      )
+    ).then(results => {
+      if (controller.signal.aborted) return;
+      const combined: CountryStats = {};
+      for (const stats of results) {
+        for (const [code, stat] of Object.entries(stats)) {
+          if (!combined[code]) combined[code] = { occurrences: 0, species: 0 };
+          combined[code].occurrences += stat.occurrences;
+        }
+      }
+      occurrenceCacheRef.current[taxaKey] = combined;
+      setOccurrenceStats(combined);
+    }).finally(() => {
+      if (!controller.signal.aborted) setOccurrenceLoading(false);
+    });
 
     return () => controller.abort();
   }, [taxaKey]);
