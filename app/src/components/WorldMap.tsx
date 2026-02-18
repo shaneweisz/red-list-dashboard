@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, memo } from "react";
+import React, { useState, useEffect, useRef, useMemo, memo } from "react";
 import {
   ComposableMap,
   Geographies,
@@ -130,32 +130,41 @@ function formatNumber(num: number): string {
 
 type ColorMode = "species" | "occurrences";
 
+const ALL_TAXA_IDS = ["mammalia", "aves", "reptilia", "amphibia", "fishes", "invertebrates", "plantae", "fungi"];
+
 interface WorldMapProps {
   selectedCountries: Set<string>;
   onCountrySelect: (countryCode: string, countryName: string, event: React.MouseEvent) => void;
   onClearSelection: () => void;
   selectedTaxon?: string | null;
-  // Optional pre-computed stats (for Red List - avoids API call)
+  // Optional pre-computed stats (for Red List species counts - avoids API call)
   precomputedStats?: CountryStats;
+  // Which taxa are selected (determines which GBIF occurrence stats to fetch)
+  selectedTaxa?: Set<string>;
 }
 
-function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, selectedTaxon, precomputedStats }: WorldMapProps) {
+function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, selectedTaxon, precomputedStats, selectedTaxa }: WorldMapProps) {
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoveredCountryCode, setHoveredCountryCode] = useState<string | null>(null);
-  const [countryStats, setCountryStats] = useState<CountryStats>({});
+  const [speciesStats, setSpeciesStats] = useState<CountryStats>({});
+  const [occurrenceStats, setOccurrenceStats] = useState<CountryStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [occurrenceLoading, setOccurrenceLoading] = useState(false);
   const [colorMode, setColorMode] = useState<ColorMode>("species");
 
-  // Use precomputed stats if provided, otherwise fetch from API
+  // Cache occurrence results by taxa key to avoid refetching on toggle
+  const occurrenceCacheRef = useRef<Record<string, CountryStats>>({});
+
+  // Use precomputed stats for species counts, otherwise fetch from API
   useEffect(() => {
     if (precomputedStats) {
-      setCountryStats(precomputedStats);
+      setSpeciesStats(precomputedStats);
       setLoading(false);
       return;
     }
 
     if (!selectedTaxon) {
-      setCountryStats({});
+      setSpeciesStats({});
       setLoading(false);
       return;
     }
@@ -165,15 +174,69 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
       .then((res) => res.json())
       .then((data) => {
         if (data.stats) {
-          setCountryStats(data.stats);
+          setSpeciesStats(data.stats);
         }
       })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [selectedTaxon, precomputedStats]);
 
-  // Calculate max value for heatmap scaling based on selected color mode
-  const maxValue = Object.values(countryStats).reduce(
+  // Stable key for the current taxa selection
+  const taxaKey = useMemo(() => {
+    if (!selectedTaxa || selectedTaxa.size === 0) return "all";
+    return Array.from(selectedTaxa).sort().join(",");
+  }, [selectedTaxa]);
+
+  // Fetch real per-country occurrence counts from GBIF API when occurrences mode is active
+  useEffect(() => {
+    if (colorMode !== "occurrences") return;
+
+    // Use cached result if available
+    if (occurrenceCacheRef.current[taxaKey]) {
+      setOccurrenceStats(occurrenceCacheRef.current[taxaKey]);
+      return;
+    }
+
+    const taxaToFetch = taxaKey === "all" ? ALL_TAXA_IDS : taxaKey.split(",");
+
+    setOccurrenceLoading(true);
+    const controller = new AbortController();
+
+    Promise.all(
+      taxaToFetch.map(taxon =>
+        fetch(`/api/country/stats?taxon=${encodeURIComponent(taxon)}`, { signal: controller.signal })
+          .then(res => res.json())
+          .then(data => (data.stats || {}) as CountryStats)
+          .catch(() => ({} as CountryStats))
+      )
+    ).then(results => {
+      if (controller.signal.aborted) return;
+      const combined: CountryStats = {};
+      for (const stats of results) {
+        for (const [code, stat] of Object.entries(stats)) {
+          if (!combined[code]) combined[code] = { occurrences: 0, species: 0 };
+          combined[code].occurrences += stat.occurrences;
+        }
+      }
+      occurrenceCacheRef.current[taxaKey] = combined;
+      setOccurrenceStats(combined);
+    }).finally(() => {
+      if (!controller.signal.aborted) setOccurrenceLoading(false);
+    });
+
+    return () => controller.abort();
+  }, [colorMode, taxaKey]);
+
+  // Invalidate occurrence cache when taxa change
+  useEffect(() => {
+    setOccurrenceStats(occurrenceCacheRef.current[taxaKey] || null);
+  }, [taxaKey]);
+
+  // Active stats for coloring based on mode
+  const activeStats = colorMode === "species" ? speciesStats : (occurrenceStats || {});
+
+  // Calculate max value for heatmap scaling
+  const maxValue = Object.values(activeStats).reduce(
     (max, stat) => Math.max(max, colorMode === "species" ? stat.species : stat.occurrences),
     0
   );
@@ -182,14 +245,15 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
     if (isSelected) return "#3b82f6"; // blue-500 for selected
     if (!alpha2) return "#f4f4f5";
 
-    const stats = countryStats[alpha2];
+    const stats = activeStats[alpha2];
     if (!stats) return "#f4f4f5";
 
     const value = colorMode === "species" ? stats.species : stats.occurrences;
     return getHeatmapColor(value, maxValue);
   };
 
-  const hoveredStats = hoveredCountryCode ? countryStats[hoveredCountryCode] : null;
+  const hoveredSpeciesStats = hoveredCountryCode ? speciesStats[hoveredCountryCode] : null;
+  const hoveredOccurrenceStats = hoveredCountryCode && occurrenceStats ? occurrenceStats[hoveredCountryCode] : null;
   const selectedCount = selectedCountries.size;
 
   return (
@@ -248,15 +312,23 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
       {hoveredCountry && (
         <div className="absolute top-12 left-1/2 -translate-x-1/2 z-10 bg-white dark:bg-zinc-800 px-3 py-2 rounded-lg shadow-lg text-sm text-zinc-700 dark:text-zinc-300 pointer-events-none border border-zinc-200 dark:border-zinc-700 min-w-[140px]">
           <div className="font-medium text-zinc-900 dark:text-zinc-100">{hoveredCountry}</div>
-          {hoveredStats ? (
+          {hoveredSpeciesStats || hoveredOccurrenceStats ? (
             <div className="mt-1 space-y-0.5">
+              {hoveredSpeciesStats && (
+                <div className="flex justify-between gap-4 text-xs">
+                  <span className="text-zinc-500">Species</span>
+                  <span className="font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">{formatNumber(hoveredSpeciesStats.species)}</span>
+                </div>
+              )}
               <div className="flex justify-between gap-4 text-xs">
-                <span className="text-zinc-500">Species</span>
-                <span className="font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">{formatNumber(hoveredStats.species)}</span>
-              </div>
-              <div className="flex justify-between gap-4 text-xs">
-                <span className="text-zinc-500">Occurrences</span>
-                <span className="font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">{formatNumber(hoveredStats.occurrences)}</span>
+                <span className="text-zinc-500">GBIF Occurrences</span>
+                {occurrenceLoading ? (
+                  <span className="text-zinc-400 tabular-nums">...</span>
+                ) : hoveredOccurrenceStats ? (
+                  <span className="font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">{formatNumber(hoveredOccurrenceStats.occurrences)}</span>
+                ) : (
+                  <span className="text-zinc-400 tabular-nums">{colorMode === "occurrences" ? "..." : "—"}</span>
+                )}
               </div>
             </div>
           ) : (
@@ -267,9 +339,9 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
 
       {/* Map */}
       <div className="flex-1 rounded-lg overflow-hidden relative" style={{ minHeight: "200px" }}>
-        {loading && (
+        {(loading || (occurrenceLoading && colorMode === "occurrences")) && (
           <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-zinc-900/50 z-10">
-            <div className="text-sm text-zinc-500">Loading heatmap data...</div>
+            <div className="text-sm text-zinc-500">{occurrenceLoading ? "Loading GBIF occurrence data..." : "Loading heatmap data..."}</div>
           </div>
         )}
         <ComposableMap
