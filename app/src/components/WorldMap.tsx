@@ -282,7 +282,7 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
               onClick={() => setColorMode("occurrences")}
               className={`px-1.5 py-0.5 rounded transition-colors ${colorMode === "occurrences" ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm font-medium" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
             >
-              GBIF Obs.
+              GBIF
             </button>
           </div>
           {/* Legend in header */}
@@ -320,7 +320,7 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
                 </div>
               )}
               <div className="flex justify-between gap-4 text-xs">
-                <span className="text-zinc-500">GBIF Obs.</span>
+                <span className="text-zinc-500">GBIF</span>
                 {occurrenceLoading ? (
                   <span className="text-zinc-400 tabular-nums">...</span>
                 ) : hoveredOccurrenceStats ? (
