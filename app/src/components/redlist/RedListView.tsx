@@ -91,8 +91,8 @@ interface Species {
   assessment_count: number;
   previous_assessments: PreviousAssessment[];
   taxon_id?: string; // Present when viewing "all" taxa
-  gbif_species_key?: number; // GBIF species key for NE species
-  gbif_occurrence_count?: number; // Total GBIF occurrences for NE species
+  gbif_species_key?: number; // GBIF species key (from CSV)
+  gbif_occurrence_count?: number; // Total GBIF occurrences (from CSV)
   gbif_observations_after_assessment_year?: number | null; // Pre-computed from GBIF CSV
 }
 
@@ -129,16 +129,15 @@ interface SpeciesDetails {
   gbifUrl: string | null;
   gbifOccurrences: number | null;
   gbifOccurrencesSinceAssessment: number | null;
-  gbifByRecordType: GbifByRecordType | null;
-  gbifNewByRecordType: GbifByRecordType | null;
   gbifMatchStatus: GbifMatchStatus | null;
-  recentInatObservations: InatObservation[];
-  inatTotalCount: number;
-  inatDefaultImage: InatDefaultImage | null;
-  // OpenAlex literature count
-  openAlexPaperCount: number | null;
-  // Papers at time of assessment
-  papersAtAssessment: number | null;
+  // undefined = still loading (show spinner), null = fetched, no image
+  inatDefaultImage: InatDefaultImage | null | undefined;
+  // undefined = still loading (show spinner), null = fetched, no data
+  openAlexPaperCount: number | null | undefined;
+  // undefined = still loading (show spinner), null = fetched, no data
+  papersAtAssessment: number | null | undefined;
+  // Whether criteria has been fetched (to avoid re-fetching on null)
+  _criteriaFetched?: boolean;
 }
 
 interface SpeciesResponse {
@@ -312,87 +311,6 @@ function HoverTooltip({ children, text }: { children: React.ReactNode; text: str
   );
 }
 
-// GBIF breakdown popup with portal and smart positioning
-function GbifBreakdownPopup({
-  children,
-  trigger,
-}: {
-  children: React.ReactNode;
-  trigger: React.ReactNode;
-  speciesId?: number;
-  inatIndex?: Record<number, number>;
-  setInatIndex?: React.Dispatch<React.SetStateAction<Record<number, number>>>;
-}) {
-  const [isHovered, setIsHovered] = useState(false);
-  const [position, setPosition] = useState({ top: 0, left: 0, showBelow: false });
-  const triggerRef = useRef<HTMLSpanElement>(null);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  const handleMouseEnter = () => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
-    setIsHovered(true);
-  };
-
-  const handleMouseLeave = () => {
-    timeoutRef.current = setTimeout(() => {
-      setIsHovered(false);
-    }, 150); // Small delay to allow moving to popup
-  };
-
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (isHovered && triggerRef.current) {
-      const rect = triggerRef.current.getBoundingClientRect();
-      const popupHeight = 200; // Approximate popup height
-      const spaceAbove = rect.top;
-      const showBelow = spaceAbove < popupHeight + 20;
-
-      setPosition({
-        top: showBelow ? rect.bottom : rect.top,
-        left: rect.right,
-        showBelow,
-      });
-    }
-  }, [isHovered]);
-
-  return (
-    <span
-      ref={triggerRef}
-      className="relative"
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-    >
-      {trigger}
-      {isHovered && typeof document !== 'undefined' && createPortal(
-        <div
-          className="fixed z-[99999]"
-          style={{
-            top: position.top,
-            left: position.left,
-            transform: position.showBelow ? 'translateX(-100%)' : 'translateX(-100%) translateY(-100%)',
-            paddingTop: position.showBelow ? '4px' : undefined,
-            paddingBottom: position.showBelow ? undefined : '4px',
-          }}
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
-        >
-          {children}
-        </div>,
-        document.body
-      )}
-    </span>
-  );
-}
 
 export default function RedListView() {
   // Filters synced with URL search params for shareable links
@@ -447,9 +365,6 @@ export default function RedListView() {
 
   // Species details cache (images, criteria, common names)
   const [speciesDetails, setSpeciesDetails] = useState<Record<number, SpeciesDetails>>({});
-
-  // Track current iNat observation index per species (for navigation)
-  const [inatIndex, setInatIndex] = useState<Record<number, number>>({});
 
   // Row expansion state
   const [selectedSpeciesKey, setSelectedSpeciesKey] = useState<number | null>(null);
@@ -836,142 +751,155 @@ export default function RedListView() {
     setCurrentPage(1);
   }, [selectedTaxa, selectedCategories, selectedYearRanges, searchFilter, selectedCountries, showOnlyStarred]);
 
-  // Fetch details for visible species
+  // Populate basic speciesDetails from CSV-enriched data (GBIF counts instant, no API calls)
+  // inatDefaultImage / openAlexPaperCount / papersAtAssessment are left as undefined → spinner
   useEffect(() => {
-    async function fetchDetails() {
-      const speciesToFetch = paginatedSpecies.filter(
-        (s) => !speciesDetails[s.sis_taxon_id]
-      );
+    const newDetails: Record<number, SpeciesDetails> = {};
+    for (const s of paginatedSpecies) {
+      if (speciesDetails[s.sis_taxon_id]) continue; // Already have details
 
-      if (speciesToFetch.length === 0) return;
+      if (s.gbif_species_key) {
+        newDetails[s.sis_taxon_id] = {
+          criteria: null,
+          commonName: s.common_name || null,
+          gbifUrl: `https://www.gbif.org/species/${s.gbif_species_key}`,
+          gbifOccurrences: s.gbif_occurrence_count ?? null,
+          gbifOccurrencesSinceAssessment: s.gbif_observations_after_assessment_year ?? null,
+          gbifMatchStatus: { matchType: 'EXACT' },
+          inatDefaultImage: undefined, // Loading — fetched per-page below
+          openAlexPaperCount: undefined, // Loading — fetched per-page below
+          papersAtAssessment: undefined, // Loading — fetched per-page below
+        };
+      } else {
+        newDetails[s.sis_taxon_id] = {
+          criteria: null,
+          commonName: s.common_name || null,
+          gbifUrl: null,
+          gbifOccurrences: null,
+          gbifOccurrencesSinceAssessment: null,
+          gbifMatchStatus: { matchType: 'NONE' },
+          inatDefaultImage: undefined, // Loading
+          openAlexPaperCount: undefined, // Loading
+          papersAtAssessment: undefined, // Loading
+        };
+      }
+    }
+    if (Object.keys(newDetails).length > 0) {
+      setSpeciesDetails((prev) => ({ ...prev, ...newDetails }));
+    }
+  }, [paginatedSpecies, speciesDetails]);
 
-      const detailPromises = speciesToFetch.map(async (s) => {
+  // Fetch iNat profile pic + OpenAlex paper counts for visible species (lightweight per-page calls)
+  useEffect(() => {
+    const speciesToFetch = paginatedSpecies.filter(
+      (s) => {
+        const d = speciesDetails[s.sis_taxon_id];
+        // Fetch if we have basic details but inatDefaultImage is still undefined (not yet fetched)
+        return d && d.inatDefaultImage === undefined;
+      }
+    );
+    if (speciesToFetch.length === 0) return;
+
+    async function fetchLightweightDetails() {
+      const promises = speciesToFetch.map(async (s) => {
         try {
-          // NE species: use GBIF species key directly, skip IUCN API
-          if (s.category === "NE" && s.gbif_species_key) {
-            // Fetch iNaturalist image and total paper count in parallel
-            try {
-              const [inatRes, litRes] = await Promise.all([
-                fetch(
-                  `https://api.inaturalist.org/v1/taxa?q=${encodeURIComponent(s.scientific_name)}&rank=species&per_page=1`
-                ),
-                fetch(
-                  `/api/literature?scientificName=${encodeURIComponent(s.scientific_name)}&assessmentYear=0&limit=1`
-                ),
-              ]);
-              let inatDefaultImage: { squareUrl: string | null; mediumUrl: string | null } | null = null;
-              if (inatRes.ok) {
-                const inatData = await inatRes.json();
-                const defaultPhoto = inatData.results?.[0]?.default_photo;
-                if (defaultPhoto) {
-                  inatDefaultImage = {
-                    squareUrl: defaultPhoto.square_url || defaultPhoto.url || null,
-                    mediumUrl: defaultPhoto.medium_url || defaultPhoto.url || null,
-                  };
-                }
-              }
-              let openAlexPaperCount: number | null = null;
-              if (litRes.ok) {
-                const litData = await litRes.json();
-                openAlexPaperCount = litData.totalPapersSinceAssessment ?? null;
-              }
-              return {
-                id: s.sis_taxon_id,
-                data: {
-                  criteria: null,
-                  commonName: s.common_name || null,
-                  gbifUrl: `https://www.gbif.org/species/${s.gbif_species_key}`,
-                  gbifOccurrences: s.gbif_occurrence_count || null,
-                  gbifOccurrencesSinceAssessment: null,
-                  gbifByRecordType: null,
-                  gbifNewByRecordType: null,
-                  gbifMatchStatus: { matchType: 'EXACT' },
-                  recentInatObservations: [],
-                  inatTotalCount: 0,
-                  inatDefaultImage,
-                  openAlexPaperCount,
-                  papersAtAssessment: null,
-                },
-              };
-            } catch {
-              return {
-                id: s.sis_taxon_id,
-                data: {
-                  criteria: null, commonName: s.common_name || null, gbifUrl: `https://www.gbif.org/species/${s.gbif_species_key}`,
-                  gbifOccurrences: s.gbif_occurrence_count || null, gbifOccurrencesSinceAssessment: null,
-                  gbifByRecordType: null, gbifNewByRecordType: null, gbifMatchStatus: null,
-                  recentInatObservations: [], inatTotalCount: 0, inatDefaultImage: null,
-                  openAlexPaperCount: null, papersAtAssessment: null,
-                },
-              };
-            }
-          }
-
-          // Extract assessment year and month for GBIF filtering
           const assessmentDate = s.assessment_date ? new Date(s.assessment_date) : null;
           const assessmentYear = assessmentDate ? assessmentDate.getFullYear().toString() : "";
-          const assessmentMonth = assessmentDate ? (assessmentDate.getMonth() + 1).toString() : ""; // 1-12
 
-          // Fetch IUCN details and OpenAlex paper count in parallel
-          const [iucnRes, litRes] = await Promise.all([
+          // Fetch iNat image + OpenAlex papers in parallel
+          const [inatRes, litRes] = await Promise.all([
             fetch(
-              `/api/redlist/species/${s.sis_taxon_id}?assessmentId=${s.assessment_id}&name=${encodeURIComponent(s.scientific_name)}&assessmentYear=${assessmentYear}&assessmentMonth=${assessmentMonth}`
+              `https://api.inaturalist.org/v1/taxa?q=${encodeURIComponent(s.scientific_name)}&rank=species&per_page=1`
             ),
-            assessmentYear ? fetch(
-              `/api/literature?scientificName=${encodeURIComponent(s.scientific_name)}&assessmentYear=${assessmentYear}&limit=1`
-            ) : Promise.resolve(null),
+            s.category === "NE"
+              ? fetch(`/api/literature?scientificName=${encodeURIComponent(s.scientific_name)}&assessmentYear=0&limit=1`)
+              : assessmentYear
+                ? fetch(`/api/literature?scientificName=${encodeURIComponent(s.scientific_name)}&assessmentYear=${assessmentYear}&limit=1`)
+                : Promise.resolve(null),
           ]);
 
-          if (iucnRes.ok) {
-            const data = await iucnRes.json();
-            // Add paper counts from literature API
-            let openAlexPaperCount: number | null = null;
-            let papersAtAssessment: number | null = null;
-            if (litRes?.ok) {
-              const litData = await litRes.json();
-              openAlexPaperCount = litData.totalPapersSinceAssessment ?? null;
-              papersAtAssessment = litData.papersAtAssessment ?? null;
+          let inatDefaultImage: InatDefaultImage | null = null;
+          if (inatRes.ok) {
+            const inatData = await inatRes.json();
+            const defaultPhoto = inatData.results?.[0]?.default_photo;
+            if (defaultPhoto) {
+              inatDefaultImage = {
+                squareUrl: defaultPhoto.square_url || defaultPhoto.url || null,
+                mediumUrl: defaultPhoto.medium_url || defaultPhoto.url || null,
+              };
             }
-            return { id: s.sis_taxon_id, data: { ...data, openAlexPaperCount, papersAtAssessment } };
           }
+
+          let openAlexPaperCount: number | null = null;
+          let papersAtAssessment: number | null = null;
+          if (litRes?.ok) {
+            const litData = await litRes.json();
+            openAlexPaperCount = litData.totalPapersSinceAssessment ?? null;
+            papersAtAssessment = litData.papersAtAssessment ?? null;
+          }
+
+          return { id: s.sis_taxon_id, inatDefaultImage, openAlexPaperCount, papersAtAssessment };
         } catch {
-          // Ignore errors for individual species
-        }
-        return null;
-      });
-
-      const results = await Promise.all(detailPromises);
-      const newDetails: Record<number, SpeciesDetails> = {};
-
-      results.forEach((result) => {
-        if (result) {
-          newDetails[result.id] = {
-            criteria: result.data.criteria,
-            commonName: result.data.commonName,
-            gbifUrl: result.data.gbifUrl,
-            gbifOccurrences: result.data.gbifOccurrences,
-            gbifOccurrencesSinceAssessment: result.data.gbifOccurrencesSinceAssessment,
-            gbifByRecordType: result.data.gbifByRecordType,
-            gbifNewByRecordType: result.data.gbifNewByRecordType,
-            gbifMatchStatus: result.data.gbifMatchStatus || null,
-            recentInatObservations: result.data.recentInatObservations || [],
-            inatTotalCount: result.data.inatTotalCount || 0,
-            inatDefaultImage: result.data.inatDefaultImage || null,
-            openAlexPaperCount: result.data.openAlexPaperCount ?? null,
-            papersAtAssessment: result.data.papersAtAssessment ?? null,
-          };
+          return { id: s.sis_taxon_id, inatDefaultImage: null, openAlexPaperCount: null, papersAtAssessment: null };
         }
       });
 
-      if (Object.keys(newDetails).length > 0) {
-        setSpeciesDetails((prev) => ({ ...prev, ...newDetails }));
+      const results = await Promise.all(promises);
+      const updates: Record<number, Partial<SpeciesDetails>> = {};
+      for (const r of results) {
+        updates[r.id] = {
+          inatDefaultImage: r.inatDefaultImage,
+          openAlexPaperCount: r.openAlexPaperCount,
+          papersAtAssessment: r.papersAtAssessment,
+        };
+      }
+      setSpeciesDetails((prev) => {
+        const next = { ...prev };
+        for (const [id, update] of Object.entries(updates)) {
+          const numId = Number(id);
+          if (next[numId]) {
+            next[numId] = { ...next[numId], ...update };
+          }
+        }
+        return next;
+      });
+    }
+
+    fetchLightweightDetails();
+  }, [paginatedSpecies, speciesDetails]);
+
+  // Fetch IUCN criteria on row expansion (lightweight — no GBIF calls; the map handles those)
+  useEffect(() => {
+    if (!selectedSpeciesKey) return;
+    const s = paginatedSpecies.find((sp) => sp.sis_taxon_id === selectedSpeciesKey);
+    if (!s || s.category === "NE") return;
+    const existing = speciesDetails[s.sis_taxon_id];
+    if (!existing || existing._criteriaFetched) return;
+
+    async function fetchCriteria() {
+      if (!s || !s.assessment_id) return;
+      try {
+        const res = await fetch(
+          `/api/redlist/assessment/${s.assessment_id}`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setSpeciesDetails((prev) => ({
+            ...prev,
+            [s.sis_taxon_id]: {
+              ...prev[s.sis_taxon_id],
+              criteria: data.criteria || null,
+              _criteriaFetched: true,
+            },
+          }));
+        }
+      } catch {
+        // Ignore errors
       }
     }
 
-    if (paginatedSpecies.length > 0) {
-      fetchDetails();
-    }
-  }, [paginatedSpecies, speciesDetails]);
+    fetchCriteria();
+  }, [selectedSpeciesKey, paginatedSpecies, speciesDetails]);
 
   // Handle category bar click (Cmd/Ctrl+click for multi-select, regular click replaces)
   const handleCategoryClick = (data: { payload?: { code?: string } }, event: React.MouseEvent) => {
@@ -1435,7 +1363,7 @@ export default function RedListView() {
                     <td className={`sticky left-[40px] z-10 px-2 md:px-4 py-2 ${selectedSpeciesKey === s.sis_taxon_id ? "bg-zinc-100 dark:bg-zinc-800" : "bg-white dark:bg-zinc-900"}`}>
                       <div className="flex items-center gap-2">
                         {/* iNat profile pic */}
-                        {details === undefined ? (
+                        {details?.inatDefaultImage === undefined ? (
                           <div className="w-8 h-8 md:w-10 md:h-10 bg-zinc-100 dark:bg-zinc-800 rounded flex-shrink-0 flex items-center justify-center">
                             <span className="inline-block animate-spin h-4 w-4 border-2 border-zinc-400 border-t-transparent rounded-full" />
                           </div>
@@ -1540,112 +1468,22 @@ export default function RedListView() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
-                      {isNE(s) ? <span className="text-zinc-400">N/A</span> : details === undefined ? (
-                        <span className="inline-block animate-spin h-4 w-4 border-2 border-zinc-400 border-t-transparent rounded-full" />
-                      ) : details?.gbifOccurrences != null && details?.gbifUrl ? (() => {
+                      {isNE(s) ? <span className="text-zinc-400">N/A</span> : details?.gbifOccurrences != null && details?.gbifUrl ? (() => {
                         const recordsAtAssessment = details.gbifOccurrences - (details.gbifOccurrencesSinceAssessment ?? 0);
-                        // Calculate pre-assessment counts by subtracting new records
-                        const newByType = details.gbifNewByRecordType || { humanObservation: 0, preservedSpecimen: 0, machineObservation: 0, other: 0, iNaturalist: 0 };
-                        const preAssessmentHuman = details.gbifByRecordType ? details.gbifByRecordType.humanObservation - newByType.humanObservation : 0;
-                        const preAssessmentSpecimen = details.gbifByRecordType ? details.gbifByRecordType.preservedSpecimen - newByType.preservedSpecimen : 0;
-                        const preAssessmentMachine = details.gbifByRecordType ? details.gbifByRecordType.machineObservation - newByType.machineObservation : 0;
-                        const preAssessmentOther = details.gbifByRecordType ? details.gbifByRecordType.other - newByType.other : 0;
-                        const preAssessmentInat = details.gbifByRecordType ? (details.gbifByRecordType.iNaturalist || 0) - (newByType.iNaturalist || 0) : 0;
-                        // Exclude preserved specimens from the displayed count
-                        const recordsAtAssessmentExclSpecimens = recordsAtAssessment - preAssessmentSpecimen;
                         return (
-                        <GbifBreakdownPopup
-                          speciesId={s.sis_taxon_id}
-                          inatIndex={inatIndex}
-                          setInatIndex={setInatIndex}
-                          trigger={
-                            <a
-                              href={assessmentYear ? `https://www.gbif.org/occurrence/search?taxon_key=${details.gbifUrl.split('/').pop()}&year=*,${assessmentYear}` : `https://www.gbif.org/occurrence/search?taxon_key=${details.gbifUrl.split('/').pop()}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              {recordsAtAssessmentExclSpecimens.toLocaleString()}
-                            </a>
-                          }
-                        >
-                          {details?.gbifByRecordType && (
-                            <div className="bg-zinc-800 dark:bg-zinc-900 border border-zinc-700 rounded-lg shadow-lg p-2 text-xs text-left min-w-[200px]">
-                              <div className="text-zinc-300 font-medium mb-1">{assessmentYear && assessmentMonth ? `Up to ${new Date(assessmentYear, assessmentMonth - 1).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}:` : assessmentYear ? `Up to ${assessmentYear}:` : 'Breakdown by type:'}</div>
-                              <div className="space-y-0.5 text-zinc-400">
-                                <div className="flex justify-between">
-                                  <span>Human observations</span>
-                                  <a
-                                    href={assessmentYear ? `https://www.gbif.org/occurrence/search?basis_of_record=HUMAN_OBSERVATION&taxon_key=${details.gbifUrl?.split('/').pop()}&year=*,${assessmentYear}` : `https://www.gbif.org/occurrence/search?basis_of_record=HUMAN_OBSERVATION&taxon_key=${details.gbifUrl?.split('/').pop()}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-zinc-200 hover:text-blue-400 hover:underline tabular-nums"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    {preAssessmentHuman.toLocaleString()}
-                                  </a>
-                                </div>
-                                {preAssessmentInat > 0 && details.recentInatObservations.length > 0 && (
-                                  <div className="flex justify-between pl-3 text-[11px]">
-                                    <span>iNaturalist</span>
-                                    <a
-                                      href={assessmentYear ? `https://www.gbif.org/occurrence/search?dataset_key=50c9509d-22c7-4a22-a47d-8c48425ef4a7&taxon_key=${details.gbifUrl?.split('/').pop()}&year=*,${assessmentYear}` : `https://www.gbif.org/occurrence/search?dataset_key=50c9509d-22c7-4a22-a47d-8c48425ef4a7&taxon_key=${details.gbifUrl?.split('/').pop()}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-zinc-300 hover:text-amber-400 hover:underline tabular-nums"
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      {preAssessmentInat.toLocaleString()}
-                                    </a>
-                                  </div>
-                                )}
-                                <div className="flex justify-between">
-                                  <span>Preserved specimens</span>
-                                  <a
-                                    href={assessmentYear ? `https://www.gbif.org/occurrence/search?basis_of_record=PRESERVED_SPECIMEN&taxon_key=${details.gbifUrl?.split('/').pop()}&year=*,${assessmentYear}` : `https://www.gbif.org/occurrence/search?basis_of_record=PRESERVED_SPECIMEN&taxon_key=${details.gbifUrl?.split('/').pop()}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-zinc-200 hover:text-blue-400 hover:underline tabular-nums"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    {preAssessmentSpecimen.toLocaleString()}
-                                  </a>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span>Machine observations</span>
-                                  <a
-                                    href={assessmentYear ? `https://www.gbif.org/occurrence/search?basis_of_record=MACHINE_OBSERVATION&taxon_key=${details.gbifUrl?.split('/').pop()}&year=*,${assessmentYear}` : `https://www.gbif.org/occurrence/search?basis_of_record=MACHINE_OBSERVATION&taxon_key=${details.gbifUrl?.split('/').pop()}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-zinc-200 hover:text-blue-400 hover:underline tabular-nums"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    {preAssessmentMachine.toLocaleString()}
-                                  </a>
-                                </div>
-                                {preAssessmentOther > 0 && (
-                                  <div className="flex justify-between">
-                                    <span>Other</span>
-                                    <span className="text-zinc-200 tabular-nums">{preAssessmentOther.toLocaleString()}</span>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </GbifBreakdownPopup>
+                          <a
+                            href={assessmentYear ? `https://www.gbif.org/occurrence/search?taxon_key=${details.gbifUrl.split('/').pop()}&year=*,${assessmentYear}` : `https://www.gbif.org/occurrence/search?taxon_key=${details.gbifUrl.split('/').pop()}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {recordsAtAssessment.toLocaleString()}
+                          </a>
                         );
-                      })() : details?.gbifOccurrences != null ? (() => {
-                        const totalRecords = details.gbifOccurrences - (details.gbifOccurrencesSinceAssessment ?? 0);
-                        const preSpecimen = details.gbifByRecordType?.preservedSpecimen
-                          ? details.gbifByRecordType.preservedSpecimen - (details.gbifNewByRecordType?.preservedSpecimen ?? 0)
-                          : 0;
-                        return (totalRecords - preSpecimen).toLocaleString();
-                      })() : details?.gbifMatchStatus?.matchType === 'HIGHERRANK' || details?.gbifMatchStatus?.matchType === 'NONE' ? (
+                      })() : details?.gbifMatchStatus?.matchType === 'NONE' ? (
                         <HoverTooltip
-                          text={details.gbifMatchStatus.matchType === 'HIGHERRANK'
-                            ? `Name not found in GBIF (matched to ${details.gbifMatchStatus.matchedRank?.toLowerCase() || 'higher rank'} instead). May be due to a taxonomic split, synonym, or naming difference.`
-                            : "Species not found in GBIF. May be due to a taxonomic split, synonym, or naming difference."}
+                          text="Species not found in GBIF. May be due to a taxonomic split, synonym, or naming difference."
                         >
                           <span className="text-zinc-400 cursor-help">?</span>
                         </HoverTooltip>
@@ -1662,102 +1500,20 @@ export default function RedListView() {
                         >
                           {s.gbif_occurrence_count.toLocaleString()}
                         </a>
-                      ) : details === undefined ? (
-                        <span className="inline-block animate-spin h-4 w-4 border-2 border-zinc-400 border-t-transparent rounded-full" />
-                      ) : details?.gbifOccurrencesSinceAssessment != null && details?.gbifUrl && assessmentYear ? (() => {
-                        // Exclude preserved specimens from new records count
-                        const newSpecimens = details.gbifNewByRecordType?.preservedSpecimen ?? 0;
-                        const newRecordsExclSpecimens = details.gbifOccurrencesSinceAssessment - newSpecimens;
-                        return (
-                        <GbifBreakdownPopup
-                          speciesId={s.sis_taxon_id}
-                          inatIndex={inatIndex}
-                          setInatIndex={setInatIndex}
-                          trigger={
-                            <a
-                              href={`https://www.gbif.org/occurrence/search?taxon_key=${details.gbifUrl.split('/').pop()}&year=${assessmentYear + 1},${new Date().getFullYear()}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
-                              title={assessmentMonth ? `Data count includes ${assessmentYear} from month ${assessmentMonth + 1} onwards` : undefined}
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              {newRecordsExclSpecimens.toLocaleString()}
-                            </a>
-                          }
+                      ) : details?.gbifOccurrencesSinceAssessment != null && details?.gbifUrl && assessmentYear ? (
+                        <a
+                          href={`https://www.gbif.org/occurrence/search?taxon_key=${details.gbifUrl.split('/').pop()}&year=${assessmentYear + 1},${new Date().getFullYear()}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
+                          title={assessmentMonth ? `Data count includes ${assessmentYear} from month ${assessmentMonth + 1} onwards` : undefined}
+                          onClick={(e) => e.stopPropagation()}
                         >
-                          {details?.gbifNewByRecordType && (
-                            <div className="bg-zinc-800 dark:bg-zinc-900 border border-zinc-700 rounded-lg shadow-lg p-2 text-xs text-left min-w-[200px]">
-                              <div className="text-zinc-300 font-medium mb-1">After {assessmentMonth ? new Date(assessmentYear, assessmentMonth - 1).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : assessmentYear}:</div>
-                              <div className="space-y-0.5 text-zinc-400">
-                                <div className="flex justify-between">
-                                  <span>Human observations</span>
-                                  <a
-                                    href={`https://www.gbif.org/occurrence/search?basis_of_record=HUMAN_OBSERVATION&taxon_key=${details.gbifUrl?.split('/').pop()}&year=${assessmentYear + 1},${new Date().getFullYear()}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-zinc-200 hover:text-blue-400 hover:underline tabular-nums"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    {details.gbifNewByRecordType.humanObservation.toLocaleString()}
-                                  </a>
-                                </div>
-                                {details.gbifNewByRecordType.iNaturalist != null && details.gbifNewByRecordType.iNaturalist > 0 && (
-                                  <div className="flex justify-between pl-3 text-[11px]">
-                                    <span>iNaturalist</span>
-                                    <a
-                                      href={`https://www.gbif.org/occurrence/search?dataset_key=50c9509d-22c7-4a22-a47d-8c48425ef4a7&taxon_key=${details.gbifUrl?.split('/').pop()}&year=${assessmentYear + 1},${new Date().getFullYear()}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-zinc-300 hover:text-amber-400 hover:underline tabular-nums"
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      {details.gbifNewByRecordType.iNaturalist.toLocaleString()}
-                                    </a>
-                                  </div>
-                                )}
-                                <div className="flex justify-between">
-                                  <span>Preserved specimens</span>
-                                  <a
-                                    href={`https://www.gbif.org/occurrence/search?basis_of_record=PRESERVED_SPECIMEN&taxon_key=${details.gbifUrl?.split('/').pop()}&year=${assessmentYear + 1},${new Date().getFullYear()}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-zinc-200 hover:text-blue-400 hover:underline tabular-nums"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    {details.gbifNewByRecordType.preservedSpecimen.toLocaleString()}
-                                  </a>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span>Machine observations</span>
-                                  <a
-                                    href={`https://www.gbif.org/occurrence/search?basis_of_record=MACHINE_OBSERVATION&taxon_key=${details.gbifUrl?.split('/').pop()}&year=${assessmentYear + 1},${new Date().getFullYear()}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-zinc-200 hover:text-blue-400 hover:underline tabular-nums"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    {details.gbifNewByRecordType.machineObservation.toLocaleString()}
-                                  </a>
-                                </div>
-                                {details.gbifNewByRecordType.other > 0 && (
-                                  <div className="flex justify-between">
-                                    <span>Other</span>
-                                    <span className="text-zinc-200 tabular-nums">{details.gbifNewByRecordType.other.toLocaleString()}</span>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </GbifBreakdownPopup>
-                        );
-                      })() : details?.gbifOccurrencesSinceAssessment != null ? (
-                        (details.gbifOccurrencesSinceAssessment - (details.gbifNewByRecordType?.preservedSpecimen ?? 0)).toLocaleString()
-                      ) : details?.gbifMatchStatus?.matchType === 'HIGHERRANK' || details?.gbifMatchStatus?.matchType === 'NONE' ? (
+                          {details.gbifOccurrencesSinceAssessment.toLocaleString()}
+                        </a>
+                      ) : details?.gbifMatchStatus?.matchType === 'NONE' ? (
                         <HoverTooltip
-                          text={details.gbifMatchStatus.matchType === 'HIGHERRANK'
-                            ? `Name not found in GBIF (matched to ${details.gbifMatchStatus.matchedRank?.toLowerCase() || 'higher rank'} instead). May be due to a taxonomic split, synonym, or naming difference.`
-                            : "Species not found in GBIF. May be due to a taxonomic split, synonym, or naming difference."}
+                          text="Species not found in GBIF. May be due to a taxonomic split, synonym, or naming difference."
                         >
                           <span className="text-zinc-400 cursor-help">?</span>
                         </HoverTooltip>
@@ -1765,7 +1521,7 @@ export default function RedListView() {
                     </td>
                     {/* Papers When Assessed */}
                     <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
-                      {isNE(s) ? <span className="text-zinc-400">N/A</span> : details === undefined ? (
+                      {isNE(s) ? <span className="text-zinc-400">N/A</span> : details?.papersAtAssessment === undefined ? (
                         <span className="inline-block animate-spin h-4 w-4 border-2 border-zinc-400 border-t-transparent rounded-full" />
                       ) : details?.papersAtAssessment != null && assessmentYear ? (
                         <a
@@ -1782,7 +1538,7 @@ export default function RedListView() {
                     </td>
                     {/* New Papers */}
                     <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
-                      {details === undefined ? (
+                      {details?.openAlexPaperCount === undefined ? (
                         <span className="inline-block animate-spin h-4 w-4 border-2 border-zinc-400 border-t-transparent rounded-full" />
                       ) : details?.openAlexPaperCount != null ? (
                         <a

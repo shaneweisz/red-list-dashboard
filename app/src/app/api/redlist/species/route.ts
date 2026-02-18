@@ -45,21 +45,26 @@ const cachedData: Map<string, PrecomputedData | null> = new Map();
 const cacheLoadTimes: Map<string, number> = new Map();
 const CACHE_RELOAD_INTERVAL = 60 * 60 * 1000; // Reload file every hour
 
-// Cache for GBIF since-assessment lookups (scientific_name_lowercase → count)
-const sinceAssessmentCache: Map<string, Map<string, number>> = new Map();
-const sinceAssessmentCacheLoadTimes: Map<string, number> = new Map();
+// Cache for GBIF CSV lookups (scientific_name_lowercase → { speciesKey, total, sinceAssessment })
+interface GbifCsvRow {
+  speciesKey: number;
+  observationsTotal: number;
+  observationsAfterAssessment: number;
+}
+const gbifCsvCache: Map<string, Map<string, GbifCsvRow>> = new Map();
+const gbifCsvCacheLoadTimes: Map<string, number> = new Map();
 
 /**
- * Load GBIF CSV and build a lookup of scientific_name → observations_after_assessment_year.
- * The CSV must have been enriched by enrich-gbif-since-assessment.ts.
+ * Load GBIF CSV and build a lookup of scientific_name → { speciesKey, observationsTotal, observationsAfterAssessment }.
+ * CSV format: species_key,observations_total,scientific_name,common_name,observations_after_assessment_year
  */
-function loadSinceAssessmentLookup(taxonId: string): Map<string, number> {
-  const cacheTime = sinceAssessmentCacheLoadTimes.get(taxonId) || 0;
-  if (sinceAssessmentCache.has(taxonId) && Date.now() - cacheTime < CACHE_RELOAD_INTERVAL) {
-    return sinceAssessmentCache.get(taxonId)!;
+function loadGbifCsvLookup(taxonId: string): Map<string, GbifCsvRow> {
+  const cacheTime = gbifCsvCacheLoadTimes.get(taxonId) || 0;
+  if (gbifCsvCache.has(taxonId) && Date.now() - cacheTime < CACHE_RELOAD_INTERVAL) {
+    return gbifCsvCache.get(taxonId)!;
   }
 
-  const lookup = new Map<string, number>();
+  const lookup = new Map<string, GbifCsvRow>();
   const dataDir = path.join(process.cwd(), "data");
 
   // For "all" taxon, load each top-level taxon's CSV
@@ -86,23 +91,27 @@ function loadSinceAssessmentLookup(taxonId: string): Map<string, number> {
 
       for (let i = 1; i < lines.length; i++) {
         const line = lines[i];
-        // Parse: species_key,occurrence_count,scientific_name,common_name,observations_after_assessment_year
-        // The last field is the since-assessment count
-        const lastComma = line.lastIndexOf(",");
-        const sinceStr = line.slice(lastComma + 1).trim();
-        if (!sinceStr) continue;
-
-        const sinceCount = parseInt(sinceStr, 10);
-        if (isNaN(sinceCount)) continue;
-
-        // Extract scientific_name (3rd field)
+        // Parse: species_key,observations_total,scientific_name,common_name,observations_after_assessment_year
         const firstComma = line.indexOf(",");
         const secondComma = line.indexOf(",", firstComma + 1);
         const thirdComma = line.indexOf(",", secondComma + 1);
-        const scientificName = line.slice(secondComma + 1, thirdComma).toLowerCase().trim();
+        const lastComma = line.lastIndexOf(",");
 
-        if (scientificName) {
-          lookup.set(scientificName, sinceCount);
+        const speciesKeyStr = line.slice(0, firstComma).trim();
+        const totalStr = line.slice(firstComma + 1, secondComma).trim();
+        const scientificName = line.slice(secondComma + 1, thirdComma).toLowerCase().trim();
+        const sinceStr = line.slice(lastComma + 1).trim();
+
+        const speciesKey = parseInt(speciesKeyStr, 10);
+        const total = parseInt(totalStr, 10);
+        const sinceCount = parseInt(sinceStr, 10);
+
+        if (scientificName && !isNaN(speciesKey) && !isNaN(total)) {
+          lookup.set(scientificName, {
+            speciesKey,
+            observationsTotal: total,
+            observationsAfterAssessment: isNaN(sinceCount) ? 0 : sinceCount,
+          });
         }
       }
     } catch {
@@ -110,8 +119,8 @@ function loadSinceAssessmentLookup(taxonId: string): Map<string, number> {
     }
   }
 
-  sinceAssessmentCache.set(taxonId, lookup);
-  sinceAssessmentCacheLoadTimes.set(taxonId, Date.now());
+  gbifCsvCache.set(taxonId, lookup);
+  gbifCsvCacheLoadTimes.set(taxonId, Date.now());
   return lookup;
 }
 
@@ -374,12 +383,18 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Enrich species with pre-computed GBIF since-assessment counts
-  const sinceAssessmentLookup = loadSinceAssessmentLookup(taxonId);
-  const enriched = sinceAssessmentLookup.size > 0
+  // Enrich species with pre-computed GBIF data from CSV (species_key, total occurrences, since-assessment count)
+  const gbifLookup = loadGbifCsvLookup(taxonId);
+  const enriched = gbifLookup.size > 0
     ? filtered.map(s => {
-        const count = sinceAssessmentLookup.get(s.scientific_name.toLowerCase().trim());
-        return count !== undefined ? { ...s, gbif_observations_after_assessment_year: count } : s;
+        const row = gbifLookup.get(s.scientific_name.toLowerCase().trim());
+        if (!row) return s;
+        return {
+          ...s,
+          gbif_species_key: row.speciesKey,
+          gbif_occurrence_count: row.observationsTotal,
+          gbif_observations_after_assessment_year: row.observationsAfterAssessment,
+        };
       })
     : filtered;
 
