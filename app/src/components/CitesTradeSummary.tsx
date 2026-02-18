@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { ALPHA2_TO_NAME } from "./WorldMap";
 
 interface YearData {
   year: number;
@@ -41,6 +42,16 @@ interface TradeData {
 
 // Sources that indicate wild take — key concern for assessors
 const WILD_SOURCE_CODES = new Set(["W", "X", "R", "U"]);
+
+function countryName(code: string): string {
+  return ALPHA2_TO_NAME[code] || code;
+}
+
+function fmtQty(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(n >= 10_000 ? 0 : 1)}k`;
+  return n.toLocaleString();
+}
 
 function TrendArrow({ data }: { data: YearData[] }) {
   if (data.length < 4) return null;
@@ -113,7 +124,7 @@ function BarChart({ data }: { data: YearData[] }) {
       {/* Hover tooltip */}
       {hovered !== null && (
         <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-zinc-800 dark:bg-zinc-700 text-white text-[10px] px-2 py-0.5 rounded whitespace-nowrap z-10 pointer-events-none">
-          {data[hovered].year}: {data[hovered].records.toLocaleString()} records
+          {data[hovered].year}: {data[hovered].records.toLocaleString()} records, {fmtQty(data[hovered].quantity)} items
         </div>
       )}
       <div className="flex">
@@ -127,7 +138,7 @@ function BarChart({ data }: { data: YearData[] }) {
                 className="absolute right-0 text-[10px] text-zinc-400 dark:text-zinc-500 tabular-nums leading-none -translate-y-1/2"
                 style={{ bottom }}
               >
-                {v >= 1000 ? `${(v / 1000).toFixed(v % 1000 === 0 ? 0 : 1)}k` : v}
+                {fmtQty(v)}
               </span>
             );
           })}
@@ -166,39 +177,6 @@ function BarChart({ data }: { data: YearData[] }) {
           </div>
         ))}
       </div>
-    </div>
-  );
-}
-
-function HorizontalBar({
-  label,
-  value,
-  max,
-  color,
-  suffix,
-}: {
-  label: string;
-  value: number;
-  max: number;
-  color: string;
-  suffix?: string;
-}) {
-  const pct = max > 0 ? (value / max) * 100 : 0;
-  return (
-    <div className="flex items-center gap-2 text-xs">
-      <span className="w-24 text-zinc-600 dark:text-zinc-300 truncate shrink-0">
-        {label}
-      </span>
-      <div className="flex-1 h-4 bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
-        <div
-          className={`h-full rounded ${color}`}
-          style={{ width: `${Math.max(pct, 1)}%` }}
-        />
-      </div>
-      <span className="w-16 text-right text-zinc-500 dark:text-zinc-400 tabular-nums shrink-0">
-        {value.toLocaleString()}
-        {suffix ? ` ${suffix}` : ""}
-      </span>
     </div>
   );
 }
@@ -251,6 +229,55 @@ function SourceBreakdown({ sources }: { sources: CodedData[] }) {
           </span>
         ))}
       </div>
+    </div>
+  );
+}
+
+function CountryTable({
+  data,
+  label,
+}: {
+  data: CountryData[];
+  label: string;
+}) {
+  if (data.length === 0) return null;
+  const top = [...data].sort((a, b) => b.quantity - a.quantity).slice(0, 5);
+
+  return (
+    <div>
+      <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
+        {label}
+      </h5>
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-left text-zinc-400 dark:text-zinc-500">
+            <th className="font-medium pb-1 pr-2">Country</th>
+            <th className="font-medium pb-1 pr-2 text-right">Records</th>
+            <th className="font-medium pb-1 text-right">Quantity</th>
+          </tr>
+        </thead>
+        <tbody>
+          {top.map((c) => (
+            <tr
+              key={c.code}
+              className="border-t border-zinc-100 dark:border-zinc-800/50"
+            >
+              <td className="py-1 pr-2 text-zinc-700 dark:text-zinc-300">
+                {countryName(c.code)}
+                <span className="text-zinc-400 dark:text-zinc-500 ml-1">
+                  ({c.code})
+                </span>
+              </td>
+              <td className="py-1 pr-2 text-right text-zinc-500 dark:text-zinc-400 tabular-nums">
+                {c.records.toLocaleString()}
+              </td>
+              <td className="py-1 text-right text-zinc-500 dark:text-zinc-400 tabular-nums">
+                {fmtQty(c.quantity)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -316,14 +343,7 @@ export default function CitesTradeSummary({
     return null;
   }
 
-  const maxTermRecords = Math.max(...data.topTerms.map((t) => t.records), 1);
-  const topCountries = [...data.topExporters]
-    .sort((a, b) => b.records - a.records)
-    .slice(0, 5);
-  const maxCountryRecords = Math.max(
-    ...topCountries.map((c) => c.records),
-    1
-  );
+  const totalQty = data.byYear.reduce((s, d) => s + d.quantity, 0);
 
   return (
     <div className="space-y-4">
@@ -333,7 +353,10 @@ export default function CitesTradeSummary({
           <span className="font-semibold tabular-nums">
             {data.totalRecords.toLocaleString()}
           </span>{" "}
-          trade records
+          shipments
+          <span className="text-zinc-400 dark:text-zinc-500 mx-1">/</span>
+          <span className="font-semibold tabular-nums">{fmtQty(totalQty)}</span>{" "}
+          reported items
           <span className="text-zinc-400 dark:text-zinc-500 ml-1">
             {data.yearRange[0]}–{data.yearRange[1]}
           </span>
@@ -354,23 +377,39 @@ export default function CitesTradeSummary({
         </div>
       )}
 
-      {/* Commodities traded */}
+      {/* Commodities — table with quantities */}
       {data.topTerms.length > 0 && (
         <div>
-          <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
+          <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
             Commodities
           </h5>
-          <div className="space-y-1">
-            {data.topTerms.slice(0, 6).map((t) => (
-              <HorizontalBar
-                key={t.term}
-                label={t.term}
-                value={t.records}
-                max={maxTermRecords}
-                color="bg-blue-300 dark:bg-blue-600"
-              />
-            ))}
-          </div>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-left text-zinc-400 dark:text-zinc-500">
+                <th className="font-medium pb-1 pr-2">Term</th>
+                <th className="font-medium pb-1 pr-2 text-right">Records</th>
+                <th className="font-medium pb-1 text-right">Quantity</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.topTerms.slice(0, 6).map((t) => (
+                <tr
+                  key={t.term}
+                  className="border-t border-zinc-100 dark:border-zinc-800/50"
+                >
+                  <td className="py-1 pr-2 text-zinc-700 dark:text-zinc-300 capitalize">
+                    {t.term}
+                  </td>
+                  <td className="py-1 pr-2 text-right text-zinc-500 dark:text-zinc-400 tabular-nums">
+                    {t.records.toLocaleString()}
+                  </td>
+                  <td className="py-1 text-right text-zinc-500 dark:text-zinc-400 tabular-nums">
+                    {fmtQty(t.quantity)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -393,25 +432,11 @@ export default function CitesTradeSummary({
         </div>
       )}
 
-      {/* Top exporting countries */}
-      {topCountries.length > 0 && (
-        <div>
-          <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
-            Top exporting countries
-          </h5>
-          <div className="space-y-1">
-            {topCountries.map((c) => (
-              <HorizontalBar
-                key={c.code}
-                label={c.code}
-                value={c.records}
-                max={maxCountryRecords}
-                color="bg-emerald-300 dark:bg-emerald-600"
-              />
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Exporters & Importers */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <CountryTable data={data.topExporters} label="Top exporters" />
+        <CountryTable data={data.topImporters} label="Top importers" />
+      </div>
     </div>
   );
 }
