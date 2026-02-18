@@ -533,9 +533,13 @@ export default function RedListView() {
   // Get unique countries from taxa-filtered species data, sorted alphabetically by name
   const { countryCounts, uniqueCountries, countryStatsForMap } = useMemo(() => {
     const counts: Record<string, number> = {};
+    const occurrenceSums: Record<string, number> = {};
     taxaFilteredSpecies.forEach(s => {
       s.countries.forEach(code => {
         counts[code] = (counts[code] || 0) + 1;
+        if (s.gbif_occurrence_count != null) {
+          occurrenceSums[code] = (occurrenceSums[code] || 0) + s.gbif_occurrence_count;
+        }
       });
     });
 
@@ -550,7 +554,7 @@ export default function RedListView() {
     const statsForMap = Object.fromEntries(
       Object.entries(counts).map(([code, count]) => [
         code,
-        { occurrences: count, species: count }
+        { occurrences: occurrenceSums[code] || 0, species: count }
       ])
     );
 
@@ -1000,7 +1004,6 @@ export default function RedListView() {
                   onCountrySelect={handleCountrySelect}
                   onClearSelection={handleClearCountry}
                   precomputedStats={countryStatsForMap}
-                  statLabel="Species"
                 />
               )}
             </div>

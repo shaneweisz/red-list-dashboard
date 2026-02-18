@@ -128,6 +128,8 @@ function formatNumber(num: number): string {
   return num.toString();
 }
 
+type ColorMode = "species" | "occurrences";
+
 interface WorldMapProps {
   selectedCountries: Set<string>;
   onCountrySelect: (countryCode: string, countryName: string, event: React.MouseEvent) => void;
@@ -135,15 +137,14 @@ interface WorldMapProps {
   selectedTaxon?: string | null;
   // Optional pre-computed stats (for Red List - avoids API call)
   precomputedStats?: CountryStats;
-  // Label for the stat shown in tooltip (default: "Occurrences")
-  statLabel?: string;
 }
 
-function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, selectedTaxon, precomputedStats, statLabel = "Occurrences" }: WorldMapProps) {
+function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, selectedTaxon, precomputedStats }: WorldMapProps) {
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoveredCountryCode, setHoveredCountryCode] = useState<string | null>(null);
   const [countryStats, setCountryStats] = useState<CountryStats>({});
   const [loading, setLoading] = useState(true);
+  const [colorMode, setColorMode] = useState<ColorMode>("species");
 
   // Use precomputed stats if provided, otherwise fetch from API
   useEffect(() => {
@@ -171,9 +172,9 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
       .finally(() => setLoading(false));
   }, [selectedTaxon, precomputedStats]);
 
-  // Calculate max value for heatmap scaling
-  const maxOccurrences = Object.values(countryStats).reduce(
-    (max, stat) => Math.max(max, stat.occurrences),
+  // Calculate max value for heatmap scaling based on selected color mode
+  const maxValue = Object.values(countryStats).reduce(
+    (max, stat) => Math.max(max, colorMode === "species" ? stat.species : stat.occurrences),
     0
   );
 
@@ -184,7 +185,8 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
     const stats = countryStats[alpha2];
     if (!stats) return "#f4f4f5";
 
-    return getHeatmapColor(stats.occurrences, maxOccurrences);
+    const value = colorMode === "species" ? stats.species : stats.occurrences;
+    return getHeatmapColor(value, maxValue);
   };
 
   const hoveredStats = hoveredCountryCode ? countryStats[hoveredCountryCode] : null;
@@ -205,6 +207,21 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
           )}
         </div>
         <div className="flex items-center gap-2">
+          {/* Color mode toggle */}
+          <div className="flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md p-0.5 text-[10px]">
+            <button
+              onClick={() => setColorMode("species")}
+              className={`px-1.5 py-0.5 rounded transition-colors ${colorMode === "species" ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm font-medium" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+            >
+              Species
+            </button>
+            <button
+              onClick={() => setColorMode("occurrences")}
+              className={`px-1.5 py-0.5 rounded transition-colors ${colorMode === "occurrences" ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm font-medium" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+            >
+              Occurrences
+            </button>
+          </div>
           {/* Legend in header */}
           <div className="flex items-center gap-1 text-[10px]">
             <span className="text-zinc-400">Low</span>
@@ -234,15 +251,13 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
           {hoveredStats ? (
             <div className="mt-1 space-y-0.5">
               <div className="flex justify-between gap-4 text-xs">
-                <span className="text-zinc-500">{statLabel}</span>
+                <span className="text-zinc-500">Species</span>
+                <span className="font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">{formatNumber(hoveredStats.species)}</span>
+              </div>
+              <div className="flex justify-between gap-4 text-xs">
+                <span className="text-zinc-500">Occurrences</span>
                 <span className="font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">{formatNumber(hoveredStats.occurrences)}</span>
               </div>
-              {hoveredStats.species > 0 && (
-                <div className="flex justify-between gap-4 text-xs">
-                  <span className="text-zinc-500">Species</span>
-                  <span className="font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">{formatNumber(hoveredStats.species)}</span>
-                </div>
-              )}
             </div>
           ) : (
             <div className="text-xs text-zinc-400 mt-1">No data available</div>
