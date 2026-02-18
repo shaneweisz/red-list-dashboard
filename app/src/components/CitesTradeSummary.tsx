@@ -39,48 +39,185 @@ interface TradeData {
   topImporters: CountryData[];
 }
 
-function MiniBarChart({ data }: { data: YearData[] }) {
+// Sources that indicate wild take — key concern for assessors
+const WILD_SOURCE_CODES = new Set(["W", "X", "R", "U"]);
+
+function TrendArrow({ data }: { data: YearData[] }) {
+  if (data.length < 4) return null;
+  const mid = Math.floor(data.length / 2);
+  const firstHalf = data.slice(0, mid);
+  const secondHalf = data.slice(mid);
+  const avgFirst =
+    firstHalf.reduce((s, d) => s + d.records, 0) / firstHalf.length;
+  const avgSecond =
+    secondHalf.reduce((s, d) => s + d.records, 0) / secondHalf.length;
+  if (avgFirst === 0 && avgSecond === 0) return null;
+  const pctChange =
+    avgFirst === 0 ? 100 : ((avgSecond - avgFirst) / avgFirst) * 100;
+  if (Math.abs(pctChange) < 15) {
+    return (
+      <span
+        className="text-zinc-400 dark:text-zinc-500 text-[11px]"
+        title="Stable trend"
+      >
+        stable
+      </span>
+    );
+  }
+  if (pctChange > 0) {
+    return (
+      <span
+        className="text-red-500 dark:text-red-400 text-[11px] font-medium"
+        title={`Trade volume increased ~${Math.round(pctChange)}%`}
+      >
+        &#9650; increasing
+      </span>
+    );
+  }
+  return (
+    <span
+      className="text-emerald-500 dark:text-emerald-400 text-[11px] font-medium"
+      title={`Trade volume decreased ~${Math.round(Math.abs(pctChange))}%`}
+    >
+      &#9660; decreasing
+    </span>
+  );
+}
+
+function BarChart({ data }: { data: YearData[] }) {
+  const [hovered, setHovered] = useState<number | null>(null);
   if (data.length === 0) return null;
   const maxRecords = Math.max(...data.map((d) => d.records));
   if (maxRecords === 0) return null;
 
   return (
-    <div className="flex items-end gap-px h-16">
-      {data.map((d) => (
-        <div key={d.year} className="flex-1 flex flex-col items-center gap-0.5">
-          <div
-            className="w-full bg-blue-400 dark:bg-blue-500 rounded-t-sm min-h-[2px]"
-            style={{ height: `${(d.records / maxRecords) * 100}%` }}
-            title={`${d.year}: ${d.records} records, ${d.quantity.toLocaleString()} items`}
-          />
-          <span className="text-[9px] text-zinc-400 dark:text-zinc-500 tabular-nums leading-none">
-            {String(d.year).slice(2)}
-          </span>
+    <div className="relative">
+      {/* Hover tooltip */}
+      {hovered !== null && (
+        <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-zinc-800 dark:bg-zinc-700 text-white text-[10px] px-2 py-0.5 rounded whitespace-nowrap z-10 pointer-events-none">
+          {data[hovered].year}: {data[hovered].records.toLocaleString()} records
         </div>
-      ))}
+      )}
+      <div className="flex items-end gap-[3px] h-24">
+        {data.map((d, i) => (
+          <div
+            key={d.year}
+            className="flex-1 flex flex-col items-center gap-1 cursor-default"
+            onMouseEnter={() => setHovered(i)}
+            onMouseLeave={() => setHovered(null)}
+          >
+            <div
+              className={`w-full rounded-t transition-colors min-h-[2px] ${
+                hovered === i
+                  ? "bg-blue-500 dark:bg-blue-400"
+                  : "bg-blue-300 dark:bg-blue-600"
+              }`}
+              style={{ height: `${(d.records / maxRecords) * 100}%` }}
+            />
+            <span className="text-[10px] text-zinc-400 dark:text-zinc-500 tabular-nums leading-none">
+              {String(d.year).slice(2)}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
-function TagList({
-  items,
+function HorizontalBar({
+  label,
+  value,
+  max,
+  color,
+  suffix,
 }: {
-  items: { label: string; count: number; title?: string }[];
+  label: string;
+  value: number;
+  max: number;
+  color: string;
+  suffix?: string;
 }) {
+  const pct = max > 0 ? (value / max) * 100 : 0;
   return (
-    <div className="flex flex-wrap gap-1">
-      {items.map((item) => (
-        <span
-          key={item.label}
-          title={item.title || `${item.count} records`}
-          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+    <div className="flex items-center gap-2 text-xs">
+      <span className="w-24 text-zinc-600 dark:text-zinc-300 truncate shrink-0">
+        {label}
+      </span>
+      <div className="flex-1 h-4 bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
+        <div
+          className={`h-full rounded ${color}`}
+          style={{ width: `${Math.max(pct, 1)}%` }}
+        />
+      </div>
+      <span className="w-16 text-right text-zinc-500 dark:text-zinc-400 tabular-nums shrink-0">
+        {value.toLocaleString()}
+        {suffix ? ` ${suffix}` : ""}
+      </span>
+    </div>
+  );
+}
+
+function SourceBreakdown({ sources }: { sources: CodedData[] }) {
+  const total = sources.reduce((s, d) => s + d.records, 0);
+  if (total === 0) return null;
+  const wildRecords = sources
+    .filter((s) => WILD_SOURCE_CODES.has(s.code))
+    .reduce((sum, s) => sum + s.records, 0);
+  const wildPct = Math.round((wildRecords / total) * 100);
+
+  return (
+    <div className="space-y-1.5">
+      {/* Stacked bar showing wild vs captive proportion */}
+      <div className="flex h-5 rounded overflow-hidden text-[10px] font-medium">
+        {sources.map((s) => {
+          const pct = (s.records / total) * 100;
+          if (pct < 1) return null;
+          const isWild = WILD_SOURCE_CODES.has(s.code);
+          return (
+            <div
+              key={s.code}
+              className={`flex items-center justify-center overflow-hidden ${
+                isWild
+                  ? "bg-amber-300 dark:bg-amber-600 text-amber-900 dark:text-amber-100"
+                  : "bg-emerald-200 dark:bg-emerald-700 text-emerald-900 dark:text-emerald-100"
+              }`}
+              style={{ width: `${pct}%` }}
+              title={`${s.label}: ${s.records} records (${Math.round(pct)}%)`}
+            >
+              {pct > 8 && <span>{s.code}</span>}
+            </div>
+          );
+        })}
+      </div>
+      {/* Legend */}
+      <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">
+        {sources.map((s) => {
+          const isWild = WILD_SOURCE_CODES.has(s.code);
+          return (
+            <span key={s.code} className="flex items-center gap-1">
+              <span
+                className={`inline-block w-2 h-2 rounded-sm ${
+                  isWild
+                    ? "bg-amber-300 dark:bg-amber-600"
+                    : "bg-emerald-200 dark:bg-emerald-700"
+                }`}
+              />
+              {s.label} ({s.records})
+            </span>
+          );
+        })}
+      </div>
+      {wildPct > 0 && (
+        <p
+          className={`text-[11px] font-medium ${
+            wildPct >= 50
+              ? "text-amber-600 dark:text-amber-400"
+              : "text-zinc-500 dark:text-zinc-400"
+          }`}
         >
-          {item.label}
-          <span className="text-zinc-400 dark:text-zinc-500 tabular-nums">
-            {item.count}
-          </span>
-        </span>
-      ))}
+          {wildPct}% of recorded trade is wild-sourced / ranched / unknown
+        </p>
+      )}
     </div>
   );
 }
@@ -121,8 +258,8 @@ export default function CitesTradeSummary({
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 text-xs text-zinc-400 dark:text-zinc-500 py-2">
-        <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+      <div className="flex items-center gap-2 text-xs text-zinc-400 dark:text-zinc-500 py-3">
+        <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
           <circle
             className="opacity-25"
             cx="12"
@@ -143,101 +280,105 @@ export default function CitesTradeSummary({
   }
 
   if (error || !data || !data.found) {
-    return null; // Silently hide if no trade data
+    return null;
   }
 
+  const maxTermRecords = Math.max(...data.topTerms.map((t) => t.records), 1);
+  const topCountries = [...data.topExporters]
+    .sort((a, b) => b.records - a.records)
+    .slice(0, 5);
+  const maxCountryRecords = Math.max(
+    ...topCountries.map((c) => c.records),
+    1
+  );
+
   return (
-    <div className="space-y-3">
-      {/* Year chart + headline */}
-      <div>
-        <div className="flex items-baseline justify-between mb-1.5">
-          <span className="text-xs text-zinc-600 dark:text-zinc-300">
-            <span className="font-semibold tabular-nums">
-              {data.totalRecords.toLocaleString()}
-            </span>{" "}
-            trade records ({data.yearRange[0]}–{data.yearRange[1]})
+    <div className="space-y-4">
+      {/* Headline + trend */}
+      <div className="flex items-baseline gap-3 flex-wrap">
+        <span className="text-sm text-zinc-700 dark:text-zinc-200">
+          <span className="font-semibold tabular-nums">
+            {data.totalRecords.toLocaleString()}
+          </span>{" "}
+          trade records
+          <span className="text-zinc-400 dark:text-zinc-500 ml-1">
+            {data.yearRange[0]}–{data.yearRange[1]}
           </span>
-        </div>
-        <MiniBarChart data={data.byYear} />
+        </span>
+        <TrendArrow data={data.byYear} />
       </div>
 
-      {/* What is traded */}
-      {data.topTerms.length > 0 && (
+      {/* Bar chart */}
+      <BarChart data={data.byYear} />
+
+      {/* Source breakdown — most important for assessors */}
+      {data.topSources.length > 0 && (
         <div>
-          <h5 className="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1">
-            What is traded
+          <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
+            Source
           </h5>
-          <TagList
-            items={data.topTerms.map((t) => ({
-              label: t.term,
-              count: t.records,
-              title: `${t.term}: ${t.records} records, ${t.quantity.toLocaleString()} items`,
-            }))}
-          />
+          <SourceBreakdown sources={data.topSources} />
         </div>
       )}
 
-      {/* Purpose & Source side by side */}
-      <div className="grid grid-cols-2 gap-3">
-        {data.topPurposes.length > 0 && (
-          <div>
-            <h5 className="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1">
-              Purpose
-            </h5>
-            <TagList
-              items={data.topPurposes.map((p) => ({
-                label: p.label,
-                count: p.records,
-              }))}
-            />
+      {/* Commodities traded */}
+      {data.topTerms.length > 0 && (
+        <div>
+          <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
+            Commodities
+          </h5>
+          <div className="space-y-1">
+            {data.topTerms.slice(0, 6).map((t) => (
+              <HorizontalBar
+                key={t.term}
+                label={t.term}
+                value={t.records}
+                max={maxTermRecords}
+                color="bg-blue-300 dark:bg-blue-600"
+              />
+            ))}
           </div>
-        )}
-        {data.topSources.length > 0 && (
-          <div>
-            <h5 className="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1">
-              Source
-            </h5>
-            <TagList
-              items={data.topSources.map((s) => ({
-                label: s.label,
-                count: s.records,
-              }))}
-            />
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* Top exporters & importers side by side */}
-      <div className="grid grid-cols-2 gap-3">
-        {data.topExporters.length > 0 && (
-          <div>
-            <h5 className="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1">
-              Top exporters
-            </h5>
-            <TagList
-              items={data.topExporters.slice(0, 6).map((e) => ({
-                label: e.code,
-                count: e.records,
-                title: `${e.code}: ${e.records} records, ${e.quantity.toLocaleString()} items`,
-              }))}
-            />
+      {/* Purpose */}
+      {data.topPurposes.length > 0 && (
+        <div>
+          <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
+            Purpose
+          </h5>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-600 dark:text-zinc-300">
+            {data.topPurposes.map((p) => (
+              <span key={p.code} className="tabular-nums">
+                {p.label}{" "}
+                <span className="text-zinc-400 dark:text-zinc-500">
+                  ({p.records})
+                </span>
+              </span>
+            ))}
           </div>
-        )}
-        {data.topImporters.length > 0 && (
-          <div>
-            <h5 className="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1">
-              Top importers
-            </h5>
-            <TagList
-              items={data.topImporters.slice(0, 6).map((im) => ({
-                label: im.code,
-                count: im.records,
-                title: `${im.code}: ${im.records} records, ${im.quantity.toLocaleString()} items`,
-              }))}
-            />
+        </div>
+      )}
+
+      {/* Top exporting countries */}
+      {topCountries.length > 0 && (
+        <div>
+          <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
+            Top exporting countries
+          </h5>
+          <div className="space-y-1">
+            {topCountries.map((c) => (
+              <HorizontalBar
+                key={c.code}
+                label={c.code}
+                value={c.records}
+                max={maxCountryRecords}
+                color="bg-emerald-300 dark:bg-emerald-600"
+              />
+            ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
