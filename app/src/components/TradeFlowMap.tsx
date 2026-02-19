@@ -187,7 +187,7 @@ function TradeFlowMap({ flows, suspensionCountries, countryAnnotations }: TradeF
   const exporterCodes = new Set(visibleFlows.map((f) => f.from));
   const importerCodes = new Set(visibleFlows.map((f) => f.to));
 
-  const maxRecords = Math.max(...visibleFlows.map((f) => f.records));
+  const maxRecords = visibleFlows.length > 0 ? Math.max(...visibleFlows.map((f) => f.records)) : 0;
 
   // Theme-aware colors for SVG fills (can't use Tailwind classes in SVG)
   const colors = dark

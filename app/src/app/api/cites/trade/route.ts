@@ -220,9 +220,9 @@ function summarize(rows: TradeRow[]): TradeSummary {
 export async function GET(request: NextRequest) {
   const taxonId = request.nextUrl.searchParams.get("taxon_id");
 
-  if (!taxonId) {
+  if (!taxonId || !/^\d+$/.test(taxonId)) {
     return NextResponse.json(
-      { error: "taxon_id parameter is required" },
+      { error: "taxon_id must be a numeric value" },
       { status: 400 }
     );
   }

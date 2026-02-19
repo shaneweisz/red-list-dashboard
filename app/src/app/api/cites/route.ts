@@ -154,7 +154,8 @@ export async function GET(request: NextRequest) {
 
     let distributions: CitesDistribution[] = [];
     if (distributionsResp.ok) {
-      distributions = (await distributionsResp.json()) as CitesDistribution[];
+      const distBody = await distributionsResp.json();
+      if (Array.isArray(distBody)) distributions = distBody;
     }
 
     // Get English common name
