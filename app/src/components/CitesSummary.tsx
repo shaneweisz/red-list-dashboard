@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import CitesTradeSummary from "./CitesTradeSummary";
 
 interface CitesListing {
@@ -175,6 +175,12 @@ export default function CitesSummary({
       </div>
     );
   }
+
+  // Country codes with active trade suspensions — passed to TradeFlowMap for overlay
+  const suspensionCountryCodes = useMemo(
+    () => new Set((data.suspensions || []).map((s) => s.countryCode)),
+    [data.suspensions]
+  );
 
   const suspensionsToShow = showAllSuspensions
     ? data.suspensions || []
@@ -386,7 +392,7 @@ export default function CitesSummary({
           <h4 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
             International Trade
           </h4>
-          <CitesTradeSummary citesId={data.citesId} prefetchedData={tradeData} prefetchedLoading={tradeLoading} />
+          <CitesTradeSummary citesId={data.citesId} prefetchedData={tradeData} prefetchedLoading={tradeLoading} suspensionCountries={suspensionCountryCodes} />
         </div>
       )}
 

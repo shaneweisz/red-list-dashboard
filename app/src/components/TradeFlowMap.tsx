@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useState, memo } from "react";
+import React, { useState, useMemo, memo } from "react";
 import {
   ComposableMap,
   Geographies,
   Geography,
-  Line,
   Marker,
 } from "react-simple-maps";
+import { geoNaturalEarth1 } from "d3-geo";
 import { useTheme } from "next-themes";
 import { ALPHA2_TO_NAME } from "./WorldMap";
 import { countryName, fmtQty } from "./cites-utils";
@@ -74,6 +74,74 @@ const COUNTRY_CENTROIDS: Record<string, [number, number]> = {
   PS: [35.2, 32.0], XK: [21.0, 42.6], MK: [21.7, 41.5],
 };
 
+const MAP_WIDTH = 800;
+const MAP_HEIGHT = 400;
+const MAP_OFFSET: [number, number] = [30, 20];
+
+// Build projection that matches the ComposableMap settings
+const projection = geoNaturalEarth1()
+  .scale(160)
+  .center([0, 0])
+  .translate([MAP_WIDTH / 2, MAP_HEIGHT / 2]);
+
+/** Project [lon, lat] to SVG [x, y] inside the offset <g> */
+function project(coords: [number, number]): [number, number] | null {
+  const p = projection(coords);
+  return p ? [p[0] + MAP_OFFSET[0], p[1] + MAP_OFFSET[1]] : null;
+}
+
+/** Build a quadratic bezier arc from→to, curving left of the direction of travel */
+function arcPath(
+  from: [number, number],
+  to: [number, number],
+  curvature = 0.25
+): string | null {
+  const p1 = project(from);
+  const p2 = project(to);
+  if (!p1 || !p2) return null;
+
+  const dx = p2[0] - p1[0];
+  const dy = p2[1] - p1[1];
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len < 1) return null;
+
+  // Control point: offset perpendicular to midpoint
+  const mx = (p1[0] + p2[0]) / 2;
+  const my = (p1[1] + p2[1]) / 2;
+  const nx = -dy / len; // perpendicular unit
+  const ny = dx / len;
+  const offset = len * curvature;
+  const cx = mx + nx * offset;
+  const cy = my + ny * offset;
+
+  return `M${p1[0]},${p1[1]} Q${cx},${cy} ${p2[0]},${p2[1]}`;
+}
+
+/** Compute the angle of the curve at the endpoint (for arrowhead rotation) */
+function endAngle(from: [number, number], to: [number, number], curvature = 0.25): number {
+  const p1 = project(from);
+  const p2 = project(to);
+  if (!p1 || !p2) return 0;
+
+  const dx = p2[0] - p1[0];
+  const dy = p2[1] - p1[1];
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len < 1) return 0;
+
+  // Tangent at t=1 of Q(p1, cp, p2) = 2*(1-t)*(cp-p1) + 2*t*(p2-cp) evaluated at t=1 = 2*(p2-cp)
+  const mx = (p1[0] + p2[0]) / 2;
+  const my = (p1[1] + p2[1]) / 2;
+  const nx = -dy / len;
+  const ny = dx / len;
+  const offset = len * curvature;
+  const cx = mx + nx * offset;
+  const cy = my + ny * offset;
+
+  const tdx = p2[0] - cx;
+  const tdy = p2[1] - cy;
+  return (Math.atan2(tdy, tdx) * 180) / Math.PI;
+}
+
 interface TradeFlow {
   from: string;
   to: string;
@@ -83,64 +151,85 @@ interface TradeFlow {
 
 interface TradeFlowMapProps {
   flows: TradeFlow[];
+  /** ISO alpha-2 codes of countries with active trade suspensions */
+  suspensionCountries?: Set<string>;
 }
 
-function TradeFlowMap({ flows }: TradeFlowMapProps) {
+function TradeFlowMap({ flows, suspensionCountries }: TradeFlowMapProps) {
   const { resolvedTheme } = useTheme();
   const [hoveredFlow, setHoveredFlow] = useState<number | null>(null);
-
-  if (flows.length === 0) return null;
-
-  // Collect unique exporter/importer codes
-  const exporterCodes = new Set(flows.map((f) => f.from));
-  const importerCodes = new Set(flows.map((f) => f.to));
+  const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
 
   // Only render flows where we have centroids for both endpoints
-  const renderableFlows = flows.filter(
-    (f) => COUNTRY_CENTROIDS[f.from] && COUNTRY_CENTROIDS[f.to]
+  const renderableFlows = useMemo(
+    () => flows.filter((f) => COUNTRY_CENTROIDS[f.from] && COUNTRY_CENTROIDS[f.to]),
+    [flows]
   );
 
   if (renderableFlows.length === 0) return null;
 
-  const maxRecords = Math.max(...renderableFlows.map((f) => f.records));
   const dark = resolvedTheme === "dark";
+
+  // Filter flows to selected country (if any)
+  const visibleFlows = selectedCountry
+    ? renderableFlows.filter((f) => f.from === selectedCountry || f.to === selectedCountry)
+    : renderableFlows;
+
+  // Collect unique exporter/importer codes from visible flows
+  const exporterCodes = new Set(visibleFlows.map((f) => f.from));
+  const importerCodes = new Set(visibleFlows.map((f) => f.to));
+
+  const maxRecords = Math.max(...visibleFlows.map((f) => f.records));
 
   // Theme-aware colors for SVG fills (can't use Tailwind classes in SVG)
   const colors = dark
-    ? { base: "#27272a", exporter: "#451a1a", importer: "#172554", both: "#1e1b4b", stroke: "#3f3f46" }
-    : { base: "#f4f4f5", exporter: "#fee2e2", importer: "#dbeafe", both: "#e0e7ff", stroke: "#d4d4d8" };
+    ? { base: "#27272a", exporter: "#451a1a", importer: "#172554", both: "#1e1b4b", stroke: "#3f3f46", suspension: "#7f1d1d" }
+    : { base: "#f4f4f5", exporter: "#fee2e2", importer: "#dbeafe", both: "#e0e7ff", stroke: "#d4d4d8", suspension: "#fecaca" };
+
+  const hoveredFlowData = hoveredFlow !== null ? visibleFlows[hoveredFlow] : null;
 
   return (
     <div className="relative">
       {/* Hover tooltip */}
-      {hoveredFlow !== null && renderableFlows[hoveredFlow] && (
+      {hoveredFlowData && (
         <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 bg-zinc-800 dark:bg-zinc-700 text-white text-[11px] px-3 py-1.5 rounded-lg shadow-lg pointer-events-none whitespace-nowrap">
           <span className="font-medium">
-            {countryName(renderableFlows[hoveredFlow].from)}
+            {countryName(hoveredFlowData.from)}
           </span>
           <span className="text-zinc-300 mx-1.5">&rarr;</span>
           <span className="font-medium">
-            {countryName(renderableFlows[hoveredFlow].to)}
+            {countryName(hoveredFlowData.to)}
           </span>
           <span className="text-zinc-400 ml-2">
-            {renderableFlows[hoveredFlow].records.toLocaleString()} records
+            {hoveredFlowData.records.toLocaleString()} records
           </span>
-          {renderableFlows[hoveredFlow].quantity > 0 && (
+          {hoveredFlowData.quantity > 0 && (
             <span className="text-zinc-400 ml-1">
-              / {fmtQty(renderableFlows[hoveredFlow].quantity)} items
+              / {fmtQty(hoveredFlowData.quantity)} items
             </span>
           )}
         </div>
+      )}
+
+      {/* Selected country filter chip */}
+      {selectedCountry && (
+        <button
+          className="absolute top-2 right-2 z-10 bg-zinc-800 dark:bg-zinc-700 text-white text-[11px] px-2.5 py-1 rounded-full flex items-center gap-1.5 hover:bg-zinc-700 dark:hover:bg-zinc-600 transition-colors"
+          onClick={() => setSelectedCountry(null)}
+        >
+          {countryName(selectedCountry)}
+          <span className="text-zinc-400">&times;</span>
+        </button>
       )}
 
       <ComposableMap
         projection="geoNaturalEarth1"
         projectionConfig={{ scale: 160, center: [0, 0] }}
         style={{ width: "100%", height: "auto" }}
-        width={800}
-        height={400}
+        width={MAP_WIDTH}
+        height={MAP_HEIGHT}
       >
-        <g transform="translate(30, 20)">
+        <g transform={`translate(${MAP_OFFSET[0]}, ${MAP_OFFSET[1]})`}>
           {/* Base map */}
           <Geographies geography={GEO_URL}>
             {({ geographies }) =>
@@ -149,15 +238,13 @@ function TradeFlowMap({ flows }: TradeFlowMapProps) {
                 .map((geo) => {
                   const name = geo.properties.name;
                   const alpha2 = NAME_TO_ALPHA2[name];
-                  const isExporter = alpha2
-                    ? exporterCodes.has(alpha2)
-                    : false;
-                  const isImporter = alpha2
-                    ? importerCodes.has(alpha2)
-                    : false;
+                  const isExporter = alpha2 ? exporterCodes.has(alpha2) : false;
+                  const isImporter = alpha2 ? importerCodes.has(alpha2) : false;
+                  const isSuspended = alpha2 ? suspensionCountries?.has(alpha2) : false;
 
                   let fill = colors.base;
-                  if (isExporter && isImporter) fill = colors.both;
+                  if (isSuspended) fill = colors.suspension;
+                  else if (isExporter && isImporter) fill = colors.both;
                   else if (isExporter) fill = colors.exporter;
                   else if (isImporter) fill = colors.importer;
 
@@ -166,8 +253,9 @@ function TradeFlowMap({ flows }: TradeFlowMapProps) {
                       key={geo.rsmKey}
                       geography={geo}
                       fill={fill}
-                      stroke={colors.stroke}
-                      strokeWidth={0.4}
+                      stroke={isSuspended ? (dark ? "#ef4444" : "#dc2626") : colors.stroke}
+                      strokeWidth={isSuspended ? 1 : 0.4}
+                      strokeDasharray={isSuspended ? "3,2" : undefined}
                       style={{
                         default: { outline: "none" },
                         hover: { outline: "none", fill },
@@ -178,55 +266,88 @@ function TradeFlowMap({ flows }: TradeFlowMapProps) {
                 })
             }
           </Geographies>
+        </g>
 
-          {/* Flow lines */}
-          {renderableFlows.map((flow, i) => {
-            const from = COUNTRY_CENTROIDS[flow.from];
-            const to = COUNTRY_CENTROIDS[flow.to];
-            // Stroke width: 1.5 to 4 based on relative volume
-            const ratio = maxRecords > 0 ? flow.records / maxRecords : 0;
-            const strokeWidth = 1.5 + ratio * 2.5;
-            const isHovered = hoveredFlow === i;
+        {/* Curved flow arcs with arrowheads — rendered outside the offset <g> since we project manually */}
+        {visibleFlows.map((flow, i) => {
+          const from = COUNTRY_CENTROIDS[flow.from];
+          const to = COUNTRY_CENTROIDS[flow.to];
+          const path = arcPath(from, to);
+          if (!path) return null;
 
-            return (
-              <Line
-                key={`${flow.from}-${flow.to}`}
-                from={from}
-                to={to}
+          const ratio = maxRecords > 0 ? flow.records / maxRecords : 0;
+          const strokeWidth = 1.5 + ratio * 2.5;
+          const isHovered = hoveredFlow === i;
+
+          // Arrowhead at destination
+          const angle = endAngle(from, to);
+          const dest = project(to);
+
+          return (
+            <g key={`flow-${flow.from}-${flow.to}`}>
+              <path
+                d={path}
+                fill="none"
                 stroke={isHovered ? "#f59e0b" : "#ef4444"}
                 strokeWidth={isHovered ? strokeWidth + 1 : strokeWidth}
                 strokeLinecap="round"
-                strokeOpacity={isHovered ? 0.9 : 0.5}
-                fill="transparent"
+                strokeOpacity={isHovered ? 0.9 : 0.45}
                 onMouseEnter={() => setHoveredFlow(i)}
                 onMouseLeave={() => setHoveredFlow(null)}
                 style={{ cursor: "pointer" }}
               />
-            );
-          })}
+              {/* Arrowhead triangle */}
+              {dest && (
+                <polygon
+                  points="-5,-3 0,0 -5,3"
+                  fill={isHovered ? "#f59e0b" : "#ef4444"}
+                  fillOpacity={isHovered ? 0.9 : 0.7}
+                  transform={`translate(${dest[0]},${dest[1]}) rotate(${angle})`}
+                />
+              )}
+            </g>
+          );
+        })}
 
-          {/* Endpoint markers (deduplicated) */}
+        {/* Endpoint markers (deduplicated) — clickable for filtering */}
+        <g transform={`translate(${MAP_OFFSET[0]}, ${MAP_OFFSET[1]})`}>
           {(() => {
             const seen = new Set<string>();
             const markers: React.ReactNode[] = [];
-            for (const flow of renderableFlows) {
-              if (!seen.has(flow.from)) {
-                seen.add(flow.from);
-                const coords = COUNTRY_CENTROIDS[flow.from];
-                const isBoth = importerCodes.has(flow.from);
+            for (const flow of visibleFlows) {
+              for (const code of [flow.from, flow.to]) {
+                if (seen.has(code)) continue;
+                seen.add(code);
+                const coords = COUNTRY_CENTROIDS[code];
+                if (!coords) continue;
+                const isExp = exporterCodes.has(code);
+                const isImp = importerCodes.has(code);
+                const isBoth = isExp && isImp;
+                const isSelected = selectedCountry === code;
+
+                let fill = isImp && !isExp ? "#3b82f6" : isBoth ? "#6366f1" : "#ef4444";
+                if (isSelected) fill = "#f59e0b";
+
                 markers.push(
-                  <Marker key={`m-${flow.from}`} coordinates={coords}>
-                    <circle r={2.5} fill={isBoth ? "#6366f1" : "#ef4444"} stroke={dark ? "#27272a" : "#fff"} strokeWidth={0.5} />
-                  </Marker>
-                );
-              }
-              if (!seen.has(flow.to)) {
-                seen.add(flow.to);
-                const coords = COUNTRY_CENTROIDS[flow.to];
-                const isBoth = exporterCodes.has(flow.to);
-                markers.push(
-                  <Marker key={`m-${flow.to}`} coordinates={coords}>
-                    <circle r={2.5} fill={isBoth ? "#6366f1" : "#3b82f6"} stroke={dark ? "#27272a" : "#fff"} strokeWidth={0.5} />
+                  <Marker key={`m-${code}`} coordinates={coords}>
+                    <circle
+                      r={isSelected ? 4 : 3}
+                      fill={fill}
+                      stroke={dark ? "#27272a" : "#fff"}
+                      strokeWidth={isSelected ? 1 : 0.5}
+                      style={{ cursor: "pointer" }}
+                      onClick={() => setSelectedCountry(selectedCountry === code ? null : code)}
+                    />
+                    {isSelected && (
+                      <text
+                        y={-8}
+                        textAnchor="middle"
+                        className="text-[8px] font-semibold"
+                        fill={dark ? "#e4e4e7" : "#3f3f46"}
+                      >
+                        {code}
+                      </text>
+                    )}
                   </Marker>
                 );
               }
@@ -237,7 +358,7 @@ function TradeFlowMap({ flows }: TradeFlowMapProps) {
       </ComposableMap>
 
       {/* Legend */}
-      <div className="flex items-center justify-center gap-4 mt-1 text-[10px] text-zinc-500 dark:text-zinc-400">
+      <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 mt-1 text-[10px] text-zinc-500 dark:text-zinc-400">
         <span className="flex items-center gap-1">
           <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
           Exporter
@@ -247,12 +368,19 @@ function TradeFlowMap({ flows }: TradeFlowMapProps) {
           Importer
         </span>
         <span className="flex items-center gap-1">
-          <span
-            className="inline-block w-4 h-[2px] rounded bg-red-500"
-            style={{ opacity: 0.5 }}
-          />
-          Trade flow
+          <svg width="16" height="8" className="inline-block">
+            <line x1="0" y1="4" x2="12" y2="4" stroke="#ef4444" strokeWidth="2" strokeOpacity="0.5" />
+            <polygon points="12,1.5 16,4 12,6.5" fill="#ef4444" fillOpacity="0.7" />
+          </svg>
+          Flow direction
         </span>
+        {suspensionCountries && suspensionCountries.size > 0 && (
+          <span className="flex items-center gap-1">
+            <span className="inline-block w-3 h-2 rounded-sm border border-dashed border-red-500 bg-red-100 dark:bg-red-900/30" />
+            Suspension
+          </span>
+        )}
+        <span className="text-zinc-400 dark:text-zinc-500 italic">click dot to filter</span>
       </div>
     </div>
   );

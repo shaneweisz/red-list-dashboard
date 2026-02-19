@@ -287,10 +287,12 @@ export default function CitesTradeSummary({
   citesId,
   prefetchedData,
   prefetchedLoading,
+  suspensionCountries,
 }: {
   citesId: number;
   prefetchedData?: Record<string, unknown> | null;
   prefetchedLoading?: boolean;
+  suspensionCountries?: Set<string>;
 }) {
   const [ownData, setOwnData] = useState<TradeData | null>(null);
   const [ownLoading, setOwnLoading] = useState(!prefetchedData && prefetchedLoading === undefined);
@@ -451,7 +453,7 @@ export default function CitesTradeSummary({
             Top Trade Flows
           </h5>
           <div className="border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden bg-zinc-50 dark:bg-zinc-800/30">
-            <TradeFlowMap flows={data.topFlows} />
+            <TradeFlowMap flows={data.topFlows} suspensionCountries={suspensionCountries} />
           </div>
         </div>
       )}
