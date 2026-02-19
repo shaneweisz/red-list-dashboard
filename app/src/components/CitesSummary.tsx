@@ -78,6 +78,8 @@ export default function CitesSummary({
   scientificName: string;
 }) {
   const [data, setData] = useState<CitesData | null>(null);
+  const [tradeData, setTradeData] = useState<Record<string, unknown> | null>(null);
+  const [tradeLoading, setTradeLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAllSuspensions, setShowAllSuspensions] = useState(false);
@@ -88,6 +90,7 @@ export default function CitesSummary({
 
     async function fetchCitesData() {
       setLoading(true);
+      setTradeData(null);
       setError(null);
 
       try {
@@ -96,12 +99,29 @@ export default function CitesSummary({
         );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const result = await res.json();
-        if (!cancelled) setData(result);
+        if (cancelled) return;
+        setData(result);
+        setLoading(false);
+
+        // Start trade data fetch immediately (eliminates waterfall)
+        if (result.found && result.citesId) {
+          setTradeLoading(true);
+          try {
+            const tradeRes = await fetch(`/api/cites/trade?taxon_id=${result.citesId}`);
+            if (tradeRes.ok && !cancelled) {
+              setTradeData(await tradeRes.json());
+            }
+          } catch {
+            // Trade data is optional — fail silently
+          } finally {
+            if (!cancelled) setTradeLoading(false);
+          }
+        }
       } catch (err) {
-        if (!cancelled)
+        if (!cancelled) {
           setError(err instanceof Error ? err.message : "Unknown error");
-      } finally {
-        if (!cancelled) setLoading(false);
+          setLoading(false);
+        }
       }
     }
 
@@ -291,7 +311,7 @@ export default function CitesSummary({
                 ))}
               </tbody>
             </table>
-            {(data.suspensions.length > 5) && (
+            {data.suspensions.length > 5 && (
               <button
                 className="w-full px-3 py-1.5 text-xs text-blue-600 dark:text-blue-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 border-t border-zinc-100 dark:border-zinc-800"
                 onClick={() => setShowAllSuspensions(!showAllSuspensions)}
@@ -346,7 +366,7 @@ export default function CitesSummary({
                 ))}
               </tbody>
             </table>
-            {(data.quotas.length > 5) && (
+            {data.quotas.length > 5 && (
               <button
                 className="w-full px-3 py-1.5 text-xs text-blue-600 dark:text-blue-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 border-t border-zinc-100 dark:border-zinc-800"
                 onClick={() => setShowAllQuotas(!showAllQuotas)}
@@ -366,7 +386,7 @@ export default function CitesSummary({
           <h4 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
             International Trade
           </h4>
-          <CitesTradeSummary citesId={data.citesId} />
+          <CitesTradeSummary citesId={data.citesId} prefetchedData={tradeData} prefetchedLoading={tradeLoading} />
         </div>
       )}
 

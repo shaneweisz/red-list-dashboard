@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
-import { ALPHA2_TO_NAME } from "./WorldMap";
+import { countryName, fmtQty } from "./cites-utils";
 
 const TradeFlowMap = dynamic(() => import("./TradeFlowMap"), { ssr: false });
 
@@ -53,16 +53,6 @@ interface TradeData {
 
 // Sources that indicate wild take — key concern for assessors
 const WILD_SOURCE_CODES = new Set(["W", "X", "R", "U"]);
-
-function countryName(code: string): string {
-  return ALPHA2_TO_NAME[code] || code;
-}
-
-function fmtQty(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(n >= 10_000 ? 0 : 1)}k`;
-  return n.toLocaleString();
-}
 
 function TrendArrow({ data }: { data: YearData[] }) {
   if (data.length < 4) return null;
@@ -295,29 +285,40 @@ function CountryTable({
 
 export default function CitesTradeSummary({
   citesId,
+  prefetchedData,
+  prefetchedLoading,
 }: {
   citesId: number;
+  prefetchedData?: Record<string, unknown> | null;
+  prefetchedLoading?: boolean;
 }) {
-  const [data, setData] = useState<TradeData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [ownData, setOwnData] = useState<TradeData | null>(null);
+  const [ownLoading, setOwnLoading] = useState(!prefetchedData && prefetchedLoading === undefined);
   const [error, setError] = useState<string | null>(null);
 
+  // Use prefetched data from parent when available; fall back to own fetch
+  const data = (prefetchedData as TradeData | null) ?? ownData;
+  const loading = prefetchedLoading ?? ownLoading;
+
   useEffect(() => {
+    // Skip own fetch if parent is managing data
+    if (prefetchedData !== undefined || prefetchedLoading !== undefined) return;
+
     let cancelled = false;
 
     async function fetchTrade() {
-      setLoading(true);
+      setOwnLoading(true);
       setError(null);
       try {
         const res = await fetch(`/api/cites/trade?taxon_id=${citesId}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const result = await res.json();
-        if (!cancelled) setData(result);
+        if (!cancelled) setOwnData(result);
       } catch (err) {
         if (!cancelled)
           setError(err instanceof Error ? err.message : "Unknown error");
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setOwnLoading(false);
       }
     }
 
@@ -325,7 +326,7 @@ export default function CitesTradeSummary({
     return () => {
       cancelled = true;
     };
-  }, [citesId]);
+  }, [citesId, prefetchedData, prefetchedLoading]);
 
   if (loading) {
     return (

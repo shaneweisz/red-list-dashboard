@@ -6,17 +6,13 @@ const SPECIES_PLUS_API = "https://api.speciesplus.net/api/v1";
 const citesCache = new Map<string, { data: object; timestamp: number }>();
 const CACHE_DURATION = 60 * 60 * 1000;
 
-function getApiKey(): string {
-  const key = process.env.SPECIES_PLUS_API_KEY;
-  if (!key) {
-    throw new Error("SPECIES_PLUS_API_KEY environment variable not set");
-  }
-  return key;
+function getApiKey(): string | null {
+  return process.env.SPECIES_PLUS_API_KEY || null;
 }
 
-async function fetchCites(path: string): Promise<Response> {
+async function fetchCites(path: string, apiKey: string): Promise<Response> {
   return fetch(`${SPECIES_PLUS_API}${path}`, {
-    headers: { "X-Authentication-Token": getApiKey() },
+    headers: { "X-Authentication-Token": apiKey },
   });
 }
 
@@ -107,9 +103,18 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: "SPECIES_PLUS_API_KEY environment variable not set" },
+        { status: 500 }
+      );
+    }
+
     // Step 1: Search for the taxon concept by name
     const searchResp = await fetchCites(
-      `/taxon_concepts?name=${encodeURIComponent(name)}`
+      `/taxon_concepts?name=${encodeURIComponent(name)}`,
+      apiKey
     );
     if (!searchResp.ok) {
       return NextResponse.json(
@@ -138,8 +143,8 @@ export async function GET(request: NextRequest) {
 
     // Step 2: Fetch legislation and distributions in parallel
     const [legislationResp, distributionsResp] = await Promise.all([
-      fetchCites(`/taxon_concepts/${match.id}/cites_legislation`),
-      fetchCites(`/taxon_concepts/${match.id}/distributions`),
+      fetchCites(`/taxon_concepts/${match.id}/cites_legislation`, apiKey),
+      fetchCites(`/taxon_concepts/${match.id}/distributions`, apiKey),
     ]);
 
     let legislation: CitesLegislation | null = null;

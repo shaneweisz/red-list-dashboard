@@ -7,9 +7,10 @@ import {
   Geography,
   Line,
   Marker,
-  ZoomableGroup,
 } from "react-simple-maps";
+import { useTheme } from "next-themes";
 import { ALPHA2_TO_NAME } from "./WorldMap";
+import { countryName, fmtQty } from "./cites-utils";
 
 const GEO_URL =
   "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
@@ -84,17 +85,8 @@ interface TradeFlowMapProps {
   flows: TradeFlow[];
 }
 
-function countryName(code: string): string {
-  return ALPHA2_TO_NAME[code] || code;
-}
-
-function fmtQty(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(n >= 10_000 ? 0 : 1)}k`;
-  return n.toLocaleString();
-}
-
 function TradeFlowMap({ flows }: TradeFlowMapProps) {
+  const { resolvedTheme } = useTheme();
   const [hoveredFlow, setHoveredFlow] = useState<number | null>(null);
 
   if (flows.length === 0) return null;
@@ -111,6 +103,12 @@ function TradeFlowMap({ flows }: TradeFlowMapProps) {
   if (renderableFlows.length === 0) return null;
 
   const maxRecords = Math.max(...renderableFlows.map((f) => f.records));
+  const dark = resolvedTheme === "dark";
+
+  // Theme-aware colors for SVG fills (can't use Tailwind classes in SVG)
+  const colors = dark
+    ? { base: "#27272a", exporter: "#451a1a", importer: "#172554", both: "#1e1b4b", stroke: "#3f3f46" }
+    : { base: "#f4f4f5", exporter: "#fee2e2", importer: "#dbeafe", both: "#e0e7ff", stroke: "#d4d4d8" };
 
   return (
     <div className="relative">
@@ -142,7 +140,7 @@ function TradeFlowMap({ flows }: TradeFlowMapProps) {
         width={800}
         height={400}
       >
-        <ZoomableGroup center={[10, 10]} zoom={1} minZoom={1} maxZoom={1}>
+        <g transform="translate(30, 20)">
           {/* Base map */}
           <Geographies geography={GEO_URL}>
             {({ geographies }) =>
@@ -158,18 +156,17 @@ function TradeFlowMap({ flows }: TradeFlowMapProps) {
                     ? importerCodes.has(alpha2)
                     : false;
 
-                  let fill = "#f4f4f5"; // zinc-100
-                  if (isExporter && isImporter)
-                    fill = "#e0e7ff"; // indigo-100 (both)
-                  else if (isExporter) fill = "#fee2e2"; // red-100
-                  else if (isImporter) fill = "#dbeafe"; // blue-100
+                  let fill = colors.base;
+                  if (isExporter && isImporter) fill = colors.both;
+                  else if (isExporter) fill = colors.exporter;
+                  else if (isImporter) fill = colors.importer;
 
                   return (
                     <Geography
                       key={geo.rsmKey}
                       geography={geo}
                       fill={fill}
-                      stroke="#d4d4d8"
+                      stroke={colors.stroke}
                       strokeWidth={0.4}
                       style={{
                         default: { outline: "none" },
@@ -219,7 +216,7 @@ function TradeFlowMap({ flows }: TradeFlowMapProps) {
                 const isBoth = importerCodes.has(flow.from);
                 markers.push(
                   <Marker key={`m-${flow.from}`} coordinates={coords}>
-                    <circle r={2.5} fill={isBoth ? "#6366f1" : "#ef4444"} stroke="#fff" strokeWidth={0.5} />
+                    <circle r={2.5} fill={isBoth ? "#6366f1" : "#ef4444"} stroke={dark ? "#27272a" : "#fff"} strokeWidth={0.5} />
                   </Marker>
                 );
               }
@@ -229,14 +226,14 @@ function TradeFlowMap({ flows }: TradeFlowMapProps) {
                 const isBoth = exporterCodes.has(flow.to);
                 markers.push(
                   <Marker key={`m-${flow.to}`} coordinates={coords}>
-                    <circle r={2.5} fill={isBoth ? "#6366f1" : "#3b82f6"} stroke="#fff" strokeWidth={0.5} />
+                    <circle r={2.5} fill={isBoth ? "#6366f1" : "#3b82f6"} stroke={dark ? "#27272a" : "#fff"} strokeWidth={0.5} />
                   </Marker>
                 );
               }
             }
             return markers;
           })()}
-        </ZoomableGroup>
+        </g>
       </ComposableMap>
 
       {/* Legend */}

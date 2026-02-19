@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
+// NOTE: This hits the CITES Trade DB web interface's JSON endpoint, not an
+// official API. It may break if CITES changes their frontend. No stable public
+// API exists for this data at present.
 const TRADE_API = "https://trade.cites.org/en/cites_trade/shipments";
 
 // Cache for trade summaries (1 hour)
