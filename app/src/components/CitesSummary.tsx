@@ -132,6 +132,13 @@ export default function CitesSummary({
     };
   }, [scientificName]);
 
+  // Country codes with active trade suspensions — passed to TradeFlowMap for overlay
+  // Must be before early returns to satisfy Rules of Hooks
+  const suspensionCountryCodes = useMemo(
+    () => new Set((data?.suspensions || []).map((s) => s.countryCode)),
+    [data?.suspensions]
+  );
+
   if (loading) {
     return (
       <div className="flex items-center gap-2 p-6 text-sm text-zinc-500 dark:text-zinc-400">
@@ -175,12 +182,6 @@ export default function CitesSummary({
       </div>
     );
   }
-
-  // Country codes with active trade suspensions — passed to TradeFlowMap for overlay
-  const suspensionCountryCodes = useMemo(
-    () => new Set((data.suspensions || []).map((s) => s.countryCode)),
-    [data.suspensions]
-  );
 
   const suspensionsToShow = showAllSuspensions
     ? data.suspensions || []
