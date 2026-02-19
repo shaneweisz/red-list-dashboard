@@ -69,11 +69,11 @@ function formatBasisOfRecord(basis?: string): string {
   if (!basis) return "";
   const labels: Record<string, string> = {
     HUMAN_OBSERVATION: "Human observation",
-    PRESERVED_SPECIMEN: "Preserved specimen",
-    MACHINE_OBSERVATION: "Machine observation",
+    PRESERVED_SPECIMEN: "Preserved specimen (museum collection)",
+    MACHINE_OBSERVATION: "Machine observation (camera trap / acoustic)",
     FOSSIL_SPECIMEN: "Fossil specimen",
-    LIVING_SPECIMEN: "Living specimen",
-    MATERIAL_SAMPLE: "Material sample",
+    LIVING_SPECIMEN: "Living specimen (zoo / garden)",
+    MATERIAL_SAMPLE: "Material sample (eDNA / tissue)",
     OCCURRENCE: "Occurrence",
     MATERIAL_CITATION: "Material citation",
   };
@@ -96,6 +96,7 @@ interface InatObservation {
 interface RecordTypeBreakdown {
   humanObservation: number;
   preservedSpecimen: number;
+  materialSample: number;
   machineObservation: number;
   other: number;
   iNaturalist: number;
@@ -337,12 +338,13 @@ export default function OccurrenceMapRow({
   const [loadingOccurrences, setLoadingOccurrences] = useState(true);
   const [loadingBreakdown, setLoadingBreakdown] = useState(true);
 
-  // Checkbox state for each observation type category (default: all checked except preserved & other)
+  // Checkbox state for each observation type category (default: all checked except preserved, material & other)
   const [checkedTypes, setCheckedTypes] = useState({
     iNaturalist: true,
     humanOther: true,
     machineObservation: true,
     preservedSpecimen: false,
+    materialSample: false,
     other: false,
   });
 
@@ -440,27 +442,20 @@ export default function OccurrenceMapRow({
     fetchInatPhotos(0, pageSize);
   }, [pageSize, fetchInatPhotos]);
 
-  // Helper to check if a record is a preserved specimen or material sample
-  const isPreserved = (basisOfRecord?: string): boolean => {
-    return basisOfRecord === "PRESERVED_SPECIMEN" || basisOfRecord === "MATERIAL_SAMPLE";
-  };
-
-  // Classify an occurrence into one of the 5 checkbox categories
+  // Classify an occurrence into one of the 6 checkbox categories
   const getCategory = (o: OccurrenceFeature): keyof typeof checkedTypes => {
     const basis = o.properties.basisOfRecord;
     if (basis === "HUMAN_OBSERVATION") {
       return o.properties.datasetKey === INAT_DATASET_KEY ? "iNaturalist" : "humanOther";
     }
     if (basis === "MACHINE_OBSERVATION") return "machineObservation";
-    if (isPreserved(basis)) return "preservedSpecimen";
+    if (basis === "PRESERVED_SPECIMEN") return "preservedSpecimen";
+    if (basis === "MATERIAL_SAMPLE") return "materialSample";
     return "other";
   };
 
   // Filter occurrences based on which checkboxes are ticked
   const filteredOccurrences = occurrences.filter((o) => checkedTypes[getCategory(o)]);
-
-  // Derive showPreservedSpecimens from checkbox state (for map legend)
-  const showPreservedSpecimens = checkedTypes.preservedSpecimen;
 
   // Helper to check if an occurrence is after the assessment year
   const isNewRecord = (eventDate?: string): boolean => {
@@ -469,10 +464,9 @@ export default function OccurrenceMapRow({
     return recordYear > assessmentYear;
   };
 
-  // Count by category for the legend
-  const preservedRecords = filteredOccurrences.filter((o) => isPreserved(o.properties.basisOfRecord));
-  const newRecords = filteredOccurrences.filter((o) => !isPreserved(o.properties.basisOfRecord) && isNewRecord(o.properties.eventDate));
-  const oldRecords = filteredOccurrences.filter((o) => !isPreserved(o.properties.basisOfRecord) && !isNewRecord(o.properties.eventDate));
+  // Count by category for the legend (just pre/post assessment)
+  const newRecords = filteredOccurrences.filter((o) => isNewRecord(o.properties.eventDate));
+  const oldRecords = filteredOccurrences.filter((o) => !isNewRecord(o.properties.eventDate));
 
   return (
         <div
@@ -504,6 +498,7 @@ export default function OccurrenceMapRow({
                       (checkedTypes.humanOther ? humanOtherCount : 0) +
                       (checkedTypes.machineObservation ? breakdown.machineObservation : 0) +
                       (checkedTypes.preservedSpecimen ? breakdown.preservedSpecimen : 0) +
+                      (checkedTypes.materialSample ? (breakdown.materialSample || 0) : 0) +
                       (checkedTypes.other ? breakdown.other : 0);
 
                     const toggleType = (key: keyof typeof checkedTypes) => {
@@ -529,7 +524,7 @@ export default function OccurrenceMapRow({
                           rel="noopener noreferrer"
                           className="flex justify-between flex-1 text-zinc-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
                         >
-                          <span>Human Observations (iNaturalist)</span>
+                          <span>Human Obs. (iNaturalist)</span>
                           <span className="tabular-nums">{breakdown.iNaturalist.toLocaleString()}</span>
                         </a>
                       </div>
@@ -548,12 +543,12 @@ export default function OccurrenceMapRow({
                           rel="noopener noreferrer"
                           className="flex justify-between flex-1 text-zinc-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
                         >
-                          <span>Human Observations (other)</span>
+                          <span>Human Obs. (other)</span>
                           <span className="tabular-nums">{humanOtherCount.toLocaleString()}</span>
                         </a>
                       </div>
 
-                      {/* Machine Observations */}
+                      {/* Machine Observations (camera traps, acoustic sensors) */}
                       <div className={rowClass(checkedTypes.machineObservation)}>
                         <input
                           type="checkbox"
@@ -567,12 +562,12 @@ export default function OccurrenceMapRow({
                           rel="noopener noreferrer"
                           className="flex justify-between flex-1 text-zinc-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
                         >
-                          <span>Machine Observations</span>
+                          <span>Machine Obs. (camera trap / acoustic)</span>
                           <span className="tabular-nums">{breakdown.machineObservation.toLocaleString()}</span>
                         </a>
                       </div>
 
-                      {/* Preserved Specimens / Material Samples */}
+                      {/* Preserved Specimens (museum collections) */}
                       <div className={rowClass(checkedTypes.preservedSpecimen)}>
                         <input
                           type="checkbox"
@@ -586,8 +581,27 @@ export default function OccurrenceMapRow({
                           rel="noopener noreferrer"
                           className="flex justify-between flex-1 text-zinc-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
                         >
-                          <span>Preserved Specimens / Material Samples</span>
+                          <span>Preserved Specimens (museum)</span>
                           <span className="tabular-nums">{breakdown.preservedSpecimen.toLocaleString()}</span>
+                        </a>
+                      </div>
+
+                      {/* Material Samples (eDNA / tissue) */}
+                      <div className={rowClass(checkedTypes.materialSample)}>
+                        <input
+                          type="checkbox"
+                          checked={checkedTypes.materialSample}
+                          onChange={() => toggleType('materialSample')}
+                          className="w-3.5 h-3.5 rounded accent-blue-500 shrink-0"
+                        />
+                        <a
+                          href={`https://www.gbif.org/occurrence/search?${baseParams}&basis_of_record=MATERIAL_SAMPLE`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex justify-between flex-1 text-zinc-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
+                        >
+                          <span>Material Samples (eDNA / tissue)</span>
+                          <span className="tabular-nums">{(breakdown.materialSample || 0).toLocaleString()}</span>
                         </a>
                       </div>
 
@@ -695,15 +709,13 @@ export default function OccurrenceMapRow({
                   />
                   <LocateControl />
                   {bbox && <FitBounds bbox={bbox} />}
-                  {/* Render occurrences: preserved (amber), old observations (grey), new observations (green) */}
+                  {/* Render occurrences: old (grey), new since assessment (green) */}
                   {filteredOccurrences.map((feature, idx) => {
                     const [lon, lat] = feature.geometry.coordinates;
-                    const preserved = isPreserved(feature.properties.basisOfRecord);
                     const isNew = isNewRecord(feature.properties.eventDate);
                     const isHighlighted = hoveredObs?.gbifID != null && feature.properties.gbifID === hoveredObs.gbifID;
-                    // Color: highlighted=blue, preserved=amber, new=green, old=grey
-                    const strokeColor = isHighlighted ? "#1d4ed8" : preserved ? "#b45309" : isNew ? "#15803d" : "#6b7280";
-                    const fillColor = isHighlighted ? "#3b82f6" : preserved ? "#f59e0b" : isNew ? "#22c55e" : "#9ca3af";
+                    const strokeColor = isHighlighted ? "#1d4ed8" : isNew ? "#15803d" : "#6b7280";
+                    const fillColor = isHighlighted ? "#3b82f6" : isNew ? "#22c55e" : "#9ca3af";
                     const inatMatch = inatPhotosByGbifId.get(feature.properties.gbifID);
                     return (
                       <CircleMarker
@@ -800,12 +812,6 @@ export default function OccurrenceMapRow({
                         <div className="w-3 h-3 rounded-full bg-green-500 border-2 border-green-700" />
                         <span>New since {assessmentYear} ({newRecords.length})</span>
                       </div>
-                      {showPreservedSpecimens && preservedRecords.length > 0 && (
-                        <div className="flex items-center gap-1">
-                          <div className="w-3 h-3 rounded-full bg-amber-500 border-2 border-amber-700" />
-                          <span>Preserved ({preservedRecords.length})</span>
-                        </div>
-                      )}
                     </>
                   ) : (
                     <span>
