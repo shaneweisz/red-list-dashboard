@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import CitesTradeSummary from "./CitesTradeSummary";
+import type { CountryAnnotation } from "./TradeFlowMap";
 
 interface CitesListing {
   appendix: string;
@@ -139,6 +140,22 @@ export default function CitesSummary({
     [data?.suspensions]
   );
 
+  // Per-country annotations (suspensions + quotas) for map hover tooltips
+  const countryAnnotations = useMemo(() => {
+    const map: Record<string, CountryAnnotation> = {};
+    for (const s of data?.suspensions || []) {
+      if (!map[s.countryCode]) map[s.countryCode] = {};
+      if (!map[s.countryCode].suspensions) map[s.countryCode].suspensions = [];
+      map[s.countryCode].suspensions!.push({ type: s.appliesTo, startDate: s.startDate });
+    }
+    for (const q of data?.quotas || []) {
+      if (!map[q.countryCode]) map[q.countryCode] = {};
+      if (!map[q.countryCode].quotas) map[q.countryCode].quotas = [];
+      map[q.countryCode].quotas!.push({ quota: q.quota, unit: q.unit });
+    }
+    return map;
+  }, [data?.suspensions, data?.quotas]);
+
   if (loading) {
     return (
       <div className="flex items-center gap-2 p-6 text-sm text-zinc-500 dark:text-zinc-400">
@@ -226,16 +243,6 @@ export default function CitesSummary({
         </div>
       </div>
 
-      {/* Trade overview from CITES Trade Database */}
-      {data.citesId && (
-        <div>
-          <h4 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
-            International Trade
-          </h4>
-          <CitesTradeSummary citesId={data.citesId} prefetchedData={tradeData} prefetchedLoading={tradeLoading} suspensionCountries={suspensionCountryCodes} />
-        </div>
-      )}
-
       {/* Current listings detail */}
       {data.currentListings && data.currentListings.length > 0 && (
         <div>
@@ -265,6 +272,16 @@ export default function CitesSummary({
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Trade overview from CITES Trade Database */}
+      {data.citesId && (
+        <div>
+          <h4 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
+            International Trade
+          </h4>
+          <CitesTradeSummary citesId={data.citesId} prefetchedData={tradeData} prefetchedLoading={tradeLoading} suspensionCountries={suspensionCountryCodes} countryAnnotations={countryAnnotations} />
         </div>
       )}
 

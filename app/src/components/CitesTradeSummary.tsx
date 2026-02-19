@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { countryName, fmtQty } from "./cites-utils";
+import type { CountryAnnotation } from "./TradeFlowMap";
 
 const TradeFlowMap = dynamic(() => import("./TradeFlowMap"), { ssr: false });
 
@@ -288,11 +289,13 @@ export default function CitesTradeSummary({
   prefetchedData,
   prefetchedLoading,
   suspensionCountries,
+  countryAnnotations,
 }: {
   citesId: number;
   prefetchedData?: Record<string, unknown> | null;
   prefetchedLoading?: boolean;
   suspensionCountries?: Set<string>;
+  countryAnnotations?: Record<string, CountryAnnotation>;
 }) {
   const [ownData, setOwnData] = useState<TradeData | null>(null);
   const [ownLoading, setOwnLoading] = useState(!prefetchedData && prefetchedLoading === undefined);
@@ -361,6 +364,15 @@ export default function CitesTradeSummary({
 
   return (
     <div className="space-y-4">
+      {/* Trade flow map — shown first for visual impact */}
+      {data.topFlows && data.topFlows.length > 0 && (
+        <div>
+          <div className="border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden bg-zinc-50 dark:bg-zinc-800/30">
+            <TradeFlowMap flows={data.topFlows} suspensionCountries={suspensionCountries} countryAnnotations={countryAnnotations} />
+          </div>
+        </div>
+      )}
+
       {/* Headline + trend */}
       <div className="flex items-baseline gap-3 flex-wrap">
         <span className="text-sm text-zinc-700 dark:text-zinc-200">
@@ -442,18 +454,6 @@ export default function CitesTradeSummary({
                 </span>
               </span>
             ))}
-          </div>
-        </div>
-      )}
-
-      {/* Trade flow map */}
-      {data.topFlows && data.topFlows.length > 0 && (
-        <div>
-          <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
-            Top Trade Flows
-          </h5>
-          <div className="border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden bg-zinc-50 dark:bg-zinc-800/30">
-            <TradeFlowMap flows={data.topFlows} suspensionCountries={suspensionCountries} />
           </div>
         </div>
       )}

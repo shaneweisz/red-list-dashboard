@@ -149,15 +149,23 @@ interface TradeFlow {
   quantity: number;
 }
 
+export interface CountryAnnotation {
+  suspensions?: { type: "import" | "export"; startDate: string }[];
+  quotas?: { quota: number; unit: string | null }[];
+}
+
 interface TradeFlowMapProps {
   flows: TradeFlow[];
   /** ISO alpha-2 codes of countries with active trade suspensions */
   suspensionCountries?: Set<string>;
+  /** Per-country suspension/quota annotations for hover tooltip */
+  countryAnnotations?: Record<string, CountryAnnotation>;
 }
 
-function TradeFlowMap({ flows, suspensionCountries }: TradeFlowMapProps) {
+function TradeFlowMap({ flows, suspensionCountries, countryAnnotations }: TradeFlowMapProps) {
   const { resolvedTheme } = useTheme();
   const [hoveredFlow, setHoveredFlow] = useState<number | null>(null);
+  const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
 
   // Only render flows where we have centroids for both endpoints
@@ -183,8 +191,8 @@ function TradeFlowMap({ flows, suspensionCountries }: TradeFlowMapProps) {
 
   // Theme-aware colors for SVG fills (can't use Tailwind classes in SVG)
   const colors = dark
-    ? { base: "#27272a", exporter: "#451a1a", importer: "#172554", both: "#1e1b4b", stroke: "#3f3f46", suspension: "#7f1d1d" }
-    : { base: "#f4f4f5", exporter: "#fee2e2", importer: "#dbeafe", both: "#e0e7ff", stroke: "#d4d4d8", suspension: "#fecaca" };
+    ? { base: "#18181b", exporter: "#7f1d1d", importer: "#1e3a5f", both: "#312e81", stroke: "#27272a", suspension: "#991b1b", arcDefault: "#f87171", arcHover: "#fbbf24" }
+    : { base: "#f4f4f5", exporter: "#fee2e2", importer: "#dbeafe", both: "#e0e7ff", stroke: "#d4d4d8", suspension: "#fecaca", arcDefault: "#ef4444", arcHover: "#f59e0b" };
 
   const hoveredFlowData = hoveredFlow !== null ? visibleFlows[hoveredFlow] : null;
 
@@ -207,6 +215,31 @@ function TradeFlowMap({ flows, suspensionCountries }: TradeFlowMapProps) {
             <span className="text-zinc-400 ml-1">
               / {fmtQty(hoveredFlowData.quantity)} items
             </span>
+          )}
+        </div>
+      )}
+
+      {/* Country annotation tooltip (suspensions/quotas) */}
+      {hoveredCountry && !hoveredFlowData && countryAnnotations?.[hoveredCountry] && (
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 bg-zinc-800 dark:bg-zinc-700 text-white text-[11px] px-3 py-2 rounded-lg shadow-lg pointer-events-none max-w-[280px]">
+          <div className="font-medium mb-1">{countryName(hoveredCountry)}</div>
+          {countryAnnotations[hoveredCountry].suspensions && countryAnnotations[hoveredCountry].suspensions!.length > 0 && (
+            <div className="text-red-300">
+              {countryAnnotations[hoveredCountry].suspensions!.map((s, i) => (
+                <div key={i}>
+                  Trade suspension ({s.type}) since {new Date(s.startDate).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}
+                </div>
+              ))}
+            </div>
+          )}
+          {countryAnnotations[hoveredCountry].quotas && countryAnnotations[hoveredCountry].quotas!.length > 0 && (
+            <div className="text-amber-300">
+              {countryAnnotations[hoveredCountry].quotas!.map((q, i) => (
+                <div key={i}>
+                  Quota: {q.quota.toLocaleString()}{q.unit ? ` ${q.unit}` : ""}
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}
@@ -248,17 +281,21 @@ function TradeFlowMap({ flows, suspensionCountries }: TradeFlowMapProps) {
                   else if (isExporter) fill = colors.exporter;
                   else if (isImporter) fill = colors.importer;
 
+                  const hasAnnotation = alpha2 && countryAnnotations?.[alpha2];
+
                   return (
                     <Geography
                       key={geo.rsmKey}
                       geography={geo}
                       fill={fill}
-                      stroke={isSuspended ? (dark ? "#ef4444" : "#dc2626") : colors.stroke}
+                      stroke={isSuspended ? (dark ? "#f87171" : "#dc2626") : colors.stroke}
                       strokeWidth={isSuspended ? 1 : 0.4}
                       strokeDasharray={isSuspended ? "3,2" : undefined}
+                      onMouseEnter={() => hasAnnotation && setHoveredCountry(alpha2)}
+                      onMouseLeave={() => setHoveredCountry(null)}
                       style={{
-                        default: { outline: "none" },
-                        hover: { outline: "none", fill },
+                        default: { outline: "none", cursor: hasAnnotation ? "pointer" : "default" },
+                        hover: { outline: "none", fill: hasAnnotation ? (dark ? "#3f3f46" : "#e4e4e7") : fill, cursor: hasAnnotation ? "pointer" : "default" },
                         pressed: { outline: "none" },
                       }}
                     />
@@ -288,10 +325,10 @@ function TradeFlowMap({ flows, suspensionCountries }: TradeFlowMapProps) {
               <path
                 d={path}
                 fill="none"
-                stroke={isHovered ? "#f59e0b" : "#ef4444"}
+                stroke={isHovered ? colors.arcHover : colors.arcDefault}
                 strokeWidth={isHovered ? strokeWidth + 1 : strokeWidth}
                 strokeLinecap="round"
-                strokeOpacity={isHovered ? 0.9 : 0.45}
+                strokeOpacity={isHovered ? 0.95 : dark ? 0.7 : 0.45}
                 onMouseEnter={() => setHoveredFlow(i)}
                 onMouseLeave={() => setHoveredFlow(null)}
                 style={{ cursor: "pointer" }}
@@ -300,8 +337,8 @@ function TradeFlowMap({ flows, suspensionCountries }: TradeFlowMapProps) {
               {dest && (
                 <polygon
                   points="-5,-3 0,0 -5,3"
-                  fill={isHovered ? "#f59e0b" : "#ef4444"}
-                  fillOpacity={isHovered ? 0.9 : 0.7}
+                  fill={isHovered ? colors.arcHover : colors.arcDefault}
+                  fillOpacity={isHovered ? 0.95 : dark ? 0.85 : 0.7}
                   transform={`translate(${dest[0]},${dest[1]}) rotate(${angle})`}
                 />
               )}
@@ -333,7 +370,7 @@ function TradeFlowMap({ flows, suspensionCountries }: TradeFlowMapProps) {
                     <circle
                       r={isSelected ? 4 : 3}
                       fill={fill}
-                      stroke={dark ? "#27272a" : "#fff"}
+                      stroke={dark ? "#18181b" : "#fff"}
                       strokeWidth={isSelected ? 1 : 0.5}
                       style={{ cursor: "pointer" }}
                       onClick={() => setSelectedCountry(selectedCountry === code ? null : code)}
