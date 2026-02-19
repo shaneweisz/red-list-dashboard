@@ -1,7 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { ALPHA2_TO_NAME } from "./WorldMap";
+
+const TradeFlowMap = dynamic(() => import("./TradeFlowMap"), { ssr: false });
 
 interface YearData {
   year: number;
@@ -27,6 +30,13 @@ interface CountryData {
   quantity: number;
 }
 
+interface FlowData {
+  from: string;
+  to: string;
+  records: number;
+  quantity: number;
+}
+
 interface TradeData {
   found: boolean;
   taxonId: string;
@@ -38,6 +48,7 @@ interface TradeData {
   topSources: CodedData[];
   topExporters: CountryData[];
   topImporters: CountryData[];
+  topFlows?: FlowData[];
 }
 
 // Sources that indicate wild take — key concern for assessors
@@ -428,6 +439,18 @@ export default function CitesTradeSummary({
                 </span>
               </span>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Trade flow map */}
+      {data.topFlows && data.topFlows.length > 0 && (
+        <div>
+          <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
+            Top Trade Flows
+          </h5>
+          <div className="border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden bg-zinc-50 dark:bg-zinc-800/30">
+            <TradeFlowMap flows={data.topFlows} />
           </div>
         </div>
       )}
