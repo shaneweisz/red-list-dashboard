@@ -225,6 +225,16 @@ export default function CitesSummary({
         </div>
       </div>
 
+      {/* Trade overview from CITES Trade Database */}
+      {data.citesId && (
+        <div>
+          <h4 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
+            International Trade
+          </h4>
+          <CitesTradeSummary citesId={data.citesId} prefetchedData={tradeData} prefetchedLoading={tradeLoading} suspensionCountries={suspensionCountryCodes} />
+        </div>
+      )}
+
       {/* Current listings detail */}
       {data.currentListings && data.currentListings.length > 0 && (
         <div>
@@ -383,16 +393,6 @@ export default function CitesSummary({
               </button>
             )}
           </div>
-        </div>
-      )}
-
-      {/* Trade overview from CITES Trade Database */}
-      {data.citesId && (
-        <div>
-          <h4 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
-            International Trade
-          </h4>
-          <CitesTradeSummary citesId={data.citesId} prefetchedData={tradeData} prefetchedLoading={tradeLoading} suspensionCountries={suspensionCountryCodes} />
         </div>
       )}
 
