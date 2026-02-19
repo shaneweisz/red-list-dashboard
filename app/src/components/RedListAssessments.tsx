@@ -532,6 +532,32 @@ export default function RedListAssessments({
           No previous assessment to compare with. This is the earliest assessment.
         </div>
       )}
+
+      {/* Footer attribution — required by IUCN Red List Terms of Use */}
+      <div className="text-[10px] text-zinc-400 dark:text-zinc-500 pt-2 space-y-1">
+        <p>
+          IUCN ({new Date().getFullYear()}).{" "}
+          <em>The IUCN Red List of Threatened Species.</em> Version 2025-2.{" "}
+          <a
+            href="https://www.iucnredlist.org"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:underline"
+          >
+            https://www.iucnredlist.org
+          </a>
+          . Subject to IUCN Red List{" "}
+          <a
+            href="https://www.iucnredlist.org/terms/terms-of-use"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:underline"
+          >
+            Terms of Use
+          </a>
+          .
+        </p>
+      </div>
     </div>
   );
 }
