@@ -1,6 +1,9 @@
 name: proof-harness
 
 on:
+  pull_request:
+    types:
+      - labeled
   pull_request_target:
     types:
       - labeled
@@ -95,7 +98,7 @@ jobs:
               core.setOutput('route', route || '/');
             }
 
-            if (eventName === 'pull_request_target') {
+            if (eventName === 'pull_request' || eventName === 'pull_request_target') {
               const label = context.payload.label?.name;
               if (label !== 'needs-proof') {
                 core.info(`Label '${label}' does not trigger proof.`);
