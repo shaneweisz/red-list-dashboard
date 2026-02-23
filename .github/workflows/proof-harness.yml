@@ -4,9 +4,7 @@ on:
   pull_request:
     types:
       - labeled
-  pull_request_target:
-    types:
-      - labeled
+      - synchronize
   issue_comment:
     types:
       - created
@@ -98,15 +96,18 @@ jobs:
               core.setOutput('route', route || '/');
             }
 
-            if (eventName === 'pull_request' || eventName === 'pull_request_target') {
-              const label = context.payload.label?.name;
-              if (label !== 'needs-proof') {
-                core.info(`Label '${label}' does not trigger proof.`);
+            if (eventName === 'pull_request') {
+              const pr = context.payload.pull_request;
+              const labels = (pr.labels || []).map((label) => label.name);
+              const hasProofLabel =
+                labels.includes('needs-proof') || context.payload.label?.name === 'needs-proof';
+
+              if (!hasProofLabel) {
+                core.info('PR does not have needs-proof label, skipping proof run.');
                 core.setOutput('should_run', 'false');
                 return;
               }
 
-              const pr = context.payload.pull_request;
               await setFromPR(pr.number, 'feature-title-rename', '/');
               return;
             }
@@ -156,16 +157,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ needs.resolve-inputs.outputs.head_sha }}
+
+      - name: Checkout base commit
+        uses: actions/checkout@v4
+        with:
           ref: ${{ needs.resolve-inputs.outputs.base_sha }}
+          path: base-ref
 
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: app/package-lock.json
+          cache-dependency-path: |
+            app/package-lock.json
+            base-ref/app/package-lock.json
 
-      - name: Install dependencies
+      - name: Install dependencies (head)
         run: npm --prefix app ci
+
+      - name: Install dependencies (base)
+        run: npm --prefix base-ref/app ci
 
       - name: Install Playwright browser
         run: |
@@ -176,8 +188,29 @@ jobs:
         name: Run before proof
         run: |
           set +e
-          npm --prefix app run proof:feature -- --name "${{ needs.resolve-inputs.outputs.feature_id }}" --route "${{ needs.resolve-inputs.outputs.route }}" --phase before --theme both
-          EXIT_CODE=$?
+          npm --prefix base-ref/app run dev -- --webpack --port 3100 > /tmp/proof-before-server.log 2>&1 &
+          BASE_SERVER_PID=$!
+
+          for i in {1..60}; do
+            curl -sSf http://127.0.0.1:3100 > /dev/null && break
+            sleep 2
+          done
+
+          if ! curl -sSf http://127.0.0.1:3100 > /dev/null; then
+            echo "Base server failed to start."
+            cat /tmp/proof-before-server.log
+            EXIT_CODE=1
+          else
+            PROOF_SKIP_WEBSERVER=1 \
+              PROOF_BASE_URL=http://127.0.0.1:3100 \
+              PROOF_COMMIT_SHA="${{ needs.resolve-inputs.outputs.base_sha }}" \
+              npm --prefix app run proof:feature -- --name "${{ needs.resolve-inputs.outputs.feature_id }}" --route "${{ needs.resolve-inputs.outputs.route }}" --phase before --theme both
+            EXIT_CODE=$?
+          fi
+
+          kill "$BASE_SERVER_PID" 2>/dev/null || true
+          wait "$BASE_SERVER_PID" 2>/dev/null || true
+
           echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
           exit 0
 
