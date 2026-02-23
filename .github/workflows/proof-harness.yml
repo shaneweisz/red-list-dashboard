@@ -306,9 +306,20 @@ jobs:
 
       - name: Build proof comparison
         run: |
+          BEFORE_REPORT="$(find artifacts/before -name proof-report.json | head -n 1)"
+          AFTER_REPORT="$(find artifacts/after -name proof-report.json | head -n 1)"
+
+          if [ -z "$BEFORE_REPORT" ] || [ -z "$AFTER_REPORT" ]; then
+            echo "Unable to locate proof-report.json in downloaded artifacts."
+            echo "before=$BEFORE_REPORT"
+            echo "after=$AFTER_REPORT"
+            find artifacts -maxdepth 4 -type f || true
+            exit 1
+          fi
+
           npm --prefix app run proof:pr:compare -- \
-            --before artifacts/before/proof-report.json \
-            --after artifacts/after/proof-report.json \
+            --before "$BEFORE_REPORT" \
+            --after "$AFTER_REPORT" \
             --out-json app/test-results/proof/compare/comparison.json \
             --out-md app/test-results/proof/compare/comment.md
 
