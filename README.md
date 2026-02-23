@@ -131,3 +131,36 @@ RED_LIST_API_KEY=your_iucn_api_key
 - Tailwind CSS
 - Recharts
 - React-Leaflet
+
+## Proof Workflow
+
+This repo includes an agent-agnostic proof harness that validates features with browser assertions, screenshots, and video.
+
+### Run feature proof locally
+
+```bash
+cd app
+npm run proof:feature -- --name feature-title-rename --route / --phase after --theme both
+```
+
+Generated proof artifacts:
+
+- `app/test-results/proof/<feature-id>/<phase>/proof-report.json`
+- `app/test-results/proof/<feature-id>/<phase>/screenshots/*`
+- `app/test-results/proof/<feature-id>/<phase>/artifacts/*` (video/trace/test output)
+
+### Compare before vs after reports
+
+```bash
+cd app
+npm run proof:pr:compare -- --before ../artifacts/before/proof-report.json --after ../artifacts/after/proof-report.json
+```
+
+### Trigger proof in PRs
+
+- Add label `needs-proof` to a PR, or
+- Comment on a PR with `/proof name=<feature-id> route=<path>`
+
+The workflow runs both base and head commits, uploads artifacts, and updates a single `Proof of Implementation` PR comment.
+
+See [AGENT_PROOF.md](/Users/shaneweisz/Repos/red-list-dashboard/AGENT_PROOF.md) for the contract expected from agents.

@@ -1,0 +1,305 @@
+name: proof-harness
+
+on:
+  pull_request_target:
+    types:
+      - labeled
+  issue_comment:
+    types:
+      - created
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Pull request number"
+        required: true
+        type: string
+      feature_id:
+        description: "Feature identifier"
+        required: false
+        default: "feature-title-rename"
+        type: string
+      route:
+        description: "Route to test"
+        required: false
+        default: "/"
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  resolve-inputs:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.resolve.outputs.should_run }}
+      pr_number: ${{ steps.resolve.outputs.pr_number }}
+      base_sha: ${{ steps.resolve.outputs.base_sha }}
+      head_sha: ${{ steps.resolve.outputs.head_sha }}
+      feature_id: ${{ steps.resolve.outputs.feature_id }}
+      route: ${{ steps.resolve.outputs.route }}
+    steps:
+      - id: resolve
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const eventName = context.eventName;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            function parseProofCommand(body) {
+              if (!body || !body.includes('/proof')) {
+                return null;
+              }
+              const tokens = body.trim().split(/\s+/);
+              if (tokens[0] !== '/proof') {
+                return null;
+              }
+
+              let featureId = 'feature-title-rename';
+              let route = '/';
+
+              for (const token of tokens.slice(1)) {
+                const [key, value] = token.split('=');
+                if (key === 'name' && value) {
+                  featureId = value;
+                }
+                if (key === 'route' && value) {
+                  route = value;
+                }
+              }
+
+              return { featureId, route };
+            }
+
+            async function setFromPR(prNumber, featureId, route) {
+              const { data: pr } = await github.rest.pulls.get({
+                owner,
+                repo,
+                pull_number: Number(prNumber),
+              });
+
+              const sameRepo = pr.head.repo.full_name === `${owner}/${repo}`;
+              if (!sameRepo) {
+                core.warning('Skipping proof run for forked PR to avoid executing untrusted code with write token.');
+                core.setOutput('should_run', 'false');
+                return;
+              }
+
+              core.setOutput('should_run', 'true');
+              core.setOutput('pr_number', String(pr.number));
+              core.setOutput('base_sha', pr.base.sha);
+              core.setOutput('head_sha', pr.head.sha);
+              core.setOutput('feature_id', featureId || 'feature-title-rename');
+              core.setOutput('route', route || '/');
+            }
+
+            if (eventName === 'pull_request_target') {
+              const label = context.payload.label?.name;
+              if (label !== 'needs-proof') {
+                core.info(`Label '${label}' does not trigger proof.`);
+                core.setOutput('should_run', 'false');
+                return;
+              }
+
+              const pr = context.payload.pull_request;
+              await setFromPR(pr.number, 'feature-title-rename', '/');
+              return;
+            }
+
+            if (eventName === 'issue_comment') {
+              const issue = context.payload.issue;
+              if (!issue.pull_request) {
+                core.info('Comment is not on a PR.');
+                core.setOutput('should_run', 'false');
+                return;
+              }
+
+              const parsed = parseProofCommand(context.payload.comment?.body || '');
+              if (!parsed) {
+                core.info('No /proof command found.');
+                core.setOutput('should_run', 'false');
+                return;
+              }
+
+              await setFromPR(issue.number, parsed.featureId, parsed.route);
+              return;
+            }
+
+            if (eventName === 'workflow_dispatch') {
+              const prNumber = core.getInput('pr_number') || context.payload.inputs?.pr_number;
+              const featureId = core.getInput('feature_id') || context.payload.inputs?.feature_id || 'feature-title-rename';
+              const route = core.getInput('route') || context.payload.inputs?.route || '/';
+
+              if (!prNumber) {
+                core.setFailed('workflow_dispatch requires pr_number input');
+                return;
+              }
+
+              await setFromPR(prNumber, featureId, route);
+              return;
+            }
+
+            core.setOutput('should_run', 'false');
+
+  proof-before:
+    needs: resolve-inputs
+    if: needs.resolve-inputs.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      artifact_name: ${{ steps.meta.outputs.artifact_name }}
+      exit_code: ${{ steps.run-proof.outputs.exit_code }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-inputs.outputs.base_sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        run: npm --prefix app ci
+
+      - name: Install Playwright browser
+        run: |
+          cd app
+          npx playwright install --with-deps chromium
+
+      - id: run-proof
+        name: Run before proof
+        run: |
+          set +e
+          npm --prefix app run proof:feature -- --name "${{ needs.resolve-inputs.outputs.feature_id }}" --route "${{ needs.resolve-inputs.outputs.route }}" --phase before --theme both
+          EXIT_CODE=$?
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - id: meta
+        run: echo "artifact_name=proof-before-${{ needs.resolve-inputs.outputs.feature_id }}-${{ github.run_id }}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload before proof artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ steps.meta.outputs.artifact_name }}
+          path: app/test-results/proof/${{ needs.resolve-inputs.outputs.feature_id }}/before
+          if-no-files-found: warn
+
+  proof-after:
+    needs: resolve-inputs
+    if: needs.resolve-inputs.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      artifact_name: ${{ steps.meta.outputs.artifact_name }}
+      exit_code: ${{ steps.run-proof.outputs.exit_code }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-inputs.outputs.head_sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        run: npm --prefix app ci
+
+      - name: Install Playwright browser
+        run: |
+          cd app
+          npx playwright install --with-deps chromium
+
+      - id: run-proof
+        name: Run after proof
+        run: |
+          set +e
+          npm --prefix app run proof:feature -- --name "${{ needs.resolve-inputs.outputs.feature_id }}" --route "${{ needs.resolve-inputs.outputs.route }}" --phase after --theme both
+          EXIT_CODE=$?
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - id: meta
+        run: echo "artifact_name=proof-after-${{ needs.resolve-inputs.outputs.feature_id }}-${{ github.run_id }}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload after proof artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ steps.meta.outputs.artifact_name }}
+          path: app/test-results/proof/${{ needs.resolve-inputs.outputs.feature_id }}/after
+          if-no-files-found: warn
+
+  proof-compare-comment:
+    needs:
+      - resolve-inputs
+      - proof-before
+      - proof-after
+    if: needs.resolve-inputs.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-inputs.outputs.head_sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        run: npm --prefix app ci
+
+      - name: Download before artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.proof-before.outputs.artifact_name }}
+          path: artifacts/before
+
+      - name: Download after artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.proof-after.outputs.artifact_name }}
+          path: artifacts/after
+
+      - name: Build proof comparison
+        run: |
+          npm --prefix app run proof:pr:compare -- \
+            --before artifacts/before/proof-report.json \
+            --after artifacts/after/proof-report.json \
+            --out-json app/test-results/proof/compare/comparison.json \
+            --out-md app/test-results/proof/compare/comment.md
+
+      - name: Upload proof comparison artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: proof-compare-${{ needs.resolve-inputs.outputs.feature_id }}-${{ github.run_id }}
+          path: app/test-results/proof/compare
+          if-no-files-found: warn
+
+      - name: Post PR proof comment
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ needs.resolve-inputs.outputs.pr_number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          BEFORE_ARTIFACT_NAME: ${{ needs.proof-before.outputs.artifact_name }}
+          AFTER_ARTIFACT_NAME: ${{ needs.proof-after.outputs.artifact_name }}
+        run: |
+          node app/scripts/post-proof-comment.mjs \
+            --markdown app/test-results/proof/compare/comment.md \
+            --repo "${{ github.repository }}" \
+            --pr "${{ needs.resolve-inputs.outputs.pr_number }}" \
+            --run-url "$RUN_URL" \
+            --before-artifact "$BEFORE_ARTIFACT_NAME" \
+            --after-artifact "$AFTER_ARTIFACT_NAME"
+
+      - name: Enforce after-proof checks
+        run: |
+          node -e 'const fs=require("node:fs"); const data=JSON.parse(fs.readFileSync("app/test-results/proof/compare/comparison.json","utf8")); if (data.shouldFail) { console.error("After-phase proof checks failed."); process.exit(1); } console.log("After-phase proof checks passed.");'

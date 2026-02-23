@@ -6,7 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:proof": "playwright test tests/proof",
+    "proof:feature": "node ./scripts/run-proof-feature.mjs",
+    "proof:feature:update": "PLAYWRIGHT_UPDATE_SNAPSHOTS=1 node ./scripts/run-proof-feature.mjs",
+    "proof:pr:compare": "node ./scripts/compare-proof-reports.mjs"
   },
   "dependencies": {
     "leaflet": "^1.9.4",
@@ -21,6 +25,7 @@
     "swr": "^2.4.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.51.1",
     "@tailwindcss/postcss": "^4",
     "@types/leaflet": "^1.9.21",
     "@types/node": "^20",
