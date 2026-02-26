@@ -36,8 +36,6 @@ interface TaxonSummary {
 interface Props {
   onToggleTaxon: (taxonId: string, event: React.MouseEvent) => void;
   selectedTaxa: Set<string>;
-  focusMode: FocusMode;
-  onFocusChange: (mode: FocusMode) => void;
 }
 
 // Bar color helpers
@@ -75,16 +73,16 @@ const COLUMN_LABELS: Record<ColumnId, string> = {
 
 const DISTRIBUTION_BIN_LABELS = ["1", "2–10", "11–100", "101–1K", "1K–10K", "10K–100K", "100K–1M", ">1M"];
 
-export type FocusMode = "redlist" | "gbif";
+type FocusMode = "redlist" | "gbif";
 
 const FOCUS_HIDDEN: Record<FocusMode, Set<ColumnId>> = {
   redlist: new Set(["gbifSpecies", "totalGbifObs", "meanGbifObs", "medianGbifObs", "gbifDistribution", "breakdown"]),
-  gbif: new Set(["assessed", "pctAssessed", "outdated", "pctOutdated", "breakdown"]),
+  gbif: new Set(["pctAssessed", "outdated", "pctOutdated", "breakdown"]),
 };
 
-const DEFAULT_HIDDEN_COLUMNS: Set<ColumnId> = FOCUS_HIDDEN.redlist;
+const DEFAULT_HIDDEN_COLUMNS = FOCUS_HIDDEN.redlist;
 
-export default function TaxaSummary({ onToggleTaxon, selectedTaxa, focusMode, onFocusChange }: Props) {
+export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [globalGbifMedian, setGlobalGbifMedian] = useState<number | undefined>();
   const [globalGbifDistribution, setGlobalGbifDistribution] = useState<Record<string, number> | undefined>();
@@ -92,6 +90,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, focusMode, on
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [modifierHeld, setModifierHeld] = useState(false);
+  const [focusMode, setFocusMode] = useState<FocusMode>("redlist");
   const [hiddenColumns, setHiddenColumns] = useState<Set<ColumnId>>(new Set(DEFAULT_HIDDEN_COLUMNS));
   const [showColumnMenu, setShowColumnMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -109,7 +108,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, focusMode, on
   };
 
   const switchFocus = (mode: FocusMode) => {
-    onFocusChange(mode);
+    setFocusMode(mode);
     setHiddenColumns(new Set(FOCUS_HIDDEN[mode]));
   };
 
@@ -673,24 +672,23 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, focusMode, on
         className="fixed bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg z-[9999] py-1 min-w-[180px]"
         style={{ top: menuPos.top, left: menuPos.left }}
       >
-        <div className="px-3 pt-1.5 pb-1 text-[10px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">View</div>
-        {(["redlist", "gbif"] as FocusMode[]).map((mode) => (
-          <label
-            key={mode}
-            className="flex items-center gap-2 px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 cursor-pointer"
+        <div className="px-3 pt-2 pb-1.5 text-[10px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Focus</div>
+        <div className="mx-3 mb-1.5 flex rounded-md overflow-hidden border border-zinc-200 dark:border-zinc-600">
+          <button
+            onClick={() => switchFocus("redlist")}
+            className={`flex-1 text-xs py-1 font-medium transition-colors ${focusMode === "redlist" ? "bg-zinc-800 text-white dark:bg-zinc-200 dark:text-zinc-900" : "bg-white text-zinc-500 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"}`}
           >
-            <input
-              type="radio"
-              name="focusMode"
-              checked={focusMode === mode}
-              onChange={() => switchFocus(mode)}
-              className="border-zinc-300 dark:border-zinc-600 text-green-600 focus:ring-green-500"
-            />
-            {mode === "redlist" ? "Red List" : "GBIF"}
-          </label>
-        ))}
-        <div className="my-1 border-t border-zinc-200 dark:border-zinc-700" />
-        <div className="px-3 pt-1 pb-1 text-[10px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Columns</div>
+            Red List
+          </button>
+          <button
+            onClick={() => switchFocus("gbif")}
+            className={`flex-1 text-xs py-1 font-medium transition-colors ${focusMode === "gbif" ? "bg-zinc-800 text-white dark:bg-zinc-200 dark:text-zinc-900" : "bg-white text-zinc-500 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"}`}
+          >
+            GBIF
+          </button>
+        </div>
+        <div className="border-t border-zinc-100 dark:border-zinc-700" />
+        <div className="px-3 pt-1.5 pb-1 text-[10px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Columns</div>
         {(Object.keys(COLUMN_LABELS) as ColumnId[]).map((col) => (
           <label
             key={col}
@@ -708,25 +706,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, focusMode, on
       </div>,
       document.body
     )}
-    <div>
-      <div className="flex items-center justify-end gap-1.5 mb-1">
-        <span className="text-[11px] text-zinc-400">Change Focus:</span>
-        <div className="flex items-center bg-zinc-200/70 dark:bg-zinc-700 rounded-md p-0.5 text-[11px]">
-          <button
-            onClick={() => switchFocus("redlist")}
-            className={`px-2 py-0.5 rounded transition-colors ${focusMode === "redlist" ? "bg-white dark:bg-zinc-600 text-zinc-900 dark:text-zinc-100 shadow-sm font-medium" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
-          >
-            Red List
-          </button>
-          <button
-            onClick={() => switchFocus("gbif")}
-            className={`px-2 py-0.5 rounded transition-colors ${focusMode === "gbif" ? "bg-white dark:bg-zinc-600 text-zinc-900 dark:text-zinc-100 shadow-sm font-medium" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
-          >
-            GBIF
-          </button>
-        </div>
-      </div>
-      <div ref={scrollRef} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto">
+    <div ref={scrollRef} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto">
       <table className="w-full">
         {renderHead()}
         <tbody>
@@ -795,7 +775,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, focusMode, on
           }
         </tbody>
       </table>
-      </div>
     </div>
     </>
   );
