@@ -1045,8 +1045,15 @@ export default function RedListView() {
             {/* Country Map */}
             <div>
               {speciesLoading ? (
-                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 min-h-[280px] flex items-center justify-center">
-                  <Spinner />
+                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 min-h-[280px] flex flex-col">
+                  <div className="flex items-center justify-between mb-1">
+                    <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                      Country <span className="font-normal text-[10px] text-zinc-400">(cmd/ctrl+click to multiselect)</span>
+                    </h2>
+                  </div>
+                  <div className="flex-1 flex items-center justify-center">
+                    <Spinner />
+                  </div>
                 </div>
               ) : (
                 <WorldMap
