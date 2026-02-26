@@ -273,7 +273,7 @@ export default function RedListView() {
     });
   }, [setSelectedTaxa]);
 
-  const [chartMode, setChartMode] = useState<"category" | "years" | "gbifObs">("category");
+
   const [selectedObsRanges, setSelectedObsRanges] = useState<Set<string>>(new Set());
 
   const [species, setSpecies] = useState<Species[]>([]);
@@ -991,71 +991,84 @@ export default function RedListView() {
 
           {/* Charts and map */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Selectable filter chart */}
+            {/* Row 1: Risk Category + Years Since Assessed */}
+
+            {/* Risk Category */}
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
               <div className="flex items-center justify-between mb-1">
-                <div className="flex items-center gap-1.5">
-                  <select
-                    value={chartMode}
-                    onChange={(e) => setChartMode(e.target.value as "category" | "years" | "gbifObs")}
-                    className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 bg-transparent border-none focus:outline-none focus:ring-0 cursor-pointer p-0 pr-5 appearance-none"
-                    style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right center' }}
-                  >
-                    <option value="category">Risk Category</option>
-                    <option value="years">Years Since Assessed</option>
-                    <option value="gbifObs">GBIF Observations</option>
-                  </select>
-                  <span className="text-[10px] text-zinc-400">(click to filter, cmd/ctrl+click to multiselect)</span>
-                </div>
-                {chartMode === "category" && selectedCategories.size > 0 && (
-                  <button onClick={() => setSelectedCategories(new Set())} className="text-xs text-red-600 hover:text-red-700 dark:text-red-400">Clear</button>
-                )}
-                {chartMode === "years" && selectedYearRanges.size > 0 && (
-                  <button onClick={() => setSelectedYearRanges(new Set())} className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400">Clear</button>
-                )}
-                {chartMode === "gbifObs" && selectedObsRanges.size > 0 && (
-                  <button onClick={() => setSelectedObsRanges(new Set())} className="text-xs text-emerald-600 hover:text-emerald-700 dark:text-emerald-400">Clear</button>
+                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Risk Category</span>
+                <span className="text-[10px] text-zinc-400 hidden sm:inline">(click to filter, cmd/ctrl+click to multiselect)</span>
+                {selectedCategories.size > 0 && (
+                  <button onClick={() => setSelectedCategories(new Set())} className="text-[10px] text-red-600 hover:text-red-700 dark:text-red-400">Clear</button>
                 )}
               </div>
               <div className="flex-1 min-h-[225px] flex items-center justify-center">
                 {speciesLoading ? (
                   <Spinner />
-                ) : chartMode === "category" ? (
-                  categoryDataWithPercent.length > 0 ? (
-                    <FilterBarChart
-                      data={categoryDataWithPercent}
-                      dataKey="code"
-                      selectedItems={selectedCategories}
-                      onBarClick={handleCategoryClick}
-                      yAxisWidth={26}
-                      rightMargin={75}
-                    />
-                  ) : null
-                ) : chartMode === "years" ? (
-                  assessmentYearData.some(y => y.count > 0) ? (
-                    <FilterBarChart
-                      data={assessmentYearData}
-                      dataKey="shortRange"
-                      selectedItems={selectedYearRanges}
-                      onBarClick={handleYearClick}
-                      barColor="#3b82f6"
-                      yAxisWidth={36}
-                      rightMargin={85}
-                    />
-                  ) : null
-                ) : (
-                  gbifObsData.some(d => d.count > 0) ? (
-                    <FilterBarChart
-                      data={gbifObsData}
-                      dataKey="shortRange"
-                      selectedItems={selectedObsRanges}
-                      onBarClick={handleObsClick}
-                      barColor="#10b981"
-                      yAxisWidth={42}
-                      rightMargin={85}
-                    />
-                  ) : null
+                ) : categoryDataWithPercent.length > 0 ? (
+                  <FilterBarChart
+                    data={categoryDataWithPercent}
+                    dataKey="code"
+                    selectedItems={selectedCategories}
+                    onBarClick={handleCategoryClick}
+                    yAxisWidth={26}
+                    rightMargin={75}
+                  />
+                ) : null}
+              </div>
+            </div>
+
+            {/* Years Since Assessed */}
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Years Since Assessed</span>
+                <span className="text-[10px] text-zinc-400 hidden sm:inline">(click to filter, cmd/ctrl+click to multiselect)</span>
+                {selectedYearRanges.size > 0 && (
+                  <button onClick={() => setSelectedYearRanges(new Set())} className="text-[10px] text-blue-600 hover:text-blue-700 dark:text-blue-400">Clear</button>
                 )}
+              </div>
+              <div className="flex-1 min-h-[225px] flex items-center justify-center">
+                {speciesLoading ? (
+                  <Spinner />
+                ) : assessmentYearData.some(y => y.count > 0) ? (
+                  <FilterBarChart
+                    data={assessmentYearData}
+                    dataKey="shortRange"
+                    selectedItems={selectedYearRanges}
+                    onBarClick={handleYearClick}
+                    barColor="#3b82f6"
+                    yAxisWidth={36}
+                    rightMargin={85}
+                  />
+                ) : null}
+              </div>
+            </div>
+
+            {/* Row 2: GBIF Observations + Country Map */}
+
+            {/* GBIF Observations */}
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">GBIF Observations</span>
+                <span className="text-[10px] text-zinc-400 hidden sm:inline">(click to filter, cmd/ctrl+click to multiselect)</span>
+                {selectedObsRanges.size > 0 && (
+                  <button onClick={() => setSelectedObsRanges(new Set())} className="text-[10px] text-emerald-600 hover:text-emerald-700 dark:text-emerald-400">Clear</button>
+                )}
+              </div>
+              <div className="flex-1 min-h-[225px] flex items-center justify-center">
+                {speciesLoading ? (
+                  <Spinner />
+                ) : gbifObsData.some(d => d.count > 0) ? (
+                  <FilterBarChart
+                    data={gbifObsData}
+                    dataKey="shortRange"
+                    selectedItems={selectedObsRanges}
+                    onBarClick={handleObsClick}
+                    barColor="#10b981"
+                    yAxisWidth={42}
+                    rightMargin={85}
+                  />
+                ) : null}
               </div>
             </div>
 
