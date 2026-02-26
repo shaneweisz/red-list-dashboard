@@ -1371,15 +1371,11 @@ export default function RedListView() {
                           </div>
                         )}
                         <div className="min-w-0">
-                          <a
-                            href={s.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="italic font-medium text-zinc-900 dark:text-zinc-100 hover:text-red-600 dark:hover:text-red-400 hover:underline text-xs md:text-sm"
-                            onClick={(e) => e.stopPropagation()}
+                          <span
+                            className="italic font-medium text-zinc-900 dark:text-zinc-100 text-xs md:text-sm"
                           >
                             {s.scientific_name}
-                          </a>
+                          </span>
                           {s.common_name && (
                             <div className="text-zinc-500 dark:text-zinc-400 text-xs truncate max-w-[140px] md:max-w-none">
                               {s.common_name}
@@ -1420,12 +1416,8 @@ export default function RedListView() {
                           <HoverTooltip
                             text={`Published: ${s.year_published}${s.previous_assessments.length > 0 ? ` | Previous: ${s.previous_assessments.slice().reverse().map(pa => `${pa.year} (${pa.category})`).join(", ")}` : ""}`}
                           >
-                            <a
-                              href={s.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="hover:text-red-500 hover:underline cursor-help"
-                              onClick={(e) => e.stopPropagation()}
+                            <span
+                              className="cursor-help"
                             >
                               {s.assessment_date
                                 ? new Date(s.assessment_date).toLocaleDateString("en-GB", {
@@ -1434,7 +1426,7 @@ export default function RedListView() {
                                     year: "numeric",
                                   })
                                 : "—"}
-                            </a>
+                            </span>
                           </HoverTooltip>
                           {yearsSinceAssessment !== null && yearsSinceAssessment > 10 && (
                             <span className="ml-1 text-xs text-amber-600">({yearsSinceAssessment}y ago)</span>
