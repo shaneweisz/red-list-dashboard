@@ -18,6 +18,70 @@ interface Species {
   scientific_name?: string;
   category: string;
   year_published: string;
+  assessment_date?: string | null;
+  countries?: string[];
+}
+
+// Cache for GBIF CSV lookups (scientific_name_lowercase → observationsTotal)
+interface GbifCsvRow {
+  observationsTotal: number;
+}
+const gbifCsvCache: Map<string, Map<string, GbifCsvRow>> = new Map();
+const gbifCsvCacheLoadTimes: Map<string, number> = new Map();
+
+function loadGbifCsvLookup(taxonId: string): Map<string, GbifCsvRow> {
+  const cacheTime = gbifCsvCacheLoadTimes.get(taxonId) || 0;
+  if (gbifCsvCache.has(taxonId) && Date.now() - cacheTime < CACHE_RELOAD_INTERVAL) {
+    return gbifCsvCache.get(taxonId)!;
+  }
+
+  const lookup = new Map<string, GbifCsvRow>();
+  const dataDir = path.join(process.cwd(), "data");
+
+  const csvFiles: string[] = [];
+  if (taxonId === "all") {
+    const topLevelTaxa = TAXA.filter(t => t.id !== "all");
+    for (const t of topLevelTaxa) {
+      csvFiles.push(t.gbifDataFile);
+    }
+  } else {
+    const taxon = getTaxonConfig(taxonId);
+    csvFiles.push(taxon.gbifDataFile);
+  }
+
+  for (const csvFile of csvFiles) {
+    const csvPath = path.join(dataDir, csvFile);
+    if (!fs.existsSync(csvPath)) continue;
+
+    try {
+      const content = fs.readFileSync(csvPath, "utf-8");
+      const lines = content.trim().split("\n");
+      const header = lines[0];
+      if (!header.includes("scientific_name")) continue;
+
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i];
+        const firstComma = line.indexOf(",");
+        const secondComma = line.indexOf(",", firstComma + 1);
+        const thirdComma = line.indexOf(",", secondComma + 1);
+
+        const totalStr = line.slice(firstComma + 1, secondComma).trim();
+        const scientificName = line.slice(secondComma + 1, thirdComma).toLowerCase().trim();
+
+        const total = parseInt(totalStr, 10);
+
+        if (scientificName && !isNaN(total)) {
+          lookup.set(scientificName, { observationsTotal: total });
+        }
+      }
+    } catch {
+      // CSV not available or malformed, skip
+    }
+  }
+
+  gbifCsvCache.set(taxonId, lookup);
+  gbifCsvCacheLoadTimes.set(taxonId, Date.now());
+  return lookup;
 }
 
 interface PrecomputedData {
@@ -179,6 +243,57 @@ export async function GET(request: NextRequest) {
 
   const totalWithNE = data.metadata.totalSpecies + neCount;
 
+  // Compute year-range distribution
+  const currentYear = new Date().getFullYear();
+  const yearRanges = [
+    { range: "0-1 years", shortRange: "0-1y", count: 0 },
+    { range: "2-5 years", shortRange: "2-5y", count: 0 },
+    { range: "6-10 years", shortRange: "6-10y", count: 0 },
+    { range: "11-20 years", shortRange: "11-20y", count: 0 },
+    { range: "20+ years", shortRange: ">20y", count: 0 },
+  ];
+  for (const s of data.species) {
+    if (!s.assessment_date || s.category === "NE") continue;
+    const yr = new Date(s.assessment_date).getFullYear();
+    const diff = currentYear - yr;
+    if (diff <= 1) yearRanges[0].count++;
+    else if (diff <= 5) yearRanges[1].count++;
+    else if (diff <= 10) yearRanges[2].count++;
+    else if (diff <= 20) yearRanges[3].count++;
+    else yearRanges[4].count++;
+  }
+
+  // Compute GBIF observation distribution
+  const gbifLookup = loadGbifCsvLookup(taxonId);
+  const obsRanges = [
+    { range: "0", shortRange: "0", count: 0 },
+    { range: "1-10", shortRange: "1-10", count: 0 },
+    { range: "11-100", shortRange: "11-100", count: 0 },
+    { range: "101-1K", shortRange: "101-1K", count: 0 },
+    { range: "1K-10K", shortRange: "1K-10K", count: 0 },
+    { range: "10K+", shortRange: "10K+", count: 0 },
+  ];
+  for (const s of data.species) {
+    const row = gbifLookup.get((s.scientific_name || "").toLowerCase().trim());
+    const obs = row?.observationsTotal ?? 0;
+    if (obs === 0) obsRanges[0].count++;
+    else if (obs <= 10) obsRanges[1].count++;
+    else if (obs <= 100) obsRanges[2].count++;
+    else if (obs <= 1000) obsRanges[3].count++;
+    else if (obs <= 10000) obsRanges[4].count++;
+    else obsRanges[5].count++;
+  }
+
+  // Compute country counts
+  const countryCounts: Record<string, number> = {};
+  for (const s of data.species) {
+    if (s.countries) {
+      for (const code of s.countries) {
+        countryCounts[code] = (countryCounts[code] || 0) + 1;
+      }
+    }
+  }
+
   return NextResponse.json({
     totalAssessed: data.metadata.totalSpecies,
     byCategory,
@@ -192,5 +307,9 @@ export async function GET(request: NextRequest) {
       estimatedSource: taxon.estimatedSource,
       color: taxon.color,
     },
+    // Pre-computed chart distributions
+    yearRanges,
+    obsRanges,
+    countryCounts,
   });
 }

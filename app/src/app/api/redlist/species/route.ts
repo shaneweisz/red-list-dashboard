@@ -398,9 +398,16 @@ export async function GET(request: NextRequest) {
       })
     : filtered;
 
+  // Strip heavy fields from bulk response to reduce payload (~70MB → ~35MB)
+  // - previous_assessments: ~23MB total, only needed in row expansion tooltip
+  // - url: ~9MB total, constructible from sis_taxon_id + assessment_id
+  // - assessment_count: derivable from previous_assessments length
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const slim = enriched.map(({ previous_assessments, url, assessment_count, ...rest }) => rest);
+
   return NextResponse.json({
-    species: enriched,
-    total: enriched.length,
+    species: slim,
+    total: slim.length,
     metadata: data.metadata,
     taxon: {
       id: taxon.id,
