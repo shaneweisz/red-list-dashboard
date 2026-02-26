@@ -10,7 +10,7 @@
       "percentAssessed": 88.5,
       "outdated": 1065,
       "percentOutdated": 17.6,
-      "lastUpdated": "2025-12-09T18:07:00.062Z",
+      "lastUpdated": "2026-02-26T14:45:56.830Z",
       "byCategory": {
         "DD": 789,
         "VU": 567,
@@ -20,6 +20,20 @@
         "CR": 238,
         "EX": 90,
         "EW": 1
+      },
+      "totalGbifObservations": 37533596,
+      "meanGbifObsPerSpecies": 7768,
+      "medianGbifObsPerSpecies": 45,
+      "gbifSpeciesCount": 4832,
+      "gbifObsDistribution": {
+        "1": 389,
+        "2–10": 1078,
+        "11–100": 1448,
+        "101–1K": 1117,
+        "1K–10K": 523,
+        "10K–100K": 203,
+        "100K–1M": 67,
+        ">1M": 7
       }
     },
     {
@@ -32,7 +46,7 @@
       "percentAssessed": 100,
       "outdated": 0,
       "percentOutdated": 0,
-      "lastUpdated": "2025-12-09T18:50:00.992Z",
+      "lastUpdated": "2026-02-26T14:45:57.000Z",
       "byCategory": {
         "LC": 8757,
         "VU": 668,
@@ -42,6 +56,20 @@
         "CR": 216,
         "EW": 5,
         "EX": 164
+      },
+      "totalGbifObservations": 2275387754,
+      "meanGbifObsPerSpecies": 203305,
+      "medianGbifObsPerSpecies": 5248,
+      "gbifSpeciesCount": 11192,
+      "gbifObsDistribution": {
+        "1": 95,
+        "2–10": 268,
+        "11–100": 719,
+        "101–1K": 1884,
+        "1K–10K": 3660,
+        "10K–100K": 2947,
+        "100K–1M": 1196,
+        ">1M": 423
       }
     },
     {
@@ -54,7 +82,7 @@
       "percentAssessed": 82.9,
       "outdated": 5394,
       "percentOutdated": 52,
-      "lastUpdated": "2025-12-09T19:24:33.342Z",
+      "lastUpdated": "2026-02-26T14:45:57.060Z",
       "byCategory": {
         "CR": 432,
         "DD": 1502,
@@ -64,6 +92,20 @@
         "NT": 567,
         "EX": 32,
         "EW": 2
+      },
+      "totalGbifObservations": 8059475,
+      "meanGbifObsPerSpecies": 884,
+      "medianGbifObsPerSpecies": 22,
+      "gbifSpeciesCount": 9116,
+      "gbifObsDistribution": {
+        "1": 876,
+        "2–10": 2599,
+        "11–100": 3031,
+        "101–1K": 1865,
+        "1K–10K": 628,
+        "10K–100K": 103,
+        "100K–1M": 14,
+        ">1M": 0
       }
     },
     {
@@ -76,7 +118,7 @@
       "percentAssessed": 90.3,
       "outdated": 862,
       "percentOutdated": 10.7,
-      "lastUpdated": "2025-12-09T19:51:56.737Z",
+      "lastUpdated": "2026-02-26T14:45:57.113Z",
       "byCategory": {
         "EN": 1291,
         "LC": 3733,
@@ -86,6 +128,20 @@
         "NT": 453,
         "EW": 2,
         "EX": 37
+      },
+      "totalGbifObservations": 7923379,
+      "meanGbifObsPerSpecies": 1357,
+      "medianGbifObsPerSpecies": 16,
+      "gbifSpeciesCount": 5839,
+      "gbifObsDistribution": {
+        "1": 725,
+        "2–10": 1769,
+        "11–100": 1904,
+        "101–1K": 1028,
+        "1K–10K": 312,
+        "10K–100K": 84,
+        "100K–1M": 17,
+        ">1M": 0
       }
     },
     {
@@ -98,7 +154,7 @@
       "percentAssessed": 77.7,
       "outdated": 11159,
       "percentOutdated": 38.5,
-      "lastUpdated": "2025-12-09T21:32:08.161Z",
+      "lastUpdated": "2026-02-26T14:45:57.295Z",
       "byCategory": {
         "CR": 875,
         "DD": 5387,
@@ -108,6 +164,20 @@
         "EX": 91,
         "EW": 11,
         "NT": 1024
+      },
+      "totalGbifObservations": 87346678,
+      "meanGbifObsPerSpecies": 3807,
+      "medianGbifObsPerSpecies": 17,
+      "gbifSpeciesCount": 22945,
+      "gbifObsDistribution": {
+        "1": 3100,
+        "2–10": 6709,
+        "11–100": 6507,
+        "101–1K": 3810,
+        "1K–10K": 1822,
+        "10K–100K": 858,
+        "100K–1M": 127,
+        ">1M": 12
       }
     },
     {
@@ -120,7 +190,7 @@
       "percentAssessed": 1.8,
       "outdated": 12368,
       "percentOutdated": 44.8,
-      "lastUpdated": "2025-12-09T23:02:06.424Z",
+      "lastUpdated": "2026-02-26T14:45:57.952Z",
       "byCategory": {
         "CR": 1603,
         "EN": 2423,
@@ -130,6 +200,20 @@
         "NT": 1871,
         "EX": 370,
         "EW": 14
+      },
+      "totalGbifObservations": 273543805,
+      "meanGbifObsPerSpecies": 839,
+      "medianGbifObsPerSpecies": 7,
+      "gbifSpeciesCount": 325941,
+      "gbifObsDistribution": {
+        "1": 57125,
+        "2–10": 127849,
+        "11–100": 86960,
+        "101–1K": 38995,
+        "1K–10K": 12180,
+        "10K–100K": 2432,
+        "100K–1M": 366,
+        ">1M": 34
       }
     },
     {
@@ -142,7 +226,7 @@
       "percentAssessed": 18,
       "outdated": 18432,
       "percentOutdated": 24,
-      "lastUpdated": "2025-12-09T17:38:11.550Z",
+      "lastUpdated": "2026-02-26T14:45:58.960Z",
       "byCategory": {
         "EN": 12707,
         "CR": 6445,
@@ -152,6 +236,20 @@
         "DD": 6317,
         "EW": 46,
         "EX": 141
+      },
+      "totalGbifObservations": 402126562,
+      "meanGbifObsPerSpecies": 2006,
+      "medianGbifObsPerSpecies": 13,
+      "gbifSpeciesCount": 200419,
+      "gbifObsDistribution": {
+        "1": 29466,
+        "2–10": 64862,
+        "11–100": 58235,
+        "101–1K": 31784,
+        "1K–10K": 12042,
+        "10K–100K": 3208,
+        "100K–1M": 794,
+        ">1M": 28
       }
     },
     {
@@ -164,7 +262,7 @@
       "percentAssessed": 0.8,
       "outdated": 45,
       "percentOutdated": 3.5,
-      "lastUpdated": "2025-12-09T17:43:03.096Z",
+      "lastUpdated": "2026-02-26T14:45:59.144Z",
       "byCategory": {
         "EN": 129,
         "CR": 48,
@@ -172,8 +270,33 @@
         "DD": 290,
         "LC": 491,
         "VU": 234
+      },
+      "totalGbifObservations": 29055742,
+      "meanGbifObsPerSpecies": 558,
+      "medianGbifObsPerSpecies": 9,
+      "gbifSpeciesCount": 52066,
+      "gbifObsDistribution": {
+        "1": 9225,
+        "2–10": 17935,
+        "11–100": 13562,
+        "101–1K": 7835,
+        "1K–10K": 2894,
+        "10K–100K": 600,
+        "100K–1M": 15,
+        ">1M": 0
       }
     }
   ],
-  "generatedAt": "2026-02-12T20:41:13.354Z"
+  "globalGbifMedian": 10,
+  "globalGbifDistribution": {
+    "1": 101001,
+    "2–10": 223069,
+    "11–100": 172366,
+    "101–1K": 88318,
+    "1K–10K": 34061,
+    "10K–100K": 10435,
+    "100K–1M": 2596,
+    ">1M": 504
+  },
+  "generatedAt": "2026-02-26T14:45:59.305Z"
 }
