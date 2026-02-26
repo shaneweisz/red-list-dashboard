@@ -257,26 +257,19 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
 
   return (
     <div className="relative bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 p-3 h-full flex flex-col">
-      {/* Header with controls and legend */}
-      <div className="flex items-center justify-between mb-0">
-        <div>
-          <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-            Country (click to filter) <span className="font-normal text-[10px] text-zinc-400">cmd/ctrl+click to multiselect</span>
-          </h2>
-          {selectedCount > 0 && (
-            <p className="text-xs text-zinc-500">
-              {selectedCount} {selectedCount === 1 ? 'country' : 'countries'} selected
-            </p>
-          )}
-        </div>
+      {/* Header with controls */}
+      <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+            Country <span className="font-normal text-[10px] text-zinc-400">(cmd/ctrl+click to multiselect)</span>
+          </h2>
           {/* Color mode toggle */}
           <div className="flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md p-0.5 text-[10px]">
             <button
               onClick={() => setColorMode("species")}
               className={`px-1.5 py-0.5 rounded transition-colors ${colorMode === "species" ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm font-medium" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
             >
-              Assessed
+              Species
             </button>
             <button
               onClick={() => setColorMode("occurrences")}
@@ -285,26 +278,15 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
               GBIF
             </button>
           </div>
-          {/* Legend in header */}
-          <div className="flex items-center gap-1 text-[10px]">
-            <span className="text-zinc-400">Low</span>
-            <div
-              className="w-12 h-1.5 rounded"
-              style={{
-                background: "linear-gradient(to right, #dcfce7, #86efac, #22c55e, #166534)"
-              }}
-            />
-            <span className="text-zinc-400">High</span>
-          </div>
-          {selectedCount > 0 && (
-            <button
-              onClick={onClearSelection}
-              className="px-2 py-1 text-xs text-zinc-600 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded transition-colors"
-            >
-              Reset
-            </button>
-          )}
         </div>
+        {selectedCount > 0 && (
+          <button
+            onClick={onClearSelection}
+            className="text-[10px] text-green-600 hover:text-green-700 dark:text-green-400"
+          >
+            Clear
+          </button>
+        )}
       </div>
 
       {/* Hover tooltip */}
@@ -315,12 +297,12 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
             <div className="mt-1 space-y-0.5">
               {hoveredSpeciesStats && (
                 <div className="flex justify-between gap-4 text-xs">
-                  <span className="text-zinc-500">Species Assessed</span>
+                  <span className="text-zinc-500"># Assessed</span>
                   <span className="font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">{formatNumber(hoveredSpeciesStats.species)}</span>
                 </div>
               )}
               <div className="flex justify-between gap-4 text-xs">
-                <span className="text-zinc-500">GBIF Observations</span>
+                <span className="text-zinc-500">GBIF Obs</span>
                 {occurrenceLoading ? (
                   <span className="text-zinc-400 tabular-nums">...</span>
                 ) : hoveredOccurrenceStats ? (
@@ -354,7 +336,7 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
           }}
           style={{ width: "100%", height: "100%", position: "absolute", top: 0, left: 0 }}
         >
-          <ZoomableGroup center={[10, 15]} zoom={1.3} minZoom={1.3} maxZoom={1.3}>
+          <ZoomableGroup center={[10, 10]} zoom={1.0} minZoom={1.0} maxZoom={1.0}>
             <Geographies geography={GEO_URL}>
               {({ geographies }) =>
                 geographies

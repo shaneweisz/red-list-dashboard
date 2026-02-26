@@ -990,14 +990,12 @@ export default function RedListView() {
       <div className="space-y-3">
 
           {/* Charts and map */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Row 1: Risk Category + Years Since Assessed */}
-
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
             {/* Risk Category */}
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Risk Category</span>
-                <span className="text-[10px] text-zinc-400 hidden sm:inline">(click to filter, cmd/ctrl+click to multiselect)</span>
+                <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
                 {selectedCategories.size > 0 && (
                   <button onClick={() => setSelectedCategories(new Set())} className="text-[10px] text-red-600 hover:text-red-700 dark:text-red-400">Clear</button>
                 )}
@@ -1012,7 +1010,7 @@ export default function RedListView() {
                     selectedItems={selectedCategories}
                     onBarClick={handleCategoryClick}
                     yAxisWidth={26}
-                    rightMargin={75}
+                    rightMargin={55}
                   />
                 ) : null}
               </div>
@@ -1022,7 +1020,7 @@ export default function RedListView() {
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Years Since Assessed</span>
-                <span className="text-[10px] text-zinc-400 hidden sm:inline">(click to filter, cmd/ctrl+click to multiselect)</span>
+                <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
                 {selectedYearRanges.size > 0 && (
                   <button onClick={() => setSelectedYearRanges(new Set())} className="text-[10px] text-blue-600 hover:text-blue-700 dark:text-blue-400">Clear</button>
                 )}
@@ -1044,13 +1042,28 @@ export default function RedListView() {
               </div>
             </div>
 
-            {/* Row 2: GBIF Observations + Country Map */}
+            {/* Country Map */}
+            <div>
+              {speciesLoading ? (
+                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 min-h-[280px] flex items-center justify-center">
+                  <Spinner />
+                </div>
+              ) : (
+                <WorldMap
+                  selectedCountries={selectedCountries}
+                  onCountrySelect={handleCountrySelect}
+                  onClearSelection={handleClearCountry}
+                  precomputedStats={countryStatsForMap}
+                  selectedTaxa={selectedTaxa}
+                />
+              )}
+            </div>
 
             {/* GBIF Observations */}
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">GBIF Observations</span>
-                <span className="text-[10px] text-zinc-400 hidden sm:inline">(click to filter, cmd/ctrl+click to multiselect)</span>
+                <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
                 {selectedObsRanges.size > 0 && (
                   <button onClick={() => setSelectedObsRanges(new Set())} className="text-[10px] text-emerald-600 hover:text-emerald-700 dark:text-emerald-400">Clear</button>
                 )}
@@ -1070,23 +1083,6 @@ export default function RedListView() {
                   />
                 ) : null}
               </div>
-            </div>
-
-            {/* Country Map */}
-            <div>
-              {speciesLoading ? (
-                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 min-h-[280px] flex items-center justify-center">
-                  <Spinner />
-                </div>
-              ) : (
-                <WorldMap
-                  selectedCountries={selectedCountries}
-                  onCountrySelect={handleCountrySelect}
-                  onClearSelection={handleClearCountry}
-                  precomputedStats={countryStatsForMap}
-                  selectedTaxa={selectedTaxa}
-                />
-              )}
             </div>
           </div>
 
