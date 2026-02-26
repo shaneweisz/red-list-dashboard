@@ -36,6 +36,8 @@ interface TaxonSummary {
 interface Props {
   onToggleTaxon: (taxonId: string, event: React.MouseEvent) => void;
   selectedTaxa: Set<string>;
+  focusMode: FocusMode;
+  onFocusChange: (mode: FocusMode) => void;
 }
 
 // Bar color helpers
@@ -73,7 +75,7 @@ const COLUMN_LABELS: Record<ColumnId, string> = {
 
 const DISTRIBUTION_BIN_LABELS = ["1", "2–10", "11–100", "101–1K", "1K–10K", "10K–100K", "100K–1M", ">1M"];
 
-type FocusMode = "redlist" | "gbif";
+export type FocusMode = "redlist" | "gbif";
 
 const FOCUS_HIDDEN: Record<FocusMode, Set<ColumnId>> = {
   redlist: new Set(["gbifSpecies", "totalGbifObs", "meanGbifObs", "medianGbifObs", "gbifDistribution", "breakdown"]),
@@ -82,7 +84,7 @@ const FOCUS_HIDDEN: Record<FocusMode, Set<ColumnId>> = {
 
 const DEFAULT_HIDDEN_COLUMNS: Set<ColumnId> = FOCUS_HIDDEN.redlist;
 
-export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
+export default function TaxaSummary({ onToggleTaxon, selectedTaxa, focusMode, onFocusChange }: Props) {
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [globalGbifMedian, setGlobalGbifMedian] = useState<number | undefined>();
   const [globalGbifDistribution, setGlobalGbifDistribution] = useState<Record<string, number> | undefined>();
@@ -90,7 +92,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [modifierHeld, setModifierHeld] = useState(false);
-  const [focusMode, setFocusMode] = useState<FocusMode>("redlist");
   const [hiddenColumns, setHiddenColumns] = useState<Set<ColumnId>>(new Set(DEFAULT_HIDDEN_COLUMNS));
   const [showColumnMenu, setShowColumnMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -108,7 +109,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
   };
 
   const switchFocus = (mode: FocusMode) => {
-    setFocusMode(mode);
+    onFocusChange(mode);
     setHiddenColumns(new Set(FOCUS_HIDDEN[mode]));
   };
 
