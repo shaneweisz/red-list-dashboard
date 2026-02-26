@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { FaInfoCircle } from "react-icons/fa";
+import { HiOutlineAdjustmentsHorizontal } from "react-icons/hi2";
 import TaxaIcon from "@/components/TaxaIcon";
 import { CATEGORY_COLORS, CATEGORY_NAMES, CATEGORY_ORDER } from "@/config/taxa";
 
@@ -41,12 +43,55 @@ const getOutdatedBarColor = (percent: number) =>
 // Sticky cell classes for the pinned taxon column
 const stickyClasses = "sticky left-0 z-10";
 
+// Toggleable column IDs (Taxon is always visible)
+type ColumnId = "described" | "assessed" | "pctAssessed" | "outdated" | "pctOutdated" | "breakdown";
+
+const COLUMN_LABELS: Record<ColumnId, string> = {
+  described: "Est. # Described",
+  assessed: "# Assessed",
+  pctAssessed: "% Assessed",
+  outdated: "# Outdated (10+Y)",
+  pctOutdated: "% Outdated",
+  breakdown: "Risk Category Breakdown",
+};
+
+const DEFAULT_HIDDEN_COLUMNS: Set<ColumnId> = new Set(["breakdown"]);
+
 export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [modifierHeld, setModifierHeld] = useState(false);
+  const [hiddenColumns, setHiddenColumns] = useState<Set<ColumnId>>(DEFAULT_HIDDEN_COLUMNS);
+  const [showColumnMenu, setShowColumnMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+
+  const isVisible = (col: ColumnId) => !hiddenColumns.has(col);
+  const toggleColumn = (col: ColumnId) => {
+    setHiddenColumns((prev) => {
+      const next = new Set(prev);
+      if (next.has(col)) next.delete(col);
+      else next.add(col);
+      return next;
+    });
+  };
+
+  const visibleColCount = 1 + (Object.keys(COLUMN_LABELS) as ColumnId[]).filter(isVisible).length;
+
+  // Close column menu on outside click
+  useEffect(() => {
+    if (!showColumnMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowColumnMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showColumnMenu]);
 
   // Track Cmd/Ctrl key state for delayed collapse
   useEffect(() => {
@@ -109,30 +154,42 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
             <div className="h-4 w-20 bg-zinc-200 dark:bg-zinc-700 rounded" />
           </div>
         </td>
-        <td className="px-3 md:px-4 py-2.5 md:py-3 text-right">
-          <div className="h-4 w-16 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
-        </td>
-        <td className="px-3 md:px-4 py-2.5 md:py-3 text-right">
-          <div className="h-4 w-14 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
-        </td>
-        <td className="px-3 md:px-4 py-2.5 md:py-3">
-          <div className="flex items-center gap-2 min-w-[120px] md:min-w-[160px]">
-            <div className="flex-1 h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
-            <div className="h-4 w-12 bg-zinc-200 dark:bg-zinc-700 rounded" />
-          </div>
-        </td>
-        <td className="px-3 md:px-4 py-2.5 md:py-3 text-right">
-          <div className="h-4 w-12 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
-        </td>
-        <td className="px-3 md:px-4 py-2.5 md:py-3">
-          <div className="flex items-center gap-2 min-w-[120px] md:min-w-[160px]">
-            <div className="flex-1 h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
-            <div className="h-4 w-12 bg-zinc-200 dark:bg-zinc-700 rounded" />
-          </div>
-        </td>
-        <td className="px-3 md:px-4 py-2.5 md:py-3">
-          <div className="h-3 w-32 md:w-40 bg-zinc-200 dark:bg-zinc-700 rounded-full" />
-        </td>
+        {isVisible("described") && (
+          <td className="px-3 md:px-4 py-2.5 md:py-3 text-right">
+            <div className="h-4 w-16 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
+          </td>
+        )}
+        {isVisible("assessed") && (
+          <td className="px-3 md:px-4 py-2.5 md:py-3 text-right">
+            <div className="h-4 w-14 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
+          </td>
+        )}
+        {isVisible("pctAssessed") && (
+          <td className="px-3 md:px-4 py-2.5 md:py-3">
+            <div className="flex items-center gap-2 min-w-[120px] md:min-w-[160px]">
+              <div className="flex-1 h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
+              <div className="h-4 w-12 bg-zinc-200 dark:bg-zinc-700 rounded" />
+            </div>
+          </td>
+        )}
+        {isVisible("outdated") && (
+          <td className="px-3 md:px-4 py-2.5 md:py-3 text-right">
+            <div className="h-4 w-12 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
+          </td>
+        )}
+        {isVisible("pctOutdated") && (
+          <td className="px-3 md:px-4 py-2.5 md:py-3">
+            <div className="flex items-center gap-2 min-w-[120px] md:min-w-[160px]">
+              <div className="flex-1 h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
+              <div className="h-4 w-12 bg-zinc-200 dark:bg-zinc-700 rounded" />
+            </div>
+          </td>
+        )}
+        {isVisible("breakdown") && (
+          <td className="px-3 md:px-4 py-2.5 md:py-3">
+            <div className="h-3 w-32 md:w-40 bg-zinc-200 dark:bg-zinc-700 rounded-full" />
+          </td>
+        )}
       </tr>
     ));
 
@@ -154,18 +211,18 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
           <thead>
             <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
               <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap`}>Taxon</th>
-              <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">Est. # Described</th>
-              <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap"># Assessed</th>
-              <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">% Assessed</th>
-              <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap"># Outdated (10+Y)</th>
-              <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">% Outdated</th>
-              <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">Risk Category Breakdown</th>
+              {isVisible("described") && <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">Est. # Described</th>}
+              {isVisible("assessed") && <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap"># Assessed</th>}
+              {isVisible("pctAssessed") && <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">% Assessed</th>}
+              {isVisible("outdated") && <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap"># Outdated (10+Y)</th>}
+              {isVisible("pctOutdated") && <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">% Outdated</th>}
+              {isVisible("breakdown") && <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">Risk Category Breakdown</th>}
             </tr>
           </thead>
           <tbody>
             {skeletonRows[0]}
             <tr>
-              <td colSpan={7} className="p-0">
+              <td colSpan={visibleColCount} className="p-0">
                 <div className="border-b-2 border-zinc-200 dark:border-zinc-700" />
               </td>
             </tr>
@@ -332,42 +389,54 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
             <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{name}</span>
           </div>
         </td>
-        <td className="px-3 md:px-4 py-2.5 md:py-3 text-right whitespace-nowrap">
-          <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
-            {estimatedDescribed.toLocaleString()}
-          </span>
-        </td>
-        <td className="px-3 md:px-4 py-2.5 md:py-3 text-right whitespace-nowrap">
-          <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
-            {available ? assessed.toLocaleString() : "—"}
-          </span>
-        </td>
-        <td className="px-3 md:px-4 py-2.5 md:py-3 whitespace-nowrap">
-          {available ? (
-            renderBar(percentAssessed, getAssessedBarColor(percentAssessed), isAllRow)
-          ) : (
-            <span className="text-sm md:text-base text-zinc-400">—</span>
-          )}
-        </td>
-        <td className="px-3 md:px-4 py-2.5 md:py-3 text-right whitespace-nowrap">
-          <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
-            {available ? outdated.toLocaleString() : "—"}
-          </span>
-        </td>
-        <td className="px-3 md:px-4 py-2.5 md:py-3 whitespace-nowrap">
-          {available ? (
-            renderBar(percentOutdated, getOutdatedBarColor(percentOutdated), isAllRow)
-          ) : (
-            <span className="text-sm md:text-base text-zinc-400">—</span>
-          )}
-        </td>
-        <td className="px-3 md:px-4 py-2.5 md:py-3 whitespace-nowrap">
-          {available ? (
-            renderBreakdownBar(byCategory)
-          ) : (
-            <span className="text-sm md:text-base text-zinc-400">—</span>
-          )}
-        </td>
+        {isVisible("described") && (
+          <td className="px-3 md:px-4 py-2.5 md:py-3 text-right whitespace-nowrap">
+            <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+              {estimatedDescribed.toLocaleString()}
+            </span>
+          </td>
+        )}
+        {isVisible("assessed") && (
+          <td className="px-3 md:px-4 py-2.5 md:py-3 text-right whitespace-nowrap">
+            <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+              {available ? assessed.toLocaleString() : "—"}
+            </span>
+          </td>
+        )}
+        {isVisible("pctAssessed") && (
+          <td className="px-3 md:px-4 py-2.5 md:py-3 whitespace-nowrap">
+            {available ? (
+              renderBar(percentAssessed, getAssessedBarColor(percentAssessed), isAllRow)
+            ) : (
+              <span className="text-sm md:text-base text-zinc-400">—</span>
+            )}
+          </td>
+        )}
+        {isVisible("outdated") && (
+          <td className="px-3 md:px-4 py-2.5 md:py-3 text-right whitespace-nowrap">
+            <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+              {available ? outdated.toLocaleString() : "—"}
+            </span>
+          </td>
+        )}
+        {isVisible("pctOutdated") && (
+          <td className="px-3 md:px-4 py-2.5 md:py-3 whitespace-nowrap">
+            {available ? (
+              renderBar(percentOutdated, getOutdatedBarColor(percentOutdated), isAllRow)
+            ) : (
+              <span className="text-sm md:text-base text-zinc-400">—</span>
+            )}
+          </td>
+        )}
+        {isVisible("breakdown") && (
+          <td className="px-3 md:px-4 py-2.5 md:py-3 whitespace-nowrap">
+            {available ? (
+              renderBreakdownBar(byCategory)
+            ) : (
+              <span className="text-sm md:text-base text-zinc-400">—</span>
+            )}
+          </td>
+        )}
       </tr>
     );
   };
@@ -377,47 +446,111 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
     <thead>
       <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
         <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap`}>
-          Taxon
+          <div className="flex items-center gap-1.5">
+            Taxon
+            <button
+              ref={menuButtonRef}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!showColumnMenu && menuButtonRef.current) {
+                  const rect = menuButtonRef.current.getBoundingClientRect();
+                  setMenuPos({ top: rect.bottom + 4, left: rect.left });
+                }
+                setShowColumnMenu((v) => !v);
+              }}
+              className="p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+              title="Toggle columns"
+            >
+              <HiOutlineAdjustmentsHorizontal size={14} />
+            </button>
+          </div>
         </th>
-        <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
-          <span className="inline-flex items-center gap-1">
-            Est. # Described
-            <span className="relative group">
-              <a
-                href={IUCN_SOURCE_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-              >
-                <FaInfoCircle size={12} />
-              </a>
-              <span className="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible z-50 shadow-lg normal-case">
-                Source: IUCN Red List Table 1a (2025-2)
+        {isVisible("described") && (
+          <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
+            <span className="inline-flex items-center gap-1">
+              Est. # Described
+              <span className="relative group">
+                <a
+                  href={IUCN_SOURCE_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                >
+                  <FaInfoCircle size={12} />
+                </a>
+                <span className="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible z-50 shadow-lg normal-case">
+                  Source: IUCN Red List Table 1a (2025-2)
+                </span>
               </span>
             </span>
-          </span>
-        </th>
-        <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
-          # Assessed
-        </th>
-        <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
-          % Assessed
-        </th>
-        <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
-          # Outdated (10+Y)
-        </th>
-        <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
-          % Outdated
-        </th>
-        <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
-          Risk Category Breakdown
-        </th>
+          </th>
+        )}
+        {isVisible("assessed") && (
+          <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
+            # Assessed
+          </th>
+        )}
+        {isVisible("pctAssessed") && (
+          <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
+            % Assessed
+          </th>
+        )}
+        {isVisible("outdated") && (
+          <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
+            # Outdated (10+Y)
+          </th>
+        )}
+        {isVisible("pctOutdated") && (
+          <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
+            % Outdated
+          </th>
+        )}
+        {isVisible("breakdown") && (
+          <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 tracking-wider whitespace-nowrap">
+            <span className="uppercase">Risk Category Breakdown</span>
+            <div className="flex items-center gap-1.5 mt-1 font-normal normal-case">
+              {BAR_CATEGORIES.map((cat) => (
+                <span key={cat} className="inline-flex items-center gap-0.5">
+                  <span
+                    className="inline-block w-2 h-2 rounded-sm"
+                    style={{ backgroundColor: CATEGORY_COLORS[cat] || "#a3a3a3" }}
+                  />
+                  <span className="text-[10px] text-zinc-500 dark:text-zinc-400">{cat}</span>
+                </span>
+              ))}
+            </div>
+          </th>
+        )}
       </tr>
     </thead>
   );
 
   return (
+    <>
+    {showColumnMenu && createPortal(
+      <div
+        ref={menuRef}
+        className="fixed bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg z-[9999] py-1 min-w-[180px]"
+        style={{ top: menuPos.top, left: menuPos.left }}
+      >
+        {(Object.keys(COLUMN_LABELS) as ColumnId[]).map((col) => (
+          <label
+            key={col}
+            className="flex items-center gap-2 px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 cursor-pointer"
+          >
+            <input
+              type="checkbox"
+              checked={isVisible(col)}
+              onChange={() => toggleColumn(col)}
+              className="rounded border-zinc-300 dark:border-zinc-600 text-green-600 focus:ring-green-500"
+            />
+            {COLUMN_LABELS[col]}
+          </label>
+        ))}
+      </div>,
+      document.body
+    )}
     <div ref={scrollRef} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto">
       <table className="w-full">
         {renderHead()}
@@ -440,7 +573,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
 
           {/* Separator */}
           <tr>
-            <td colSpan={7} className="p-0">
+            <td colSpan={visibleColCount} className="p-0">
               <div className="border-b-2 border-zinc-200 dark:border-zinc-700" />
             </td>
           </tr>
@@ -483,5 +616,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
         </tbody>
       </table>
     </div>
+    </>
   );
 }

@@ -276,7 +276,7 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
               onClick={() => setColorMode("species")}
               className={`px-1.5 py-0.5 rounded transition-colors ${colorMode === "species" ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm font-medium" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
             >
-              Species
+              Assessed
             </button>
             <button
               onClick={() => setColorMode("occurrences")}
@@ -315,12 +315,12 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
             <div className="mt-1 space-y-0.5">
               {hoveredSpeciesStats && (
                 <div className="flex justify-between gap-4 text-xs">
-                  <span className="text-zinc-500">Species</span>
+                  <span className="text-zinc-500">Species Assessed</span>
                   <span className="font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">{formatNumber(hoveredSpeciesStats.species)}</span>
                 </div>
               )}
               <div className="flex justify-between gap-4 text-xs">
-                <span className="text-zinc-500">GBIF</span>
+                <span className="text-zinc-500">GBIF Observations</span>
                 {occurrenceLoading ? (
                   <span className="text-zinc-400 tabular-nums">...</span>
                 ) : hoveredOccurrenceStats ? (
