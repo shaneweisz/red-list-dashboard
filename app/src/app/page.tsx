@@ -20,7 +20,7 @@ const RedListView = dynamic(
 
 export default function RedListPage() {
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 p-4 md:p-8">
+    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 px-6 py-4 md:px-16 md:py-8">
       <main className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-4 md:mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
