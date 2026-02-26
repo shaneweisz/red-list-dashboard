@@ -26,6 +26,11 @@ interface TaxonSummary {
   percentOutdated: number;
   lastUpdated: string | null;
   byCategory: Record<string, number>;
+  totalGbifObservations?: number;
+  meanGbifObsPerSpecies?: number;
+  medianGbifObsPerSpecies?: number;
+  gbifSpeciesCount?: number;
+  gbifObsDistribution?: Record<string, number>;
 }
 
 interface Props {
@@ -42,9 +47,15 @@ const getOutdatedBarColor = (percent: number) =>
 
 // Sticky cell classes for the pinned taxon column
 const stickyClasses = "sticky left-0 z-10";
+// Compact cell classes for tighter table spacing
+const cellPad = "px-3 md:px-4 py-2 md:py-2.5";
+const numericTdClasses = `${cellPad} text-right whitespace-nowrap w-0`;
+const numericThClasses = `${cellPad} text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`;
+const flexTdClasses = `${cellPad} whitespace-nowrap w-0`;
+const flexThClasses = `${cellPad} text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`;
 
 // Toggleable column IDs (Taxon is always visible)
-type ColumnId = "described" | "assessed" | "pctAssessed" | "outdated" | "pctOutdated" | "breakdown";
+type ColumnId = "described" | "assessed" | "pctAssessed" | "outdated" | "pctOutdated" | "breakdown" | "gbifSpecies" | "totalGbifObs" | "meanGbifObs" | "medianGbifObs" | "gbifDistribution";
 
 const COLUMN_LABELS: Record<ColumnId, string> = {
   described: "Est. # Described",
@@ -53,17 +64,34 @@ const COLUMN_LABELS: Record<ColumnId, string> = {
   outdated: "# Outdated (10+Y)",
   pctOutdated: "% Outdated",
   breakdown: "Risk Category Breakdown",
+  gbifSpecies: "# on GBIF",
+  totalGbifObs: "Total Obs",
+  meanGbifObs: "Mean Obs",
+  medianGbifObs: "Median Obs",
+  gbifDistribution: "Obs Distribution",
 };
 
-const DEFAULT_HIDDEN_COLUMNS: Set<ColumnId> = new Set(["breakdown"]);
+const DISTRIBUTION_BIN_LABELS = ["1", "2–10", "11–100", "101–1K", "1K–10K", "10K–100K", "100K–1M", ">1M"];
+
+type FocusMode = "redlist" | "gbif";
+
+const FOCUS_HIDDEN: Record<FocusMode, Set<ColumnId>> = {
+  redlist: new Set(["gbifSpecies", "totalGbifObs", "meanGbifObs", "medianGbifObs", "gbifDistribution", "breakdown"]),
+  gbif: new Set(["pctAssessed", "outdated", "pctOutdated", "breakdown"]),
+};
+
+const DEFAULT_HIDDEN_COLUMNS = FOCUS_HIDDEN.redlist;
 
 export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
+  const [globalGbifMedian, setGlobalGbifMedian] = useState<number | undefined>();
+  const [globalGbifDistribution, setGlobalGbifDistribution] = useState<Record<string, number> | undefined>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [modifierHeld, setModifierHeld] = useState(false);
-  const [hiddenColumns, setHiddenColumns] = useState<Set<ColumnId>>(DEFAULT_HIDDEN_COLUMNS);
+  const [focusMode, setFocusMode] = useState<FocusMode>("redlist");
+  const [hiddenColumns, setHiddenColumns] = useState<Set<ColumnId>>(new Set(DEFAULT_HIDDEN_COLUMNS));
   const [showColumnMenu, setShowColumnMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -77,6 +105,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
       else next.add(col);
       return next;
     });
+  };
+
+  const switchFocus = (mode: FocusMode) => {
+    setFocusMode(mode);
+    setHiddenColumns(new Set(FOCUS_HIDDEN[mode]));
   };
 
   const visibleColCount = 1 + (Object.keys(COLUMN_LABELS) as ColumnId[]).filter(isVisible).length;
@@ -135,6 +168,8 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
         if (!res.ok) throw new Error("Failed to load taxa");
         const data = await res.json();
         setTaxa(data.taxa);
+        setGlobalGbifMedian(data.globalGbifMedian);
+        setGlobalGbifDistribution(data.globalGbifDistribution);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load taxa");
       } finally {
@@ -148,45 +183,70 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
     // Skeleton rows matching actual table structure
     const skeletonRows = Array.from({ length: 9 }, (_, i) => (
       <tr key={i} className={i === 0 ? "bg-zinc-50/80 dark:bg-zinc-800/60" : ""}>
-        <td className={`${stickyClasses} bg-white dark:bg-zinc-900 px-3 md:px-4 py-2.5 md:py-3`}>
+        <td className={`${stickyClasses} bg-white dark:bg-zinc-900 ${cellPad} w-0`}>
           <div className="flex items-center gap-2">
             <div className="w-[22px] h-[22px] rounded-full bg-zinc-200 dark:bg-zinc-700" />
             <div className="h-4 w-20 bg-zinc-200 dark:bg-zinc-700 rounded" />
           </div>
         </td>
         {isVisible("described") && (
-          <td className="px-3 md:px-4 py-2.5 md:py-3 text-right">
+          <td className={numericTdClasses}>
             <div className="h-4 w-16 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
           </td>
         )}
         {isVisible("assessed") && (
-          <td className="px-3 md:px-4 py-2.5 md:py-3 text-right">
+          <td className={numericTdClasses}>
             <div className="h-4 w-14 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
           </td>
         )}
         {isVisible("pctAssessed") && (
-          <td className="px-3 md:px-4 py-2.5 md:py-3">
-            <div className="flex items-center gap-2 min-w-[120px] md:min-w-[160px]">
+          <td className={flexTdClasses}>
+            <div className="flex items-center gap-2 min-w-[80px] md:min-w-[100px]">
               <div className="flex-1 h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
               <div className="h-4 w-12 bg-zinc-200 dark:bg-zinc-700 rounded" />
             </div>
           </td>
         )}
         {isVisible("outdated") && (
-          <td className="px-3 md:px-4 py-2.5 md:py-3 text-right">
+          <td className={numericTdClasses}>
             <div className="h-4 w-12 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
           </td>
         )}
         {isVisible("pctOutdated") && (
-          <td className="px-3 md:px-4 py-2.5 md:py-3">
-            <div className="flex items-center gap-2 min-w-[120px] md:min-w-[160px]">
+          <td className={flexTdClasses}>
+            <div className="flex items-center gap-2 min-w-[80px] md:min-w-[100px]">
               <div className="flex-1 h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
               <div className="h-4 w-12 bg-zinc-200 dark:bg-zinc-700 rounded" />
             </div>
           </td>
         )}
+        {isVisible("gbifSpecies") && (
+          <td className={numericTdClasses}>
+            <div className="h-4 w-14 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
+          </td>
+        )}
+        {isVisible("totalGbifObs") && (
+          <td className={numericTdClasses}>
+            <div className="h-4 w-20 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
+          </td>
+        )}
+        {isVisible("gbifDistribution") && (
+          <td className={flexTdClasses}>
+            <div className="h-5 w-28 bg-zinc-200 dark:bg-zinc-700 rounded" />
+          </td>
+        )}
+        {isVisible("meanGbifObs") && (
+          <td className={numericTdClasses}>
+            <div className="h-4 w-16 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
+          </td>
+        )}
+        {isVisible("medianGbifObs") && (
+          <td className={numericTdClasses}>
+            <div className="h-4 w-16 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
+          </td>
+        )}
         {isVisible("breakdown") && (
-          <td className="px-3 md:px-4 py-2.5 md:py-3">
+          <td className={flexTdClasses}>
             <div className="h-3 w-32 md:w-40 bg-zinc-200 dark:bg-zinc-700 rounded-full" />
           </td>
         )}
@@ -210,13 +270,18 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
         <table className="w-full">
           <thead>
             <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
-              <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap`}>Taxon</th>
-              {isVisible("described") && <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">Est. # Described</th>}
-              {isVisible("assessed") && <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap"># Assessed</th>}
-              {isVisible("pctAssessed") && <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">% Assessed</th>}
-              {isVisible("outdated") && <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap"># Outdated (10+Y)</th>}
-              {isVisible("pctOutdated") && <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">% Outdated</th>}
-              {isVisible("breakdown") && <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">Risk Category Breakdown</th>}
+              <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`}>Taxon</th>
+              {isVisible("described") && <th className={numericThClasses}>Est. # Described</th>}
+              {isVisible("assessed") && <th className={numericThClasses}># Assessed</th>}
+              {isVisible("pctAssessed") && <th className={flexThClasses}>% Assessed</th>}
+              {isVisible("outdated") && <th className={numericThClasses}># Outdated (10+Y)</th>}
+              {isVisible("pctOutdated") && <th className={flexThClasses}>% Outdated</th>}
+              {isVisible("gbifSpecies") && <th className={numericThClasses}># on GBIF</th>}
+              {isVisible("totalGbifObs") && <th className={numericThClasses}>Total Obs</th>}
+              {isVisible("gbifDistribution") && <th className={flexThClasses}>Obs Distribution</th>}
+              {isVisible("meanGbifObs") && <th className={numericThClasses}>Mean Obs</th>}
+              {isVisible("medianGbifObs") && <th className={numericThClasses}>Median Obs</th>}
+              {isVisible("breakdown") && <th className={flexThClasses}>Risk Category Breakdown</th>}
             </tr>
           </thead>
           <tbody>
@@ -253,6 +318,9 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
       totalByCategory[cat] = (totalByCategory[cat] || 0) + count;
     }
   }
+  const totalGbifObs = taxa.reduce((sum, t) => sum + (t.totalGbifObservations || 0), 0);
+  const totalGbifSpecies = taxa.reduce((sum, t) => sum + (t.gbifSpeciesCount || 0), 0);
+  const totalMeanGbifObs = totalGbifSpecies > 0 ? Math.round(totalGbifObs / totalGbifSpecies) : 0;
 
 
   // Column order: Taxon (sticky) | Est. Described | Assessed | % Assessed | Outdated | % Outdated | Category Breakdown
@@ -262,7 +330,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
     const clampedPercent = Math.min(100, Math.max(0, percent));
     const fillColor = isAll ? "rgba(255,255,255,0.25)" : barColor;
     return (
-      <div className="flex items-center gap-2 min-w-[120px] md:min-w-[160px]">
+      <div className="flex items-center gap-2 min-w-[160px] md:min-w-[220px]">
         <div className="flex-1 h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
           <div
             className="h-full rounded-full transition-all"
@@ -292,7 +360,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
       }));
 
     return (
-      <div className="min-w-[120px] md:min-w-[160px] relative">
+      <div className="min-w-[80px] md:min-w-[100px] relative">
         {/* Visible bar (clipped for rounded corners) */}
         <div className="flex h-3 rounded-full overflow-hidden bg-zinc-200 dark:bg-zinc-700">
           {segments.map((seg) => (
@@ -342,6 +410,35 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
     );
   };
 
+  // Render a mini histogram for GBIF observation distribution
+  const renderDistributionBar = (distribution: Record<string, number>) => {
+    const entries = DISTRIBUTION_BIN_LABELS.map((label) => ({ label, count: distribution[label] || 0 }));
+    const max = Math.max(...entries.map((e) => e.count));
+    if (max === 0) return <span className="text-sm text-zinc-400">—</span>;
+
+    return (
+      <div className="min-w-[100px] md:min-w-[120px] relative">
+        <div className="flex items-end h-5">
+          {entries.map(({ label, count }, i) => {
+            const heightPct = (count / max) * 100;
+            return (
+              <div key={label} className="group/bar relative flex-1 flex items-end h-full">
+                <div
+                  className={`w-full bg-emerald-500/70 dark:bg-emerald-400/60 transition-colors group-hover/bar:bg-emerald-500 dark:group-hover/bar:bg-emerald-400 ${i === 0 ? "rounded-l-sm" : ""} ${i === entries.length - 1 ? "rounded-r-sm" : ""}`}
+                  style={{ height: `${Math.max(heightPct, count > 0 ? 6 : 0)}%` }}
+                />
+                <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 px-2 py-1 text-xs bg-zinc-800 dark:bg-zinc-700 text-white rounded-lg shadow-lg opacity-0 invisible group-hover/bar:opacity-100 group-hover/bar:visible z-50 whitespace-nowrap pointer-events-none">
+                  <span className="text-zinc-300">{label} obs:</span>{" "}
+                  <span className="font-medium">{count.toLocaleString()}</span> species
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   // Render a data row
   const renderRow = (
     id: string,
@@ -355,7 +452,8 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
     byCategory: Record<string, number>,
     isSelected?: boolean,
     available = true,
-    isAllRow = false
+    isAllRow = false,
+    gbifObs?: { total?: number; mean?: number; median?: number; speciesCount?: number; distribution?: Record<string, number> }
   ) => {
     const rowBg = isAllRow
       ? "bg-zinc-50/80 dark:bg-zinc-800/60"
@@ -383,28 +481,28 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
         }}
         className={`transition-colors ${rowBg} ${hoverClass}`}
       >
-        <td className={`${stickyClasses} px-3 md:px-4 py-2.5 md:py-3 whitespace-nowrap ${stickyBg}`}>
+        <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 ${stickyBg}`}>
           <div className="flex items-center gap-2">
             <TaxaIcon taxonId={id} size={22} className="flex-shrink-0" style={{ color }} />
             <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{name}</span>
           </div>
         </td>
         {isVisible("described") && (
-          <td className="px-3 md:px-4 py-2.5 md:py-3 text-right whitespace-nowrap">
+          <td className={numericTdClasses}>
             <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
               {estimatedDescribed.toLocaleString()}
             </span>
           </td>
         )}
         {isVisible("assessed") && (
-          <td className="px-3 md:px-4 py-2.5 md:py-3 text-right whitespace-nowrap">
+          <td className={numericTdClasses}>
             <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
               {available ? assessed.toLocaleString() : "—"}
             </span>
           </td>
         )}
         {isVisible("pctAssessed") && (
-          <td className="px-3 md:px-4 py-2.5 md:py-3 whitespace-nowrap">
+          <td className={flexTdClasses}>
             {available ? (
               renderBar(percentAssessed, getAssessedBarColor(percentAssessed), isAllRow)
             ) : (
@@ -413,14 +511,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
           </td>
         )}
         {isVisible("outdated") && (
-          <td className="px-3 md:px-4 py-2.5 md:py-3 text-right whitespace-nowrap">
+          <td className={numericTdClasses}>
             <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
               {available ? outdated.toLocaleString() : "—"}
             </span>
           </td>
         )}
         {isVisible("pctOutdated") && (
-          <td className="px-3 md:px-4 py-2.5 md:py-3 whitespace-nowrap">
+          <td className={flexTdClasses}>
             {available ? (
               renderBar(percentOutdated, getOutdatedBarColor(percentOutdated), isAllRow)
             ) : (
@@ -428,8 +526,41 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
             )}
           </td>
         )}
+        {isVisible("gbifSpecies") && (
+          <td className={numericTdClasses}>
+            <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+              {gbifObs?.speciesCount != null ? gbifObs.speciesCount.toLocaleString() : "—"}
+            </span>
+          </td>
+        )}
+        {isVisible("totalGbifObs") && (
+          <td className={numericTdClasses}>
+            <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+              {gbifObs?.total != null ? gbifObs.total.toLocaleString() : "—"}
+            </span>
+          </td>
+        )}
+        {isVisible("gbifDistribution") && (
+          <td className={flexTdClasses}>
+            {gbifObs?.distribution ? renderDistributionBar(gbifObs.distribution) : <span className="text-sm text-zinc-400">—</span>}
+          </td>
+        )}
+        {isVisible("meanGbifObs") && (
+          <td className={numericTdClasses}>
+            <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+              {gbifObs?.mean != null ? gbifObs.mean.toLocaleString() : "—"}
+            </span>
+          </td>
+        )}
+        {isVisible("medianGbifObs") && (
+          <td className={numericTdClasses}>
+            <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+              {gbifObs?.median != null ? gbifObs.median.toLocaleString() : "—"}
+            </span>
+          </td>
+        )}
         {isVisible("breakdown") && (
-          <td className="px-3 md:px-4 py-2.5 md:py-3 whitespace-nowrap">
+          <td className={flexTdClasses}>
             {available ? (
               renderBreakdownBar(byCategory)
             ) : (
@@ -445,7 +576,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
   const renderHead = () => (
     <thead>
       <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
-        <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap`}>
+        <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`}>
           <div className="flex items-center gap-1.5">
             Taxon
             <button
@@ -466,7 +597,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
           </div>
         </th>
         {isVisible("described") && (
-          <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
+          <th className={`${numericThClasses}`}>
             <span className="inline-flex items-center gap-1">
               Est. # Described
               <span className="relative group">
@@ -487,27 +618,34 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
           </th>
         )}
         {isVisible("assessed") && (
-          <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
-            # Assessed
-          </th>
+          <th className={numericThClasses}># Assessed</th>
         )}
         {isVisible("pctAssessed") && (
-          <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
-            % Assessed
-          </th>
+          <th className={flexThClasses}>% Assessed</th>
         )}
         {isVisible("outdated") && (
-          <th className="px-3 md:px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
-            # Outdated (10+Y)
-          </th>
+          <th className={numericThClasses}># Outdated (10+Y)</th>
         )}
         {isVisible("pctOutdated") && (
-          <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap">
-            % Outdated
-          </th>
+          <th className={flexThClasses}>% Outdated</th>
+        )}
+        {isVisible("gbifSpecies") && (
+          <th className={numericThClasses}># on GBIF</th>
+        )}
+        {isVisible("totalGbifObs") && (
+          <th className={numericThClasses}>Total Obs</th>
+        )}
+        {isVisible("gbifDistribution") && (
+          <th className={flexThClasses}>Obs Distribution</th>
+        )}
+        {isVisible("meanGbifObs") && (
+          <th className={numericThClasses}>Mean Obs</th>
+        )}
+        {isVisible("medianGbifObs") && (
+          <th className={numericThClasses}>Median Obs</th>
         )}
         {isVisible("breakdown") && (
-          <th className="px-3 md:px-4 py-2 text-left text-xs font-medium text-zinc-500 tracking-wider whitespace-nowrap">
+          <th className={flexThClasses}>
             <span className="uppercase">Risk Category Breakdown</span>
             <div className="flex items-center gap-1.5 mt-1 font-normal normal-case">
               {BAR_CATEGORIES.map((cat) => (
@@ -534,6 +672,23 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
         className="fixed bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg z-[9999] py-1 min-w-[180px]"
         style={{ top: menuPos.top, left: menuPos.left }}
       >
+        <div className="px-3 pt-2 pb-1.5 text-[10px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Focus</div>
+        <div className="mx-3 mb-1.5 flex rounded-md overflow-hidden border border-zinc-200 dark:border-zinc-600">
+          <button
+            onClick={() => switchFocus("redlist")}
+            className={`flex-1 text-xs py-1 font-medium transition-colors ${focusMode === "redlist" ? "bg-zinc-800 text-white dark:bg-zinc-200 dark:text-zinc-900" : "bg-white text-zinc-500 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"}`}
+          >
+            Red List
+          </button>
+          <button
+            onClick={() => switchFocus("gbif")}
+            className={`flex-1 text-xs py-1 font-medium transition-colors ${focusMode === "gbif" ? "bg-zinc-800 text-white dark:bg-zinc-200 dark:text-zinc-900" : "bg-white text-zinc-500 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"}`}
+          >
+            GBIF
+          </button>
+        </div>
+        <div className="border-t border-zinc-100 dark:border-zinc-700" />
+        <div className="px-3 pt-1.5 pb-1 text-[10px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Columns</div>
         {(Object.keys(COLUMN_LABELS) as ColumnId[]).map((col) => (
           <label
             key={col}
@@ -568,7 +723,8 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
             totalByCategory,
             false,
             true,
-            true
+            true,
+            { total: totalGbifObs, mean: totalMeanGbifObs, median: globalGbifMedian, speciesCount: totalGbifSpecies, distribution: globalGbifDistribution }
           )}
 
           {/* Separator */}
@@ -594,7 +750,9 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
                     taxon.percentOutdated,
                     taxon.byCategory || {},
                     true,
-                    taxon.available
+                    taxon.available,
+                    false,
+                    { total: taxon.totalGbifObservations, mean: taxon.meanGbifObsPerSpecies, median: taxon.medianGbifObsPerSpecies, speciesCount: taxon.gbifSpeciesCount, distribution: taxon.gbifObsDistribution }
                   )
                 )
             : taxa.map((taxon) =>
@@ -609,7 +767,9 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
                   taxon.percentOutdated,
                   taxon.byCategory || {},
                   selectedTaxa.has(taxon.id),
-                  taxon.available
+                  taxon.available,
+                  false,
+                  { total: taxon.totalGbifObservations, mean: taxon.meanGbifObsPerSpecies, median: taxon.medianGbifObsPerSpecies, speciesCount: taxon.gbifSpeciesCount, distribution: taxon.gbifObsDistribution }
                 )
               )
           }

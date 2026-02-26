@@ -14,10 +14,17 @@ interface TaxonSummary {
   percentOutdated: number;
   lastUpdated: string | null;
   byCategory: Record<string, number>;
+  totalGbifObservations?: number;
+  meanGbifObsPerSpecies?: number;
+  medianGbifObsPerSpecies?: number;
+  gbifSpeciesCount?: number;
+  gbifObsDistribution?: Record<string, number>;
 }
 
 interface SummaryFile {
   taxa: TaxonSummary[];
+  globalGbifMedian?: number;
+  globalGbifDistribution?: Record<string, number>;
   generatedAt: string;
 }
 
@@ -43,7 +50,7 @@ function loadSummary(): SummaryFile | null {
 export async function GET() {
   // Check cache
   if (cachedSummary && Date.now() - cacheTime < CACHE_TTL) {
-    return NextResponse.json({ taxa: cachedSummary.taxa, cached: true });
+    return NextResponse.json({ taxa: cachedSummary.taxa, globalGbifMedian: cachedSummary.globalGbifMedian, globalGbifDistribution: cachedSummary.globalGbifDistribution, cached: true });
   }
 
   // Load pre-computed summary file (~2KB instead of ~110MB)
@@ -60,5 +67,5 @@ export async function GET() {
   cachedSummary = summary;
   cacheTime = Date.now();
 
-  return NextResponse.json({ taxa: summary.taxa, cached: false });
+  return NextResponse.json({ taxa: summary.taxa, globalGbifMedian: summary.globalGbifMedian, globalGbifDistribution: summary.globalGbifDistribution, cached: false });
 }

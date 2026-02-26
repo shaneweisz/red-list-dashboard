@@ -273,6 +273,9 @@ export default function RedListView() {
     });
   }, [setSelectedTaxa]);
 
+
+  const [selectedObsRanges, setSelectedObsRanges] = useState<Set<string>>(new Set());
+
   const [species, setSpecies] = useState<Species[]>([]);
   const [speciesLoading, setSpeciesLoading] = useState(true);
   const [neCount, setNeCount] = useState<number>(0);
@@ -476,6 +479,23 @@ export default function RedListView() {
     return false;
   };
 
+  // Helper to check if species matches GBIF observation range filter
+  const matchesObsRangeFilter = (obsCount: number | undefined): boolean => {
+    if (selectedObsRanges.size === 0) return true;
+    const obs = obsCount ?? 0;
+    for (const range of selectedObsRanges) {
+      switch (range) {
+        case "0": if (obs === 0) return true; break;
+        case "1-10": if (obs >= 1 && obs <= 10) return true; break;
+        case "11-100": if (obs >= 11 && obs <= 100) return true; break;
+        case "101-1K": if (obs >= 101 && obs <= 1000) return true; break;
+        case "1K-10K": if (obs >= 1001 && obs <= 10000) return true; break;
+        case "10K+": if (obs > 10000) return true; break;
+      }
+    }
+    return false;
+  };
+
   // Filter species by selected taxa (first level filter before charts)
   const taxaFilteredSpecies = useMemo(() => {
     if (selectedTaxa.size === 0) return species;
@@ -523,6 +543,32 @@ export default function RedListView() {
       else if (diff <= 10) ranges[2].count++;
       else if (diff <= 20) ranges[3].count++;
       else ranges[4].count++;
+    });
+    const total = ranges.reduce((sum, r) => sum + r.count, 0);
+    return ranges.map(r => ({
+      ...r,
+      label: `${r.count.toLocaleString()} (${total > 0 ? ((r.count / total) * 100).toFixed(1) : 0}%)`,
+    }));
+  }, [taxaFilteredSpecies]);
+
+  // Compute GBIF observation count distribution for filter chart
+  const gbifObsData = useMemo(() => {
+    const ranges = [
+      { range: "0", shortRange: "0", count: 0 },
+      { range: "1-10", shortRange: "1-10", count: 0 },
+      { range: "11-100", shortRange: "11-100", count: 0 },
+      { range: "101-1K", shortRange: "101-1K", count: 0 },
+      { range: "1K-10K", shortRange: "1K-10K", count: 0 },
+      { range: "10K+", shortRange: "10K+", count: 0 },
+    ];
+    taxaFilteredSpecies.forEach(s => {
+      const obs = s.gbif_occurrence_count ?? 0;
+      if (obs === 0) ranges[0].count++;
+      else if (obs <= 10) ranges[1].count++;
+      else if (obs <= 100) ranges[2].count++;
+      else if (obs <= 1000) ranges[3].count++;
+      else if (obs <= 10000) ranges[4].count++;
+      else ranges[5].count++;
     });
     const total = ranges.reduce((sum, r) => sum + r.count, 0);
     return ranges.map(r => ({
@@ -601,13 +647,14 @@ export default function RedListView() {
       const matchesCategory = selectedCategories.size === 0 || selectedCategories.has(s.category);
       // NE species have no assessment date, so skip year range filter for them
       const matchesYear = s.category === "NE" || matchesYearRangeFilter(s.assessment_date);
+      const matchesObs = matchesObsRangeFilter(s.gbif_occurrence_count);
       const matchesCountry = selectedCountries.size === 0 || s.countries.some(c => selectedCountries.has(c));
       const matchesSearch =
         !searchFilter ||
         s.scientific_name.toLowerCase().includes(searchFilter) ||
         s.common_name?.toLowerCase().includes(searchFilter);
       const matchesStarred = !showOnlyStarred || pinnedSet.has(s.sis_taxon_id);
-      return matchesCategory && matchesYear && matchesCountry && matchesSearch && matchesStarred;
+      return matchesCategory && matchesYear && matchesObs && matchesCountry && matchesSearch && matchesStarred;
     });
 
     // Sort filtered species
@@ -649,7 +696,7 @@ export default function RedListView() {
     });
 
     return { filteredSpecies: filtered, sortedSpecies: sorted };
-  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedCountries, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedCountries, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection]);
 
   // Pagination calculations
   const totalPages = Math.ceil(sortedSpecies.length / PAGE_SIZE);
@@ -676,7 +723,7 @@ export default function RedListView() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedTaxa, selectedCategories, selectedYearRanges, searchFilter, selectedCountries, showOnlyStarred]);
+  }, [selectedTaxa, selectedCategories, selectedYearRanges, selectedObsRanges, searchFilter, selectedCountries, showOnlyStarred]);
 
   // Populate basic speciesDetails from CSV-enriched data (GBIF counts instant, no API calls)
   // inatDefaultImage / openAlexPaperCount / papersAtAssessment are left as undefined → spinner
@@ -788,8 +835,7 @@ export default function RedListView() {
           }
 
           return { id: s.sis_taxon_id, inatDefaultImage, openAlexPaperCount, papersAtAssessment, gbifMatchStatus };
-        } catch (err) {
-          if (signal.aborted) throw err;
+        } catch {
           return { id: s.sis_taxon_id, inatDefaultImage: null, openAlexPaperCount: null, papersAtAssessment: null, gbifMatchStatus: null };
         }
       });
@@ -820,7 +866,7 @@ export default function RedListView() {
     }
 
     fetchLightweightDetails();
-    return () => controller.abort();
+    return () => controller.abort("cleanup");
   }, [paginatedSpecies, speciesDetails]);
 
   // Fetch IUCN criteria on row expansion (lightweight — no GBIF calls; the map handles those)
@@ -903,6 +949,24 @@ export default function RedListView() {
       }
     });
   };
+  // Handle GBIF observation range bar click
+  const handleObsClick = (data: { payload?: { range?: string } }, event: React.MouseEvent) => {
+    const range = data.payload?.range;
+    if (!range) return;
+    const isMultiSelect = event.metaKey || event.ctrlKey;
+    setSelectedObsRanges(prev => {
+      if (isMultiSelect) {
+        const next = new Set(prev);
+        if (next.has(range)) next.delete(range);
+        else next.add(range);
+        return next;
+      } else {
+        if (prev.size === 1 && prev.has(range)) return new Set();
+        return new Set([range]);
+      }
+    });
+  };
+
   const currentYear = new Date().getFullYear();
   const isNE = (s: Species) => s.category === "NE";
 
@@ -926,20 +990,14 @@ export default function RedListView() {
       <div className="space-y-3">
 
           {/* Charts and map */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {/* Category distribution - 1 column */}
-            <div className="lg:col-span-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            {/* Risk Category */}
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
               <div className="flex items-center justify-between mb-1">
-                <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                  Risk Category (click to filter) <span className="font-normal text-[10px] text-zinc-400">cmd/ctrl+click to multiselect</span>
-                </h3>
+                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Risk Category</span>
+                <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
                 {selectedCategories.size > 0 && (
-                  <button
-                    onClick={() => setSelectedCategories(new Set())}
-                    className="text-xs text-red-600 hover:text-red-700 dark:text-red-400"
-                  >
-                    Clear
-                  </button>
+                  <button onClick={() => setSelectedCategories(new Set())} className="text-[10px] text-red-600 hover:text-red-700 dark:text-red-400">Clear</button>
                 )}
               </div>
               <div className="flex-1 min-h-[225px] flex items-center justify-center">
@@ -952,28 +1010,22 @@ export default function RedListView() {
                     selectedItems={selectedCategories}
                     onBarClick={handleCategoryClick}
                     yAxisWidth={26}
-                    rightMargin={75}
+                    rightMargin={55}
                   />
                 ) : null}
               </div>
             </div>
 
-            {/* Years Since Assessment chart - 1 column */}
-            <div className="lg:col-span-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+            {/* Years Since Assessed */}
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
               <div className="flex items-center justify-between mb-1">
-                <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                  Years Since Assessed (click to filter) <span className="font-normal text-[10px] text-zinc-400">cmd/ctrl+click to multiselect</span>
-                </h3>
+                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Years Since Assessed</span>
+                <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
                 {selectedYearRanges.size > 0 && (
-                  <button
-                    onClick={() => setSelectedYearRanges(new Set())}
-                    className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400"
-                  >
-                    Clear
-                  </button>
+                  <button onClick={() => setSelectedYearRanges(new Set())} className="text-[10px] text-blue-600 hover:text-blue-700 dark:text-blue-400">Clear</button>
                 )}
               </div>
-              <div className="flex-1 min-h-[150px] flex items-center justify-center">
+              <div className="flex-1 min-h-[225px] flex items-center justify-center">
                 {speciesLoading ? (
                   <Spinner />
                 ) : assessmentYearData.some(y => y.count > 0) ? (
@@ -990,8 +1042,8 @@ export default function RedListView() {
               </div>
             </div>
 
-            {/* Country Map - 1 column */}
-            <div className="lg:col-span-1">
+            {/* Country Map */}
+            <div>
               {speciesLoading ? (
                 <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 min-h-[280px] flex items-center justify-center">
                   <Spinner />
@@ -1005,6 +1057,32 @@ export default function RedListView() {
                   selectedTaxa={selectedTaxa}
                 />
               )}
+            </div>
+
+            {/* GBIF Observations */}
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">GBIF Observations</span>
+                <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
+                {selectedObsRanges.size > 0 && (
+                  <button onClick={() => setSelectedObsRanges(new Set())} className="text-[10px] text-emerald-600 hover:text-emerald-700 dark:text-emerald-400">Clear</button>
+                )}
+              </div>
+              <div className="flex-1 min-h-[225px] flex items-center justify-center">
+                {speciesLoading ? (
+                  <Spinner />
+                ) : gbifObsData.some(d => d.count > 0) ? (
+                  <FilterBarChart
+                    data={gbifObsData}
+                    dataKey="shortRange"
+                    selectedItems={selectedObsRanges}
+                    onBarClick={handleObsClick}
+                    barColor="#10b981"
+                    yAxisWidth={42}
+                    rightMargin={85}
+                  />
+                ) : null}
+              </div>
             </div>
           </div>
 
@@ -1029,33 +1107,6 @@ export default function RedListView() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
-            {/* Country filter dropdown */}
-            <div className="relative">
-              <select
-                value=""
-                onChange={(e) => {
-                  if (e.target.value) {
-                    setSelectedCountries(prev => new Set([...prev, e.target.value]));
-                  }
-                }}
-                className="px-2 md:px-3 py-2 pr-7 md:pr-8 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 text-xs md:text-sm focus:outline-none focus:ring-2 focus:ring-red-500 appearance-none cursor-pointer"
-              >
-                <option value="">{selectedCountries.size > 0 ? `${selectedCountries.size} selected` : "All countries"}</option>
-                {uniqueCountries.filter(code => !selectedCountries.has(code)).map(code => (
-                  <option key={code} value={code}>
-                    {getCountryName(code)} ({countryCounts[code]})
-                  </option>
-                ))}
-              </select>
-              <svg
-                className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 pointer-events-none"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </div>
             {pinnedSpecies.length > 0 && (
               <>
                 <button
@@ -1071,56 +1122,8 @@ export default function RedListView() {
                   </svg>
                   <span className="hidden sm:inline">Starred</span> ({pinnedSpecies.length})
                 </button>
-                <button
-                  onClick={() => {
-                    const data = JSON.stringify(pinnedSpecies, null, 2);
-                    const blob = new Blob([data], { type: "application/json" });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = "starred-species.json";
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  }}
-                  className="px-2 py-1.5 rounded-lg text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                  title="Export starred species"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
-                </button>
               </>
             )}
-            <label className="px-2 py-1.5 rounded-lg text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer" title="Import starred species">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-              </svg>
-              <input
-                type="file"
-                accept=".json"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    const reader = new FileReader();
-                    reader.onload = (event) => {
-                      try {
-                        const imported = JSON.parse(event.target?.result as string);
-                        if (Array.isArray(imported)) {
-                          // Merge with existing, avoiding duplicates
-                          const merged = [...new Set([...pinnedSpecies, ...imported])];
-                          setPinnedSpecies(merged);
-                        }
-                      } catch {
-                        alert("Invalid JSON file");
-                      }
-                    };
-                    reader.readAsText(file);
-                  }
-                  e.target.value = ""; // Reset to allow re-importing same file
-                }}
-              />
-            </label>
             {Array.from(selectedTaxa).map(taxonId => (
               <button
                 key={taxonId}
@@ -1153,6 +1156,16 @@ export default function RedListView() {
                 <span className="text-xs">×</span>
               </button>
             ))}
+            {Array.from(selectedObsRanges).map(range => (
+              <button
+                key={range}
+                onClick={() => setSelectedObsRanges(prev => { const next = new Set(prev); next.delete(range); return next; })}
+                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 flex items-center gap-1 hover:opacity-80"
+              >
+                {range} obs
+                <span className="text-xs">×</span>
+              </button>
+            ))}
             {Array.from(selectedCountries).map(code => (
               <button
                 key={code}
@@ -1163,16 +1176,16 @@ export default function RedListView() {
                 <span className="text-xs">×</span>
               </button>
             ))}
-            {(selectedTaxa.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedCountries.size > 0 || showOnlyStarred) && (
+            {(selectedTaxa.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || showOnlyStarred) && (
               <button
-                onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setShowOnlyStarred(false); }}
+                onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setSelectedObsRanges(new Set()); setShowOnlyStarred(false); }}
                 className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 underline"
               >
                 Clear all
               </button>
             )}
-            <span className="text-xs md:text-sm text-zinc-500">
-              {filteredSpecies.length} species
+            <span className="ml-auto text-sm md:text-base font-semibold text-zinc-700 dark:text-zinc-300 tabular-nums">
+              {filteredSpecies.length.toLocaleString()} species
             </span>
             {neCount > 0 && (
               <button
@@ -1187,7 +1200,7 @@ export default function RedListView() {
                     return next;
                   });
                 }}
-                className={`ml-auto px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1 md:gap-1.5 ${
+                className={`px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1 md:gap-1.5 ${
                   selectedCategories.has("NE")
                     ? "bg-zinc-500 text-white"
                     : "bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700"

@@ -24,8 +24,8 @@ function parseParams(search: string) {
     sortField: (
       sortParam === "none" ? null :
       sortParam === "category" ? "category" :
-      sortParam === "year" ? "year" :
-      "newGbif"
+      sortParam === "newGbif" ? "newGbif" :
+      "year"
     ) as "year" | "category" | "newGbif" | null,
     sortDirection: (p.get("dir") === "asc" ? "asc" : "desc") as "asc" | "desc",
   };
@@ -46,17 +46,17 @@ function buildQs(state: {
   if (state.yearRanges.size > 0) p.set("years", [...state.yearRanges].join(","));
   if (state.countries.size > 0) p.set("countries", [...state.countries].join(","));
   if (state.search) p.set("search", state.search);
-  // "newGbif" desc is the default — only write non-default sort to URL
+  // "year" desc is the default — only write non-default sort to URL
   if (state.sortField === null) {
     p.set("sort", "none");
   } else if (state.sortField === "category") {
     p.set("sort", "category");
     if (state.sortDirection !== "desc") p.set("dir", state.sortDirection);
-  } else if (state.sortField === "year") {
-    p.set("sort", "year");
+  } else if (state.sortField === "newGbif") {
+    p.set("sort", "newGbif");
     if (state.sortDirection !== "desc") p.set("dir", state.sortDirection);
   } else if (state.sortDirection !== "desc") {
-    // sortField is "newGbif" (default) but direction is non-default
+    // sortField is "year" (default) but direction is non-default
     p.set("dir", state.sortDirection);
   }
   const qs = p.toString();
@@ -74,16 +74,12 @@ function buildQs(state: {
  * Example URL: /?taxa=mammalia&categories=CR,EN&years=11-20+years&search=shrew
  */
 export function useFilterParams() {
-  // Initialize state from URL on first render (SSR-safe: default to empty)
-  const [state, setState] = useState(() => {
-    if (typeof window !== "undefined") {
-      return parseParams(window.location.search);
-    }
-    return parseParams("");
-  });
+  // Initialize with empty state (SSR-safe), hydrate from URL in effect
+  const [state, setState] = useState(() => parseParams(""));
 
-  // Sync URL → state on popstate (back/forward button)
+  // Hydrate from URL on mount + sync on popstate (back/forward button)
   useEffect(() => {
+    setState(parseParams(window.location.search));
     const onPopState = () => {
       setState(parseParams(window.location.search));
     };
@@ -181,7 +177,7 @@ export function useFilterParams() {
         yearRanges: new Set<string>(),
         countries: new Set<string>(),
         search: "",
-        sortField: "newGbif" as const,
+        sortField: "year" as const,
         sortDirection: "desc" as const,
       };
       queueMicrotask(() => syncUrl(next, false));
@@ -198,7 +194,7 @@ export function useFilterParams() {
         yearRanges: new Set<string>(),
         countries: new Set<string>(),
         search: "",
-        sortField: "newGbif" as const,
+        sortField: "year" as const,
         sortDirection: "desc" as const,
       };
       queueMicrotask(() => syncUrl(next, true));
