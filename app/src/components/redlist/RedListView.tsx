@@ -60,6 +60,18 @@ interface TaxonInfo {
   color: string;
 }
 
+interface YearRangeItem {
+  range: string;
+  shortRange: string;
+  count: number;
+}
+
+interface ObsRangeItem {
+  range: string;
+  shortRange: string;
+  count: number;
+}
+
 interface StatsResponse {
   totalAssessed: number;
   byCategory: CategoryStats[];
@@ -68,6 +80,9 @@ interface StatsResponse {
   cached: boolean;
   error?: string;
   taxon?: TaxonInfo;
+  yearRanges?: YearRangeItem[];
+  obsRanges?: ObsRangeItem[];
+  countryCounts?: Record<string, number>;
 }
 
 
@@ -86,11 +101,11 @@ interface Species {
   category: string;
   assessment_date: string | null;
   year_published: string;
-  url: string;
+  url?: string;
   population_trend: string | null;
   countries: string[];
-  assessment_count: number;
-  previous_assessments: PreviousAssessment[];
+  assessment_count?: number;
+  previous_assessments?: PreviousAssessment[];
   taxon_id?: string; // Present when viewing "all" taxa
   gbif_species_key?: number; // GBIF species key (from CSV)
   gbif_occurrence_count?: number; // Total GBIF occurrences (from CSV)
@@ -281,6 +296,10 @@ export default function RedListView() {
   const [neCount, setNeCount] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
 
+  // Pre-computed chart data from stats API (shown instantly before species load)
+  const [precomputedStats, setPrecomputedStats] = useState<StatsResponse | null>(null);
+  const [statsLoaded, setStatsLoaded] = useState(false);
+
   const [showOnlyStarred, setShowOnlyStarred] = useState(false);
 
   // Stable callback for debounced search input
@@ -300,6 +319,7 @@ export default function RedListView() {
   const [activeDetailTab, setActiveDetailTab] = useState<"gbif" | "literature" | "redlist" | "cites">("gbif");
   const [stackedDetailView, setStackedDetailView] = useState(false);
   const [mounted, setMounted] = useState(false);
+
 
   // Pinned species as ordered array (persisted to localStorage)
   const [pinnedSpecies, setPinnedSpecies] = useState<number[]>([]);
@@ -390,36 +410,42 @@ export default function RedListView() {
     setDragOverSpecies(null);
   };
 
-  // Load all species on mount (taxon=all)
+  // Fetch stats first (fast ~3KB, shows charts instantly)
+  useEffect(() => {
+    fetch("/api/redlist/stats?taxon=all")
+      .then(async (res) => {
+        if (!res.ok) return null;
+        return res.json() as Promise<StatsResponse>;
+      })
+      .then((statsData) => {
+        if (statsData) {
+          setPrecomputedStats(statsData);
+          const ne = statsData.byCategory?.find((c: CategoryStats) => c.code === "NE");
+          if (ne) setNeCount(ne.count);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setStatsLoaded(true));
+  }, []);
+
+  // Fetch full species data (slow ~35MB, populates table)
   useEffect(() => {
     setError(null);
     setSpeciesLoading(true);
 
-    // Fetch all species and NE count in parallel
-    Promise.all([
-      fetch("/api/redlist/species?taxon=all")
-        .then(async (res) => {
-          if (!res.ok) {
-            const text = await res.text().catch(() => "");
-            let msg: string;
-            try { msg = JSON.parse(text)?.error; } catch { msg = ""; }
-            throw new Error(msg || `Species API returned ${res.status}`);
-          }
-          return res.json();
-        }),
-      fetch("/api/redlist/stats?taxon=all")
-        .then(async (res) => {
-          if (!res.ok) return null;
-          return res.json();
-        })
-        .catch(() => null),
-    ])
-      .then(([speciesData, statsData]: [SpeciesResponse, StatsResponse | null]) => {
+    fetch("/api/redlist/species?taxon=all")
+      .then(async (res) => {
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          let msg: string;
+          try { msg = JSON.parse(text)?.error; } catch { msg = ""; }
+          throw new Error(msg || `Species API returned ${res.status}`);
+        }
+        return res.json() as Promise<SpeciesResponse>;
+      })
+      .then((speciesData) => {
         if (speciesData.error) throw new Error(speciesData.error);
         setSpecies(speciesData.species);
-        // Extract NE count from stats (computed server-side from GBIF CSVs)
-        const ne = statsData?.byCategory?.find((c: CategoryStats) => c.code === "NE");
-        if (ne) setNeCount(ne.count);
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load species"))
       .finally(() => setSpeciesLoading(false));
@@ -502,8 +528,29 @@ export default function RedListView() {
     return species.filter(s => s.taxon_id && selectedTaxa.has(s.taxon_id));
   }, [species, selectedTaxa]);
 
-  // Compute category stats client-side from taxa-filtered species
+  // Compute category stats: use pre-computed stats while species are loading (no taxa filter),
+  // then switch to client-computed data for reactivity to taxa filter changes
   const categoryDataWithPercent = useMemo(() => {
+    // Use pre-computed stats from API when species haven't loaded and no taxa filter active
+    if (speciesLoading && precomputedStats?.byCategory && selectedTaxa.size === 0) {
+      const DISPLAY_ORDER = ["EX", "EW", "CR", "EN", "VU", "NT", "LC", "DD"];
+      const statsMap: Record<string, number> = {};
+      for (const cat of precomputedStats.byCategory) {
+        statsMap[cat.code] = cat.count;
+      }
+      const total = DISPLAY_ORDER.reduce((sum, code) => sum + (statsMap[code] || 0), 0);
+      return DISPLAY_ORDER
+        .filter(code => (statsMap[code] || 0) > 0)
+        .map(code => ({
+          code,
+          name: code,
+          count: statsMap[code] || 0,
+          color: CATEGORY_COLORS[code] || "#999",
+          percent: total > 0 ? ((statsMap[code] / total) * 100).toFixed(1) : "0",
+          label: `${(statsMap[code] || 0).toLocaleString()} (${total > 0 ? ((statsMap[code] / total) * 100).toFixed(1) : 0}%)`,
+        }));
+    }
+
     const counts: Record<string, number> = {};
     taxaFilteredSpecies.forEach(s => {
       if (s.category !== "NE") {
@@ -522,10 +569,19 @@ export default function RedListView() {
         percent: total > 0 ? ((counts[code] / total) * 100).toFixed(1) : "0",
         label: `${(counts[code] || 0).toLocaleString()} (${total > 0 ? ((counts[code] / total) * 100).toFixed(1) : 0}%)`,
       }));
-  }, [taxaFilteredSpecies]);
+  }, [taxaFilteredSpecies, speciesLoading, precomputedStats, selectedTaxa]);
 
-  // Compute years-since-assessment stats client-side from taxa-filtered species
+  // Compute years-since-assessment stats: pre-computed while loading, then client-computed
   const assessmentYearData = useMemo(() => {
+    if (speciesLoading && precomputedStats?.yearRanges && selectedTaxa.size === 0) {
+      const total = precomputedStats.yearRanges.reduce((sum, r) => sum + r.count, 0);
+      return precomputedStats.yearRanges.map(r => ({
+        ...r,
+        minYear: 0,
+        label: `${r.count.toLocaleString()} (${total > 0 ? ((r.count / total) * 100).toFixed(1) : 0}%)`,
+      }));
+    }
+
     const currentYr = new Date().getFullYear();
     const ranges = [
       { range: "0-1 years", shortRange: "0-1y", count: 0, minYear: 0 },
@@ -549,10 +605,18 @@ export default function RedListView() {
       ...r,
       label: `${r.count.toLocaleString()} (${total > 0 ? ((r.count / total) * 100).toFixed(1) : 0}%)`,
     }));
-  }, [taxaFilteredSpecies]);
+  }, [taxaFilteredSpecies, speciesLoading, precomputedStats, selectedTaxa]);
 
-  // Compute GBIF observation count distribution for filter chart
+  // Compute GBIF observation count distribution: pre-computed while loading, then client-computed
   const gbifObsData = useMemo(() => {
+    if (speciesLoading && precomputedStats?.obsRanges && selectedTaxa.size === 0) {
+      const total = precomputedStats.obsRanges.reduce((sum, r) => sum + r.count, 0);
+      return precomputedStats.obsRanges.map(r => ({
+        ...r,
+        label: `${r.count.toLocaleString()} (${total > 0 ? ((r.count / total) * 100).toFixed(1) : 0}%)`,
+      }));
+    }
+
     const ranges = [
       { range: "0", shortRange: "0", count: 0 },
       { range: "1-10", shortRange: "1-10", count: 0 },
@@ -575,16 +639,22 @@ export default function RedListView() {
       ...r,
       label: `${r.count.toLocaleString()} (${total > 0 ? ((r.count / total) * 100).toFixed(1) : 0}%)`,
     }));
-  }, [taxaFilteredSpecies]);
+  }, [taxaFilteredSpecies, speciesLoading, precomputedStats, selectedTaxa]);
 
-  // Get unique countries from taxa-filtered species data, sorted alphabetically by name
+  // Get unique countries: pre-computed while loading, then client-computed
   const { countryCounts, uniqueCountries, countryStatsForMap } = useMemo(() => {
-    const counts: Record<string, number> = {};
-    taxaFilteredSpecies.forEach(s => {
-      s.countries.forEach(code => {
-        counts[code] = (counts[code] || 0) + 1;
+    let counts: Record<string, number>;
+
+    if (speciesLoading && precomputedStats?.countryCounts && selectedTaxa.size === 0) {
+      counts = precomputedStats.countryCounts;
+    } else {
+      counts = {};
+      taxaFilteredSpecies.forEach(s => {
+        s.countries.forEach(code => {
+          counts[code] = (counts[code] || 0) + 1;
+        });
       });
-    });
+    }
 
     const sorted = Object.entries(counts)
       .sort((a, b) => {
@@ -603,7 +673,7 @@ export default function RedListView() {
     );
 
     return { countryCounts: counts, uniqueCountries: sorted, countryStatsForMap: statsForMap };
-  }, [taxaFilteredSpecies]);
+  }, [taxaFilteredSpecies, speciesLoading, precomputedStats, selectedTaxa]);
 
   // Helper to get country display name
   const getCountryName = (code: string) => ALPHA2_TO_NAME[code] || code;
@@ -1001,9 +1071,7 @@ export default function RedListView() {
                 )}
               </div>
               <div className="flex-1 min-h-[225px] flex items-center justify-center">
-                {speciesLoading ? (
-                  <Spinner />
-                ) : categoryDataWithPercent.length > 0 ? (
+                {categoryDataWithPercent.length > 0 ? (
                   <FilterBarChart
                     data={categoryDataWithPercent}
                     dataKey="code"
@@ -1012,6 +1080,8 @@ export default function RedListView() {
                     yAxisWidth={26}
                     rightMargin={55}
                   />
+                ) : !statsLoaded ? (
+                  <Spinner />
                 ) : null}
               </div>
             </div>
@@ -1026,9 +1096,7 @@ export default function RedListView() {
                 )}
               </div>
               <div className="flex-1 min-h-[225px] flex items-center justify-center">
-                {speciesLoading ? (
-                  <Spinner />
-                ) : assessmentYearData.some(y => y.count > 0) ? (
+                {assessmentYearData.some(y => y.count > 0) ? (
                   <FilterBarChart
                     data={assessmentYearData}
                     dataKey="shortRange"
@@ -1038,13 +1106,23 @@ export default function RedListView() {
                     yAxisWidth={36}
                     rightMargin={85}
                   />
+                ) : !statsLoaded ? (
+                  <Spinner />
                 ) : null}
               </div>
             </div>
 
             {/* Country Map */}
             <div>
-              {speciesLoading ? (
+              {Object.keys(countryStatsForMap).length > 0 ? (
+                <WorldMap
+                  selectedCountries={selectedCountries}
+                  onCountrySelect={handleCountrySelect}
+                  onClearSelection={handleClearCountry}
+                  precomputedStats={countryStatsForMap}
+                  selectedTaxa={selectedTaxa}
+                />
+              ) : !statsLoaded ? (
                 <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 min-h-[280px] flex flex-col">
                   <div className="flex items-center justify-between mb-1">
                     <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
@@ -1055,15 +1133,7 @@ export default function RedListView() {
                     <Spinner />
                   </div>
                 </div>
-              ) : (
-                <WorldMap
-                  selectedCountries={selectedCountries}
-                  onCountrySelect={handleCountrySelect}
-                  onClearSelection={handleClearCountry}
-                  precomputedStats={countryStatsForMap}
-                  selectedTaxa={selectedTaxa}
-                />
-              )}
+              ) : null}
             </div>
 
             {/* GBIF Observations */}
@@ -1076,9 +1146,7 @@ export default function RedListView() {
                 )}
               </div>
               <div className="flex-1 min-h-[225px] flex items-center justify-center">
-                {speciesLoading ? (
-                  <Spinner />
-                ) : gbifObsData.some(d => d.count > 0) ? (
+                {gbifObsData.some(d => d.count > 0) ? (
                   <FilterBarChart
                     data={gbifObsData}
                     dataKey="shortRange"
@@ -1088,6 +1156,8 @@ export default function RedListView() {
                     yAxisWidth={42}
                     rightMargin={85}
                   />
+                ) : !statsLoaded ? (
+                  <Spinner />
                 ) : null}
               </div>
             </div>
@@ -1414,7 +1484,7 @@ export default function RedListView() {
                       {isNE(s) ? <span className="text-zinc-400">N/A</span> : (
                         <>
                           <HoverTooltip
-                            text={`Published: ${s.year_published}${s.previous_assessments.length > 0 ? ` | Previous: ${s.previous_assessments.slice().reverse().map(pa => `${pa.year} (${pa.category})`).join(", ")}` : ""}`}
+                            text={`Published: ${s.year_published}${s.previous_assessments && s.previous_assessments.length > 0 ? ` | Previous: ${s.previous_assessments.slice().reverse().map(pa => `${pa.year} (${pa.category})`).join(", ")}` : ""}`}
                           >
                             <span
                               className="cursor-help"
@@ -1614,8 +1684,8 @@ export default function RedListView() {
                                 currentAssessmentId={s.assessment_id}
                                 currentCategory={s.category}
                                 currentAssessmentDate={s.assessment_date}
-                                previousAssessments={s.previous_assessments}
-                                speciesUrl={s.url}
+                                previousAssessments={s.previous_assessments || []}
+                                speciesUrl={s.url || `https://www.iucnredlist.org/species/${s.sis_taxon_id}/${s.assessment_id}`}
                               />
                             </div>
                           )}
