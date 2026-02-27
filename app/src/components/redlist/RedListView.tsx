@@ -11,6 +11,7 @@ import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
 import { useFilterParams } from "@/hooks/useFilterParams";
+import { computePriority, FLAG_SHORT_LABELS, FLAG_COLORS, type PriorityFlag, type PriorityResult } from "@/lib/prioritization";
 
 // Dynamically import OccurrenceMapRow to avoid SSR issues with Leaflet
 const OccurrenceMapRow = dynamic(
@@ -301,6 +302,7 @@ export default function RedListView() {
   const [statsLoaded, setStatsLoaded] = useState(false);
 
   const [showOnlyStarred, setShowOnlyStarred] = useState(false);
+  const [showNeedsReview, setShowNeedsReview] = useState(false);
 
   // Stable callback for debounced search input
   const handleSearch = useCallback((value: string) => {
@@ -641,6 +643,22 @@ export default function RedListView() {
     }));
   }, [taxaFilteredSpecies, speciesLoading, precomputedStats, selectedTaxa]);
 
+  // Compute priority flags for all species (client-side, from already-loaded data)
+  const priorityMap = useMemo(() => {
+    const map = new Map<number, PriorityResult>();
+    const yr = new Date().getFullYear();
+    for (const s of taxaFilteredSpecies) {
+      const result = computePriority(s, yr);
+      if (result.flags.length > 0) {
+        map.set(s.sis_taxon_id, result);
+      }
+    }
+    return map;
+  }, [taxaFilteredSpecies]);
+
+  // Count species that need review (have any priority flag)
+  const needsReviewCount = priorityMap.size;
+
   // Get unique countries: pre-computed while loading, then client-computed
   const { countryCounts, uniqueCountries, countryStatsForMap } = useMemo(() => {
     let counts: Record<string, number>;
@@ -724,7 +742,8 @@ export default function RedListView() {
         s.scientific_name.toLowerCase().includes(searchFilter) ||
         s.common_name?.toLowerCase().includes(searchFilter);
       const matchesStarred = !showOnlyStarred || pinnedSet.has(s.sis_taxon_id);
-      return matchesCategory && matchesYear && matchesObs && matchesCountry && matchesSearch && matchesStarred;
+      const matchesReview = !showNeedsReview || priorityMap.has(s.sis_taxon_id);
+      return matchesCategory && matchesYear && matchesObs && matchesCountry && matchesSearch && matchesStarred && matchesReview;
     });
 
     // Sort filtered species
@@ -734,6 +753,13 @@ export default function RedListView() {
         const aIdx = pinnedSpecies.indexOf(a.sis_taxon_id);
         const bIdx = pinnedSpecies.indexOf(b.sis_taxon_id);
         return aIdx - bIdx;
+      }
+
+      // When Needs Review is active, sort by priority score descending
+      if (showNeedsReview) {
+        const scoreA = priorityMap.get(a.sis_taxon_id)?.score ?? 0;
+        const scoreB = priorityMap.get(b.sis_taxon_id)?.score ?? 0;
+        if (scoreA !== scoreB) return scoreB - scoreA;
       }
 
       if (!sortField) return 0;
@@ -766,7 +792,7 @@ export default function RedListView() {
     });
 
     return { filteredSpecies: filtered, sortedSpecies: sorted };
-  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedCountries, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedCountries, searchFilter, showOnlyStarred, showNeedsReview, priorityMap, pinnedSet, pinnedSpecies, sortField, sortDirection]);
 
   // Pagination calculations
   const totalPages = Math.ceil(sortedSpecies.length / PAGE_SIZE);
@@ -793,7 +819,7 @@ export default function RedListView() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedTaxa, selectedCategories, selectedYearRanges, selectedObsRanges, searchFilter, selectedCountries, showOnlyStarred]);
+  }, [selectedTaxa, selectedCategories, selectedYearRanges, selectedObsRanges, searchFilter, selectedCountries, showOnlyStarred, showNeedsReview]);
 
   // Populate basic speciesDetails from CSV-enriched data (GBIF counts instant, no API calls)
   // inatDefaultImage / openAlexPaperCount / papersAtAssessment are left as undefined → spinner
@@ -1201,6 +1227,22 @@ export default function RedListView() {
                 </button>
               </>
             )}
+            {needsReviewCount > 0 && !speciesLoading && (
+              <button
+                onClick={() => setShowNeedsReview(!showNeedsReview)}
+                className={`px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1 md:gap-1.5 ${
+                  showNeedsReview
+                    ? "bg-orange-500 text-white"
+                    : "bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700"
+                }`}
+                title="Show species flagged as needing reassessment based on stale data, declining populations, worsening trajectory, or significant new data"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+                <span className="hidden sm:inline">Needs Review</span> ({needsReviewCount.toLocaleString()})
+              </button>
+            )}
             {Array.from(selectedTaxa).map(taxonId => (
               <button
                 key={taxonId}
@@ -1253,9 +1295,9 @@ export default function RedListView() {
                 <span className="text-xs">×</span>
               </button>
             ))}
-            {(selectedTaxa.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || showOnlyStarred) && (
+            {(selectedTaxa.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || showOnlyStarred || showNeedsReview) && (
               <button
-                onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setSelectedObsRanges(new Set()); setShowOnlyStarred(false); }}
+                onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setSelectedObsRanges(new Set()); setShowOnlyStarred(false); setShowNeedsReview(false); }}
                 className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 underline"
               >
                 Clear all
@@ -1356,6 +1398,9 @@ export default function RedListView() {
                 </th>
                 <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
                   New Papers
+                </th>
+                <th className="px-3 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[80px]">
+                  Priority
                 </th>
               </tr>
             </thead>
@@ -1600,10 +1645,34 @@ export default function RedListView() {
                         </a>
                       ) : "—"}
                     </td>
+                    {/* Priority flags */}
+                    <td className="px-3 md:px-4 py-3 whitespace-nowrap">
+                      {(() => {
+                        const priority = priorityMap.get(s.sis_taxon_id);
+                        if (!priority || priority.flags.length === 0) return <span className="text-zinc-300 dark:text-zinc-700">—</span>;
+                        return (
+                          <div className="flex flex-wrap gap-1">
+                            {priority.flags.map((flag: PriorityFlag) => (
+                              <HoverTooltip key={flag} text={FLAG_SHORT_LABELS[flag]}>
+                                <span
+                                  className="inline-block px-1.5 py-0.5 text-[10px] font-medium rounded cursor-help"
+                                  style={{
+                                    backgroundColor: FLAG_COLORS[flag] + "20",
+                                    color: FLAG_COLORS[flag],
+                                  }}
+                                >
+                                  {FLAG_SHORT_LABELS[flag]}
+                                </span>
+                              </HoverTooltip>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                    </td>
                   </tr>
                   {selectedSpeciesKey === s.sis_taxon_id && (
                     <tr>
-                      <td colSpan={8} className="p-0 bg-zinc-50 dark:bg-zinc-800/30">
+                      <td colSpan={9} className="p-0 bg-zinc-50 dark:bg-zinc-800/30">
                         <div style={{ maxWidth: 'calc(100vw - 2rem)', transform: 'translateX(var(--scroll-left, 0px))' }}>
                           {/* Tab bar */}
                           <div className="flex items-center border-b border-zinc-200 dark:border-zinc-700" onClick={(e) => e.stopPropagation()}>
@@ -1701,7 +1770,7 @@ export default function RedListView() {
               })}
               {filteredSpecies.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-zinc-500">
+                  <td colSpan={9} className="px-4 py-8 text-center text-zinc-500">
                     {neLoading ? (
                       <div className="flex items-center justify-center gap-2">
                         <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
