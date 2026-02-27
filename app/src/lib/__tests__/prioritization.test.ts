@@ -93,8 +93,8 @@ describe("computePriority", () => {
 
   // ── New data (0–25) ─────────────────────────────────────────────────
 
-  it("scores new data based on ratio of new to total observations", () => {
-    // 50% new → ratio 0.5 → min(25, round(0.5*50)) = 25
+  it("scores new data using dampened ratio to avoid small-sample inflation", () => {
+    // 500/1050 (dampened) = 0.476 → round(0.476*50) = 24
     const result = computePriority(
       makeSpecies({
         gbif_occurrence_count: 1000,
@@ -102,7 +102,7 @@ describe("computePriority", () => {
       }),
       CURRENT_YEAR,
     );
-    expect(result.breakdown.newData).toBe(25);
+    expect(result.breakdown.newData).toBe(24);
   });
 
   it("scores 0 new data when there are no new observations", () => {
@@ -114,7 +114,7 @@ describe("computePriority", () => {
   });
 
   it("gives proportional new-data score for small ratios", () => {
-    // 100 new out of 1000 total → ratio 0.1 → min(25, round(0.1*50)) = 5
+    // 100/1050 (dampened) = 0.0952 → round(0.0952*50) = 5
     const result = computePriority(
       makeSpecies({
         gbif_occurrence_count: 1000,
@@ -175,17 +175,17 @@ describe("computePriority", () => {
       makeSpecies({
         category: "DD",
         assessment_date: "1990-01-01",
-        gbif_occurrence_count: 200,
-        gbif_observations_after_assessment_year: 200,
+        gbif_occurrence_count: 5000,
+        gbif_observations_after_assessment_year: 5000,
       }),
       CURRENT_YEAR,
     );
-    // staleness: 25 + newData: 25 (100% new) + category: 50 = 100
+    // staleness: 25 + newData: 25 (5000/5050 dampened ≈ 0.99 → 25) + category: 50 = 100
     expect(result.score).toBe(100);
   });
 
   it("returns correct breakdown for a mid-range species", () => {
-    // EN species, 16yr old assessment, 20% new data
+    // EN species, 16yr old assessment, 100 new out of 500
     const result = computePriority(
       makeSpecies({
         category: "EN",
@@ -197,10 +197,23 @@ describe("computePriority", () => {
     );
     // staleness: (16-5)*1.25 = 13.75 → 14
     expect(result.breakdown.staleness).toBe(14);
-    // newData: 0.2*50 = 10
-    expect(result.breakdown.newData).toBe(10);
+    // newData: 100/550 (dampened) = 0.1818 → round(0.1818*50) = 9
+    expect(result.breakdown.newData).toBe(9);
     // category: EN = 30
     expect(result.breakdown.category).toBe(30);
-    expect(result.score).toBe(54);
+    expect(result.score).toBe(53);
+  });
+
+  it("dampens new-data score for species with very few observations", () => {
+    // 2 new out of 2 total: undampened would be 100% → 25pts
+    // dampened: 2/52 = 0.038 → round(0.038*50) = 2
+    const result = computePriority(
+      makeSpecies({
+        gbif_occurrence_count: 2,
+        gbif_observations_after_assessment_year: 2,
+      }),
+      CURRENT_YEAR,
+    );
+    expect(result.breakdown.newData).toBe(2);
   });
 });

@@ -41,11 +41,20 @@ function scoreStaleness(assessmentDate: string | null, currentYear: number): num
   return Math.min(25, Math.round((years - 5) * 1.25));
 }
 
-/** 2. New data: ratio of post-assessment observations to total, scaled to 25. */
+/**
+ * 2. New data: dampened ratio of post-assessment observations to total, scaled to 25.
+ *
+ * Uses `new / (total + K)` instead of `new / total` to prevent species with
+ * tiny observation counts from getting inflated scores (e.g., 2/2 = 100%).
+ * K=50 means a species needs ~50+ total observations before the ratio
+ * approaches its true value; below that, the score is conservatively reduced.
+ */
+const NEW_DATA_SMOOTHING = 50;
+
 function scoreNewData(gbifTotal: number, newGbif: number): number {
   if (gbifTotal <= 0 || newGbif <= 0) return 0;
-  const ratio = newGbif / gbifTotal;
-  // ratio of 0.5+ (half the data is new) → full 25 points
+  const ratio = newGbif / (gbifTotal + NEW_DATA_SMOOTHING);
+  // ratio of 0.5+ → full 25 points
   return Math.min(25, Math.round(ratio * 50));
 }
 
