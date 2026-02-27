@@ -302,7 +302,6 @@ export default function RedListView() {
   const [statsLoaded, setStatsLoaded] = useState(false);
 
   const [showOnlyStarred, setShowOnlyStarred] = useState(false);
-  const [showNeedsReview, setShowNeedsReview] = useState(false);
 
   // Stable callback for debounced search input
   const handleSearch = useCallback((value: string) => {
@@ -654,15 +653,6 @@ export default function RedListView() {
     return map;
   }, [taxaFilteredSpecies]);
 
-  // Count species with nonzero priority score
-  const needsReviewCount = useMemo(() => {
-    let count = 0;
-    for (const r of priorityMap.values()) {
-      if (r.score > 0) count++;
-    }
-    return count;
-  }, [priorityMap]);
-
   // Get unique countries: pre-computed while loading, then client-computed
   const { countryCounts, uniqueCountries, countryStatsForMap } = useMemo(() => {
     let counts: Record<string, number>;
@@ -746,8 +736,7 @@ export default function RedListView() {
         s.scientific_name.toLowerCase().includes(searchFilter) ||
         s.common_name?.toLowerCase().includes(searchFilter);
       const matchesStarred = !showOnlyStarred || pinnedSet.has(s.sis_taxon_id);
-      const matchesReview = !showNeedsReview || (priorityMap.get(s.sis_taxon_id)?.score ?? 0) > 0;
-      return matchesCategory && matchesYear && matchesObs && matchesCountry && matchesSearch && matchesStarred && matchesReview;
+      return matchesCategory && matchesYear && matchesObs && matchesCountry && matchesSearch && matchesStarred;
     });
 
     // Sort filtered species
@@ -795,7 +784,7 @@ export default function RedListView() {
     });
 
     return { filteredSpecies: filtered, sortedSpecies: sorted };
-  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedCountries, searchFilter, showOnlyStarred, showNeedsReview, priorityMap, pinnedSet, pinnedSpecies, sortField, sortDirection]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedCountries, searchFilter, showOnlyStarred, priorityMap, pinnedSet, pinnedSpecies, sortField, sortDirection]);
 
   // Pagination calculations
   const totalPages = Math.ceil(sortedSpecies.length / PAGE_SIZE);
@@ -822,7 +811,7 @@ export default function RedListView() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedTaxa, selectedCategories, selectedYearRanges, selectedObsRanges, searchFilter, selectedCountries, showOnlyStarred, showNeedsReview]);
+  }, [selectedTaxa, selectedCategories, selectedYearRanges, selectedObsRanges, searchFilter, selectedCountries, showOnlyStarred]);
 
   // Populate basic speciesDetails from CSV-enriched data (GBIF counts instant, no API calls)
   // inatDefaultImage / openAlexPaperCount / papersAtAssessment are left as undefined → spinner
@@ -1230,22 +1219,6 @@ export default function RedListView() {
                 </button>
               </>
             )}
-            {needsReviewCount > 0 && !speciesLoading && (
-              <button
-                onClick={() => setShowNeedsReview(!showNeedsReview)}
-                className={`px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1 md:gap-1.5 ${
-                  showNeedsReview
-                    ? "bg-orange-500 text-white"
-                    : "bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700"
-                }`}
-                title="Show species flagged as needing reassessment based on stale data, declining populations, worsening trajectory, or significant new data"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                </svg>
-                <span className="hidden sm:inline">Needs Review</span> ({needsReviewCount.toLocaleString()})
-              </button>
-            )}
             {Array.from(selectedTaxa).map(taxonId => (
               <button
                 key={taxonId}
@@ -1298,9 +1271,9 @@ export default function RedListView() {
                 <span className="text-xs">×</span>
               </button>
             ))}
-            {(selectedTaxa.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || showOnlyStarred || showNeedsReview) && (
+            {(selectedTaxa.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || showOnlyStarred) && (
               <button
-                onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setSelectedObsRanges(new Set()); setShowOnlyStarred(false); setShowNeedsReview(false); }}
+                onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setSelectedObsRanges(new Set()); setShowOnlyStarred(false); }}
                 className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 underline"
               >
                 Clear all
