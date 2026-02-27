@@ -260,6 +260,21 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  // Single species lookup by ID — returns full record (with previous_assessments, url, etc.)
+  const speciesId = searchParams.get("id");
+  if (speciesId) {
+    const allData = getSpeciesData("all");
+    if (!allData) {
+      return NextResponse.json({ error: "Species data not available" }, { status: 503 });
+    }
+    const id = parseInt(speciesId, 10);
+    const found = allData.species.find(s => s.sis_taxon_id === id);
+    if (!found) {
+      return NextResponse.json({ error: "Species not found" }, { status: 404 });
+    }
+    return NextResponse.json(found);
+  }
+
   const taxon = getTaxonConfig(taxonId);
   const data = getSpeciesData(taxonId);
 

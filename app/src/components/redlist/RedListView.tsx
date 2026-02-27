@@ -320,6 +320,9 @@ export default function RedListView() {
   const [stackedDetailView, setStackedDetailView] = useState(false);
   const [mounted, setMounted] = useState(false);
 
+  // Full species records fetched on demand (for previous_assessments, url, etc.)
+  const [fullSpeciesRecords, setFullSpeciesRecords] = useState<Record<number, Species>>({});
+
   // Pinned species as ordered array (persisted to localStorage)
   const [pinnedSpecies, setPinnedSpecies] = useState<number[]>([]);
   const pinnedSet = useMemo(() => new Set(pinnedSpecies), [pinnedSpecies]); // For O(1) lookup
@@ -970,6 +973,26 @@ export default function RedListView() {
 
     fetchCriteria();
   }, [selectedSpeciesKey, paginatedSpecies, speciesDetails]);
+
+  // Fetch full species record on row expansion (for previous_assessments, url)
+  useEffect(() => {
+    if (!selectedSpeciesKey) return;
+    if (fullSpeciesRecords[selectedSpeciesKey]) return; // Already fetched
+
+    async function fetchFullRecord() {
+      try {
+        const res = await fetch(`/api/redlist/species?id=${selectedSpeciesKey}`);
+        if (res.ok) {
+          const data = await res.json();
+          setFullSpeciesRecords(prev => ({ ...prev, [selectedSpeciesKey!]: data }));
+        }
+      } catch {
+        // Ignore errors
+      }
+    }
+
+    fetchFullRecord();
+  }, [selectedSpeciesKey, fullSpeciesRecords]);
 
   // Handle category bar click (Cmd/Ctrl+click for multi-select, regular click replaces)
   const handleCategoryClick = (data: { payload?: { code?: string } }, event: React.MouseEvent) => {
@@ -1683,8 +1706,8 @@ export default function RedListView() {
                                 currentAssessmentId={s.assessment_id}
                                 currentCategory={s.category}
                                 currentAssessmentDate={s.assessment_date}
-                                previousAssessments={s.previous_assessments || []}
-                                speciesUrl={s.url || `https://www.iucnredlist.org/species/${s.sis_taxon_id}/${s.assessment_id}`}
+                                previousAssessments={fullSpeciesRecords[s.sis_taxon_id]?.previous_assessments || s.previous_assessments || []}
+                                speciesUrl={fullSpeciesRecords[s.sis_taxon_id]?.url || s.url || `https://www.iucnredlist.org/species/${s.sis_taxon_id}/${s.assessment_id}`}
                               />
                             </div>
                           )}
