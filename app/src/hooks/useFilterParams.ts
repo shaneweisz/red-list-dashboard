@@ -25,8 +25,9 @@ export function parseParams(search: string) {
       sortParam === "category" ? "category" :
       sortParam === "year" ? "year" :
       sortParam === "newGbif" ? "newGbif" :
+      sortParam === "priority" ? "priority" :
       null
-    ) as "year" | "category" | "newGbif" | null,
+    ) as "year" | "category" | "newGbif" | "priority" | null,
     sortDirection: (p.get("dir") === "asc" ? "asc" : "desc") as "asc" | "desc",
   };
 }
@@ -37,7 +38,7 @@ export function buildQs(state: {
   yearRanges: Set<string>;
   countries: Set<string>;
   search: string;
-  sortField: "year" | "category" | "newGbif" | null;
+  sortField: "year" | "category" | "newGbif" | "priority" | null;
   sortDirection: "asc" | "desc";
 }): string {
   const p = new URLSearchParams();
@@ -46,9 +47,10 @@ export function buildQs(state: {
   if (state.yearRanges.size > 0) p.set("years", [...state.yearRanges].join(","));
   if (state.countries.size > 0) p.set("countries", [...state.countries].join(","));
   if (state.search) p.set("search", state.search);
-  // null (priority score) desc is the default — only write non-default sort to URL
-  if (state.sortField !== null) {
-    p.set("sort", state.sortField);
+  // null / "priority" desc is the default — only write non-default sort to URL
+  const isDefaultSort = state.sortField === null || state.sortField === "priority";
+  if (!isDefaultSort) {
+    p.set("sort", state.sortField!);
     if (state.sortDirection !== "desc") p.set("dir", state.sortDirection);
   } else if (state.sortDirection !== "desc") {
     p.set("dir", state.sortDirection);
@@ -153,7 +155,7 @@ export function useFilterParams() {
   );
 
   const setSort = useCallback(
-    (field: "year" | "category" | "newGbif" | null, direction: "asc" | "desc") => {
+    (field: "year" | "category" | "newGbif" | "priority" | null, direction: "asc" | "desc") => {
       setState(prev => {
         const next = { ...prev, sortField: field, sortDirection: direction };
         queueMicrotask(() => syncUrl(next, false));

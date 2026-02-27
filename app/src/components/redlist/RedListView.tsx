@@ -748,16 +748,12 @@ export default function RedListView() {
         return aIdx - bIdx;
       }
 
-      // Default sort: priority score descending (applies when no column sort is active)
-      if (!sortField) {
+      let comparison = 0;
+      if (!sortField || sortField === "priority") {
         const scoreA = priorityMap.get(a.sis_taxon_id)?.score ?? 0;
         const scoreB = priorityMap.get(b.sis_taxon_id)?.score ?? 0;
-        if (scoreA !== scoreB) return scoreB - scoreA;
-        return a.sis_taxon_id - b.sis_taxon_id;
-      }
-
-      let comparison = 0;
-      if (sortField === "year") {
+        comparison = scoreA - scoreB;
+      } else if (sortField === "year") {
         // Sort by assessment date
         const dateA = a.assessment_date ? new Date(a.assessment_date).getTime() : 0;
         const dateB = b.assessment_date ? new Date(b.assessment_date).getTime() : 0;
@@ -794,9 +790,10 @@ export default function RedListView() {
   );
 
   // Handle sort toggle
-  const handleSort = (field: "year" | "category" | "newGbif") => {
-    if (sortField === field) {
-      // Toggle direction or clear sort
+  const handleSort = (field: "year" | "category" | "newGbif" | "priority") => {
+    // Treat null and "priority" as equivalent for toggle logic
+    const currentField = sortField === null ? "priority" : sortField;
+    if (currentField === field) {
       if (sortDirection === "desc") {
         setSort(field, "asc");
       } else {
@@ -1375,8 +1372,16 @@ export default function RedListView() {
                 <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
                   New Papers
                 </th>
-                <th className="px-3 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[80px]">
-                  Priority
+                <th
+                  className="px-3 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[80px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
+                  onClick={() => handleSort("priority")}
+                >
+                  <span className="flex items-center gap-1">
+                    Priority
+                    {(sortField === "priority" || sortField === null) && (
+                      <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
+                    )}
+                  </span>
                 </th>
               </tr>
             </thead>

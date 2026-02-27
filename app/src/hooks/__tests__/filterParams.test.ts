@@ -53,6 +53,11 @@ describe("parseParams", () => {
     expect(result.sortField).toBe("year");
   });
 
+  it("parses sort=priority", () => {
+    const result = parseParams("?sort=priority");
+    expect(result.sortField).toBe("priority");
+  });
+
   it("defaults unknown sort values to null (priority score)", () => {
     const result = parseParams("?sort=unknown");
     expect(result.sortField).toBe(null);
@@ -93,7 +98,7 @@ describe("buildQs", () => {
     yearRanges: new Set<string>(),
     countries: new Set<string>(),
     search: "",
-    sortField: null as "year" | "category" | "newGbif" | null,
+    sortField: null as "year" | "category" | "newGbif" | "priority" | null,
     sortDirection: "desc" as const,
   };
 
@@ -133,6 +138,11 @@ describe("buildQs", () => {
 
   it("omits sort param for null sortField (default)", () => {
     const qs = buildQs({ ...emptyState, sortField: null });
+    expect(qs).toBe("");
+  });
+
+  it("omits sort param for priority sortField (same as default)", () => {
+    const qs = buildQs({ ...emptyState, sortField: "priority" });
     expect(qs).toBe("");
   });
 
@@ -193,7 +203,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
       yearRanges: new Set<string>(),
       countries: new Set<string>(),
       search: "",
-      sortField: null as "year" | "category" | "newGbif" | null,
+      sortField: null as "year" | "category" | "newGbif" | "priority" | null,
       sortDirection: "desc" as const,
     };
 
