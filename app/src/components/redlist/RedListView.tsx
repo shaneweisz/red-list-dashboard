@@ -11,7 +11,7 @@ import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
 import { useFilterParams } from "@/hooks/useFilterParams";
-import { computePriority, FLAG_SHORT_LABELS, FLAG_COLORS, type PriorityFlag, type PriorityResult } from "@/lib/prioritization";
+import { computePriority, FLAG_LABELS, FLAG_SHORT_LABELS, FLAG_COLORS, type PriorityFlag, type PriorityResult } from "@/lib/prioritization";
 
 // Dynamically import OccurrenceMapRow to avoid SSR issues with Leaflet
 const OccurrenceMapRow = dynamic(
@@ -643,21 +643,25 @@ export default function RedListView() {
     }));
   }, [taxaFilteredSpecies, speciesLoading, precomputedStats, selectedTaxa]);
 
-  // Compute priority flags for all species (client-side, from already-loaded data)
+  // Compute priority scores for all species (client-side, from already-loaded data)
   const priorityMap = useMemo(() => {
     const map = new Map<number, PriorityResult>();
     const yr = new Date().getFullYear();
     for (const s of taxaFilteredSpecies) {
       const result = computePriority(s, yr);
-      if (result.flags.length > 0) {
-        map.set(s.sis_taxon_id, result);
-      }
+      map.set(s.sis_taxon_id, result);
     }
     return map;
   }, [taxaFilteredSpecies]);
 
   // Count species that need review (have any priority flag)
-  const needsReviewCount = priorityMap.size;
+  const needsReviewCount = useMemo(() => {
+    let count = 0;
+    for (const r of priorityMap.values()) {
+      if (r.flags.length > 0) count++;
+    }
+    return count;
+  }, [priorityMap]);
 
   // Get unique countries: pre-computed while loading, then client-computed
   const { countryCounts, uniqueCountries, countryStatsForMap } = useMemo(() => {
@@ -742,7 +746,7 @@ export default function RedListView() {
         s.scientific_name.toLowerCase().includes(searchFilter) ||
         s.common_name?.toLowerCase().includes(searchFilter);
       const matchesStarred = !showOnlyStarred || pinnedSet.has(s.sis_taxon_id);
-      const matchesReview = !showNeedsReview || priorityMap.has(s.sis_taxon_id);
+      const matchesReview = !showNeedsReview || (priorityMap.get(s.sis_taxon_id)?.flags.length ?? 0) > 0;
       return matchesCategory && matchesYear && matchesObs && matchesCountry && matchesSearch && matchesStarred && matchesReview;
     });
 
@@ -755,14 +759,13 @@ export default function RedListView() {
         return aIdx - bIdx;
       }
 
-      // When Needs Review is active, sort by priority score descending
-      if (showNeedsReview) {
+      // Default sort: priority score descending (applies when no column sort is active)
+      if (!sortField) {
         const scoreA = priorityMap.get(a.sis_taxon_id)?.score ?? 0;
         const scoreB = priorityMap.get(b.sis_taxon_id)?.score ?? 0;
         if (scoreA !== scoreB) return scoreB - scoreA;
+        return a.sis_taxon_id - b.sis_taxon_id;
       }
-
-      if (!sortField) return 0;
 
       let comparison = 0;
       if (sortField === "year") {
@@ -1645,26 +1648,29 @@ export default function RedListView() {
                         </a>
                       ) : "—"}
                     </td>
-                    {/* Priority flags */}
+                    {/* Priority score + flags */}
                     <td className="px-3 md:px-4 py-3 whitespace-nowrap">
                       {(() => {
                         const priority = priorityMap.get(s.sis_taxon_id);
-                        if (!priority || priority.flags.length === 0) return <span className="text-zinc-300 dark:text-zinc-700">—</span>;
+                        if (!priority || priority.score === 0) return <span className="text-zinc-300 dark:text-zinc-700">—</span>;
                         return (
-                          <div className="flex flex-wrap gap-1">
-                            {priority.flags.map((flag: PriorityFlag) => (
-                              <HoverTooltip key={flag} text={FLAG_SHORT_LABELS[flag]}>
-                                <span
-                                  className="inline-block px-1.5 py-0.5 text-[10px] font-medium rounded cursor-help"
-                                  style={{
-                                    backgroundColor: FLAG_COLORS[flag] + "20",
-                                    color: FLAG_COLORS[flag],
-                                  }}
-                                >
-                                  {FLAG_SHORT_LABELS[flag]}
-                                </span>
-                              </HoverTooltip>
-                            ))}
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 tabular-nums w-6 text-right shrink-0">{priority.score}</span>
+                            <div className="flex flex-wrap gap-1">
+                              {priority.flags.map((flag: PriorityFlag) => (
+                                <HoverTooltip key={flag} text={FLAG_LABELS[flag]}>
+                                  <span
+                                    className="inline-block px-1.5 py-0.5 text-[10px] font-medium rounded cursor-help"
+                                    style={{
+                                      backgroundColor: FLAG_COLORS[flag] + "20",
+                                      color: FLAG_COLORS[flag],
+                                    }}
+                                  >
+                                    {FLAG_SHORT_LABELS[flag]}
+                                  </span>
+                                </HoverTooltip>
+                              ))}
+                            </div>
                           </div>
                         );
                       })()}
