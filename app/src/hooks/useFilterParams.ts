@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from "react";
 
 // --- URL parsing helpers ---
 
-function parseParams(search: string) {
+export function parseParams(search: string) {
   const p = new URLSearchParams(search);
   const sortParam = p.get("sort");
   return {
@@ -31,7 +31,7 @@ function parseParams(search: string) {
   };
 }
 
-function buildQs(state: {
+export function buildQs(state: {
   taxa: Set<string>;
   categories: Set<string>;
   yearRanges: Set<string>;

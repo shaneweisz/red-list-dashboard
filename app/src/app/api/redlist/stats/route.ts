@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import * as fs from "fs";
 import * as path from "path";
 import { getTaxonConfig, TAXA, CATEGORY_COLORS, CATEGORY_NAMES } from "@/config/taxa";
+import { parseGbifCsvLine } from "@/lib/data-utils";
 
 // Category order for display (most threatened first, NE last)
 const CATEGORY_ORDER = ["EX", "EW", "CR", "EN", "VU", "NT", "LC", "DD", "NE"];
@@ -60,18 +61,11 @@ function loadGbifCsvLookup(taxonId: string): Map<string, GbifCsvRow> {
       if (!header.includes("scientific_name")) continue;
 
       for (let i = 1; i < lines.length; i++) {
-        const line = lines[i];
-        const firstComma = line.indexOf(",");
-        const secondComma = line.indexOf(",", firstComma + 1);
-        const thirdComma = line.indexOf(",", secondComma + 1);
+        const record = parseGbifCsvLine(lines[i], { hasScientificName: true, hasSinceAssessment: false });
+        const scientificName = record.scientific_name?.toLowerCase().trim();
 
-        const totalStr = line.slice(firstComma + 1, secondComma).trim();
-        const scientificName = line.slice(secondComma + 1, thirdComma).toLowerCase().trim();
-
-        const total = parseInt(totalStr, 10);
-
-        if (scientificName && !isNaN(total)) {
-          lookup.set(scientificName, { observationsTotal: total });
+        if (scientificName && !isNaN(record.occurrence_count)) {
+          lookup.set(scientificName, { observationsTotal: record.occurrence_count });
         }
       }
     } catch {
