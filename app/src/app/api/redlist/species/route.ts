@@ -90,10 +90,8 @@ function loadGbifCsvLookup(taxonId: string): Map<string, GbifCsvRow> {
       const header = lines[0];
       if (!header.includes("observations_after_assessment_year") && !header.includes("occurrences_since_assessment")) continue;
 
-      const hasSinceAssessment = header.includes("observations_after_assessment_year") || header.includes("occurrences_since_assessment");
-
       for (let i = 1; i < lines.length; i++) {
-        const record = parseGbifCsvLine(lines[i], { hasScientificName: true, hasSinceAssessment });
+        const record = parseGbifCsvLine(lines[i], { hasScientificName: true, hasSinceAssessment: true });
         const scientificName = record.scientific_name?.toLowerCase().trim();
 
         if (scientificName && !isNaN(record.species_key) && !isNaN(record.occurrence_count)) {
