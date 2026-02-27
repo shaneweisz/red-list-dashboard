@@ -2,14 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { promises as fs } from "fs";
 import path from "path";
 import { getTaxonConfig, TaxonConfig } from "@/config/taxa";
-
-interface SpeciesRecord {
-  species_key: number;
-  occurrence_count: number;
-  observations_after_assessment_year?: number | null;
-  scientific_name?: string;
-  redlist_category?: string | null;
-}
+import {
+  parseGbifCsvLine,
+  filterSpecies,
+  paginate,
+  computeDistribution,
+  type SpeciesRecord,
+} from "@/lib/data-utils";
 
 interface RedListSpecies {
   scientific_name: string;
@@ -81,42 +80,18 @@ async function loadCsvData(taxonId: string): Promise<SpeciesRecord[]> {
 
     const hasSinceAssessment = header.includes("observations_after_assessment_year") || header.includes("occurrences_since_assessment");
 
-    // Skip header
+    // Skip header, parse each line, then enrich with Red List category
     dataCache[taxonId] = lines.slice(1).map((line) => {
-      // Parse carefully: last field may be since_assessment, common_name may contain commas
-      const firstComma = line.indexOf(",");
-      const secondComma = line.indexOf(",", firstComma + 1);
-      const thirdComma = line.indexOf(",", secondComma + 1);
-
-      const species_key = parseInt(line.slice(0, firstComma), 10);
-      const occurrence_count = parseInt(line.slice(firstComma + 1, secondComma), 10);
-      const scientific_name = hasScientificName ? line.slice(secondComma + 1, thirdComma) || undefined : undefined;
-
-      // Parse observations_after_assessment_year from the last field if present
-      let observations_after_assessment_year: number | null = null;
-      if (hasSinceAssessment) {
-        const lastComma = line.lastIndexOf(",");
-        const sinceStr = line.slice(lastComma + 1).trim();
-        if (sinceStr) {
-          const parsed = parseInt(sinceStr, 10);
-          if (!isNaN(parsed)) observations_after_assessment_year = parsed;
-        }
-      }
+      const record = parseGbifCsvLine(line, { hasScientificName, hasSinceAssessment });
 
       // Look up Red List category by scientific name
       let redlist_category: string | null = null;
-      if (scientific_name) {
-        const normalizedName = scientific_name.toLowerCase().trim();
+      if (record.scientific_name) {
+        const normalizedName = record.scientific_name.toLowerCase().trim();
         redlist_category = redListLookup.get(normalizedName) || null;
       }
 
-      return {
-        species_key,
-        occurrence_count,
-        observations_after_assessment_year,
-        scientific_name,
-        redlist_category,
-      };
+      return { ...record, redlist_category };
     });
 
     // Also build the valid species keys set for filtering live queries
@@ -153,19 +128,8 @@ async function handleCsvRequest(
 ) {
   const data = await loadCsvData(taxonId);
 
-  // Filter by occurrence count range
-  let filtered = data.filter(
-    (d) => d.occurrence_count >= minCount && d.occurrence_count <= maxCount
-  );
-
-  // Filter by Red List category
-  if (redlistFilter && redlistFilter !== "all") {
-    if (redlistFilter === "NE") {
-      filtered = filtered.filter((d) => !d.redlist_category);
-    } else {
-      filtered = filtered.filter((d) => d.redlist_category === redlistFilter);
-    }
-  }
+  // Filter by occurrence count range and Red List category
+  let filtered = filterSpecies(data, { minCount, maxCount, redlistFilter });
 
   // Sort
   if (sortOrder === "asc") {
@@ -174,27 +138,19 @@ async function handleCsvRequest(
   // Default is already sorted desc from the CSV
 
   // Paginate
-  const start = (page - 1) * limit;
-  const end = start + limit;
-  const paginated = filtered.slice(start, end);
+  const paginated = paginate(filtered, page, limit);
 
   // Calculate stats
+  const allCounts = data.map((d) => d.occurrence_count);
   const assessed = data.filter((d) => d.redlist_category);
   const notAssessed = data.filter((d) => !d.redlist_category);
 
   const stats = {
     total: data.length,
     filtered: filtered.length,
-    totalOccurrences: data.reduce((sum, d) => sum + d.occurrence_count, 0),
+    totalOccurrences: allCounts.reduce((sum, c) => sum + c, 0),
     median: data[Math.floor(data.length / 2)]?.occurrence_count || 0,
-    distribution: {
-      eq1: data.filter((d) => d.occurrence_count === 1).length,
-      gt1_lte10: data.filter((d) => d.occurrence_count > 1 && d.occurrence_count <= 10).length,
-      gt10_lte100: data.filter((d) => d.occurrence_count > 10 && d.occurrence_count <= 100).length,
-      gt100_lte1000: data.filter((d) => d.occurrence_count > 100 && d.occurrence_count <= 1000).length,
-      gt1000_lte10000: data.filter((d) => d.occurrence_count > 1000 && d.occurrence_count <= 10000).length,
-      gt10000: data.filter((d) => d.occurrence_count > 10000).length,
-    },
+    distribution: computeDistribution(allCounts),
     redlist: {
       assessed: assessed.length,
       notAssessed: notAssessed.length,
@@ -325,14 +281,7 @@ async function handleLiveRequest(
   const counts = allSpecies.map((s: { count: number }) => s.count).sort((a: number, b: number) => a - b);
   const median = counts.length > 0 ? counts[Math.floor(counts.length / 2)] : 0;
 
-  const distribution = {
-    eq1: allSpecies.filter((s: { count: number }) => s.count === 1).length,
-    gt1_lte10: allSpecies.filter((s: { count: number }) => s.count > 1 && s.count <= 10).length,
-    gt10_lte100: allSpecies.filter((s: { count: number }) => s.count > 10 && s.count <= 100).length,
-    gt100_lte1000: allSpecies.filter((s: { count: number }) => s.count > 100 && s.count <= 1000).length,
-    gt1000_lte10000: allSpecies.filter((s: { count: number }) => s.count > 1000 && s.count <= 10000).length,
-    gt10000: allSpecies.filter((s: { count: number }) => s.count > 10000).length,
-  };
+  const distribution = computeDistribution(counts);
 
   // Filter by count range
   let filteredSpecies = allSpecies.filter(

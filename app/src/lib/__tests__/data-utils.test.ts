@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   parseGbifCsvLine,
+  parseGbifCsv,
   filterSpecies,
   paginate,
   computeDistribution,
@@ -37,9 +38,7 @@ describe("parseGbifCsvLine", () => {
   });
 
   it("handles common names with commas (uses lastComma for since-assessment)", () => {
-    // Common name "Some, Complex Name" spans multiple comma-separated fields
-    // but since-assessment is always the last field
-    const line = '2435099,100,Rana capensis,Some, Complex Name,42';
+    const line = "2435099,100,Rana capensis,Some, Complex Name,42";
     const result = parseGbifCsvLine(line, {
       hasScientificName: true,
       hasSinceAssessment: true,
@@ -47,7 +46,6 @@ describe("parseGbifCsvLine", () => {
     expect(result.species_key).toBe(2435099);
     expect(result.occurrence_count).toBe(100);
     expect(result.scientific_name).toBe("Rana capensis");
-    // since-assessment comes from the last comma
     expect(result.observations_after_assessment_year).toBe(42);
   });
 
@@ -76,6 +74,71 @@ describe("parseGbifCsvLine", () => {
       hasSinceAssessment: true,
     });
     expect(result.observations_after_assessment_year).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseGbifCsv (bulk CSV parsing)
+// ---------------------------------------------------------------------------
+describe("parseGbifCsv", () => {
+  it("parses a full CSV string with header detection", () => {
+    const csv = [
+      "species_key,observations_total,scientific_name,common_name,observations_after_assessment_year",
+      "2435099,100,Panthera leo,Lion,42",
+      "5219404,200,Rana capensis,Cape Rain Frog,10",
+    ].join("\n");
+
+    const records = parseGbifCsv(csv);
+    expect(records).toHaveLength(2);
+    expect(records[0].species_key).toBe(2435099);
+    expect(records[0].occurrence_count).toBe(100);
+    expect(records[0].scientific_name).toBe("Panthera leo");
+    expect(records[0].observations_after_assessment_year).toBe(42);
+    expect(records[1].species_key).toBe(5219404);
+    expect(records[1].occurrence_count).toBe(200);
+  });
+
+  it("detects scientific_name column from header", () => {
+    const csv = [
+      "species_key,observations_total",
+      "2435099,100",
+    ].join("\n");
+
+    const records = parseGbifCsv(csv);
+    expect(records).toHaveLength(1);
+    expect(records[0].scientific_name).toBeUndefined();
+  });
+
+  it("detects observations_after_assessment_year from header", () => {
+    const csv = [
+      "species_key,observations_total,scientific_name,common_name,observations_after_assessment_year",
+      "2435099,100,Panthera leo,Lion,42",
+    ].join("\n");
+    expect(parseGbifCsv(csv)[0].observations_after_assessment_year).toBe(42);
+  });
+
+  it("detects occurrences_since_assessment as alternative header", () => {
+    const csv = [
+      "species_key,observations_total,scientific_name,common_name,occurrences_since_assessment",
+      "2435099,100,Panthera leo,Lion,99",
+    ].join("\n");
+    expect(parseGbifCsv(csv)[0].observations_after_assessment_year).toBe(99);
+  });
+
+  it("returns empty array for empty CSV", () => {
+    expect(parseGbifCsv("")).toEqual([]);
+    expect(parseGbifCsv("species_key,observations_total")).toEqual([]);
+  });
+
+  it("skips lines that parse to NaN species_key", () => {
+    const csv = [
+      "species_key,observations_total,scientific_name,common_name,observations_after_assessment_year",
+      "bad,100,Panthera leo,Lion,42",
+      "2435099,100,Rana capensis,Frog,10",
+    ].join("\n");
+    const records = parseGbifCsv(csv);
+    expect(records).toHaveLength(1);
+    expect(records[0].species_key).toBe(2435099);
   });
 });
 
@@ -178,23 +241,12 @@ describe("paginate", () => {
 });
 
 // ---------------------------------------------------------------------------
-// computeDistribution
+// computeDistribution — accepts number[]
 // ---------------------------------------------------------------------------
 describe("computeDistribution", () => {
   it("buckets counts correctly", () => {
-    const data: SpeciesRecord[] = [
-      { species_key: 1, occurrence_count: 1 },
-      { species_key: 2, occurrence_count: 1 },
-      { species_key: 3, occurrence_count: 5 },
-      { species_key: 4, occurrence_count: 10 },
-      { species_key: 5, occurrence_count: 50 },
-      { species_key: 6, occurrence_count: 100 },
-      { species_key: 7, occurrence_count: 500 },
-      { species_key: 8, occurrence_count: 5000 },
-      { species_key: 9, occurrence_count: 50000 },
-    ];
-
-    const dist = computeDistribution(data);
+    const counts = [1, 1, 5, 10, 50, 100, 500, 5000, 50000];
+    const dist = computeDistribution(counts);
     expect(dist.eq1).toBe(2);
     expect(dist.gt1_lte10).toBe(2); // 5, 10
     expect(dist.gt10_lte100).toBe(2); // 50, 100
@@ -210,14 +262,8 @@ describe("computeDistribution", () => {
   });
 
   it("places boundary values in the correct bucket", () => {
-    const data: SpeciesRecord[] = [
-      { species_key: 1, occurrence_count: 1 },
-      { species_key: 2, occurrence_count: 10 },
-      { species_key: 3, occurrence_count: 100 },
-      { species_key: 4, occurrence_count: 1000 },
-      { species_key: 5, occurrence_count: 10000 },
-    ];
-    const dist = computeDistribution(data);
+    const counts = [1, 10, 100, 1000, 10000];
+    const dist = computeDistribution(counts);
     expect(dist.eq1).toBe(1); // exactly 1
     expect(dist.gt1_lte10).toBe(1); // 10 (>1 && <=10)
     expect(dist.gt10_lte100).toBe(1); // 100

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import * as fs from "fs";
 import * as path from "path";
 import { TAXA, getTaxonConfig } from "@/config/taxa";
+import { parseGbifCsvLine } from "@/lib/data-utils";
 
 interface PreviousAssessment {
   year: string;
@@ -89,28 +90,17 @@ function loadGbifCsvLookup(taxonId: string): Map<string, GbifCsvRow> {
       const header = lines[0];
       if (!header.includes("observations_after_assessment_year") && !header.includes("occurrences_since_assessment")) continue;
 
+      const hasSinceAssessment = header.includes("observations_after_assessment_year") || header.includes("occurrences_since_assessment");
+
       for (let i = 1; i < lines.length; i++) {
-        const line = lines[i];
-        // Parse: species_key,observations_total,scientific_name,common_name,observations_after_assessment_year
-        const firstComma = line.indexOf(",");
-        const secondComma = line.indexOf(",", firstComma + 1);
-        const thirdComma = line.indexOf(",", secondComma + 1);
-        const lastComma = line.lastIndexOf(",");
+        const record = parseGbifCsvLine(lines[i], { hasScientificName: true, hasSinceAssessment });
+        const scientificName = record.scientific_name?.toLowerCase().trim();
 
-        const speciesKeyStr = line.slice(0, firstComma).trim();
-        const totalStr = line.slice(firstComma + 1, secondComma).trim();
-        const scientificName = line.slice(secondComma + 1, thirdComma).toLowerCase().trim();
-        const sinceStr = line.slice(lastComma + 1).trim();
-
-        const speciesKey = parseInt(speciesKeyStr, 10);
-        const total = parseInt(totalStr, 10);
-        const sinceCount = parseInt(sinceStr, 10);
-
-        if (scientificName && !isNaN(speciesKey) && !isNaN(total)) {
+        if (scientificName && !isNaN(record.species_key) && !isNaN(record.occurrence_count)) {
           lookup.set(scientificName, {
-            speciesKey,
-            observationsTotal: total,
-            observationsAfterAssessment: isNaN(sinceCount) ? 0 : sinceCount,
+            speciesKey: record.species_key,
+            observationsTotal: record.occurrence_count,
+            observationsAfterAssessment: record.observations_after_assessment_year ?? 0,
           });
         }
       }

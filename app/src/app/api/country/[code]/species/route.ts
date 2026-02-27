@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTaxonConfig, TaxonConfig } from "@/config/taxa";
 import { promises as fs } from "fs";
 import path from "path";
+import { computeDistribution } from "@/lib/data-utils";
 
 interface RedListSpecies {
   scientific_name: string;
@@ -221,15 +222,7 @@ export async function GET(
     const counts = allSpecies.map(s => s.count).sort((a, b) => a - b);
     const median = counts.length > 0 ? counts[Math.floor(counts.length / 2)] : 0;
 
-    const distribution = {
-      // Histogram buckets (non-cumulative)
-      eq1: allSpecies.filter(s => s.count === 1).length,
-      gt1_lte10: allSpecies.filter(s => s.count > 1 && s.count <= 10).length,
-      gt10_lte100: allSpecies.filter(s => s.count > 10 && s.count <= 100).length,
-      gt100_lte1000: allSpecies.filter(s => s.count > 100 && s.count <= 1000).length,
-      gt1000_lte10000: allSpecies.filter(s => s.count > 1000 && s.count <= 10000).length,
-      gt10000: allSpecies.filter(s => s.count > 10000).length,
-    };
+    const distribution = computeDistribution(counts);
 
     // Red List stats (before filtering)
     const assessed = allSpecies.filter(s => s.redlistCategory);

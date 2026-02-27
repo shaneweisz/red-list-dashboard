@@ -50,6 +50,37 @@ export function parseGbifCsvLine(
 }
 
 /**
+ * Parse a full GBIF CSV string (header + data rows) into SpeciesRecord[].
+ *
+ * Automatically detects which columns are present from the header row.
+ * Skips rows that produce NaN for species_key or occurrence_count.
+ */
+export function parseGbifCsv(csvContent: string): SpeciesRecord[] {
+  if (!csvContent.trim()) return [];
+
+  const lines = csvContent.trim().split("\n");
+  if (lines.length <= 1) return [];
+
+  const header = lines[0];
+  const hasScientificName = header.includes("scientific_name");
+  const hasSinceAssessment =
+    header.includes("observations_after_assessment_year") ||
+    header.includes("occurrences_since_assessment");
+
+  const records: SpeciesRecord[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const record = parseGbifCsvLine(lines[i], {
+      hasScientificName,
+      hasSinceAssessment,
+    });
+    if (!isNaN(record.species_key) && !isNaN(record.occurrence_count)) {
+      records.push(record);
+    }
+  }
+  return records;
+}
+
+/**
  * Filter species records by occurrence count range and optional Red List category.
  */
 export function filterSpecies(
@@ -84,9 +115,9 @@ export function paginate<T>(items: T[], page: number, limit: number): T[] {
 }
 
 /**
- * Compute the occurrence-count distribution buckets.
+ * Compute the occurrence-count distribution buckets from an array of counts.
  */
-export function computeDistribution(data: SpeciesRecord[]): {
+export function computeDistribution(counts: number[]): {
   eq1: number;
   gt1_lte10: number;
   gt10_lte100: number;
@@ -95,12 +126,12 @@ export function computeDistribution(data: SpeciesRecord[]): {
   gt10000: number;
 } {
   return {
-    eq1: data.filter((d) => d.occurrence_count === 1).length,
-    gt1_lte10: data.filter((d) => d.occurrence_count > 1 && d.occurrence_count <= 10).length,
-    gt10_lte100: data.filter((d) => d.occurrence_count > 10 && d.occurrence_count <= 100).length,
-    gt100_lte1000: data.filter((d) => d.occurrence_count > 100 && d.occurrence_count <= 1000).length,
-    gt1000_lte10000: data.filter((d) => d.occurrence_count > 1000 && d.occurrence_count <= 10000).length,
-    gt10000: data.filter((d) => d.occurrence_count > 10000).length,
+    eq1: counts.filter((c) => c === 1).length,
+    gt1_lte10: counts.filter((c) => c > 1 && c <= 10).length,
+    gt10_lte100: counts.filter((c) => c > 10 && c <= 100).length,
+    gt100_lte1000: counts.filter((c) => c > 100 && c <= 1000).length,
+    gt1000_lte10000: counts.filter((c) => c > 1000 && c <= 10000).length,
+    gt10000: counts.filter((c) => c > 10000).length,
   };
 }
 
