@@ -11,7 +11,7 @@ import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
 import { useFilterParams } from "@/hooks/useFilterParams";
-import { computePriority, FLAG_LABELS, FLAG_SHORT_LABELS, FLAG_COLORS, type PriorityFlag, type PriorityResult } from "@/lib/prioritization";
+import { computePriority, BREAKDOWN_LABELS, type PriorityResult, type ScoreBreakdown } from "@/lib/prioritization";
 
 // Dynamically import OccurrenceMapRow to avoid SSR issues with Leaflet
 const OccurrenceMapRow = dynamic(
@@ -654,11 +654,11 @@ export default function RedListView() {
     return map;
   }, [taxaFilteredSpecies]);
 
-  // Count species that need review (have any priority flag)
+  // Count species with nonzero priority score
   const needsReviewCount = useMemo(() => {
     let count = 0;
     for (const r of priorityMap.values()) {
-      if (r.flags.length > 0) count++;
+      if (r.score > 0) count++;
     }
     return count;
   }, [priorityMap]);
@@ -746,7 +746,7 @@ export default function RedListView() {
         s.scientific_name.toLowerCase().includes(searchFilter) ||
         s.common_name?.toLowerCase().includes(searchFilter);
       const matchesStarred = !showOnlyStarred || pinnedSet.has(s.sis_taxon_id);
-      const matchesReview = !showNeedsReview || (priorityMap.get(s.sis_taxon_id)?.flags.length ?? 0) > 0;
+      const matchesReview = !showNeedsReview || (priorityMap.get(s.sis_taxon_id)?.score ?? 0) > 0;
       return matchesCategory && matchesYear && matchesObs && matchesCountry && matchesSearch && matchesStarred && matchesReview;
     });
 
@@ -1648,30 +1648,22 @@ export default function RedListView() {
                         </a>
                       ) : "—"}
                     </td>
-                    {/* Priority score + flags */}
+                    {/* Priority score */}
                     <td className="px-3 md:px-4 py-3 whitespace-nowrap">
                       {(() => {
                         const priority = priorityMap.get(s.sis_taxon_id);
                         if (!priority || priority.score === 0) return <span className="text-zinc-300 dark:text-zinc-700">—</span>;
+                        const b = priority.breakdown;
+                        const tooltipText = (Object.keys(b) as (keyof ScoreBreakdown)[])
+                          .filter(k => b[k] > 0)
+                          .map(k => `${BREAKDOWN_LABELS[k]}: ${b[k]}`)
+                          .join(" · ");
                         return (
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 tabular-nums w-6 text-right shrink-0">{priority.score}</span>
-                            <div className="flex flex-wrap gap-1">
-                              {priority.flags.map((flag: PriorityFlag) => (
-                                <HoverTooltip key={flag} text={FLAG_LABELS[flag]}>
-                                  <span
-                                    className="inline-block px-1.5 py-0.5 text-[10px] font-medium rounded cursor-help"
-                                    style={{
-                                      backgroundColor: FLAG_COLORS[flag] + "20",
-                                      color: FLAG_COLORS[flag],
-                                    }}
-                                  >
-                                    {FLAG_SHORT_LABELS[flag]}
-                                  </span>
-                                </HoverTooltip>
-                              ))}
-                            </div>
-                          </div>
+                          <HoverTooltip text={tooltipText}>
+                            <span className="text-xs font-semibold tabular-nums cursor-help text-zinc-600 dark:text-zinc-400">
+                              {priority.score}
+                            </span>
+                          </HoverTooltip>
                         );
                       })()}
                     </td>

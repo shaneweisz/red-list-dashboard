@@ -9,7 +9,7 @@ describe("parseParams", () => {
     expect(result.yearRanges.size).toBe(0);
     expect(result.countries.size).toBe(0);
     expect(result.search).toBe("");
-    expect(result.sortField).toBe("newGbif");
+    expect(result.sortField).toBe(null);
     expect(result.sortDirection).toBe("desc");
   });
 
@@ -38,9 +38,9 @@ describe("parseParams", () => {
     expect(result.search).toBe("elephant shrew");
   });
 
-  it("parses sort=none as null sortField", () => {
-    const result = parseParams("?sort=none");
-    expect(result.sortField).toBe(null);
+  it("parses sort=newGbif", () => {
+    const result = parseParams("?sort=newGbif");
+    expect(result.sortField).toBe("newGbif");
   });
 
   it("parses sort=category", () => {
@@ -53,9 +53,9 @@ describe("parseParams", () => {
     expect(result.sortField).toBe("year");
   });
 
-  it("defaults unknown sort values to newGbif", () => {
+  it("defaults unknown sort values to null (priority score)", () => {
     const result = parseParams("?sort=unknown");
-    expect(result.sortField).toBe("newGbif");
+    expect(result.sortField).toBe(null);
   });
 
   it("parses sort direction", () => {
@@ -93,7 +93,7 @@ describe("buildQs", () => {
     yearRanges: new Set<string>(),
     countries: new Set<string>(),
     search: "",
-    sortField: "newGbif" as const,
+    sortField: null as "year" | "category" | "newGbif" | null,
     sortDirection: "desc" as const,
   };
 
@@ -131,10 +131,9 @@ describe("buildQs", () => {
     expect(params.get("search")).toBe("elephant");
   });
 
-  it("writes sort=none for null sortField", () => {
+  it("omits sort param for null sortField (default)", () => {
     const qs = buildQs({ ...emptyState, sortField: null });
-    const params = new URLSearchParams(qs);
-    expect(params.get("sort")).toBe("none");
+    expect(qs).toBe("");
   });
 
   it("writes sort=category", () => {
@@ -143,9 +142,10 @@ describe("buildQs", () => {
     expect(params.get("sort")).toBe("category");
   });
 
-  it("omits default sort (newGbif desc)", () => {
-    const qs = buildQs(emptyState);
-    expect(qs).toBe("");
+  it("writes sort=newGbif when explicitly set", () => {
+    const qs = buildQs({ ...emptyState, sortField: "newGbif" });
+    const params = new URLSearchParams(qs);
+    expect(params.get("sort")).toBe("newGbif");
   });
 
   it("writes dir=asc for non-default direction", () => {
@@ -193,7 +193,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
       yearRanges: new Set<string>(),
       countries: new Set<string>(),
       search: "",
-      sortField: "newGbif" as const,
+      sortField: null as "year" | "category" | "newGbif" | null,
       sortDirection: "desc" as const,
     };
 
@@ -203,23 +203,23 @@ describe("parseParams ↔ buildQs round-trip", () => {
     expect(parsed.taxa.size).toBe(0);
     expect(parsed.categories.size).toBe(0);
     expect(parsed.search).toBe("");
-    expect(parsed.sortField).toBe("newGbif");
+    expect(parsed.sortField).toBe(null);
     expect(parsed.sortDirection).toBe("desc");
   });
 
-  it("round-trips sort=none", () => {
+  it("round-trips sort=newGbif", () => {
     const original = {
       taxa: new Set<string>(),
       categories: new Set<string>(),
       yearRanges: new Set<string>(),
       countries: new Set<string>(),
       search: "",
-      sortField: null as "year" | "category" | "newGbif" | null,
+      sortField: "newGbif" as const,
       sortDirection: "desc" as const,
     };
 
     const qs = buildQs(original);
     const parsed = parseParams(qs);
-    expect(parsed.sortField).toBe(null);
+    expect(parsed.sortField).toBe("newGbif");
   });
 });
