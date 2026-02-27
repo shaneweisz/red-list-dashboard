@@ -11,6 +11,7 @@ import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
 import { useFilterParams } from "@/hooks/useFilterParams";
+import { computePriority, BREAKDOWN_LABELS, type PriorityResult, type ScoreBreakdown } from "@/lib/prioritization";
 
 // Dynamically import OccurrenceMapRow to avoid SSR issues with Leaflet
 const OccurrenceMapRow = dynamic(
@@ -641,6 +642,17 @@ export default function RedListView() {
     }));
   }, [taxaFilteredSpecies, speciesLoading, precomputedStats, selectedTaxa]);
 
+  // Compute priority scores for all species (client-side, from already-loaded data)
+  const priorityMap = useMemo(() => {
+    const map = new Map<number, PriorityResult>();
+    const yr = new Date().getFullYear();
+    for (const s of taxaFilteredSpecies) {
+      const result = computePriority(s, yr);
+      map.set(s.sis_taxon_id, result);
+    }
+    return map;
+  }, [taxaFilteredSpecies]);
+
   // Get unique countries: pre-computed while loading, then client-computed
   const { countryCounts, uniqueCountries, countryStatsForMap } = useMemo(() => {
     let counts: Record<string, number>;
@@ -736,10 +748,12 @@ export default function RedListView() {
         return aIdx - bIdx;
       }
 
-      if (!sortField) return 0;
-
       let comparison = 0;
-      if (sortField === "year") {
+      if (!sortField || sortField === "priority") {
+        const scoreA = priorityMap.get(a.sis_taxon_id)?.score ?? 0;
+        const scoreB = priorityMap.get(b.sis_taxon_id)?.score ?? 0;
+        comparison = scoreA - scoreB;
+      } else if (sortField === "year") {
         // Sort by assessment date
         const dateA = a.assessment_date ? new Date(a.assessment_date).getTime() : 0;
         const dateB = b.assessment_date ? new Date(b.assessment_date).getTime() : 0;
@@ -766,7 +780,7 @@ export default function RedListView() {
     });
 
     return { filteredSpecies: filtered, sortedSpecies: sorted };
-  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedCountries, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedCountries, searchFilter, showOnlyStarred, priorityMap, pinnedSet, pinnedSpecies, sortField, sortDirection]);
 
   // Pagination calculations
   const totalPages = Math.ceil(sortedSpecies.length / PAGE_SIZE);
@@ -776,9 +790,10 @@ export default function RedListView() {
   );
 
   // Handle sort toggle
-  const handleSort = (field: "year" | "category" | "newGbif") => {
-    if (sortField === field) {
-      // Toggle direction or clear sort
+  const handleSort = (field: "year" | "category" | "newGbif" | "priority") => {
+    // Treat null and "priority" as equivalent for toggle logic
+    const currentField = sortField === null ? "priority" : sortField;
+    if (currentField === field) {
       if (sortDirection === "desc") {
         setSort(field, "asc");
       } else {
@@ -1357,6 +1372,17 @@ export default function RedListView() {
                 <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
                   New Papers
                 </th>
+                <th
+                  className="px-3 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[80px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
+                  onClick={() => handleSort("priority")}
+                >
+                  <span className="flex items-center gap-1">
+                    Priority
+                    {(sortField === "priority" || sortField === null) && (
+                      <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
+                    )}
+                  </span>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
@@ -1600,10 +1626,29 @@ export default function RedListView() {
                         </a>
                       ) : "—"}
                     </td>
+                    {/* Priority score */}
+                    <td className="px-3 md:px-4 py-3 whitespace-nowrap">
+                      {(() => {
+                        const priority = priorityMap.get(s.sis_taxon_id);
+                        if (!priority || priority.score === 0) return <span className="text-zinc-300 dark:text-zinc-700">—</span>;
+                        const b = priority.breakdown;
+                        const tooltipText = (Object.keys(b) as (keyof ScoreBreakdown)[])
+                          .filter(k => b[k] > 0)
+                          .map(k => `${BREAKDOWN_LABELS[k]}: ${b[k]}`)
+                          .join(" · ");
+                        return (
+                          <HoverTooltip text={tooltipText}>
+                            <span className="text-xs font-semibold tabular-nums cursor-help text-zinc-600 dark:text-zinc-400">
+                              {priority.score}
+                            </span>
+                          </HoverTooltip>
+                        );
+                      })()}
+                    </td>
                   </tr>
                   {selectedSpeciesKey === s.sis_taxon_id && (
                     <tr>
-                      <td colSpan={8} className="p-0 bg-zinc-50 dark:bg-zinc-800/30">
+                      <td colSpan={9} className="p-0 bg-zinc-50 dark:bg-zinc-800/30">
                         <div style={{ maxWidth: 'calc(100vw - 2rem)', transform: 'translateX(var(--scroll-left, 0px))' }}>
                           {/* Tab bar */}
                           <div className="flex items-center border-b border-zinc-200 dark:border-zinc-700" onClick={(e) => e.stopPropagation()}>
@@ -1701,7 +1746,7 @@ export default function RedListView() {
               })}
               {filteredSpecies.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-zinc-500">
+                  <td colSpan={9} className="px-4 py-8 text-center text-zinc-500">
                     {neLoading ? (
                       <div className="flex items-center justify-center gap-2">
                         <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
