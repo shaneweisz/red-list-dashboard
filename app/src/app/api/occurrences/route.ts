@@ -4,8 +4,8 @@ export const dynamic = "force-dynamic";
 
 const GBIF_PAGE_LIMIT = 300; // GBIF API max per request
 
-// Major basisOfRecord types to stratify sampling across
-const BASIS_OF_RECORD_TYPES = [
+// Major basisOfRecord types that should be represented in the sample
+const MAJOR_RECORD_TYPES = [
   "HUMAN_OBSERVATION",
   "MACHINE_OBSERVATION",
   "PRESERVED_SPECIMEN",
@@ -32,17 +32,19 @@ type GbifRecord = {
 };
 
 /**
- * Fetch paginated records from GBIF for a given set of base params up to typeLimit.
+ * Fetch paginated records from GBIF up to the given limit.
+ * Returns { results, totalCount }.
  */
 async function fetchPaginated(
   baseParams: URLSearchParams,
-  typeLimit: number
-): Promise<GbifRecord[]> {
+  fetchLimit: number
+): Promise<{ results: GbifRecord[]; totalCount: number }> {
   let results: GbifRecord[] = [];
+  let totalCount = 0;
   let offset = 0;
 
-  while (results.length < typeLimit) {
-    const pageSize = Math.min(GBIF_PAGE_LIMIT, typeLimit - results.length);
+  while (results.length < fetchLimit) {
+    const pageSize = Math.min(GBIF_PAGE_LIMIT, fetchLimit - results.length);
     const params = new URLSearchParams(baseParams);
     params.set("limit", pageSize.toString());
     params.set("offset", offset.toString());
@@ -57,15 +59,16 @@ async function fetchPaginated(
     }
 
     const data = await response.json();
+    totalCount = data.count;
     results = results.concat(data.results);
     offset += pageSize;
 
-    if (data.endOfRecords || results.length >= data.count) {
+    if (data.endOfRecords || results.length >= totalCount) {
       break;
     }
   }
 
-  return results;
+  return { results, totalCount };
 }
 
 export async function GET(request: NextRequest) {
@@ -97,79 +100,59 @@ export async function GET(request: NextRequest) {
       baseParams.set("coordinateUncertaintyInMeters", `*,${maxUncertainty}`);
     }
 
-    // Step 1: Get counts per basisOfRecord type in parallel (limit=0 for fast count-only queries)
-    const countPromises = BASIS_OF_RECORD_TYPES.map((type) => {
-      const params = new URLSearchParams(baseParams);
-      params.set("basisOfRecord", type);
-      params.set("limit", "0");
-      return fetch(
-        `https://api.gbif.org/v1/occurrence/search?${params}`,
-        { cache: "no-store" }
-      ).then((r) => r.json());
-    });
+    // Primary fetch: get records without basisOfRecord filter (original behavior)
+    const { results: primaryResults, totalCount } = await fetchPaginated(baseParams, limit);
 
-    // Also get overall total count
-    const totalParams = new URLSearchParams(baseParams);
-    totalParams.set("limit", "0");
-    const totalPromise = fetch(
-      `https://api.gbif.org/v1/occurrence/search?${totalParams}`,
-      { cache: "no-store" }
-    ).then((r) => r.json());
+    let allResults = primaryResults;
 
-    const [countResults, totalData] = await Promise.all([
-      Promise.all(countPromises),
-      totalPromise,
-    ]);
+    // Check which major basisOfRecord types are missing from the primary results.
+    // GBIF's default ordering can group entire record types beyond the sample window,
+    // causing types like MACHINE_OBSERVATION to be completely absent from the sample
+    // even when they represent the majority of records (see GitHub issue #58).
+    const presentTypes = new Set(
+      primaryResults.map((r) => r.basisOfRecord).filter(Boolean)
+    );
+    const missingTypes = MAJOR_RECORD_TYPES.filter(
+      (type) => !presentTypes.has(type)
+    );
 
-    const typeCounts = BASIS_OF_RECORD_TYPES.map((type, i) => ({
-      type,
-      count: (countResults[i].count as number) || 0,
-    }));
-
-    const overallTotal = totalData.count || 0;
-
-    // Step 2: Allocate sample proportionally across types
-    const activeTypes = typeCounts.filter((tc) => tc.count > 0);
-
-    let allResults: GbifRecord[] = [];
-
-    if (activeTypes.length > 0) {
-      // Calculate proportional allocation with minimum 1 per active type
-      const allocations: { type: string; allocation: number }[] = [];
-      let remaining = limit;
-
-      for (const tc of activeTypes) {
-        const share = Math.max(1, Math.round((tc.count / overallTotal) * limit));
-        const allocation = Math.min(share, tc.count, remaining);
-        allocations.push({ type: tc.type, allocation });
-        remaining -= allocation;
-      }
-
-      // Distribute any leftover to the largest type
-      if (remaining > 0) {
-        const largest = allocations.reduce((a, b) =>
-          (typeCounts.find((tc) => tc.type === a.type)?.count ?? 0) >=
-          (typeCounts.find((tc) => tc.type === b.type)?.count ?? 0)
-            ? a
-            : b
-        );
-        const largestCount = typeCounts.find((tc) => tc.type === largest.type)?.count ?? 0;
-        largest.allocation = Math.min(largest.allocation + remaining, largestCount);
-      }
-
-      // Step 3: Fetch records for each type in parallel
-      const typeResults = await Promise.all(
-        allocations
-          .filter((a) => a.allocation > 0)
-          .map((a) => {
-            const params = new URLSearchParams(baseParams);
-            params.set("basisOfRecord", a.type);
-            return fetchPaginated(params, a.allocation);
-          })
+    if (missingTypes.length > 0 && totalCount > primaryResults.length) {
+      // Quick parallel count queries for missing types only
+      const missingCountResults = await Promise.all(
+        missingTypes.map((type) => {
+          const params = new URLSearchParams(baseParams);
+          params.set("basisOfRecord", type);
+          params.set("limit", "0");
+          return fetch(
+            `https://api.gbif.org/v1/occurrence/search?${params}`,
+            { cache: "no-store" }
+          )
+            .then((r) => r.json())
+            .then((d) => ({ type, count: (d.count as number) || 0 }))
+            .catch(() => ({ type, count: 0 }));
+        })
       );
 
-      for (const results of typeResults) {
-        allResults = allResults.concat(results);
+      const typesWithRecords = missingCountResults.filter((tc) => tc.count > 0);
+
+      if (typesWithRecords.length > 0) {
+        // Allocate a proportional share of the sample to each missing type
+        const supplementResults = await Promise.all(
+          typesWithRecords.map((tc) => {
+            const share = Math.max(
+              1,
+              Math.round((tc.count / totalCount) * limit)
+            );
+            const typeLimit = Math.min(share, tc.count);
+            const params = new URLSearchParams(baseParams);
+            params.set("basisOfRecord", tc.type);
+            return fetchPaginated(params, typeLimit).then((r) => r.results);
+          })
+        );
+
+        for (const results of supplementResults) {
+          allResults = allResults.concat(results);
+        }
       }
     }
 
@@ -200,8 +183,10 @@ export async function GET(request: NextRequest) {
       }));
 
     // Calculate bbox from features
-    let minLon = Infinity, maxLon = -Infinity;
-    let minLat = Infinity, maxLat = -Infinity;
+    let minLon = Infinity,
+      maxLon = -Infinity;
+    let minLat = Infinity,
+      maxLat = -Infinity;
 
     for (const feature of features) {
       const [lon, lat] = feature.geometry.coordinates;
@@ -217,7 +202,7 @@ export async function GET(request: NextRequest) {
       metadata: {
         speciesKey: parseInt(speciesKey),
         count: features.length,
-        total: overallTotal,
+        total: totalCount,
         bbox: features.length > 0 ? [minLon, minLat, maxLon, maxLat] : null,
       },
     });
