@@ -13,6 +13,7 @@ import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
 import { useFilterParams } from "@/hooks/useFilterParams";
 import { computePriority, BREAKDOWN_LABELS, type PriorityResult, type ScoreBreakdown } from "@/lib/prioritization";
 import { TREND_FLAG_META, type TrendResult, type TrendFlag } from "@/lib/trend-analysis";
+import CriteriaEstimation from "../CriteriaEstimation";
 
 // Dynamically import OccurrenceMapRow to avoid SSR issues with Leaflet
 const OccurrenceMapRow = dynamic(
@@ -321,7 +322,7 @@ export default function RedListView() {
 
   // Row expansion state
   const [selectedSpeciesKey, setSelectedSpeciesKey] = useState<number | null>(null);
-  const [activeDetailTab, setActiveDetailTab] = useState<"gbif" | "literature" | "redlist" | "cites">("gbif");
+  const [activeDetailTab, setActiveDetailTab] = useState<"gbif" | "literature" | "redlist" | "cites" | "criterionB">("gbif");
   const [stackedDetailView, setStackedDetailView] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -1780,6 +1781,14 @@ export default function RedListView() {
                                 >
                                   CITES
                                 </button>
+                                {gbifSpeciesKey && s.category !== "NE" && (
+                                  <button
+                                    className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "criterionB" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                    onClick={() => setActiveDetailTab("criterionB")}
+                                  >
+                                    Criterion B
+                                  </button>
+                                )}
                               </>
                             )}
                             {stackedDetailView && (
@@ -1889,6 +1898,14 @@ export default function RedListView() {
                           <div style={{ display: stackedDetailView || activeDetailTab === "cites" ? undefined : "none" }}>
                             <CitesSummary scientificName={s.scientific_name} />
                           </div>
+                          {gbifSpeciesKey && s.category !== "NE" && (
+                            <div style={{ display: stackedDetailView || activeDetailTab === "criterionB" ? undefined : "none" }}>
+                              <CriteriaEstimation
+                                speciesKey={gbifSpeciesKey}
+                                assessmentYear={assessmentYear}
+                              />
+                            </div>
+                          )}
                         </div>
                       </td>
                     </tr>
