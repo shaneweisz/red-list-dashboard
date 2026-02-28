@@ -54,6 +54,17 @@ const SOURCE_LABELS: Record<string, string> = {
   X: "Marine",
 };
 
+/** Compact per-shipment record for client-side filtering */
+interface CompactRecord {
+  y: number;   // year
+  s: string;   // source code
+  p: string;   // purpose code
+  t: string;   // term
+  q: number;   // quantity (max of importer/exporter reported)
+  e: string;   // exporter country code
+  i: string;   // importer country code
+}
+
 interface TradeSummary {
   totalRecords: number;
   yearRange: [number, number];
@@ -71,6 +82,14 @@ interface TradeSummary {
   topImporters: { code: string; records: number; quantity: number }[];
   /** Top bilateral trade flows (exporter → importer) */
   topFlows: { from: string; to: string; records: number; quantity: number }[];
+  /** Compact per-shipment records for client-side filtering */
+  shipments: CompactRecord[];
+  /** All unique source codes with labels */
+  allSources: { code: string; label: string; records: number }[];
+  /** All unique purpose codes with labels */
+  allPurposes: { code: string; label: string; records: number }[];
+  /** All unique terms with record counts */
+  allTerms: { term: string; records: number }[];
 }
 
 function parseQty(val: string | null): number {
@@ -198,6 +217,43 @@ function summarize(rows: TradeRow[]): TradeSummary {
       return { from, to, ...v };
     });
 
+  // Compact per-shipment records for client-side filtering
+  const shipments: CompactRecord[] = rows.map((r) => ({
+    y: r.Year,
+    s: r.Source || "",
+    p: r.Purpose || "",
+    t: r.Term || "unspecified",
+    q: Math.max(
+      parseQty(r["Importer reported quantity"]),
+      parseQty(r["Exporter reported quantity"])
+    ),
+    e: r.Exporter || "",
+    i: r.Importer || "",
+  }));
+
+  // All unique sources (not just top 6)
+  const allSources = Array.from(sourceMap.entries())
+    .sort(([, a], [, b]) => b - a)
+    .map(([code, records]) => ({
+      code,
+      label: SOURCE_LABELS[code] || code,
+      records,
+    }));
+
+  // All unique purposes (not just top 6)
+  const allPurposes = Array.from(purposeMap.entries())
+    .sort(([, a], [, b]) => b - a)
+    .map(([code, records]) => ({
+      code,
+      label: PURPOSE_LABELS[code] || code,
+      records,
+    }));
+
+  // All unique terms with record counts
+  const allTerms = Array.from(termMap.entries())
+    .sort(([, a], [, b]) => b.records - a.records)
+    .map(([term, v]) => ({ term, records: v.records }));
+
   return {
     totalRecords: rows.length,
     yearRange,
@@ -208,6 +264,10 @@ function summarize(rows: TradeRow[]): TradeSummary {
     topExporters,
     topImporters,
     topFlows,
+    shipments,
+    allSources,
+    allPurposes,
+    allTerms,
   };
 }
 
