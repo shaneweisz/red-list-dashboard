@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { analyzeTrend, computeTrendFlag, type YearCount } from "../trend-analysis";
+import { analyzeTrend, computeTrendFlag, EXCLUDED_YEARS, type YearCount } from "../trend-analysis";
 
 const CURRENT_YEAR = 2026;
 
@@ -13,27 +13,35 @@ function flatCounts(value: number, startYear = 2017, years = 10): YearCount[] {
 
 /** Helper: create declining year counts (earlier=high, later=low). */
 function decliningCounts(
-  earlierAvg: number,
-  laterAvg: number,
+  earlierVal: number,
+  laterVal: number,
   startYear = 2017,
 ): YearCount[] {
-  // 5 years at earlierAvg, 5 years at laterAvg
+  // 5 years at earlierVal, 5 years at laterVal
   return [
-    ...Array.from({ length: 5 }, (_, i) => ({ year: startYear + i, count: earlierAvg })),
-    ...Array.from({ length: 5 }, (_, i) => ({ year: startYear + 5 + i, count: laterAvg })),
+    ...Array.from({ length: 5 }, (_, i) => ({ year: startYear + i, count: earlierVal })),
+    ...Array.from({ length: 5 }, (_, i) => ({ year: startYear + 5 + i, count: laterVal })),
   ];
 }
 
 /** Helper: create increasing year counts (earlier=low, later=high). */
 function increasingCounts(
-  earlierAvg: number,
-  laterAvg: number,
+  earlierVal: number,
+  laterVal: number,
   startYear = 2017,
 ): YearCount[] {
   return [
-    ...Array.from({ length: 5 }, (_, i) => ({ year: startYear + i, count: earlierAvg })),
-    ...Array.from({ length: 5 }, (_, i) => ({ year: startYear + 5 + i, count: laterAvg })),
+    ...Array.from({ length: 5 }, (_, i) => ({ year: startYear + i, count: earlierVal })),
+    ...Array.from({ length: 5 }, (_, i) => ({ year: startYear + 5 + i, count: laterVal })),
   ];
+}
+
+/** Helper: create counts excluding the given years (to simulate gaps). */
+function countsExcluding(value: number, excludeYears: number[], startYear = 2017, years = 10): YearCount[] {
+  return Array.from({ length: years }, (_, i) => ({
+    year: startYear + i,
+    count: value,
+  })).filter((yc) => !excludeYears.includes(yc.year));
 }
 
 describe("analyzeTrend", () => {
@@ -50,7 +58,7 @@ describe("analyzeTrend", () => {
   });
 
   it("returns insufficient_data when total observations are below threshold", () => {
-    // 10 years but only 1 obs/year = 10 total < 20 threshold
+    // 10 years but only 1 obs/year = 10 total < 20 threshold (after excluding 2020-2021 = 8 years * 1 = 8)
     const counts = flatCounts(1);
     const result = analyzeTrend(counts, CURRENT_YEAR);
     expect(result.direction).toBe("insufficient_data");
@@ -146,11 +154,96 @@ describe("analyzeTrend", () => {
     expect(result.windowEnd).toBe(2026);
   });
 
-  it("reports earlier and later averages", () => {
+  it("reports earlier and later medians", () => {
     const counts = decliningCounts(100, 50);
     const result = analyzeTrend(counts, CURRENT_YEAR);
-    expect(result.earlierAvg).toBe(100);
-    expect(result.laterAvg).toBe(50);
+    expect(result.earlierMedian).toBe(100);
+    expect(result.laterMedian).toBe(50);
+  });
+
+  // ── Covid year exclusion ──────────────────────────────────────────────
+
+  it("excludes Covid years (2020-2021) from analysis", () => {
+    // Without exclusion: earlier half has a mix of 100 (2017-2019) and 0 (2020-2021)
+    // which would drag down the earlier avg. With exclusion, only 2017-2019 counts matter.
+    const counts: YearCount[] = [
+      { year: 2017, count: 100 },
+      { year: 2018, count: 100 },
+      { year: 2019, count: 100 },
+      { year: 2020, count: 5 },   // Covid dip — should be excluded
+      { year: 2021, count: 5 },   // Covid dip — should be excluded
+      { year: 2022, count: 100 },
+      { year: 2023, count: 100 },
+      { year: 2024, count: 100 },
+      { year: 2025, count: 100 },
+      { year: 2026, count: 100 },
+    ];
+    const result = analyzeTrend(counts, CURRENT_YEAR);
+    // With exclusion: earlier median = 100, later median = 100 → stable
+    // Without exclusion: earlier avg = (100*3+5*2)/5 = 62, later avg = 100 → would look increasing
+    expect(result.direction).toBe("stable");
+    expect(result.excludedYears).toContain(2020);
+    expect(result.excludedYears).toContain(2021);
+  });
+
+  it("reports which years were excluded", () => {
+    const result = analyzeTrend(flatCounts(30), CURRENT_YEAR);
+    expect(result.excludedYears).toEqual(
+      EXCLUDED_YEARS.filter((y) => y >= 2017 && y <= 2026),
+    );
+  });
+
+  it("still includes excluded years in yearCounts for display", () => {
+    const counts = flatCounts(30);
+    const result = analyzeTrend(counts, CURRENT_YEAR);
+    // yearCounts should contain all 10 years including excluded ones
+    const years = result.yearCounts.map((yc) => yc.year);
+    for (const excluded of EXCLUDED_YEARS) {
+      if (excluded >= 2017 && excluded <= 2026) {
+        expect(years).toContain(excluded);
+      }
+    }
+  });
+
+  // ── Median robustness ─────────────────────────────────────────────────
+
+  it("uses median so a single high year does not skew the result", () => {
+    // 3 normal earlier years (2017-2019) + 5 normal later years (2022-2026)
+    // One outlier year in the later half shouldn't shift the median much
+    const counts: YearCount[] = [
+      { year: 2017, count: 50 },
+      { year: 2018, count: 50 },
+      { year: 2019, count: 50 },
+      { year: 2020, count: 50 },  // excluded
+      { year: 2021, count: 50 },  // excluded
+      { year: 2022, count: 50 },
+      { year: 2023, count: 50 },
+      { year: 2024, count: 50 },
+      { year: 2025, count: 50 },
+      { year: 2026, count: 5000 }, // huge outlier
+    ];
+    const result = analyzeTrend(counts, CURRENT_YEAR);
+    // Median of later half [50,50,50,50,5000] = 50, so stable
+    // Mean would be 1040, which would falsely show increasing
+    expect(result.direction).toBe("stable");
+  });
+
+  it("uses median so a single low year does not skew the result", () => {
+    const counts: YearCount[] = [
+      { year: 2017, count: 200 },
+      { year: 2018, count: 200 },
+      { year: 2019, count: 200 },
+      { year: 2020, count: 200 },  // excluded
+      { year: 2021, count: 200 },  // excluded
+      { year: 2022, count: 1 },    // one bad year
+      { year: 2023, count: 200 },
+      { year: 2024, count: 200 },
+      { year: 2025, count: 200 },
+      { year: 2026, count: 200 },
+    ];
+    const result = analyzeTrend(counts, CURRENT_YEAR);
+    // Median of later half [1,200,200,200,200] = 200, so stable
+    expect(result.direction).toBe("stable");
   });
 });
 

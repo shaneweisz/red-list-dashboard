@@ -1410,9 +1410,6 @@ export default function RedListView() {
                     )}
                   </span>
                 </th>
-                <th className="px-3 md:px-4 py-3 text-center text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
-                  Trend
-                </th>
                 <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
                   Papers at Assess.
                 </th>
@@ -1429,6 +1426,9 @@ export default function RedListView() {
                       <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
                     )}
                   </span>
+                </th>
+                <th className="px-3 md:px-4 py-3 text-center text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
+                  Signal
                 </th>
               </tr>
             </thead>
@@ -1633,58 +1633,6 @@ export default function RedListView() {
                         </HoverTooltip>
                       ) : "—"}
                     </td>
-                    {/* Observation trend flag */}
-                    <td className="px-3 py-3 text-center whitespace-nowrap">
-                      {(() => {
-                        if (isNE(s) || s.category === "EX" || s.category === "EW") {
-                          return <span className="text-zinc-300 dark:text-zinc-700">—</span>;
-                        }
-                        const gbifKey = s.gbif_species_key;
-                        if (!gbifKey) {
-                          return <span className="text-zinc-300 dark:text-zinc-700">—</span>;
-                        }
-                        const trend = speciesTrends[gbifKey];
-                        if (!trend) {
-                          // Still loading
-                          return <span className="inline-block animate-spin h-3.5 w-3.5 border-2 border-zinc-300 border-t-transparent rounded-full" />;
-                        }
-                        if (trend.direction === "insufficient_data") {
-                          return (
-                            <HoverTooltip text="Insufficient GBIF data to determine observation trend">
-                              <span className="text-zinc-400 dark:text-zinc-600 cursor-help text-xs">—</span>
-                            </HoverTooltip>
-                          );
-                        }
-                        if (trend.flag) {
-                          const meta = TREND_FLAG_META[trend.flag];
-                          const changeText = trend.changePercent > 0
-                            ? `+${trend.changePercent}%`
-                            : `${trend.changePercent}%`;
-                          const tooltip = `${meta.label}: ${meta.description} (${changeText} over ${trend.windowEnd - trend.windowStart + 1}yr, from ~${trend.earlierAvg}/yr to ~${trend.laterAvg}/yr)`;
-                          return (
-                            <HoverTooltip text={tooltip}>
-                              <span
-                                className="inline-flex items-center gap-0.5 cursor-help text-xs font-semibold px-1.5 py-0.5 rounded-full"
-                                style={{
-                                  color: meta.color,
-                                  backgroundColor: meta.color + "18",
-                                }}
-                              >
-                                <span className="text-sm leading-none">{meta.icon}</span>
-                                <span className="hidden sm:inline">{trend.flag === "data_available" ? "Data" : changeText}</span>
-                              </span>
-                            </HoverTooltip>
-                          );
-                        }
-                        // Stable — no flag
-                        const tooltip = `Observations stable (${trend.changePercent > 0 ? "+" : ""}${trend.changePercent}% over ${trend.windowEnd - trend.windowStart + 1}yr)`;
-                        return (
-                          <HoverTooltip text={tooltip}>
-                            <span className="text-zinc-400 dark:text-zinc-500 cursor-help text-xs">→</span>
-                          </HoverTooltip>
-                        );
-                      })()}
-                    </td>
                     {/* Papers When Assessed */}
                     <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
                       {isNE(s) ? <span className="text-zinc-400">N/A</span> : details?.papersAtAssessment === undefined ? (
@@ -1740,6 +1688,61 @@ export default function RedListView() {
                             <span className="text-xs font-semibold tabular-nums cursor-help text-zinc-600 dark:text-zinc-400">
                               {priority.score}
                             </span>
+                          </HoverTooltip>
+                        );
+                      })()}
+                    </td>
+                    {/* Signal — observation trend flag */}
+                    <td className="px-3 py-3 text-center whitespace-nowrap">
+                      {(() => {
+                        if (isNE(s) || s.category === "EX" || s.category === "EW") {
+                          return <span className="text-zinc-300 dark:text-zinc-700">—</span>;
+                        }
+                        const gbifKey = s.gbif_species_key;
+                        if (!gbifKey) {
+                          return <span className="text-zinc-300 dark:text-zinc-700">—</span>;
+                        }
+                        const trend = speciesTrends[gbifKey];
+                        if (!trend) {
+                          // Still loading
+                          return <span className="inline-block animate-spin h-3.5 w-3.5 border-2 border-zinc-300 border-t-transparent rounded-full" />;
+                        }
+                        if (trend.direction === "insufficient_data") {
+                          return (
+                            <HoverTooltip text="Insufficient GBIF data to determine observation signal">
+                              <span className="text-zinc-400 dark:text-zinc-600 cursor-help text-xs">—</span>
+                            </HoverTooltip>
+                          );
+                        }
+                        if (trend.flag) {
+                          const meta = TREND_FLAG_META[trend.flag];
+                          const changeText = trend.changePercent > 0
+                            ? `+${trend.changePercent}%`
+                            : `${trend.changePercent}%`;
+                          const excludedNote = trend.excludedYears.length > 0
+                            ? ` Excludes ${trend.excludedYears.join(", ")} (Covid disruption).`
+                            : "";
+                          const tooltip = `${meta.label}: ${meta.description} (${changeText} over ${trend.windowEnd - trend.windowStart + 1}yr, median ~${trend.earlierMedian}/yr → ~${trend.laterMedian}/yr)${excludedNote}`;
+                          return (
+                            <HoverTooltip text={tooltip}>
+                              <span
+                                className="inline-flex items-center gap-0.5 cursor-help text-xs font-semibold px-1.5 py-0.5 rounded-full"
+                                style={{
+                                  color: meta.color,
+                                  backgroundColor: meta.color + "18",
+                                }}
+                              >
+                                <span className="text-sm leading-none">{meta.icon}</span>
+                                <span className="hidden sm:inline">{trend.flag === "data_available" ? "Data" : meta.label.split(" ").pop()}</span>
+                              </span>
+                            </HoverTooltip>
+                          );
+                        }
+                        // Stable — no flag
+                        const tooltip = `Observations stable (${trend.changePercent > 0 ? "+" : ""}${trend.changePercent}% over ${trend.windowEnd - trend.windowStart + 1}yr)`;
+                        return (
+                          <HoverTooltip text={tooltip}>
+                            <span className="text-zinc-400 dark:text-zinc-500 cursor-help text-xs">→</span>
                           </HoverTooltip>
                         );
                       })()}
@@ -1807,7 +1810,7 @@ export default function RedListView() {
                               {stackedDetailView ? "Tabbed" : "Stacked"}
                             </button>
                           </div>
-                          {/* Trend flag banner (if applicable) */}
+                          {/* Signal banner (if applicable) */}
                           {(() => {
                             const trend = gbifSpeciesKey ? speciesTrends[gbifSpeciesKey] : null;
                             if (!trend?.flag) return null;
@@ -1830,9 +1833,9 @@ export default function RedListView() {
                                     — {meta.description}
                                   </span>
                                   <div className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400 flex flex-wrap gap-x-4 gap-y-1">
-                                    <span>Observation change: <strong className="text-zinc-700 dark:text-zinc-300">{changeText}</strong> over {trend.windowEnd - trend.windowStart + 1} years</span>
-                                    <span>Earlier avg: <strong className="text-zinc-700 dark:text-zinc-300">~{trend.earlierAvg.toLocaleString()}/yr</strong></span>
-                                    <span>Recent avg: <strong className="text-zinc-700 dark:text-zinc-300">~{trend.laterAvg.toLocaleString()}/yr</strong></span>
+                                    <span>Observation change: <strong className="text-zinc-700 dark:text-zinc-300">{changeText}</strong> over {trend.windowEnd - trend.windowStart + 1} years{trend.excludedYears.length > 0 ? ` (excl. ${trend.excludedYears.join(", ")})` : ""}</span>
+                                    <span>Earlier median: <strong className="text-zinc-700 dark:text-zinc-300">~{trend.earlierMedian.toLocaleString()}/yr</strong></span>
+                                    <span>Recent median: <strong className="text-zinc-700 dark:text-zinc-300">~{trend.laterMedian.toLocaleString()}/yr</strong></span>
                                   </div>
                                   {trend.yearCounts.length > 0 && (
                                     <div className="mt-2 flex items-end gap-px h-8" title="GBIF observations per year">
