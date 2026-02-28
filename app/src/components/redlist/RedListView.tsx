@@ -12,6 +12,8 @@ import { ALPHA2_TO_NAME } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
 import { useFilterParams } from "@/hooks/useFilterParams";
 import { computePriority, BREAKDOWN_LABELS, type PriorityResult, type ScoreBreakdown } from "@/lib/prioritization";
+import { TREND_FLAG_META, type TrendResult, type TrendFlag } from "@/lib/trend-analysis";
+import CriteriaEstimation from "../CriteriaEstimation";
 
 // Dynamically import OccurrenceMapRow to avoid SSR issues with Leaflet
 const OccurrenceMapRow = dynamic(
@@ -315,9 +317,12 @@ export default function RedListView() {
   // Species details cache (images, criteria, common names)
   const [speciesDetails, setSpeciesDetails] = useState<Record<number, SpeciesDetails>>({});
 
+  // Observation trend flags (fetched per-page from GBIF year-faceted data)
+  const [speciesTrends, setSpeciesTrends] = useState<Record<number, TrendResult>>({});
+
   // Row expansion state
   const [selectedSpeciesKey, setSelectedSpeciesKey] = useState<number | null>(null);
-  const [activeDetailTab, setActiveDetailTab] = useState<"gbif" | "literature" | "redlist" | "cites">("gbif");
+  const [activeDetailTab, setActiveDetailTab] = useState<"gbif" | "literature" | "redlist" | "cites" | "criterionB">("gbif");
   const [stackedDetailView, setStackedDetailView] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -987,6 +992,45 @@ export default function RedListView() {
     fetchCriteria();
   }, [selectedSpeciesKey, paginatedSpecies, speciesDetails]);
 
+  // Fetch observation trends for visible species (batched per-page)
+  useEffect(() => {
+    // Only fetch trends for species with GBIF keys that we haven't fetched yet
+    const toFetch = paginatedSpecies.filter(
+      (s) => s.gbif_species_key && !speciesTrends[s.gbif_species_key] && s.category !== "EX" && s.category !== "EW"
+    );
+    if (toFetch.length === 0) return;
+
+    const controller = new AbortController();
+
+    async function fetchTrends() {
+      const keys = toFetch.map((s) => s.gbif_species_key!).join(",");
+      const categories = toFetch.map((s) => s.category).join(",");
+      try {
+        const res = await fetch(
+          `/api/redlist/trends?keys=${keys}&categories=${categories}`,
+          { signal: controller.signal }
+        );
+        if (!res.ok || controller.signal.aborted) return;
+        const data = await res.json();
+        if (data.trends) {
+          setSpeciesTrends((prev) => {
+            const next = { ...prev };
+            // Key by gbif_species_key for O(1) lookup
+            for (const [key, trend] of Object.entries(data.trends)) {
+              next[Number(key)] = trend as TrendResult;
+            }
+            return next;
+          });
+        }
+      } catch {
+        // Abort or network error — ignore
+      }
+    }
+
+    fetchTrends();
+    return () => controller.abort("cleanup");
+  }, [paginatedSpecies, speciesTrends]);
+
   // Handle category bar click (Cmd/Ctrl+click for multi-select, regular click replaces)
   const handleCategoryClick = (data: { payload?: { code?: string } }, event: React.MouseEvent) => {
     const code = data.payload?.code;
@@ -1366,6 +1410,9 @@ export default function RedListView() {
                     )}
                   </span>
                 </th>
+                <th className="px-3 md:px-4 py-3 text-center text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
+                  Trend
+                </th>
                 <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
                   Papers at Assess.
                 </th>
@@ -1586,6 +1633,58 @@ export default function RedListView() {
                         </HoverTooltip>
                       ) : "—"}
                     </td>
+                    {/* Observation trend flag */}
+                    <td className="px-3 py-3 text-center whitespace-nowrap">
+                      {(() => {
+                        if (isNE(s) || s.category === "EX" || s.category === "EW") {
+                          return <span className="text-zinc-300 dark:text-zinc-700">—</span>;
+                        }
+                        const gbifKey = s.gbif_species_key;
+                        if (!gbifKey) {
+                          return <span className="text-zinc-300 dark:text-zinc-700">—</span>;
+                        }
+                        const trend = speciesTrends[gbifKey];
+                        if (!trend) {
+                          // Still loading
+                          return <span className="inline-block animate-spin h-3.5 w-3.5 border-2 border-zinc-300 border-t-transparent rounded-full" />;
+                        }
+                        if (trend.direction === "insufficient_data") {
+                          return (
+                            <HoverTooltip text="Insufficient GBIF data to determine observation trend">
+                              <span className="text-zinc-400 dark:text-zinc-600 cursor-help text-xs">—</span>
+                            </HoverTooltip>
+                          );
+                        }
+                        if (trend.flag) {
+                          const meta = TREND_FLAG_META[trend.flag];
+                          const changeText = trend.changePercent > 0
+                            ? `+${trend.changePercent}%`
+                            : `${trend.changePercent}%`;
+                          const tooltip = `${meta.label}: ${meta.description} (${changeText} over ${trend.windowEnd - trend.windowStart + 1}yr, from ~${trend.earlierAvg}/yr to ~${trend.laterAvg}/yr)`;
+                          return (
+                            <HoverTooltip text={tooltip}>
+                              <span
+                                className="inline-flex items-center gap-0.5 cursor-help text-xs font-semibold px-1.5 py-0.5 rounded-full"
+                                style={{
+                                  color: meta.color,
+                                  backgroundColor: meta.color + "18",
+                                }}
+                              >
+                                <span className="text-sm leading-none">{meta.icon}</span>
+                                <span className="hidden sm:inline">{trend.flag === "data_available" ? "Data" : changeText}</span>
+                              </span>
+                            </HoverTooltip>
+                          );
+                        }
+                        // Stable — no flag
+                        const tooltip = `Observations stable (${trend.changePercent > 0 ? "+" : ""}${trend.changePercent}% over ${trend.windowEnd - trend.windowStart + 1}yr)`;
+                        return (
+                          <HoverTooltip text={tooltip}>
+                            <span className="text-zinc-400 dark:text-zinc-500 cursor-help text-xs">→</span>
+                          </HoverTooltip>
+                        );
+                      })()}
+                    </td>
                     {/* Papers When Assessed */}
                     <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
                       {isNE(s) ? <span className="text-zinc-400">N/A</span> : details?.papersAtAssessment === undefined ? (
@@ -1648,7 +1747,7 @@ export default function RedListView() {
                   </tr>
                   {selectedSpeciesKey === s.sis_taxon_id && (
                     <tr>
-                      <td colSpan={9} className="p-0 bg-zinc-50 dark:bg-zinc-800/30">
+                      <td colSpan={10} className="p-0 bg-zinc-50 dark:bg-zinc-800/30">
                         <div style={{ maxWidth: 'calc(100vw - 2rem)', transform: 'translateX(var(--scroll-left, 0px))' }}>
                           {/* Tab bar */}
                           <div className="flex items-center border-b border-zinc-200 dark:border-zinc-700" onClick={(e) => e.stopPropagation()}>
@@ -1682,6 +1781,14 @@ export default function RedListView() {
                                 >
                                   CITES
                                 </button>
+                                {gbifSpeciesKey && s.category !== "NE" && (
+                                  <button
+                                    className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "criterionB" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                    onClick={() => setActiveDetailTab("criterionB")}
+                                  >
+                                    Criterion B
+                                  </button>
+                                )}
                               </>
                             )}
                             {stackedDetailView && (
@@ -1700,6 +1807,60 @@ export default function RedListView() {
                               {stackedDetailView ? "Tabbed" : "Stacked"}
                             </button>
                           </div>
+                          {/* Trend flag banner (if applicable) */}
+                          {(() => {
+                            const trend = gbifSpeciesKey ? speciesTrends[gbifSpeciesKey] : null;
+                            if (!trend?.flag) return null;
+                            const meta = TREND_FLAG_META[trend.flag];
+                            const changeText = trend.changePercent > 0
+                              ? `+${trend.changePercent}%`
+                              : `${trend.changePercent}%`;
+                            return (
+                              <div
+                                className="mx-4 mt-3 px-4 py-3 rounded-lg border text-sm flex items-start gap-3"
+                                style={{
+                                  borderColor: meta.color + "40",
+                                  backgroundColor: meta.color + "08",
+                                }}
+                              >
+                                <span className="text-xl leading-none mt-0.5" style={{ color: meta.color }}>{meta.icon}</span>
+                                <div>
+                                  <span className="font-semibold" style={{ color: meta.color }}>{meta.label}</span>
+                                  <span className="text-zinc-600 dark:text-zinc-400 ml-1">
+                                    — {meta.description}
+                                  </span>
+                                  <div className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400 flex flex-wrap gap-x-4 gap-y-1">
+                                    <span>Observation change: <strong className="text-zinc-700 dark:text-zinc-300">{changeText}</strong> over {trend.windowEnd - trend.windowStart + 1} years</span>
+                                    <span>Earlier avg: <strong className="text-zinc-700 dark:text-zinc-300">~{trend.earlierAvg.toLocaleString()}/yr</strong></span>
+                                    <span>Recent avg: <strong className="text-zinc-700 dark:text-zinc-300">~{trend.laterAvg.toLocaleString()}/yr</strong></span>
+                                  </div>
+                                  {trend.yearCounts.length > 0 && (
+                                    <div className="mt-2 flex items-end gap-px h-8" title="GBIF observations per year">
+                                      {trend.yearCounts.map((yc) => {
+                                        const maxCount = Math.max(...trend.yearCounts.map((y) => y.count), 1);
+                                        const height = Math.max(2, (yc.count / maxCount) * 32);
+                                        const midYear = trend.windowStart + Math.floor((trend.windowEnd - trend.windowStart + 1) / 2);
+                                        const isEarlier = yc.year < midYear;
+                                        return (
+                                          <HoverTooltip key={yc.year} text={`${yc.year}: ${yc.count.toLocaleString()} observations`}>
+                                            <div
+                                              className="w-4 rounded-sm cursor-help transition-colors"
+                                              style={{
+                                                height: `${height}px`,
+                                                backgroundColor: isEarlier
+                                                  ? "rgb(161 161 170)" // zinc-400
+                                                  : meta.color + "B0",
+                                              }}
+                                            />
+                                          </HoverTooltip>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })()}
                           {/* Content */}
                           {gbifSpeciesKey ? (
                             <div style={{ display: stackedDetailView || activeDetailTab === "gbif" ? undefined : "none" }}>
@@ -1737,6 +1898,14 @@ export default function RedListView() {
                           <div style={{ display: stackedDetailView || activeDetailTab === "cites" ? undefined : "none" }}>
                             <CitesSummary scientificName={s.scientific_name} />
                           </div>
+                          {gbifSpeciesKey && s.category !== "NE" && (
+                            <div style={{ display: stackedDetailView || activeDetailTab === "criterionB" ? undefined : "none" }}>
+                              <CriteriaEstimation
+                                speciesKey={gbifSpeciesKey}
+                                assessmentYear={assessmentYear}
+                              />
+                            </div>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1746,7 +1915,7 @@ export default function RedListView() {
               })}
               {filteredSpecies.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-zinc-500">
+                  <td colSpan={10} className="px-4 py-8 text-center text-zinc-500">
                     {neLoading ? (
                       <div className="flex items-center justify-center gap-2">
                         <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
