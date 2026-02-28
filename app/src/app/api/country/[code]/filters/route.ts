@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTaxonConfig } from "@/config/taxa";
+import { buildTaxonParams } from "@/lib/gbif-taxon-params";
 
 // Data source definitions
 const DATA_SOURCES = {
@@ -44,25 +45,6 @@ interface FilterStats {
 const cache: Record<string, { data: FilterStats; timestamp: number }> = {};
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
-function buildTaxonParams(taxon: ReturnType<typeof getTaxonConfig>): URLSearchParams {
-  const params = new URLSearchParams();
-
-  if (taxon.gbifClassKey) {
-    params.set("classKey", taxon.gbifClassKey.toString());
-  } else if (taxon.gbifClassKeys && taxon.gbifClassKeys.length > 0) {
-    taxon.gbifClassKeys.forEach(key => {
-      params.append("classKey", key.toString());
-    });
-  } else if (taxon.gbifOrderKeys && taxon.gbifOrderKeys.length > 0) {
-    taxon.gbifOrderKeys.forEach(key => {
-      params.append("orderKey", key.toString());
-    });
-  } else if (taxon.gbifKingdomKey) {
-    params.set("kingdomKey", taxon.gbifKingdomKey.toString());
-  }
-
-  return params;
-}
 
 export async function GET(
   request: NextRequest,

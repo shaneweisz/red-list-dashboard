@@ -1005,9 +1005,10 @@ export default function RedListView() {
     async function fetchTrends() {
       const keys = toFetch.map((s) => s.gbif_species_key!).join(",");
       const categories = toFetch.map((s) => s.category).join(",");
+      const taxons = toFetch.map((s) => s.taxon_id || "").join(",");
       try {
         const res = await fetch(
-          `/api/redlist/trends?keys=${keys}&categories=${categories}`,
+          `/api/redlist/trends?keys=${keys}&categories=${categories}&taxons=${taxons}`,
           { signal: controller.signal }
         );
         if (!res.ok || controller.signal.aborted) return;
@@ -1719,10 +1720,8 @@ export default function RedListView() {
                           const changeText = trend.changePercent > 0
                             ? `+${trend.changePercent}%`
                             : `${trend.changePercent}%`;
-                          const excludedNote = trend.excludedYears.length > 0
-                            ? ` Excludes ${trend.excludedYears.join(", ")} (Covid disruption).`
-                            : "";
-                          const tooltip = `${meta.label}: ${meta.description} (${changeText} over ${trend.windowEnd - trend.windowStart + 1}yr, median ~${trend.earlierMedian}/yr → ~${trend.laterMedian}/yr)${excludedNote}`;
+                          const normNote = trend.effortNormalized ? " Effort-adjusted." : "";
+                          const tooltip = `${meta.label}: ${meta.description} (${changeText} over ${trend.windowEnd - trend.windowStart + 1}yr, median ~${trend.earlierMedian}/yr → ~${trend.laterMedian}/yr)${normNote}`;
                           return (
                             <HoverTooltip text={tooltip}>
                               <span
@@ -1833,19 +1832,28 @@ export default function RedListView() {
                                     — {meta.description}
                                   </span>
                                   <div className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400 flex flex-wrap gap-x-4 gap-y-1">
-                                    <span>Observation change: <strong className="text-zinc-700 dark:text-zinc-300">{changeText}</strong> over {trend.windowEnd - trend.windowStart + 1} years{trend.excludedYears.length > 0 ? ` (excl. ${trend.excludedYears.join(", ")})` : ""}</span>
+                                    <span>Observation change: <strong className="text-zinc-700 dark:text-zinc-300">{changeText}</strong> over {trend.windowEnd - trend.windowStart + 1} years</span>
                                     <span>Earlier median: <strong className="text-zinc-700 dark:text-zinc-300">~{trend.earlierMedian.toLocaleString()}/yr</strong></span>
                                     <span>Recent median: <strong className="text-zinc-700 dark:text-zinc-300">~{trend.laterMedian.toLocaleString()}/yr</strong></span>
+                                    {trend.effortNormalized && (
+                                      <span className="text-zinc-400 dark:text-zinc-500 italic">Effort-adjusted</span>
+                                    )}
                                   </div>
-                                  {trend.yearCounts.length > 0 && (
-                                    <div className="mt-2 flex items-end gap-px h-8" title="GBIF observations per year">
-                                      {trend.yearCounts.map((yc) => {
-                                        const maxCount = Math.max(...trend.yearCounts.map((y) => y.count), 1);
+                                  {trend.adjustedYearCounts.length > 0 && (
+                                    <div className="mt-2 flex items-end gap-px h-8" title={trend.effortNormalized ? "Effort-adjusted GBIF observations per year" : "GBIF observations per year"}>
+                                      {trend.adjustedYearCounts.map((yc) => {
+                                        const maxCount = Math.max(...trend.adjustedYearCounts.map((y) => y.count), 1);
                                         const height = Math.max(2, (yc.count / maxCount) * 32);
                                         const midYear = trend.windowStart + Math.floor((trend.windowEnd - trend.windowStart + 1) / 2);
                                         const isEarlier = yc.year < midYear;
+                                        const raw = trend.yearCounts.find((r) => r.year === yc.year);
+                                        const factor = trend.scalingFactors[yc.year];
+                                        const tooltipParts = [`${yc.year}: ${yc.count.toLocaleString()} obs`];
+                                        if (trend.effortNormalized && raw && factor !== undefined) {
+                                          tooltipParts.push(`(raw: ${raw.count.toLocaleString()}, effort factor: ${factor.toFixed(2)}×)`);
+                                        }
                                         return (
-                                          <HoverTooltip key={yc.year} text={`${yc.year}: ${yc.count.toLocaleString()} observations`}>
+                                          <HoverTooltip key={yc.year} text={tooltipParts.join(" ")}>
                                             <div
                                               className="w-4 rounded-sm cursor-help transition-colors"
                                               style={{

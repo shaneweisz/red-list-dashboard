@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { analyzeTrend, computeTrendFlag, EXCLUDED_YEARS, type YearCount } from "../trend-analysis";
+import { analyzeTrend, computeTrendFlag, computeScalingFactors, type YearCount } from "../trend-analysis";
 
 const CURRENT_YEAR = 2026;
 
@@ -36,14 +36,6 @@ function increasingCounts(
   ];
 }
 
-/** Helper: create counts excluding the given years (to simulate gaps). */
-function countsExcluding(value: number, excludeYears: number[], startYear = 2017, years = 10): YearCount[] {
-  return Array.from({ length: years }, (_, i) => ({
-    year: startYear + i,
-    count: value,
-  })).filter((yc) => !excludeYears.includes(yc.year));
-}
-
 describe("analyzeTrend", () => {
   // ── Insufficient data ─────────────────────────────────────────────────
 
@@ -58,7 +50,6 @@ describe("analyzeTrend", () => {
   });
 
   it("returns insufficient_data when total observations are below threshold", () => {
-    // 10 years but only 1 obs/year = 10 total < 20 threshold (after excluding 2020-2021 = 8 years * 1 = 8)
     const counts = flatCounts(1);
     const result = analyzeTrend(counts, CURRENT_YEAR);
     expect(result.direction).toBe("insufficient_data");
@@ -131,7 +122,6 @@ describe("analyzeTrend", () => {
   // ── Window and filtering ──────────────────────────────────────────────
 
   it("only considers observations within the 10-year window", () => {
-    // Old data outside window shouldn't affect the result
     const counts: YearCount[] = [
       { year: 2000, count: 10000 }, // Way outside window
       ...flatCounts(50),
@@ -161,61 +151,15 @@ describe("analyzeTrend", () => {
     expect(result.laterMedian).toBe(50);
   });
 
-  // ── Covid year exclusion ──────────────────────────────────────────────
-
-  it("excludes Covid years (2020-2021) from analysis", () => {
-    // Without exclusion: earlier half has a mix of 100 (2017-2019) and 0 (2020-2021)
-    // which would drag down the earlier avg. With exclusion, only 2017-2019 counts matter.
-    const counts: YearCount[] = [
-      { year: 2017, count: 100 },
-      { year: 2018, count: 100 },
-      { year: 2019, count: 100 },
-      { year: 2020, count: 5 },   // Covid dip — should be excluded
-      { year: 2021, count: 5 },   // Covid dip — should be excluded
-      { year: 2022, count: 100 },
-      { year: 2023, count: 100 },
-      { year: 2024, count: 100 },
-      { year: 2025, count: 100 },
-      { year: 2026, count: 100 },
-    ];
-    const result = analyzeTrend(counts, CURRENT_YEAR);
-    // With exclusion: earlier median = 100, later median = 100 → stable
-    // Without exclusion: earlier avg = (100*3+5*2)/5 = 62, later avg = 100 → would look increasing
-    expect(result.direction).toBe("stable");
-    expect(result.excludedYears).toContain(2020);
-    expect(result.excludedYears).toContain(2021);
-  });
-
-  it("reports which years were excluded", () => {
-    const result = analyzeTrend(flatCounts(30), CURRENT_YEAR);
-    expect(result.excludedYears).toEqual(
-      EXCLUDED_YEARS.filter((y) => y >= 2017 && y <= 2026),
-    );
-  });
-
-  it("still includes excluded years in yearCounts for display", () => {
-    const counts = flatCounts(30);
-    const result = analyzeTrend(counts, CURRENT_YEAR);
-    // yearCounts should contain all 10 years including excluded ones
-    const years = result.yearCounts.map((yc) => yc.year);
-    for (const excluded of EXCLUDED_YEARS) {
-      if (excluded >= 2017 && excluded <= 2026) {
-        expect(years).toContain(excluded);
-      }
-    }
-  });
-
   // ── Median robustness ─────────────────────────────────────────────────
 
   it("uses median so a single high year does not skew the result", () => {
-    // 3 normal earlier years (2017-2019) + 5 normal later years (2022-2026)
-    // One outlier year in the later half shouldn't shift the median much
     const counts: YearCount[] = [
       { year: 2017, count: 50 },
       { year: 2018, count: 50 },
       { year: 2019, count: 50 },
-      { year: 2020, count: 50 },  // excluded
-      { year: 2021, count: 50 },  // excluded
+      { year: 2020, count: 50 },
+      { year: 2021, count: 50 },
       { year: 2022, count: 50 },
       { year: 2023, count: 50 },
       { year: 2024, count: 50 },
@@ -224,7 +168,6 @@ describe("analyzeTrend", () => {
     ];
     const result = analyzeTrend(counts, CURRENT_YEAR);
     // Median of later half [50,50,50,50,5000] = 50, so stable
-    // Mean would be 1040, which would falsely show increasing
     expect(result.direction).toBe("stable");
   });
 
@@ -233,8 +176,8 @@ describe("analyzeTrend", () => {
       { year: 2017, count: 200 },
       { year: 2018, count: 200 },
       { year: 2019, count: 200 },
-      { year: 2020, count: 200 },  // excluded
-      { year: 2021, count: 200 },  // excluded
+      { year: 2020, count: 200 },
+      { year: 2021, count: 200 },
       { year: 2022, count: 1 },    // one bad year
       { year: 2023, count: 200 },
       { year: 2024, count: 200 },
@@ -244,6 +187,228 @@ describe("analyzeTrend", () => {
     const result = analyzeTrend(counts, CURRENT_YEAR);
     // Median of later half [1,200,200,200,200] = 200, so stable
     expect(result.direction).toBe("stable");
+  });
+
+  // ── Without normalization ─────────────────────────────────────────────
+
+  it("marks effortNormalized=false when no taxon baseline provided", () => {
+    const result = analyzeTrend(flatCounts(50), CURRENT_YEAR);
+    expect(result.effortNormalized).toBe(false);
+    expect(result.scalingFactors).toEqual({});
+  });
+
+  it("returns adjustedYearCounts identical to yearCounts when not normalized", () => {
+    const counts = flatCounts(50);
+    const result = analyzeTrend(counts, CURRENT_YEAR);
+    expect(result.adjustedYearCounts).toEqual(result.yearCounts);
+  });
+
+  // ── With effort normalization ─────────────────────────────────────────
+
+  it("marks effortNormalized=true when taxon baseline provided", () => {
+    const species = flatCounts(50);
+    const taxon = flatCounts(10000);
+    const result = analyzeTrend(species, CURRENT_YEAR, taxon);
+    expect(result.effortNormalized).toBe(true);
+  });
+
+  it("returns scaling factors for each year in the window", () => {
+    const species = flatCounts(50);
+    const taxon = flatCounts(10000);
+    const result = analyzeTrend(species, CURRENT_YEAR, taxon);
+    // With flat taxon counts, all factors should be ~1
+    for (let y = 2017; y <= 2026; y++) {
+      expect(result.scalingFactors[y]).toBeCloseTo(1, 5);
+    }
+  });
+
+  it("compensates for Covid-like dip via effort normalization", () => {
+    // Species tracks the taxon baseline closely (proportional observer effect)
+    // In 2020-2021, both species and taxon observations drop (Covid lockdowns)
+    const species: YearCount[] = [
+      { year: 2017, count: 100 },
+      { year: 2018, count: 100 },
+      { year: 2019, count: 100 },
+      { year: 2020, count: 30 },   // Covid dip
+      { year: 2021, count: 30 },   // Covid dip
+      { year: 2022, count: 100 },
+      { year: 2023, count: 100 },
+      { year: 2024, count: 100 },
+      { year: 2025, count: 100 },
+      { year: 2026, count: 100 },
+    ];
+    const taxon: YearCount[] = [
+      { year: 2017, count: 1000000 },
+      { year: 2018, count: 1000000 },
+      { year: 2019, count: 1000000 },
+      { year: 2020, count: 300000 },  // Covid dip (same proportion)
+      { year: 2021, count: 300000 },  // Covid dip (same proportion)
+      { year: 2022, count: 1000000 },
+      { year: 2023, count: 1000000 },
+      { year: 2024, count: 1000000 },
+      { year: 2025, count: 1000000 },
+      { year: 2026, count: 1000000 },
+    ];
+
+    // Without normalization: earlier median would be dragged down by 2020-2021
+    const rawResult = analyzeTrend(species, CURRENT_YEAR);
+
+    // With normalization: Covid years get scaled up, revealing stable pattern
+    const normResult = analyzeTrend(species, CURRENT_YEAR, taxon);
+    expect(normResult.direction).toBe("stable");
+    expect(normResult.effortNormalized).toBe(true);
+
+    // Verify the Covid years were scaled up in adjusted counts
+    const adj2020 = normResult.adjustedYearCounts.find((yc) => yc.year === 2020);
+    const raw2020 = normResult.yearCounts.find((yc) => yc.year === 2020);
+    expect(adj2020!.count).toBeGreaterThan(raw2020!.count);
+  });
+
+  it("compensates for citizen science growth via effort normalization", () => {
+    // Species count is actually stable, but raw counts look increasing
+    // because total citizen science observations are growing exponentially
+    const species: YearCount[] = [
+      { year: 2017, count: 50 },
+      { year: 2018, count: 60 },
+      { year: 2019, count: 70 },
+      { year: 2020, count: 80 },
+      { year: 2021, count: 90 },
+      { year: 2022, count: 100 },
+      { year: 2023, count: 120 },
+      { year: 2024, count: 140 },
+      { year: 2025, count: 160 },
+      { year: 2026, count: 180 },
+    ];
+    // Taxon grows at the same rate — species' relative abundance is constant
+    const taxon: YearCount[] = [
+      { year: 2017, count: 500000 },
+      { year: 2018, count: 600000 },
+      { year: 2019, count: 700000 },
+      { year: 2020, count: 800000 },
+      { year: 2021, count: 900000 },
+      { year: 2022, count: 1000000 },
+      { year: 2023, count: 1200000 },
+      { year: 2024, count: 1400000 },
+      { year: 2025, count: 1600000 },
+      { year: 2026, count: 1800000 },
+    ];
+
+    // Without normalization: raw median later >> earlier → might look increasing
+    // With normalization: adjusted counts are flat → stable
+    const normResult = analyzeTrend(species, CURRENT_YEAR, taxon);
+    expect(normResult.direction).toBe("stable");
+  });
+
+  it("detects genuine decline even with growing baseline", () => {
+    // Species is genuinely declining while overall taxon is growing
+    const species: YearCount[] = [
+      { year: 2017, count: 200 },
+      { year: 2018, count: 200 },
+      { year: 2019, count: 200 },
+      { year: 2020, count: 180 },
+      { year: 2021, count: 160 },
+      { year: 2022, count: 30 },
+      { year: 2023, count: 25 },
+      { year: 2024, count: 20 },
+      { year: 2025, count: 15 },
+      { year: 2026, count: 10 },
+    ];
+    const taxon: YearCount[] = flatCounts(1000000);
+
+    const result = analyzeTrend(species, CURRENT_YEAR, taxon);
+    expect(result.direction).toBe("declining");
+  });
+
+  it("preserves raw yearCounts alongside adjusted when normalized", () => {
+    const species = flatCounts(50);
+    // Growing taxon → scaling factors < 1 for later years
+    const taxon: YearCount[] = [
+      { year: 2017, count: 500000 },
+      { year: 2018, count: 600000 },
+      { year: 2019, count: 700000 },
+      { year: 2020, count: 800000 },
+      { year: 2021, count: 900000 },
+      { year: 2022, count: 1000000 },
+      { year: 2023, count: 1200000 },
+      { year: 2024, count: 1400000 },
+      { year: 2025, count: 1600000 },
+      { year: 2026, count: 1800000 },
+    ];
+
+    const result = analyzeTrend(species, CURRENT_YEAR, taxon);
+    // Raw counts should all be 50
+    for (const yc of result.yearCounts) {
+      expect(yc.count).toBe(50);
+    }
+    // Adjusted counts should differ from raw
+    const rawSum = result.yearCounts.reduce((s, yc) => s + yc.count, 0);
+    const adjSum = result.adjustedYearCounts.reduce((s, yc) => s + yc.count, 0);
+    expect(adjSum).not.toBe(rawSum);
+  });
+});
+
+describe("computeScalingFactors", () => {
+  it("returns factor 1 for flat taxon counts", () => {
+    const taxon = flatCounts(10000);
+    const factors = computeScalingFactors(taxon, 2017, 2026);
+    for (let y = 2017; y <= 2026; y++) {
+      expect(factors[y]).toBeCloseTo(1, 5);
+    }
+  });
+
+  it("returns factors > 1 for years with below-average effort", () => {
+    const taxon: YearCount[] = [
+      { year: 2017, count: 1000000 },
+      { year: 2018, count: 1000000 },
+      { year: 2019, count: 1000000 },
+      { year: 2020, count: 300000 },  // Covid dip
+      { year: 2021, count: 300000 },  // Covid dip
+      { year: 2022, count: 1000000 },
+      { year: 2023, count: 1000000 },
+      { year: 2024, count: 1000000 },
+      { year: 2025, count: 1000000 },
+      { year: 2026, count: 1000000 },
+    ];
+    const factors = computeScalingFactors(taxon, 2017, 2026);
+    // 2020 had 300k vs mean ~860k, so factor should be ~2.87
+    expect(factors[2020]).toBeGreaterThan(2);
+    expect(factors[2021]).toBeGreaterThan(2);
+    // Normal years should be close to 1
+    expect(factors[2017]).toBeLessThan(1.2);
+  });
+
+  it("returns factors < 1 for years with above-average effort", () => {
+    const taxon: YearCount[] = [
+      { year: 2017, count: 500000 },
+      { year: 2018, count: 600000 },
+      { year: 2019, count: 700000 },
+      { year: 2020, count: 800000 },
+      { year: 2021, count: 900000 },
+      { year: 2022, count: 1000000 },
+      { year: 2023, count: 1200000 },
+      { year: 2024, count: 1400000 },
+      { year: 2025, count: 1600000 },
+      { year: 2026, count: 1800000 },
+    ];
+    const factors = computeScalingFactors(taxon, 2017, 2026);
+    // Earlier years (below mean) should have factor > 1
+    expect(factors[2017]).toBeGreaterThan(1);
+    // Later years (above mean) should have factor < 1
+    expect(factors[2026]).toBeLessThan(1);
+  });
+
+  it("returns empty object for empty input", () => {
+    const factors = computeScalingFactors([], 2017, 2026);
+    expect(factors).toEqual({});
+  });
+
+  it("handles zero-count years with factor 1", () => {
+    const taxon: YearCount[] = [
+      { year: 2017, count: 1000 },
+      { year: 2018, count: 0 },
+    ];
+    const factors = computeScalingFactors(taxon, 2017, 2018);
+    expect(factors[2018]).toBe(1);
   });
 });
 
