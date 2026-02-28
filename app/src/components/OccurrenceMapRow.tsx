@@ -30,6 +30,10 @@ const CircleMarker = dynamic(
   () => import("react-leaflet").then((mod) => mod.CircleMarker),
   { ssr: false }
 );
+const Circle = dynamic(
+  () => import("react-leaflet").then((mod) => mod.Circle),
+  { ssr: false }
+);
 const Popup = dynamic(
   () => import("react-leaflet").then((mod) => mod.Popup),
   { ssr: false }
@@ -57,11 +61,188 @@ interface OccurrenceFeature {
     eventDate?: string;
     basisOfRecord?: string;
     datasetKey?: string;
+    datasetName?: string;
+    publishingOrgKey?: string;
+    coordinateUncertaintyInMeters?: number | null;
+    year?: number | null;
+    month?: number | null;
+    institutionCode?: string;
   };
   geometry: {
     type: "Point";
     coordinates: [number, number];
   };
+}
+
+// Uncertainty filter options (meters)
+const UNCERTAINTY_OPTIONS = [
+  { label: "Any", value: null },
+  { label: "\u2264 10m", value: 10 },
+  { label: "\u2264 100m", value: 100 },
+  { label: "\u2264 1km", value: 1000 },
+  { label: "\u2264 10km", value: 10000 },
+  { label: "\u2264 50km", value: 50000 },
+] as const;
+
+// Deduplication grid sizes
+const DEDUP_OPTIONS = [
+  { label: "~10m", value: 0.0001 },
+  { label: "~100m", value: 0.001 },
+  { label: "~1km", value: 0.01 },
+  { label: "~10km", value: 0.1 },
+] as const;
+
+// Sample size options
+const SAMPLE_SIZE_OPTIONS = [100, 300, 500, 1000, 2000] as const;
+
+// Spatial deduplication: keep one record per grid cell, preferring newest
+function deduplicateSpatially(
+  features: OccurrenceFeature[],
+  gridDeg: number
+): OccurrenceFeature[] {
+  const cells = new Map<string, OccurrenceFeature>();
+  for (const f of features) {
+    const [lon, lat] = f.geometry.coordinates;
+    const cellKey = `${Math.round(lat / gridDeg)},${Math.round(lon / gridDeg)}`;
+    const existing = cells.get(cellKey);
+    if (!existing || (f.properties.year ?? 0) > (existing.properties.year ?? 0)) {
+      cells.set(cellKey, f);
+    }
+  }
+  return Array.from(cells.values());
+}
+
+// Year-based color interpolation (oldest=amber, newest=green)
+function yearToColor(year: number, minYear: number, maxYear: number): { stroke: string; fill: string } {
+  if (minYear === maxYear) return { stroke: "#15803d", fill: "#22c55e" };
+  const t = (year - minYear) / (maxYear - minYear); // 0 = oldest, 1 = newest
+  // Interpolate hue from 30 (amber) to 142 (green)
+  const hue = Math.round(30 + t * 112);
+  const sat = Math.round(60 + t * 20);
+  return {
+    stroke: `hsl(${hue}, ${sat}%, 30%)`,
+    fill: `hsl(${hue}, ${sat}%, 50%)`,
+  };
+}
+
+// Mini bar chart of occurrences per year (pure SVG)
+function YearHistogram({
+  features,
+  yearRange,
+  onRangeChange,
+  assessmentYear,
+}: {
+  features: OccurrenceFeature[];
+  yearRange: [number, number];
+  onRangeChange: (range: [number, number]) => void;
+  assessmentYear?: number | null;
+}) {
+  const yearCounts = useMemo(() => {
+    const counts = new Map<number, number>();
+    for (const f of features) {
+      const y = f.properties.year;
+      if (y != null) counts.set(y, (counts.get(y) || 0) + 1);
+    }
+    return counts;
+  }, [features]);
+
+  const allYears = useMemo(() => {
+    const years = Array.from(yearCounts.keys()).sort((a: number, b: number) => a - b);
+    return years;
+  }, [yearCounts]);
+
+  if (allYears.length < 2) return null;
+
+  const minY = allYears[0];
+  const maxY = allYears[allYears.length - 1];
+  const maxCount = Math.max(...Array.from(yearCounts.values()));
+  const barW = Math.max(2, Math.min(8, 200 / (maxY - minY + 1)));
+  const chartW = (maxY - minY + 1) * (barW + 1);
+  const chartH = 40;
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between text-[10px] text-zinc-400">
+        <span>{minY}</span>
+        <span>{maxY}</span>
+      </div>
+      <div className="overflow-x-auto">
+        <svg width={Math.max(chartW, 100)} height={chartH} className="w-full" viewBox={`0 0 ${Math.max(chartW, 100)} ${chartH}`} preserveAspectRatio="none">
+          {Array.from({ length: maxY - minY + 1 }, (_, i) => {
+            const year = minY + i;
+            const count = yearCounts.get(year) || 0;
+            const h = maxCount > 0 ? (count / maxCount) * (chartH - 2) : 0;
+            const x = i * (barW + 1);
+            const inRange = year >= yearRange[0] && year <= yearRange[1];
+            const isAssessmentYear = assessmentYear != null && year === assessmentYear;
+            return (
+              <rect
+                key={year}
+                x={x}
+                y={chartH - h}
+                width={barW}
+                height={Math.max(h, 0.5)}
+                rx={0.5}
+                className={
+                  isAssessmentYear
+                    ? "fill-blue-400"
+                    : inRange
+                    ? "fill-emerald-500 dark:fill-emerald-400"
+                    : "fill-zinc-300 dark:fill-zinc-600"
+                }
+                opacity={inRange ? 1 : 0.3}
+              >
+                <title>{year}: {count} records</title>
+              </rect>
+            );
+          })}
+          {/* Assessment year marker line */}
+          {assessmentYear != null && assessmentYear >= minY && assessmentYear <= maxY && (
+            <line
+              x1={(assessmentYear - minY) * (barW + 1) + barW / 2}
+              y1={0}
+              x2={(assessmentYear - minY) * (barW + 1) + barW / 2}
+              y2={chartH}
+              stroke="#3b82f6"
+              strokeWidth={1}
+              strokeDasharray="2,2"
+              opacity={0.6}
+            />
+          )}
+        </svg>
+      </div>
+      {/* Year range slider */}
+      <div className="flex items-center gap-2">
+        <input
+          type="range"
+          min={minY}
+          max={maxY}
+          value={yearRange[0]}
+          onChange={(e) => {
+            const v = parseInt(e.target.value);
+            onRangeChange([Math.min(v, yearRange[1]), yearRange[1]]);
+          }}
+          className="flex-1 h-1 accent-emerald-500"
+          title={`From: ${yearRange[0]}`}
+        />
+        <span className="text-[10px] text-zinc-500 tabular-nums w-20 text-center">
+          {yearRange[0]}–{yearRange[1]}
+        </span>
+        <input
+          type="range"
+          min={minY}
+          max={maxY}
+          value={yearRange[1]}
+          onChange={(e) => {
+            const v = parseInt(e.target.value);
+            onRangeChange([yearRange[0], Math.max(v, yearRange[0])]);
+          }}
+          className="flex-1 h-1 accent-emerald-500"
+          title={`To: ${yearRange[1]}`}
+        />
+      </div>
+    </div>
+  );
 }
 
 // Format basisOfRecord to human-readable string
@@ -348,6 +529,16 @@ export default function OccurrenceMapRow({
     other: false,
   });
 
+  // Advanced filter state
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [maxUncertainty, setMaxUncertainty] = useState<number | null>(null);
+  const [showUncertaintyCircles, setShowUncertaintyCircles] = useState(false);
+  const [colorByYear, setColorByYear] = useState(false);
+  const [dedupEnabled, setDedupEnabled] = useState(false);
+  const [dedupGrid, setDedupGrid] = useState(0.01); // ~1km
+  const [sampleSize, setSampleSize] = useState(500);
+  const [yearRange, setYearRange] = useState<[number, number]>([0, 9999]);
+
   // Responsive grid columns and page size (always 2 rows)
   const gridCols = useGridColumns();
   const pageSize = gridCols * 2;
@@ -375,12 +566,12 @@ export default function OccurrenceMapRow({
   // Bounding box from API: [minLon, minLat, maxLon, maxLat]
   const [bbox, setBbox] = useState<[number, number, number, number] | null>(null);
 
-  // Fetch occurrences immediately (limited sample for performance)
+  // Fetch occurrences (re-fetches when sample size changes)
   useEffect(() => {
     setLoadingOccurrences(true);
     const params = new URLSearchParams({
       speciesKey: speciesKey.toString(),
-      limit: "500",
+      limit: sampleSize.toString(),
     });
     if (countryCode) {
       params.set("country", countryCode);
@@ -388,13 +579,21 @@ export default function OccurrenceMapRow({
     fetch(`/api/occurrences?${params}`)
       .then((res) => res.json())
       .then((data) => {
-        setOccurrences(data.features || []);
+        const features = data.features || [];
+        setOccurrences(features);
         setTotalOccurrences(data.metadata?.total ?? null);
         setBbox(data.metadata?.bbox ?? null);
+        // Initialize year range from data
+        const years = features
+          .map((f: OccurrenceFeature) => f.properties.year)
+          .filter((y: number | null | undefined): y is number => y != null);
+        if (years.length > 0) {
+          setYearRange([Math.min(...years), Math.max(...years)]);
+        }
       })
       .catch(console.error)
       .finally(() => setLoadingOccurrences(false));
-  }, [speciesKey, countryCode]);
+  }, [speciesKey, countryCode, sampleSize]);
 
   // Fetch breakdown data
   useEffect(() => {
@@ -454,8 +653,30 @@ export default function OccurrenceMapRow({
     return "other";
   };
 
-  // Filter occurrences based on which checkboxes are ticked
-  const filteredOccurrences = occurrences.filter((o) => checkedTypes[getCategory(o)]);
+  // Multi-stage filtering pipeline
+  const filteredOccurrences = useMemo(() => {
+    let result = occurrences;
+    // 1. Basis of record checkboxes
+    result = result.filter((o) => checkedTypes[getCategory(o)]);
+    // 2. GPS uncertainty filter
+    if (maxUncertainty != null) {
+      result = result.filter((o) => {
+        const u = o.properties.coordinateUncertaintyInMeters;
+        return u != null && u <= maxUncertainty;
+      });
+    }
+    // 3. Year range filter
+    result = result.filter((o) => {
+      const y = o.properties.year;
+      if (y == null) return true; // keep records without year data
+      return y >= yearRange[0] && y <= yearRange[1];
+    });
+    // 4. Spatial deduplication
+    if (dedupEnabled) {
+      result = deduplicateSpatially(result, dedupGrid);
+    }
+    return result;
+  }, [occurrences, checkedTypes, maxUncertainty, yearRange, dedupEnabled, dedupGrid]);
 
   // Helper to check if an occurrence is after the assessment year
   const isNewRecord = (eventDate?: string): boolean => {
@@ -463,6 +684,17 @@ export default function OccurrenceMapRow({
     const recordYear = new Date(eventDate).getFullYear();
     return recordYear > assessmentYear;
   };
+
+  // Year range for color gradient
+  const { minYear, maxYear } = useMemo(() => {
+    const years = filteredOccurrences
+      .map((o) => o.properties.year)
+      .filter((y): y is number => y != null);
+    return {
+      minYear: years.length > 0 ? Math.min(...years) : 0,
+      maxYear: years.length > 0 ? Math.max(...years) : 0,
+    };
+  }, [filteredOccurrences]);
 
   // Count by category for the legend (just pre/post assessment)
   const newRecords = filteredOccurrences.filter((o) => isNewRecord(o.properties.eventDate));
@@ -629,6 +861,128 @@ export default function OccurrenceMapRow({
                   })() : null}
                 </div>
 
+                {/* Advanced Filters (collapsible) */}
+                <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden">
+                  <button
+                    onClick={() => setAdvancedOpen(!advancedOpen)}
+                    className="w-full px-3 py-2 flex items-center justify-between text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+                  >
+                    <span>Advanced Filters</span>
+                    <svg
+                      className={`w-4 h-4 transition-transform ${advancedOpen ? 'rotate-180' : ''}`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {advancedOpen && (
+                    <div className="px-3 pb-3 space-y-3 border-t border-zinc-100 dark:border-zinc-800">
+                      {/* GPS Uncertainty */}
+                      <div className="pt-2">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">GPS Uncertainty</span>
+                          <select
+                            value={maxUncertainty ?? ""}
+                            onChange={(e) => setMaxUncertainty(e.target.value ? parseInt(e.target.value) : null)}
+                            className="text-xs px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
+                          >
+                            {UNCERTAINTY_OPTIONS.map((opt) => (
+                              <option key={opt.label} value={opt.value ?? ""}>{opt.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={showUncertaintyCircles}
+                            onChange={(e) => setShowUncertaintyCircles(e.target.checked)}
+                            className="w-3 h-3 rounded accent-blue-500"
+                          />
+                          Show uncertainty radius on map
+                        </label>
+                      </div>
+
+                      {/* Year Range + Histogram */}
+                      <div>
+                        <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Year Range</span>
+                        <YearHistogram
+                          features={occurrences.filter((o) => checkedTypes[getCategory(o)])}
+                          yearRange={yearRange}
+                          onRangeChange={setYearRange}
+                          assessmentYear={assessmentYear}
+                        />
+                      </div>
+
+                      {/* Color by year toggle */}
+                      <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={colorByYear}
+                          onChange={(e) => setColorByYear(e.target.checked)}
+                          className="w-3 h-3 rounded accent-blue-500"
+                        />
+                        Color markers by year
+                        {colorByYear && (
+                          <span className="ml-auto flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full" style={{ background: "hsl(30, 60%, 50%)" }} />
+                            <span>old</span>
+                            <span className="w-2 h-2 rounded-full" style={{ background: "hsl(142, 80%, 50%)" }} />
+                            <span>new</span>
+                          </span>
+                        )}
+                      </label>
+
+                      {/* Spatial deduplication */}
+                      <div>
+                        <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={dedupEnabled}
+                            onChange={(e) => setDedupEnabled(e.target.checked)}
+                            className="w-3 h-3 rounded accent-blue-500"
+                          />
+                          Deduplicate nearby points
+                        </label>
+                        {dedupEnabled && (
+                          <div className="mt-1 flex items-center gap-1.5 ml-[18px]">
+                            <span className="text-[10px] text-zinc-400">Grid:</span>
+                            {DEDUP_OPTIONS.map((opt) => (
+                              <button
+                                key={opt.value}
+                                onClick={() => setDedupGrid(opt.value)}
+                                className={`text-[10px] px-1.5 py-0.5 rounded border ${
+                                  dedupGrid === opt.value
+                                    ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300'
+                                    : 'border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800'
+                                }`}
+                              >
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Sample size */}
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Sample size</span>
+                        <select
+                          value={sampleSize}
+                          onChange={(e) => setSampleSize(parseInt(e.target.value))}
+                          className="text-xs px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
+                        >
+                          {SAMPLE_SIZE_OPTIONS.map((n) => (
+                            <option key={n} value={n}>{n.toLocaleString()}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* iNaturalist photos grid with pagination */}
                 {inatPhotos.length > 0 && (
                   <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 flex-1 overflow-hidden">
@@ -709,14 +1063,46 @@ export default function OccurrenceMapRow({
                   />
                   <LocateControl />
                   {bbox && <FitBounds bbox={bbox} />}
-                  {/* Render occurrences: old (grey), new since assessment (green) */}
+                  {/* Uncertainty circles (rendered behind markers) */}
+                  {showUncertaintyCircles && filteredOccurrences.map((feature, idx) => {
+                    const uncertainty = feature.properties.coordinateUncertaintyInMeters;
+                    if (uncertainty == null || uncertainty <= 0) return null;
+                    const [lon, lat] = feature.geometry.coordinates;
+                    return (
+                      <Circle
+                        key={`unc-${feature.properties.gbifID || idx}`}
+                        center={[lat, lon]}
+                        radius={uncertainty}
+                        pathOptions={{
+                          color: "#6366f1",
+                          fillColor: "#6366f1",
+                          fillOpacity: 0.06,
+                          weight: 0.5,
+                          opacity: 0.3,
+                        }}
+                      />
+                    );
+                  })}
+                  {/* Render occurrences: colored by age or year gradient */}
                   {filteredOccurrences.map((feature, idx) => {
                     const [lon, lat] = feature.geometry.coordinates;
                     const isNew = isNewRecord(feature.properties.eventDate);
                     const isHighlighted = hoveredObs?.gbifID != null && feature.properties.gbifID === hoveredObs.gbifID;
-                    const strokeColor = isHighlighted ? "#1d4ed8" : isNew ? "#15803d" : "#6b7280";
-                    const fillColor = isHighlighted ? "#3b82f6" : isNew ? "#22c55e" : "#9ca3af";
+                    let strokeColor: string;
+                    let fillColor: string;
+                    if (isHighlighted) {
+                      strokeColor = "#1d4ed8";
+                      fillColor = "#3b82f6";
+                    } else if (colorByYear && feature.properties.year != null) {
+                      const colors = yearToColor(feature.properties.year, minYear, maxYear);
+                      strokeColor = colors.stroke;
+                      fillColor = colors.fill;
+                    } else {
+                      strokeColor = isNew ? "#15803d" : "#6b7280";
+                      fillColor = isNew ? "#22c55e" : "#9ca3af";
+                    }
                     const inatMatch = inatPhotosByGbifId.get(feature.properties.gbifID);
+                    const uncertainty = feature.properties.coordinateUncertaintyInMeters;
                     return (
                       <CircleMarker
                         key={feature.properties.gbifID || idx}
@@ -748,9 +1134,19 @@ export default function OccurrenceMapRow({
                                 {formatBasisOfRecord(feature.properties.basisOfRecord)}
                               </div>
                             )}
+                            {feature.properties.datasetName && (
+                              <div className="text-xs text-gray-500">
+                                {feature.properties.datasetName}
+                              </div>
+                            )}
                             {feature.properties.eventDate && (
                               <div className="text-xs">
                                 {feature.properties.eventDate}
+                              </div>
+                            )}
+                            {uncertainty != null && (
+                              <div className="text-xs text-gray-500">
+                                GPS uncertainty: {uncertainty >= 1000 ? `${(uncertainty / 1000).toFixed(1)}km` : `${uncertainty}m`}
                               </div>
                             )}
                             {inatMatch?.observer && (
@@ -800,9 +1196,22 @@ export default function OccurrenceMapRow({
                 </MapContainer>
               ) : null}
               {!loadingOccurrences && (
-                <div className="absolute bottom-2 left-2 z-[1000] bg-white dark:bg-zinc-800 px-2 py-1.5 rounded text-xs text-zinc-600 dark:text-zinc-300 shadow flex items-center gap-3">
+                <div className="absolute bottom-2 left-2 z-[1000] bg-white dark:bg-zinc-800 px-2 py-1.5 rounded text-xs text-zinc-600 dark:text-zinc-300 shadow flex flex-wrap items-center gap-x-3 gap-y-1 max-w-[90%]">
                   {/* Legend */}
-                  {assessmentYear ? (
+                  {colorByYear ? (
+                    <>
+                      <div className="flex items-center gap-1">
+                        <div className="w-3 h-3 rounded-full" style={{ background: "hsl(30, 60%, 50%)", border: "2px solid hsl(30, 60%, 30%)" }} />
+                        <span>{minYear}</span>
+                      </div>
+                      <span>→</span>
+                      <div className="flex items-center gap-1">
+                        <div className="w-3 h-3 rounded-full" style={{ background: "hsl(142, 80%, 50%)", border: "2px solid hsl(142, 80%, 30%)" }} />
+                        <span>{maxYear}</span>
+                      </div>
+                      <span className="text-zinc-400">({filteredOccurrences.length})</span>
+                    </>
+                  ) : assessmentYear ? (
                     <>
                       <div className="flex items-center gap-1">
                         <div className="w-3 h-3 rounded-full bg-gray-400 border-2 border-gray-500" />
@@ -819,6 +1228,12 @@ export default function OccurrenceMapRow({
                         ? `${filteredOccurrences.length} of ${totalOccurrences.toLocaleString()} occurrences`
                         : `${filteredOccurrences.length} occurrences`}
                     </span>
+                  )}
+                  {dedupEnabled && (
+                    <span className="text-zinc-400">(deduped)</span>
+                  )}
+                  {totalOccurrences != null && totalOccurrences > sampleSize && (
+                    <span className="text-zinc-400">sample of {totalOccurrences.toLocaleString()}</span>
                   )}
                 </div>
               )}
