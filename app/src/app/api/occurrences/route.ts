@@ -4,6 +4,70 @@ export const dynamic = "force-dynamic";
 
 const GBIF_PAGE_LIMIT = 300; // GBIF API max per request
 
+// Major basisOfRecord types to stratify sampling across
+const BASIS_OF_RECORD_TYPES = [
+  "HUMAN_OBSERVATION",
+  "MACHINE_OBSERVATION",
+  "PRESERVED_SPECIMEN",
+  "MATERIAL_SAMPLE",
+];
+
+type GbifRecord = {
+  key: number;
+  species?: string;
+  scientificName?: string;
+  eventDate?: string;
+  recordedBy?: string;
+  decimalLongitude: number;
+  decimalLatitude: number;
+  country?: string;
+  basisOfRecord?: string;
+  datasetKey?: string;
+  datasetName?: string;
+  publishingOrgKey?: string;
+  coordinateUncertaintyInMeters?: number;
+  year?: number;
+  month?: number;
+  institutionCode?: string;
+};
+
+/**
+ * Fetch paginated records from GBIF for a given set of base params up to typeLimit.
+ */
+async function fetchPaginated(
+  baseParams: URLSearchParams,
+  typeLimit: number
+): Promise<GbifRecord[]> {
+  let results: GbifRecord[] = [];
+  let offset = 0;
+
+  while (results.length < typeLimit) {
+    const pageSize = Math.min(GBIF_PAGE_LIMIT, typeLimit - results.length);
+    const params = new URLSearchParams(baseParams);
+    params.set("limit", pageSize.toString());
+    params.set("offset", offset.toString());
+
+    const response = await fetch(
+      `https://api.gbif.org/v1/occurrence/search?${params}`,
+      { cache: "no-store" }
+    );
+
+    if (!response.ok) {
+      throw new Error(`GBIF API error: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    results = results.concat(data.results);
+    offset += pageSize;
+
+    if (data.endOfRecords || results.length >= data.count) {
+      break;
+    }
+  }
+
+  return results;
+}
+
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const speciesKey = searchParams.get("speciesKey");
@@ -25,69 +89,93 @@ export async function GET(request: NextRequest) {
       hasGeospatialIssue: "false",
     });
 
-    // Add country filter if provided
     if (country) {
       baseParams.set("country", country.toUpperCase());
     }
 
-    // Add coordinate uncertainty filter if provided (meters)
     if (maxUncertainty) {
       baseParams.set("coordinateUncertaintyInMeters", `*,${maxUncertainty}`);
     }
 
-    // Paginate through GBIF API (max 300 per request)
-    type GbifRecord = {
-      key: number;
-      species?: string;
-      scientificName?: string;
-      eventDate?: string;
-      recordedBy?: string;
-      decimalLongitude: number;
-      decimalLatitude: number;
-      country?: string;
-      basisOfRecord?: string;
-      datasetKey?: string;
-      datasetName?: string;
-      publishingOrgKey?: string;
-      coordinateUncertaintyInMeters?: number;
-      year?: number;
-      month?: number;
-      institutionCode?: string;
-    };
-
-    let allResults: GbifRecord[] = [];
-    let totalCount = 0;
-    let offset = 0;
-
-    while (allResults.length < limit) {
-      const pageSize = Math.min(GBIF_PAGE_LIMIT, limit - allResults.length);
+    // Step 1: Get counts per basisOfRecord type in parallel (limit=0 for fast count-only queries)
+    const countPromises = BASIS_OF_RECORD_TYPES.map((type) => {
       const params = new URLSearchParams(baseParams);
-      params.set("limit", pageSize.toString());
-      params.set("offset", offset.toString());
-
-      const response = await fetch(
+      params.set("basisOfRecord", type);
+      params.set("limit", "0");
+      return fetch(
         `https://api.gbif.org/v1/occurrence/search?${params}`,
         { cache: "no-store" }
-      );
+      ).then((r) => r.json());
+    });
 
-      if (!response.ok) {
-        throw new Error(`GBIF API error: ${response.statusText}`);
+    // Also get overall total count
+    const totalParams = new URLSearchParams(baseParams);
+    totalParams.set("limit", "0");
+    const totalPromise = fetch(
+      `https://api.gbif.org/v1/occurrence/search?${totalParams}`,
+      { cache: "no-store" }
+    ).then((r) => r.json());
+
+    const [countResults, totalData] = await Promise.all([
+      Promise.all(countPromises),
+      totalPromise,
+    ]);
+
+    const typeCounts = BASIS_OF_RECORD_TYPES.map((type, i) => ({
+      type,
+      count: (countResults[i].count as number) || 0,
+    }));
+
+    const overallTotal = totalData.count || 0;
+
+    // Step 2: Allocate sample proportionally across types
+    const activeTypes = typeCounts.filter((tc) => tc.count > 0);
+
+    let allResults: GbifRecord[] = [];
+
+    if (activeTypes.length > 0) {
+      // Calculate proportional allocation with minimum 1 per active type
+      const allocations: { type: string; allocation: number }[] = [];
+      let remaining = limit;
+
+      for (const tc of activeTypes) {
+        const share = Math.max(1, Math.round((tc.count / overallTotal) * limit));
+        const allocation = Math.min(share, tc.count, remaining);
+        allocations.push({ type: tc.type, allocation });
+        remaining -= allocation;
       }
 
-      const data = await response.json();
-      totalCount = data.count;
-      allResults = allResults.concat(data.results);
-      offset += pageSize;
+      // Distribute any leftover to the largest type
+      if (remaining > 0) {
+        const largest = allocations.reduce((a, b) =>
+          (typeCounts.find((tc) => tc.type === a.type)?.count ?? 0) >=
+          (typeCounts.find((tc) => tc.type === b.type)?.count ?? 0)
+            ? a
+            : b
+        );
+        const largestCount = typeCounts.find((tc) => tc.type === largest.type)?.count ?? 0;
+        largest.allocation = Math.min(largest.allocation + remaining, largestCount);
+      }
 
-      // Stop if we've fetched all available records
-      if (data.endOfRecords || allResults.length >= totalCount) {
-        break;
+      // Step 3: Fetch records for each type in parallel
+      const typeResults = await Promise.all(
+        allocations
+          .filter((a) => a.allocation > 0)
+          .map((a) => {
+            const params = new URLSearchParams(baseParams);
+            params.set("basisOfRecord", a.type);
+            return fetchPaginated(params, a.allocation);
+          })
+      );
+
+      for (const results of typeResults) {
+        allResults = allResults.concat(results);
       }
     }
 
     // Convert to GeoJSON
     const features = allResults
-      .filter((r) => r.decimalLatitude && r.decimalLongitude)
+      .filter((r) => r.decimalLatitude != null && r.decimalLongitude != null)
       .map((r) => ({
         type: "Feature",
         properties: {
@@ -129,7 +217,7 @@ export async function GET(request: NextRequest) {
       metadata: {
         speciesKey: parseInt(speciesKey),
         count: features.length,
-        total: totalCount,
+        total: overallTotal,
         bbox: features.length > 0 ? [minLon, minLat, maxLon, maxLat] : null,
       },
     });
