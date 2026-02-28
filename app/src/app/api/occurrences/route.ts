@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+
 const GBIF_PAGE_LIMIT = 300; // GBIF API max per request
 
 export async function GET(request: NextRequest) {
@@ -64,7 +66,8 @@ export async function GET(request: NextRequest) {
       params.set("offset", offset.toString());
 
       const response = await fetch(
-        `https://api.gbif.org/v1/occurrence/search?${params}`
+        `https://api.gbif.org/v1/occurrence/search?${params}`,
+        { cache: "no-store" }
       );
 
       if (!response.ok) {
