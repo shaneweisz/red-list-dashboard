@@ -224,6 +224,20 @@ describe("computeAOO", () => {
       expect(typeof lng).toBe("number");
     }
   });
+
+  it("returns cell bounds with point counts", () => {
+    const result = computeAOO([[0, 0], [0.0005, 0.0005], [1, 1]], 2);
+    expect(result.cellBounds).toHaveLength(2);
+    // First cell should have 2 points (the two nearby ones)
+    const counts = result.cellBounds.map((c) => c.pointCount).sort((a, b) => b - a);
+    expect(counts[0]).toBe(2);
+    expect(counts[1]).toBe(1);
+    // Each bound should have [south, west, north, east]
+    for (const cell of result.cellBounds) {
+      expect(cell.bounds).toHaveLength(4);
+      expect(cell.bounds[2]).toBeGreaterThan(cell.bounds[0]); // north > south
+    }
+  });
 });
 
 // ── Location clustering ──────────────────────────────────────────────────
@@ -346,7 +360,7 @@ describe("assessCriterionB", () => {
   it("returns null overall when no thresholds met", () => {
     const result = assessCriterionB(
       { areaKm2: 30_000, hullVertices: [], pointCount: 100, suggestedCategory: null },
-      { areaKm2: 3_000, occupiedCells: 750, gridSizeKm: 2, cellCenters: [], suggestedCategory: null },
+      { areaKm2: 3_000, occupiedCells: 750, gridSizeKm: 2, cellCenters: [], cellBounds: [], suggestedCategory: null },
       { count: 20, clusters: [], clusterDistanceKm: 10 },
       { eooTrend: null, aooTrend: null, locationsTrend: null, splitYear: 2015, earlierPointCount: 50, laterPointCount: 50 },
     );
@@ -356,7 +370,7 @@ describe("assessCriterionB", () => {
   it("returns a category when B1 threshold met with subcriteria", () => {
     const result = assessCriterionB(
       { areaKm2: 80, hullVertices: [], pointCount: 100, suggestedCategory: "CR" },
-      { areaKm2: 8, occupiedCells: 2, gridSizeKm: 2, cellCenters: [], suggestedCategory: "CR" },
+      { areaKm2: 8, occupiedCells: 2, gridSizeKm: 2, cellCenters: [], cellBounds: [], suggestedCategory: "CR" },
       { count: 1, clusters: [], clusterDistanceKm: 10 }, // ≤1 → CR → sub (a) met
       {
         eooTrend: { earlierValue: 200, laterValue: 80, changePercent: -60, earlierPeriod: "2005-2015", laterPeriod: "2016-2025" },
@@ -371,7 +385,7 @@ describe("assessCriterionB", () => {
   it("requires at least 2 subcriteria for overall assessment", () => {
     const result = assessCriterionB(
       { areaKm2: 80, hullVertices: [], pointCount: 100, suggestedCategory: "CR" },
-      { areaKm2: 8, occupiedCells: 2, gridSizeKm: 2, cellCenters: [], suggestedCategory: "CR" },
+      { areaKm2: 8, occupiedCells: 2, gridSizeKm: 2, cellCenters: [], cellBounds: [], suggestedCategory: "CR" },
       { count: 20, clusters: [], clusterDistanceKm: 10 }, // Many locations → sub (a) NOT met
       { eooTrend: null, aooTrend: null, locationsTrend: null, splitYear: 2015, earlierPointCount: 5, laterPointCount: 5 },
     );
@@ -491,5 +505,21 @@ describe("estimateCriteria", () => {
     const result = estimateCriteria(points, { maxUncertaintyMeters: 1000 });
     expect(result.meta.filteredOut.uncertainty).toBe(1);
     expect(result.meta.usedPoints).toBe(2);
+  });
+
+  it("includes filteredPoints in result for map rendering", () => {
+    const points: OccurrencePoint[] = [
+      { lat: 0, lng: 0, year: 2020 },
+      { lat: 0.5, lng: 0.5, year: 2021 },
+      { lat: 1, lng: 0, year: 2022 },
+    ];
+
+    const result = estimateCriteria(points);
+    expect(result.filteredPoints).toBeDefined();
+    expect(result.filteredPoints.length).toBe(result.meta.usedPoints);
+    for (const p of result.filteredPoints) {
+      expect(typeof p.lat).toBe("number");
+      expect(typeof p.lng).toBe("number");
+    }
   });
 });

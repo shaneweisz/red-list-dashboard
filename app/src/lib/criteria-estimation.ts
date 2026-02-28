@@ -53,6 +53,13 @@ export interface EOOResult {
   suggestedCategory: string | null;
 }
 
+export interface GridCellBounds {
+  /** [southLat, westLng, northLat, eastLng] */
+  bounds: [number, number, number, number];
+  /** Number of occurrence points in this cell. */
+  pointCount: number;
+}
+
 export interface AOOResult {
   /** Total area of occupancy in km². */
   areaKm2: number;
@@ -62,6 +69,8 @@ export interface AOOResult {
   gridSizeKm: number;
   /** Center coordinates of each occupied grid cell for map display. */
   cellCenters: [number, number][];
+  /** Bounds of each occupied grid cell for map rectangle display. */
+  cellBounds: GridCellBounds[];
   /** Suggested IUCN category based on AOO thresholds, or null if above VU. */
   suggestedCategory: string | null;
 }
@@ -127,6 +136,8 @@ export interface CriteriaEstimationResult {
   locations: LocationsResult;
   temporal: TemporalResult;
   criterionB: CriterionBAssessment;
+  /** Filtered occurrence points used in the estimation (for map rendering). */
+  filteredPoints: OccurrencePoint[];
   meta: {
     totalPoints: number;
     usedPoints: number;
@@ -323,6 +334,7 @@ export function computeAOO(
       occupiedCells: 0,
       gridSizeKm,
       cellCenters: [],
+      cellBounds: [],
       suggestedCategory: null,
     };
   }
@@ -330,6 +342,7 @@ export function computeAOO(
   const cellSizeLat = gridSizeKm / KM_PER_DEG_LAT;
   const occupiedSet = new Set<string>();
   const cellCenterMap = new Map<string, [number, number]>();
+  const cellBoundsMap = new Map<string, { bounds: [number, number, number, number]; count: number }>();
 
   for (const [lat, lng] of points) {
     // Latitude-corrected cell size for longitude
@@ -346,6 +359,19 @@ export function computeAOO(
         (cellY + 0.5) * cellSizeLat,
         (cellX + 0.5) * cellSizeLng,
       ]);
+      // Cell bounds: [southLat, westLng, northLat, eastLng]
+      cellBoundsMap.set(key, {
+        bounds: [
+          cellY * cellSizeLat,
+          cellX * cellSizeLng,
+          (cellY + 1) * cellSizeLat,
+          (cellX + 1) * cellSizeLng,
+        ],
+        count: 1,
+      });
+    } else {
+      const entry = cellBoundsMap.get(key)!;
+      entry.count++;
     }
   }
 
@@ -359,6 +385,10 @@ export function computeAOO(
     occupiedCells,
     gridSizeKm,
     cellCenters: Array.from(cellCenterMap.values()),
+    cellBounds: Array.from(cellBoundsMap.values()).map((v) => ({
+      bounds: v.bounds,
+      pointCount: v.count,
+    })),
     suggestedCategory,
   };
 }
@@ -725,6 +755,7 @@ export function estimateCriteria(
     locations,
     temporal,
     criterionB,
+    filteredPoints: filtered,
     meta: {
       totalPoints: points.length,
       usedPoints: filtered.length,

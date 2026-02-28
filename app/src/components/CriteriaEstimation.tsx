@@ -1,12 +1,48 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
+import dynamic from "next/dynamic";
 import {
   EOO_THRESHOLDS,
   AOO_THRESHOLDS,
   LOCATION_THRESHOLDS,
   type CriteriaEstimationResult,
+  type OccurrencePoint,
+  type GridCellBounds,
+  type LocationCluster,
 } from "@/lib/criteria-estimation";
+
+// ── Dynamic Leaflet imports (SSR-safe) ───────────────────────────────────
+
+const MapContainer = dynamic(
+  () => import("react-leaflet").then((mod) => mod.MapContainer),
+  { ssr: false },
+);
+const TileLayer = dynamic(
+  () => import("react-leaflet").then((mod) => mod.TileLayer),
+  { ssr: false },
+);
+const CircleMarker = dynamic(
+  () => import("react-leaflet").then((mod) => mod.CircleMarker),
+  { ssr: false },
+);
+const Circle = dynamic(
+  () => import("react-leaflet").then((mod) => mod.Circle),
+  { ssr: false },
+);
+const Polygon = dynamic(
+  () => import("react-leaflet").then((mod) => mod.Polygon),
+  { ssr: false },
+);
+const Rectangle = dynamic(
+  () => import("react-leaflet").then((mod) => mod.Rectangle),
+  { ssr: false },
+);
+const Popup = dynamic(
+  () => import("react-leaflet").then((mod) => mod.Popup),
+  { ssr: false },
+);
+const FitBounds = dynamic(() => import("./FitBounds"), { ssr: false });
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -23,6 +59,23 @@ interface Params {
   outlierDistance: number;
 }
 
+/** Point from API (slightly different from OccurrencePoint — nulls not undefined) */
+interface MapPoint {
+  lat: number;
+  lng: number;
+  year: number | null;
+  coordinateUncertainty: number | null;
+  basisOfRecord: string | null;
+}
+
+interface MapLayers {
+  points: boolean;
+  hull: boolean;
+  aooCells: boolean;
+  clusters: boolean;
+  uncertainty: boolean;
+}
+
 // ── Defaults ─────────────────────────────────────────────────────────────
 
 const DEFAULT_PARAMS: Params = {
@@ -31,6 +84,14 @@ const DEFAULT_PARAMS: Params = {
   gridSize: 2,
   clusterDistance: 10,
   outlierDistance: 0,
+};
+
+const DEFAULT_LAYERS: MapLayers = {
+  points: true,
+  hull: true,
+  aooCells: true,
+  clusters: false,
+  uncertainty: false,
 };
 
 const UNCERTAINTY_OPTIONS = [
@@ -56,6 +117,287 @@ const CATEGORY_STYLE: Record<string, { color: string; bg: string }> = {
   VU: { color: "#ca8a04", bg: "#fefce8" },
 };
 
+// ── Year-based point coloring ────────────────────────────────────────────
+
+/** Color occurrence points by recency: older=cool/blue, recent=warm/red */
+function yearColor(year: number | null, minYear: number, maxYear: number): string {
+  if (year == null) return "#94a3b8"; // grey for unknown year
+  const range = maxYear - minYear || 1;
+  const t = Math.max(0, Math.min(1, (year - minYear) / range));
+  // Blue (old) → Yellow → Red (recent)
+  if (t < 0.5) {
+    const s = t * 2;
+    const r = Math.round(59 + s * (234 - 59));
+    const g = Math.round(130 + s * (179 - 130));
+    const b = Math.round(246 - s * 246);
+    return `rgb(${r},${g},${b})`;
+  }
+  const s = (t - 0.5) * 2;
+  const r = Math.round(234 + s * (220 - 234));
+  const g = Math.round(179 - s * 141);
+  const b = Math.round(0 + s * 38);
+  return `rgb(${r},${g},${b})`;
+}
+
+/** Flag suspicious points: Null Island, extreme coordinates */
+function isSuspicious(p: MapPoint): string | null {
+  if (Math.abs(p.lat) < 0.1 && Math.abs(p.lng) < 0.1) return "Near Null Island (0,0) — likely a data error";
+  if (Math.abs(p.lat) > 85) return "Near pole — coordinate may be erroneous";
+  return null;
+}
+
+// ── Map component ────────────────────────────────────────────────────────
+
+function CriterionBMap({
+  points,
+  hullVertices,
+  cellBounds,
+  clusters,
+  layers,
+}: {
+  points: MapPoint[];
+  hullVertices: [number, number][];
+  cellBounds: GridCellBounds[];
+  clusters: LocationCluster[];
+  layers: MapLayers;
+}) {
+  // Compute bounds from all points
+  const bbox = useMemo(() => {
+    if (points.length === 0) return null;
+    let minLat = Infinity, maxLat = -Infinity;
+    let minLng = Infinity, maxLng = -Infinity;
+    for (const p of points) {
+      if (p.lat < minLat) minLat = p.lat;
+      if (p.lat > maxLat) maxLat = p.lat;
+      if (p.lng < minLng) minLng = p.lng;
+      if (p.lng > maxLng) maxLng = p.lng;
+    }
+    return [minLng, minLat, maxLng, maxLat] as [number, number, number, number];
+  }, [points]);
+
+  // Year range for coloring
+  const [minYear, maxYear] = useMemo(() => {
+    const years = points.map((p) => p.year).filter((y): y is number => y != null);
+    if (years.length === 0) return [2000, 2024];
+    return [Math.min(...years), Math.max(...years)];
+  }, [points]);
+
+  // Suspicious points
+  const suspiciousPoints = useMemo(
+    () => points.filter((p) => isSuspicious(p) !== null),
+    [points],
+  );
+
+  if (!bbox || points.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      <div className="rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700" style={{ height: 420 }}>
+        <MapContainer
+          center={[(bbox[1] + bbox[3]) / 2, (bbox[0] + bbox[2]) / 2]}
+          zoom={4}
+          style={{ height: "100%", width: "100%" }}
+          scrollWheelZoom={true}
+        >
+          <TileLayer
+            url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>'
+          />
+          <FitBounds bbox={bbox} />
+
+          {/* AOO grid cells — render below points */}
+          {layers.aooCells && cellBounds.map((cell, i) => (
+            <Rectangle
+              key={`cell-${i}`}
+              bounds={[
+                [cell.bounds[0], cell.bounds[1]],
+                [cell.bounds[2], cell.bounds[3]],
+              ]}
+              pathOptions={{
+                color: "#f59e0b",
+                weight: 1,
+                fillColor: "#f59e0b",
+                fillOpacity: 0.15,
+              }}
+            >
+              <Popup>
+                <div className="text-xs">
+                  <strong>AOO grid cell</strong><br />
+                  {cell.pointCount} occurrence{cell.pointCount !== 1 ? "s" : ""}
+                </div>
+              </Popup>
+            </Rectangle>
+          ))}
+
+          {/* EOO convex hull polygon */}
+          {layers.hull && hullVertices.length >= 3 && (
+            <Polygon
+              positions={hullVertices.map(([lat, lng]) => [lat, lng] as [number, number])}
+              pathOptions={{
+                color: "#3b82f6",
+                weight: 2,
+                dashArray: "6 4",
+                fillColor: "#3b82f6",
+                fillOpacity: 0.06,
+              }}
+            >
+              <Popup>
+                <div className="text-xs">
+                  <strong>EOO Convex Hull</strong><br />
+                  {hullVertices.length} vertices
+                </div>
+              </Popup>
+            </Polygon>
+          )}
+
+          {/* Location clusters */}
+          {layers.clusters && clusters.map((cluster, i) => (
+            <Circle
+              key={`cluster-${i}`}
+              center={[cluster.centroid[0], cluster.centroid[1]]}
+              radius={Math.max(cluster.radiusKm * 1000, 500)}
+              pathOptions={{
+                color: "#8b5cf6",
+                weight: 1.5,
+                dashArray: "4 3",
+                fillColor: "#8b5cf6",
+                fillOpacity: 0.08,
+              }}
+            >
+              <Popup>
+                <div className="text-xs">
+                  <strong>Location {i + 1}</strong><br />
+                  {cluster.pointCount} point{cluster.pointCount !== 1 ? "s" : ""}<br />
+                  Radius: {cluster.radiusKm.toFixed(1)} km
+                </div>
+              </Popup>
+            </Circle>
+          ))}
+
+          {/* Coordinate uncertainty circles */}
+          {layers.uncertainty && points
+            .filter((p) => p.coordinateUncertainty != null && p.coordinateUncertainty > 0)
+            .map((p, i) => (
+              <Circle
+                key={`unc-${i}`}
+                center={[p.lat, p.lng]}
+                radius={p.coordinateUncertainty!}
+                pathOptions={{
+                  color: "#94a3b8",
+                  weight: 0.5,
+                  fillColor: "#94a3b8",
+                  fillOpacity: 0.05,
+                }}
+              />
+            ))}
+
+          {/* Occurrence points — rendered last (on top) */}
+          {layers.points && points.map((p, i) => {
+            const suspicious = isSuspicious(p);
+            return (
+              <CircleMarker
+                key={`pt-${i}`}
+                center={[p.lat, p.lng]}
+                radius={suspicious ? 5 : 3}
+                pathOptions={{
+                  color: suspicious ? "#ef4444" : yearColor(p.year, minYear, maxYear),
+                  weight: suspicious ? 2 : 1,
+                  fillColor: suspicious ? "#ef4444" : yearColor(p.year, minYear, maxYear),
+                  fillOpacity: 0.7,
+                }}
+              >
+                <Popup>
+                  <div className="text-xs space-y-0.5">
+                    <div><strong>{p.lat.toFixed(4)}, {p.lng.toFixed(4)}</strong></div>
+                    {p.year && <div>Year: {p.year}</div>}
+                    {p.basisOfRecord && <div>{p.basisOfRecord}</div>}
+                    {p.coordinateUncertainty != null && (
+                      <div>Uncertainty: {p.coordinateUncertainty >= 1000
+                        ? `${(p.coordinateUncertainty / 1000).toFixed(1)} km`
+                        : `${p.coordinateUncertainty} m`
+                      }</div>
+                    )}
+                    {suspicious && (
+                      <div className="text-red-600 font-semibold mt-1">{suspicious}</div>
+                    )}
+                  </div>
+                </Popup>
+              </CircleMarker>
+            );
+          })}
+        </MapContainer>
+      </div>
+
+      {/* Year color legend */}
+      <div className="flex items-center gap-2 text-[10px] text-zinc-500 dark:text-zinc-400 px-1">
+        <span>Older ({minYear})</span>
+        <div className="flex-1 h-2 rounded-full" style={{
+          background: `linear-gradient(to right, rgb(59,130,246), rgb(234,179,0), rgb(220,38,38))`,
+        }} />
+        <span>Recent ({maxYear})</span>
+        <span className="ml-2 flex items-center gap-1">
+          <span className="inline-block w-2 h-2 rounded-full bg-slate-400" />
+          No year
+        </span>
+      </div>
+
+      {/* Warnings */}
+      {suspiciousPoints.length > 0 && (
+        <div className="px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-xs text-amber-700 dark:text-amber-400">
+          <strong>{suspiciousPoints.length} suspicious point{suspiciousPoints.length !== 1 ? "s" : ""} detected</strong> (shown in red) — these may be data errors. Consider enabling outlier exclusion.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Layer toggle controls ────────────────────────────────────────────────
+
+function LayerToggles({
+  layers,
+  onChange,
+  hullVertexCount,
+  cellCount,
+  clusterCount,
+}: {
+  layers: MapLayers;
+  onChange: (layers: MapLayers) => void;
+  hullVertexCount: number;
+  cellCount: number;
+  clusterCount: number;
+}) {
+  const toggles: { key: keyof MapLayers; label: string; color: string; detail: string }[] = [
+    { key: "points", label: "Occurrences", color: "#6366f1", detail: "colored by year" },
+    { key: "hull", label: "EOO Hull", color: "#3b82f6", detail: `${hullVertexCount} vertices` },
+    { key: "aooCells", label: "AOO Cells", color: "#f59e0b", detail: `${cellCount} cells` },
+    { key: "clusters", label: "Locations", color: "#8b5cf6", detail: `${clusterCount} clusters` },
+    { key: "uncertainty", label: "Uncertainty", color: "#94a3b8", detail: "coord. radius" },
+  ];
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {toggles.map(({ key, label, color, detail }) => (
+        <button
+          key={key}
+          onClick={() => onChange({ ...layers, [key]: !layers[key] })}
+          className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs border transition-colors ${
+            layers[key]
+              ? "border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800"
+              : "border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 opacity-50"
+          }`}
+        >
+          <span
+            className="w-2.5 h-2.5 rounded-sm inline-block"
+            style={{ backgroundColor: layers[key] ? color : "#d4d4d8" }}
+          />
+          <span className="font-medium">{label}</span>
+          <span className="text-zinc-400 dark:text-zinc-500">{detail}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // ── Threshold gauge component ────────────────────────────────────────────
 
 function ThresholdGauge({
@@ -73,14 +415,12 @@ function ThresholdGauge({
   suggestedCategory: string | null;
   description?: string;
 }) {
-  // Map value to gauge position (log scale for large ranges)
   const maxDisplay = thresholds.VU * 3;
   const logValue = Math.log10(Math.max(value, 0.1));
   const logMax = Math.log10(maxDisplay);
   const logMin = Math.log10(Math.max(thresholds.CR * 0.1, 0.1));
   const position = Math.min(100, Math.max(0, ((logValue - logMin) / (logMax - logMin)) * 100));
 
-  // Threshold positions on the log scale
   const crPos = ((Math.log10(thresholds.CR) - logMin) / (logMax - logMin)) * 100;
   const enPos = ((Math.log10(thresholds.EN) - logMin) / (logMax - logMin)) * 100;
   const vuPos = ((Math.log10(thresholds.VU) - logMin) / (logMax - logMin)) * 100;
@@ -109,15 +449,11 @@ function ThresholdGauge({
       {description && (
         <p className="text-xs text-zinc-500 dark:text-zinc-400">{description}</p>
       )}
-      {/* Gauge bar */}
       <div className="relative h-3 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-visible">
-        {/* Threshold zones */}
         <div className="absolute inset-y-0 left-0 rounded-l-full bg-red-100 dark:bg-red-900/30" style={{ width: `${crPos}%` }} />
         <div className="absolute inset-y-0 bg-orange-100 dark:bg-orange-900/30" style={{ left: `${crPos}%`, width: `${enPos - crPos}%` }} />
         <div className="absolute inset-y-0 bg-yellow-100 dark:bg-yellow-900/30" style={{ left: `${enPos}%`, width: `${vuPos - enPos}%` }} />
         <div className="absolute inset-y-0 rounded-r-full bg-green-100 dark:bg-green-900/30" style={{ left: `${vuPos}%`, right: 0 }} />
-
-        {/* Threshold markers */}
         {[
           { pos: crPos, label: "CR", val: thresholds.CR },
           { pos: enPos, label: "EN", val: thresholds.EN },
@@ -130,8 +466,6 @@ function ThresholdGauge({
             </span>
           </div>
         ))}
-
-        {/* Value indicator */}
         <div
           className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full border-2 border-white dark:border-zinc-900 shadow-sm"
           style={{
@@ -141,8 +475,7 @@ function ThresholdGauge({
           }}
         />
       </div>
-      {/* Threshold labels row */}
-      <div className="h-3" /> {/* spacer for threshold labels */}
+      <div className="h-3" />
     </div>
   );
 }
@@ -185,14 +518,40 @@ function TrendRow({
   );
 }
 
+// ── Subcriterion badge ───────────────────────────────────────────────────
+
+function SubcriterionBadge({ code, label, met }: { code: string; label: string; met: boolean }) {
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs ${
+      met
+        ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
+        : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500"
+    }`}>
+      <span className={`w-3 h-3 rounded-full inline-flex items-center justify-center text-[8px] font-bold ${
+        met ? "bg-red-500 text-white" : "border border-zinc-300 dark:border-zinc-600"
+      }`}>
+        {met ? "✓" : ""}
+      </span>
+      <span className="font-medium">{code}</span>
+      {label}
+    </span>
+  );
+}
+
 // ── Main component ───────────────────────────────────────────────────────
+
+/** Result type from the API (without filteredPoints, which are sent separately) */
+type APIResult = Omit<CriteriaEstimationResult, "filteredPoints">;
 
 export default function CriteriaEstimation({ speciesKey, assessmentYear }: CriteriaEstimationProps) {
   const [params, setParams] = useState<Params>(DEFAULT_PARAMS);
-  const [result, setResult] = useState<CriteriaEstimationResult | null>(null);
+  const [result, setResult] = useState<APIResult | null>(null);
+  const [mapPoints, setMapPoints] = useState<MapPoint[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showParams, setShowParams] = useState(false);
+  const [layers, setLayers] = useState<MapLayers>(DEFAULT_LAYERS);
+  const [showMap, setShowMap] = useState(true);
 
   const runEstimation = useCallback(async () => {
     setLoading(true);
@@ -214,6 +573,7 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
         setError(data.error);
       } else if (data.result) {
         setResult(data.result);
+        setMapPoints(data.filteredPoints ?? []);
       } else {
         setError(data.message || "No data available");
       }
@@ -361,6 +721,50 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
             {result.meta.filteredOut.duplicate > 0 && <span>Deduplicated: {result.meta.filteredOut.duplicate}</span>}
           </div>
 
+          {/* Map visualization */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider">
+                Sense-check Map
+              </h4>
+              <button
+                onClick={() => setShowMap(!showMap)}
+                className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+              >
+                {showMap ? "Hide map" : "Show map"}
+              </button>
+            </div>
+            {showMap && (
+              <>
+                <LayerToggles
+                  layers={layers}
+                  onChange={setLayers}
+                  hullVertexCount={result.eoo.hullVertices.length}
+                  cellCount={result.aoo.occupiedCells}
+                  clusterCount={result.locations.count}
+                />
+                <CriterionBMap
+                  points={mapPoints}
+                  hullVertices={result.eoo.hullVertices}
+                  cellBounds={result.aoo.cellBounds ?? []}
+                  clusters={result.locations.clusters}
+                  layers={layers}
+                />
+                <div className="px-3 py-2 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-lg">
+                  <p className="text-xs font-medium text-blue-700 dark:text-blue-400 mb-1">Sense-check guidance (IUCN Mapping Standards)</p>
+                  <ul className="text-[11px] text-blue-600 dark:text-blue-400/80 space-y-0.5 list-disc list-inside">
+                    <li>Verify that occurrence points fall within the species&apos; known range — look for outliers in unexpected regions</li>
+                    <li>Check that the <strong>convex hull</strong> (blue dashed line) does not include large uninhabitable areas (e.g. ocean for terrestrial species)</li>
+                    <li>Confirm <strong>AOO grid cells</strong> (amber) align with actual habitat — cells in unsuitable terrain may indicate data issues</li>
+                    <li>Assess whether <strong>location clusters</strong> (purple) correspond to distinct threat-affected areas, not just point density</li>
+                    <li>Older points (blue) near the edge may no longer reflect the current range — consider adjusting the minimum year filter</li>
+                    <li>Red-highlighted points near (0,0) or poles are likely data errors and should be excluded</li>
+                  </ul>
+                </div>
+              </>
+            )}
+          </div>
+
           {/* Gauges */}
           <div className="space-y-5">
             <ThresholdGauge
@@ -441,7 +845,6 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
               Criterion B Assessment
             </h4>
             <div className="space-y-2 text-sm">
-              {/* B1 and B2 */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="px-3 py-2 rounded-lg bg-zinc-50 dark:bg-zinc-800/50">
                   <span className="text-xs font-medium text-zinc-500">B1 (EOO)</span>
@@ -469,25 +872,12 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
                 </div>
               </div>
 
-              {/* Subcriteria */}
               <div className="px-3 py-2 rounded-lg bg-zinc-50 dark:bg-zinc-800/50">
                 <span className="text-xs font-medium text-zinc-500">Subcriteria (need ≥2 for Criterion B)</span>
                 <div className="mt-1.5 flex flex-wrap gap-2">
-                  <SubcriterionBadge
-                    code="(a)"
-                    label="Few locations"
-                    met={result.criterionB.subcriteria.a}
-                  />
-                  <SubcriterionBadge
-                    code="(b)(i)"
-                    label="EOO decline"
-                    met={result.criterionB.subcriteria.bi}
-                  />
-                  <SubcriterionBadge
-                    code="(b)(ii)"
-                    label="AOO decline"
-                    met={result.criterionB.subcriteria.bii}
-                  />
+                  <SubcriterionBadge code="(a)" label="Few locations" met={result.criterionB.subcriteria.a} />
+                  <SubcriterionBadge code="(b)(i)" label="EOO decline" met={result.criterionB.subcriteria.bi} />
+                  <SubcriterionBadge code="(b)(ii)" label="AOO decline" met={result.criterionB.subcriteria.bii} />
                   <span className="text-xs text-zinc-400 flex items-center gap-1">
                     <span className="w-3 h-3 rounded-full border border-dashed border-zinc-300 dark:border-zinc-600 inline-block" />
                     (b)(iii-v), (c) — requires additional data
@@ -495,7 +885,6 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
                 </div>
               </div>
 
-              {/* Overall */}
               {result.criterionB.overallCategory ? (
                 <div
                   className="px-4 py-3 rounded-lg border text-sm"
@@ -531,7 +920,7 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
             approximations. EOO and AOO calculations follow IUCN standards (minimum convex polygon
             and 2×2 km grid respectively). Number of locations is approximated by spatial clustering
             and does not account for threat-based definitions. Assessors should verify results using
-            additional data sources and expert knowledge.
+            additional data sources and expert knowledge per IUCN Red List Guidelines and Mapping Standards.
           </p>
         </div>
       )}
@@ -544,25 +933,5 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
         </div>
       )}
     </div>
-  );
-}
-
-// ── Subcriterion badge ───────────────────────────────────────────────────
-
-function SubcriterionBadge({ code, label, met }: { code: string; label: string; met: boolean }) {
-  return (
-    <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs ${
-      met
-        ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
-        : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500"
-    }`}>
-      <span className={`w-3 h-3 rounded-full inline-flex items-center justify-center text-[8px] font-bold ${
-        met ? "bg-red-500 text-white" : "border border-zinc-300 dark:border-zinc-600"
-      }`}>
-        {met ? "✓" : ""}
-      </span>
-      <span className="font-medium">{code}</span>
-      {label}
-    </span>
   );
 }

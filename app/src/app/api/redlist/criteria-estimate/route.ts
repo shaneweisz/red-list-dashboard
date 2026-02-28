@@ -164,9 +164,27 @@ export async function GET(request: NextRequest) {
 
     const result = estimateCriteria(points, params);
 
+    // Cap filtered points sent to client to limit payload size.
+    // The map only needs lat/lng/year for rendering; strip extra fields
+    // and limit to 5000 points to keep the response under ~500KB.
+    const MAX_MAP_POINTS = 5_000;
+    const mapPoints = result.filteredPoints.slice(0, MAX_MAP_POINTS).map((p) => ({
+      lat: p.lat,
+      lng: p.lng,
+      year: p.year ?? null,
+      coordinateUncertainty: p.coordinateUncertainty ?? null,
+      basisOfRecord: p.basisOfRecord ?? null,
+    }));
+
+    // Don't include the full filteredPoints array in the response
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { filteredPoints: _, ...resultWithoutPoints } = result;
+
     return NextResponse.json({
       error: null,
-      result,
+      result: resultWithoutPoints,
+      filteredPoints: mapPoints,
+      filteredPointsCapped: result.filteredPoints.length > MAX_MAP_POINTS,
       totalAvailable,
       fetchedPoints: points.length,
     });
