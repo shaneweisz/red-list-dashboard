@@ -1,16 +1,27 @@
 /**
- * Observation trend analysis: detects whether GBIF observation patterns
+ * Observation signal analysis: detects whether GBIF observation patterns
  * suggest a species' IUCN category may need reassessment.
  *
- * Compares mean annual observations in the earlier vs later half of a
- * 10-year window. Conservative thresholds avoid false alarms — we'd
- * rather miss borderline trends than flag species incorrectly.
+ * When taxon-level baseline data is provided, per-year species counts are
+ * effort-adjusted: each year's count is scaled by the ratio of average
+ * taxon-wide effort to that year's effort. This compensates for platform
+ * growth (citizen science) and disruptions (e.g. Covid) without hardcoding
+ * specific years — like adjusting for inflation.
+ *
+ * Compares **median** adjusted annual observations in the earlier vs later
+ * half of a rolling window. Median is robust to remaining species-level
+ * outliers (bioblitz events, data dumps).
  *
  * Trend flags:
  *   - potential_uplisting:  LC/NT/VU with declining observations
  *   - data_available:       DD species with substantial new GBIF records
  *   - potential_recovery:   CR/EN with increasing observations
  *   - monitoring_needed:    CR/EN with declining observations (worsening)
+ *
+ * Known limitations:
+ *   - No spatial deduplication — duplicate records at the same location
+ *     may inflate counts. GBIF's hasCoordinate and hasGeospatialIssue
+ *     filters provide some quality control.
  */
 
 // ── Types ────────────────────────────────────────────────────────────────
@@ -38,11 +49,20 @@ export interface TrendResult {
   changePercent: number;
   flag: TrendFlag | null;
   flagLabel: string | null;
+  /** Raw (unadjusted) observation counts per year within the window */
   yearCounts: YearCount[];
+  /** Effort-adjusted observation counts (or same as yearCounts if no baseline) */
+  adjustedYearCounts: YearCount[];
   windowStart: number;
   windowEnd: number;
-  earlierAvg: number;
-  laterAvg: number;
+  /** Median adjusted annual observations in earlier half of window */
+  earlierMedian: number;
+  /** Median adjusted annual observations in later half of window */
+  laterMedian: number;
+  /** Whether effort normalization was applied */
+  effortNormalized: boolean;
+  /** Per-year effort scaling factors (year → factor). Factor > 1 means below-average effort that year. */
+  scalingFactors: Record<number, number>;
 }
 
 // ── Constants ────────────────────────────────────────────────────────────
@@ -57,19 +77,61 @@ const MIN_TOTAL_OBSERVATIONS = 20;
 const WINDOW_YEARS = 10;
 
 /**
- * Decline threshold: later-half avg must be below this fraction of
- * earlier-half avg to count as "declining". 0.6 = 40%+ drop.
+ * Decline threshold: later-half median must be below this fraction of
+ * earlier-half median to count as "declining". 0.6 = 40%+ drop.
  */
 const DECLINE_THRESHOLD = 0.6;
 
 /**
- * Increase threshold: later-half avg must exceed this multiple of
- * earlier-half avg to count as "increasing". 1.8 = 80%+ rise.
+ * Increase threshold: later-half median must exceed this multiple of
+ * earlier-half median to count as "increasing". 1.8 = 80%+ rise.
  */
 const INCREASE_THRESHOLD = 1.8;
 
 /** DD species need at least this many recent observations to flag. */
 const DD_DATA_THRESHOLD = 50;
+
+// ── Helpers ──────────────────────────────────────────────────────────────
+
+/** Compute the median of a sorted-or-unsorted numeric array. Returns 0 for empty arrays. */
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? sorted[mid]
+    : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+/**
+ * Compute per-year effort scaling factors from taxon-level year counts.
+ *
+ * factor[year] = meanTaxonObs / taxonObsThatYear
+ *
+ * A factor > 1 means recording effort was below average that year (e.g.
+ * Covid), so species counts get scaled up. A factor < 1 means above-average
+ * effort (citizen science growth), so species counts get scaled down.
+ */
+export function computeScalingFactors(
+  taxonYearCounts: YearCount[],
+  windowStart: number,
+  windowEnd: number,
+): Record<number, number> {
+  const inWindow = taxonYearCounts.filter(
+    (yc) => yc.year >= windowStart && yc.year <= windowEnd,
+  );
+
+  if (inWindow.length === 0) return {};
+
+  const meanTaxonObs =
+    inWindow.reduce((s, yc) => s + yc.count, 0) / inWindow.length;
+
+  const factors: Record<number, number> = {};
+  for (const yc of inWindow) {
+    factors[yc.year] = yc.count > 0 ? meanTaxonObs / yc.count : 1;
+  }
+  return factors;
+}
 
 // ── Flag metadata for display ────────────────────────────────────────────
 
@@ -112,66 +174,99 @@ export const TREND_FLAG_META: Record<
 /**
  * Analyze observation trend from year-faceted GBIF data.
  *
- * Splits a 10-year window into two halves and compares mean annual
- * observations. Returns direction + magnitude but NOT the flag (which
- * depends on the species' IUCN category — see computeTrendFlag).
+ * When `taxonYearCounts` is provided, species counts are effort-adjusted
+ * by scaling each year relative to the taxon-wide average effort.
+ * Then compares **median** adjusted annual observations in the earlier
+ * vs later half of the window.
+ *
+ * Returns direction + magnitude but NOT the flag (which depends on the
+ * species' IUCN category — see computeTrendFlag).
  */
 export function analyzeTrend(
   yearCounts: YearCount[],
   currentYear: number,
+  taxonYearCounts?: YearCount[],
 ): Omit<TrendResult, "flag" | "flagLabel"> {
   const windowStart = currentYear - WINDOW_YEARS + 1;
   const windowEnd = currentYear;
 
-  // Filter to window and sort
+  // Filter to window and sort (keep all years for display)
   const inWindow = yearCounts
     .filter((yc) => yc.year >= windowStart && yc.year <= windowEnd)
     .sort((a, b) => a.year - b.year);
 
-  const yearsWithData = inWindow.filter((yc) => yc.count > 0).length;
-  const totalObs = inWindow.reduce((sum, yc) => sum + yc.count, 0);
+  // Compute effort scaling factors if taxon baseline is available
+  const effortNormalized = !!taxonYearCounts && taxonYearCounts.length > 0;
+  const scalingFactors = effortNormalized
+    ? computeScalingFactors(taxonYearCounts!, windowStart, windowEnd)
+    : {};
+
+  // Apply effort adjustment to get adjusted year counts
+  const adjustedInWindow: YearCount[] = inWindow.map((yc) => ({
+    year: yc.year,
+    count: effortNormalized
+      ? Math.round(yc.count * (scalingFactors[yc.year] ?? 1))
+      : yc.count,
+  }));
+
+  const yearsWithData = adjustedInWindow.filter((yc) => yc.count > 0).length;
+  const totalObs = adjustedInWindow.reduce((sum, yc) => sum + yc.count, 0);
+
+  const insufficientResult: Omit<TrendResult, "flag" | "flagLabel"> = {
+    direction: "insufficient_data",
+    changePercent: 0,
+    yearCounts: inWindow,
+    adjustedYearCounts: adjustedInWindow,
+    windowStart,
+    windowEnd,
+    earlierMedian: 0,
+    laterMedian: 0,
+    effortNormalized,
+    scalingFactors,
+  };
 
   if (yearsWithData < MIN_YEARS_WITH_DATA || totalObs < MIN_TOTAL_OBSERVATIONS) {
-    return {
-      direction: "insufficient_data",
-      changePercent: 0,
-      yearCounts: inWindow,
-      windowStart,
-      windowEnd,
-      earlierAvg: 0,
-      laterAvg: 0,
-    };
+    return insufficientResult;
   }
 
   // Split at midpoint: years [start..mid-1] vs [mid..end]
   const midYear = windowStart + Math.floor(WINDOW_YEARS / 2);
-  const earlierHalfYears = midYear - windowStart;
-  const laterHalfYears = windowEnd - midYear + 1;
 
-  const earlierSum = inWindow
-    .filter((yc) => yc.year < midYear)
-    .reduce((s, yc) => s + yc.count, 0);
-  const laterSum = inWindow
-    .filter((yc) => yc.year >= midYear)
-    .reduce((s, yc) => s + yc.count, 0);
+  // Build complete count arrays for each half, including 0 for years
+  // with no data in the adjusted counts
+  const earlierCounts: number[] = [];
+  const laterCounts: number[] = [];
 
-  const earlierAvg = earlierSum / earlierHalfYears;
-  const laterAvg = laterSum / laterHalfYears;
+  for (let y = windowStart; y <= windowEnd; y++) {
+    const yc = adjustedInWindow.find((d) => d.year === y);
+    const count = yc?.count ?? 0;
+    if (y < midYear) {
+      earlierCounts.push(count);
+    } else {
+      laterCounts.push(count);
+    }
+  }
+
+  const earlierMed = median(earlierCounts);
+  const laterMed = median(laterCounts);
 
   // Edge case: no earlier observations but later observations exist
-  if (earlierAvg === 0) {
+  if (earlierMed === 0) {
     return {
-      direction: laterAvg > 0 ? "increasing" : "stable",
-      changePercent: laterAvg > 0 ? 100 : 0,
+      direction: laterMed > 0 ? "increasing" : "stable",
+      changePercent: laterMed > 0 ? 100 : 0,
       yearCounts: inWindow,
+      adjustedYearCounts: adjustedInWindow,
       windowStart,
       windowEnd,
-      earlierAvg: 0,
-      laterAvg: Math.round(laterAvg),
+      earlierMedian: 0,
+      laterMedian: Math.round(laterMed),
+      effortNormalized,
+      scalingFactors,
     };
   }
 
-  const ratio = laterAvg / earlierAvg;
+  const ratio = laterMed / earlierMed;
   const changePercent = Math.round((ratio - 1) * 100);
 
   let direction: TrendDirection;
@@ -187,10 +282,13 @@ export function analyzeTrend(
     direction,
     changePercent,
     yearCounts: inWindow,
+    adjustedYearCounts: adjustedInWindow,
     windowStart,
     windowEnd,
-    earlierAvg: Math.round(earlierAvg),
-    laterAvg: Math.round(laterAvg),
+    earlierMedian: Math.round(earlierMed),
+    laterMedian: Math.round(laterMed),
+    effortNormalized,
+    scalingFactors,
   };
 }
 
