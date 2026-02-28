@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 
+const GBIF_PAGE_LIMIT = 300; // GBIF API max per request
+
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const speciesKey = searchParams.get("speciesKey");
   const country = searchParams.get("country");
-  const limit = parseInt(searchParams.get("limit") || "500");
+  const limit = Math.min(parseInt(searchParams.get("limit") || "500"), 5000);
   const maxUncertainty = searchParams.get("maxUncertainty");
 
   if (!speciesKey) {
@@ -15,56 +17,75 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const params = new URLSearchParams({
+    const baseParams = new URLSearchParams({
       speciesKey,
       hasCoordinate: "true",
       hasGeospatialIssue: "false",
-      limit: limit.toString(),
     });
 
     // Add country filter if provided
     if (country) {
-      params.set("country", country.toUpperCase());
+      baseParams.set("country", country.toUpperCase());
     }
 
     // Add coordinate uncertainty filter if provided (meters)
     if (maxUncertainty) {
-      params.set("coordinateUncertaintyInMeters", `*,${maxUncertainty}`);
+      baseParams.set("coordinateUncertaintyInMeters", `*,${maxUncertainty}`);
     }
 
-    const response = await fetch(
-      `https://api.gbif.org/v1/occurrence/search?${params}`
-    );
+    // Paginate through GBIF API (max 300 per request)
+    type GbifRecord = {
+      key: number;
+      species?: string;
+      scientificName?: string;
+      eventDate?: string;
+      recordedBy?: string;
+      decimalLongitude: number;
+      decimalLatitude: number;
+      country?: string;
+      basisOfRecord?: string;
+      datasetKey?: string;
+      datasetName?: string;
+      publishingOrgKey?: string;
+      coordinateUncertaintyInMeters?: number;
+      year?: number;
+      month?: number;
+      institutionCode?: string;
+    };
 
-    if (!response.ok) {
-      throw new Error(`GBIF API error: ${response.statusText}`);
+    let allResults: GbifRecord[] = [];
+    let totalCount = 0;
+    let offset = 0;
+
+    while (allResults.length < limit) {
+      const pageSize = Math.min(GBIF_PAGE_LIMIT, limit - allResults.length);
+      const params = new URLSearchParams(baseParams);
+      params.set("limit", pageSize.toString());
+      params.set("offset", offset.toString());
+
+      const response = await fetch(
+        `https://api.gbif.org/v1/occurrence/search?${params}`
+      );
+
+      if (!response.ok) {
+        throw new Error(`GBIF API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      totalCount = data.count;
+      allResults = allResults.concat(data.results);
+      offset += pageSize;
+
+      // Stop if we've fetched all available records
+      if (data.endOfRecords || allResults.length >= totalCount) {
+        break;
+      }
     }
-
-    const data = await response.json();
 
     // Convert to GeoJSON
-    const features = data.results
-      .filter((r: { decimalLatitude?: number; decimalLongitude?: number }) =>
-        r.decimalLatitude && r.decimalLongitude
-      )
-      .map((r: {
-        key: number;
-        species?: string;
-        scientificName?: string;
-        eventDate?: string;
-        recordedBy?: string;
-        decimalLongitude: number;
-        decimalLatitude: number;
-        country?: string;
-        basisOfRecord?: string;
-        datasetKey?: string;
-        datasetName?: string;
-        publishingOrgKey?: string;
-        coordinateUncertaintyInMeters?: number;
-        year?: number;
-        month?: number;
-        institutionCode?: string;
-      }) => ({
+    const features = allResults
+      .filter((r) => r.decimalLatitude && r.decimalLongitude)
+      .map((r) => ({
         type: "Feature",
         properties: {
           gbifID: r.key,
@@ -105,7 +126,7 @@ export async function GET(request: NextRequest) {
       metadata: {
         speciesKey: parseInt(speciesKey),
         count: features.length,
-        total: data.count,
+        total: totalCount,
         bbox: features.length > 0 ? [minLon, minLat, maxLon, maxLat] : null,
       },
     });

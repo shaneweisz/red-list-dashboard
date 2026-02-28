@@ -77,6 +77,7 @@ interface OccurrenceFeature {
 // Uncertainty filter options (meters)
 const UNCERTAINTY_OPTIONS = [
   { label: "Any", value: null },
+  { label: "\u2264 10m", value: 10 },
   { label: "\u2264 100m", value: 100 },
   { label: "\u2264 1km", value: 1000 },
   { label: "\u2264 10km", value: 10000 },
@@ -85,6 +86,7 @@ const UNCERTAINTY_OPTIONS = [
 
 // Deduplication grid sizes
 const DEDUP_OPTIONS = [
+  { label: "~10m", value: 0.0001 },
   { label: "~100m", value: 0.001 },
   { label: "~1km", value: 0.01 },
   { label: "~10km", value: 0.1 },
