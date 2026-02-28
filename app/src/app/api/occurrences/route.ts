@@ -5,6 +5,7 @@ export async function GET(request: NextRequest) {
   const speciesKey = searchParams.get("speciesKey");
   const country = searchParams.get("country");
   const limit = parseInt(searchParams.get("limit") || "500");
+  const maxUncertainty = searchParams.get("maxUncertainty");
 
   if (!speciesKey) {
     return NextResponse.json(
@@ -24,6 +25,11 @@ export async function GET(request: NextRequest) {
     // Add country filter if provided
     if (country) {
       params.set("country", country.toUpperCase());
+    }
+
+    // Add coordinate uncertainty filter if provided (meters)
+    if (maxUncertainty) {
+      params.set("coordinateUncertaintyInMeters", `*,${maxUncertainty}`);
     }
 
     const response = await fetch(
@@ -52,6 +58,12 @@ export async function GET(request: NextRequest) {
         country?: string;
         basisOfRecord?: string;
         datasetKey?: string;
+        datasetName?: string;
+        publishingOrgKey?: string;
+        coordinateUncertaintyInMeters?: number;
+        year?: number;
+        month?: number;
+        institutionCode?: string;
       }) => ({
         type: "Feature",
         properties: {
@@ -62,6 +74,12 @@ export async function GET(request: NextRequest) {
           country: r.country,
           basisOfRecord: r.basisOfRecord,
           datasetKey: r.datasetKey,
+          datasetName: r.datasetName,
+          publishingOrgKey: r.publishingOrgKey,
+          coordinateUncertaintyInMeters: r.coordinateUncertaintyInMeters ?? null,
+          year: r.year ?? null,
+          month: r.month ?? null,
+          institutionCode: r.institutionCode,
         },
         geometry: {
           type: "Point",
