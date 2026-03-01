@@ -32,7 +32,7 @@ export interface EstimationParams {
   maxYear?: number;
   /** Max coordinate uncertainty in meters. Default: 10000. */
   maxUncertaintyMeters?: number;
-  /** Grid cell size for AOO in km. Default: 2 (IUCN standard). */
+  /** Grid cell size for observation grid overlay in km. Default: 2 (IUCN standard). */
   gridSizeKm?: number;
   /** Distance threshold for location clustering in km. Default: 10. */
   clusterDistanceKm?: number;
@@ -40,6 +40,18 @@ export interface EstimationParams {
   outlierDistanceKm?: number;
   /** Basis of record types to include. Default: all. */
   basisOfRecord?: string[];
+  /**
+   * Prevalence: estimated fraction of the EOO grid cells actually occupied (0–1).
+   * Used when aooMethod is "eoo-prevalence".
+   * Default: 1.0 (100%).
+   */
+  prevalence?: number;
+  /**
+   * AOO estimation method:
+   * - "gbif": count of GBIF observation grid cells (default)
+   * - "eoo-prevalence": EOO grid cells × prevalence slider
+   */
+  aooMethod?: AOOMethod;
 }
 
 export interface EOOResult {
@@ -60,19 +72,43 @@ export interface GridCellBounds {
   pointCount: number;
 }
 
+/** Method used to estimate AOO. */
+export type AOOMethod = "gbif" | "eoo-prevalence";
+
 export interface AOOResult {
-  /** Total area of occupancy in km². */
+  /** The estimation method used to derive areaKm2. */
+  method: AOOMethod;
+  /** AOO estimate in km² (interpretation depends on method). */
   areaKm2: number;
-  /** Number of occupied grid cells. */
-  occupiedCells: number;
-  /** Grid cell size used (km). */
+  /** Grid cell size used (km). IUCN standard: 2 km. */
   gridSizeKm: number;
-  /** Center coordinates of each occupied grid cell for map display. */
-  cellCenters: [number, number][];
-  /** Bounds of each occupied grid cell for map rectangle display. */
-  cellBounds: GridCellBounds[];
   /** Suggested IUCN category based on AOO thresholds, or null if above VU. */
   suggestedCategory: string | null;
+
+  // ── GBIF observation grid data (always computed for map display) ──
+
+  /** Number of grid cells containing GBIF observations. */
+  observationCells: number;
+  /** AOO based on GBIF observation cells alone (observationCells × cellArea). */
+  observationAreaKm2: number;
+  /** Center coordinates of each observation grid cell for map display. */
+  cellCenters: [number, number][];
+  /** Bounds of each observation grid cell for map rectangle display. */
+  cellBounds: GridCellBounds[];
+
+  // ── EOO prevalence data (always computed for reference) ──
+
+  /** Total grid cells covering the EOO convex hull. */
+  totalEOOCells: number;
+  /** Estimated occupied cells (= ceil(totalEOOCells × prevalence)). */
+  occupiedCells: number;
+  /** EOO prevalence-based AOO in km² (occupiedCells × cellArea). */
+  prevalenceAreaKm2: number;
+  /**
+   * Prevalence: estimated fraction of EOO grid cells actually occupied (0–1).
+   * Defaults to 1.0 (100%).
+   */
+  prevalence: number;
 }
 
 export interface LocationCluster {
@@ -194,6 +230,8 @@ const DEFAULT_PARAMS: Required<EstimationParams> = {
   clusterDistanceKm: 10,
   outlierDistanceKm: 0,
   basisOfRecord: [],
+  prevalence: 1.0,
+  aooMethod: "gbif",
 };
 
 // ── Haversine distance ───────────────────────────────────────────────────
@@ -316,27 +354,23 @@ export function computeEOO(points: [number, number][]): EOOResult {
   };
 }
 
-// ── AOO computation ──────────────────────────────────────────────────────
+// ── GBIF observation grid ────────────────────────────────────────────────
 
 /**
- * Compute Area of Occupancy (AOO) by overlaying a grid and counting
- * occupied cells. Grid cell size is adjustable (IUCN default: 2 km).
+ * Overlay a grid on GBIF occurrence points and count cells with observations.
+ * Returns grid cell details for map visualization.
  *
- * Uses a latitude-corrected grid to approximate equal-area cells.
+ * **This is NOT an AOO calculation.** It only shows where GBIF records exist.
+ * AOO is estimated separately using EOO × prevalence (or AOH × prevalence
+ * in future). The grid cells are displayed on the map as context for the
+ * assessor.
  */
-export function computeAOO(
+export function computeObservationGrid(
   points: [number, number][],
   gridSizeKm: number = 2,
-): AOOResult {
+): { observationCells: number; cellCenters: [number, number][]; cellBounds: GridCellBounds[] } {
   if (points.length === 0) {
-    return {
-      areaKm2: 0,
-      occupiedCells: 0,
-      gridSizeKm,
-      cellCenters: [],
-      cellBounds: [],
-      suggestedCategory: null,
-    };
+    return { observationCells: 0, cellCenters: [], cellBounds: [] };
   }
 
   const cellSizeLat = gridSizeKm / KM_PER_DEG_LAT;
@@ -345,7 +379,6 @@ export function computeAOO(
   const cellBoundsMap = new Map<string, { bounds: [number, number, number, number]; count: number }>();
 
   for (const [lat, lng] of points) {
-    // Latitude-corrected cell size for longitude
     const cellSizeLng = cellSizeLat / Math.max(Math.cos(lat * DEG_TO_RAD), 0.01);
 
     const cellY = Math.floor(lat / cellSizeLat);
@@ -354,12 +387,10 @@ export function computeAOO(
 
     if (!occupiedSet.has(key)) {
       occupiedSet.add(key);
-      // Cell center for map display
       cellCenterMap.set(key, [
         (cellY + 0.5) * cellSizeLat,
         (cellX + 0.5) * cellSizeLng,
       ]);
-      // Cell bounds: [southLat, westLng, northLat, eastLng]
       cellBoundsMap.set(key, {
         bounds: [
           cellY * cellSizeLat,
@@ -375,21 +406,13 @@ export function computeAOO(
     }
   }
 
-  const occupiedCells = occupiedSet.size;
-  const cellAreaKm2 = gridSizeKm * gridSizeKm;
-  const areaKm2 = occupiedCells * cellAreaKm2;
-  const suggestedCategory = categorizeByThreshold(areaKm2, AOO_THRESHOLDS);
-
   return {
-    areaKm2,
-    occupiedCells,
-    gridSizeKm,
+    observationCells: occupiedSet.size,
     cellCenters: Array.from(cellCenterMap.values()),
     cellBounds: Array.from(cellBoundsMap.values()).map((v) => ({
       bounds: v.bounds,
       pointCount: v.count,
     })),
-    suggestedCategory,
   };
 }
 
@@ -556,13 +579,11 @@ export function computeTemporalTrends(
     laterPeriod: `${actualSplitYear}–${maxYear}`,
   } : null;
 
-  // AOO trend
-  const earlierAOO = computeAOO(earlierPoints, gridSizeKm);
-  const laterAOO = computeAOO(laterPoints, gridSizeKm);
-  const aooTrend: TemporalTrend | null = earlierAOO.areaKm2 > 0 ? {
-    earlierValue: earlierAOO.areaKm2,
-    laterValue: laterAOO.areaKm2,
-    changePercent: Math.round(((laterAOO.areaKm2 - earlierAOO.areaKm2) / earlierAOO.areaKm2) * 100),
+  // AOO trend (derived from EOO trend — AOO = EOO × prevalence, so % change tracks EOO)
+  const aooTrend: TemporalTrend | null = earlierEOO.areaKm2 > 0 ? {
+    earlierValue: earlierEOO.areaKm2,
+    laterValue: laterEOO.areaKm2,
+    changePercent: Math.round(((laterEOO.areaKm2 - earlierEOO.areaKm2) / earlierEOO.areaKm2) * 100),
     earlierPeriod: `${minYear}–${actualSplitYear - 1}`,
     laterPeriod: `${actualSplitYear}–${maxYear}`,
   } : null;
@@ -719,6 +740,79 @@ export function filterPoints(
   };
 }
 
+// ── EOO grid cell counting ───────────────────────────────────────────────
+
+/**
+ * Test if a point is inside a convex polygon using cross-product sign consistency.
+ * Assumes polygon vertices are ordered (CW or CCW).
+ */
+function pointInConvexPolygon(point: [number, number], polygon: [number, number][]): boolean {
+  const n = polygon.length;
+  if (n < 3) return false;
+
+  let sign: number | null = null;
+  for (let i = 0; i < n; i++) {
+    const a = polygon[i];
+    const b = polygon[(i + 1) % n];
+    // Cross product of edge vector (a→b) and point vector (a→point)
+    const cross = (b[0] - a[0]) * (point[1] - a[1]) - (b[1] - a[1]) * (point[0] - a[0]);
+    if (cross !== 0) {
+      const currentSign = cross > 0 ? 1 : -1;
+      if (sign === null) {
+        sign = currentSign;
+      } else if (currentSign !== sign) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+/**
+ * Count how many grid cells of the given size fall within a convex hull.
+ * Uses a latitude-corrected grid (same as the observation grid) to
+ * approximate equal-area cells.
+ *
+ * A cell is counted if its center falls inside the hull.
+ */
+export function countGridCellsInHull(
+  hull: [number, number][],
+  gridSizeKm: number,
+): number {
+  if (hull.length < 3) return hull.length > 0 ? 1 : 0;
+
+  const cellSizeLat = gridSizeKm / KM_PER_DEG_LAT;
+
+  // Bounding box of hull
+  let minLat = Infinity, maxLat = -Infinity;
+  let minLng = Infinity, maxLng = -Infinity;
+  for (const [lat, lng] of hull) {
+    if (lat < minLat) minLat = lat;
+    if (lat > maxLat) maxLat = lat;
+    if (lng < minLng) minLng = lng;
+    if (lng > maxLng) maxLng = lng;
+  }
+
+  // Iterate over grid rows (latitude bands)
+  let count = 0;
+  const startLat = Math.floor(minLat / cellSizeLat) * cellSizeLat;
+
+  for (let latBase = startLat; latBase < maxLat; latBase += cellSizeLat) {
+    const centerLat = latBase + cellSizeLat / 2;
+    const cellSizeLng = cellSizeLat / Math.max(Math.cos(centerLat * DEG_TO_RAD), 0.01);
+    const startLng = Math.floor(minLng / cellSizeLng) * cellSizeLng;
+
+    for (let lngBase = startLng; lngBase < maxLng; lngBase += cellSizeLng) {
+      const centerLng = lngBase + cellSizeLng / 2;
+      if (pointInConvexPolygon([centerLat, centerLng], hull)) {
+        count++;
+      }
+    }
+  }
+
+  return count;
+}
+
 // ── Main entry point ─────────────────────────────────────────────────────
 
 /**
@@ -740,13 +834,42 @@ export function estimateCriteria(
 
   // Compute all metrics
   const eoo = computeEOO(coords);
-  const aoo = computeAOO(coords, fullParams.gridSizeKm);
+  const grid = computeObservationGrid(coords, fullParams.gridSizeKm);
   const locations = computeLocations(coords, fullParams.clusterDistanceKm);
   const temporal = computeTemporalTrends(
     filtered,
     fullParams.gridSizeKm,
     fullParams.clusterDistanceKm,
   );
+
+  // AOO: compute both methods, select based on aooMethod
+  const prevalence = Math.max(0, Math.min(1, fullParams.prevalence));
+  const cellAreaKm2 = fullParams.gridSizeKm * fullParams.gridSizeKm;
+  const totalEOOCells = countGridCellsInHull(eoo.hullVertices, fullParams.gridSizeKm);
+  const occupiedCells = Math.ceil(totalEOOCells * prevalence);
+  const observationAreaKm2 = grid.observationCells * cellAreaKm2;
+  const prevalenceAreaKm2 = occupiedCells * cellAreaKm2;
+
+  const method = fullParams.aooMethod;
+  const aooAreaKm2 = method === "gbif" ? observationAreaKm2 : prevalenceAreaKm2;
+
+  const aoo: AOOResult = {
+    method,
+    areaKm2: aooAreaKm2,
+    gridSizeKm: fullParams.gridSizeKm,
+    suggestedCategory: categorizeByThreshold(aooAreaKm2, AOO_THRESHOLDS),
+    // GBIF data
+    observationCells: grid.observationCells,
+    observationAreaKm2,
+    cellCenters: grid.cellCenters,
+    cellBounds: grid.cellBounds,
+    // EOO prevalence data
+    totalEOOCells,
+    occupiedCells,
+    prevalenceAreaKm2,
+    prevalence,
+  };
+
   const criterionB = assessCriterionB(eoo, aoo, locations, temporal);
 
   return {

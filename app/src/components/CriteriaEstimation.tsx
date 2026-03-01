@@ -10,6 +10,7 @@ import {
   type OccurrencePoint,
   type GridCellBounds,
   type LocationCluster,
+  type AOOMethod,
 } from "@/lib/criteria-estimation";
 
 // ── Dynamic Leaflet imports (SSR-safe) ───────────────────────────────────
@@ -57,6 +58,8 @@ interface Params {
   gridSize: number;
   clusterDistance: number;
   outlierDistance: number;
+  aooMethod: AOOMethod;
+  prevalence: number;
 }
 
 /** Point from API (slightly different from OccurrencePoint — nulls not undefined) */
@@ -84,6 +87,8 @@ const DEFAULT_PARAMS: Params = {
   gridSize: 2,
   clusterDistance: 10,
   outlierDistance: 0,
+  aooMethod: "eoo-prevalence",
+  prevalence: 100,
 };
 
 const DEFAULT_LAYERS: MapLayers = {
@@ -369,7 +374,7 @@ function LayerToggles({
   const toggles: { key: keyof MapLayers; label: string; color: string; detail: string }[] = [
     { key: "points", label: "Occurrences", color: "#6366f1", detail: "colored by year" },
     { key: "hull", label: "EOO Hull", color: "#3b82f6", detail: `${hullVertexCount} vertices` },
-    { key: "aooCells", label: "AOO Cells", color: "#f59e0b", detail: `${cellCount} cells` },
+    { key: "aooCells", label: "GBIF Cells", color: "#f59e0b", detail: `${cellCount} cells` },
     { key: "clusters", label: "Locations", color: "#8b5cf6", detail: `${clusterCount} clusters` },
     { key: "uncertainty", label: "Uncertainty", color: "#94a3b8", detail: "coord. radius" },
   ];
@@ -549,9 +554,10 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
   const [mapPoints, setMapPoints] = useState<MapPoint[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showParams, setShowParams] = useState(false);
+  const [showParams, setShowParams] = useState(true);
   const [layers, setLayers] = useState<MapLayers>(DEFAULT_LAYERS);
   const [showMap, setShowMap] = useState(true);
+  const [activeSubtab, setActiveSubtab] = useState<string>("criterion-b");
 
   const runEstimation = useCallback(async () => {
     setLoading(true);
@@ -565,6 +571,8 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
       if (params.gridSize !== 2) searchParams.set("gridSize", String(params.gridSize));
       if (params.clusterDistance !== 10) searchParams.set("clusterDistance", String(params.clusterDistance));
       if (params.outlierDistance > 0) searchParams.set("outlierDistance", String(params.outlierDistance));
+      if (params.aooMethod !== "gbif") searchParams.set("aooMethod", params.aooMethod);
+      if (params.prevalence !== 100) searchParams.set("prevalence", String(params.prevalence / 100));
 
       const res = await fetch(`/api/redlist/criteria-estimate?${searchParams}`);
       const data = await res.json();
@@ -594,12 +602,45 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
-            Criterion B Parameter Estimation
+            Parameter Estimation
           </h3>
           <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-            Approximate EOO, AOO, and number of locations from GBIF occurrence data
+            Estimate parameters to assist with drafting IUCN Red List assessments
           </p>
         </div>
+      </div>
+
+      {/* Subtab navigation */}
+      <div className="flex items-center gap-1 border-b border-zinc-200 dark:border-zinc-700 -mx-4 px-4">
+        <button
+          onClick={() => setActiveSubtab("criterion-b")}
+          className={`px-3 py-2 text-xs font-medium transition-colors border-b-2 ${
+            activeSubtab === "criterion-b"
+              ? "text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400"
+              : "text-zinc-500 dark:text-zinc-400 border-transparent hover:text-zinc-700 dark:hover:text-zinc-300"
+          }`}
+        >
+          Criterion B
+        </button>
+        {(["Criterion A", "Criterion C", "Criterion D"] as const).map((label) => (
+          <span
+            key={label}
+            className="px-3 py-2 text-xs text-zinc-400 dark:text-zinc-600 cursor-default border-b-2 border-transparent"
+          >
+            {label} <span className="text-[10px] opacity-60">soon</span>
+          </span>
+        ))}
+        <span className="px-3 py-2 text-xs text-zinc-400 dark:text-zinc-600 cursor-default border-b-2 border-transparent">
+          Supporting Info <span className="text-[10px] opacity-60">soon</span>
+        </span>
+      </div>
+
+      {/* Criterion B subtab */}
+      {activeSubtab === "criterion-b" && (<>
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+          Geographic range: EOO, AOO, and number of locations from GBIF occurrence data
+        </p>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowParams(!showParams)}
@@ -653,7 +694,7 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
           </div>
           <div>
             <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">
-              AOO grid cell size
+              Observation grid cell size
             </label>
             <select
               value={params.gridSize}
@@ -690,6 +731,62 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
               onChange={(e) => updateParam("outlierDistance", parseFloat(e.target.value) || 0)}
               className="w-full px-2 py-1 text-sm rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200"
             />
+          </div>
+          <div className="col-span-2 sm:col-span-3 space-y-2">
+            <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+              AOO estimation method
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => updateParam("aooMethod", "gbif")}
+                className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${
+                  params.aooMethod === "gbif"
+                    ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium"
+                    : "border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                }`}
+              >
+                GBIF Records
+              </button>
+              <button
+                onClick={() => updateParam("aooMethod", "eoo-prevalence")}
+                className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${
+                  params.aooMethod === "eoo-prevalence"
+                    ? "border-amber-500 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 font-medium"
+                    : "border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                }`}
+              >
+                EOO × Prevalence
+              </button>
+              <span className="px-3 py-1.5 text-xs rounded-lg border border-dashed border-zinc-300 dark:border-zinc-600 text-zinc-400 dark:text-zinc-500 cursor-default">
+                AOH × Prevalence <span className="text-[10px] ml-1 opacity-70">coming soon</span>
+              </span>
+            </div>
+            <p className="text-[10px] text-zinc-400 dark:text-zinc-500">
+              {params.aooMethod === "gbif"
+                ? "Count of 2 km grid cells with GBIF occurrence records. Likely underestimates AOO for poorly-sampled species."
+                : "Overlay the EOO hull with a grid, then apply a prevalence estimate. Adjust the slider below."}
+            </p>
+            {params.aooMethod === "eoo-prevalence" && (
+              <div>
+                <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">
+                  Prevalence: <strong>{params.prevalence}%</strong> of EOO grid cells occupied
+                </label>
+                <input
+                  type="range"
+                  value={params.prevalence}
+                  min={1}
+                  max={100}
+                  step={1}
+                  onChange={(e) => updateParam("prevalence", parseInt(e.target.value))}
+                  className="w-full accent-amber-500"
+                />
+                <div className="flex justify-between text-[10px] text-zinc-400 mt-0.5">
+                  <span>1%</span>
+                  <span className="text-zinc-500">{result ? `${Math.ceil(result.aoo.totalEOOCells * params.prevalence / 100)} of ${result.aoo.totalEOOCells} EOO cells = ${(Math.ceil(result.aoo.totalEOOCells * params.prevalence / 100) * params.gridSize * params.gridSize).toLocaleString()} km²` : "Run analysis first"}</span>
+                  <span>100%</span>
+                </div>
+              </div>
+            )}
           </div>
           <div className="flex items-end">
             <button
@@ -740,7 +837,7 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
                   layers={layers}
                   onChange={setLayers}
                   hullVertexCount={result.eoo.hullVertices.length}
-                  cellCount={result.aoo.occupiedCells}
+                  cellCount={result.aoo.observationCells}
                   clusterCount={result.locations.count}
                 />
                 <CriterionBMap
@@ -755,7 +852,7 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
                   <ul className="text-[11px] text-blue-600 dark:text-blue-400/80 space-y-0.5 list-disc list-inside">
                     <li>Verify that occurrence points fall within the species&apos; known range — look for outliers in unexpected regions</li>
                     <li>Check that the <strong>convex hull</strong> (blue dashed line) does not include large uninhabitable areas (e.g. ocean for terrestrial species)</li>
-                    <li>Confirm <strong>AOO grid cells</strong> (amber) align with actual habitat — cells in unsuitable terrain may indicate data issues</li>
+                    <li>GBIF observation cells (amber) show where records exist — switch to <strong>EOO × Prevalence</strong> mode and adjust the slider if GBIF sampling is incomplete</li>
                     <li>Assess whether <strong>location clusters</strong> (purple) correspond to distinct threat-affected areas, not just point density</li>
                     <li>Older points (blue) near the edge may no longer reflect the current range — consider adjusting the minimum year filter</li>
                     <li>Red-highlighted points near (0,0) or poles are likely data errors and should be excluded</li>
@@ -781,7 +878,11 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
               unit="km²"
               thresholds={AOO_THRESHOLDS}
               suggestedCategory={result.aoo.suggestedCategory}
-              description={`${result.aoo.occupiedCells} occupied ${result.aoo.gridSizeKm}×${result.aoo.gridSizeKm} km grid cells`}
+              description={
+                result.aoo.method === "gbif"
+                  ? `${result.aoo.observationCells} GBIF observation grid cells (${result.aoo.gridSizeKm}×${result.aoo.gridSizeKm} km)`
+                  : `${result.aoo.occupiedCells} of ${result.aoo.totalEOOCells} EOO grid cells (${Math.round(result.aoo.prevalence * 100)}% prevalence)`
+              }
             />
             <ThresholdGauge
               label="Number of Locations"
@@ -930,6 +1031,17 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
         <div className="text-center py-8 text-zinc-400 dark:text-zinc-500">
           <p className="text-sm">Click &quot;Run Analysis&quot; to estimate Criterion B parameters from GBIF occurrences</p>
           <p className="text-xs mt-1">Fetches up to 10,000 georeferenced records and computes EOO, AOO, and locations</p>
+        </div>
+      )}
+      </>)}
+
+      {/* Coming-soon subtab placeholders */}
+      {activeSubtab !== "criterion-b" && (
+        <div className="text-center py-12 text-zinc-400 dark:text-zinc-500">
+          <p className="text-sm font-medium">Coming soon</p>
+          <p className="text-xs mt-1 max-w-md mx-auto">
+            Automated parameter estimation for additional IUCN criteria and supporting information is in development.
+          </p>
         </div>
       )}
     </div>
