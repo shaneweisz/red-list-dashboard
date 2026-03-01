@@ -5,6 +5,7 @@ import {
   sphericalPolygonArea,
   computeEOO,
   computeObservationGrid,
+  countGridCellsInHull,
   computeLocations,
   computeTemporalTrends,
   assessCriterionB,
@@ -220,37 +221,77 @@ describe("computeObservationGrid", () => {
   });
 });
 
-// ── AOO (prevalence-based) ──────────────────────────────────────────────
+// ── EOO grid cell counting ──────────────────────────────────────────────
+
+describe("countGridCellsInHull", () => {
+  it("returns 0 for empty hull", () => {
+    expect(countGridCellsInHull([], 2)).toBe(0);
+  });
+
+  it("returns 1 for a single point (degenerate hull)", () => {
+    expect(countGridCellsInHull([[0, 0]], 2)).toBe(1);
+  });
+
+  it("returns 1 for a line (2-point hull)", () => {
+    expect(countGridCellsInHull([[0, 0], [0.01, 0.01]], 2)).toBe(1);
+  });
+
+  it("counts cells inside a triangle hull", () => {
+    // Triangle with vertices at roughly 0-1 degree extent
+    const hull: [number, number][] = [[0, 0], [1, 0], [0.5, 1]];
+    const cells = countGridCellsInHull(hull, 2);
+    expect(cells).toBeGreaterThan(0);
+    // Should be roughly proportional to the area
+    // ~55 km per degree at equator, so triangle ~½ * 111 * 111 ≈ 6160 km²
+    // At 4 km² per cell, ~1540 cells
+    expect(cells).toBeGreaterThan(500);
+    expect(cells).toBeLessThan(5000);
+  });
+
+  it("larger hull has more cells", () => {
+    const small: [number, number][] = [[0, 0], [0.1, 0], [0, 0.1]];
+    const large: [number, number][] = [[0, 0], [1, 0], [0, 1]];
+    expect(countGridCellsInHull(large, 2)).toBeGreaterThan(countGridCellsInHull(small, 2));
+  });
+
+  it("larger grid size means fewer cells", () => {
+    const hull: [number, number][] = [[0, 0], [1, 0], [0.5, 1]];
+    const fine = countGridCellsInHull(hull, 2);
+    const coarse = countGridCellsInHull(hull, 10);
+    expect(fine).toBeGreaterThan(coarse);
+  });
+});
+
+// ── AOO (gridded prevalence-based) ──────────────────────────────────────
 
 describe("AOO prevalence estimation", () => {
-  it("at 100% prevalence, AOO equals EOO", () => {
+  it("at 100% prevalence, all EOO grid cells are occupied", () => {
     const points: OccurrencePoint[] = [
       { lat: 0, lng: 0 }, { lat: 1, lng: 0 }, { lat: 0, lng: 1 },
     ];
     const result = estimateCriteria(points, { prevalence: 1.0 });
-    expect(result.aoo.areaKm2).toBe(result.eoo.areaKm2);
+    expect(result.aoo.occupiedCells).toBe(result.aoo.totalEOOCells);
     expect(result.aoo.prevalence).toBe(1.0);
-    expect(result.aoo.baseAreaSource).toBe("eoo");
+    expect(result.aoo.areaKm2).toBe(result.aoo.totalEOOCells * 4); // 2×2 km cells
   });
 
-  it("at 50% prevalence, AOO is half of EOO", () => {
+  it("at 50% prevalence, roughly half the EOO cells are occupied", () => {
     const points: OccurrencePoint[] = [
       { lat: 0, lng: 0 }, { lat: 1, lng: 0 }, { lat: 0, lng: 1 },
     ];
     const result = estimateCriteria(points, { prevalence: 0.5 });
-    expect(result.aoo.areaKm2).toBeCloseTo(result.eoo.areaKm2 * 0.5, 1);
+    expect(result.aoo.occupiedCells).toBe(Math.ceil(result.aoo.totalEOOCells * 0.5));
     expect(result.aoo.prevalence).toBe(0.5);
   });
 
-  it("AOO category thresholds reflect prevalence-adjusted area", () => {
-    // With a large EOO but low prevalence, AOO can still be small
+  it("lower prevalence gives smaller or equal AOO", () => {
     const points: OccurrencePoint[] = [
-      { lat: 0, lng: 0 }, { lat: 0.1, lng: 0 }, { lat: 0, lng: 0.1 },
+      { lat: 0, lng: 0 }, { lat: 0.5, lng: 0 }, { lat: 0, lng: 0.5 },
     ];
     const full = estimateCriteria(points, { prevalence: 1.0 });
     const low = estimateCriteria(points, { prevalence: 0.01 });
-    // Lower prevalence should give a smaller or equal AOO
     expect(low.aoo.areaKm2).toBeLessThanOrEqual(full.aoo.areaKm2);
+    expect(low.aoo.occupiedCells).toBeLessThanOrEqual(full.aoo.occupiedCells);
   });
 
   it("observation cells are independent of prevalence", () => {
@@ -260,6 +301,16 @@ describe("AOO prevalence estimation", () => {
     const full = estimateCriteria(points, { prevalence: 1.0 });
     const half = estimateCriteria(points, { prevalence: 0.5 });
     expect(full.aoo.observationCells).toBe(half.aoo.observationCells);
+  });
+
+  it("AOO is expressed in grid cells, not continuous area", () => {
+    const points: OccurrencePoint[] = [
+      { lat: 0, lng: 0 }, { lat: 1, lng: 0 }, { lat: 0, lng: 1 },
+    ];
+    const result = estimateCriteria(points, { prevalence: 1.0 });
+    // AOO should be an exact multiple of cell area (4 km² for 2km grid)
+    expect(result.aoo.areaKm2 % 4).toBe(0);
+    expect(result.aoo.totalEOOCells).toBeGreaterThan(0);
   });
 });
 
@@ -382,10 +433,10 @@ describe("computeTemporalTrends", () => {
 describe("assessCriterionB", () => {
   const makeAOO = (areaKm2: number, suggestedCategory: string | null) => ({
     areaKm2,
-    baseAreaKm2: areaKm2,
-    baseAreaSource: "eoo" as const,
-    prevalence: 1.0,
     gridSizeKm: 2,
+    totalEOOCells: areaKm2 / 4,
+    occupiedCells: areaKm2 / 4,
+    prevalence: 1.0,
     observationCells: 0,
     cellCenters: [] as [number, number][],
     cellBounds: [],
@@ -525,6 +576,8 @@ describe("estimateCriteria", () => {
 
     // Should produce valid results
     expect(result.eoo.areaKm2).toBeGreaterThan(0);
+    expect(result.aoo.totalEOOCells).toBeGreaterThan(0);
+    expect(result.aoo.occupiedCells).toBe(result.aoo.totalEOOCells); // 100% prevalence default
     expect(result.aoo.observationCells).toBeGreaterThan(0);
     expect(result.locations.count).toBeGreaterThan(0);
     expect(result.meta.usedPoints).toBeGreaterThan(0);

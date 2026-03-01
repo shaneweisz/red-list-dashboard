@@ -69,25 +69,27 @@ export interface GridCellBounds {
 }
 
 export interface AOOResult {
-  /** AOO estimate in km² (= baseAreaKm2 × prevalence). */
+  /** AOO estimate in km² (= occupiedCells × gridSizeKm²). */
   areaKm2: number;
+  /** Grid cell size used (km). IUCN standard: 2 km. */
+  gridSizeKm: number;
   /**
-   * The base area used for AOO estimation.
-   * Currently EOO (convex hull area); in future, AOH (Area of Habitat)
-   * will provide a tighter base by excluding unsuitable habitat.
+   * Total grid cells covering the EOO convex hull.
+   * This is the maximum possible AOO at 100% prevalence.
    */
-  baseAreaKm2: number;
-  /** Source of the base area estimate. */
-  baseAreaSource: "eoo" | "aoh";
+  totalEOOCells: number;
   /**
-   * Prevalence: estimated fraction of the base area actually occupied (0–1).
+   * Estimated occupied cells (= ceil(totalEOOCells × prevalence)).
+   * This is the AOO expressed as grid cells.
+   */
+  occupiedCells: number;
+  /**
+   * Prevalence: estimated fraction of EOO grid cells actually occupied (0–1).
    * Defaults to 1.0 (100%). Assessors should adjust this based on expert
    * knowledge of the species' habitat use and distribution.
    */
   prevalence: number;
-  /** Grid cell size used for observation overlay (km). */
-  gridSizeKm: number;
-  /** Number of grid cells containing GBIF observations (for reference, not used in AOO calculation). */
+  /** Number of grid cells containing GBIF observations (for reference). */
   observationCells: number;
   /** Center coordinates of each observation grid cell for map display. */
   cellCenters: [number, number][];
@@ -725,6 +727,79 @@ export function filterPoints(
   };
 }
 
+// ── EOO grid cell counting ───────────────────────────────────────────────
+
+/**
+ * Test if a point is inside a convex polygon using cross-product sign consistency.
+ * Assumes polygon vertices are ordered (CW or CCW).
+ */
+function pointInConvexPolygon(point: [number, number], polygon: [number, number][]): boolean {
+  const n = polygon.length;
+  if (n < 3) return false;
+
+  let sign: number | null = null;
+  for (let i = 0; i < n; i++) {
+    const a = polygon[i];
+    const b = polygon[(i + 1) % n];
+    // Cross product of edge vector (a→b) and point vector (a→point)
+    const cross = (b[0] - a[0]) * (point[1] - a[1]) - (b[1] - a[1]) * (point[0] - a[0]);
+    if (cross !== 0) {
+      const currentSign = cross > 0 ? 1 : -1;
+      if (sign === null) {
+        sign = currentSign;
+      } else if (currentSign !== sign) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+/**
+ * Count how many grid cells of the given size fall within a convex hull.
+ * Uses a latitude-corrected grid (same as the observation grid) to
+ * approximate equal-area cells.
+ *
+ * A cell is counted if its center falls inside the hull.
+ */
+export function countGridCellsInHull(
+  hull: [number, number][],
+  gridSizeKm: number,
+): number {
+  if (hull.length < 3) return hull.length > 0 ? 1 : 0;
+
+  const cellSizeLat = gridSizeKm / KM_PER_DEG_LAT;
+
+  // Bounding box of hull
+  let minLat = Infinity, maxLat = -Infinity;
+  let minLng = Infinity, maxLng = -Infinity;
+  for (const [lat, lng] of hull) {
+    if (lat < minLat) minLat = lat;
+    if (lat > maxLat) maxLat = lat;
+    if (lng < minLng) minLng = lng;
+    if (lng > maxLng) maxLng = lng;
+  }
+
+  // Iterate over grid rows (latitude bands)
+  let count = 0;
+  const startLat = Math.floor(minLat / cellSizeLat) * cellSizeLat;
+
+  for (let latBase = startLat; latBase < maxLat; latBase += cellSizeLat) {
+    const centerLat = latBase + cellSizeLat / 2;
+    const cellSizeLng = cellSizeLat / Math.max(Math.cos(centerLat * DEG_TO_RAD), 0.01);
+    const startLng = Math.floor(minLng / cellSizeLng) * cellSizeLng;
+
+    for (let lngBase = startLng; lngBase < maxLng; lngBase += cellSizeLng) {
+      const centerLng = lngBase + cellSizeLng / 2;
+      if (pointInConvexPolygon([centerLat, centerLng], hull)) {
+        count++;
+      }
+    }
+  }
+
+  return count;
+}
+
 // ── Main entry point ─────────────────────────────────────────────────────
 
 /**
@@ -754,15 +829,18 @@ export function estimateCriteria(
     fullParams.clusterDistanceKm,
   );
 
-  // AOO = EOO × prevalence (in future: AOH × prevalence)
+  // AOO: overlay grid on EOO hull, then apply prevalence
   const prevalence = Math.max(0, Math.min(1, fullParams.prevalence));
-  const aooAreaKm2 = Math.round(eoo.areaKm2 * prevalence * 100) / 100;
+  const cellAreaKm2 = fullParams.gridSizeKm * fullParams.gridSizeKm;
+  const totalEOOCells = countGridCellsInHull(eoo.hullVertices, fullParams.gridSizeKm);
+  const occupiedCells = Math.ceil(totalEOOCells * prevalence);
+  const aooAreaKm2 = occupiedCells * cellAreaKm2;
   const aoo: AOOResult = {
     areaKm2: aooAreaKm2,
-    baseAreaKm2: eoo.areaKm2,
-    baseAreaSource: "eoo",
-    prevalence,
     gridSizeKm: fullParams.gridSizeKm,
+    totalEOOCells,
+    occupiedCells,
+    prevalence,
     observationCells: grid.observationCells,
     cellCenters: grid.cellCenters,
     cellBounds: grid.cellBounds,

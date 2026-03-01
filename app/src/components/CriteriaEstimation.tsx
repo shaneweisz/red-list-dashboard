@@ -696,7 +696,7 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
           </div>
           <div className="col-span-2 sm:col-span-3">
             <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">
-              Prevalence — estimated % of range (EOO) actually occupied: <strong>{params.prevalence}%</strong>
+              Prevalence — estimated % of EOO grid cells occupied: <strong>{params.prevalence}%</strong>
             </label>
             <input
               type="range"
@@ -709,7 +709,7 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
             />
             <div className="flex justify-between text-[10px] text-zinc-400 mt-0.5">
               <span>1%</span>
-              <span className="text-zinc-500">AOO = EOO × {params.prevalence}% = {result ? `${(result.eoo.areaKm2 * params.prevalence / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })} km²` : "..."}</span>
+              <span className="text-zinc-500">{result ? `${Math.ceil(result.aoo.totalEOOCells * params.prevalence / 100)} of ${result.aoo.totalEOOCells} EOO cells = ${(Math.ceil(result.aoo.totalEOOCells * params.prevalence / 100) * params.gridSize * params.gridSize).toLocaleString()} km²` : "Run analysis first"}</span>
               <span>100%</span>
             </div>
           </div>
@@ -803,7 +803,7 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
               unit="km²"
               thresholds={AOO_THRESHOLDS}
               suggestedCategory={result.aoo.suggestedCategory}
-              description={`EOO (${result.aoo.baseAreaKm2.toLocaleString()} km²) × ${Math.round(result.aoo.prevalence * 100)}% prevalence · ${result.aoo.observationCells} GBIF observation cells shown on map`}
+              description={`${result.aoo.occupiedCells} of ${result.aoo.totalEOOCells} EOO grid cells (${Math.round(result.aoo.prevalence * 100)}% prevalence) · ${result.aoo.observationCells} GBIF cells on map`}
             />
             <ThresholdGauge
               label="Number of Locations"
