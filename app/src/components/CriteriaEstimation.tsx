@@ -557,6 +557,7 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
   const [showParams, setShowParams] = useState(true);
   const [layers, setLayers] = useState<MapLayers>(DEFAULT_LAYERS);
   const [showMap, setShowMap] = useState(true);
+  const [activeSubtab, setActiveSubtab] = useState<string>("criterion-b");
 
   const runEstimation = useCallback(async () => {
     setLoading(true);
@@ -601,12 +602,45 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
-            Criterion B Parameter Estimation
+            Parameter Estimation
           </h3>
           <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-            Approximate EOO, AOO, and number of locations from GBIF occurrence data
+            Estimate parameters to assist with drafting IUCN Red List assessments
           </p>
         </div>
+      </div>
+
+      {/* Subtab navigation */}
+      <div className="flex items-center gap-1 border-b border-zinc-200 dark:border-zinc-700 -mx-4 px-4">
+        <button
+          onClick={() => setActiveSubtab("criterion-b")}
+          className={`px-3 py-2 text-xs font-medium transition-colors border-b-2 ${
+            activeSubtab === "criterion-b"
+              ? "text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400"
+              : "text-zinc-500 dark:text-zinc-400 border-transparent hover:text-zinc-700 dark:hover:text-zinc-300"
+          }`}
+        >
+          Criterion B
+        </button>
+        {(["Criterion A", "Criterion C", "Criterion D"] as const).map((label) => (
+          <span
+            key={label}
+            className="px-3 py-2 text-xs text-zinc-400 dark:text-zinc-600 cursor-default border-b-2 border-transparent"
+          >
+            {label} <span className="text-[10px] opacity-60">soon</span>
+          </span>
+        ))}
+        <span className="px-3 py-2 text-xs text-zinc-400 dark:text-zinc-600 cursor-default border-b-2 border-transparent">
+          Supporting Info <span className="text-[10px] opacity-60">soon</span>
+        </span>
+      </div>
+
+      {/* Criterion B subtab */}
+      {activeSubtab === "criterion-b" && (<>
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+          Geographic range: EOO, AOO, and number of locations from GBIF occurrence data
+        </p>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowParams(!showParams)}
@@ -997,6 +1031,17 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
         <div className="text-center py-8 text-zinc-400 dark:text-zinc-500">
           <p className="text-sm">Click &quot;Run Analysis&quot; to estimate Criterion B parameters from GBIF occurrences</p>
           <p className="text-xs mt-1">Fetches up to 10,000 georeferenced records and computes EOO, AOO, and locations</p>
+        </div>
+      )}
+      </>)}
+
+      {/* Coming-soon subtab placeholders */}
+      {activeSubtab !== "criterion-b" && (
+        <div className="text-center py-12 text-zinc-400 dark:text-zinc-500">
+          <p className="text-sm font-medium">Coming soon</p>
+          <p className="text-xs mt-1 max-w-md mx-auto">
+            Automated parameter estimation for additional IUCN criteria and supporting information is in development.
+          </p>
         </div>
       )}
     </div>

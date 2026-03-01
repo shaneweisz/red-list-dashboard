@@ -1788,7 +1788,7 @@ export default function RedListView() {
                                     className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "criterionB" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                     onClick={() => setActiveDetailTab("criterionB")}
                                   >
-                                    Criterion B
+                                    Parameter Estimation
                                   </button>
                                 )}
                               </>
