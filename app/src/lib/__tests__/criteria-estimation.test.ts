@@ -4,7 +4,7 @@ import {
   convexHull,
   sphericalPolygonArea,
   computeEOO,
-  computeAOO,
+  computeObservationGrid,
   computeLocations,
   computeTemporalTrends,
   assessCriterionB,
@@ -175,49 +175,31 @@ describe("computeEOO", () => {
   });
 });
 
-// ── AOO ──────────────────────────────────────────────────────────────────
+// ── Observation grid ────────────────────────────────────────────────────
 
-describe("computeAOO", () => {
+describe("computeObservationGrid", () => {
   it("returns 0 for empty input", () => {
-    const result = computeAOO([]);
-    expect(result.areaKm2).toBe(0);
-    expect(result.occupiedCells).toBe(0);
+    const result = computeObservationGrid([]);
+    expect(result.observationCells).toBe(0);
   });
 
-  it("returns 4 km² for a single point (one 2×2 km cell)", () => {
-    const result = computeAOO([[0, 0]]);
-    expect(result.occupiedCells).toBe(1);
-    expect(result.areaKm2).toBe(4); // 2×2 km
+  it("returns 1 cell for a single point", () => {
+    const result = computeObservationGrid([[0, 0]]);
+    expect(result.observationCells).toBe(1);
   });
 
   it("counts separate grid cells for distant points", () => {
-    // Points ~100 km apart should be in different 2km grid cells
-    const result = computeAOO([[0, 0], [0, 1]], 2);
-    expect(result.occupiedCells).toBe(2);
-    expect(result.areaKm2).toBe(8);
+    const result = computeObservationGrid([[0, 0], [0, 1]], 2);
+    expect(result.observationCells).toBe(2);
   });
 
   it("merges nearby points into same grid cell", () => {
-    // Points 100m apart should be in the same 2km grid cell
-    const result = computeAOO([[0, 0], [0.0005, 0.0005]], 2);
-    expect(result.occupiedCells).toBe(1);
-    expect(result.areaKm2).toBe(4);
-  });
-
-  it("respects custom grid size", () => {
-    const result = computeAOO([[0, 0]], 10);
-    expect(result.gridSizeKm).toBe(10);
-    expect(result.areaKm2).toBe(100); // 10×10 km
-  });
-
-  it("categorizes by AOO thresholds", () => {
-    // 2 cells × 4 km² = 8 km² < CR threshold (10 km²)
-    const result = computeAOO([[0, 0], [0, 1]], 2);
-    expect(result.suggestedCategory).toBe("CR");
+    const result = computeObservationGrid([[0, 0], [0.0005, 0.0005]], 2);
+    expect(result.observationCells).toBe(1);
   });
 
   it("returns cell centers for map display", () => {
-    const result = computeAOO([[10, 20], [10.5, 20.5]], 2);
+    const result = computeObservationGrid([[10, 20], [10.5, 20.5]], 2);
     expect(result.cellCenters).toHaveLength(2);
     for (const [lat, lng] of result.cellCenters) {
       expect(typeof lat).toBe("number");
@@ -226,17 +208,58 @@ describe("computeAOO", () => {
   });
 
   it("returns cell bounds with point counts", () => {
-    const result = computeAOO([[0, 0], [0.0005, 0.0005], [1, 1]], 2);
+    const result = computeObservationGrid([[0, 0], [0.0005, 0.0005], [1, 1]], 2);
     expect(result.cellBounds).toHaveLength(2);
-    // First cell should have 2 points (the two nearby ones)
     const counts = result.cellBounds.map((c) => c.pointCount).sort((a, b) => b - a);
     expect(counts[0]).toBe(2);
     expect(counts[1]).toBe(1);
-    // Each bound should have [south, west, north, east]
     for (const cell of result.cellBounds) {
       expect(cell.bounds).toHaveLength(4);
-      expect(cell.bounds[2]).toBeGreaterThan(cell.bounds[0]); // north > south
+      expect(cell.bounds[2]).toBeGreaterThan(cell.bounds[0]);
     }
+  });
+});
+
+// ── AOO (prevalence-based) ──────────────────────────────────────────────
+
+describe("AOO prevalence estimation", () => {
+  it("at 100% prevalence, AOO equals EOO", () => {
+    const points: OccurrencePoint[] = [
+      { lat: 0, lng: 0 }, { lat: 1, lng: 0 }, { lat: 0, lng: 1 },
+    ];
+    const result = estimateCriteria(points, { prevalence: 1.0 });
+    expect(result.aoo.areaKm2).toBe(result.eoo.areaKm2);
+    expect(result.aoo.prevalence).toBe(1.0);
+    expect(result.aoo.baseAreaSource).toBe("eoo");
+  });
+
+  it("at 50% prevalence, AOO is half of EOO", () => {
+    const points: OccurrencePoint[] = [
+      { lat: 0, lng: 0 }, { lat: 1, lng: 0 }, { lat: 0, lng: 1 },
+    ];
+    const result = estimateCriteria(points, { prevalence: 0.5 });
+    expect(result.aoo.areaKm2).toBeCloseTo(result.eoo.areaKm2 * 0.5, 1);
+    expect(result.aoo.prevalence).toBe(0.5);
+  });
+
+  it("AOO category thresholds reflect prevalence-adjusted area", () => {
+    // With a large EOO but low prevalence, AOO can still be small
+    const points: OccurrencePoint[] = [
+      { lat: 0, lng: 0 }, { lat: 0.1, lng: 0 }, { lat: 0, lng: 0.1 },
+    ];
+    const full = estimateCriteria(points, { prevalence: 1.0 });
+    const low = estimateCriteria(points, { prevalence: 0.01 });
+    // Lower prevalence should give a smaller or equal AOO
+    expect(low.aoo.areaKm2).toBeLessThanOrEqual(full.aoo.areaKm2);
+  });
+
+  it("observation cells are independent of prevalence", () => {
+    const points: OccurrencePoint[] = [
+      { lat: 0, lng: 0 }, { lat: 1, lng: 0 }, { lat: 0, lng: 1 },
+    ];
+    const full = estimateCriteria(points, { prevalence: 1.0 });
+    const half = estimateCriteria(points, { prevalence: 0.5 });
+    expect(full.aoo.observationCells).toBe(half.aoo.observationCells);
   });
 });
 
@@ -357,10 +380,22 @@ describe("computeTemporalTrends", () => {
 // ── Criterion B assessment ───────────────────────────────────────────────
 
 describe("assessCriterionB", () => {
+  const makeAOO = (areaKm2: number, suggestedCategory: string | null) => ({
+    areaKm2,
+    baseAreaKm2: areaKm2,
+    baseAreaSource: "eoo" as const,
+    prevalence: 1.0,
+    gridSizeKm: 2,
+    observationCells: 0,
+    cellCenters: [] as [number, number][],
+    cellBounds: [],
+    suggestedCategory,
+  });
+
   it("returns null overall when no thresholds met", () => {
     const result = assessCriterionB(
       { areaKm2: 30_000, hullVertices: [], pointCount: 100, suggestedCategory: null },
-      { areaKm2: 3_000, occupiedCells: 750, gridSizeKm: 2, cellCenters: [], cellBounds: [], suggestedCategory: null },
+      makeAOO(3_000, null),
       { count: 20, clusters: [], clusterDistanceKm: 10 },
       { eooTrend: null, aooTrend: null, locationsTrend: null, splitYear: 2015, earlierPointCount: 50, laterPointCount: 50 },
     );
@@ -370,7 +405,7 @@ describe("assessCriterionB", () => {
   it("returns a category when B1 threshold met with subcriteria", () => {
     const result = assessCriterionB(
       { areaKm2: 80, hullVertices: [], pointCount: 100, suggestedCategory: "CR" },
-      { areaKm2: 8, occupiedCells: 2, gridSizeKm: 2, cellCenters: [], cellBounds: [], suggestedCategory: "CR" },
+      makeAOO(8, "CR"),
       { count: 1, clusters: [], clusterDistanceKm: 10 }, // ≤1 → CR → sub (a) met
       {
         eooTrend: { earlierValue: 200, laterValue: 80, changePercent: -60, earlierPeriod: "2005-2015", laterPeriod: "2016-2025" },
@@ -385,7 +420,7 @@ describe("assessCriterionB", () => {
   it("requires at least 2 subcriteria for overall assessment", () => {
     const result = assessCriterionB(
       { areaKm2: 80, hullVertices: [], pointCount: 100, suggestedCategory: "CR" },
-      { areaKm2: 8, occupiedCells: 2, gridSizeKm: 2, cellCenters: [], cellBounds: [], suggestedCategory: "CR" },
+      makeAOO(8, "CR"),
       { count: 20, clusters: [], clusterDistanceKm: 10 }, // Many locations → sub (a) NOT met
       { eooTrend: null, aooTrend: null, locationsTrend: null, splitYear: 2015, earlierPointCount: 5, laterPointCount: 5 },
     );
@@ -405,6 +440,7 @@ describe("filterPoints", () => {
     clusterDistanceKm: 10,
     outlierDistanceKm: 0,
     basisOfRecord: [],
+    prevalence: 1.0,
   };
 
   it("filters by coordinate uncertainty", () => {
@@ -489,7 +525,7 @@ describe("estimateCriteria", () => {
 
     // Should produce valid results
     expect(result.eoo.areaKm2).toBeGreaterThan(0);
-    expect(result.aoo.occupiedCells).toBeGreaterThan(0);
+    expect(result.aoo.observationCells).toBeGreaterThan(0);
     expect(result.locations.count).toBeGreaterThan(0);
     expect(result.meta.usedPoints).toBeGreaterThan(0);
     expect(result.meta.params.gridSizeKm).toBe(2);

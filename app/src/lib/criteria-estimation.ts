@@ -32,7 +32,7 @@ export interface EstimationParams {
   maxYear?: number;
   /** Max coordinate uncertainty in meters. Default: 10000. */
   maxUncertaintyMeters?: number;
-  /** Grid cell size for AOO in km. Default: 2 (IUCN standard). */
+  /** Grid cell size for observation grid overlay in km. Default: 2 (IUCN standard). */
   gridSizeKm?: number;
   /** Distance threshold for location clustering in km. Default: 10. */
   clusterDistanceKm?: number;
@@ -40,6 +40,14 @@ export interface EstimationParams {
   outlierDistanceKm?: number;
   /** Basis of record types to include. Default: all. */
   basisOfRecord?: string[];
+  /**
+   * Prevalence: estimated fraction of the base area (EOO or AOH) that the
+   * species actually occupies (0–1). Used to estimate AOO as:
+   *   AOO = baseArea × prevalence
+   * Default: 1.0 (100% — assumes the species occupies its entire range).
+   * Assessors should adjust downward based on expert knowledge.
+   */
+  prevalence?: number;
 }
 
 export interface EOOResult {
@@ -61,15 +69,29 @@ export interface GridCellBounds {
 }
 
 export interface AOOResult {
-  /** Total area of occupancy in km². */
+  /** AOO estimate in km² (= baseAreaKm2 × prevalence). */
   areaKm2: number;
-  /** Number of occupied grid cells. */
-  occupiedCells: number;
-  /** Grid cell size used (km). */
+  /**
+   * The base area used for AOO estimation.
+   * Currently EOO (convex hull area); in future, AOH (Area of Habitat)
+   * will provide a tighter base by excluding unsuitable habitat.
+   */
+  baseAreaKm2: number;
+  /** Source of the base area estimate. */
+  baseAreaSource: "eoo" | "aoh";
+  /**
+   * Prevalence: estimated fraction of the base area actually occupied (0–1).
+   * Defaults to 1.0 (100%). Assessors should adjust this based on expert
+   * knowledge of the species' habitat use and distribution.
+   */
+  prevalence: number;
+  /** Grid cell size used for observation overlay (km). */
   gridSizeKm: number;
-  /** Center coordinates of each occupied grid cell for map display. */
+  /** Number of grid cells containing GBIF observations (for reference, not used in AOO calculation). */
+  observationCells: number;
+  /** Center coordinates of each observation grid cell for map display. */
   cellCenters: [number, number][];
-  /** Bounds of each occupied grid cell for map rectangle display. */
+  /** Bounds of each observation grid cell for map rectangle display. */
   cellBounds: GridCellBounds[];
   /** Suggested IUCN category based on AOO thresholds, or null if above VU. */
   suggestedCategory: string | null;
@@ -194,6 +216,7 @@ const DEFAULT_PARAMS: Required<EstimationParams> = {
   clusterDistanceKm: 10,
   outlierDistanceKm: 0,
   basisOfRecord: [],
+  prevalence: 1.0,
 };
 
 // ── Haversine distance ───────────────────────────────────────────────────
@@ -316,27 +339,23 @@ export function computeEOO(points: [number, number][]): EOOResult {
   };
 }
 
-// ── AOO computation ──────────────────────────────────────────────────────
+// ── GBIF observation grid ────────────────────────────────────────────────
 
 /**
- * Compute Area of Occupancy (AOO) by overlaying a grid and counting
- * occupied cells. Grid cell size is adjustable (IUCN default: 2 km).
+ * Overlay a grid on GBIF occurrence points and count cells with observations.
+ * Returns grid cell details for map visualization.
  *
- * Uses a latitude-corrected grid to approximate equal-area cells.
+ * **This is NOT an AOO calculation.** It only shows where GBIF records exist.
+ * AOO is estimated separately using EOO × prevalence (or AOH × prevalence
+ * in future). The grid cells are displayed on the map as context for the
+ * assessor.
  */
-export function computeAOO(
+export function computeObservationGrid(
   points: [number, number][],
   gridSizeKm: number = 2,
-): AOOResult {
+): { observationCells: number; cellCenters: [number, number][]; cellBounds: GridCellBounds[] } {
   if (points.length === 0) {
-    return {
-      areaKm2: 0,
-      occupiedCells: 0,
-      gridSizeKm,
-      cellCenters: [],
-      cellBounds: [],
-      suggestedCategory: null,
-    };
+    return { observationCells: 0, cellCenters: [], cellBounds: [] };
   }
 
   const cellSizeLat = gridSizeKm / KM_PER_DEG_LAT;
@@ -345,7 +364,6 @@ export function computeAOO(
   const cellBoundsMap = new Map<string, { bounds: [number, number, number, number]; count: number }>();
 
   for (const [lat, lng] of points) {
-    // Latitude-corrected cell size for longitude
     const cellSizeLng = cellSizeLat / Math.max(Math.cos(lat * DEG_TO_RAD), 0.01);
 
     const cellY = Math.floor(lat / cellSizeLat);
@@ -354,12 +372,10 @@ export function computeAOO(
 
     if (!occupiedSet.has(key)) {
       occupiedSet.add(key);
-      // Cell center for map display
       cellCenterMap.set(key, [
         (cellY + 0.5) * cellSizeLat,
         (cellX + 0.5) * cellSizeLng,
       ]);
-      // Cell bounds: [southLat, westLng, northLat, eastLng]
       cellBoundsMap.set(key, {
         bounds: [
           cellY * cellSizeLat,
@@ -375,21 +391,13 @@ export function computeAOO(
     }
   }
 
-  const occupiedCells = occupiedSet.size;
-  const cellAreaKm2 = gridSizeKm * gridSizeKm;
-  const areaKm2 = occupiedCells * cellAreaKm2;
-  const suggestedCategory = categorizeByThreshold(areaKm2, AOO_THRESHOLDS);
-
   return {
-    areaKm2,
-    occupiedCells,
-    gridSizeKm,
+    observationCells: occupiedSet.size,
     cellCenters: Array.from(cellCenterMap.values()),
     cellBounds: Array.from(cellBoundsMap.values()).map((v) => ({
       bounds: v.bounds,
       pointCount: v.count,
     })),
-    suggestedCategory,
   };
 }
 
@@ -556,13 +564,11 @@ export function computeTemporalTrends(
     laterPeriod: `${actualSplitYear}–${maxYear}`,
   } : null;
 
-  // AOO trend
-  const earlierAOO = computeAOO(earlierPoints, gridSizeKm);
-  const laterAOO = computeAOO(laterPoints, gridSizeKm);
-  const aooTrend: TemporalTrend | null = earlierAOO.areaKm2 > 0 ? {
-    earlierValue: earlierAOO.areaKm2,
-    laterValue: laterAOO.areaKm2,
-    changePercent: Math.round(((laterAOO.areaKm2 - earlierAOO.areaKm2) / earlierAOO.areaKm2) * 100),
+  // AOO trend (derived from EOO trend — AOO = EOO × prevalence, so % change tracks EOO)
+  const aooTrend: TemporalTrend | null = earlierEOO.areaKm2 > 0 ? {
+    earlierValue: earlierEOO.areaKm2,
+    laterValue: laterEOO.areaKm2,
+    changePercent: Math.round(((laterEOO.areaKm2 - earlierEOO.areaKm2) / earlierEOO.areaKm2) * 100),
     earlierPeriod: `${minYear}–${actualSplitYear - 1}`,
     laterPeriod: `${actualSplitYear}–${maxYear}`,
   } : null;
@@ -740,13 +746,29 @@ export function estimateCriteria(
 
   // Compute all metrics
   const eoo = computeEOO(coords);
-  const aoo = computeAOO(coords, fullParams.gridSizeKm);
+  const grid = computeObservationGrid(coords, fullParams.gridSizeKm);
   const locations = computeLocations(coords, fullParams.clusterDistanceKm);
   const temporal = computeTemporalTrends(
     filtered,
     fullParams.gridSizeKm,
     fullParams.clusterDistanceKm,
   );
+
+  // AOO = EOO × prevalence (in future: AOH × prevalence)
+  const prevalence = Math.max(0, Math.min(1, fullParams.prevalence));
+  const aooAreaKm2 = Math.round(eoo.areaKm2 * prevalence * 100) / 100;
+  const aoo: AOOResult = {
+    areaKm2: aooAreaKm2,
+    baseAreaKm2: eoo.areaKm2,
+    baseAreaSource: "eoo",
+    prevalence,
+    gridSizeKm: fullParams.gridSizeKm,
+    observationCells: grid.observationCells,
+    cellCenters: grid.cellCenters,
+    cellBounds: grid.cellBounds,
+    suggestedCategory: categorizeByThreshold(aooAreaKm2, AOO_THRESHOLDS),
+  };
+
   const criterionB = assessCriterionB(eoo, aoo, locations, temporal);
 
   return {

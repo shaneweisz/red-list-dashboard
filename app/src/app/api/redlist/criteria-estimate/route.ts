@@ -147,6 +147,9 @@ export async function GET(request: NextRequest) {
   const outlierDistance = searchParams.get("outlierDistance");
   if (outlierDistance) params.outlierDistanceKm = parseFloat(outlierDistance);
 
+  const prevalence = searchParams.get("prevalence");
+  if (prevalence) params.prevalence = parseFloat(prevalence);
+
   const basisOfRecord = searchParams.get("basisOfRecord");
   if (basisOfRecord) params.basisOfRecord = basisOfRecord.split(",");
 

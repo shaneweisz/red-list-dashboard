@@ -57,6 +57,7 @@ interface Params {
   gridSize: number;
   clusterDistance: number;
   outlierDistance: number;
+  prevalence: number;
 }
 
 /** Point from API (slightly different from OccurrencePoint — nulls not undefined) */
@@ -84,6 +85,7 @@ const DEFAULT_PARAMS: Params = {
   gridSize: 2,
   clusterDistance: 10,
   outlierDistance: 0,
+  prevalence: 100,
 };
 
 const DEFAULT_LAYERS: MapLayers = {
@@ -369,7 +371,7 @@ function LayerToggles({
   const toggles: { key: keyof MapLayers; label: string; color: string; detail: string }[] = [
     { key: "points", label: "Occurrences", color: "#6366f1", detail: "colored by year" },
     { key: "hull", label: "EOO Hull", color: "#3b82f6", detail: `${hullVertexCount} vertices` },
-    { key: "aooCells", label: "AOO Cells", color: "#f59e0b", detail: `${cellCount} cells` },
+    { key: "aooCells", label: "GBIF Cells", color: "#f59e0b", detail: `${cellCount} cells` },
     { key: "clusters", label: "Locations", color: "#8b5cf6", detail: `${clusterCount} clusters` },
     { key: "uncertainty", label: "Uncertainty", color: "#94a3b8", detail: "coord. radius" },
   ];
@@ -565,6 +567,7 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
       if (params.gridSize !== 2) searchParams.set("gridSize", String(params.gridSize));
       if (params.clusterDistance !== 10) searchParams.set("clusterDistance", String(params.clusterDistance));
       if (params.outlierDistance > 0) searchParams.set("outlierDistance", String(params.outlierDistance));
+      if (params.prevalence !== 100) searchParams.set("prevalence", String(params.prevalence / 100));
 
       const res = await fetch(`/api/redlist/criteria-estimate?${searchParams}`);
       const data = await res.json();
@@ -653,7 +656,7 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
           </div>
           <div>
             <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">
-              AOO grid cell size
+              Observation grid cell size
             </label>
             <select
               value={params.gridSize}
@@ -690,6 +693,25 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
               onChange={(e) => updateParam("outlierDistance", parseFloat(e.target.value) || 0)}
               className="w-full px-2 py-1 text-sm rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200"
             />
+          </div>
+          <div className="col-span-2 sm:col-span-3">
+            <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">
+              Prevalence — estimated % of range (EOO) actually occupied: <strong>{params.prevalence}%</strong>
+            </label>
+            <input
+              type="range"
+              value={params.prevalence}
+              min={1}
+              max={100}
+              step={1}
+              onChange={(e) => updateParam("prevalence", parseInt(e.target.value))}
+              className="w-full accent-amber-500"
+            />
+            <div className="flex justify-between text-[10px] text-zinc-400 mt-0.5">
+              <span>1%</span>
+              <span className="text-zinc-500">AOO = EOO × {params.prevalence}% = {result ? `${(result.eoo.areaKm2 * params.prevalence / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })} km²` : "..."}</span>
+              <span>100%</span>
+            </div>
           </div>
           <div className="flex items-end">
             <button
@@ -740,7 +762,7 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
                   layers={layers}
                   onChange={setLayers}
                   hullVertexCount={result.eoo.hullVertices.length}
-                  cellCount={result.aoo.occupiedCells}
+                  cellCount={result.aoo.observationCells}
                   clusterCount={result.locations.count}
                 />
                 <CriterionBMap
@@ -755,7 +777,7 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
                   <ul className="text-[11px] text-blue-600 dark:text-blue-400/80 space-y-0.5 list-disc list-inside">
                     <li>Verify that occurrence points fall within the species&apos; known range — look for outliers in unexpected regions</li>
                     <li>Check that the <strong>convex hull</strong> (blue dashed line) does not include large uninhabitable areas (e.g. ocean for terrestrial species)</li>
-                    <li>Confirm <strong>AOO grid cells</strong> (amber) align with actual habitat — cells in unsuitable terrain may indicate data issues</li>
+                    <li>GBIF observation cells (amber) show where records exist — <strong>adjust the prevalence slider</strong> to estimate what fraction of the EOO the species actually occupies</li>
                     <li>Assess whether <strong>location clusters</strong> (purple) correspond to distinct threat-affected areas, not just point density</li>
                     <li>Older points (blue) near the edge may no longer reflect the current range — consider adjusting the minimum year filter</li>
                     <li>Red-highlighted points near (0,0) or poles are likely data errors and should be excluded</li>
@@ -781,7 +803,7 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
               unit="km²"
               thresholds={AOO_THRESHOLDS}
               suggestedCategory={result.aoo.suggestedCategory}
-              description={`${result.aoo.occupiedCells} occupied ${result.aoo.gridSizeKm}×${result.aoo.gridSizeKm} km grid cells`}
+              description={`EOO (${result.aoo.baseAreaKm2.toLocaleString()} km²) × ${Math.round(result.aoo.prevalence * 100)}% prevalence · ${result.aoo.observationCells} GBIF observation cells shown on map`}
             />
             <ThresholdGauge
               label="Number of Locations"
