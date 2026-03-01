@@ -41,13 +41,17 @@ export interface EstimationParams {
   /** Basis of record types to include. Default: all. */
   basisOfRecord?: string[];
   /**
-   * Prevalence: estimated fraction of the base area (EOO or AOH) that the
-   * species actually occupies (0–1). Used to estimate AOO as:
-   *   AOO = baseArea × prevalence
-   * Default: 1.0 (100% — assumes the species occupies its entire range).
-   * Assessors should adjust downward based on expert knowledge.
+   * Prevalence: estimated fraction of the EOO grid cells actually occupied (0–1).
+   * Used when aooMethod is "eoo-prevalence".
+   * Default: 1.0 (100%).
    */
   prevalence?: number;
+  /**
+   * AOO estimation method:
+   * - "gbif": count of GBIF observation grid cells (default)
+   * - "eoo-prevalence": EOO grid cells × prevalence slider
+   */
+  aooMethod?: AOOMethod;
 }
 
 export interface EOOResult {
@@ -68,35 +72,43 @@ export interface GridCellBounds {
   pointCount: number;
 }
 
+/** Method used to estimate AOO. */
+export type AOOMethod = "gbif" | "eoo-prevalence";
+
 export interface AOOResult {
-  /** AOO estimate in km² (= occupiedCells × gridSizeKm²). */
+  /** The estimation method used to derive areaKm2. */
+  method: AOOMethod;
+  /** AOO estimate in km² (interpretation depends on method). */
   areaKm2: number;
   /** Grid cell size used (km). IUCN standard: 2 km. */
   gridSizeKm: number;
-  /**
-   * Total grid cells covering the EOO convex hull.
-   * This is the maximum possible AOO at 100% prevalence.
-   */
-  totalEOOCells: number;
-  /**
-   * Estimated occupied cells (= ceil(totalEOOCells × prevalence)).
-   * This is the AOO expressed as grid cells.
-   */
-  occupiedCells: number;
-  /**
-   * Prevalence: estimated fraction of EOO grid cells actually occupied (0–1).
-   * Defaults to 1.0 (100%). Assessors should adjust this based on expert
-   * knowledge of the species' habitat use and distribution.
-   */
-  prevalence: number;
-  /** Number of grid cells containing GBIF observations (for reference). */
+  /** Suggested IUCN category based on AOO thresholds, or null if above VU. */
+  suggestedCategory: string | null;
+
+  // ── GBIF observation grid data (always computed for map display) ──
+
+  /** Number of grid cells containing GBIF observations. */
   observationCells: number;
+  /** AOO based on GBIF observation cells alone (observationCells × cellArea). */
+  observationAreaKm2: number;
   /** Center coordinates of each observation grid cell for map display. */
   cellCenters: [number, number][];
   /** Bounds of each observation grid cell for map rectangle display. */
   cellBounds: GridCellBounds[];
-  /** Suggested IUCN category based on AOO thresholds, or null if above VU. */
-  suggestedCategory: string | null;
+
+  // ── EOO prevalence data (always computed for reference) ──
+
+  /** Total grid cells covering the EOO convex hull. */
+  totalEOOCells: number;
+  /** Estimated occupied cells (= ceil(totalEOOCells × prevalence)). */
+  occupiedCells: number;
+  /** EOO prevalence-based AOO in km² (occupiedCells × cellArea). */
+  prevalenceAreaKm2: number;
+  /**
+   * Prevalence: estimated fraction of EOO grid cells actually occupied (0–1).
+   * Defaults to 1.0 (100%).
+   */
+  prevalence: number;
 }
 
 export interface LocationCluster {
@@ -219,6 +231,7 @@ const DEFAULT_PARAMS: Required<EstimationParams> = {
   outlierDistanceKm: 0,
   basisOfRecord: [],
   prevalence: 1.0,
+  aooMethod: "gbif",
 };
 
 // ── Haversine distance ───────────────────────────────────────────────────
@@ -829,22 +842,32 @@ export function estimateCriteria(
     fullParams.clusterDistanceKm,
   );
 
-  // AOO: overlay grid on EOO hull, then apply prevalence
+  // AOO: compute both methods, select based on aooMethod
   const prevalence = Math.max(0, Math.min(1, fullParams.prevalence));
   const cellAreaKm2 = fullParams.gridSizeKm * fullParams.gridSizeKm;
   const totalEOOCells = countGridCellsInHull(eoo.hullVertices, fullParams.gridSizeKm);
   const occupiedCells = Math.ceil(totalEOOCells * prevalence);
-  const aooAreaKm2 = occupiedCells * cellAreaKm2;
+  const observationAreaKm2 = grid.observationCells * cellAreaKm2;
+  const prevalenceAreaKm2 = occupiedCells * cellAreaKm2;
+
+  const method = fullParams.aooMethod;
+  const aooAreaKm2 = method === "gbif" ? observationAreaKm2 : prevalenceAreaKm2;
+
   const aoo: AOOResult = {
+    method,
     areaKm2: aooAreaKm2,
     gridSizeKm: fullParams.gridSizeKm,
-    totalEOOCells,
-    occupiedCells,
-    prevalence,
+    suggestedCategory: categorizeByThreshold(aooAreaKm2, AOO_THRESHOLDS),
+    // GBIF data
     observationCells: grid.observationCells,
+    observationAreaKm2,
     cellCenters: grid.cellCenters,
     cellBounds: grid.cellBounds,
-    suggestedCategory: categorizeByThreshold(aooAreaKm2, AOO_THRESHOLDS),
+    // EOO prevalence data
+    totalEOOCells,
+    occupiedCells,
+    prevalenceAreaKm2,
+    prevalence,
   };
 
   const criterionB = assessCriterionB(eoo, aoo, locations, temporal);

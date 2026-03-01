@@ -10,6 +10,7 @@ import {
   type OccurrencePoint,
   type GridCellBounds,
   type LocationCluster,
+  type AOOMethod,
 } from "@/lib/criteria-estimation";
 
 // ── Dynamic Leaflet imports (SSR-safe) ───────────────────────────────────
@@ -57,6 +58,7 @@ interface Params {
   gridSize: number;
   clusterDistance: number;
   outlierDistance: number;
+  aooMethod: AOOMethod;
   prevalence: number;
 }
 
@@ -85,6 +87,7 @@ const DEFAULT_PARAMS: Params = {
   gridSize: 2,
   clusterDistance: 10,
   outlierDistance: 0,
+  aooMethod: "gbif",
   prevalence: 100,
 };
 
@@ -567,6 +570,7 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
       if (params.gridSize !== 2) searchParams.set("gridSize", String(params.gridSize));
       if (params.clusterDistance !== 10) searchParams.set("clusterDistance", String(params.clusterDistance));
       if (params.outlierDistance > 0) searchParams.set("outlierDistance", String(params.outlierDistance));
+      if (params.aooMethod !== "gbif") searchParams.set("aooMethod", params.aooMethod);
       if (params.prevalence !== 100) searchParams.set("prevalence", String(params.prevalence / 100));
 
       const res = await fetch(`/api/redlist/criteria-estimate?${searchParams}`);
@@ -694,24 +698,61 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
               className="w-full px-2 py-1 text-sm rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200"
             />
           </div>
-          <div className="col-span-2 sm:col-span-3">
-            <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">
-              Prevalence — estimated % of EOO grid cells occupied: <strong>{params.prevalence}%</strong>
+          <div className="col-span-2 sm:col-span-3 space-y-2">
+            <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+              AOO estimation method
             </label>
-            <input
-              type="range"
-              value={params.prevalence}
-              min={1}
-              max={100}
-              step={1}
-              onChange={(e) => updateParam("prevalence", parseInt(e.target.value))}
-              className="w-full accent-amber-500"
-            />
-            <div className="flex justify-between text-[10px] text-zinc-400 mt-0.5">
-              <span>1%</span>
-              <span className="text-zinc-500">{result ? `${Math.ceil(result.aoo.totalEOOCells * params.prevalence / 100)} of ${result.aoo.totalEOOCells} EOO cells = ${(Math.ceil(result.aoo.totalEOOCells * params.prevalence / 100) * params.gridSize * params.gridSize).toLocaleString()} km²` : "Run analysis first"}</span>
-              <span>100%</span>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => updateParam("aooMethod", "gbif")}
+                className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${
+                  params.aooMethod === "gbif"
+                    ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium"
+                    : "border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                }`}
+              >
+                GBIF Records
+              </button>
+              <button
+                onClick={() => updateParam("aooMethod", "eoo-prevalence")}
+                className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${
+                  params.aooMethod === "eoo-prevalence"
+                    ? "border-amber-500 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 font-medium"
+                    : "border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                }`}
+              >
+                EOO × Prevalence
+              </button>
+              <span className="px-3 py-1.5 text-xs rounded-lg border border-dashed border-zinc-300 dark:border-zinc-600 text-zinc-400 dark:text-zinc-500 cursor-default">
+                AOH × Prevalence <span className="text-[10px] ml-1 opacity-70">coming soon</span>
+              </span>
             </div>
+            <p className="text-[10px] text-zinc-400 dark:text-zinc-500">
+              {params.aooMethod === "gbif"
+                ? "Count of 2 km grid cells with GBIF occurrence records. Likely underestimates AOO for poorly-sampled species."
+                : "Overlay the EOO hull with a grid, then apply a prevalence estimate. Adjust the slider below."}
+            </p>
+            {params.aooMethod === "eoo-prevalence" && (
+              <div>
+                <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">
+                  Prevalence: <strong>{params.prevalence}%</strong> of EOO grid cells occupied
+                </label>
+                <input
+                  type="range"
+                  value={params.prevalence}
+                  min={1}
+                  max={100}
+                  step={1}
+                  onChange={(e) => updateParam("prevalence", parseInt(e.target.value))}
+                  className="w-full accent-amber-500"
+                />
+                <div className="flex justify-between text-[10px] text-zinc-400 mt-0.5">
+                  <span>1%</span>
+                  <span className="text-zinc-500">{result ? `${Math.ceil(result.aoo.totalEOOCells * params.prevalence / 100)} of ${result.aoo.totalEOOCells} EOO cells = ${(Math.ceil(result.aoo.totalEOOCells * params.prevalence / 100) * params.gridSize * params.gridSize).toLocaleString()} km²` : "Run analysis first"}</span>
+                  <span>100%</span>
+                </div>
+              </div>
+            )}
           </div>
           <div className="flex items-end">
             <button
@@ -777,7 +818,7 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
                   <ul className="text-[11px] text-blue-600 dark:text-blue-400/80 space-y-0.5 list-disc list-inside">
                     <li>Verify that occurrence points fall within the species&apos; known range — look for outliers in unexpected regions</li>
                     <li>Check that the <strong>convex hull</strong> (blue dashed line) does not include large uninhabitable areas (e.g. ocean for terrestrial species)</li>
-                    <li>GBIF observation cells (amber) show where records exist — <strong>adjust the prevalence slider</strong> to estimate what fraction of the EOO the species actually occupies</li>
+                    <li>GBIF observation cells (amber) show where records exist — switch to <strong>EOO × Prevalence</strong> mode and adjust the slider if GBIF sampling is incomplete</li>
                     <li>Assess whether <strong>location clusters</strong> (purple) correspond to distinct threat-affected areas, not just point density</li>
                     <li>Older points (blue) near the edge may no longer reflect the current range — consider adjusting the minimum year filter</li>
                     <li>Red-highlighted points near (0,0) or poles are likely data errors and should be excluded</li>
@@ -803,7 +844,11 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
               unit="km²"
               thresholds={AOO_THRESHOLDS}
               suggestedCategory={result.aoo.suggestedCategory}
-              description={`${result.aoo.occupiedCells} of ${result.aoo.totalEOOCells} EOO grid cells (${Math.round(result.aoo.prevalence * 100)}% prevalence) · ${result.aoo.observationCells} GBIF cells on map`}
+              description={
+                result.aoo.method === "gbif"
+                  ? `${result.aoo.observationCells} GBIF observation grid cells (${result.aoo.gridSizeKm}×${result.aoo.gridSizeKm} km)`
+                  : `${result.aoo.occupiedCells} of ${result.aoo.totalEOOCells} EOO grid cells (${Math.round(result.aoo.prevalence * 100)}% prevalence)`
+              }
             />
             <ThresholdGauge
               label="Number of Locations"

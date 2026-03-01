@@ -150,6 +150,9 @@ export async function GET(request: NextRequest) {
   const prevalence = searchParams.get("prevalence");
   if (prevalence) params.prevalence = parseFloat(prevalence);
 
+  const aooMethod = searchParams.get("aooMethod");
+  if (aooMethod === "gbif" || aooMethod === "eoo-prevalence") params.aooMethod = aooMethod;
+
   const basisOfRecord = searchParams.get("basisOfRecord");
   if (basisOfRecord) params.basisOfRecord = basisOfRecord.split(",");
 

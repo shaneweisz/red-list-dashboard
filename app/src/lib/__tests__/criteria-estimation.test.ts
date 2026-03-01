@@ -262,55 +262,60 @@ describe("countGridCellsInHull", () => {
   });
 });
 
-// ── AOO (gridded prevalence-based) ──────────────────────────────────────
+// ── AOO methods ─────────────────────────────────────────────────────────
 
-describe("AOO prevalence estimation", () => {
-  it("at 100% prevalence, all EOO grid cells are occupied", () => {
-    const points: OccurrencePoint[] = [
-      { lat: 0, lng: 0 }, { lat: 1, lng: 0 }, { lat: 0, lng: 1 },
-    ];
-    const result = estimateCriteria(points, { prevalence: 1.0 });
-    expect(result.aoo.occupiedCells).toBe(result.aoo.totalEOOCells);
-    expect(result.aoo.prevalence).toBe(1.0);
-    expect(result.aoo.areaKm2).toBe(result.aoo.totalEOOCells * 4); // 2×2 km cells
+describe("AOO method selection", () => {
+  const triangle: OccurrencePoint[] = [
+    { lat: 0, lng: 0 }, { lat: 1, lng: 0 }, { lat: 0, lng: 1 },
+  ];
+
+  it("defaults to GBIF method", () => {
+    const result = estimateCriteria(triangle);
+    expect(result.aoo.method).toBe("gbif");
+    expect(result.aoo.areaKm2).toBe(result.aoo.observationAreaKm2);
   });
 
-  it("at 50% prevalence, roughly half the EOO cells are occupied", () => {
-    const points: OccurrencePoint[] = [
-      { lat: 0, lng: 0 }, { lat: 1, lng: 0 }, { lat: 0, lng: 1 },
-    ];
-    const result = estimateCriteria(points, { prevalence: 0.5 });
+  it("GBIF method: AOO = observation cells × cell area", () => {
+    const result = estimateCriteria(triangle, { aooMethod: "gbif" });
+    expect(result.aoo.areaKm2).toBe(result.aoo.observationCells * 4);
+    expect(result.aoo.method).toBe("gbif");
+  });
+
+  it("EOO prevalence method: at 100%, AOO = all EOO grid cells", () => {
+    const result = estimateCriteria(triangle, { aooMethod: "eoo-prevalence", prevalence: 1.0 });
+    expect(result.aoo.method).toBe("eoo-prevalence");
+    expect(result.aoo.occupiedCells).toBe(result.aoo.totalEOOCells);
+    expect(result.aoo.areaKm2).toBe(result.aoo.totalEOOCells * 4);
+  });
+
+  it("EOO prevalence method: at 50%, roughly half the EOO cells", () => {
+    const result = estimateCriteria(triangle, { aooMethod: "eoo-prevalence", prevalence: 0.5 });
     expect(result.aoo.occupiedCells).toBe(Math.ceil(result.aoo.totalEOOCells * 0.5));
     expect(result.aoo.prevalence).toBe(0.5);
+    expect(result.aoo.areaKm2).toBe(result.aoo.prevalenceAreaKm2);
   });
 
   it("lower prevalence gives smaller or equal AOO", () => {
-    const points: OccurrencePoint[] = [
-      { lat: 0, lng: 0 }, { lat: 0.5, lng: 0 }, { lat: 0, lng: 0.5 },
-    ];
-    const full = estimateCriteria(points, { prevalence: 1.0 });
-    const low = estimateCriteria(points, { prevalence: 0.01 });
+    const full = estimateCriteria(triangle, { aooMethod: "eoo-prevalence", prevalence: 1.0 });
+    const low = estimateCriteria(triangle, { aooMethod: "eoo-prevalence", prevalence: 0.01 });
     expect(low.aoo.areaKm2).toBeLessThanOrEqual(full.aoo.areaKm2);
     expect(low.aoo.occupiedCells).toBeLessThanOrEqual(full.aoo.occupiedCells);
   });
 
-  it("observation cells are independent of prevalence", () => {
-    const points: OccurrencePoint[] = [
-      { lat: 0, lng: 0 }, { lat: 1, lng: 0 }, { lat: 0, lng: 1 },
-    ];
-    const full = estimateCriteria(points, { prevalence: 1.0 });
-    const half = estimateCriteria(points, { prevalence: 0.5 });
-    expect(full.aoo.observationCells).toBe(half.aoo.observationCells);
+  it("both methods always compute all data regardless of selection", () => {
+    const gbif = estimateCriteria(triangle, { aooMethod: "gbif" });
+    const prev = estimateCriteria(triangle, { aooMethod: "eoo-prevalence" });
+    // Both have GBIF data
+    expect(gbif.aoo.observationCells).toBeGreaterThan(0);
+    expect(prev.aoo.observationCells).toBe(gbif.aoo.observationCells);
+    // Both have EOO prevalence data
+    expect(gbif.aoo.totalEOOCells).toBeGreaterThan(0);
+    expect(prev.aoo.totalEOOCells).toBe(gbif.aoo.totalEOOCells);
   });
 
-  it("AOO is expressed in grid cells, not continuous area", () => {
-    const points: OccurrencePoint[] = [
-      { lat: 0, lng: 0 }, { lat: 1, lng: 0 }, { lat: 0, lng: 1 },
-    ];
-    const result = estimateCriteria(points, { prevalence: 1.0 });
-    // AOO should be an exact multiple of cell area (4 km² for 2km grid)
+  it("AOO is always expressed as grid cells (multiple of cell area)", () => {
+    const result = estimateCriteria(triangle, { aooMethod: "eoo-prevalence", prevalence: 1.0 });
     expect(result.aoo.areaKm2 % 4).toBe(0);
-    expect(result.aoo.totalEOOCells).toBeGreaterThan(0);
   });
 });
 
@@ -432,15 +437,18 @@ describe("computeTemporalTrends", () => {
 
 describe("assessCriterionB", () => {
   const makeAOO = (areaKm2: number, suggestedCategory: string | null) => ({
+    method: "gbif" as const,
     areaKm2,
     gridSizeKm: 2,
-    totalEOOCells: areaKm2 / 4,
-    occupiedCells: areaKm2 / 4,
-    prevalence: 1.0,
-    observationCells: 0,
+    suggestedCategory,
+    observationCells: areaKm2 / 4,
+    observationAreaKm2: areaKm2,
     cellCenters: [] as [number, number][],
     cellBounds: [],
-    suggestedCategory,
+    totalEOOCells: areaKm2 / 4,
+    occupiedCells: areaKm2 / 4,
+    prevalenceAreaKm2: areaKm2,
+    prevalence: 1.0,
   });
 
   it("returns null overall when no thresholds met", () => {
@@ -492,6 +500,7 @@ describe("filterPoints", () => {
     outlierDistanceKm: 0,
     basisOfRecord: [],
     prevalence: 1.0,
+    aooMethod: "gbif",
   };
 
   it("filters by coordinate uncertainty", () => {
@@ -576,9 +585,10 @@ describe("estimateCriteria", () => {
 
     // Should produce valid results
     expect(result.eoo.areaKm2).toBeGreaterThan(0);
-    expect(result.aoo.totalEOOCells).toBeGreaterThan(0);
-    expect(result.aoo.occupiedCells).toBe(result.aoo.totalEOOCells); // 100% prevalence default
+    expect(result.aoo.method).toBe("gbif"); // default method
+    expect(result.aoo.areaKm2).toBe(result.aoo.observationAreaKm2);
     expect(result.aoo.observationCells).toBeGreaterThan(0);
+    expect(result.aoo.totalEOOCells).toBeGreaterThan(0); // always computed
     expect(result.locations.count).toBeGreaterThan(0);
     expect(result.meta.usedPoints).toBeGreaterThan(0);
     expect(result.meta.params.gridSizeKm).toBe(2);
