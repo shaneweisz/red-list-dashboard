@@ -867,36 +867,6 @@ export default function OccurrenceMapRow({
                     )}
                   </div>
 
-                  {/* Year Range + Histogram */}
-                  <div className="mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-700">
-                    <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Year Range</span>
-                    <YearHistogram
-                      features={occurrences.filter((o) => checkedTypes[getCategory(o)])}
-                      yearRange={yearRange}
-                      onRangeChange={setYearRange}
-                      assessmentYear={assessmentYear}
-                    />
-                  </div>
-
-                  {/* Color by year toggle */}
-                  <label className="mt-3 flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={colorByYear}
-                      onChange={(e) => setColorByYear(e.target.checked)}
-                      className="w-3 h-3 rounded accent-blue-500"
-                    />
-                    Color markers by year
-                    {colorByYear && (
-                      <span className="ml-auto flex items-center gap-1">
-                        <span className="w-2 h-2 rounded-full" style={{ background: "hsl(30, 60%, 50%)" }} />
-                        <span>old</span>
-                        <span className="w-2 h-2 rounded-full" style={{ background: "hsl(142, 80%, 50%)" }} />
-                        <span>new</span>
-                      </span>
-                    )}
-                  </label>
-
                   {/* Advanced (collapsible) */}
                   <div className="mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-700">
                     <button
@@ -916,6 +886,36 @@ export default function OccurrenceMapRow({
                     </button>
                     {advancedOpen && (
                       <div className="mt-2 space-y-3">
+                        {/* Year Range + Histogram */}
+                        <div>
+                          <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Year Range</span>
+                          <YearHistogram
+                            features={occurrences.filter((o) => checkedTypes[getCategory(o)])}
+                            yearRange={yearRange}
+                            onRangeChange={setYearRange}
+                            assessmentYear={assessmentYear}
+                          />
+                        </div>
+
+                        {/* Color by year toggle */}
+                        <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={colorByYear}
+                            onChange={(e) => setColorByYear(e.target.checked)}
+                            className="w-3 h-3 rounded accent-blue-500"
+                          />
+                          Color markers by year
+                          {colorByYear && (
+                            <span className="ml-auto flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full" style={{ background: "hsl(30, 60%, 50%)" }} />
+                              <span>old</span>
+                              <span className="w-2 h-2 rounded-full" style={{ background: "hsl(142, 80%, 50%)" }} />
+                              <span>new</span>
+                            </span>
+                          )}
+                        </label>
+
                         {/* GPS Uncertainty */}
                         <div>
                           <div className="flex items-center justify-between mb-1">
