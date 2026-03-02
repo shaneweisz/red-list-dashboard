@@ -530,7 +530,7 @@ export default function OccurrenceMapRow({
   });
 
   // Advanced filter state
-
+  const [obsTypesOpen, setObsTypesOpen] = useState(false);
   const [maxUncertainty, setMaxUncertainty] = useState<number | null>(null);
   const [showUncertaintyCircles, setShowUncertaintyCircles] = useState(false);
   const [colorByYear, setColorByYear] = useState(false);
@@ -711,160 +711,165 @@ export default function OccurrenceMapRow({
               <div className="lg:w-1/3 flex flex-col gap-3 relative z-10">
                 {/* Filters: observation types + advanced */}
                 <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700">
-                  <div className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">Filters</div>
-                  {loadingBreakdown ? (
-                    <div className="flex items-center gap-2 text-zinc-400 text-sm py-1">
-                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-2">Filters</div>
+
+                  {/* Observation Types (collapsible) */}
+                  <div>
+                    <button
+                      onClick={() => setObsTypesOpen(!obsTypesOpen)}
+                      className="w-full flex items-center justify-between text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1"
+                    >
+                      <span>Observation Types</span>
+                      <svg
+                        className={`w-3.5 h-3.5 transition-transform ${obsTypesOpen ? 'rotate-180' : ''}`}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                       </svg>
-                      Loading...
-                    </div>
-                  ) : breakdown ? (() => {
-                    const baseParams = `taxon_key=${speciesKey}&has_coordinate=true&has_geospatial_issue=false${countryCode ? `&country=${countryCode}` : ''}`;
-                    const humanOtherCount = Math.max(0, breakdown.humanObservation - breakdown.iNaturalist);
-
-                    // Calculate total from checked types only
-                    const checkedTotal =
-                      (checkedTypes.iNaturalist ? breakdown.iNaturalist : 0) +
-                      (checkedTypes.humanOther ? humanOtherCount : 0) +
-                      (checkedTypes.machineObservation ? breakdown.machineObservation : 0) +
-                      (checkedTypes.preservedSpecimen ? breakdown.preservedSpecimen : 0) +
-                      (checkedTypes.materialSample ? (breakdown.materialSample || 0) : 0) +
-                      (checkedTypes.other ? breakdown.other : 0);
-
-                    const toggleType = (key: keyof typeof checkedTypes) => {
-                      setCheckedTypes((prev) => ({ ...prev, [key]: !prev[key] }));
-                    };
-
-                    const rowClass = (checked: boolean) =>
-                      `flex items-center gap-2 transition-opacity ${checked ? '' : 'opacity-40'}`;
-
-                    return (
-                    <div className="space-y-1.5 text-sm">
-                      {/* Human Observations (iNaturalist) */}
-                      <div className={rowClass(checkedTypes.iNaturalist)}>
-                        <input
-                          type="checkbox"
-                          checked={checkedTypes.iNaturalist}
-                          onChange={() => toggleType('iNaturalist')}
-                          className="w-3.5 h-3.5 rounded accent-blue-500 shrink-0"
-                        />
-                        <a
-                          href={`https://www.gbif.org/occurrence/search?${baseParams}&dataset_key=50c9509d-22c7-4a22-a47d-8c48425ef4a7`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex justify-between flex-1 text-zinc-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
-                        >
-                          <span>Human Obs. (iNaturalist)</span>
-                          <span className="tabular-nums">{breakdown.iNaturalist.toLocaleString()}</span>
-                        </a>
-                      </div>
-
-                      {/* Human Observations (other) */}
-                      <div className={rowClass(checkedTypes.humanOther)}>
-                        <input
-                          type="checkbox"
-                          checked={checkedTypes.humanOther}
-                          onChange={() => toggleType('humanOther')}
-                          className="w-3.5 h-3.5 rounded accent-blue-500 shrink-0"
-                        />
-                        <a
-                          href={`https://www.gbif.org/occurrence/search?${baseParams}&basis_of_record=HUMAN_OBSERVATION`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex justify-between flex-1 text-zinc-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
-                        >
-                          <span>Human Obs. (other)</span>
-                          <span className="tabular-nums">{humanOtherCount.toLocaleString()}</span>
-                        </a>
-                      </div>
-
-                      {/* Machine Observations (camera traps, acoustic sensors) */}
-                      <div className={rowClass(checkedTypes.machineObservation)}>
-                        <input
-                          type="checkbox"
-                          checked={checkedTypes.machineObservation}
-                          onChange={() => toggleType('machineObservation')}
-                          className="w-3.5 h-3.5 rounded accent-blue-500 shrink-0"
-                        />
-                        <a
-                          href={`https://www.gbif.org/occurrence/search?${baseParams}&basis_of_record=MACHINE_OBSERVATION`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex justify-between flex-1 text-zinc-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
-                        >
-                          <span>Machine Obs. (camera trap / acoustic)</span>
-                          <span className="tabular-nums">{breakdown.machineObservation.toLocaleString()}</span>
-                        </a>
-                      </div>
-
-                      {/* Preserved Specimens (museum collections) */}
-                      <div className={rowClass(checkedTypes.preservedSpecimen)}>
-                        <input
-                          type="checkbox"
-                          checked={checkedTypes.preservedSpecimen}
-                          onChange={() => toggleType('preservedSpecimen')}
-                          className="w-3.5 h-3.5 rounded accent-blue-500 shrink-0"
-                        />
-                        <a
-                          href={`https://www.gbif.org/occurrence/search?${baseParams}&basis_of_record=PRESERVED_SPECIMEN`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex justify-between flex-1 text-zinc-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
-                        >
-                          <span>Preserved Specimens (museum)</span>
-                          <span className="tabular-nums">{breakdown.preservedSpecimen.toLocaleString()}</span>
-                        </a>
-                      </div>
-
-                      {/* Material Samples (eDNA / tissue) */}
-                      <div className={rowClass(checkedTypes.materialSample)}>
-                        <input
-                          type="checkbox"
-                          checked={checkedTypes.materialSample}
-                          onChange={() => toggleType('materialSample')}
-                          className="w-3.5 h-3.5 rounded accent-blue-500 shrink-0"
-                        />
-                        <a
-                          href={`https://www.gbif.org/occurrence/search?${baseParams}&basis_of_record=MATERIAL_SAMPLE`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex justify-between flex-1 text-zinc-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
-                        >
-                          <span>Material Samples (eDNA / tissue)</span>
-                          <span className="tabular-nums">{(breakdown.materialSample || 0).toLocaleString()}</span>
-                        </a>
-                      </div>
-
-                      {/* Other */}
-                      <div className={rowClass(checkedTypes.other)}>
-                        <input
-                          type="checkbox"
-                          checked={checkedTypes.other}
-                          onChange={() => toggleType('other')}
-                          className="w-3.5 h-3.5 rounded accent-blue-500 shrink-0"
-                        />
-                        <div className="flex justify-between flex-1 text-zinc-600 dark:text-zinc-400">
-                          <span>Other</span>
-                          <span className="tabular-nums">{breakdown.other.toLocaleString()}</span>
+                    </button>
+                    {obsTypesOpen && (
+                      loadingBreakdown ? (
+                        <div className="flex items-center gap-2 text-zinc-400 text-xs py-1">
+                          <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                          </svg>
+                          Loading...
                         </div>
-                      </div>
+                      ) : breakdown ? (() => {
+                        const baseParams = `taxon_key=${speciesKey}&has_coordinate=true&has_geospatial_issue=false${countryCode ? `&country=${countryCode}` : ''}`;
+                        const humanOtherCount = Math.max(0, breakdown.humanObservation - breakdown.iNaturalist);
 
-                      {/* Total (of checked types) */}
-                      <div className="border-t border-zinc-200 dark:border-zinc-700 pt-1 mt-1 flex justify-between font-medium text-zinc-700 dark:text-zinc-300">
-                        <span>Total</span>
-                        <span className="tabular-nums">{checkedTotal.toLocaleString()}</span>
-                      </div>
-                    </div>
-                    );
-                  })() : null}
+                        const toggleType = (key: keyof typeof checkedTypes) => {
+                          setCheckedTypes((prev) => ({ ...prev, [key]: !prev[key] }));
+                        };
 
+                        const rowClass = (checked: boolean) =>
+                          `flex items-center gap-2 transition-opacity ${checked ? '' : 'opacity-40'}`;
+
+                        return (
+                        <div className="space-y-1.5 text-xs">
+                          {/* Human Observations (iNaturalist) */}
+                          <div className={rowClass(checkedTypes.iNaturalist)}>
+                            <input
+                              type="checkbox"
+                              checked={checkedTypes.iNaturalist}
+                              onChange={() => toggleType('iNaturalist')}
+                              className="w-3 h-3 rounded accent-blue-500 shrink-0"
+                            />
+                            <a
+                              href={`https://www.gbif.org/occurrence/search?${baseParams}&dataset_key=50c9509d-22c7-4a22-a47d-8c48425ef4a7`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex justify-between flex-1 text-zinc-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
+                            >
+                              <span>Human Obs. (iNaturalist)</span>
+                              <span className="tabular-nums">{breakdown.iNaturalist.toLocaleString()}</span>
+                            </a>
+                          </div>
+
+                          {/* Human Observations (other) */}
+                          <div className={rowClass(checkedTypes.humanOther)}>
+                            <input
+                              type="checkbox"
+                              checked={checkedTypes.humanOther}
+                              onChange={() => toggleType('humanOther')}
+                              className="w-3 h-3 rounded accent-blue-500 shrink-0"
+                            />
+                            <a
+                              href={`https://www.gbif.org/occurrence/search?${baseParams}&basis_of_record=HUMAN_OBSERVATION`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex justify-between flex-1 text-zinc-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
+                            >
+                              <span>Human Obs. (other)</span>
+                              <span className="tabular-nums">{humanOtherCount.toLocaleString()}</span>
+                            </a>
+                          </div>
+
+                          {/* Machine Observations (camera traps, acoustic sensors) */}
+                          <div className={rowClass(checkedTypes.machineObservation)}>
+                            <input
+                              type="checkbox"
+                              checked={checkedTypes.machineObservation}
+                              onChange={() => toggleType('machineObservation')}
+                              className="w-3 h-3 rounded accent-blue-500 shrink-0"
+                            />
+                            <a
+                              href={`https://www.gbif.org/occurrence/search?${baseParams}&basis_of_record=MACHINE_OBSERVATION`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex justify-between flex-1 text-zinc-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
+                            >
+                              <span>Machine Obs. (camera trap / acoustic)</span>
+                              <span className="tabular-nums">{breakdown.machineObservation.toLocaleString()}</span>
+                            </a>
+                          </div>
+
+                          {/* Preserved Specimens (museum collections) */}
+                          <div className={rowClass(checkedTypes.preservedSpecimen)}>
+                            <input
+                              type="checkbox"
+                              checked={checkedTypes.preservedSpecimen}
+                              onChange={() => toggleType('preservedSpecimen')}
+                              className="w-3 h-3 rounded accent-blue-500 shrink-0"
+                            />
+                            <a
+                              href={`https://www.gbif.org/occurrence/search?${baseParams}&basis_of_record=PRESERVED_SPECIMEN`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex justify-between flex-1 text-zinc-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
+                            >
+                              <span>Preserved Specimens (museum)</span>
+                              <span className="tabular-nums">{breakdown.preservedSpecimen.toLocaleString()}</span>
+                            </a>
+                          </div>
+
+                          {/* Material Samples (eDNA / tissue) */}
+                          <div className={rowClass(checkedTypes.materialSample)}>
+                            <input
+                              type="checkbox"
+                              checked={checkedTypes.materialSample}
+                              onChange={() => toggleType('materialSample')}
+                              className="w-3 h-3 rounded accent-blue-500 shrink-0"
+                            />
+                            <a
+                              href={`https://www.gbif.org/occurrence/search?${baseParams}&basis_of_record=MATERIAL_SAMPLE`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex justify-between flex-1 text-zinc-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
+                            >
+                              <span>Material Samples (eDNA / tissue)</span>
+                              <span className="tabular-nums">{(breakdown.materialSample || 0).toLocaleString()}</span>
+                            </a>
+                          </div>
+
+                          {/* Other */}
+                          <div className={rowClass(checkedTypes.other)}>
+                            <input
+                              type="checkbox"
+                              checked={checkedTypes.other}
+                              onChange={() => toggleType('other')}
+                              className="w-3 h-3 rounded accent-blue-500 shrink-0"
+                            />
+                            <div className="flex justify-between flex-1 text-zinc-600 dark:text-zinc-400">
+                              <span>Other</span>
+                              <span className="tabular-nums">{breakdown.other.toLocaleString()}</span>
+                            </div>
+                          </div>
+                        </div>
+                        );
+                      })() : null
+                    )}
+                  </div>
 
                   {/* Advanced Filters */}
                   <div className="mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-700 space-y-3">
                       {/* GPS Uncertainty */}
-                      <div className="pt-2">
+                      <div>
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">GPS Uncertainty</span>
                           <select
