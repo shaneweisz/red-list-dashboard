@@ -12,7 +12,7 @@ import { ALPHA2_TO_NAME } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
 import { useFilterParams } from "@/hooks/useFilterParams";
 import { computePriority, BREAKDOWN_LABELS, type PriorityResult, type ScoreBreakdown } from "@/lib/prioritization";
-import { TREND_FLAG_META, type TrendResult, type TrendFlag } from "@/lib/trend-analysis";
+import { type TrendResult } from "@/lib/trend-analysis";
 import CriteriaEstimation from "../CriteriaEstimation";
 
 // Dynamically import OccurrenceMapRow to avoid SSR issues with Leaflet
@@ -1428,9 +1428,6 @@ export default function RedListView() {
                     )}
                   </span>
                 </th>
-                <th className="px-3 md:px-4 py-3 text-center text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
-                  Signal
-                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
@@ -1693,63 +1690,10 @@ export default function RedListView() {
                         );
                       })()}
                     </td>
-                    {/* Signal — observation trend flag */}
-                    <td className="px-3 py-3 text-center whitespace-nowrap">
-                      {(() => {
-                        if (isNE(s) || s.category === "EX" || s.category === "EW") {
-                          return <span className="text-zinc-300 dark:text-zinc-700">—</span>;
-                        }
-                        const gbifKey = s.gbif_species_key;
-                        if (!gbifKey) {
-                          return <span className="text-zinc-300 dark:text-zinc-700">—</span>;
-                        }
-                        const trend = speciesTrends[gbifKey];
-                        if (!trend) {
-                          // Still loading
-                          return <span className="inline-block animate-spin h-3.5 w-3.5 border-2 border-zinc-300 border-t-transparent rounded-full" />;
-                        }
-                        if (trend.direction === "insufficient_data") {
-                          return (
-                            <HoverTooltip text="Insufficient GBIF data to determine observation signal">
-                              <span className="text-zinc-400 dark:text-zinc-600 cursor-help text-xs">—</span>
-                            </HoverTooltip>
-                          );
-                        }
-                        if (trend.flag) {
-                          const meta = TREND_FLAG_META[trend.flag];
-                          const changeText = trend.changePercent > 0
-                            ? `+${trend.changePercent}%`
-                            : `${trend.changePercent}%`;
-                          const normNote = trend.effortNormalized ? " Effort-adjusted." : "";
-                          const tooltip = `${meta.label}: ${meta.description} (${changeText} over ${trend.windowEnd - trend.windowStart + 1}yr, median ~${trend.earlierMedian}/yr → ~${trend.laterMedian}/yr)${normNote}`;
-                          return (
-                            <HoverTooltip text={tooltip}>
-                              <span
-                                className="inline-flex items-center gap-0.5 cursor-help text-xs font-semibold px-1.5 py-0.5 rounded-full"
-                                style={{
-                                  color: meta.color,
-                                  backgroundColor: meta.color + "18",
-                                }}
-                              >
-                                <span className="text-sm leading-none">{meta.icon}</span>
-                                <span className="hidden sm:inline">{trend.flag === "data_available" ? "Data" : meta.label.split(" ").pop()}</span>
-                              </span>
-                            </HoverTooltip>
-                          );
-                        }
-                        // Stable — no flag
-                        const tooltip = `Observations stable (${trend.changePercent > 0 ? "+" : ""}${trend.changePercent}% over ${trend.windowEnd - trend.windowStart + 1}yr)`;
-                        return (
-                          <HoverTooltip text={tooltip}>
-                            <span className="text-zinc-400 dark:text-zinc-500 cursor-help text-xs">→</span>
-                          </HoverTooltip>
-                        );
-                      })()}
-                    </td>
                   </tr>
                   {selectedSpeciesKey === s.sis_taxon_id && (
                     <tr>
-                      <td colSpan={10} className="p-0 bg-zinc-50 dark:bg-zinc-800/30">
+                      <td colSpan={9} className="p-0 bg-zinc-50 dark:bg-zinc-800/30">
                         <div style={{ maxWidth: 'calc(100vw - 2rem)', transform: 'translateX(var(--scroll-left, 0px))' }}>
                           {/* Tab bar */}
                           <div className="flex items-center border-b border-zinc-200 dark:border-zinc-700" onClick={(e) => e.stopPropagation()}>
@@ -1809,69 +1753,6 @@ export default function RedListView() {
                               {stackedDetailView ? "Tabbed" : "Stacked"}
                             </button>
                           </div>
-                          {/* Signal banner (if applicable) */}
-                          {(() => {
-                            const trend = gbifSpeciesKey ? speciesTrends[gbifSpeciesKey] : null;
-                            if (!trend?.flag) return null;
-                            const meta = TREND_FLAG_META[trend.flag];
-                            const changeText = trend.changePercent > 0
-                              ? `+${trend.changePercent}%`
-                              : `${trend.changePercent}%`;
-                            return (
-                              <div
-                                className="mx-4 mt-3 px-4 py-3 rounded-lg border text-sm flex items-start gap-3"
-                                style={{
-                                  borderColor: meta.color + "40",
-                                  backgroundColor: meta.color + "08",
-                                }}
-                              >
-                                <span className="text-xl leading-none mt-0.5" style={{ color: meta.color }}>{meta.icon}</span>
-                                <div>
-                                  <span className="font-semibold" style={{ color: meta.color }}>{meta.label}</span>
-                                  <span className="text-zinc-600 dark:text-zinc-400 ml-1">
-                                    — {meta.description}
-                                  </span>
-                                  <div className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400 flex flex-wrap gap-x-4 gap-y-1">
-                                    <span>Observation change: <strong className="text-zinc-700 dark:text-zinc-300">{changeText}</strong> over {trend.windowEnd - trend.windowStart + 1} years</span>
-                                    <span>Earlier median: <strong className="text-zinc-700 dark:text-zinc-300">~{trend.earlierMedian.toLocaleString()}/yr</strong></span>
-                                    <span>Recent median: <strong className="text-zinc-700 dark:text-zinc-300">~{trend.laterMedian.toLocaleString()}/yr</strong></span>
-                                    {trend.effortNormalized && (
-                                      <span className="text-zinc-400 dark:text-zinc-500 italic">Effort-adjusted</span>
-                                    )}
-                                  </div>
-                                  {trend.adjustedYearCounts.length > 0 && (
-                                    <div className="mt-2 flex items-end gap-px h-8" title={trend.effortNormalized ? "Effort-adjusted GBIF observations per year" : "GBIF observations per year"}>
-                                      {trend.adjustedYearCounts.map((yc) => {
-                                        const maxCount = Math.max(...trend.adjustedYearCounts.map((y) => y.count), 1);
-                                        const height = Math.max(2, (yc.count / maxCount) * 32);
-                                        const midYear = trend.windowStart + Math.floor((trend.windowEnd - trend.windowStart + 1) / 2);
-                                        const isEarlier = yc.year < midYear;
-                                        const raw = trend.yearCounts.find((r) => r.year === yc.year);
-                                        const factor = trend.scalingFactors[yc.year];
-                                        const tooltipParts = [`${yc.year}: ${yc.count.toLocaleString()} obs`];
-                                        if (trend.effortNormalized && raw && factor !== undefined) {
-                                          tooltipParts.push(`(raw: ${raw.count.toLocaleString()}, effort factor: ${factor.toFixed(2)}×)`);
-                                        }
-                                        return (
-                                          <HoverTooltip key={yc.year} text={tooltipParts.join(" ")}>
-                                            <div
-                                              className="w-4 rounded-sm cursor-help transition-colors"
-                                              style={{
-                                                height: `${height}px`,
-                                                backgroundColor: isEarlier
-                                                  ? "rgb(161 161 170)" // zinc-400
-                                                  : meta.color + "B0",
-                                              }}
-                                            />
-                                          </HoverTooltip>
-                                        );
-                                      })}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })()}
                           {/* Content */}
                           {gbifSpeciesKey ? (
                             <div style={{ display: stackedDetailView || activeDetailTab === "gbif" ? undefined : "none" }}>
@@ -1879,6 +1760,7 @@ export default function RedListView() {
                                 speciesKey={gbifSpeciesKey}
                                 mounted={mounted}
                                 assessmentYear={assessmentYear}
+                                trendResult={gbifSpeciesKey ? speciesTrends[gbifSpeciesKey] : undefined}
                               />
                             </div>
                           ) : (stackedDetailView || activeDetailTab === "gbif") && (
@@ -1926,7 +1808,7 @@ export default function RedListView() {
               })}
               {filteredSpecies.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-4 py-8 text-center text-zinc-500">
+                  <td colSpan={9} className="px-4 py-8 text-center text-zinc-500">
                     {neLoading ? (
                       <div className="flex items-center justify-center gap-2">
                         <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">

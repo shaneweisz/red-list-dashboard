@@ -3,6 +3,16 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+} from "recharts";
+import type { TrendResult } from "@/lib/trend-analysis";
 
 // Hook to get responsive grid column count: 3 (mobile portrait), 5 (landscape/sm+)
 function useGridColumns() {
@@ -291,6 +301,7 @@ interface OccurrenceMapRowProps {
   countryCode?: string | null;
   mounted: boolean;
   assessmentYear?: number | null;
+  trendResult?: TrendResult;
 }
 
 // Convert iNaturalist photo URLs to a smaller size for thumbnails
@@ -513,6 +524,7 @@ export default function OccurrenceMapRow({
   countryCode,
   mounted,
   assessmentYear,
+  trendResult,
 }: OccurrenceMapRowProps) {
   const [occurrences, setOccurrences] = useState<OccurrenceFeature[]>([]);
   const [breakdown, setBreakdown] = useState<RecordTypeBreakdown | null>(null);
@@ -860,6 +872,72 @@ export default function OccurrenceMapRow({
                     );
                   })() : null}
                 </div>
+
+                {/* Normalized GBIF observation trend (line chart) */}
+                {trendResult && trendResult.adjustedYearCounts.length >= 2 && (
+                  <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
+                        Observation Trend
+                      </span>
+                      {trendResult.effortNormalized && (
+                        <span className="text-[10px] text-zinc-400 dark:text-zinc-500 italic">
+                          Effort-adjusted
+                        </span>
+                      )}
+                    </div>
+                    <ResponsiveContainer width="100%" height={140}>
+                      <LineChart
+                        data={trendResult.adjustedYearCounts.map((yc) => ({
+                          year: yc.year,
+                          observations: yc.count,
+                        }))}
+                        margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
+                      >
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          stroke="currentColor"
+                          className="text-zinc-200 dark:text-zinc-700"
+                        />
+                        <XAxis
+                          dataKey="year"
+                          tick={{ fontSize: 11, fill: "#a1a1aa" }}
+                          tickLine={false}
+                          axisLine={false}
+                        />
+                        <YAxis
+                          tick={{ fontSize: 11, fill: "#a1a1aa" }}
+                          tickLine={false}
+                          axisLine={false}
+                          width={40}
+                          tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v)}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "#18181b",
+                            border: "1px solid #3f3f46",
+                            borderRadius: "8px",
+                            fontSize: 12,
+                          }}
+                          itemStyle={{ color: "#fff" }}
+                          labelStyle={{ color: "#a1a1aa" }}
+                          formatter={(value: number) => [
+                            value.toLocaleString(),
+                            "Observations",
+                          ]}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="observations"
+                          stroke="#3b82f6"
+                          strokeWidth={2}
+                          dot={{ r: 3, fill: "#3b82f6", strokeWidth: 0 }}
+                          activeDot={{ r: 5, fill: "#3b82f6", strokeWidth: 2, stroke: "#fff" }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
 
                 {/* Advanced Filters (collapsible) */}
                 <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden">
