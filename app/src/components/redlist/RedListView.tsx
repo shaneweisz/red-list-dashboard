@@ -1809,69 +1809,6 @@ export default function RedListView() {
                               {stackedDetailView ? "Tabbed" : "Stacked"}
                             </button>
                           </div>
-                          {/* Signal banner (if applicable) */}
-                          {(() => {
-                            const trend = gbifSpeciesKey ? speciesTrends[gbifSpeciesKey] : null;
-                            if (!trend?.flag) return null;
-                            const meta = TREND_FLAG_META[trend.flag];
-                            const changeText = trend.changePercent > 0
-                              ? `+${trend.changePercent}%`
-                              : `${trend.changePercent}%`;
-                            return (
-                              <div
-                                className="mx-4 mt-3 px-4 py-3 rounded-lg border text-sm flex items-start gap-3"
-                                style={{
-                                  borderColor: meta.color + "40",
-                                  backgroundColor: meta.color + "08",
-                                }}
-                              >
-                                <span className="text-xl leading-none mt-0.5" style={{ color: meta.color }}>{meta.icon}</span>
-                                <div>
-                                  <span className="font-semibold" style={{ color: meta.color }}>{meta.label}</span>
-                                  <span className="text-zinc-600 dark:text-zinc-400 ml-1">
-                                    — {meta.description}
-                                  </span>
-                                  <div className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400 flex flex-wrap gap-x-4 gap-y-1">
-                                    <span>Observation change: <strong className="text-zinc-700 dark:text-zinc-300">{changeText}</strong> over {trend.windowEnd - trend.windowStart + 1} years</span>
-                                    <span>Earlier median: <strong className="text-zinc-700 dark:text-zinc-300">~{trend.earlierMedian.toLocaleString()}/yr</strong></span>
-                                    <span>Recent median: <strong className="text-zinc-700 dark:text-zinc-300">~{trend.laterMedian.toLocaleString()}/yr</strong></span>
-                                    {trend.effortNormalized && (
-                                      <span className="text-zinc-400 dark:text-zinc-500 italic">Effort-adjusted</span>
-                                    )}
-                                  </div>
-                                  {trend.adjustedYearCounts.length > 0 && (
-                                    <div className="mt-2 flex items-end gap-px h-8" title={trend.effortNormalized ? "Effort-adjusted GBIF observations per year" : "GBIF observations per year"}>
-                                      {trend.adjustedYearCounts.map((yc) => {
-                                        const maxCount = Math.max(...trend.adjustedYearCounts.map((y) => y.count), 1);
-                                        const height = Math.max(2, (yc.count / maxCount) * 32);
-                                        const midYear = trend.windowStart + Math.floor((trend.windowEnd - trend.windowStart + 1) / 2);
-                                        const isEarlier = yc.year < midYear;
-                                        const raw = trend.yearCounts.find((r) => r.year === yc.year);
-                                        const factor = trend.scalingFactors[yc.year];
-                                        const tooltipParts = [`${yc.year}: ${yc.count.toLocaleString()} obs`];
-                                        if (trend.effortNormalized && raw && factor !== undefined) {
-                                          tooltipParts.push(`(raw: ${raw.count.toLocaleString()}, effort factor: ${factor.toFixed(2)}×)`);
-                                        }
-                                        return (
-                                          <HoverTooltip key={yc.year} text={tooltipParts.join(" ")}>
-                                            <div
-                                              className="w-4 rounded-sm cursor-help transition-colors"
-                                              style={{
-                                                height: `${height}px`,
-                                                backgroundColor: isEarlier
-                                                  ? "rgb(161 161 170)" // zinc-400
-                                                  : meta.color + "B0",
-                                              }}
-                                            />
-                                          </HoverTooltip>
-                                        );
-                                      })}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })()}
                           {/* Content */}
                           {gbifSpeciesKey ? (
                             <div style={{ display: stackedDetailView || activeDetailTab === "gbif" ? undefined : "none" }}>
