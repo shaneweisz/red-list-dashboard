@@ -531,6 +531,7 @@ export default function OccurrenceMapRow({
 
   // Advanced filter state
   const [obsTypesOpen, setObsTypesOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [maxUncertainty, setMaxUncertainty] = useState<number | null>(null);
   const [showUncertaintyCircles, setShowUncertaintyCircles] = useState(false);
   const [colorByYear, setColorByYear] = useState(false);
@@ -866,107 +867,126 @@ export default function OccurrenceMapRow({
                     )}
                   </div>
 
-                  {/* Advanced Filters */}
-                  <div className="mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-700 space-y-3">
-                      {/* GPS Uncertainty */}
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">GPS Uncertainty</span>
+                  {/* Year Range + Histogram */}
+                  <div className="mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-700">
+                    <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Year Range</span>
+                    <YearHistogram
+                      features={occurrences.filter((o) => checkedTypes[getCategory(o)])}
+                      yearRange={yearRange}
+                      onRangeChange={setYearRange}
+                      assessmentYear={assessmentYear}
+                    />
+                  </div>
+
+                  {/* Color by year toggle */}
+                  <label className="mt-3 flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={colorByYear}
+                      onChange={(e) => setColorByYear(e.target.checked)}
+                      className="w-3 h-3 rounded accent-blue-500"
+                    />
+                    Color markers by year
+                    {colorByYear && (
+                      <span className="ml-auto flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full" style={{ background: "hsl(30, 60%, 50%)" }} />
+                        <span>old</span>
+                        <span className="w-2 h-2 rounded-full" style={{ background: "hsl(142, 80%, 50%)" }} />
+                        <span>new</span>
+                      </span>
+                    )}
+                  </label>
+
+                  {/* Advanced (collapsible) */}
+                  <div className="mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-700">
+                    <button
+                      onClick={() => setAdvancedOpen(!advancedOpen)}
+                      className="w-full flex items-center justify-between text-xs font-medium text-zinc-600 dark:text-zinc-400"
+                    >
+                      <span>Advanced</span>
+                      <svg
+                        className={`w-3.5 h-3.5 transition-transform ${advancedOpen ? 'rotate-180' : ''}`}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {advancedOpen && (
+                      <div className="mt-2 space-y-3">
+                        {/* GPS Uncertainty */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">GPS Uncertainty</span>
+                            <select
+                              value={maxUncertainty ?? ""}
+                              onChange={(e) => setMaxUncertainty(e.target.value ? parseInt(e.target.value) : null)}
+                              className="text-xs px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
+                            >
+                              {UNCERTAINTY_OPTIONS.map((opt) => (
+                                <option key={opt.label} value={opt.value ?? ""}>{opt.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={showUncertaintyCircles}
+                              onChange={(e) => setShowUncertaintyCircles(e.target.checked)}
+                              className="w-3 h-3 rounded accent-blue-500"
+                            />
+                            Show uncertainty radius on map
+                          </label>
+                        </div>
+
+                        {/* Spatial deduplication */}
+                        <div>
+                          <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={dedupEnabled}
+                              onChange={(e) => setDedupEnabled(e.target.checked)}
+                              className="w-3 h-3 rounded accent-blue-500"
+                            />
+                            Deduplicate nearby points
+                          </label>
+                          {dedupEnabled && (
+                            <div className="mt-1 flex items-center gap-1.5 ml-[18px]">
+                              <span className="text-[10px] text-zinc-400">Grid:</span>
+                              {DEDUP_OPTIONS.map((opt) => (
+                                <button
+                                  key={opt.value}
+                                  onClick={() => setDedupGrid(opt.value)}
+                                  className={`text-[10px] px-1.5 py-0.5 rounded border ${
+                                    dedupGrid === opt.value
+                                      ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300'
+                                      : 'border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800'
+                                  }`}
+                                >
+                                  {opt.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Sample size */}
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Sample size</span>
                           <select
-                            value={maxUncertainty ?? ""}
-                            onChange={(e) => setMaxUncertainty(e.target.value ? parseInt(e.target.value) : null)}
+                            value={sampleSize}
+                            onChange={(e) => setSampleSize(parseInt(e.target.value))}
                             className="text-xs px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
                           >
-                            {UNCERTAINTY_OPTIONS.map((opt) => (
-                              <option key={opt.label} value={opt.value ?? ""}>{opt.label}</option>
+                            {SAMPLE_SIZE_OPTIONS.map((n) => (
+                              <option key={n} value={n}>{n.toLocaleString()}</option>
                             ))}
                           </select>
                         </div>
-                        <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={showUncertaintyCircles}
-                            onChange={(e) => setShowUncertaintyCircles(e.target.checked)}
-                            className="w-3 h-3 rounded accent-blue-500"
-                          />
-                          Show uncertainty radius on map
-                        </label>
                       </div>
-
-                      {/* Year Range + Histogram */}
-                      <div>
-                        <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Year Range</span>
-                        <YearHistogram
-                          features={occurrences.filter((o) => checkedTypes[getCategory(o)])}
-                          yearRange={yearRange}
-                          onRangeChange={setYearRange}
-                          assessmentYear={assessmentYear}
-                        />
-                      </div>
-
-                      {/* Color by year toggle */}
-                      <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={colorByYear}
-                          onChange={(e) => setColorByYear(e.target.checked)}
-                          className="w-3 h-3 rounded accent-blue-500"
-                        />
-                        Color markers by year
-                        {colorByYear && (
-                          <span className="ml-auto flex items-center gap-1">
-                            <span className="w-2 h-2 rounded-full" style={{ background: "hsl(30, 60%, 50%)" }} />
-                            <span>old</span>
-                            <span className="w-2 h-2 rounded-full" style={{ background: "hsl(142, 80%, 50%)" }} />
-                            <span>new</span>
-                          </span>
-                        )}
-                      </label>
-
-                      {/* Spatial deduplication */}
-                      <div>
-                        <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={dedupEnabled}
-                            onChange={(e) => setDedupEnabled(e.target.checked)}
-                            className="w-3 h-3 rounded accent-blue-500"
-                          />
-                          Deduplicate nearby points
-                        </label>
-                        {dedupEnabled && (
-                          <div className="mt-1 flex items-center gap-1.5 ml-[18px]">
-                            <span className="text-[10px] text-zinc-400">Grid:</span>
-                            {DEDUP_OPTIONS.map((opt) => (
-                              <button
-                                key={opt.value}
-                                onClick={() => setDedupGrid(opt.value)}
-                                className={`text-[10px] px-1.5 py-0.5 rounded border ${
-                                  dedupGrid === opt.value
-                                    ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300'
-                                    : 'border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800'
-                                }`}
-                              >
-                                {opt.label}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Sample size */}
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Sample size</span>
-                        <select
-                          value={sampleSize}
-                          onChange={(e) => setSampleSize(parseInt(e.target.value))}
-                          className="text-xs px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
-                        >
-                          {SAMPLE_SIZE_OPTIONS.map((n) => (
-                            <option key={n} value={n}>{n.toLocaleString()}</option>
-                          ))}
-                        </select>
-                      </div>
+                    )}
                   </div>
                 </div>
 
