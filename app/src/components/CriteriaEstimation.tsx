@@ -554,7 +554,7 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
   const [mapPoints, setMapPoints] = useState<MapPoint[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showParams, setShowParams] = useState(true);
+  const [showParams, setShowParams] = useState(false);
   const [layers, setLayers] = useState<MapLayers>(DEFAULT_LAYERS);
   const [showMap, setShowMap] = useState(true);
   const [activeSubtab, setActiveSubtab] = useState<string>("criterion-b");
