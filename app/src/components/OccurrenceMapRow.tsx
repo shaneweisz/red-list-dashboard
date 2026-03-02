@@ -530,7 +530,7 @@ export default function OccurrenceMapRow({
   });
 
   // Advanced filter state
-  const [advancedOpen, setAdvancedOpen] = useState(false);
+
   const [maxUncertainty, setMaxUncertainty] = useState<number | null>(null);
   const [showUncertaintyCircles, setShowUncertaintyCircles] = useState(false);
   const [colorByYear, setColorByYear] = useState(false);
@@ -709,9 +709,9 @@ export default function OccurrenceMapRow({
             <div className="flex flex-col lg:flex-row gap-3">
               {/* Left column: Breakdown + iNat photos (1/3 width) */}
               <div className="lg:w-1/3 flex flex-col gap-3 relative z-10">
-                {/* Observation type breakdown */}
+                {/* Filters: observation types + advanced */}
                 <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700">
-                  <div className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">Observation Types</div>
+                  <div className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">Filters</div>
                   {loadingBreakdown ? (
                     <div className="flex items-center gap-2 text-zinc-400 text-sm py-1">
                       <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -859,27 +859,10 @@ export default function OccurrenceMapRow({
                     </div>
                     );
                   })() : null}
-                </div>
 
-                {/* Advanced Filters (collapsible) */}
-                <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden">
-                  <button
-                    onClick={() => setAdvancedOpen(!advancedOpen)}
-                    className="w-full px-3 py-2 flex items-center justify-between text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
-                  >
-                    <span>Advanced Filters</span>
-                    <svg
-                      className={`w-4 h-4 transition-transform ${advancedOpen ? 'rotate-180' : ''}`}
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
-                  {advancedOpen && (
-                    <div className="px-3 pb-3 space-y-3 border-t border-zinc-100 dark:border-zinc-800">
+
+                  {/* Advanced Filters */}
+                  <div className="mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-700 space-y-3">
                       {/* GPS Uncertainty */}
                       <div className="pt-2">
                         <div className="flex items-center justify-between mb-1">
@@ -979,8 +962,7 @@ export default function OccurrenceMapRow({
                           ))}
                         </select>
                       </div>
-                    </div>
-                  )}
+                  </div>
                 </div>
 
                 {/* iNaturalist photos grid with pagination */}
