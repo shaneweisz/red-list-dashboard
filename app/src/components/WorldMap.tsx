@@ -279,14 +279,6 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
             </button>
           </div>
         </div>
-        {selectedCount > 0 && (
-          <button
-            onClick={onClearSelection}
-            className="text-[10px] text-green-600 hover:text-green-700 dark:text-green-400"
-          >
-            Clear
-          </button>
-        )}
       </div>
 
       {/* Hover tooltip */}
