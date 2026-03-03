@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTaxonConfig } from "@/config/taxa";
+import { CACHE_5M } from "@/lib/cache-headers";
 
 interface GBIFSpeciesResult {
   key: number;
@@ -120,7 +121,7 @@ export async function GET(request: NextRequest) {
       })
     );
 
-    return NextResponse.json({ results: enrichedResults });
+    return NextResponse.json({ results: enrichedResults }, { headers: CACHE_5M });
   } catch (error) {
     console.error("Search error:", error);
     return NextResponse.json({ error: "Search failed" }, { status: 500 });

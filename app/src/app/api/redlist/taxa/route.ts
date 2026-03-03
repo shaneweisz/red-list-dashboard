@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import * as fs from "fs";
 import * as path from "path";
+import { CACHE_1H } from "@/lib/cache-headers";
 
 interface TaxonSummary {
   id: string;
@@ -50,7 +51,7 @@ function loadSummary(): SummaryFile | null {
 export async function GET() {
   // Check cache
   if (cachedSummary && Date.now() - cacheTime < CACHE_TTL) {
-    return NextResponse.json({ taxa: cachedSummary.taxa, globalGbifMedian: cachedSummary.globalGbifMedian, globalGbifDistribution: cachedSummary.globalGbifDistribution, cached: true });
+    return NextResponse.json({ taxa: cachedSummary.taxa, globalGbifMedian: cachedSummary.globalGbifMedian, globalGbifDistribution: cachedSummary.globalGbifDistribution, cached: true }, { headers: CACHE_1H });
   }
 
   // Load pre-computed summary file (~2KB instead of ~110MB)
@@ -67,5 +68,5 @@ export async function GET() {
   cachedSummary = summary;
   cacheTime = Date.now();
 
-  return NextResponse.json({ taxa: summary.taxa, globalGbifMedian: summary.globalGbifMedian, globalGbifDistribution: summary.globalGbifDistribution, cached: false });
+  return NextResponse.json({ taxa: summary.taxa, globalGbifMedian: summary.globalGbifMedian, globalGbifDistribution: summary.globalGbifDistribution, cached: false }, { headers: CACHE_1H });
 }

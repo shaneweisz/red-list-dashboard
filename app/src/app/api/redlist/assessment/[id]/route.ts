@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CACHE_1H } from "@/lib/cache-headers";
 
 // Cache for assessment details (1 hour)
 const assessmentCache = new Map<
@@ -43,7 +44,7 @@ export async function GET(
   // Check cache
   const cached = assessmentCache.get(assessmentId);
   if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-    return NextResponse.json({ ...cached.data, cached: true });
+    return NextResponse.json({ ...cached.data, cached: true }, { headers: CACHE_1H });
   }
 
   try {
@@ -243,7 +244,7 @@ export async function GET(
       timestamp: Date.now(),
     });
 
-    return NextResponse.json(result);
+    return NextResponse.json(result, { headers: CACHE_1H });
   } catch (error) {
     console.error("Error fetching assessment:", error);
     return NextResponse.json(

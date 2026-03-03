@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateNameVariants } from "@/lib/nameVariants";
+import { CACHE_1H } from "@/lib/cache-headers";
 
 /**
  * Literature Since Assessment API
@@ -185,7 +186,7 @@ export async function GET(request: NextRequest) {
   const cacheKey = `${scientificName.toLowerCase()}-${sinceYear}-${limit}-${mode}`;
   const cached = literatureCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-    return NextResponse.json({ ...cached.data, cached: true });
+    return NextResponse.json({ ...cached.data, cached: true }, { headers: CACHE_1H });
   }
 
   try {
@@ -223,7 +224,7 @@ export async function GET(request: NextRequest) {
     // Cache the result
     literatureCache.set(cacheKey, { data: result, timestamp: Date.now() });
 
-    return NextResponse.json(result);
+    return NextResponse.json(result, { headers: CACHE_1H });
   } catch (error) {
     console.error("Literature search error:", error);
     return NextResponse.json(

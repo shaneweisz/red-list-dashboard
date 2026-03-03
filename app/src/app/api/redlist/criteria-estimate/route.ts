@@ -4,6 +4,7 @@ import {
   type OccurrencePoint,
   type EstimationParams,
 } from "@/lib/criteria-estimation";
+import { CACHE_5M } from "@/lib/cache-headers";
 
 export const dynamic = "force-dynamic";
 
@@ -193,7 +194,7 @@ export async function GET(request: NextRequest) {
       filteredPointsCapped: result.filteredPoints.length > MAX_MAP_POINTS,
       totalAvailable,
       fetchedPoints: points.length,
-    });
+    }, { headers: CACHE_5M });
   } catch (err) {
     console.error("Criteria estimation error:", err);
     return NextResponse.json(
