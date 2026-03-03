@@ -9,6 +9,7 @@ import {
   computeDistribution,
   type SpeciesRecord,
 } from "@/lib/data-utils";
+import { CACHE_5M } from "@/lib/cache-headers";
 
 interface RedListSpecies {
   scientific_name: string;
@@ -168,7 +169,7 @@ async function handleCsvRequest(
       totalPages: Math.ceil(filtered.length / limit),
     },
     stats,
-  });
+  }, { headers: CACHE_5M });
 }
 
 // Handle filtered requests using live GBIF queries
@@ -359,7 +360,7 @@ async function handleLiveRequest(
     },
     // Flag to indicate this is live data (unvalidated species counts)
     isLiveQuery: true,
-  });
+  }, { headers: CACHE_5M });
 }
 
 export async function GET(request: NextRequest) {

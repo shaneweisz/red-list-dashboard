@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import * as fs from "fs";
 import * as path from "path";
 import { getTaxonConfig } from "@/config/taxa";
+import { CACHE_1H } from "@/lib/cache-headers";
 
 interface YearRange {
   range: string;
@@ -153,5 +154,5 @@ export async function GET(request: NextRequest) {
     sampleSize: data.metadata.totalSpecies,
     lastUpdated: data.metadata.fetchedAt,
     cached: true,
-  });
+  }, { headers: CACHE_1H });
 }

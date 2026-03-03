@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CACHE_1H } from "@/lib/cache-headers";
 
 // NOTE: This hits the CITES Trade DB web interface's JSON endpoint, not an
 // official API. It may break if CITES changes their frontend. No stable public
@@ -290,7 +291,7 @@ export async function GET(request: NextRequest) {
   const cacheKey = taxonId;
   const cached = tradeCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-    return NextResponse.json(cached.data);
+    return NextResponse.json(cached.data, { headers: CACHE_1H });
   }
 
   try {
@@ -328,13 +329,13 @@ export async function GET(request: NextRequest) {
     if (rows.length === 0) {
       const result = { found: false, taxonId };
       tradeCache.set(cacheKey, { data: result, timestamp: Date.now() });
-      return NextResponse.json(result);
+      return NextResponse.json(result, { headers: CACHE_1H });
     }
 
     const summary = summarize(rows);
     const result = { found: true, taxonId, ...summary };
     tradeCache.set(cacheKey, { data: result, timestamp: Date.now() });
-    return NextResponse.json(result);
+    return NextResponse.json(result, { headers: CACHE_1H });
   } catch (error) {
     console.error("Error fetching CITES trade data:", error);
     return NextResponse.json(

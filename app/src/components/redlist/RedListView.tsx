@@ -12,6 +12,8 @@ import { ALPHA2_TO_NAME } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
 import { useFilterParams } from "@/hooks/useFilterParams";
 import { computePriority, BREAKDOWN_LABELS, type PriorityResult, type ScoreBreakdown } from "@/lib/prioritization";
+import { TREND_FLAG_META, type TrendResult, type TrendFlag } from "@/lib/trend-analysis";
+import CriteriaEstimation from "../CriteriaEstimation";
 
 // Dynamically import OccurrenceMapRow to avoid SSR issues with Leaflet
 const OccurrenceMapRow = dynamic(
@@ -315,9 +317,12 @@ export default function RedListView() {
   // Species details cache (images, criteria, common names)
   const [speciesDetails, setSpeciesDetails] = useState<Record<number, SpeciesDetails>>({});
 
+  // Observation trend flags (fetched per-page from GBIF year-faceted data)
+  const [speciesTrends, setSpeciesTrends] = useState<Record<number, TrendResult>>({});
+
   // Row expansion state
   const [selectedSpeciesKey, setSelectedSpeciesKey] = useState<number | null>(null);
-  const [activeDetailTab, setActiveDetailTab] = useState<"gbif" | "literature" | "redlist" | "cites">("gbif");
+  const [activeDetailTab, setActiveDetailTab] = useState<"gbif" | "literature" | "redlist" | "cites" | "criterionB">("gbif");
   const [stackedDetailView, setStackedDetailView] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -486,15 +491,16 @@ export default function RedListView() {
   }, [selectedCategories, neSpeciesFetched]);
 
   // Helper to check if species matches year range filter (based on assessment date)
-  const matchesYearRangeFilter = (assessmentDate: string | null): boolean => {
-    if (selectedYearRanges.size === 0) return true;
+  // Accepts optional yearRanges param for cross-filtering (defaults to current filter state)
+  const matchesYearRangeFilter = (assessmentDate: string | null, yearRanges: Set<string> = selectedYearRanges): boolean => {
+    if (yearRanges.size === 0) return true;
     if (!assessmentDate) return false;
     const currentYear = new Date().getFullYear();
     const assessmentYear = new Date(assessmentDate).getFullYear();
     const yearsSince = currentYear - assessmentYear;
 
     // Check if matches ANY of the selected ranges
-    for (const range of selectedYearRanges) {
+    for (const range of yearRanges) {
       switch (range) {
         case "0-1 years": if (yearsSince <= 1) return true; break;
         case "2-5 years": if (yearsSince >= 2 && yearsSince <= 5) return true; break;
@@ -507,10 +513,11 @@ export default function RedListView() {
   };
 
   // Helper to check if species matches GBIF observation range filter
-  const matchesObsRangeFilter = (obsCount: number | undefined): boolean => {
-    if (selectedObsRanges.size === 0) return true;
+  // Accepts optional obsRanges param for cross-filtering (defaults to current filter state)
+  const matchesObsRangeFilter = (obsCount: number | undefined, obsRanges: Set<string> = selectedObsRanges): boolean => {
+    if (obsRanges.size === 0) return true;
     const obs = obsCount ?? 0;
-    for (const range of selectedObsRanges) {
+    for (const range of obsRanges) {
       switch (range) {
         case "0": if (obs === 0) return true; break;
         case "1-10": if (obs >= 1 && obs <= 10) return true; break;
@@ -541,36 +548,38 @@ export default function RedListView() {
       }
       const total = DISPLAY_ORDER.reduce((sum, code) => sum + (statsMap[code] || 0), 0);
       return DISPLAY_ORDER
-        .filter(code => (statsMap[code] || 0) > 0)
         .map(code => ({
           code,
           name: code,
           count: statsMap[code] || 0,
           color: CATEGORY_COLORS[code] || "#999",
-          percent: total > 0 ? ((statsMap[code] / total) * 100).toFixed(1) : "0",
-          label: `${(statsMap[code] || 0).toLocaleString()} (${total > 0 ? ((statsMap[code] / total) * 100).toFixed(1) : 0}%)`,
+          percent: total > 0 ? (((statsMap[code] || 0) / total) * 100).toFixed(1) : "0",
+          label: `${(statsMap[code] || 0).toLocaleString()} (${total > 0 ? (((statsMap[code] || 0) / total) * 100).toFixed(1) : 0}%)`,
         }));
     }
 
+    // Cross-filter: apply all filters EXCEPT category, so the category chart
+    // shows the distribution within the constraints of other active filters
     const counts: Record<string, number> = {};
     taxaFilteredSpecies.forEach(s => {
-      if (s.category !== "NE") {
-        counts[s.category] = (counts[s.category] || 0) + 1;
-      }
+      if (s.category === "NE") return;
+      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
+      if (selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
+      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      counts[s.category] = (counts[s.category] || 0) + 1;
     });
-    const total = taxaFilteredSpecies.filter(s => s.category !== "NE").length;
+    const total = Object.values(counts).reduce((sum, c) => sum + c, 0);
     const DISPLAY_ORDER = ["EX", "EW", "CR", "EN", "VU", "NT", "LC", "DD"];
     return DISPLAY_ORDER
-      .filter(code => (counts[code] || 0) > 0)
       .map(code => ({
         code,
         name: code,
         count: counts[code] || 0,
         color: CATEGORY_COLORS[code] || "#999",
-        percent: total > 0 ? ((counts[code] / total) * 100).toFixed(1) : "0",
-        label: `${(counts[code] || 0).toLocaleString()} (${total > 0 ? ((counts[code] / total) * 100).toFixed(1) : 0}%)`,
+        percent: total > 0 ? (((counts[code] || 0) / total) * 100).toFixed(1) : "0",
+        label: `${(counts[code] || 0).toLocaleString()} (${total > 0 ? (((counts[code] || 0) / total) * 100).toFixed(1) : 0}%)`,
       }));
-  }, [taxaFilteredSpecies, speciesLoading, precomputedStats, selectedTaxa]);
+  }, [taxaFilteredSpecies, speciesLoading, precomputedStats, selectedTaxa, selectedCountries, selectedYearRanges, selectedObsRanges]);
 
   // Compute years-since-assessment stats: pre-computed while loading, then client-computed
   const assessmentYearData = useMemo(() => {
@@ -591,8 +600,12 @@ export default function RedListView() {
       { range: "11-20 years", shortRange: "11-20y", count: 0, minYear: 11 },
       { range: "20+ years", shortRange: ">20y", count: 0, minYear: 21 },
     ];
+    // Cross-filter: apply all filters EXCEPT year range
     taxaFilteredSpecies.forEach(s => {
       if (!s.assessment_date || s.category === "NE") return;
+      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
+      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
+      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
       const yr = new Date(s.assessment_date).getFullYear();
       const diff = currentYr - yr;
       if (diff <= 1) ranges[0].count++;
@@ -606,7 +619,7 @@ export default function RedListView() {
       ...r,
       label: `${r.count.toLocaleString()} (${total > 0 ? ((r.count / total) * 100).toFixed(1) : 0}%)`,
     }));
-  }, [taxaFilteredSpecies, speciesLoading, precomputedStats, selectedTaxa]);
+  }, [taxaFilteredSpecies, speciesLoading, precomputedStats, selectedTaxa, selectedCategories, selectedCountries, selectedObsRanges]);
 
   // Compute GBIF observation count distribution: pre-computed while loading, then client-computed
   const gbifObsData = useMemo(() => {
@@ -626,7 +639,11 @@ export default function RedListView() {
       { range: "1K-10K", shortRange: "1K-10K", count: 0 },
       { range: "10K+", shortRange: "10K+", count: 0 },
     ];
+    // Cross-filter: apply all filters EXCEPT observation range
     taxaFilteredSpecies.forEach(s => {
+      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
+      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
+      if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
       const obs = s.gbif_occurrence_count ?? 0;
       if (obs === 0) ranges[0].count++;
       else if (obs <= 10) ranges[1].count++;
@@ -640,7 +657,7 @@ export default function RedListView() {
       ...r,
       label: `${r.count.toLocaleString()} (${total > 0 ? ((r.count / total) * 100).toFixed(1) : 0}%)`,
     }));
-  }, [taxaFilteredSpecies, speciesLoading, precomputedStats, selectedTaxa]);
+  }, [taxaFilteredSpecies, speciesLoading, precomputedStats, selectedTaxa, selectedCategories, selectedCountries, selectedYearRanges]);
 
   // Compute priority scores for all species (client-side, from already-loaded data)
   const priorityMap = useMemo(() => {
@@ -661,7 +678,11 @@ export default function RedListView() {
       counts = precomputedStats.countryCounts;
     } else {
       counts = {};
+      // Cross-filter: apply all filters EXCEPT country
       taxaFilteredSpecies.forEach(s => {
+        if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
+        if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
+        if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
         s.countries.forEach(code => {
           counts[code] = (counts[code] || 0) + 1;
         });
@@ -685,7 +706,7 @@ export default function RedListView() {
     );
 
     return { countryCounts: counts, uniqueCountries: sorted, countryStatsForMap: statsForMap };
-  }, [taxaFilteredSpecies, speciesLoading, precomputedStats, selectedTaxa]);
+  }, [taxaFilteredSpecies, speciesLoading, precomputedStats, selectedTaxa, selectedCategories, selectedYearRanges, selectedObsRanges]);
 
   // Helper to get country display name
   const getCountryName = (code: string) => ALPHA2_TO_NAME[code] || code;
@@ -987,6 +1008,46 @@ export default function RedListView() {
     fetchCriteria();
   }, [selectedSpeciesKey, paginatedSpecies, speciesDetails]);
 
+  // Fetch observation trends for visible species (batched per-page)
+  useEffect(() => {
+    // Only fetch trends for species with GBIF keys that we haven't fetched yet
+    const toFetch = paginatedSpecies.filter(
+      (s) => s.gbif_species_key && !speciesTrends[s.gbif_species_key] && s.category !== "EX" && s.category !== "EW"
+    );
+    if (toFetch.length === 0) return;
+
+    const controller = new AbortController();
+
+    async function fetchTrends() {
+      const keys = toFetch.map((s) => s.gbif_species_key!).join(",");
+      const categories = toFetch.map((s) => s.category).join(",");
+      const taxons = toFetch.map((s) => s.taxon_id || "").join(",");
+      try {
+        const res = await fetch(
+          `/api/redlist/trends?keys=${keys}&categories=${categories}&taxons=${taxons}`,
+          { signal: controller.signal }
+        );
+        if (!res.ok || controller.signal.aborted) return;
+        const data = await res.json();
+        if (data.trends) {
+          setSpeciesTrends((prev) => {
+            const next = { ...prev };
+            // Key by gbif_species_key for O(1) lookup
+            for (const [key, trend] of Object.entries(data.trends)) {
+              next[Number(key)] = trend as TrendResult;
+            }
+            return next;
+          });
+        }
+      } catch {
+        // Abort or network error — ignore
+      }
+    }
+
+    fetchTrends();
+    return () => controller.abort("cleanup");
+  }, [paginatedSpecies, speciesTrends]);
+
   // Handle category bar click (Cmd/Ctrl+click for multi-select, regular click replaces)
   const handleCategoryClick = (data: { payload?: { code?: string } }, event: React.MouseEvent) => {
     const code = data.payload?.code;
@@ -1081,12 +1142,11 @@ export default function RedListView() {
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Risk Category</span>
                 <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
-                {selectedCategories.size > 0 && (
-                  <button onClick={() => setSelectedCategories(new Set())} className="text-[10px] text-red-600 hover:text-red-700 dark:text-red-400">Clear</button>
-                )}
               </div>
               <div className="flex-1 min-h-[225px] flex items-center justify-center">
-                {categoryDataWithPercent.length > 0 ? (
+                {!statsLoaded ? (
+                  <Spinner />
+                ) : categoryDataWithPercent.length > 0 ? (
                   <FilterBarChart
                     data={categoryDataWithPercent}
                     dataKey="code"
@@ -1095,8 +1155,6 @@ export default function RedListView() {
                     yAxisWidth={26}
                     rightMargin={55}
                   />
-                ) : !statsLoaded ? (
-                  <Spinner />
                 ) : null}
               </div>
             </div>
@@ -1106,12 +1164,11 @@ export default function RedListView() {
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Years Since Assessed</span>
                 <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
-                {selectedYearRanges.size > 0 && (
-                  <button onClick={() => setSelectedYearRanges(new Set())} className="text-[10px] text-blue-600 hover:text-blue-700 dark:text-blue-400">Clear</button>
-                )}
               </div>
               <div className="flex-1 min-h-[225px] flex items-center justify-center">
-                {assessmentYearData.some(y => y.count > 0) ? (
+                {!statsLoaded ? (
+                  <Spinner />
+                ) : assessmentYearData.length > 0 ? (
                   <FilterBarChart
                     data={assessmentYearData}
                     dataKey="shortRange"
@@ -1121,8 +1178,6 @@ export default function RedListView() {
                     yAxisWidth={36}
                     rightMargin={85}
                   />
-                ) : !statsLoaded ? (
-                  <Spinner />
                 ) : null}
               </div>
             </div>
@@ -1156,12 +1211,11 @@ export default function RedListView() {
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">GBIF Observations</span>
                 <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
-                {selectedObsRanges.size > 0 && (
-                  <button onClick={() => setSelectedObsRanges(new Set())} className="text-[10px] text-emerald-600 hover:text-emerald-700 dark:text-emerald-400">Clear</button>
-                )}
               </div>
               <div className="flex-1 min-h-[225px] flex items-center justify-center">
-                {gbifObsData.some(d => d.count > 0) ? (
+                {!statsLoaded ? (
+                  <Spinner />
+                ) : gbifObsData.length > 0 ? (
                   <FilterBarChart
                     data={gbifObsData}
                     dataKey="shortRange"
@@ -1171,8 +1225,6 @@ export default function RedListView() {
                     yAxisWidth={42}
                     rightMargin={85}
                   />
-                ) : !statsLoaded ? (
-                  <Spinner />
                 ) : null}
               </div>
             </div>
@@ -1382,6 +1434,9 @@ export default function RedListView() {
                       <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
                     )}
                   </span>
+                </th>
+                <th className="px-3 md:px-4 py-3 text-center text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
+                  Signal
                 </th>
               </tr>
             </thead>
@@ -1645,10 +1700,63 @@ export default function RedListView() {
                         );
                       })()}
                     </td>
+                    {/* Signal — observation trend flag */}
+                    <td className="px-3 py-3 text-center whitespace-nowrap">
+                      {(() => {
+                        if (isNE(s) || s.category === "EX" || s.category === "EW") {
+                          return <span className="text-zinc-300 dark:text-zinc-700">—</span>;
+                        }
+                        const gbifKey = s.gbif_species_key;
+                        if (!gbifKey) {
+                          return <span className="text-zinc-300 dark:text-zinc-700">—</span>;
+                        }
+                        const trend = speciesTrends[gbifKey];
+                        if (!trend) {
+                          // Still loading
+                          return <span className="inline-block animate-spin h-3.5 w-3.5 border-2 border-zinc-300 border-t-transparent rounded-full" />;
+                        }
+                        if (trend.direction === "insufficient_data") {
+                          return (
+                            <HoverTooltip text="Insufficient GBIF data to determine observation signal">
+                              <span className="text-zinc-400 dark:text-zinc-600 cursor-help text-xs">—</span>
+                            </HoverTooltip>
+                          );
+                        }
+                        if (trend.flag) {
+                          const meta = TREND_FLAG_META[trend.flag];
+                          const changeText = trend.changePercent > 0
+                            ? `+${trend.changePercent}%`
+                            : `${trend.changePercent}%`;
+                          const normNote = trend.effortNormalized ? " Effort-adjusted." : "";
+                          const tooltip = `${meta.label}: ${meta.description} (${changeText} over ${trend.windowEnd - trend.windowStart + 1}yr, median ~${trend.earlierMedian}/yr → ~${trend.laterMedian}/yr)${normNote}`;
+                          return (
+                            <HoverTooltip text={tooltip}>
+                              <span
+                                className="inline-flex items-center gap-0.5 cursor-help text-xs font-semibold px-1.5 py-0.5 rounded-full"
+                                style={{
+                                  color: meta.color,
+                                  backgroundColor: meta.color + "18",
+                                }}
+                              >
+                                <span className="text-sm leading-none">{meta.icon}</span>
+                                <span className="hidden sm:inline">{trend.flag === "data_available" ? "Data" : meta.label.split(" ").pop()}</span>
+                              </span>
+                            </HoverTooltip>
+                          );
+                        }
+                        // Stable — no flag
+                        const tooltip = `Observations stable (${trend.changePercent > 0 ? "+" : ""}${trend.changePercent}% over ${trend.windowEnd - trend.windowStart + 1}yr)`;
+                        return (
+                          <HoverTooltip text={tooltip}>
+                            <span className="text-zinc-400 dark:text-zinc-500 cursor-help text-xs">→</span>
+                          </HoverTooltip>
+                        );
+                      })()}
+                    </td>
                   </tr>
                   {selectedSpeciesKey === s.sis_taxon_id && (
                     <tr>
-                      <td colSpan={9} className="p-0 bg-zinc-50 dark:bg-zinc-800/30">
+                      <td colSpan={10} className="p-0 bg-zinc-50 dark:bg-zinc-800/30">
                         <div style={{ maxWidth: 'calc(100vw - 2rem)', transform: 'translateX(var(--scroll-left, 0px))' }}>
                           {/* Tab bar */}
                           <div className="flex items-center border-b border-zinc-200 dark:border-zinc-700" onClick={(e) => e.stopPropagation()}>
@@ -1682,6 +1790,14 @@ export default function RedListView() {
                                 >
                                   CITES
                                 </button>
+                                {gbifSpeciesKey && s.category !== "NE" && (
+                                  <button
+                                    className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "criterionB" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                    onClick={() => setActiveDetailTab("criterionB")}
+                                  >
+                                    Parameter Estimation
+                                  </button>
+                                )}
                               </>
                             )}
                             {stackedDetailView && (
@@ -1700,6 +1816,69 @@ export default function RedListView() {
                               {stackedDetailView ? "Tabbed" : "Stacked"}
                             </button>
                           </div>
+                          {/* Signal banner (if applicable) */}
+                          {(() => {
+                            const trend = gbifSpeciesKey ? speciesTrends[gbifSpeciesKey] : null;
+                            if (!trend?.flag) return null;
+                            const meta = TREND_FLAG_META[trend.flag];
+                            const changeText = trend.changePercent > 0
+                              ? `+${trend.changePercent}%`
+                              : `${trend.changePercent}%`;
+                            return (
+                              <div
+                                className="mx-4 mt-3 px-4 py-3 rounded-lg border text-sm flex items-start gap-3"
+                                style={{
+                                  borderColor: meta.color + "40",
+                                  backgroundColor: meta.color + "08",
+                                }}
+                              >
+                                <span className="text-xl leading-none mt-0.5" style={{ color: meta.color }}>{meta.icon}</span>
+                                <div>
+                                  <span className="font-semibold" style={{ color: meta.color }}>{meta.label}</span>
+                                  <span className="text-zinc-600 dark:text-zinc-400 ml-1">
+                                    — {meta.description}
+                                  </span>
+                                  <div className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400 flex flex-wrap gap-x-4 gap-y-1">
+                                    <span>Observation change: <strong className="text-zinc-700 dark:text-zinc-300">{changeText}</strong> over {trend.windowEnd - trend.windowStart + 1} years</span>
+                                    <span>Earlier median: <strong className="text-zinc-700 dark:text-zinc-300">~{trend.earlierMedian.toLocaleString()}/yr</strong></span>
+                                    <span>Recent median: <strong className="text-zinc-700 dark:text-zinc-300">~{trend.laterMedian.toLocaleString()}/yr</strong></span>
+                                    {trend.effortNormalized && (
+                                      <span className="text-zinc-400 dark:text-zinc-500 italic">Effort-adjusted</span>
+                                    )}
+                                  </div>
+                                  {trend.adjustedYearCounts.length > 0 && (
+                                    <div className="mt-2 flex items-end gap-px h-8" title={trend.effortNormalized ? "Effort-adjusted GBIF observations per year" : "GBIF observations per year"}>
+                                      {trend.adjustedYearCounts.map((yc) => {
+                                        const maxCount = Math.max(...trend.adjustedYearCounts.map((y) => y.count), 1);
+                                        const height = Math.max(2, (yc.count / maxCount) * 32);
+                                        const midYear = trend.windowStart + Math.floor((trend.windowEnd - trend.windowStart + 1) / 2);
+                                        const isEarlier = yc.year < midYear;
+                                        const raw = trend.yearCounts.find((r) => r.year === yc.year);
+                                        const factor = trend.scalingFactors[yc.year];
+                                        const tooltipParts = [`${yc.year}: ${yc.count.toLocaleString()} obs`];
+                                        if (trend.effortNormalized && raw && factor !== undefined) {
+                                          tooltipParts.push(`(raw: ${raw.count.toLocaleString()}, effort factor: ${factor.toFixed(2)}×)`);
+                                        }
+                                        return (
+                                          <HoverTooltip key={yc.year} text={tooltipParts.join(" ")}>
+                                            <div
+                                              className="w-4 rounded-sm cursor-help transition-colors"
+                                              style={{
+                                                height: `${height}px`,
+                                                backgroundColor: isEarlier
+                                                  ? "rgb(161 161 170)" // zinc-400
+                                                  : meta.color + "B0",
+                                              }}
+                                            />
+                                          </HoverTooltip>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })()}
                           {/* Content */}
                           {gbifSpeciesKey ? (
                             <div style={{ display: stackedDetailView || activeDetailTab === "gbif" ? undefined : "none" }}>
@@ -1737,6 +1916,14 @@ export default function RedListView() {
                           <div style={{ display: stackedDetailView || activeDetailTab === "cites" ? undefined : "none" }}>
                             <CitesSummary scientificName={s.scientific_name} />
                           </div>
+                          {gbifSpeciesKey && s.category !== "NE" && (
+                            <div style={{ display: stackedDetailView || activeDetailTab === "criterionB" ? undefined : "none" }}>
+                              <CriteriaEstimation
+                                speciesKey={gbifSpeciesKey}
+                                assessmentYear={assessmentYear}
+                              />
+                            </div>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1746,7 +1933,7 @@ export default function RedListView() {
               })}
               {filteredSpecies.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-zinc-500">
+                  <td colSpan={10} className="px-4 py-8 text-center text-zinc-500">
                     {neLoading ? (
                       <div className="flex items-center justify-center gap-2">
                         <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">

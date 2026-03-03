@@ -3,6 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { TAXA, getTaxonConfig } from "@/config/taxa";
 import { parseGbifCsvLine } from "@/lib/data-utils";
+import { CACHE_1H } from "@/lib/cache-headers";
 
 interface PreviousAssessment {
   year: string;
@@ -245,7 +246,7 @@ export async function GET(request: NextRequest) {
   if (searchParams.get("list") === "taxa") {
     return NextResponse.json({
       taxa: getAvailableTaxa(),
-    });
+    }, { headers: CACHE_1H });
   }
 
   const taxon = getTaxonConfig(taxonId);
@@ -345,14 +346,14 @@ export async function GET(request: NextRequest) {
         total: neSpecies.length,
         metadata: data.metadata,
         taxon: { id: taxon.id, name: taxon.name, estimatedDescribed: taxon.estimatedDescribed, estimatedSource: taxon.estimatedSource, color: taxon.color },
-      });
+      }, { headers: CACHE_1H });
     } catch (error) {
       console.error("Error loading NE species:", error);
       return NextResponse.json({
         species: [],
         total: 0,
         taxon: { id: taxon.id, name: taxon.name, estimatedDescribed: taxon.estimatedDescribed, estimatedSource: taxon.estimatedSource, color: taxon.color },
-      });
+      }, { headers: CACHE_1H });
     }
   }
 
@@ -403,5 +404,5 @@ export async function GET(request: NextRequest) {
       estimatedSource: taxon.estimatedSource,
       color: taxon.color,
     },
-  });
+  }, { headers: CACHE_1H });
 }

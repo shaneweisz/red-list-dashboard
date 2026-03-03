@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CACHE_5M } from "@/lib/cache-headers";
 
 export const dynamic = "force-dynamic";
 
@@ -205,7 +206,7 @@ export async function GET(request: NextRequest) {
         total: totalCount,
         bbox: features.length > 0 ? [minLon, minLat, maxLon, maxLat] : null,
       },
-    });
+    }, { headers: CACHE_5M });
   } catch (error) {
     console.error("Error fetching occurrences:", error);
     return NextResponse.json(

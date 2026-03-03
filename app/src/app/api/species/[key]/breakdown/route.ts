@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CACHE_5M } from "@/lib/cache-headers";
 
 interface InatObservation {
   url: string;
@@ -57,7 +58,7 @@ export async function GET(
 
   // Return cached data if valid
   if (cache[cacheKey] && Date.now() - cache[cacheKey].timestamp < CACHE_DURATION) {
-    return NextResponse.json(cache[cacheKey].data);
+    return NextResponse.json(cache[cacheKey].data, { headers: CACHE_5M });
   }
 
   try {
@@ -192,7 +193,7 @@ export async function GET(
     // Cache the result
     cache[cacheKey] = { data: breakdown, timestamp: Date.now() };
 
-    return NextResponse.json(breakdown);
+    return NextResponse.json(breakdown, { headers: CACHE_5M });
   } catch (error) {
     console.error("Error fetching record breakdown:", error);
     return NextResponse.json(

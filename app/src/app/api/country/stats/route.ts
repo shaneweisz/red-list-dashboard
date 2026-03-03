@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTaxonConfig } from "@/config/taxa";
+import { CACHE_1H } from "@/lib/cache-headers";
 
 interface CountryStats {
   [countryCode: string]: {
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
 
   // Return cached data if still valid
   if (cachedStats[cacheKey] && Date.now() - (cacheTime[cacheKey] || 0) < CACHE_DURATION) {
-    return NextResponse.json({ stats: cachedStats[cacheKey], cached: true });
+    return NextResponse.json({ stats: cachedStats[cacheKey], cached: true }, { headers: CACHE_1H });
   }
 
   try {
@@ -121,7 +122,7 @@ export async function GET(request: NextRequest) {
     cachedStats[cacheKey] = stats;
     cacheTime[cacheKey] = Date.now();
 
-    return NextResponse.json({ stats, cached: false });
+    return NextResponse.json({ stats, cached: false }, { headers: CACHE_1H });
   } catch (error) {
     console.error("Error fetching country stats:", error);
     return NextResponse.json(

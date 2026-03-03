@@ -3,6 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { getTaxonConfig, TAXA, CATEGORY_COLORS, CATEGORY_NAMES } from "@/config/taxa";
 import { parseGbifCsvLine } from "@/lib/data-utils";
+import { CACHE_1H } from "@/lib/cache-headers";
 
 // Category order for display (most threatened first, NE last)
 const CATEGORY_ORDER = ["EX", "EW", "CR", "EN", "VU", "NT", "LC", "DD", "NE"];
@@ -305,5 +306,5 @@ export async function GET(request: NextRequest) {
     yearRanges,
     obsRanges,
     countryCounts,
-  });
+  }, { headers: CACHE_1H });
 }
