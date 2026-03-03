@@ -548,7 +548,6 @@ export default function RedListView() {
       }
       const total = DISPLAY_ORDER.reduce((sum, code) => sum + (statsMap[code] || 0), 0);
       return DISPLAY_ORDER
-        .filter(code => (statsMap[code] || 0) > 0)
         .map(code => ({
           code,
           name: code,
@@ -572,7 +571,6 @@ export default function RedListView() {
     const total = Object.values(counts).reduce((sum, c) => sum + c, 0);
     const DISPLAY_ORDER = ["EX", "EW", "CR", "EN", "VU", "NT", "LC", "DD"];
     return DISPLAY_ORDER
-      .filter(code => (counts[code] || 0) > 0)
       .map(code => ({
         code,
         name: code,
@@ -1174,7 +1172,7 @@ export default function RedListView() {
                 )}
               </div>
               <div className="flex-1 min-h-[225px] flex items-center justify-center">
-                {assessmentYearData.some(y => y.count > 0) ? (
+                {assessmentYearData.length > 0 ? (
                   <FilterBarChart
                     data={assessmentYearData}
                     dataKey="shortRange"
@@ -1224,7 +1222,7 @@ export default function RedListView() {
                 )}
               </div>
               <div className="flex-1 min-h-[225px] flex items-center justify-center">
-                {gbifObsData.some(d => d.count > 0) ? (
+                {gbifObsData.length > 0 ? (
                   <FilterBarChart
                     data={gbifObsData}
                     dataKey="shortRange"
