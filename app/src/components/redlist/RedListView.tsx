@@ -1144,7 +1144,9 @@ export default function RedListView() {
                 <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
               </div>
               <div className="flex-1 min-h-[225px] flex items-center justify-center">
-                {categoryDataWithPercent.length > 0 ? (
+                {!statsLoaded ? (
+                  <Spinner />
+                ) : categoryDataWithPercent.length > 0 ? (
                   <FilterBarChart
                     data={categoryDataWithPercent}
                     dataKey="code"
@@ -1153,8 +1155,6 @@ export default function RedListView() {
                     yAxisWidth={26}
                     rightMargin={55}
                   />
-                ) : !statsLoaded ? (
-                  <Spinner />
                 ) : null}
               </div>
             </div>
@@ -1166,7 +1166,9 @@ export default function RedListView() {
                 <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
               </div>
               <div className="flex-1 min-h-[225px] flex items-center justify-center">
-                {assessmentYearData.length > 0 ? (
+                {!statsLoaded ? (
+                  <Spinner />
+                ) : assessmentYearData.length > 0 ? (
                   <FilterBarChart
                     data={assessmentYearData}
                     dataKey="shortRange"
@@ -1176,8 +1178,6 @@ export default function RedListView() {
                     yAxisWidth={36}
                     rightMargin={85}
                   />
-                ) : !statsLoaded ? (
-                  <Spinner />
                 ) : null}
               </div>
             </div>
@@ -1213,7 +1213,9 @@ export default function RedListView() {
                 <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
               </div>
               <div className="flex-1 min-h-[225px] flex items-center justify-center">
-                {gbifObsData.length > 0 ? (
+                {!statsLoaded ? (
+                  <Spinner />
+                ) : gbifObsData.length > 0 ? (
                   <FilterBarChart
                     data={gbifObsData}
                     dataKey="shortRange"
@@ -1223,8 +1225,6 @@ export default function RedListView() {
                     yAxisWidth={42}
                     rightMargin={85}
                   />
-                ) : !statsLoaded ? (
-                  <Spinner />
                 ) : null}
               </div>
             </div>
