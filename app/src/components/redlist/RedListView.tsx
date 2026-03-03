@@ -1142,9 +1142,6 @@ export default function RedListView() {
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Risk Category</span>
                 <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
-                {selectedCategories.size > 0 && (
-                  <button onClick={() => setSelectedCategories(new Set())} className="text-[10px] text-red-600 hover:text-red-700 dark:text-red-400">Clear</button>
-                )}
               </div>
               <div className="flex-1 min-h-[225px] flex items-center justify-center">
                 {categoryDataWithPercent.length > 0 ? (
@@ -1167,9 +1164,6 @@ export default function RedListView() {
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Years Since Assessed</span>
                 <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
-                {selectedYearRanges.size > 0 && (
-                  <button onClick={() => setSelectedYearRanges(new Set())} className="text-[10px] text-blue-600 hover:text-blue-700 dark:text-blue-400">Clear</button>
-                )}
               </div>
               <div className="flex-1 min-h-[225px] flex items-center justify-center">
                 {assessmentYearData.length > 0 ? (
@@ -1217,9 +1211,6 @@ export default function RedListView() {
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">GBIF Observations</span>
                 <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
-                {selectedObsRanges.size > 0 && (
-                  <button onClick={() => setSelectedObsRanges(new Set())} className="text-[10px] text-emerald-600 hover:text-emerald-700 dark:text-emerald-400">Clear</button>
-                )}
               </div>
               <div className="flex-1 min-h-[225px] flex items-center justify-center">
                 {gbifObsData.length > 0 ? (
