@@ -3,6 +3,7 @@ import { getTaxonConfig, TaxonConfig } from "@/config/taxa";
 import { promises as fs } from "fs";
 import path from "path";
 import { computeDistribution } from "@/lib/data-utils";
+import { CACHE_5M } from "@/lib/cache-headers";
 
 interface RedListSpecies {
   scientific_name: string;
@@ -194,7 +195,7 @@ export async function GET(
           distribution: { eq1: 0, gt1_lte10: 0, gt10_lte100: 0, gt100_lte1000: 0, gt1000_lte10000: 0, gt10000: 0 },
         },
         country: countryCode,
-      });
+      }, { headers: CACHE_5M });
     }
 
     // Convert facets to species records with counts and Red List status
@@ -338,7 +339,7 @@ export async function GET(
         redlist: redlistStats,
       },
       country: countryCode,
-    });
+    }, { headers: CACHE_5M });
   } catch (error) {
     console.error("Error fetching country species:", error);
     return NextResponse.json(

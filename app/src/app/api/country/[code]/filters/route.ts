@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTaxonConfig } from "@/config/taxa";
 import { buildTaxonParams } from "@/lib/gbif-taxon-params";
+import { CACHE_5M } from "@/lib/cache-headers";
 
 // Data source definitions
 const DATA_SOURCES = {
@@ -60,7 +61,7 @@ export async function GET(
 
   // Return cached data if valid
   if (cache[cacheKey] && Date.now() - cache[cacheKey].timestamp < CACHE_DURATION) {
-    return NextResponse.json(cache[cacheKey].data);
+    return NextResponse.json(cache[cacheKey].data, { headers: CACHE_5M });
   }
 
   const taxon = getTaxonConfig(taxonId);
@@ -175,7 +176,7 @@ export async function GET(
     // Cache the result
     cache[cacheKey] = { data: stats, timestamp: Date.now() };
 
-    return NextResponse.json(stats);
+    return NextResponse.json(stats, { headers: CACHE_5M });
   } catch (error) {
     console.error("Error fetching filter stats:", error);
     return NextResponse.json(

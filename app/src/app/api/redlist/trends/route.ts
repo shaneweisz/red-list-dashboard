@@ -7,6 +7,7 @@ import {
 } from "@/lib/trend-analysis";
 import { getTaxonConfig } from "@/config/taxa";
 import { buildTaxonParams } from "@/lib/gbif-taxon-params";
+import { CACHE_1H } from "@/lib/cache-headers";
 
 // ── Cache ────────────────────────────────────────────────────────────────
 
@@ -247,5 +248,5 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({ trends });
+  return NextResponse.json({ trends }, { headers: CACHE_1H });
 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CACHE_5M } from "@/lib/cache-headers";
 
 interface GBIFMedia {
   type?: string;
@@ -89,7 +90,7 @@ export async function GET(
       taxonomicStatus: gbifData.taxonomicStatus,
       gbifUrl: `https://www.gbif.org/species/${speciesKey}`,
       imageUrl,
-    });
+    }, { headers: CACHE_5M });
   } catch (error) {
     console.error("Error fetching from GBIF:", error);
     return NextResponse.json(

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CACHE_1H } from "@/lib/cache-headers";
 
 interface CommonName {
   name: string;
@@ -64,7 +65,7 @@ export async function GET(
   // Check cache
   const cached = detailsCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-    return NextResponse.json({ ...cached.data, cached: true });
+    return NextResponse.json({ ...cached.data, cached: true }, { headers: CACHE_1H });
   }
 
   try {
@@ -368,7 +369,7 @@ export async function GET(
     // Cache the result
     detailsCache.set(cacheKey, { data: result, timestamp: Date.now() });
 
-    return NextResponse.json(result);
+    return NextResponse.json(result, { headers: CACHE_1H });
   } catch (error) {
     console.error("Error fetching species details:", error);
     return NextResponse.json(

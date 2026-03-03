@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CACHE_5M } from "@/lib/cache-headers";
 
 interface InatObservation {
   url: string;
@@ -95,7 +96,7 @@ export async function GET(
         }
       );
 
-    return NextResponse.json({ observations, totalCount });
+    return NextResponse.json({ observations, totalCount }, { headers: CACHE_5M });
   } catch (error) {
     console.error("Error fetching iNat photos:", error);
     return NextResponse.json(
