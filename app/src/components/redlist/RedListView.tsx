@@ -553,8 +553,8 @@ export default function RedListView() {
           name: code,
           count: statsMap[code] || 0,
           color: CATEGORY_COLORS[code] || "#999",
-          percent: total > 0 ? ((statsMap[code] / total) * 100).toFixed(1) : "0",
-          label: `${(statsMap[code] || 0).toLocaleString()} (${total > 0 ? ((statsMap[code] / total) * 100).toFixed(1) : 0}%)`,
+          percent: total > 0 ? (((statsMap[code] || 0) / total) * 100).toFixed(1) : "0",
+          label: `${(statsMap[code] || 0).toLocaleString()} (${total > 0 ? (((statsMap[code] || 0) / total) * 100).toFixed(1) : 0}%)`,
         }));
     }
 
@@ -576,8 +576,8 @@ export default function RedListView() {
         name: code,
         count: counts[code] || 0,
         color: CATEGORY_COLORS[code] || "#999",
-        percent: total > 0 ? ((counts[code] / total) * 100).toFixed(1) : "0",
-        label: `${(counts[code] || 0).toLocaleString()} (${total > 0 ? ((counts[code] / total) * 100).toFixed(1) : 0}%)`,
+        percent: total > 0 ? (((counts[code] || 0) / total) * 100).toFixed(1) : "0",
+        label: `${(counts[code] || 0).toLocaleString()} (${total > 0 ? (((counts[code] || 0) / total) * 100).toFixed(1) : 0}%)`,
       }));
   }, [taxaFilteredSpecies, speciesLoading, precomputedStats, selectedTaxa, selectedCountries, selectedYearRanges, selectedObsRanges]);
 
