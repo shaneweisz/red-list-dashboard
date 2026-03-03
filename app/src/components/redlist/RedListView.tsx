@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { FaInfoCircle } from "react-icons/fa";
 import dynamic from "next/dynamic";
 import TaxaSummary from "./TaxaSummary";
 import NewLiteratureSinceAssessment from "../LiteratureSearch";
@@ -1209,7 +1210,12 @@ export default function RedListView() {
             {/* GBIF Observations */}
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">GBIF Observations</span>
+                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">
+                  GBIF Observations
+                  <HoverTooltip text="Includes wild observations only (iNaturalist, eBird, camera traps, acoustic sensors). Excludes museum specimens, fossils, zoo/garden records, and literature citations.">
+                    <FaInfoCircle className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 cursor-help" size={12} />
+                  </HoverTooltip>
+                </span>
                 <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
               </div>
               <div className="flex-1 min-h-[225px] flex items-center justify-center">
