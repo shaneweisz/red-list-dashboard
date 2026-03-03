@@ -217,7 +217,7 @@ function explainCriteria(criteria: string): string {
 }
 
 // Quick hover tooltip using portal
-function HoverTooltip({ children, text }: { children: React.ReactNode; text: string }) {
+function HoverTooltip({ children, text, content }: { children: React.ReactNode; text?: string; content?: React.ReactNode }) {
   const [isHovered, setIsHovered] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const triggerRef = useRef<HTMLSpanElement>(null);
@@ -241,14 +241,14 @@ function HoverTooltip({ children, text }: { children: React.ReactNode; text: str
       {children}
       {isHovered && typeof document !== 'undefined' && createPortal(
         <div
-          className="fixed z-[99999] px-2 py-1 text-xs bg-zinc-800 text-zinc-200 rounded shadow-lg max-w-[250px] text-center"
+          className={`fixed z-[99999] px-2 py-1 text-xs bg-zinc-800 text-zinc-200 rounded shadow-lg ${content ? "max-w-[340px] text-left" : "max-w-[250px] text-center"}`}
           style={{
             top: position.top,
             left: position.left,
             transform: 'translateX(-50%) translateY(-100%)',
           }}
         >
-          {text}
+          {content || text}
         </div>,
         document.body
       )}
@@ -1212,7 +1212,25 @@ export default function RedListView() {
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">
                   GBIF Observations
-                  <HoverTooltip text="Includes wild observations only (iNaturalist, eBird, camera traps, acoustic sensors). Excludes museum specimens, fossils, zoo/garden records, and literature citations.">
+                  <HoverTooltip content={
+                    <div>
+                      <div className="font-semibold mb-1">Included basis of record:</div>
+                      <ul className="list-disc pl-3 mb-1.5 space-y-0.5">
+                        <li>HUMAN_OBSERVATION (iNaturalist, eBird, etc.)</li>
+                        <li>MACHINE_OBSERVATION (camera traps, acoustic sensors)</li>
+                        <li>OBSERVATION (generic observation records)</li>
+                        <li>MATERIAL_SAMPLE (DNA/tissue samples)</li>
+                        <li>OCCURRENCE (generic occurrence records)</li>
+                      </ul>
+                      <div className="font-semibold mb-1">Excluded:</div>
+                      <ul className="list-disc pl-3 space-y-0.5">
+                        <li>PRESERVED_SPECIMEN (museum collections)</li>
+                        <li>FOSSIL_SPECIMEN (paleontological records)</li>
+                        <li>LIVING_SPECIMEN (zoos, botanical gardens)</li>
+                        <li>MATERIAL_CITATION (literature references)</li>
+                      </ul>
+                    </div>
+                  }>
                     <FaInfoCircle className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 cursor-help" size={12} />
                   </HoverTooltip>
                 </span>
