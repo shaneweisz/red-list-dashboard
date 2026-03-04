@@ -1123,26 +1123,6 @@ export default function OccurrenceMapRow({
 
             {/* Map */}
             <div className="flex-1 flex flex-col rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 relative isolate z-0">
-            {/* Sample size bar */}
-            {totalOccurrences != null && totalOccurrences > sampleSize && (
-              <div className="flex items-center justify-between px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 border-b border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-300">
-                <span>
-                  Sampled <strong>{sampleSize.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> records
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span>Increase sample:</span>
-                <select
-                  value={sampleSize}
-                  onChange={(e) => setSampleSize(parseInt(e.target.value))}
-                  className="text-xs px-1.5 py-0.5 rounded border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-300"
-                >
-                  {SAMPLE_SIZE_OPTIONS.map((n) => (
-                    <option key={n} value={n}>{n.toLocaleString()}</option>
-                  ))}
-                </select>
-                </span>
-              </div>
-            )}
             <div className="h-[300px] sm:h-[450px] flex-1 relative">
               {loadingOccurrences ? (
                 <div className="flex items-center justify-center h-full bg-zinc-100 dark:bg-zinc-800">
@@ -1341,6 +1321,26 @@ export default function OccurrenceMapRow({
                 </div>
               )}
             </div>
+            {/* Sample size bar */}
+            {totalOccurrences != null && totalOccurrences > sampleSize && (
+              <div className="flex items-center justify-between px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 border-t border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-300">
+                <span>
+                  Sampled <strong>{sampleSize.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> records
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span>Increase sample:</span>
+                  <select
+                    value={sampleSize}
+                    onChange={(e) => setSampleSize(parseInt(e.target.value))}
+                    className="text-xs px-1.5 py-0.5 rounded border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-300"
+                  >
+                    {SAMPLE_SIZE_OPTIONS.map((n) => (
+                      <option key={n} value={n}>{n.toLocaleString()}</option>
+                    ))}
+                  </select>
+                </span>
+              </div>
+            )}
             </div>{/* close outer map flex-col div */}
           </div>
         </div>
