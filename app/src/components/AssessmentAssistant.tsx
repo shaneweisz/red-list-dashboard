@@ -554,9 +554,10 @@ export default function AssessmentAssistant({ speciesKey, assessmentYear }: Asse
   const [mapPoints, setMapPoints] = useState<MapPoint[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showParams, setShowParams] = useState(true);
+  const [showParams, setShowParams] = useState(false);
   const [layers, setLayers] = useState<MapLayers>(DEFAULT_LAYERS);
   const [showMap, setShowMap] = useState(true);
+  const [collapsed, setCollapsed] = useState(true);
   const [activeSubtab, setActiveSubtab] = useState<string>("criterion-b");
 
   const runEstimation = useCallback(async () => {
@@ -599,7 +600,10 @@ export default function AssessmentAssistant({ speciesKey, assessmentYear }: Asse
   return (
     <div className="p-4 space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <button
+        className="flex items-center justify-between w-full text-left"
+        onClick={() => setCollapsed(!collapsed)}
+      >
         <div>
           <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
             Assessment Assistant
@@ -608,8 +612,17 @@ export default function AssessmentAssistant({ speciesKey, assessmentYear }: Asse
             Estimate parameters to assist with drafting IUCN Red List assessments
           </p>
         </div>
-      </div>
+        <svg
+          className={`w-4 h-4 text-zinc-400 transition-transform ${collapsed ? "" : "rotate-180"}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
 
+      {!collapsed && <>
       {/* Subtab navigation */}
       <div className="flex items-center gap-1 border-b border-zinc-200 dark:border-zinc-700 -mx-4 px-4">
         <span
@@ -1049,6 +1062,7 @@ export default function AssessmentAssistant({ speciesKey, assessmentYear }: Asse
           </p>
         </div>
       )}
+      </>}
     </div>
   );
 }
