@@ -602,7 +602,7 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
-            Parameter Estimation
+            Assessment Assistant
           </h3>
           <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
             Estimate parameters to assist with drafting IUCN Red List assessments
@@ -612,6 +612,11 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
 
       {/* Subtab navigation */}
       <div className="flex items-center gap-1 border-b border-zinc-200 dark:border-zinc-700 -mx-4 px-4">
+        <span
+          className="px-3 py-2 text-xs text-zinc-400 dark:text-zinc-600 cursor-default border-b-2 border-transparent"
+        >
+          Criterion A <span className="text-[10px] opacity-60">soon</span>
+        </span>
         <button
           onClick={() => setActiveSubtab("criterion-b")}
           className={`px-3 py-2 text-xs font-medium transition-colors border-b-2 ${
@@ -622,7 +627,7 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
         >
           Criterion B
         </button>
-        {(["Criterion A", "Criterion C", "Criterion D"] as const).map((label) => (
+        {(["Criterion C", "Criterion D"] as const).map((label) => (
           <span
             key={label}
             className="px-3 py-2 text-xs text-zinc-400 dark:text-zinc-600 cursor-default border-b-2 border-transparent"
