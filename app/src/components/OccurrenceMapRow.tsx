@@ -29,10 +29,6 @@ const Marker = dynamic(
   () => import("react-leaflet").then((mod) => mod.Marker),
   { ssr: false }
 );
-const Popup = dynamic(
-  () => import("react-leaflet").then((mod) => mod.Popup),
-  { ssr: false }
-);
 const LocateControl = dynamic(
   () => import("./LocateControl"),
   { ssr: false }
@@ -196,7 +192,7 @@ function yearToColor(year: number, minYear: number, maxYear: number): { stroke: 
 // Category labels for tooltip display
 const CATEGORY_LABELS: Record<string, string> = {
   iNaturalist: "iNaturalist",
-  humanOther: "Human Obs.",
+  humanOther: "Other Human Obs.",
   machineObservation: "Machine Obs.",
   preservedSpecimen: "Specimens",
   materialSample: "Material",
@@ -480,22 +476,6 @@ function YearRangeTrimmer({
   );
 }
 
-// Format basisOfRecord to human-readable string
-function formatBasisOfRecord(basis?: string): string {
-  if (!basis) return "";
-  const labels: Record<string, string> = {
-    HUMAN_OBSERVATION: "Human observation",
-    PRESERVED_SPECIMEN: "Preserved specimen (museum collection)",
-    MACHINE_OBSERVATION: "Machine observation (camera trap / acoustic)",
-    FOSSIL_SPECIMEN: "Fossil specimen",
-    LIVING_SPECIMEN: "Living specimen (zoo / garden)",
-    MATERIAL_SAMPLE: "Material sample (eDNA / tissue)",
-    OCCURRENCE: "Occurrence",
-    MATERIAL_CITATION: "Material citation",
-  };
-  return labels[basis] || basis.replace(/_/g, " ").toLowerCase();
-}
-
 interface InatObservation {
   url: string;
   date: string | null;
@@ -765,7 +745,7 @@ export default function OccurrenceMapRow({
   });
 
   // Advanced filter state
-  const [maxUncertainty, setMaxUncertainty] = useState<number | null>(10000);
+  const [maxUncertainty, setMaxUncertainty] = useState<number | null>(50000);
   const [showUncertaintyCircles, setShowUncertaintyCircles] = useState(false);
   const [colorByYear, setColorByYear] = useState(false);
   const [dedupEnabled, setDedupEnabled] = useState(false);
@@ -818,10 +798,11 @@ export default function OccurrenceMapRow({
   const [playbackSpeed, setPlaybackSpeed] = useState(2);
   const animationRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Touch device detection (no hover tooltips on touch)
+  // Touch-only device detection (no hover tooltips on touch-only devices)
+  // Check for coarse pointer (phone/tablet) rather than maxTouchPoints which is true on Mac trackpads
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   useEffect(() => {
-    setIsTouchDevice("ontouchstart" in window || navigator.maxTouchPoints > 0);
+    setIsTouchDevice(window.matchMedia("(pointer: coarse)").matches && !window.matchMedia("(pointer: fine)").matches);
   }, []);
 
   // Lookup: gbifID → InatObservation (for showing photos in map popups)
@@ -1091,7 +1072,7 @@ export default function OccurrenceMapRow({
     const humanOtherCount = Math.max(0, breakdown.humanObservation - breakdown.iNaturalist);
     return [
       { key: "iNaturalist" as const, label: "iNaturalist", count: breakdown.iNaturalist, tooltip: "iNaturalist: Community science observations with photos" },
-      { key: "humanOther" as const, label: "Human Obs.", count: humanOtherCount, tooltip: "Human Observations: Field surveys, citizen science (non-iNaturalist)" },
+      { key: "humanOther" as const, label: "Other Human Obs.", count: humanOtherCount, tooltip: "Human Observations: Field surveys, citizen science (non-iNaturalist)" },
       { key: "machineObservation" as const, label: "Machine Obs.", count: breakdown.machineObservation, tooltip: "Machine Observations: Camera traps, bioacoustics, remote sensing" },
       { key: "preservedSpecimen" as const, label: "Specimens", count: breakdown.preservedSpecimen, tooltip: "Preserved Specimens: Museum and herbarium collections" },
       { key: "materialSample" as const, label: "Material", count: breakdown.materialSample || 0, tooltip: "Material Samples: eDNA, tissue samples, blood, feathers" },
@@ -1139,19 +1120,65 @@ export default function OccurrenceMapRow({
               ) : (
                 pillDefs.map((pill) => {
                   const active = checkedTypes[pill.key];
+                  const iconClass = `w-3.5 h-3.5 shrink-0 ${active ? "text-emerald-600 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"}`;
+                  const pillIcon = {
+                    iNaturalist: (
+                      /* Leaf — community/nature science */
+                      <svg className={iconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M17 8C8 10 5.9 16.17 3.82 21.34l1.89.66L7 19c4-4 7-4 12-3 0-5-2-9-7-11z" />
+                        <path d="M5 19c4-5 7-7 12-9" />
+                      </svg>
+                    ),
+                    humanOther: (
+                      /* Eye — field observation */
+                      <svg className={iconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                    ),
+                    machineObservation: (
+                      /* Camera — camera trap / sensor */
+                      <svg className={iconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
+                        <circle cx="12" cy="13" r="4" />
+                      </svg>
+                    ),
+                    preservedSpecimen: (
+                      /* Archive box — museum collection */
+                      <svg className={iconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="2" y="3" width="20" height="5" rx="1" />
+                        <path d="M4 8v11a2 2 0 002 2h12a2 2 0 002-2V8M10 12h4" />
+                      </svg>
+                    ),
+                    materialSample: (
+                      /* Test tube — eDNA / tissue sample */
+                      <svg className={iconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14.5 2v17.5c0 1.4-1.1 2.5-2.5 2.5s-2.5-1.1-2.5-2.5V2M8 2h8M9.5 16h5" />
+                      </svg>
+                    ),
+                    other: (
+                      /* Dots — miscellaneous */
+                      <svg className={iconClass} viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="5" cy="12" r="2" />
+                        <circle cx="12" cy="12" r="2" />
+                        <circle cx="19" cy="12" r="2" />
+                      </svg>
+                    ),
+                  }[pill.key];
                   return (
                     <button
                       key={pill.key}
                       onClick={() => toggleType(pill.key)}
                       onMouseEnter={() => setHoveredType(pill.key)}
                       onMouseLeave={() => setHoveredType(null)}
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
                         active
                           ? "bg-emerald-50 dark:bg-emerald-900/30 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300"
                           : "bg-transparent border-zinc-300 dark:border-zinc-600 text-zinc-400 dark:text-zinc-500"
                       }`}
                       title={pill.tooltip}
                     >
+                      {pillIcon}
                       {pill.label}
                       <span className={`tabular-nums ${active ? "text-emerald-500 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"}`}>
                         {pill.count.toLocaleString()}
@@ -1265,7 +1292,7 @@ export default function OccurrenceMapRow({
                     const count = uncertaintyCounts.get(opt.value ?? null);
                     return (
                       <option key={opt.label} value={opt.value ?? ""}>
-                        {opt.label}{count != null ? ` (${count})` : ""}
+                        {opt.label}
                       </option>
                     );
                   })}
@@ -1434,7 +1461,7 @@ export default function OccurrenceMapRow({
 
             {/* Map */}
             <div className="flex-1 flex flex-col rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 relative isolate z-0">
-            <div className="min-h-[300px] sm:min-h-[450px] flex-1 relative">
+            <div className="h-[300px] sm:h-auto sm:min-h-[450px] sm:flex-1 relative">
               {loadingOccurrences ? (
                 <div className="flex items-center justify-center h-full bg-zinc-100 dark:bg-zinc-800">
                   <div className="flex items-center gap-2 text-zinc-400 text-sm">
@@ -1510,9 +1537,15 @@ export default function OccurrenceMapRow({
                     const isFeatureHovered = hoveredFeature?.properties.gbifID === feature.properties.gbifID;
                     const isEmphasized = isHighlighted || isFeatureHovered;
                     const markerSize = isEmphasized ? 10 : (isBrushed ? 10 : (isDimmed ? 6 : 8));
-                    const hoverHandlers = isTouchDevice ? undefined : {
-                      mouseover: () => setHoveredFeature(feature),
-                      mouseout: () => setHoveredFeature(null),
+                    const clickHandler = () => {
+                      window.open(`https://www.gbif.org/occurrence/${feature.properties.gbifID}`, "_blank");
+                    };
+                    const hoverHandlers = {
+                      click: clickHandler,
+                      ...(isTouchDevice ? {} : {
+                        mouseover: () => setHoveredFeature(feature),
+                        mouseout: () => setHoveredFeature(null),
+                      }),
                     };
                     const markerOpacity = isDimmed ? 0.15 : 1;
 
@@ -1525,26 +1558,7 @@ export default function OccurrenceMapRow({
                           icon={icon}
                           opacity={markerOpacity}
                           eventHandlers={hoverHandlers}
-                        >
-                          <Popup>
-                            <div className="text-sm" style={{ maxWidth: 220 }}>
-                              {inatMatch?.imageUrl && (
-                                <a href={inatMatch.url} target="_blank" rel="noopener noreferrer">
-                                  <img src={inatMatch.imageUrl} alt={`${feature.properties.species} observation`} className="w-full h-32 object-cover rounded mb-2 hover:opacity-90 cursor-pointer" />
-                                </a>
-                              )}
-                              <div className="font-medium italic">{feature.properties.species}</div>
-                              {feature.properties.basisOfRecord && <div className="text-xs text-gray-600">{formatBasisOfRecord(feature.properties.basisOfRecord)}</div>}
-                              {feature.properties.datasetName && <div className="text-xs text-gray-500">{feature.properties.datasetName}</div>}
-                              {feature.properties.eventDate && <div className="text-xs">{feature.properties.eventDate}</div>}
-                              {uncertainty != null && <div className="text-xs text-gray-500">GPS uncertainty: {uncertainty >= 1000 ? `${(uncertainty / 1000).toFixed(1)}km` : `${uncertainty}m`}</div>}
-                              {inatMatch?.observer && <div className="text-xs text-gray-600">by {inatMatch.observer}</div>}
-                              {inatMatch?.location && <div className="text-xs text-gray-500 truncate" title={inatMatch.location}>{inatMatch.location}</div>}
-                              <div className="text-xs text-gray-500">{lat.toFixed(4)}, {lon.toFixed(4)}</div>
-                              <a href={`https://www.gbif.org/occurrence/${feature.properties.gbifID}`} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:text-blue-800 hover:underline mt-1 inline-block">View on GBIF →</a>
-                            </div>
-                          </Popup>
-                        </Marker>
+                        />
                       );
                     }
 
@@ -1560,61 +1574,7 @@ export default function OccurrenceMapRow({
                           weight: isDimmed ? 1 : (isEmphasized || isBrushed ? 3 : 2),
                         }}
                         eventHandlers={hoverHandlers}
-                      >
-                        <Popup>
-                          <div className="text-sm" style={{ maxWidth: 220 }}>
-                            {inatMatch?.imageUrl && (
-                              <a href={inatMatch.url} target="_blank" rel="noopener noreferrer">
-                                <img
-                                  src={inatMatch.imageUrl}
-                                  alt={`${feature.properties.species} observation`}
-                                  className="w-full h-32 object-cover rounded mb-2 hover:opacity-90 cursor-pointer"
-                                />
-                              </a>
-                            )}
-                            <div className="font-medium italic">
-                              {feature.properties.species}
-                            </div>
-                            {feature.properties.basisOfRecord && (
-                              <div className="text-xs text-gray-600">
-                                {formatBasisOfRecord(feature.properties.basisOfRecord)}
-                              </div>
-                            )}
-                            {feature.properties.datasetName && (
-                              <div className="text-xs text-gray-500">
-                                {feature.properties.datasetName}
-                              </div>
-                            )}
-                            {feature.properties.eventDate && (
-                              <div className="text-xs">
-                                {feature.properties.eventDate}
-                              </div>
-                            )}
-                            {uncertainty != null && (
-                              <div className="text-xs text-gray-500">
-                                GPS uncertainty: {uncertainty >= 1000 ? `${(uncertainty / 1000).toFixed(1)}km` : `${uncertainty}m`}
-                              </div>
-                            )}
-                            {inatMatch?.observer && (
-                              <div className="text-xs text-gray-600">by {inatMatch.observer}</div>
-                            )}
-                            {inatMatch?.location && (
-                              <div className="text-xs text-gray-500 truncate" title={inatMatch.location}>{inatMatch.location}</div>
-                            )}
-                            <div className="text-xs text-gray-500">
-                              {lat.toFixed(4)}, {lon.toFixed(4)}
-                            </div>
-                            <a
-                              href={`https://www.gbif.org/occurrence/${feature.properties.gbifID}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs text-blue-600 hover:text-blue-800 hover:underline mt-1 inline-block"
-                            >
-                              View on GBIF →
-                            </a>
-                          </div>
-                        </Popup>
-                      </CircleMarker>
+                      />
                     );
                   })}
                   {/* Highlighted dot when hovering an iNat thumbnail */}
@@ -1698,7 +1658,7 @@ export default function OccurrenceMapRow({
                       <span className="text-zinc-400">|</span>
                       {([
                         ["iNaturalist", "iNat"],
-                        ["humanOther", "Human"],
+                        ["humanOther", "Other Human"],
                         ["machineObservation", "Machine"],
                         ["preservedSpecimen", "Specimen"],
                         ["materialSample", "Material"],

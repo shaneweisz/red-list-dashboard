@@ -97,7 +97,7 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
           )}
           {uncertainty != null && (
             <div className="text-zinc-400">
-              GPS: {uncertainty >= 1000
+              GPS Uncertainty: {uncertainty >= 1000
                 ? `${(uncertainty / 1000).toFixed(1)}km`
                 : `${uncertainty}m`}
             </div>
