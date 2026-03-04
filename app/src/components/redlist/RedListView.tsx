@@ -1154,6 +1154,16 @@ export default function RedListView() {
                     onBarClick={handleCategoryClick}
                     yAxisWidth={26}
                     rightMargin={55}
+                    labelFormatter={(code) => ({
+                      EX: "Extinct",
+                      EW: "Extinct in the Wild",
+                      CR: "Critically Endangered",
+                      EN: "Endangered",
+                      VU: "Vulnerable",
+                      NT: "Near Threatened",
+                      LC: "Least Concern",
+                      DD: "Data Deficient",
+                    }[code] || code)}
                   />
                 ) : null}
               </div>
@@ -1210,6 +1220,22 @@ export default function RedListView() {
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">GBIF Observations</span>
+                <div className="relative group/gbifinfo inline-flex ml-1">
+                  <svg className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 cursor-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 16v-4M12 8h.01" />
+                  </svg>
+                  <div className="absolute left-0 bottom-full mb-1.5 z-50 hidden group-hover/gbifinfo:block">
+                    <div className="bg-zinc-900 dark:bg-zinc-800 text-white text-[9px] leading-snug rounded px-2 py-1.5 shadow-lg w-52">
+                      <div className="font-medium text-[10px] mb-0.5">Georeferenced GBIF records only</div>
+                      <div className="text-zinc-400">hasCoordinate=true · hasGeospatialIssue=false</div>
+                      <div className="font-medium text-zinc-100 mt-1">Included:</div>
+                      <div className="text-zinc-300">HUMAN_OBSERVATION (iNat, eBird) · MACHINE_OBSERVATION (camera traps) · MATERIAL_SAMPLE (eDNA) · OCCURRENCE · OBSERVATION</div>
+                      <div className="font-medium text-zinc-100 mt-1">Excluded:</div>
+                      <div className="text-zinc-300">PRESERVED_SPECIMEN (museums) · FOSSIL_SPECIMEN · LIVING_SPECIMEN (zoos) · MATERIAL_CITATION</div>
+                    </div>
+                  </div>
+                </div>
                 <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
               </div>
               <div className="flex-1 min-h-[225px] flex items-center justify-center">

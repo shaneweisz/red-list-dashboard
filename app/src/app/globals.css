@@ -44,3 +44,9 @@ th.sticky {
 .dark th.sticky {
   box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.3);
 }
+
+/* Shape marker icons: strip default leaflet-div-icon styles */
+.shape-marker-icon {
+  background: none !important;
+  border: none !important;
+}

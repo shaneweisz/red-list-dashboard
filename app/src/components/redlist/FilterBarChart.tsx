@@ -26,6 +26,7 @@ interface FilterBarChartProps {
   barColor?: string;
   yAxisWidth?: number;
   rightMargin?: number;
+  labelFormatter?: (label: string) => string;
 }
 
 export default function FilterBarChart({
@@ -36,6 +37,7 @@ export default function FilterBarChart({
   barColor,
   yAxisWidth = 36,
   rightMargin = 85,
+  labelFormatter,
 }: FilterBarChartProps) {
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -57,6 +59,7 @@ export default function FilterBarChart({
         />
         <Tooltip
           formatter={(value: number) => [value.toLocaleString(), "Species"]}
+          labelFormatter={labelFormatter}
           contentStyle={{
             backgroundColor: "#18181b",
             border: "1px solid #3f3f46",
