@@ -820,6 +820,20 @@ export default function OccurrenceMapRow({
     return recordYear > assessmentYear;
   };
 
+  // Bounding box from filtered occurrences
+  const filteredBbox = useMemo<[number, number, number, number] | null>(() => {
+    if (filteredOccurrences.length === 0) return bbox; // fall back to API bbox
+    let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
+    for (const f of filteredOccurrences) {
+      const [lon, lat] = f.geometry.coordinates;
+      if (lon < minLon) minLon = lon;
+      if (lon > maxLon) maxLon = lon;
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+    }
+    return [minLon, minLat, maxLon, maxLat];
+  }, [filteredOccurrences, bbox]);
+
   // Year range for color gradient
   const { minYear, maxYear } = useMemo(() => {
     const years = filteredOccurrences
@@ -848,6 +862,23 @@ export default function OccurrenceMapRow({
       ...(breakdown.other > 0 ? [{ key: "other" as const, label: "Other", count: breakdown.other }] : []),
     ];
   }, [breakdown]);
+
+  // Cumulative counts per GPS uncertainty threshold (from type-filtered sample)
+  const uncertaintyCounts = useMemo(() => {
+    const typeFiltered = occurrences.filter((o) => checkedTypes[getCategory(o)]);
+    const counts = new Map<number | null, number>();
+    // "Any" = total type-filtered count
+    counts.set(null, typeFiltered.length);
+    for (const opt of UNCERTAINTY_OPTIONS) {
+      if (opt.value == null) continue;
+      const count = typeFiltered.filter((o) => {
+        const u = o.properties.coordinateUncertaintyInMeters;
+        return u != null && u <= opt.value;
+      }).length;
+      counts.set(opt.value, count);
+    }
+    return counts;
+  }, [occurrences, checkedTypes]);
 
   const toggleType = (key: keyof typeof checkedTypes) => {
     setCheckedTypes((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -901,7 +932,14 @@ export default function OccurrenceMapRow({
                   {yearRange[0]}
                 </span>
                 <YearRangeTrimmer
-                  features={occurrences.filter((o) => checkedTypes[getCategory(o)])}
+                  features={occurrences.filter((o) => {
+                    if (!checkedTypes[getCategory(o)]) return false;
+                    if (maxUncertainty != null) {
+                      const u = o.properties.coordinateUncertaintyInMeters;
+                      if (u == null || u > maxUncertainty) return false;
+                    }
+                    return true;
+                  })}
                   yearRange={yearRange}
                   onRangeChange={setYearRange}
                   assessmentYear={assessmentYear}
@@ -923,9 +961,14 @@ export default function OccurrenceMapRow({
                   onChange={(e) => setMaxUncertainty(e.target.value ? parseInt(e.target.value) : null)}
                   className="text-xs px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
                 >
-                  {UNCERTAINTY_OPTIONS.map((opt) => (
-                    <option key={opt.label} value={opt.value ?? ""}>{opt.label}</option>
-                  ))}
+                  {UNCERTAINTY_OPTIONS.map((opt) => {
+                    const count = uncertaintyCounts.get(opt.value ?? null);
+                    return (
+                      <option key={opt.label} value={opt.value ?? ""}>
+                        {opt.label}{count != null ? ` (${count})` : ""}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 
@@ -1011,19 +1054,6 @@ export default function OccurrenceMapRow({
                       )}
                     </div>
 
-                    {/* Sample size */}
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Sample size</span>
-                      <select
-                        value={sampleSize}
-                        onChange={(e) => setSampleSize(parseInt(e.target.value))}
-                        className="text-xs px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
-                      >
-                        {SAMPLE_SIZE_OPTIONS.map((n) => (
-                          <option key={n} value={n}>{n.toLocaleString()}</option>
-                        ))}
-                      </select>
-                    </div>
                   </div>
                 )}
               </div>
@@ -1092,7 +1122,28 @@ export default function OccurrenceMapRow({
             )}
 
             {/* Map */}
-            <div className="h-[300px] sm:h-[450px] flex-1 rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 relative isolate z-0">
+            <div className="flex-1 flex flex-col rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 relative isolate z-0">
+            {/* Sample size bar */}
+            {totalOccurrences != null && totalOccurrences > sampleSize && (
+              <div className="flex items-center justify-between px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 border-b border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-300">
+                <span>
+                  Sampled <strong>{sampleSize.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> records
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span>Increase sample:</span>
+                <select
+                  value={sampleSize}
+                  onChange={(e) => setSampleSize(parseInt(e.target.value))}
+                  className="text-xs px-1.5 py-0.5 rounded border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-300"
+                >
+                  {SAMPLE_SIZE_OPTIONS.map((n) => (
+                    <option key={n} value={n}>{n.toLocaleString()}</option>
+                  ))}
+                </select>
+                </span>
+              </div>
+            )}
+            <div className="h-[300px] sm:h-[450px] flex-1 relative">
               {loadingOccurrences ? (
                 <div className="flex items-center justify-center h-full bg-zinc-100 dark:bg-zinc-800">
                   <div className="flex items-center gap-2 text-zinc-400 text-sm">
@@ -1114,7 +1165,7 @@ export default function OccurrenceMapRow({
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   />
                   <LocateControl />
-                  {bbox && <FitBounds bbox={bbox} />}
+                  {filteredBbox && <FitBounds bbox={filteredBbox} />}
                   {/* Uncertainty circles (rendered behind markers) */}
                   {showUncertaintyCircles && filteredOccurrences.map((feature, idx) => {
                     const uncertainty = feature.properties.coordinateUncertaintyInMeters;
@@ -1285,11 +1336,12 @@ export default function OccurrenceMapRow({
                     <span className="text-zinc-400">(deduped)</span>
                   )}
                   {totalOccurrences != null && totalOccurrences > sampleSize && (
-                    <span className="text-zinc-400">sample of {totalOccurrences.toLocaleString()}</span>
+                    <span className="text-zinc-400">(sampled)</span>
                   )}
                 </div>
               )}
             </div>
+            </div>{/* close outer map flex-col div */}
           </div>
         </div>
       </div>
