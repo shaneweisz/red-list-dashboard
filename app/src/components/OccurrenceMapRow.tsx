@@ -150,14 +150,17 @@ function YearRangeTrimmer({
     const allYears = Array.from(yearCounts.keys()).sort((a, b) => a - b);
     if (allYears.length < 2) return null;
 
-    const minY = allYears[0];
-    const maxY = allYears[allYears.length - 1];
+    // Use the union of data range and yearRange so handles are always on-screen
+    const dataMinY = allYears[0];
+    const dataMaxY = allYears[allYears.length - 1];
+    const minY = Math.min(dataMinY, yearRange[0]);
+    const maxY = Math.max(dataMaxY, yearRange[1]);
     const maxCount = Math.max(...Array.from(yearCounts.values()));
 
     const yearToX = (year: number) => pad + ((year - minY) / (maxY - minY)) * (chartW - pad * 2);
 
     const points: string[] = [];
-    for (let y = minY; y <= maxY; y++) {
+    for (let y = dataMinY; y <= dataMaxY; y++) {
       const count = yearCounts.get(y) || 0;
       const x = yearToX(y);
       const cy = chartH - 2 - (maxCount > 0 ? (count / maxCount) * (chartH - 4) : 0);
@@ -167,11 +170,11 @@ function YearRangeTrimmer({
     return {
       minY,
       maxY,
-      areaPath: `M${yearToX(minY)},${chartH - 2} L${points.join(" L")} L${yearToX(maxY)},${chartH - 2} Z`,
+      areaPath: `M${yearToX(dataMinY)},${chartH - 2} L${points.join(" L")} L${yearToX(dataMaxY)},${chartH - 2} Z`,
       linePath: `M${points.join(" L")}`,
       yearToX,
     };
-  }, [yearCounts]);
+  }, [yearCounts, yearRange]);
 
   // Keep yearRange in a ref so drag handlers always see the latest value
   const rangeRef = useRef(yearRange);
