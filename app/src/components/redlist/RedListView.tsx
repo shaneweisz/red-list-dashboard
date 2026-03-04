@@ -13,7 +13,7 @@ import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
 import { useFilterParams } from "@/hooks/useFilterParams";
 import { computePriority, BREAKDOWN_LABELS, type PriorityResult, type ScoreBreakdown } from "@/lib/prioritization";
 import { TREND_FLAG_META, type TrendResult, type TrendFlag } from "@/lib/trend-analysis";
-import CriteriaEstimation from "../CriteriaEstimation";
+import AssessmentAssistant from "../AssessmentAssistant";
 
 // Dynamically import OccurrenceMapRow to avoid SSR issues with Leaflet
 const OccurrenceMapRow = dynamic(
@@ -1792,7 +1792,7 @@ export default function RedListView() {
                         </div>
                           {gbifSpeciesKey && s.category !== "NE" && (
                             <div className="border-t border-zinc-200 dark:border-zinc-700">
-                              <CriteriaEstimation
+                              <AssessmentAssistant
                                 speciesKey={gbifSpeciesKey}
                                 assessmentYear={assessmentYear}
                               />

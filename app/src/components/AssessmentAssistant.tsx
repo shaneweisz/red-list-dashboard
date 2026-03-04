@@ -47,7 +47,7 @@ const FitBounds = dynamic(() => import("./FitBounds"), { ssr: false });
 
 // ── Types ────────────────────────────────────────────────────────────────
 
-interface CriteriaEstimationProps {
+interface AssessmentAssistantProps {
   speciesKey: number;
   assessmentYear?: number | null;
 }
@@ -548,7 +548,7 @@ function SubcriterionBadge({ code, label, met }: { code: string; label: string; 
 /** Result type from the API (without filteredPoints, which are sent separately) */
 type APIResult = Omit<CriteriaEstimationResult, "filteredPoints">;
 
-export default function CriteriaEstimation({ speciesKey, assessmentYear }: CriteriaEstimationProps) {
+export default function AssessmentAssistant({ speciesKey, assessmentYear }: AssessmentAssistantProps) {
   const [params, setParams] = useState<Params>(DEFAULT_PARAMS);
   const [result, setResult] = useState<APIResult | null>(null);
   const [mapPoints, setMapPoints] = useState<MapPoint[]>([]);
