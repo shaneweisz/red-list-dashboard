@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
+import type L from "leaflet";
 
 // Fixed page size for iNat photo filmstrip (2 columns x 5 rows on desktop)
 const INAT_PAGE_SIZE = 10;
@@ -24,6 +25,10 @@ const Circle = dynamic(
   () => import("react-leaflet").then((mod) => mod.Circle),
   { ssr: false }
 );
+const Marker = dynamic(
+  () => import("react-leaflet").then((mod) => mod.Marker),
+  { ssr: false }
+);
 const Popup = dynamic(
   () => import("react-leaflet").then((mod) => mod.Popup),
   { ssr: false }
@@ -38,6 +43,10 @@ const MapImageTooltip = dynamic(
 );
 const FitBounds = dynamic(
   () => import("./FitBounds"),
+  { ssr: false }
+);
+const MapOccurrenceTooltip = dynamic(
+  () => import("./MapOccurrenceTooltip"),
   { ssr: false }
 );
 
@@ -84,6 +93,75 @@ const DEDUP_OPTIONS = [
 
 // Sample size options
 const SAMPLE_SIZE_OPTIONS = [100, 300, 500, 1000, 2000] as const;
+
+// Basemap tile options
+const BASEMAP_OPTIONS = {
+  streets: {
+    label: "Streets",
+    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  },
+  satellite: {
+    label: "Satellite",
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    attribution: '&copy; <a href="https://www.esri.com">Esri</a> World Imagery',
+  },
+  terrain: {
+    label: "Terrain",
+    url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+    attribution: '&copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)',
+  },
+} as const;
+type BasemapKey = keyof typeof BASEMAP_OPTIONS;
+
+// Shape icon factory for marker shapes by record type
+const shapeIconCache = new Map<string, unknown>();
+function getShapeIcon(
+  category: string,
+  fillColor: string,
+  strokeColor: string,
+  size: number,
+): unknown {
+  const key = `${category}-${fillColor}-${strokeColor}-${size}`;
+  const cached = shapeIconCache.get(key);
+  if (cached) return cached;
+
+  const sw = 1.5;
+  const s = size;
+  let svgContent: string;
+
+  switch (category) {
+    case "iNaturalist":
+      svgContent = `<circle cx="${s/2}" cy="${s/2}" r="${s/2 - sw}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${sw}"/>`;
+      break;
+    case "humanOther":
+      svgContent = `<circle cx="${s/2}" cy="${s/2}" r="${s/2 - sw}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${sw}"/><circle cx="${s/2}" cy="${s/2}" r="1.5" fill="${strokeColor}"/>`;
+      break;
+    case "machineObservation":
+      svgContent = `<rect x="${sw}" y="${sw}" width="${s - sw*2}" height="${s - sw*2}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${sw}"/>`;
+      break;
+    case "preservedSpecimen":
+      svgContent = `<rect x="${s*0.15}" y="${s*0.15}" width="${s*0.7}" height="${s*0.7}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${sw}" transform="rotate(45 ${s/2} ${s/2})"/>`;
+      break;
+    case "materialSample":
+      svgContent = `<polygon points="${s/2},${sw} ${s-sw},${s-sw} ${sw},${s-sw}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${sw}"/>`;
+      break;
+    default:
+      svgContent = `<line x1="${s/2}" y1="${sw+1}" x2="${s/2}" y2="${s-sw-1}" stroke="${strokeColor}" stroke-width="${sw+1}" stroke-linecap="round"/><line x1="${sw+1}" y1="${s/2}" x2="${s-sw-1}" y2="${s/2}" stroke="${strokeColor}" stroke-width="${sw+1}" stroke-linecap="round"/>`;
+      break;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const L = require("leaflet");
+  const icon = L.divIcon({
+    html: `<svg width="${s}" height="${s}" viewBox="0 0 ${s} ${s}" xmlns="http://www.w3.org/2000/svg">${svgContent}</svg>`,
+    className: "shape-marker-icon",
+    iconSize: [s, s],
+    iconAnchor: [s / 2, s / 2],
+  });
+  shapeIconCache.set(key, icon);
+  return icon;
+}
 
 // Spatial deduplication: keep one record per grid cell, preferring newest
 function deduplicateSpatially(
@@ -143,19 +221,26 @@ function YearRangeTrimmer({
   yearRange,
   onRangeChange,
   assessmentYear,
+  hoveredYear,
+  onHoverYear,
+  animatingYear,
+  onAnimationScrub,
   className,
 }: {
   features: OccurrenceFeature[];
   yearRange: [number, number];
   onRangeChange: (range: [number, number]) => void;
   assessmentYear?: number | null;
+  hoveredYear?: number | null;
+  onHoverYear?: (year: number | null) => void;
+  animatingYear?: number | null;
+  onAnimationScrub?: (year: number) => void;
   className?: string;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const dragging = useRef<"start" | "end" | null>(null);
+  const dragging = useRef<"start" | "end" | "animation" | null>(null);
   const clipId = useRef(`trim-${Math.random().toString(36).slice(2, 8)}`).current;
-  const [hoveredYear, setHoveredYear] = useState<number | null>(null);
 
   const yearBreakdown = useMemo(() => {
     const breakdown = new Map<number, { total: number; categories: Record<string, number> }>();
@@ -209,7 +294,10 @@ function YearRangeTrimmer({
   const rangeRef = useRef(yearRange);
   rangeRef.current = yearRange;
 
-  const startDrag = useCallback((handle: "start" | "end") => {
+  const scrubRef = useRef(onAnimationScrub);
+  scrubRef.current = onAnimationScrub;
+
+  const startDrag = useCallback((handle: "start" | "end" | "animation") => {
     dragging.current = handle;
 
     const onMove = (e: PointerEvent) => {
@@ -222,8 +310,11 @@ function YearRangeTrimmer({
       const cur = rangeRef.current;
       if (handle === "start") {
         onRangeChange([Math.min(year, cur[1]), cur[1]]);
-      } else {
+      } else if (handle === "end") {
         onRangeChange([cur[0], Math.max(year, cur[0])]);
+      } else if (handle === "animation") {
+        const clamped = Math.max(cur[0], Math.min(year, cur[1]));
+        scrubRef.current?.(clamped);
       }
     };
 
@@ -302,8 +393,8 @@ function YearRangeTrimmer({
               width={hitW}
               height={chartH}
               fill="transparent"
-              onMouseEnter={() => setHoveredYear(b.year)}
-              onMouseLeave={() => setHoveredYear(null)}
+              onMouseEnter={() => onHoverYear?.(b.year)}
+              onMouseLeave={() => onHoverYear?.(null)}
             />
           );
         })}
@@ -319,6 +410,29 @@ function YearRangeTrimmer({
             strokeDasharray="3,2"
             opacity={0.5}
           />
+        )}
+        {/* Animation year indicator (draggable) */}
+        {animatingYear != null && animatingYear >= minY && animatingYear <= maxY && (
+          <>
+            <line
+              x1={yearToX(animatingYear)}
+              y1={0}
+              x2={yearToX(animatingYear)}
+              y2={chartH}
+              stroke="#f59e0b"
+              strokeWidth={2}
+              opacity={0.9}
+            />
+            <rect
+              x={yearToX(animatingYear) - 8}
+              y={0}
+              width={16}
+              height={chartH}
+              fill="transparent"
+              className="cursor-ew-resize"
+              onPointerDown={(e) => { e.preventDefault(); startDrag("animation"); }}
+            />
+          </>
         )}
         {/* Start handle */}
         <line x1={startX} y1={0} x2={startX} y2={chartH} stroke="currentColor" className="text-emerald-600 dark:text-emerald-400" strokeWidth={2} />
@@ -646,7 +760,7 @@ export default function OccurrenceMapRow({
     humanOther: true,
     machineObservation: true,
     preservedSpecimen: false,
-    materialSample: false,
+    materialSample: true,
     other: false,
   });
 
@@ -655,8 +769,10 @@ export default function OccurrenceMapRow({
   const [showUncertaintyCircles, setShowUncertaintyCircles] = useState(false);
   const [colorByYear, setColorByYear] = useState(false);
   const [dedupEnabled, setDedupEnabled] = useState(false);
+  const [basemap, setBasemap] = useState<BasemapKey>("streets");
+  const [shapeByType, setShapeByType] = useState(false);
   const [dedupGrid, setDedupGrid] = useState(0.01); // ~1km
-  const [sampleSize, setSampleSize] = useState(500);
+  const [sampleSize, setSampleSize] = useState(1000);
   const [yearRange, setYearRange] = useState<[number, number]>([0, 9999]);
 
   // "More" popover state
@@ -686,6 +802,27 @@ export default function OccurrenceMapRow({
 
   // Hovered iNat observation (for map highlight)
   const [hoveredObs, setHoveredObs] = useState<InatObservation | null>(null);
+
+  // Hovered year from histogram (for linked brushing)
+  const [hoveredYear, setHoveredYear] = useState<number | null>(null);
+
+  // Hovered observation type pill (for linked brushing)
+  const [hoveredType, setHoveredType] = useState<string | null>(null);
+
+  // Hovered occurrence on map (for hover tooltip)
+  const [hoveredFeature, setHoveredFeature] = useState<OccurrenceFeature | null>(null);
+
+  // Animation state: step through unique sorted dates
+  const [animatingDateIdx, setAnimatingDateIdx] = useState<number | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState(2);
+  const animationRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Touch device detection (no hover tooltips on touch)
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+  useEffect(() => {
+    setIsTouchDevice("ontouchstart" in window || navigator.maxTouchPoints > 0);
+  }, []);
 
   // Lookup: gbifID → InatObservation (for showing photos in map popups)
   const inatPhotosByGbifId = useMemo(() => {
@@ -776,6 +913,42 @@ export default function OccurrenceMapRow({
     fetchInatPhotos(0, pageSize);
   }, [pageSize, fetchInatPhotos]);
 
+  // Animation playback interval (date by date)
+  useEffect(() => {
+    if (!isPlaying) return;
+    if (animatingDateIdx == null) {
+      setAnimatingDateIdx(0);
+    }
+    const totalDays = animationDateRange.totalDays;
+    // Base step: aim for ~20s animation at 1x, scale with speed
+    const baseStep = Math.max(1, Math.ceil(totalDays / (20 * 60)));
+    const step = baseStep * playbackSpeed;
+    animationRef.current = setInterval(() => {
+      setAnimatingDateIdx((prev) => {
+        const cur = prev ?? 0;
+        const next = cur + step;
+        if (next >= totalDays) {
+          setIsPlaying(false);
+          return totalDays - 1;
+        }
+        return next;
+      });
+    }, 16);
+    return () => {
+      if (animationRef.current) clearInterval(animationRef.current);
+    };
+  }, [isPlaying, playbackSpeed]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Stop animation when user manually changes year range
+  const handleYearRangeChange = useCallback((range: [number, number]) => {
+    setYearRange(range);
+    if (isPlaying) {
+      setIsPlaying(false);
+      setAnimatingDateIdx(null);
+      if (animationRef.current) clearInterval(animationRef.current);
+    }
+  }, [isPlaying]);
+
   // Classify an occurrence into one of the 6 checkbox categories
   const getCategory = (o: OccurrenceFeature): keyof typeof checkedTypes => {
     const basis = o.properties.basisOfRecord;
@@ -788,8 +961,17 @@ export default function OccurrenceMapRow({
     return "other";
   };
 
-  // Multi-stage filtering pipeline
-  const filteredOccurrences = useMemo(() => {
+  // Global year bounds (from all occurrences, before filtering)
+  const globalYearBounds = useMemo(() => {
+    const years = occurrences
+      .map((o) => o.properties.year)
+      .filter((y): y is number => y != null);
+    if (years.length === 0) return null;
+    return { min: Math.min(...years), max: Math.max(...years) };
+  }, [occurrences]);
+
+  // Multi-stage filtering pipeline (before animation)
+  const filteredBeforeAnimation = useMemo(() => {
     let result = occurrences;
     // 1. Basis of record checkboxes
     result = result.filter((o) => checkedTypes[getCategory(o)]);
@@ -812,6 +994,60 @@ export default function OccurrenceMapRow({
     }
     return result;
   }, [occurrences, checkedTypes, maxUncertainty, yearRange, dedupEnabled, dedupGrid]);
+
+  // Continuous date range for animation (every day from earliest to latest)
+  const animationDateRange = useMemo(() => {
+    let minDate: string | null = null;
+    let maxDate: string | null = null;
+    for (const o of filteredBeforeAnimation) {
+      const d = o.properties.eventDate ?? (o.properties.year != null ? `${o.properties.year}-01-01` : null);
+      if (d == null) continue;
+      if (minDate == null || d < minDate) minDate = d;
+      if (maxDate == null || d > maxDate) maxDate = d;
+    }
+    if (!minDate || !maxDate) return { start: null, totalDays: 0 };
+    const startMs = new Date(minDate).getTime();
+    const endMs = new Date(maxDate).getTime();
+    const totalDays = Math.floor((endMs - startMs) / 86400000) + 1;
+    return { start: startMs, totalDays };
+  }, [filteredBeforeAnimation]);
+
+  // The current animation date cutoff
+  const animatingDate = useMemo(() => {
+    if (animatingDateIdx == null || animationDateRange.start == null) return null;
+    const idx = Math.min(animatingDateIdx, animationDateRange.totalDays - 1);
+    const d = new Date(animationDateRange.start + idx * 86400000);
+    return d.toISOString().slice(0, 10);
+  }, [animatingDateIdx, animationDateRange]);
+
+  // Scrub animation to a year (from dragging the orange line)
+  const handleAnimationScrub = useCallback((year: number) => {
+    // Pause playback while scrubbing
+    if (isPlaying) {
+      if (animationRef.current) clearInterval(animationRef.current);
+      animationRef.current = null;
+      setIsPlaying(false);
+    }
+    // Convert year to a date index (Jan 1 of that year)
+    if (animationDateRange.start == null) return;
+    const targetMs = new Date(`${year}-01-01`).getTime();
+    const dayIdx = Math.max(0, Math.min(
+      Math.floor((targetMs - animationDateRange.start) / 86400000),
+      animationDateRange.totalDays - 1
+    ));
+    setAnimatingDateIdx(dayIdx);
+  }, [isPlaying, animationDateRange]);
+
+  // Apply animation filter
+  const filteredOccurrences = useMemo(() => {
+    if (animatingDate != null) {
+      return filteredBeforeAnimation.filter((o) => {
+        const d = o.properties.eventDate ?? (o.properties.year != null ? String(o.properties.year) : null);
+        return d != null && d <= animatingDate;
+      });
+    }
+    return filteredBeforeAnimation;
+  }, [filteredBeforeAnimation, animatingDate]);
 
   // Helper to check if an occurrence is after the assessment year
   const isNewRecord = (eventDate?: string): boolean => {
@@ -854,12 +1090,12 @@ export default function OccurrenceMapRow({
     if (!breakdown) return [];
     const humanOtherCount = Math.max(0, breakdown.humanObservation - breakdown.iNaturalist);
     return [
-      { key: "iNaturalist" as const, label: "iNaturalist", count: breakdown.iNaturalist },
-      { key: "humanOther" as const, label: "Human Obs.", count: humanOtherCount },
-      { key: "machineObservation" as const, label: "Machine Obs.", count: breakdown.machineObservation },
-      { key: "preservedSpecimen" as const, label: "Specimens", count: breakdown.preservedSpecimen },
-      { key: "materialSample" as const, label: "Material", count: breakdown.materialSample || 0 },
-      ...(breakdown.other > 0 ? [{ key: "other" as const, label: "Other", count: breakdown.other }] : []),
+      { key: "iNaturalist" as const, label: "iNaturalist", count: breakdown.iNaturalist, tooltip: "iNaturalist: Community science observations with photos" },
+      { key: "humanOther" as const, label: "Human Obs.", count: humanOtherCount, tooltip: "Human Observations: Field surveys, citizen science (non-iNaturalist)" },
+      { key: "machineObservation" as const, label: "Machine Obs.", count: breakdown.machineObservation, tooltip: "Machine Observations: Camera traps, bioacoustics, remote sensing" },
+      { key: "preservedSpecimen" as const, label: "Specimens", count: breakdown.preservedSpecimen, tooltip: "Preserved Specimens: Museum and herbarium collections" },
+      { key: "materialSample" as const, label: "Material", count: breakdown.materialSample || 0, tooltip: "Material Samples: eDNA, tissue samples, blood, feathers" },
+      ...(breakdown.other > 0 ? [{ key: "other" as const, label: "Other", count: breakdown.other, tooltip: "Other: Fossils, living specimens, generic occurrences" }] : []),
     ];
   }, [breakdown]);
 
@@ -907,12 +1143,14 @@ export default function OccurrenceMapRow({
                     <button
                       key={pill.key}
                       onClick={() => toggleType(pill.key)}
+                      onMouseEnter={() => setHoveredType(pill.key)}
+                      onMouseLeave={() => setHoveredType(null)}
                       className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
                         active
                           ? "bg-emerald-50 dark:bg-emerald-900/30 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300"
                           : "bg-transparent border-zinc-300 dark:border-zinc-600 text-zinc-400 dark:text-zinc-500"
                       }`}
-                      title={`${active ? "Hide" : "Show"} ${pill.label} on map`}
+                      title={pill.tooltip}
                     >
                       {pill.label}
                       <span className={`tabular-nums ${active ? "text-emerald-500 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"}`}>
@@ -941,13 +1179,75 @@ export default function OccurrenceMapRow({
                     return true;
                   })}
                   yearRange={yearRange}
-                  onRangeChange={setYearRange}
+                  onRangeChange={handleYearRangeChange}
                   assessmentYear={assessmentYear}
+                  hoveredYear={hoveredYear}
+                  onHoverYear={setHoveredYear}
+                  animatingYear={animatingDate != null
+                    ? parseInt(animatingDate.slice(0, 4)) || null
+                    : null}
+                  onAnimationScrub={handleAnimationScrub}
                   className="w-32 sm:w-44 h-8"
                 />
                 <span className="text-[11px] text-zinc-500 dark:text-zinc-400 tabular-nums whitespace-nowrap">
                   {yearRange[1]}
                 </span>
+                {/* Play/pause animation */}
+                <button
+                  onClick={() => {
+                    if (isPlaying) {
+                      if (animationRef.current) clearInterval(animationRef.current);
+                      animationRef.current = null;
+                      setIsPlaying(false);
+                    } else {
+                      // Reset to start if at the end
+                      if (animatingDateIdx != null && animatingDateIdx >= animationDateRange.totalDays - 1) {
+                        setAnimatingDateIdx(0);
+                      } else if (animatingDateIdx == null) {
+                        setAnimatingDateIdx(0);
+                      }
+                      setIsPlaying(true);
+                    }
+                  }}
+                  className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                  title={isPlaying ? "Pause" : "Play timeline"}
+                  disabled={animationDateRange.totalDays === 0}
+                >
+                  {isPlaying ? (
+                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                  )}
+                </button>
+                {(isPlaying || animatingDateIdx != null) && (
+                  <>
+                    <button
+                      onClick={() => {
+                        if (animationRef.current) clearInterval(animationRef.current);
+                        animationRef.current = null;
+                        setIsPlaying(false);
+                        setAnimatingDateIdx(null);
+                      }}
+                      className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                      title="Stop animation"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                        <rect x="6" y="6" width="12" height="12" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => setPlaybackSpeed((s) => s === 1 ? 2 : s === 2 ? 3 : s === 3 ? 5 : 1)}
+                      className="px-1.5 py-0.5 rounded text-[10px] font-medium tabular-nums border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 dark:text-zinc-400 transition-colors"
+                      title="Playback speed"
+                    >
+                      {playbackSpeed}x
+                    </button>
+                  </>
+                )}
               </div>
 
               {/* Separator */}
@@ -955,7 +1255,7 @@ export default function OccurrenceMapRow({
 
               {/* GPS Uncertainty */}
               <div className="flex items-center gap-1.5">
-                <span className="text-xs text-zinc-500 dark:text-zinc-400">GPS:</span>
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">GPS Uncertainty:</span>
                 <select
                   value={maxUncertainty ?? ""}
                   onChange={(e) => setMaxUncertainty(e.target.value ? parseInt(e.target.value) : null)}
@@ -1021,6 +1321,17 @@ export default function OccurrenceMapRow({
                           <span>new</span>
                         </span>
                       )}
+                    </label>
+
+                    {/* Shape by record type toggle */}
+                    <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={shapeByType}
+                        onChange={(e) => setShapeByType(e.target.checked)}
+                        className="w-3 h-3 rounded accent-blue-500"
+                      />
+                      Shape markers by record type
                     </label>
 
                     {/* Spatial deduplication */}
@@ -1141,11 +1452,12 @@ export default function OccurrenceMapRow({
                   style={{ height: "100%", width: "100%" }}
                 >
                   <TileLayer
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    key={basemap}
+                    attribution={BASEMAP_OPTIONS[basemap].attribution}
+                    url={BASEMAP_OPTIONS[basemap].url}
                   />
                   <LocateControl />
-                  {filteredBbox && <FitBounds bbox={filteredBbox} />}
+                  {filteredBbox && animatingDateIdx == null && <FitBounds bbox={filteredBbox} />}
                   {/* Uncertainty circles (rendered behind markers) */}
                   {showUncertaintyCircles && filteredOccurrences.map((feature, idx) => {
                     const uncertainty = feature.properties.coordinateUncertaintyInMeters;
@@ -1171,11 +1483,20 @@ export default function OccurrenceMapRow({
                     const [lon, lat] = feature.geometry.coordinates;
                     const isNew = isNewRecord(feature.properties.eventDate);
                     const isHighlighted = hoveredObs?.gbifID != null && feature.properties.gbifID === hoveredObs.gbifID;
+                    // Linked brushing: highlight markers matching hovered year or type
+                    const category = classifyOccurrence(feature);
+                    const isTypeBrushed = hoveredType != null && category === hoveredType;
+                    const isTypeDimmed = hoveredType != null && category !== hoveredType;
+                    const isBrushed = (hoveredYear != null && feature.properties.year === hoveredYear) || isTypeBrushed;
+                    const isDimmed = (hoveredYear != null && feature.properties.year !== hoveredYear) || isTypeDimmed;
                     let strokeColor: string;
                     let fillColor: string;
                     if (isHighlighted) {
                       strokeColor = "#1d4ed8";
                       fillColor = "#3b82f6";
+                    } else if (isBrushed) {
+                      strokeColor = "#d97706";
+                      fillColor = "#f59e0b";
                     } else if (colorByYear && feature.properties.year != null) {
                       const colors = yearToColor(feature.properties.year, minYear, maxYear);
                       strokeColor = colors.stroke;
@@ -1186,17 +1507,59 @@ export default function OccurrenceMapRow({
                     }
                     const inatMatch = inatPhotosByGbifId.get(feature.properties.gbifID);
                     const uncertainty = feature.properties.coordinateUncertaintyInMeters;
+                    const isFeatureHovered = hoveredFeature?.properties.gbifID === feature.properties.gbifID;
+                    const isEmphasized = isHighlighted || isFeatureHovered;
+                    const markerSize = isEmphasized ? 10 : (isBrushed ? 10 : (isDimmed ? 6 : 8));
+                    const hoverHandlers = isTouchDevice ? undefined : {
+                      mouseover: () => setHoveredFeature(feature),
+                      mouseout: () => setHoveredFeature(null),
+                    };
+                    const markerOpacity = isDimmed ? 0.15 : 1;
+
+                    if (shapeByType) {
+                      const icon = getShapeIcon(category, fillColor, strokeColor, markerSize) as L.DivIcon;
+                      return (
+                        <Marker
+                          key={feature.properties.gbifID || idx}
+                          position={[lat, lon]}
+                          icon={icon}
+                          opacity={markerOpacity}
+                          eventHandlers={hoverHandlers}
+                        >
+                          <Popup>
+                            <div className="text-sm" style={{ maxWidth: 220 }}>
+                              {inatMatch?.imageUrl && (
+                                <a href={inatMatch.url} target="_blank" rel="noopener noreferrer">
+                                  <img src={inatMatch.imageUrl} alt={`${feature.properties.species} observation`} className="w-full h-32 object-cover rounded mb-2 hover:opacity-90 cursor-pointer" />
+                                </a>
+                              )}
+                              <div className="font-medium italic">{feature.properties.species}</div>
+                              {feature.properties.basisOfRecord && <div className="text-xs text-gray-600">{formatBasisOfRecord(feature.properties.basisOfRecord)}</div>}
+                              {feature.properties.datasetName && <div className="text-xs text-gray-500">{feature.properties.datasetName}</div>}
+                              {feature.properties.eventDate && <div className="text-xs">{feature.properties.eventDate}</div>}
+                              {uncertainty != null && <div className="text-xs text-gray-500">GPS uncertainty: {uncertainty >= 1000 ? `${(uncertainty / 1000).toFixed(1)}km` : `${uncertainty}m`}</div>}
+                              {inatMatch?.observer && <div className="text-xs text-gray-600">by {inatMatch.observer}</div>}
+                              {inatMatch?.location && <div className="text-xs text-gray-500 truncate" title={inatMatch.location}>{inatMatch.location}</div>}
+                              <div className="text-xs text-gray-500">{lat.toFixed(4)}, {lon.toFixed(4)}</div>
+                              <a href={`https://www.gbif.org/occurrence/${feature.properties.gbifID}`} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:text-blue-800 hover:underline mt-1 inline-block">View on GBIF →</a>
+                            </div>
+                          </Popup>
+                        </Marker>
+                      );
+                    }
+
                     return (
                       <CircleMarker
                         key={feature.properties.gbifID || idx}
                         center={[lat, lon]}
-                        radius={isHighlighted ? 9 : 5}
+                        radius={isEmphasized ? 5 : (isBrushed ? 5 : (isDimmed ? 3 : 4))}
                         pathOptions={{
                           color: strokeColor,
                           fillColor: fillColor,
-                          fillOpacity: isHighlighted ? 1 : 0.9,
-                          weight: isHighlighted ? 3 : 2,
+                          fillOpacity: isDimmed ? 0.15 : (isEmphasized || isBrushed ? 1 : 0.9),
+                          weight: isDimmed ? 1 : (isEmphasized || isBrushed ? 3 : 2),
                         }}
+                        eventHandlers={hoverHandlers}
                       >
                         <Popup>
                           <div className="text-sm" style={{ maxWidth: 220 }}>
@@ -1259,7 +1622,7 @@ export default function OccurrenceMapRow({
                     <>
                       <CircleMarker
                         center={[hoveredObs.decimalLatitude, hoveredObs.decimalLongitude]}
-                        radius={7}
+                        radius={4}
                         pathOptions={{
                           color: "#1d4ed8",
                           fillColor: "#3b82f6",
@@ -1276,6 +1639,24 @@ export default function OccurrenceMapRow({
                       )}
                     </>
                   )}
+                  {/* Hover tooltip for map markers */}
+                  {hoveredFeature && !hoveredObs && (() => {
+                    const [hLon, hLat] = hoveredFeature.geometry.coordinates;
+                    const hInat = inatPhotosByGbifId.get(hoveredFeature.properties.gbifID);
+                    return (
+                      <MapOccurrenceTooltip
+                        lat={hLat}
+                        lng={hLon}
+                        species={hoveredFeature.properties.species}
+                        basisOfRecord={hoveredFeature.properties.basisOfRecord}
+                        datasetName={hoveredFeature.properties.datasetName}
+                        eventDate={hoveredFeature.properties.eventDate}
+                        coordinateUncertaintyInMeters={hoveredFeature.properties.coordinateUncertaintyInMeters}
+                        imageUrl={hInat?.imageUrl ?? null}
+                        observer={hInat?.observer ?? null}
+                      />
+                    );
+                  })()}
                 </MapContainer>
               ) : null}
               {!loadingOccurrences && (
@@ -1312,12 +1693,60 @@ export default function OccurrenceMapRow({
                         : `${filteredOccurrences.length} occurrences`}
                     </span>
                   )}
+                  {shapeByType && (
+                    <>
+                      <span className="text-zinc-400">|</span>
+                      {([
+                        ["iNaturalist", "iNat"],
+                        ["humanOther", "Human"],
+                        ["machineObservation", "Machine"],
+                        ["preservedSpecimen", "Specimen"],
+                        ["materialSample", "Material"],
+                      ] as const).map(([cat, label]) => (
+                        <div key={cat} className="flex items-center gap-0.5">
+                          <svg width="10" height="10" viewBox="0 0 12 12" className="shrink-0">
+                            {cat === "iNaturalist" && <circle cx="6" cy="6" r="4.5" fill="#22c55e" stroke="#15803d" strokeWidth="1.5"/>}
+                            {cat === "humanOther" && <><circle cx="6" cy="6" r="4.5" fill="#22c55e" stroke="#15803d" strokeWidth="1.5"/><circle cx="6" cy="6" r="1.5" fill="#15803d"/></>}
+                            {cat === "machineObservation" && <rect x="1.5" y="1.5" width="9" height="9" fill="#22c55e" stroke="#15803d" strokeWidth="1.5"/>}
+                            {cat === "preservedSpecimen" && <rect x="1.8" y="1.8" width="8.4" height="8.4" fill="#22c55e" stroke="#15803d" strokeWidth="1.5" transform="rotate(45 6 6)"/>}
+                            {cat === "materialSample" && <polygon points="6,1.5 10.5,10.5 1.5,10.5" fill="#22c55e" stroke="#15803d" strokeWidth="1.5"/>}
+                          </svg>
+                          <span className="text-[10px]">{label}</span>
+                        </div>
+                      ))}
+                    </>
+                  )}
                   {dedupEnabled && (
                     <span className="text-zinc-400">(deduped)</span>
                   )}
                   {totalOccurrences != null && totalOccurrences > sampleSize && (
                     <span className="text-zinc-400">(sampled)</span>
                   )}
+                </div>
+              )}
+              {/* Animating badge */}
+              {animatingDate != null && (
+                <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[1000] bg-amber-500 text-white text-sm font-bold px-3 py-1 rounded-full shadow-md tabular-nums flex items-center gap-2">
+                  <span>{animatingDate}</span>
+                  <span className="text-xs font-normal text-amber-100">{filteredOccurrences.length} / {filteredBeforeAnimation.length}</span>
+                </div>
+              )}
+              {/* Basemap toggle */}
+              {!loadingOccurrences && mounted && (
+                <div className="absolute top-12 right-2 z-[1000] flex flex-col gap-0.5 bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 p-1">
+                  {(Object.entries(BASEMAP_OPTIONS) as [BasemapKey, (typeof BASEMAP_OPTIONS)[BasemapKey]][]).map(([key, opt]) => (
+                    <button
+                      key={key}
+                      onClick={() => setBasemap(key)}
+                      className={`px-2 py-0.5 rounded text-[10px] transition-colors ${
+                        basemap === key
+                          ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium"
+                          : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
