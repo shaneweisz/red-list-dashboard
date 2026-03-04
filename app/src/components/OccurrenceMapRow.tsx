@@ -115,7 +115,29 @@ function yearToColor(year: number, minYear: number, maxYear: number): { stroke: 
   };
 }
 
-// Inline year range chart with draggable trim handles (like editing a video clip)
+// Category labels for tooltip display
+const CATEGORY_LABELS: Record<string, string> = {
+  iNaturalist: "iNaturalist",
+  humanOther: "Human Obs.",
+  machineObservation: "Machine Obs.",
+  preservedSpecimen: "Specimens",
+  materialSample: "Material",
+  other: "Other",
+};
+
+// Classify an occurrence into one of the 6 checkbox categories (standalone for YearRangeTrimmer)
+function classifyOccurrence(o: OccurrenceFeature): string {
+  const basis = o.properties.basisOfRecord;
+  if (basis === "HUMAN_OBSERVATION") {
+    return o.properties.datasetKey === INAT_DATASET_KEY ? "iNaturalist" : "humanOther";
+  }
+  if (basis === "MACHINE_OBSERVATION") return "machineObservation";
+  if (basis === "PRESERVED_SPECIMEN") return "preservedSpecimen";
+  if (basis === "MATERIAL_SAMPLE") return "materialSample";
+  return "other";
+}
+
+// Inline year range bar chart with draggable trim handles (like editing a video clip)
 function YearRangeTrimmer({
   features,
   yearRange,
@@ -130,16 +152,26 @@ function YearRangeTrimmer({
   className?: string;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const dragging = useRef<"start" | "end" | null>(null);
   const clipId = useRef(`trim-${Math.random().toString(36).slice(2, 8)}`).current;
+  const [hoveredYear, setHoveredYear] = useState<number | null>(null);
 
-  const yearCounts = useMemo(() => {
-    const counts = new Map<number, number>();
+  const yearBreakdown = useMemo(() => {
+    const breakdown = new Map<number, { total: number; categories: Record<string, number> }>();
     for (const f of features) {
       const y = f.properties.year;
-      if (y != null) counts.set(y, (counts.get(y) || 0) + 1);
+      if (y == null) continue;
+      let entry = breakdown.get(y);
+      if (!entry) {
+        entry = { total: 0, categories: {} };
+        breakdown.set(y, entry);
+      }
+      entry.total++;
+      const cat = classifyOccurrence(f);
+      entry.categories[cat] = (entry.categories[cat] || 0) + 1;
     }
-    return counts;
+    return breakdown;
   }, [features]);
 
   const chartW = 200;
@@ -147,7 +179,7 @@ function YearRangeTrimmer({
   const pad = 6; // left/right padding for handle overhang
 
   const chartData = useMemo(() => {
-    const allYears = Array.from(yearCounts.keys()).sort((a, b) => a - b);
+    const allYears = Array.from(yearBreakdown.keys()).sort((a, b) => a - b);
     if (allYears.length < 2) return null;
 
     // Use the union of data range and yearRange so handles are always on-screen
@@ -155,26 +187,23 @@ function YearRangeTrimmer({
     const dataMaxY = allYears[allYears.length - 1];
     const minY = Math.min(dataMinY, yearRange[0]);
     const maxY = Math.max(dataMaxY, yearRange[1]);
-    const maxCount = Math.max(...Array.from(yearCounts.values()));
+    const maxCount = Math.max(...Array.from(yearBreakdown.values()).map((v) => v.total));
 
     const yearToX = (year: number) => pad + ((year - minY) / (maxY - minY)) * (chartW - pad * 2);
+    const totalSpan = maxY - minY + 1;
+    const barW = (chartW - pad * 2) / totalSpan; // flush histogram bars, no gaps
 
-    const points: string[] = [];
+    const bars: { year: number; x: number; barH: number; total: number }[] = [];
     for (let y = dataMinY; y <= dataMaxY; y++) {
-      const count = yearCounts.get(y) || 0;
+      const entry = yearBreakdown.get(y);
+      const count = entry?.total || 0;
       const x = yearToX(y);
-      const cy = chartH - 2 - (maxCount > 0 ? (count / maxCount) * (chartH - 4) : 0);
-      points.push(`${x},${cy}`);
+      const barH = maxCount > 0 ? (count / maxCount) * (chartH - 4) : 0;
+      bars.push({ year: y, x, barH, total: count });
     }
 
-    return {
-      minY,
-      maxY,
-      areaPath: `M${yearToX(dataMinY)},${chartH - 2} L${points.join(" L")} L${yearToX(dataMaxY)},${chartH - 2} Z`,
-      linePath: `M${points.join(" L")}`,
-      yearToX,
-    };
-  }, [yearCounts, yearRange]);
+    return { minY, maxY, bars, barW, yearToX };
+  }, [yearBreakdown, yearRange]);
 
   // Keep yearRange in a ref so drag handlers always see the latest value
   const rangeRef = useRef(yearRange);
@@ -208,29 +237,76 @@ function YearRangeTrimmer({
     document.addEventListener("pointerup", onUp);
   }, [chartData, onRangeChange]);
 
+  // Compute tooltip position (percentage from left) for the hovered bar
+  const tooltipInfo = useMemo(() => {
+    if (hoveredYear == null || !chartData) return null;
+    const entry = yearBreakdown.get(hoveredYear);
+    if (!entry) return null;
+    const x = chartData.yearToX(hoveredYear);
+    const pct = (x / chartW) * 100;
+    return { pct, year: hoveredYear, total: entry.total, categories: entry.categories };
+  }, [hoveredYear, chartData, yearBreakdown]);
+
   if (!chartData) return null;
 
-  const { minY, maxY, areaPath, linePath, yearToX } = chartData;
+  const { minY, maxY, bars, barW, yearToX } = chartData;
   const startX = yearToX(yearRange[0]);
   const endX = yearToX(yearRange[1]);
 
   return (
-    <div className={className}>
+    <div className={`relative ${className || ""}`} ref={wrapperRef}>
       <svg
         ref={svgRef}
         viewBox={`0 0 ${chartW} ${chartH}`}
         className="w-full h-full select-none"
         preserveAspectRatio="none"
       >
-        {/* Dimmed full area */}
-        <path d={areaPath} fill="currentColor" className="text-zinc-300 dark:text-zinc-600" opacity={0.3} />
-        {/* Highlighted selected range — clip to the range */}
+        {/* Dimmed bars */}
+        {bars.map((b) => (
+          <rect
+            key={b.year}
+            x={b.x - barW / 2}
+            y={chartH - 2 - b.barH}
+            width={barW}
+            height={b.barH}
+            fill="currentColor"
+            className="text-zinc-300 dark:text-zinc-600"
+            opacity={0.4}
+          />
+        ))}
+        {/* Highlighted bars in selected range — clip to the range */}
         <clipPath id={clipId}>
           <rect x={startX} y={0} width={Math.max(endX - startX, 0)} height={chartH} />
         </clipPath>
-        <path d={areaPath} fill="currentColor" className="text-emerald-500 dark:text-emerald-400" opacity={0.5} clipPath={`url(#${clipId})`} />
-        <path d={linePath} fill="none" stroke="currentColor" className="text-zinc-400 dark:text-zinc-500" strokeWidth={1} opacity={0.4} />
-        <path d={linePath} fill="none" stroke="currentColor" className="text-emerald-600 dark:text-emerald-400" strokeWidth={1.5} clipPath={`url(#${clipId})`} />
+        {bars.map((b) => (
+          <rect
+            key={b.year}
+            x={b.x - barW / 2}
+            y={chartH - 2 - b.barH}
+            width={barW}
+            height={b.barH}
+            fill="currentColor"
+            className="text-emerald-500 dark:text-emerald-400"
+            opacity={0.7}
+            clipPath={`url(#${clipId})`}
+          />
+        ))}
+        {/* Invisible wider hit targets for hover */}
+        {bars.map((b) => {
+          const hitW = Math.max(barW + 2, (chartW - pad * 2) / bars.length);
+          return (
+            <rect
+              key={`hit-${b.year}`}
+              x={b.x - hitW / 2}
+              y={0}
+              width={hitW}
+              height={chartH}
+              fill="transparent"
+              onMouseEnter={() => setHoveredYear(b.year)}
+              onMouseLeave={() => setHoveredYear(null)}
+            />
+          );
+        })}
         {/* Assessment year marker */}
         {assessmentYear != null && assessmentYear >= minY && assessmentYear <= maxY && (
           <line
@@ -267,6 +343,25 @@ function YearRangeTrimmer({
           onPointerDown={(e) => { e.preventDefault(); startDrag("end"); }}
         />
       </svg>
+      {/* Hover tooltip */}
+      {tooltipInfo && (
+        <div
+          className="absolute bottom-full mb-1 z-50 pointer-events-none"
+          style={{ left: `${tooltipInfo.pct}%`, transform: "translateX(-50%)" }}
+        >
+          <div className="bg-zinc-900 dark:bg-zinc-800 text-white text-[10px] rounded px-2 py-1.5 shadow-lg whitespace-nowrap">
+            <div className="font-medium text-[11px] mb-0.5">{tooltipInfo.year} — {tooltipInfo.total} obs.</div>
+            {Object.entries(tooltipInfo.categories)
+              .sort(([, a], [, b]) => b - a)
+              .map(([cat, count]) => (
+                <div key={cat} className="flex justify-between gap-3 text-zinc-300">
+                  <span>{CATEGORY_LABELS[cat] || cat}</span>
+                  <span className="tabular-nums">{count}</span>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -556,7 +651,7 @@ export default function OccurrenceMapRow({
   });
 
   // Advanced filter state
-  const [maxUncertainty, setMaxUncertainty] = useState<number | null>(null);
+  const [maxUncertainty, setMaxUncertainty] = useState<number | null>(10000);
   const [showUncertaintyCircles, setShowUncertaintyCircles] = useState(false);
   const [colorByYear, setColorByYear] = useState(false);
   const [dedupEnabled, setDedupEnabled] = useState(false);
@@ -855,22 +950,6 @@ export default function OccurrenceMapRow({
                 </button>
                 {moreOpen && (
                   <div className="absolute right-0 top-full mt-1 z-50 w-72 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg p-3 space-y-3">
-                    {/* Year range (larger version) */}
-                    <div>
-                      <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Year Range</span>
-                      <div className="flex items-center gap-1.5 mt-1">
-                        <span className="text-[10px] text-zinc-400 tabular-nums">{yearRange[0]}</span>
-                        <YearRangeTrimmer
-                          features={occurrences.filter((o) => checkedTypes[getCategory(o)])}
-                          yearRange={yearRange}
-                          onRangeChange={setYearRange}
-                          assessmentYear={assessmentYear}
-                          className="flex-1 h-10"
-                        />
-                        <span className="text-[10px] text-zinc-400 tabular-nums">{yearRange[1]}</span>
-                      </div>
-                    </div>
-
                     {/* Show uncertainty radius */}
                     <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer">
                       <input
