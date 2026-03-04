@@ -4,18 +4,8 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 
-// Hook to get responsive grid column count: 3 (mobile portrait), 5 (landscape/sm+)
-function useGridColumns() {
-  const [cols, setCols] = useState(5);
-  useEffect(() => {
-    const smQuery = window.matchMedia("(min-width: 640px)");
-    const update = () => setCols(smQuery.matches ? 5 : 3);
-    update();
-    smQuery.addEventListener("change", update);
-    return () => smQuery.removeEventListener("change", update);
-  }, []);
-  return cols;
-}
+// Fixed page size for iNat photo filmstrip (2 columns x 5 rows on desktop)
+const INAT_PAGE_SIZE = 10;
 
 // Dynamically import Leaflet components
 const MapContainer = dynamic(
@@ -125,122 +115,253 @@ function yearToColor(year: number, minYear: number, maxYear: number): { stroke: 
   };
 }
 
-// Mini bar chart of occurrences per year (pure SVG)
-function YearHistogram({
+// Category labels for tooltip display
+const CATEGORY_LABELS: Record<string, string> = {
+  iNaturalist: "iNaturalist",
+  humanOther: "Human Obs.",
+  machineObservation: "Machine Obs.",
+  preservedSpecimen: "Specimens",
+  materialSample: "Material",
+  other: "Other",
+};
+
+// Classify an occurrence into one of the 6 checkbox categories (standalone for YearRangeTrimmer)
+function classifyOccurrence(o: OccurrenceFeature): string {
+  const basis = o.properties.basisOfRecord;
+  if (basis === "HUMAN_OBSERVATION") {
+    return o.properties.datasetKey === INAT_DATASET_KEY ? "iNaturalist" : "humanOther";
+  }
+  if (basis === "MACHINE_OBSERVATION") return "machineObservation";
+  if (basis === "PRESERVED_SPECIMEN") return "preservedSpecimen";
+  if (basis === "MATERIAL_SAMPLE") return "materialSample";
+  return "other";
+}
+
+// Inline year range bar chart with draggable trim handles (like editing a video clip)
+function YearRangeTrimmer({
   features,
   yearRange,
   onRangeChange,
   assessmentYear,
+  className,
 }: {
   features: OccurrenceFeature[];
   yearRange: [number, number];
   onRangeChange: (range: [number, number]) => void;
   assessmentYear?: number | null;
+  className?: string;
 }) {
-  const yearCounts = useMemo(() => {
-    const counts = new Map<number, number>();
+  const svgRef = useRef<SVGSVGElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const dragging = useRef<"start" | "end" | null>(null);
+  const clipId = useRef(`trim-${Math.random().toString(36).slice(2, 8)}`).current;
+  const [hoveredYear, setHoveredYear] = useState<number | null>(null);
+
+  const yearBreakdown = useMemo(() => {
+    const breakdown = new Map<number, { total: number; categories: Record<string, number> }>();
     for (const f of features) {
       const y = f.properties.year;
-      if (y != null) counts.set(y, (counts.get(y) || 0) + 1);
+      if (y == null) continue;
+      let entry = breakdown.get(y);
+      if (!entry) {
+        entry = { total: 0, categories: {} };
+        breakdown.set(y, entry);
+      }
+      entry.total++;
+      const cat = classifyOccurrence(f);
+      entry.categories[cat] = (entry.categories[cat] || 0) + 1;
     }
-    return counts;
+    return breakdown;
   }, [features]);
 
-  const allYears = useMemo(() => {
-    const years = Array.from(yearCounts.keys()).sort((a: number, b: number) => a - b);
-    return years;
-  }, [yearCounts]);
+  const chartW = 200;
+  const chartH = 32;
+  const pad = 6; // left/right padding for handle overhang
 
-  if (allYears.length < 2) return null;
+  const chartData = useMemo(() => {
+    const allYears = Array.from(yearBreakdown.keys()).sort((a, b) => a - b);
+    if (allYears.length < 2) return null;
 
-  const minY = allYears[0];
-  const maxY = allYears[allYears.length - 1];
-  const maxCount = Math.max(...Array.from(yearCounts.values()));
-  const barW = Math.max(2, Math.min(8, 200 / (maxY - minY + 1)));
-  const chartW = (maxY - minY + 1) * (barW + 1);
-  const chartH = 40;
+    // Use the union of data range and yearRange so handles are always on-screen
+    const dataMinY = allYears[0];
+    const dataMaxY = allYears[allYears.length - 1];
+    const minY = Math.min(dataMinY, yearRange[0]);
+    const maxY = Math.max(dataMaxY, yearRange[1]);
+    const maxCount = Math.max(...Array.from(yearBreakdown.values()).map((v) => v.total));
+
+    const yearToX = (year: number) => pad + ((year - minY) / (maxY - minY)) * (chartW - pad * 2);
+    const totalSpan = maxY - minY + 1;
+    const barW = (chartW - pad * 2) / totalSpan; // flush histogram bars, no gaps
+
+    const bars: { year: number; x: number; barH: number; total: number }[] = [];
+    for (let y = dataMinY; y <= dataMaxY; y++) {
+      const entry = yearBreakdown.get(y);
+      const count = entry?.total || 0;
+      const x = yearToX(y);
+      const barH = maxCount > 0 ? (count / maxCount) * (chartH - 4) : 0;
+      bars.push({ year: y, x, barH, total: count });
+    }
+
+    return { minY, maxY, bars, barW, yearToX };
+  }, [yearBreakdown, yearRange]);
+
+  // Keep yearRange in a ref so drag handlers always see the latest value
+  const rangeRef = useRef(yearRange);
+  rangeRef.current = yearRange;
+
+  const startDrag = useCallback((handle: "start" | "end") => {
+    dragging.current = handle;
+
+    const onMove = (e: PointerEvent) => {
+      if (!svgRef.current) return;
+      const rect = svgRef.current.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * chartW;
+      if (!chartData) return;
+      const t = Math.max(0, Math.min(1, (x - pad) / (chartW - pad * 2)));
+      const year = Math.round(chartData.minY + t * (chartData.maxY - chartData.minY));
+      const cur = rangeRef.current;
+      if (handle === "start") {
+        onRangeChange([Math.min(year, cur[1]), cur[1]]);
+      } else {
+        onRangeChange([cur[0], Math.max(year, cur[0])]);
+      }
+    };
+
+    const onUp = () => {
+      dragging.current = null;
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+    };
+
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+  }, [chartData, onRangeChange]);
+
+  // Compute tooltip position (percentage from left) for the hovered bar
+  const tooltipInfo = useMemo(() => {
+    if (hoveredYear == null || !chartData) return null;
+    const entry = yearBreakdown.get(hoveredYear);
+    if (!entry) return null;
+    const x = chartData.yearToX(hoveredYear);
+    const pct = (x / chartW) * 100;
+    return { pct, year: hoveredYear, total: entry.total, categories: entry.categories };
+  }, [hoveredYear, chartData, yearBreakdown]);
+
+  if (!chartData) return null;
+
+  const { minY, maxY, bars, barW, yearToX } = chartData;
+  const startX = yearToX(yearRange[0]);
+  const endX = yearToX(yearRange[1]);
 
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between text-[10px] text-zinc-400">
-        <span>{minY}</span>
-        <span>{maxY}</span>
-      </div>
-      <div className="overflow-x-auto">
-        <svg width={Math.max(chartW, 100)} height={chartH} className="w-full" viewBox={`0 0 ${Math.max(chartW, 100)} ${chartH}`} preserveAspectRatio="none">
-          {Array.from({ length: maxY - minY + 1 }, (_, i) => {
-            const year = minY + i;
-            const count = yearCounts.get(year) || 0;
-            const h = maxCount > 0 ? (count / maxCount) * (chartH - 2) : 0;
-            const x = i * (barW + 1);
-            const inRange = year >= yearRange[0] && year <= yearRange[1];
-            const isAssessmentYear = assessmentYear != null && year === assessmentYear;
-            return (
-              <rect
-                key={year}
-                x={x}
-                y={chartH - h}
-                width={barW}
-                height={Math.max(h, 0.5)}
-                rx={0.5}
-                className={
-                  isAssessmentYear
-                    ? "fill-blue-400"
-                    : inRange
-                    ? "fill-emerald-500 dark:fill-emerald-400"
-                    : "fill-zinc-300 dark:fill-zinc-600"
-                }
-                opacity={inRange ? 1 : 0.3}
-              >
-                <title>{year}: {count} records</title>
-              </rect>
-            );
-          })}
-          {/* Assessment year marker line */}
-          {assessmentYear != null && assessmentYear >= minY && assessmentYear <= maxY && (
-            <line
-              x1={(assessmentYear - minY) * (barW + 1) + barW / 2}
-              y1={0}
-              x2={(assessmentYear - minY) * (barW + 1) + barW / 2}
-              y2={chartH}
-              stroke="#3b82f6"
-              strokeWidth={1}
-              strokeDasharray="2,2"
-              opacity={0.6}
+    <div className={`relative ${className || ""}`} ref={wrapperRef}>
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${chartW} ${chartH}`}
+        className="w-full h-full select-none"
+        preserveAspectRatio="none"
+      >
+        {/* Dimmed bars */}
+        {bars.map((b) => (
+          <rect
+            key={b.year}
+            x={b.x - barW / 2}
+            y={chartH - 2 - b.barH}
+            width={barW}
+            height={b.barH}
+            fill="currentColor"
+            className="text-zinc-300 dark:text-zinc-600"
+            opacity={0.4}
+          />
+        ))}
+        {/* Highlighted bars in selected range — clip to the range */}
+        <clipPath id={clipId}>
+          <rect x={startX} y={0} width={Math.max(endX - startX, 0)} height={chartH} />
+        </clipPath>
+        {bars.map((b) => (
+          <rect
+            key={b.year}
+            x={b.x - barW / 2}
+            y={chartH - 2 - b.barH}
+            width={barW}
+            height={b.barH}
+            fill="currentColor"
+            className="text-emerald-500 dark:text-emerald-400"
+            opacity={0.7}
+            clipPath={`url(#${clipId})`}
+          />
+        ))}
+        {/* Invisible wider hit targets for hover */}
+        {bars.map((b) => {
+          const hitW = Math.max(barW + 2, (chartW - pad * 2) / bars.length);
+          return (
+            <rect
+              key={`hit-${b.year}`}
+              x={b.x - hitW / 2}
+              y={0}
+              width={hitW}
+              height={chartH}
+              fill="transparent"
+              onMouseEnter={() => setHoveredYear(b.year)}
+              onMouseLeave={() => setHoveredYear(null)}
             />
-          )}
-        </svg>
-      </div>
-      {/* Year range slider */}
-      <div className="flex items-center gap-2">
-        <input
-          type="range"
-          min={minY}
-          max={maxY}
-          value={yearRange[0]}
-          onChange={(e) => {
-            const v = parseInt(e.target.value);
-            onRangeChange([Math.min(v, yearRange[1]), yearRange[1]]);
-          }}
-          className="flex-1 h-1 accent-emerald-500"
-          title={`From: ${yearRange[0]}`}
+          );
+        })}
+        {/* Assessment year marker */}
+        {assessmentYear != null && assessmentYear >= minY && assessmentYear <= maxY && (
+          <line
+            x1={yearToX(assessmentYear)}
+            y1={0}
+            x2={yearToX(assessmentYear)}
+            y2={chartH}
+            stroke="#3b82f6"
+            strokeWidth={1}
+            strokeDasharray="3,2"
+            opacity={0.5}
+          />
+        )}
+        {/* Start handle */}
+        <line x1={startX} y1={0} x2={startX} y2={chartH} stroke="currentColor" className="text-emerald-600 dark:text-emerald-400" strokeWidth={2} />
+        <rect
+          x={startX - 8}
+          y={0}
+          width={16}
+          height={chartH}
+          fill="transparent"
+          className="cursor-ew-resize"
+          onPointerDown={(e) => { e.preventDefault(); startDrag("start"); }}
         />
-        <span className="text-[10px] text-zinc-500 tabular-nums w-20 text-center">
-          {yearRange[0]}–{yearRange[1]}
-        </span>
-        <input
-          type="range"
-          min={minY}
-          max={maxY}
-          value={yearRange[1]}
-          onChange={(e) => {
-            const v = parseInt(e.target.value);
-            onRangeChange([yearRange[0], Math.max(v, yearRange[0])]);
-          }}
-          className="flex-1 h-1 accent-emerald-500"
-          title={`To: ${yearRange[1]}`}
+        {/* End handle */}
+        <line x1={endX} y1={0} x2={endX} y2={chartH} stroke="currentColor" className="text-emerald-600 dark:text-emerald-400" strokeWidth={2} />
+        <rect
+          x={endX - 8}
+          y={0}
+          width={16}
+          height={chartH}
+          fill="transparent"
+          className="cursor-ew-resize"
+          onPointerDown={(e) => { e.preventDefault(); startDrag("end"); }}
         />
-      </div>
+      </svg>
+      {/* Hover tooltip */}
+      {tooltipInfo && (
+        <div
+          className="absolute bottom-full mb-1 z-50 pointer-events-none"
+          style={{ left: `${tooltipInfo.pct}%`, transform: "translateX(-50%)" }}
+        >
+          <div className="bg-zinc-900 dark:bg-zinc-800 text-white text-[10px] rounded px-2 py-1.5 shadow-lg whitespace-nowrap">
+            <div className="font-medium text-[11px] mb-0.5">{tooltipInfo.year} — {tooltipInfo.total} obs.</div>
+            {Object.entries(tooltipInfo.categories)
+              .sort(([, a], [, b]) => b - a)
+              .map(([cat, count]) => (
+                <div key={cat} className="flex justify-between gap-3 text-zinc-300">
+                  <span>{CATEGORY_LABELS[cat] || cat}</span>
+                  <span className="tabular-nums">{count}</span>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -530,8 +651,7 @@ export default function OccurrenceMapRow({
   });
 
   // Advanced filter state
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [maxUncertainty, setMaxUncertainty] = useState<number | null>(null);
+  const [maxUncertainty, setMaxUncertainty] = useState<number | null>(10000);
   const [showUncertaintyCircles, setShowUncertaintyCircles] = useState(false);
   const [colorByYear, setColorByYear] = useState(false);
   const [dedupEnabled, setDedupEnabled] = useState(false);
@@ -539,15 +659,30 @@ export default function OccurrenceMapRow({
   const [sampleSize, setSampleSize] = useState(500);
   const [yearRange, setYearRange] = useState<[number, number]>([0, 9999]);
 
-  // Responsive grid columns and page size (always 2 rows)
-  const gridCols = useGridColumns();
-  const pageSize = gridCols * 2;
+  // "More" popover state
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
+
+  // Fixed page size for filmstrip
+  const pageSize = INAT_PAGE_SIZE;
 
   // iNat photos pagination
   const [inatPage, setInatPage] = useState(0);
   const [inatPhotos, setInatPhotos] = useState<InatObservation[]>([]);
   const [inatTotalCount, setInatTotalCount] = useState(0);
   const [loadingInatPhotos, setLoadingInatPhotos] = useState(false);
+
+  // Close "More" popover on outside click
+  useEffect(() => {
+    if (!moreOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) {
+        setMoreOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [moreOpen]);
 
   // Hovered iNat observation (for map highlight)
   const [hoveredObs, setHoveredObs] = useState<InatObservation | null>(null);
@@ -685,6 +820,20 @@ export default function OccurrenceMapRow({
     return recordYear > assessmentYear;
   };
 
+  // Bounding box from filtered occurrences
+  const filteredBbox = useMemo<[number, number, number, number] | null>(() => {
+    if (filteredOccurrences.length === 0) return bbox; // fall back to API bbox
+    let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
+    for (const f of filteredOccurrences) {
+      const [lon, lat] = f.geometry.coordinates;
+      if (lon < minLon) minLon = lon;
+      if (lon > maxLon) maxLon = lon;
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+    }
+    return [minLon, minLat, maxLon, maxLat];
+  }, [filteredOccurrences, bbox]);
+
   // Year range for color gradient
   const { minYear, maxYear } = useMemo(() => {
     const years = filteredOccurrences
@@ -700,347 +849,281 @@ export default function OccurrenceMapRow({
   const newRecords = filteredOccurrences.filter((o) => isNewRecord(o.properties.eventDate));
   const oldRecords = filteredOccurrences.filter((o) => !isNewRecord(o.properties.eventDate));
 
+  // Pill definitions for the filter bar
+  const pillDefs = useMemo(() => {
+    if (!breakdown) return [];
+    const humanOtherCount = Math.max(0, breakdown.humanObservation - breakdown.iNaturalist);
+    return [
+      { key: "iNaturalist" as const, label: "iNaturalist", count: breakdown.iNaturalist },
+      { key: "humanOther" as const, label: "Human Obs.", count: humanOtherCount },
+      { key: "machineObservation" as const, label: "Machine Obs.", count: breakdown.machineObservation },
+      { key: "preservedSpecimen" as const, label: "Specimens", count: breakdown.preservedSpecimen },
+      { key: "materialSample" as const, label: "Material", count: breakdown.materialSample || 0 },
+      ...(breakdown.other > 0 ? [{ key: "other" as const, label: "Other", count: breakdown.other }] : []),
+    ];
+  }, [breakdown]);
+
+  // Cumulative counts per GPS uncertainty threshold (from type-filtered sample)
+  const uncertaintyCounts = useMemo(() => {
+    const typeFiltered = occurrences.filter((o) => checkedTypes[getCategory(o)]);
+    const counts = new Map<number | null, number>();
+    // "Any" = total type-filtered count
+    counts.set(null, typeFiltered.length);
+    for (const opt of UNCERTAINTY_OPTIONS) {
+      if (opt.value == null) continue;
+      const count = typeFiltered.filter((o) => {
+        const u = o.properties.coordinateUncertaintyInMeters;
+        return u != null && u <= opt.value;
+      }).length;
+      counts.set(opt.value, count);
+    }
+    return counts;
+  }, [occurrences, checkedTypes]);
+
+  const toggleType = (key: keyof typeof checkedTypes) => {
+    setCheckedTypes((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
   return (
-        <div
-          className="bg-zinc-50 dark:bg-zinc-800/50"
-        >
-          <div className="p-2">
-            {/* Main layout: 1/3 left (breakdown + photos), 2/3 right (map) */}
-            <div className="flex flex-col lg:flex-row gap-3">
-              {/* Left column: Breakdown + iNat photos (1/3 width) */}
-              <div className="lg:w-1/3 flex flex-col gap-3 relative z-10">
-                {/* Observation type breakdown */}
-                <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700">
-                  <div className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">Observation Types</div>
-                  {loadingBreakdown ? (
-                    <div className="flex items-center gap-2 text-zinc-400 text-sm py-1">
-                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                      </svg>
-                      Loading...
-                    </div>
-                  ) : breakdown ? (() => {
-                    const baseParams = `taxon_key=${speciesKey}&has_coordinate=true&has_geospatial_issue=false${countryCode ? `&country=${countryCode}` : ''}`;
-                    const humanOtherCount = Math.max(0, breakdown.humanObservation - breakdown.iNaturalist);
-
-                    // Calculate total from checked types only
-                    const checkedTotal =
-                      (checkedTypes.iNaturalist ? breakdown.iNaturalist : 0) +
-                      (checkedTypes.humanOther ? humanOtherCount : 0) +
-                      (checkedTypes.machineObservation ? breakdown.machineObservation : 0) +
-                      (checkedTypes.preservedSpecimen ? breakdown.preservedSpecimen : 0) +
-                      (checkedTypes.materialSample ? (breakdown.materialSample || 0) : 0) +
-                      (checkedTypes.other ? breakdown.other : 0);
-
-                    const toggleType = (key: keyof typeof checkedTypes) => {
-                      setCheckedTypes((prev) => ({ ...prev, [key]: !prev[key] }));
-                    };
-
-                    const rowClass = (checked: boolean) =>
-                      `flex items-center gap-2 transition-opacity ${checked ? '' : 'opacity-40'}`;
-
-                    return (
-                    <div className="space-y-1.5 text-sm">
-                      {/* Human Observations (iNaturalist) */}
-                      <div className={rowClass(checkedTypes.iNaturalist)}>
-                        <input
-                          type="checkbox"
-                          checked={checkedTypes.iNaturalist}
-                          onChange={() => toggleType('iNaturalist')}
-                          className="w-3.5 h-3.5 rounded accent-blue-500 shrink-0"
-                        />
-                        <a
-                          href={`https://www.gbif.org/occurrence/search?${baseParams}&dataset_key=50c9509d-22c7-4a22-a47d-8c48425ef4a7`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex justify-between flex-1 text-zinc-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
-                        >
-                          <span>Human Obs. (iNaturalist)</span>
-                          <span className="tabular-nums">{breakdown.iNaturalist.toLocaleString()}</span>
-                        </a>
-                      </div>
-
-                      {/* Human Observations (other) */}
-                      <div className={rowClass(checkedTypes.humanOther)}>
-                        <input
-                          type="checkbox"
-                          checked={checkedTypes.humanOther}
-                          onChange={() => toggleType('humanOther')}
-                          className="w-3.5 h-3.5 rounded accent-blue-500 shrink-0"
-                        />
-                        <a
-                          href={`https://www.gbif.org/occurrence/search?${baseParams}&basis_of_record=HUMAN_OBSERVATION`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex justify-between flex-1 text-zinc-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
-                        >
-                          <span>Human Obs. (other)</span>
-                          <span className="tabular-nums">{humanOtherCount.toLocaleString()}</span>
-                        </a>
-                      </div>
-
-                      {/* Machine Observations (camera traps, acoustic sensors) */}
-                      <div className={rowClass(checkedTypes.machineObservation)}>
-                        <input
-                          type="checkbox"
-                          checked={checkedTypes.machineObservation}
-                          onChange={() => toggleType('machineObservation')}
-                          className="w-3.5 h-3.5 rounded accent-blue-500 shrink-0"
-                        />
-                        <a
-                          href={`https://www.gbif.org/occurrence/search?${baseParams}&basis_of_record=MACHINE_OBSERVATION`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex justify-between flex-1 text-zinc-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
-                        >
-                          <span>Machine Obs. (camera trap / acoustic)</span>
-                          <span className="tabular-nums">{breakdown.machineObservation.toLocaleString()}</span>
-                        </a>
-                      </div>
-
-                      {/* Preserved Specimens (museum collections) */}
-                      <div className={rowClass(checkedTypes.preservedSpecimen)}>
-                        <input
-                          type="checkbox"
-                          checked={checkedTypes.preservedSpecimen}
-                          onChange={() => toggleType('preservedSpecimen')}
-                          className="w-3.5 h-3.5 rounded accent-blue-500 shrink-0"
-                        />
-                        <a
-                          href={`https://www.gbif.org/occurrence/search?${baseParams}&basis_of_record=PRESERVED_SPECIMEN`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex justify-between flex-1 text-zinc-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
-                        >
-                          <span>Preserved Specimens (museum)</span>
-                          <span className="tabular-nums">{breakdown.preservedSpecimen.toLocaleString()}</span>
-                        </a>
-                      </div>
-
-                      {/* Material Samples (eDNA / tissue) */}
-                      <div className={rowClass(checkedTypes.materialSample)}>
-                        <input
-                          type="checkbox"
-                          checked={checkedTypes.materialSample}
-                          onChange={() => toggleType('materialSample')}
-                          className="w-3.5 h-3.5 rounded accent-blue-500 shrink-0"
-                        />
-                        <a
-                          href={`https://www.gbif.org/occurrence/search?${baseParams}&basis_of_record=MATERIAL_SAMPLE`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex justify-between flex-1 text-zinc-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
-                        >
-                          <span>Material Samples (eDNA / tissue)</span>
-                          <span className="tabular-nums">{(breakdown.materialSample || 0).toLocaleString()}</span>
-                        </a>
-                      </div>
-
-                      {/* Other */}
-                      <div className={rowClass(checkedTypes.other)}>
-                        <input
-                          type="checkbox"
-                          checked={checkedTypes.other}
-                          onChange={() => toggleType('other')}
-                          className="w-3.5 h-3.5 rounded accent-blue-500 shrink-0"
-                        />
-                        <div className="flex justify-between flex-1 text-zinc-600 dark:text-zinc-400">
-                          <span>Other</span>
-                          <span className="tabular-nums">{breakdown.other.toLocaleString()}</span>
-                        </div>
-                      </div>
-
-                      {/* Total (of checked types) */}
-                      <div className="border-t border-zinc-200 dark:border-zinc-700 pt-1 mt-1 flex justify-between font-medium text-zinc-700 dark:text-zinc-300">
-                        <span>Total</span>
-                        <span className="tabular-nums">{checkedTotal.toLocaleString()}</span>
-                      </div>
-                    </div>
-                    );
-                  })() : null}
+    <div className="bg-zinc-50 dark:bg-zinc-800/50">
+      <div className="p-2">
+        <div className="flex flex-col gap-2">
+          {/* ── Filter Bar ── */}
+          <div className="p-2.5 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700">
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Observation type pills */}
+              {loadingBreakdown ? (
+                <div className="flex items-center gap-2 text-zinc-400 text-xs">
+                  <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Loading...
                 </div>
-
-                {/* Advanced Filters (collapsible) */}
-                <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden">
-                  <button
-                    onClick={() => setAdvancedOpen(!advancedOpen)}
-                    className="w-full px-3 py-2 flex items-center justify-between text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
-                  >
-                    <span>Advanced Filters</span>
-                    <svg
-                      className={`w-4 h-4 transition-transform ${advancedOpen ? 'rotate-180' : ''}`}
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={2}
+              ) : (
+                pillDefs.map((pill) => {
+                  const active = checkedTypes[pill.key];
+                  return (
+                    <button
+                      key={pill.key}
+                      onClick={() => toggleType(pill.key)}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                        active
+                          ? "bg-emerald-50 dark:bg-emerald-900/30 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300"
+                          : "bg-transparent border-zinc-300 dark:border-zinc-600 text-zinc-400 dark:text-zinc-500"
+                      }`}
+                      title={`${active ? "Hide" : "Show"} ${pill.label} on map`}
                     >
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
-                  {advancedOpen && (
-                    <div className="px-3 pb-3 space-y-3 border-t border-zinc-100 dark:border-zinc-800">
-                      {/* GPS Uncertainty */}
-                      <div className="pt-2">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">GPS Uncertainty</span>
-                          <select
-                            value={maxUncertainty ?? ""}
-                            onChange={(e) => setMaxUncertainty(e.target.value ? parseInt(e.target.value) : null)}
-                            className="text-xs px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
-                          >
-                            {UNCERTAINTY_OPTIONS.map((opt) => (
-                              <option key={opt.label} value={opt.value ?? ""}>{opt.label}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={showUncertaintyCircles}
-                            onChange={(e) => setShowUncertaintyCircles(e.target.checked)}
-                            className="w-3 h-3 rounded accent-blue-500"
-                          />
-                          Show uncertainty radius on map
-                        </label>
-                      </div>
+                      {pill.label}
+                      <span className={`tabular-nums ${active ? "text-emerald-500 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"}`}>
+                        {pill.count.toLocaleString()}
+                      </span>
+                    </button>
+                  );
+                })
+              )}
 
-                      {/* Year Range + Histogram */}
-                      <div>
-                        <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Year Range</span>
-                        <YearHistogram
-                          features={occurrences.filter((o) => checkedTypes[getCategory(o)])}
-                          yearRange={yearRange}
-                          onRangeChange={setYearRange}
-                          assessmentYear={assessmentYear}
-                        />
-                      </div>
+              {/* Separator */}
+              <div className="w-px h-5 bg-zinc-200 dark:bg-zinc-700 mx-0.5 hidden sm:block" />
 
-                      {/* Color by year toggle */}
+              {/* Year range trimmer */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-zinc-500 dark:text-zinc-400 tabular-nums whitespace-nowrap">
+                  {yearRange[0]}
+                </span>
+                <YearRangeTrimmer
+                  features={occurrences.filter((o) => {
+                    if (!checkedTypes[getCategory(o)]) return false;
+                    if (maxUncertainty != null) {
+                      const u = o.properties.coordinateUncertaintyInMeters;
+                      if (u == null || u > maxUncertainty) return false;
+                    }
+                    return true;
+                  })}
+                  yearRange={yearRange}
+                  onRangeChange={setYearRange}
+                  assessmentYear={assessmentYear}
+                  className="w-32 sm:w-44 h-8"
+                />
+                <span className="text-[11px] text-zinc-500 dark:text-zinc-400 tabular-nums whitespace-nowrap">
+                  {yearRange[1]}
+                </span>
+              </div>
+
+              {/* Separator */}
+              <div className="w-px h-5 bg-zinc-200 dark:bg-zinc-700 mx-0.5 hidden sm:block" />
+
+              {/* GPS Uncertainty */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">GPS:</span>
+                <select
+                  value={maxUncertainty ?? ""}
+                  onChange={(e) => setMaxUncertainty(e.target.value ? parseInt(e.target.value) : null)}
+                  className="text-xs px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
+                >
+                  {UNCERTAINTY_OPTIONS.map((opt) => {
+                    const count = uncertaintyCounts.get(opt.value ?? null);
+                    return (
+                      <option key={opt.label} value={opt.value ?? ""}>
+                        {opt.label}{count != null ? ` (${count})` : ""}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {/* Separator */}
+              <div className="w-px h-5 bg-zinc-200 dark:bg-zinc-700 mx-0.5 hidden sm:block" />
+
+              {/* "More" popover trigger */}
+              <div className="relative" ref={moreRef}>
+                <button
+                  onClick={() => setMoreOpen(!moreOpen)}
+                  className={`p-1.5 rounded border transition-colors ${
+                    moreOpen
+                      ? "bg-zinc-100 dark:bg-zinc-800 border-zinc-400 dark:border-zinc-500"
+                      : "border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                  }`}
+                  title="More filters"
+                >
+                  <svg className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </button>
+                {moreOpen && (
+                  <div className="absolute right-0 top-full mt-1 z-50 w-72 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg p-3 space-y-3">
+                    {/* Show uncertainty radius */}
+                    <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={showUncertaintyCircles}
+                        onChange={(e) => setShowUncertaintyCircles(e.target.checked)}
+                        className="w-3 h-3 rounded accent-blue-500"
+                      />
+                      Show uncertainty radius on map
+                    </label>
+
+                    {/* Color by year toggle */}
+                    <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={colorByYear}
+                        onChange={(e) => setColorByYear(e.target.checked)}
+                        className="w-3 h-3 rounded accent-blue-500"
+                      />
+                      Color markers by year
+                      {colorByYear && (
+                        <span className="ml-auto flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full" style={{ background: "hsl(30, 60%, 50%)" }} />
+                          <span>old</span>
+                          <span className="w-2 h-2 rounded-full" style={{ background: "hsl(142, 80%, 50%)" }} />
+                          <span>new</span>
+                        </span>
+                      )}
+                    </label>
+
+                    {/* Spatial deduplication */}
+                    <div>
                       <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={colorByYear}
-                          onChange={(e) => setColorByYear(e.target.checked)}
+                          checked={dedupEnabled}
+                          onChange={(e) => setDedupEnabled(e.target.checked)}
                           className="w-3 h-3 rounded accent-blue-500"
                         />
-                        Color markers by year
-                        {colorByYear && (
-                          <span className="ml-auto flex items-center gap-1">
-                            <span className="w-2 h-2 rounded-full" style={{ background: "hsl(30, 60%, 50%)" }} />
-                            <span>old</span>
-                            <span className="w-2 h-2 rounded-full" style={{ background: "hsl(142, 80%, 50%)" }} />
-                            <span>new</span>
-                          </span>
-                        )}
+                        Deduplicate nearby points
                       </label>
-
-                      {/* Spatial deduplication */}
-                      <div>
-                        <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={dedupEnabled}
-                            onChange={(e) => setDedupEnabled(e.target.checked)}
-                            className="w-3 h-3 rounded accent-blue-500"
-                          />
-                          Deduplicate nearby points
-                        </label>
-                        {dedupEnabled && (
-                          <div className="mt-1 flex items-center gap-1.5 ml-[18px]">
-                            <span className="text-[10px] text-zinc-400">Grid:</span>
-                            {DEDUP_OPTIONS.map((opt) => (
-                              <button
-                                key={opt.value}
-                                onClick={() => setDedupGrid(opt.value)}
-                                className={`text-[10px] px-1.5 py-0.5 rounded border ${
-                                  dedupGrid === opt.value
-                                    ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300'
-                                    : 'border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800'
-                                }`}
-                              >
-                                {opt.label}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Sample size */}
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Sample size</span>
-                        <select
-                          value={sampleSize}
-                          onChange={(e) => setSampleSize(parseInt(e.target.value))}
-                          className="text-xs px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
-                        >
-                          {SAMPLE_SIZE_OPTIONS.map((n) => (
-                            <option key={n} value={n}>{n.toLocaleString()}</option>
+                      {dedupEnabled && (
+                        <div className="mt-1 flex items-center gap-1.5 ml-[18px]">
+                          <span className="text-[10px] text-zinc-400">Grid:</span>
+                          {DEDUP_OPTIONS.map((opt) => (
+                            <button
+                              key={opt.value}
+                              onClick={() => setDedupGrid(opt.value)}
+                              className={`text-[10px] px-1.5 py-0.5 rounded border ${
+                                dedupGrid === opt.value
+                                  ? "bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300"
+                                  : "border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
                           ))}
-                        </select>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* iNaturalist photos grid with pagination */}
-                {inatPhotos.length > 0 && (
-                  <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 flex-1 overflow-hidden">
-                    <div className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span>iNaturalist</span>
-                        <span className="text-zinc-400 text-xs">({inatTotalCount.toLocaleString()} total)</span>
-                      </div>
-                      {/* Pagination controls */}
-                      {inatTotalCount > pageSize && (
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            onClick={() => {
-                              const newPage = inatPage - 1;
-                              setInatPage(newPage);
-                              fetchInatPhotos(newPage, pageSize);
-                            }}
-                            disabled={inatPage === 0 || loadingInatPhotos}
-                            className="px-1.5 py-0.5 text-xs rounded border border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
-                          >
-                            ‹ Prev
-                          </button>
-                          <span className="text-xs text-zinc-400 tabular-nums">
-                            {inatPage + 1} / {Math.ceil(inatTotalCount / pageSize)}
-                          </span>
-                          <button
-                            onClick={() => {
-                              const newPage = inatPage + 1;
-                              setInatPage(newPage);
-                              fetchInatPhotos(newPage, pageSize);
-                            }}
-                            disabled={(inatPage + 1) * pageSize >= inatTotalCount || loadingInatPhotos}
-                            className="px-1.5 py-0.5 text-xs rounded border border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
-                          >
-                            Next ›
-                          </button>
                         </div>
                       )}
                     </div>
-                    <div className={`grid grid-cols-3 sm:grid-cols-5 gap-1.5 ${loadingInatPhotos ? 'opacity-50' : ''}`}>
-                      {inatPhotos.slice(0, pageSize).map((obs, idx) => (
-                        <InatPhotoWithPreview
-                          key={`${inatPage}-${idx}`}
-                          obs={obs}
-                          idx={idx}
-                          onHover={() => setHoveredObs(obs)}
-                          onLeave={() => setHoveredObs(null)}
-                        />
-                      ))}
-                    </div>
+
                   </div>
                 )}
               </div>
+            </div>
+          </div>
 
-              {/* Right column: Map (2/3 width) */}
-              <div className="lg:w-2/3 flex flex-col gap-2">
-                {/* Map */}
-                <div className="h-[300px] md:h-[400px] rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 relative isolate z-0">
+          {/* ── iNat filmstrip (left) + Map (right) ── */}
+          <div className="flex flex-col sm:flex-row gap-2">
+            {/* iNat photo filmstrip — 2-col grid on sm+, horizontal row on mobile */}
+            {inatPhotos.length > 0 && (
+              <div className="sm:w-[10.5rem] shrink-0 flex flex-col bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden relative z-10">
+                {/* Header with count */}
+                <div className="px-2 py-1.5 text-[10px] font-medium text-zinc-500 dark:text-zinc-400 text-center border-b border-zinc-100 dark:border-zinc-800">
+                  iNaturalist <span className="tabular-nums">({inatTotalCount.toLocaleString()})</span>
+                </div>
+                {/* Photos — horizontal scroll on mobile, 2-col grid on sm+ */}
+                <div className={`flex sm:grid sm:grid-cols-2 gap-1.5 p-1.5 overflow-x-auto sm:overflow-x-visible sm:overflow-y-visible flex-1 ${loadingInatPhotos ? "opacity-50" : ""}`}>
+                  {inatPhotos.slice(0, pageSize).map((obs, idx) => (
+                    <div key={`${inatPage}-${idx}`} className="w-14 sm:w-full shrink-0">
+                      <InatPhotoWithPreview
+                        obs={obs}
+                        idx={idx}
+                        onHover={() => setHoveredObs(obs)}
+                        onLeave={() => setHoveredObs(null)}
+                      />
+                    </div>
+                  ))}
+                </div>
+                {/* Pagination arrows */}
+                {inatTotalCount > pageSize && (
+                  <div className="flex items-center justify-center gap-1 px-1.5 py-1 border-t border-zinc-100 dark:border-zinc-800">
+                    <button
+                      onClick={() => {
+                        const newPage = inatPage - 1;
+                        setInatPage(newPage);
+                        fetchInatPhotos(newPage, pageSize);
+                      }}
+                      disabled={inatPage === 0 || loadingInatPhotos}
+                      className="p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed"
+                      title="Previous page"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </button>
+                    <span className="text-[10px] text-zinc-400 tabular-nums">
+                      {inatPage + 1}/{Math.ceil(inatTotalCount / pageSize)}
+                    </span>
+                    <button
+                      onClick={() => {
+                        const newPage = inatPage + 1;
+                        setInatPage(newPage);
+                        fetchInatPhotos(newPage, pageSize);
+                      }}
+                      disabled={(inatPage + 1) * pageSize >= inatTotalCount || loadingInatPhotos}
+                      className="p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed"
+                      title="Next page"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Map */}
+            <div className="flex-1 flex flex-col rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 relative isolate z-0">
+            <div className="h-[300px] sm:h-[450px] flex-1 relative">
               {loadingOccurrences ? (
                 <div className="flex items-center justify-center h-full bg-zinc-100 dark:bg-zinc-800">
                   <div className="flex items-center gap-2 text-zinc-400 text-sm">
@@ -1062,7 +1145,7 @@ export default function OccurrenceMapRow({
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   />
                   <LocateControl />
-                  {bbox && <FitBounds bbox={bbox} />}
+                  {filteredBbox && <FitBounds bbox={filteredBbox} />}
                   {/* Uncertainty circles (rendered behind markers) */}
                   {showUncertaintyCircles && filteredOccurrences.map((feature, idx) => {
                     const uncertainty = feature.properties.coordinateUncertaintyInMeters;
@@ -1233,14 +1316,35 @@ export default function OccurrenceMapRow({
                     <span className="text-zinc-400">(deduped)</span>
                   )}
                   {totalOccurrences != null && totalOccurrences > sampleSize && (
-                    <span className="text-zinc-400">sample of {totalOccurrences.toLocaleString()}</span>
+                    <span className="text-zinc-400">(sampled)</span>
                   )}
                 </div>
               )}
-                </div>
-              </div>
             </div>
+            {/* Sample size bar */}
+            {totalOccurrences != null && totalOccurrences > sampleSize && (
+              <div className="flex items-center justify-between px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 border-t border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-300">
+                <span>
+                  Sampled <strong>{sampleSize.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> records
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span>Increase sample:</span>
+                  <select
+                    value={sampleSize}
+                    onChange={(e) => setSampleSize(parseInt(e.target.value))}
+                    className="text-xs px-1.5 py-0.5 rounded border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-300"
+                  >
+                    {SAMPLE_SIZE_OPTIONS.map((n) => (
+                      <option key={n} value={n}>{n.toLocaleString()}</option>
+                    ))}
+                  </select>
+                </span>
+              </div>
+            )}
+            </div>{/* close outer map flex-col div */}
           </div>
         </div>
+      </div>
+    </div>
   );
 }
