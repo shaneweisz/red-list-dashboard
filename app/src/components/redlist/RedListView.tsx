@@ -1785,6 +1785,7 @@ export default function RedListView() {
                                 speciesKey={gbifSpeciesKey}
                                 mounted={mounted}
                                 assessmentYear={assessmentYear}
+                                assessmentDate={s.assessment_date}
                               />
                             </div>
                           ) : (stackedDetailView || activeDetailTab === "gbif") && (

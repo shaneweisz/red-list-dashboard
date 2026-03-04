@@ -46,6 +46,47 @@ const MapOccurrenceTooltip = dynamic(
   { ssr: false }
 );
 
+// Syncs two Leaflet maps: when one moves/zooms, the other follows
+function MapSync({ syncRef }: { syncRef: React.MutableRefObject<{ center: [number, number]; zoom: number } | null> }) {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { useMap } = require("react-leaflet");
+  const map = useMap();
+  const isSyncing = useRef(false);
+
+  useEffect(() => {
+    const onMoveEnd = () => {
+      if (isSyncing.current) return;
+      const c = map.getCenter();
+      syncRef.current = { center: [c.lat, c.lng], zoom: map.getZoom() };
+    };
+    map.on("moveend", onMoveEnd);
+    map.on("zoomend", onMoveEnd);
+    return () => {
+      map.off("moveend", onMoveEnd);
+      map.off("zoomend", onMoveEnd);
+    };
+  }, [map, syncRef]);
+
+  // Poll for changes from the other map (lightweight — only sets view when different)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const s = syncRef.current;
+      if (!s) return;
+      const c = map.getCenter();
+      const z = map.getZoom();
+      if (Math.abs(c.lat - s.center[0]) > 0.0001 || Math.abs(c.lng - s.center[1]) > 0.0001 || z !== s.zoom) {
+        isSyncing.current = true;
+        map.setView(s.center, s.zoom, { animate: false });
+        // Reset after Leaflet fires its events
+        requestAnimationFrame(() => { isSyncing.current = false; });
+      }
+    }, 50);
+    return () => clearInterval(interval);
+  }, [map, syncRef]);
+
+  return null;
+}
+
 const INAT_DATASET_KEY = "50c9509d-22c7-4a22-a47d-8c48425ef4a7";
 
 interface OccurrenceFeature {
@@ -506,6 +547,7 @@ interface OccurrenceMapRowProps {
   countryCode?: string | null;
   mounted: boolean;
   assessmentYear?: number | null;
+  assessmentDate?: string | null;
 }
 
 // Convert iNaturalist photo URLs to a smaller size for thumbnails
@@ -728,6 +770,7 @@ export default function OccurrenceMapRow({
   countryCode,
   mounted,
   assessmentYear,
+  assessmentDate,
 }: OccurrenceMapRowProps) {
   const [occurrences, setOccurrences] = useState<OccurrenceFeature[]>([]);
   const [breakdown, setBreakdown] = useState<RecordTypeBreakdown | null>(null);
@@ -751,6 +794,9 @@ export default function OccurrenceMapRow({
   const [dedupEnabled, setDedupEnabled] = useState(false);
   const [basemap, setBasemap] = useState<BasemapKey>("streets");
   const [shapeByType, setShapeByType] = useState(false);
+  const [splitView, setSplitView] = useState(false);
+  const [splitDate, setSplitDate] = useState<string>(assessmentDate?.split("T")[0] || "");
+  const mapSyncRef = useRef<{ center: [number, number]; zoom: number } | null>(null);
   const [dedupGrid, setDedupGrid] = useState(0.01); // ~1km
   const [sampleSize, setSampleSize] = useState(1000);
   const [yearRange, setYearRange] = useState<[number, number]>([0, 9999]);
@@ -942,15 +988,6 @@ export default function OccurrenceMapRow({
     return "other";
   };
 
-  // Global year bounds (from all occurrences, before filtering)
-  const globalYearBounds = useMemo(() => {
-    const years = occurrences
-      .map((o) => o.properties.year)
-      .filter((y): y is number => y != null);
-    if (years.length === 0) return null;
-    return { min: Math.min(...years), max: Math.max(...years) };
-  }, [occurrences]);
-
   // Multi-stage filtering pipeline (before animation)
   const filteredBeforeAnimation = useMemo(() => {
     let result = occurrences;
@@ -1051,6 +1088,41 @@ export default function OccurrenceMapRow({
     return [minLon, minLat, maxLon, maxLat];
   }, [filteredOccurrences, bbox]);
 
+  // Split view: partition occurrences by exact assessment date
+  const { preAssessmentOccs, postAssessmentOccs, preBbox, postBbox } = useMemo(() => {
+    if (!splitView || !splitDate) {
+      return { preAssessmentOccs: [], postAssessmentOccs: [], preBbox: null, postBbox: null };
+    }
+    const pre: OccurrenceFeature[] = [];
+    const post: OccurrenceFeature[] = [];
+    for (const o of filteredOccurrences) {
+      const d = o.properties.eventDate;
+      if (d && d > splitDate) {
+        post.push(o);
+      } else {
+        pre.push(o);
+      }
+    }
+    const computeBbox = (features: OccurrenceFeature[]): [number, number, number, number] | null => {
+      if (features.length === 0) return bbox;
+      let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
+      for (const f of features) {
+        const [lon, lat] = f.geometry.coordinates;
+        if (lon < minLon) minLon = lon;
+        if (lon > maxLon) maxLon = lon;
+        if (lat < minLat) minLat = lat;
+        if (lat > maxLat) maxLat = lat;
+      }
+      return [minLon, minLat, maxLon, maxLat];
+    };
+    return {
+      preAssessmentOccs: pre,
+      postAssessmentOccs: post,
+      preBbox: computeBbox(pre),
+      postBbox: computeBbox(post),
+    };
+  }, [splitView, splitDate, filteredOccurrences, bbox]);
+
   // Year range for color gradient
   const { minYear, maxYear } = useMemo(() => {
     const years = filteredOccurrences
@@ -1099,6 +1171,311 @@ export default function OccurrenceMapRow({
 
   const toggleType = (key: keyof typeof checkedTypes) => {
     setCheckedTypes((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  // Reusable map panel renderer (used once in normal mode, twice in split view)
+  const renderMapPanel = (
+    panelOccurrences: OccurrenceFeature[],
+    panelBbox: [number, number, number, number] | null,
+    label: string | null,
+  ) => {
+    const panelNewRecords = panelOccurrences.filter((o) => isNewRecord(o.properties.eventDate));
+    const panelOldRecords = panelOccurrences.filter((o) => !isNewRecord(o.properties.eventDate));
+    return (
+      <div className="flex-1 flex flex-col rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 relative isolate z-0">
+        <div className={`${splitView ? "h-[250px] sm:h-auto sm:min-h-[400px]" : "h-[300px] sm:h-auto sm:min-h-[450px]"} sm:flex-1 relative`}>
+          {loadingOccurrences ? (
+            <div className="flex items-center justify-center h-full bg-zinc-100 dark:bg-zinc-800">
+              <div className="flex items-center gap-2 text-zinc-400 text-sm">
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                Loading occurrences...
+              </div>
+            </div>
+          ) : mounted ? (
+            <MapContainer
+              center={[20, 0]}
+              zoom={2}
+              style={{ height: "100%", width: "100%" }}
+            >
+              <TileLayer
+                key={basemap}
+                attribution={BASEMAP_OPTIONS[basemap].attribution}
+                url={BASEMAP_OPTIONS[basemap].url}
+              />
+              {splitView && <MapSync syncRef={mapSyncRef} />}
+              <LocateControl />
+              {panelBbox && animatingDateIdx == null && <FitBounds bbox={panelBbox} />}
+              {/* Uncertainty circles */}
+              {showUncertaintyCircles && panelOccurrences.map((feature, idx) => {
+                const uncertainty = feature.properties.coordinateUncertaintyInMeters;
+                if (uncertainty == null || uncertainty <= 0) return null;
+                const [lon, lat] = feature.geometry.coordinates;
+                return (
+                  <Circle
+                    key={`unc-${feature.properties.gbifID || idx}`}
+                    center={[lat, lon]}
+                    radius={uncertainty}
+                    pathOptions={{
+                      color: "#6366f1",
+                      fillColor: "#6366f1",
+                      fillOpacity: 0.06,
+                      weight: 0.5,
+                      opacity: 0.3,
+                    }}
+                  />
+                );
+              })}
+              {/* Render markers */}
+              {panelOccurrences.map((feature, idx) => {
+                const [lon, lat] = feature.geometry.coordinates;
+                const isNew = isNewRecord(feature.properties.eventDate);
+                const isHighlighted = hoveredObs?.gbifID != null && feature.properties.gbifID === hoveredObs.gbifID;
+                const category = classifyOccurrence(feature);
+                const isTypeBrushed = hoveredType != null && category === hoveredType;
+                const isTypeDimmed = hoveredType != null && category !== hoveredType;
+                const isBrushed = (hoveredYear != null && feature.properties.year === hoveredYear) || isTypeBrushed;
+                const isDimmed = (hoveredYear != null && feature.properties.year !== hoveredYear) || isTypeDimmed;
+                let strokeColor: string;
+                let fillColor: string;
+                if (isHighlighted) {
+                  strokeColor = "#1d4ed8";
+                  fillColor = "#3b82f6";
+                } else if (isBrushed) {
+                  strokeColor = "#d97706";
+                  fillColor = "#f59e0b";
+                } else if (colorByYear && feature.properties.year != null) {
+                  const colors = yearToColor(feature.properties.year, minYear, maxYear);
+                  strokeColor = colors.stroke;
+                  fillColor = colors.fill;
+                } else {
+                  strokeColor = isNew ? "#15803d" : "#6b7280";
+                  fillColor = isNew ? "#22c55e" : "#9ca3af";
+                }
+                const inatMatch = inatPhotosByGbifId.get(feature.properties.gbifID);
+                const isFeatureHovered = hoveredFeature?.properties.gbifID === feature.properties.gbifID;
+                const isEmphasized = isHighlighted || isFeatureHovered;
+                const markerSize = isEmphasized ? 10 : (isBrushed ? 10 : (isDimmed ? 6 : 8));
+                const clickHandler = () => {
+                  window.open(`https://www.gbif.org/occurrence/${feature.properties.gbifID}`, "_blank");
+                };
+                const hoverHandlers = {
+                  click: clickHandler,
+                  ...(isTouchDevice ? {} : {
+                    mouseover: () => setHoveredFeature(feature),
+                    mouseout: () => setHoveredFeature(null),
+                  }),
+                };
+                const markerOpacity = isDimmed ? 0.15 : 1;
+
+                if (shapeByType) {
+                  const icon = getShapeIcon(category, fillColor, strokeColor, markerSize) as L.DivIcon;
+                  return (
+                    <Marker
+                      key={feature.properties.gbifID || idx}
+                      position={[lat, lon]}
+                      icon={icon}
+                      opacity={markerOpacity}
+                      eventHandlers={hoverHandlers}
+                    />
+                  );
+                }
+
+                return (
+                  <CircleMarker
+                    key={feature.properties.gbifID || idx}
+                    center={[lat, lon]}
+                    radius={isEmphasized ? 5 : (isBrushed ? 5 : (isDimmed ? 3 : 4))}
+                    pathOptions={{
+                      color: strokeColor,
+                      fillColor: fillColor,
+                      fillOpacity: isDimmed ? 0.15 : (isEmphasized || isBrushed ? 1 : 0.9),
+                      weight: isDimmed ? 1 : (isEmphasized || isBrushed ? 3 : 2),
+                    }}
+                    eventHandlers={hoverHandlers}
+                  />
+                );
+              })}
+              {/* Highlighted dot when hovering an iNat thumbnail */}
+              {hoveredObs && hoveredObs.decimalLatitude != null && hoveredObs.decimalLongitude != null && (
+                <>
+                  <CircleMarker
+                    center={[hoveredObs.decimalLatitude, hoveredObs.decimalLongitude]}
+                    radius={4}
+                    pathOptions={{
+                      color: "#1d4ed8",
+                      fillColor: "#3b82f6",
+                      fillOpacity: 0.4,
+                      weight: 2,
+                    }}
+                  />
+                  {hoveredObs.imageUrl && (
+                    <MapImageTooltip
+                      lat={hoveredObs.decimalLatitude!}
+                      lng={hoveredObs.decimalLongitude!}
+                      imageUrl={getThumbUrl(hoveredObs.imageUrl)}
+                    />
+                  )}
+                </>
+              )}
+              {/* Hover tooltip for map markers */}
+              {hoveredFeature && !hoveredObs && (() => {
+                const [hLon, hLat] = hoveredFeature.geometry.coordinates;
+                const hInat = inatPhotosByGbifId.get(hoveredFeature.properties.gbifID);
+                return (
+                  <MapOccurrenceTooltip
+                    lat={hLat}
+                    lng={hLon}
+                    species={hoveredFeature.properties.species}
+                    basisOfRecord={hoveredFeature.properties.basisOfRecord}
+                    datasetName={hoveredFeature.properties.datasetName}
+                    eventDate={hoveredFeature.properties.eventDate}
+                    coordinateUncertaintyInMeters={hoveredFeature.properties.coordinateUncertaintyInMeters}
+                    imageUrl={hInat?.imageUrl ?? null}
+                    observer={hInat?.observer ?? null}
+                  />
+                );
+              })()}
+            </MapContainer>
+          ) : null}
+          {/* Legend */}
+          {!loadingOccurrences && (
+            <div className="absolute bottom-2 left-2 z-[1000] bg-white dark:bg-zinc-800 px-2 py-1.5 rounded text-xs text-zinc-600 dark:text-zinc-300 shadow flex flex-wrap items-center gap-x-3 gap-y-1 max-w-[90%]">
+              {label ? (
+                <span>{label}</span>
+              ) : colorByYear ? (
+                <>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded-full" style={{ background: "hsl(30, 60%, 50%)", border: "2px solid hsl(30, 60%, 30%)" }} />
+                    <span>{minYear}</span>
+                  </div>
+                  <span>→</span>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded-full" style={{ background: "hsl(142, 80%, 50%)", border: "2px solid hsl(142, 80%, 30%)" }} />
+                    <span>{maxYear}</span>
+                  </div>
+                  <span className="text-zinc-400">({panelOccurrences.length})</span>
+                </>
+              ) : assessmentYear && !splitView ? (
+                <>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded-full bg-gray-400 border-2 border-gray-500" />
+                    <span>≤{assessmentYear} ({panelOldRecords.length})</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded-full bg-green-500 border-2 border-green-700" />
+                    <span>New since {assessmentYear} ({panelNewRecords.length})</span>
+                  </div>
+                  <span className="text-zinc-400">|</span>
+                  <button
+                    onClick={() => {
+                      if (!splitDate && assessmentDate) setSplitDate(assessmentDate.split("T")[0]);
+                      setSplitView(true);
+                      setIsPlaying(false);
+                      setAnimatingDateIdx(null);
+                      if (animationRef.current) clearInterval(animationRef.current);
+                    }}
+                    className="text-[10px] px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                  >
+                    Split view
+                  </button>
+                </>
+              ) : label ? (
+                <span>{panelOccurrences.length} occurrences</span>
+              ) : (
+                <span>
+                  {totalOccurrences && totalOccurrences > occurrences.length
+                    ? `${panelOccurrences.length} of ${totalOccurrences.toLocaleString()} occurrences`
+                    : `${panelOccurrences.length} occurrences`}
+                </span>
+              )}
+              {shapeByType && (
+                <>
+                  <span className="text-zinc-400">|</span>
+                  {([
+                    ["iNaturalist", "iNat"],
+                    ["humanOther", "Other Human"],
+                    ["machineObservation", "Machine"],
+                    ["preservedSpecimen", "Specimen"],
+                    ["materialSample", "Material"],
+                  ] as const).map(([cat, catLabel]) => (
+                    <div key={cat} className="flex items-center gap-0.5">
+                      <svg width="10" height="10" viewBox="0 0 12 12" className="shrink-0">
+                        {cat === "iNaturalist" && <circle cx="6" cy="6" r="4.5" fill="#22c55e" stroke="#15803d" strokeWidth="1.5"/>}
+                        {cat === "humanOther" && <><circle cx="6" cy="6" r="4.5" fill="#22c55e" stroke="#15803d" strokeWidth="1.5"/><circle cx="6" cy="6" r="1.5" fill="#15803d"/></>}
+                        {cat === "machineObservation" && <rect x="1.5" y="1.5" width="9" height="9" fill="#22c55e" stroke="#15803d" strokeWidth="1.5"/>}
+                        {cat === "preservedSpecimen" && <rect x="1.8" y="1.8" width="8.4" height="8.4" fill="#22c55e" stroke="#15803d" strokeWidth="1.5" transform="rotate(45 6 6)"/>}
+                        {cat === "materialSample" && <polygon points="6,1.5 10.5,10.5 1.5,10.5" fill="#22c55e" stroke="#15803d" strokeWidth="1.5"/>}
+                      </svg>
+                      <span className="text-[10px]">{catLabel}</span>
+                    </div>
+                  ))}
+                </>
+              )}
+              {dedupEnabled && (
+                <span className="text-zinc-400">(deduped)</span>
+              )}
+              {!splitView && totalOccurrences != null && totalOccurrences > sampleSize && (
+                <span className="text-zinc-400">(sampled)</span>
+              )}
+            </div>
+          )}
+          {/* Animating badge */}
+          {!splitView && animatingDate != null && (
+            <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[1000] bg-amber-500 text-white text-sm font-bold px-3 py-1 rounded-full shadow-md tabular-nums flex items-center gap-2">
+              <span>{animatingDate}</span>
+              <span className="text-xs font-normal text-amber-100">{filteredOccurrences.length} / {filteredBeforeAnimation.length}</span>
+            </div>
+          )}
+          {/* Label badge for split view */}
+          {label && (
+            <div className="absolute top-2 left-2 z-[1000] bg-zinc-900/80 text-white text-[11px] font-medium px-2.5 py-1 rounded-full shadow-md">
+              {label}
+            </div>
+          )}
+          {/* Basemap toggle */}
+          {!loadingOccurrences && mounted && (
+            <div className="absolute top-12 right-2 z-[1000] flex flex-col gap-0.5 bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 p-1">
+              {(Object.entries(BASEMAP_OPTIONS) as [BasemapKey, (typeof BASEMAP_OPTIONS)[BasemapKey]][]).map(([key, opt]) => (
+                <button
+                  key={key}
+                  onClick={() => setBasemap(key)}
+                  className={`px-2 py-0.5 rounded text-[10px] transition-colors ${
+                    basemap === key
+                      ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium"
+                      : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        {/* Sample size bar (only in single view) */}
+        {!splitView && totalOccurrences != null && totalOccurrences > sampleSize && (
+          <div className="flex items-center justify-between px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 border-t border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-300">
+            <span>
+              Sampled <strong>{sampleSize.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> records
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span>Increase sample:</span>
+              <select
+                value={sampleSize}
+                onChange={(e) => setSampleSize(parseInt(e.target.value))}
+                className="text-xs px-1.5 py-0.5 rounded border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-300"
+              >
+                {SAMPLE_SIZE_OPTIONS.map((n) => (
+                  <option key={n} value={n}>{n.toLocaleString()}</option>
+                ))}
+              </select>
+            </span>
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -1459,278 +1836,48 @@ export default function OccurrenceMapRow({
               </div>
             )}
 
-            {/* Map */}
-            <div className="flex-1 flex flex-col rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 relative isolate z-0">
-            <div className="h-[300px] sm:h-auto sm:min-h-[450px] sm:flex-1 relative">
-              {loadingOccurrences ? (
-                <div className="flex items-center justify-center h-full bg-zinc-100 dark:bg-zinc-800">
-                  <div className="flex items-center gap-2 text-zinc-400 text-sm">
-                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                    Loading occurrences...
-                  </div>
-                </div>
-              ) : mounted ? (
-                <MapContainer
-                  center={[20, 0]}
-                  zoom={2}
-                  style={{ height: "100%", width: "100%" }}
-                >
-                  <TileLayer
-                    key={basemap}
-                    attribution={BASEMAP_OPTIONS[basemap].attribution}
-                    url={BASEMAP_OPTIONS[basemap].url}
-                  />
-                  <LocateControl />
-                  {filteredBbox && animatingDateIdx == null && <FitBounds bbox={filteredBbox} />}
-                  {/* Uncertainty circles (rendered behind markers) */}
-                  {showUncertaintyCircles && filteredOccurrences.map((feature, idx) => {
-                    const uncertainty = feature.properties.coordinateUncertaintyInMeters;
-                    if (uncertainty == null || uncertainty <= 0) return null;
-                    const [lon, lat] = feature.geometry.coordinates;
-                    return (
-                      <Circle
-                        key={`unc-${feature.properties.gbifID || idx}`}
-                        center={[lat, lon]}
-                        radius={uncertainty}
-                        pathOptions={{
-                          color: "#6366f1",
-                          fillColor: "#6366f1",
-                          fillOpacity: 0.06,
-                          weight: 0.5,
-                          opacity: 0.3,
-                        }}
-                      />
-                    );
-                  })}
-                  {/* Render occurrences: colored by age or year gradient */}
-                  {filteredOccurrences.map((feature, idx) => {
-                    const [lon, lat] = feature.geometry.coordinates;
-                    const isNew = isNewRecord(feature.properties.eventDate);
-                    const isHighlighted = hoveredObs?.gbifID != null && feature.properties.gbifID === hoveredObs.gbifID;
-                    // Linked brushing: highlight markers matching hovered year or type
-                    const category = classifyOccurrence(feature);
-                    const isTypeBrushed = hoveredType != null && category === hoveredType;
-                    const isTypeDimmed = hoveredType != null && category !== hoveredType;
-                    const isBrushed = (hoveredYear != null && feature.properties.year === hoveredYear) || isTypeBrushed;
-                    const isDimmed = (hoveredYear != null && feature.properties.year !== hoveredYear) || isTypeDimmed;
-                    let strokeColor: string;
-                    let fillColor: string;
-                    if (isHighlighted) {
-                      strokeColor = "#1d4ed8";
-                      fillColor = "#3b82f6";
-                    } else if (isBrushed) {
-                      strokeColor = "#d97706";
-                      fillColor = "#f59e0b";
-                    } else if (colorByYear && feature.properties.year != null) {
-                      const colors = yearToColor(feature.properties.year, minYear, maxYear);
-                      strokeColor = colors.stroke;
-                      fillColor = colors.fill;
-                    } else {
-                      strokeColor = isNew ? "#15803d" : "#6b7280";
-                      fillColor = isNew ? "#22c55e" : "#9ca3af";
-                    }
-                    const inatMatch = inatPhotosByGbifId.get(feature.properties.gbifID);
-                    const uncertainty = feature.properties.coordinateUncertaintyInMeters;
-                    const isFeatureHovered = hoveredFeature?.properties.gbifID === feature.properties.gbifID;
-                    const isEmphasized = isHighlighted || isFeatureHovered;
-                    const markerSize = isEmphasized ? 10 : (isBrushed ? 10 : (isDimmed ? 6 : 8));
-                    const clickHandler = () => {
-                      window.open(`https://www.gbif.org/occurrence/${feature.properties.gbifID}`, "_blank");
-                    };
-                    const hoverHandlers = {
-                      click: clickHandler,
-                      ...(isTouchDevice ? {} : {
-                        mouseover: () => setHoveredFeature(feature),
-                        mouseout: () => setHoveredFeature(null),
-                      }),
-                    };
-                    const markerOpacity = isDimmed ? 0.15 : 1;
-
-                    if (shapeByType) {
-                      const icon = getShapeIcon(category, fillColor, strokeColor, markerSize) as L.DivIcon;
-                      return (
-                        <Marker
-                          key={feature.properties.gbifID || idx}
-                          position={[lat, lon]}
-                          icon={icon}
-                          opacity={markerOpacity}
-                          eventHandlers={hoverHandlers}
-                        />
-                      );
-                    }
-
-                    return (
-                      <CircleMarker
-                        key={feature.properties.gbifID || idx}
-                        center={[lat, lon]}
-                        radius={isEmphasized ? 5 : (isBrushed ? 5 : (isDimmed ? 3 : 4))}
-                        pathOptions={{
-                          color: strokeColor,
-                          fillColor: fillColor,
-                          fillOpacity: isDimmed ? 0.15 : (isEmphasized || isBrushed ? 1 : 0.9),
-                          weight: isDimmed ? 1 : (isEmphasized || isBrushed ? 3 : 2),
-                        }}
-                        eventHandlers={hoverHandlers}
-                      />
-                    );
-                  })}
-                  {/* Highlighted dot when hovering an iNat thumbnail */}
-                  {hoveredObs && hoveredObs.decimalLatitude != null && hoveredObs.decimalLongitude != null && (
-                    <>
-                      <CircleMarker
-                        center={[hoveredObs.decimalLatitude, hoveredObs.decimalLongitude]}
-                        radius={4}
-                        pathOptions={{
-                          color: "#1d4ed8",
-                          fillColor: "#3b82f6",
-                          fillOpacity: 0.4,
-                          weight: 2,
-                        }}
-                      />
-                      {hoveredObs.imageUrl && (
-                        <MapImageTooltip
-                          lat={hoveredObs.decimalLatitude!}
-                          lng={hoveredObs.decimalLongitude!}
-                          imageUrl={getThumbUrl(hoveredObs.imageUrl)}
-                        />
-                      )}
-                    </>
-                  )}
-                  {/* Hover tooltip for map markers */}
-                  {hoveredFeature && !hoveredObs && (() => {
-                    const [hLon, hLat] = hoveredFeature.geometry.coordinates;
-                    const hInat = inatPhotosByGbifId.get(hoveredFeature.properties.gbifID);
-                    return (
-                      <MapOccurrenceTooltip
-                        lat={hLat}
-                        lng={hLon}
-                        species={hoveredFeature.properties.species}
-                        basisOfRecord={hoveredFeature.properties.basisOfRecord}
-                        datasetName={hoveredFeature.properties.datasetName}
-                        eventDate={hoveredFeature.properties.eventDate}
-                        coordinateUncertaintyInMeters={hoveredFeature.properties.coordinateUncertaintyInMeters}
-                        imageUrl={hInat?.imageUrl ?? null}
-                        observer={hInat?.observer ?? null}
-                      />
-                    );
-                  })()}
-                </MapContainer>
-              ) : null}
-              {!loadingOccurrences && (
-                <div className="absolute bottom-2 left-2 z-[1000] bg-white dark:bg-zinc-800 px-2 py-1.5 rounded text-xs text-zinc-600 dark:text-zinc-300 shadow flex flex-wrap items-center gap-x-3 gap-y-1 max-w-[90%]">
-                  {/* Legend */}
-                  {colorByYear ? (
-                    <>
-                      <div className="flex items-center gap-1">
-                        <div className="w-3 h-3 rounded-full" style={{ background: "hsl(30, 60%, 50%)", border: "2px solid hsl(30, 60%, 30%)" }} />
-                        <span>{minYear}</span>
-                      </div>
-                      <span>→</span>
-                      <div className="flex items-center gap-1">
-                        <div className="w-3 h-3 rounded-full" style={{ background: "hsl(142, 80%, 50%)", border: "2px solid hsl(142, 80%, 30%)" }} />
-                        <span>{maxYear}</span>
-                      </div>
-                      <span className="text-zinc-400">({filteredOccurrences.length})</span>
-                    </>
-                  ) : assessmentYear ? (
-                    <>
-                      <div className="flex items-center gap-1">
-                        <div className="w-3 h-3 rounded-full bg-gray-400 border-2 border-gray-500" />
-                        <span>≤{assessmentYear} ({oldRecords.length})</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <div className="w-3 h-3 rounded-full bg-green-500 border-2 border-green-700" />
-                        <span>New since {assessmentYear} ({newRecords.length})</span>
-                      </div>
-                    </>
-                  ) : (
-                    <span>
-                      {totalOccurrences && totalOccurrences > occurrences.length
-                        ? `${filteredOccurrences.length} of ${totalOccurrences.toLocaleString()} occurrences`
-                        : `${filteredOccurrences.length} occurrences`}
-                    </span>
-                  )}
-                  {shapeByType && (
-                    <>
-                      <span className="text-zinc-400">|</span>
-                      {([
-                        ["iNaturalist", "iNat"],
-                        ["humanOther", "Other Human"],
-                        ["machineObservation", "Machine"],
-                        ["preservedSpecimen", "Specimen"],
-                        ["materialSample", "Material"],
-                      ] as const).map(([cat, label]) => (
-                        <div key={cat} className="flex items-center gap-0.5">
-                          <svg width="10" height="10" viewBox="0 0 12 12" className="shrink-0">
-                            {cat === "iNaturalist" && <circle cx="6" cy="6" r="4.5" fill="#22c55e" stroke="#15803d" strokeWidth="1.5"/>}
-                            {cat === "humanOther" && <><circle cx="6" cy="6" r="4.5" fill="#22c55e" stroke="#15803d" strokeWidth="1.5"/><circle cx="6" cy="6" r="1.5" fill="#15803d"/></>}
-                            {cat === "machineObservation" && <rect x="1.5" y="1.5" width="9" height="9" fill="#22c55e" stroke="#15803d" strokeWidth="1.5"/>}
-                            {cat === "preservedSpecimen" && <rect x="1.8" y="1.8" width="8.4" height="8.4" fill="#22c55e" stroke="#15803d" strokeWidth="1.5" transform="rotate(45 6 6)"/>}
-                            {cat === "materialSample" && <polygon points="6,1.5 10.5,10.5 1.5,10.5" fill="#22c55e" stroke="#15803d" strokeWidth="1.5"/>}
-                          </svg>
-                          <span className="text-[10px]">{label}</span>
-                        </div>
-                      ))}
-                    </>
-                  )}
-                  {dedupEnabled && (
-                    <span className="text-zinc-400">(deduped)</span>
-                  )}
-                  {totalOccurrences != null && totalOccurrences > sampleSize && (
-                    <span className="text-zinc-400">(sampled)</span>
-                  )}
-                </div>
-              )}
-              {/* Animating badge */}
-              {animatingDate != null && (
-                <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[1000] bg-amber-500 text-white text-sm font-bold px-3 py-1 rounded-full shadow-md tabular-nums flex items-center gap-2">
-                  <span>{animatingDate}</span>
-                  <span className="text-xs font-normal text-amber-100">{filteredOccurrences.length} / {filteredBeforeAnimation.length}</span>
-                </div>
-              )}
-              {/* Basemap toggle */}
-              {!loadingOccurrences && mounted && (
-                <div className="absolute top-12 right-2 z-[1000] flex flex-col gap-0.5 bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 p-1">
-                  {(Object.entries(BASEMAP_OPTIONS) as [BasemapKey, (typeof BASEMAP_OPTIONS)[BasemapKey]][]).map(([key, opt]) => (
+            {/* Map(s) */}
+            {splitView && splitDate ? (
+              <div className="flex-1 flex flex-col gap-2">
+                {/* Split view control bar */}
+                <div className="flex items-center gap-2 px-2 py-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-xs text-zinc-600 dark:text-zinc-300">
+                  <span className="font-medium">Split view</span>
+                  <span className="text-zinc-400">|</span>
+                  <label className="flex items-center gap-1">
+                    <span className="text-zinc-500 dark:text-zinc-400">Date:</span>
+                    <input
+                      type="date"
+                      value={splitDate}
+                      onChange={(e) => setSplitDate(e.target.value)}
+                      className="bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 rounded px-1.5 py-0.5 text-xs text-zinc-700 dark:text-zinc-200"
+                    />
+                  </label>
+                  {assessmentDate && splitDate !== assessmentDate.split("T")[0] && (
                     <button
-                      key={key}
-                      onClick={() => setBasemap(key)}
-                      className={`px-2 py-0.5 rounded text-[10px] transition-colors ${
-                        basemap === key
-                          ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium"
-                          : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
-                      }`}
+                      onClick={() => setSplitDate(assessmentDate.split("T")[0])}
+                      className="text-[10px] px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 hover:bg-white dark:hover:bg-zinc-700 transition-colors"
                     >
-                      {opt.label}
+                      Reset to assessment date
                     </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            {/* Sample size bar */}
-            {totalOccurrences != null && totalOccurrences > sampleSize && (
-              <div className="flex items-center justify-between px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 border-t border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-300">
-                <span>
-                  Sampled <strong>{sampleSize.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> records
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span>Increase sample:</span>
-                  <select
-                    value={sampleSize}
-                    onChange={(e) => setSampleSize(parseInt(e.target.value))}
-                    className="text-xs px-1.5 py-0.5 rounded border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-300"
+                  )}
+                  <button
+                    onClick={() => setSplitView(false)}
+                    className="ml-auto p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                    title="Close split view"
                   >
-                    {SAMPLE_SIZE_OPTIONS.map((n) => (
-                      <option key={n} value={n}>{n.toLocaleString()}</option>
-                    ))}
-                  </select>
-                </span>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  {renderMapPanel(preAssessmentOccs, filteredBbox, `Before ${splitDate} (${preAssessmentOccs.length})`)}
+                  {renderMapPanel(postAssessmentOccs, filteredBbox, `After ${splitDate} (${postAssessmentOccs.length})`)}
+                </div>
               </div>
+            ) : (
+              renderMapPanel(filteredOccurrences, filteredBbox, null)
             )}
-            </div>{/* close outer map flex-col div */}
           </div>
         </div>
       </div>
