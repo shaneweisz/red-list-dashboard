@@ -47,7 +47,7 @@ const FitBounds = dynamic(() => import("./FitBounds"), { ssr: false });
 
 // ── Types ────────────────────────────────────────────────────────────────
 
-interface CriteriaEstimationProps {
+interface AssessmentAssistantProps {
   speciesKey: number;
   assessmentYear?: number | null;
 }
@@ -548,15 +548,16 @@ function SubcriterionBadge({ code, label, met }: { code: string; label: string; 
 /** Result type from the API (without filteredPoints, which are sent separately) */
 type APIResult = Omit<CriteriaEstimationResult, "filteredPoints">;
 
-export default function CriteriaEstimation({ speciesKey, assessmentYear }: CriteriaEstimationProps) {
+export default function AssessmentAssistant({ speciesKey, assessmentYear }: AssessmentAssistantProps) {
   const [params, setParams] = useState<Params>(DEFAULT_PARAMS);
   const [result, setResult] = useState<APIResult | null>(null);
   const [mapPoints, setMapPoints] = useState<MapPoint[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showParams, setShowParams] = useState(true);
+  const [showParams, setShowParams] = useState(false);
   const [layers, setLayers] = useState<MapLayers>(DEFAULT_LAYERS);
   const [showMap, setShowMap] = useState(true);
+  const [collapsed, setCollapsed] = useState(true);
   const [activeSubtab, setActiveSubtab] = useState<string>("criterion-b");
 
   const runEstimation = useCallback(async () => {
@@ -599,19 +600,36 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
   return (
     <div className="p-4 space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <button
+        className="flex items-center justify-between w-full text-left"
+        onClick={() => setCollapsed(!collapsed)}
+      >
         <div>
           <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
-            Parameter Estimation
+            Assessment Assistant
           </h3>
           <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
             Estimate parameters to assist with drafting IUCN Red List assessments
           </p>
         </div>
-      </div>
+        <svg
+          className={`w-4 h-4 text-zinc-400 transition-transform ${collapsed ? "" : "rotate-180"}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
 
+      {!collapsed && <>
       {/* Subtab navigation */}
       <div className="flex items-center gap-1 border-b border-zinc-200 dark:border-zinc-700 -mx-4 px-4">
+        <span
+          className="px-3 py-2 text-xs text-zinc-400 dark:text-zinc-600 cursor-default border-b-2 border-transparent"
+        >
+          Criterion A <span className="text-[10px] opacity-60">soon</span>
+        </span>
         <button
           onClick={() => setActiveSubtab("criterion-b")}
           className={`px-3 py-2 text-xs font-medium transition-colors border-b-2 ${
@@ -622,7 +640,7 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
         >
           Criterion B
         </button>
-        {(["Criterion A", "Criterion C", "Criterion D"] as const).map((label) => (
+        {(["Criterion C", "Criterion D"] as const).map((label) => (
           <span
             key={label}
             className="px-3 py-2 text-xs text-zinc-400 dark:text-zinc-600 cursor-default border-b-2 border-transparent"
@@ -1044,6 +1062,7 @@ export default function CriteriaEstimation({ speciesKey, assessmentYear }: Crite
           </p>
         </div>
       )}
+      </>}
     </div>
   );
 }
