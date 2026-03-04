@@ -1381,7 +1381,7 @@ export default function OccurrenceMapRow({
                   iNaturalist <span className="tabular-nums">({inatTotalCount.toLocaleString()})</span>
                 </div>
                 {/* Photos — horizontal scroll on mobile, 2-col grid on sm+ */}
-                <div className={`flex sm:grid sm:grid-cols-2 gap-1.5 p-1.5 overflow-x-auto sm:overflow-x-visible sm:overflow-y-visible flex-1 ${loadingInatPhotos ? "opacity-50" : ""}`}>
+                <div className={`flex sm:grid sm:grid-cols-2 sm:content-start gap-1.5 p-1.5 overflow-x-auto sm:overflow-x-visible sm:overflow-y-visible flex-1 ${loadingInatPhotos ? "opacity-50" : ""}`}>
                   {inatPhotos.slice(0, pageSize).map((obs, idx) => (
                     <div key={`${inatPage}-${idx}`} className="w-14 sm:w-full shrink-0">
                       <InatPhotoWithPreview
@@ -1434,7 +1434,7 @@ export default function OccurrenceMapRow({
 
             {/* Map */}
             <div className="flex-1 flex flex-col rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 relative isolate z-0">
-            <div className="h-[300px] sm:h-[450px] flex-1 relative">
+            <div className="min-h-[300px] sm:min-h-[450px] flex-1 relative">
               {loadingOccurrences ? (
                 <div className="flex items-center justify-center h-full bg-zinc-100 dark:bg-zinc-800">
                   <div className="flex items-center gap-2 text-zinc-400 text-sm">
