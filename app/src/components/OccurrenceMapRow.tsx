@@ -1088,6 +1088,17 @@ export default function OccurrenceMapRow({
     return [minLon, minLat, maxLon, maxLat];
   }, [filteredOccurrences, bbox]);
 
+  // Date range for the split view slider
+  const { sliderMinDate, sliderMaxDate } = useMemo(() => {
+    const dates = filteredOccurrences
+      .map((o) => o.properties.eventDate)
+      .filter((d): d is string => d != null && d.length >= 10)
+      .map((d) => d.slice(0, 10));
+    if (dates.length === 0) return { sliderMinDate: splitDate, sliderMaxDate: splitDate };
+    dates.sort();
+    return { sliderMinDate: dates[0], sliderMaxDate: dates[dates.length - 1] };
+  }, [filteredOccurrences, splitDate]);
+
   // Split view: partition occurrences by exact assessment date
   const { preAssessmentOccs, postAssessmentOccs, preBbox, postBbox } = useMemo(() => {
     if (!splitView || !splitDate) {
@@ -1843,19 +1854,24 @@ export default function OccurrenceMapRow({
                 <div className="flex items-center gap-2 px-2 py-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-xs text-zinc-600 dark:text-zinc-300">
                   <span className="font-medium">Split view</span>
                   <span className="text-zinc-400">|</span>
-                  <label className="flex items-center gap-1">
-                    <span className="text-zinc-500 dark:text-zinc-400">Date:</span>
-                    <input
-                      type="date"
-                      value={splitDate}
-                      onChange={(e) => setSplitDate(e.target.value)}
-                      className="bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 rounded px-1.5 py-0.5 text-xs text-zinc-700 dark:text-zinc-200"
-                    />
-                  </label>
+                  <span className="text-zinc-500 dark:text-zinc-400 whitespace-nowrap">Date: <span className="font-medium text-zinc-700 dark:text-zinc-200">{splitDate}</span></span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={Math.max(0, Math.round((new Date(sliderMaxDate).getTime() - new Date(sliderMinDate).getTime()) / 86400000))}
+                    value={Math.max(0, Math.round((new Date(splitDate).getTime() - new Date(sliderMinDate).getTime()) / 86400000))}
+                    onChange={(e) => {
+                      const days = parseInt(e.target.value, 10);
+                      const d = new Date(sliderMinDate);
+                      d.setDate(d.getDate() + days);
+                      setSplitDate(d.toISOString().slice(0, 10));
+                    }}
+                    className="flex-1 min-w-[100px] h-1.5 accent-blue-500"
+                  />
                   {assessmentDate && splitDate !== assessmentDate.split("T")[0] && (
                     <button
                       onClick={() => setSplitDate(assessmentDate.split("T")[0])}
-                      className="text-[10px] px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 hover:bg-white dark:hover:bg-zinc-700 transition-colors"
+                      className="text-[10px] px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 hover:bg-white dark:hover:bg-zinc-700 transition-colors whitespace-nowrap"
                     >
                       Reset to assessment date
                     </button>
