@@ -21,6 +21,7 @@ import { SupabaseClient } from "@supabase/supabase-js";
 import {
   loadEnvFiles,
   createServiceClient,
+  fetchAllRows,
   normalizeSpeciesName,
   buildSpeciesIndex,
   findMatch,
@@ -329,12 +330,10 @@ export async function upsertGbifSpecies(
   }>,
   logger: SyncLogger
 ): Promise<GbifUpsertStats> {
-  // Load existing species for matching
-  const { data: existing, error: fetchError } = await supabase
-    .from("species")
-    .select("id, scientific_name, sis_taxon_id, gbif_species_key, col_id");
-
-  if (fetchError) throw new Error(`Failed to fetch existing species: ${fetchError.message}`);
+  // Load existing species for matching (paginated to avoid 1000-row default limit)
+  const existing = await fetchAllRows<ExistingSpecies>(
+    supabase, "species", "id, scientific_name, sis_taxon_id, gbif_species_key, col_id"
+  );
 
   const index = buildSpeciesIndex(existing as ExistingSpecies[]);
   const stats: GbifUpsertStats = { matched_by_id: 0, matched_by_col_id: 0, matched_by_name: 0, inserted: 0, errors: 0 };
@@ -454,6 +453,7 @@ async function main() {
     const totals: GbifUpsertStats = { inserted: 0, matched_by_id: 0, matched_by_col_id: 0, matched_by_name: 0, errors: 0 };
 
     for (const taxon of taxaToSync) {
+      const taxonStart = Date.now();
       console.log(`\n${taxon.name} (${taxon.id}):`);
 
       // Step 1: Fetch total occurrence counts
@@ -482,15 +482,13 @@ async function main() {
 
       // Step 3: Load assessment dates from Supabase for post-assessment counts
       console.log("  Loading assessment dates from Supabase...");
-      const { data: assessedSpecies, error: assessError } = await supabase
-        .from("species")
-        .select("scientific_name, assessment_date")
-        .not("assessment_date", "is", null);
-
-      if (assessError) throw new Error(`Failed to fetch assessment dates: ${assessError.message}`);
+      const assessedSpecies = await fetchAllRows<{ scientific_name: string; assessment_date: string }>(
+        supabase, "species", "scientific_name, assessment_date",
+        (q) => q.not("assessment_date", "is", null)
+      );
 
       const assessmentYears = new Map<string, number>();
-      for (const row of assessedSpecies || []) {
+      for (const row of assessedSpecies) {
         if (row.assessment_date) {
           const year = parseInt(row.assessment_date.slice(0, 4), 10);
           if (!isNaN(year)) {
@@ -548,7 +546,8 @@ async function main() {
 
       const stats = await upsertGbifSpecies(supabase, speciesList, logger);
 
-      logger.log("taxon_complete", { taxon_id: taxon.id, taxon_name: taxon.name, raw_species: rawResults.length, valid_species: speciesList.length, ...stats });
+      const taxonDuration = ((Date.now() - taxonStart) / 1000).toFixed(1);
+      logger.log("taxon_complete", { taxon_id: taxon.id, taxon_name: taxon.name, raw_species: rawResults.length, valid_species: speciesList.length, ...stats, duration_seconds: Number(taxonDuration) });
 
       for (const key of Object.keys(totals) as (keyof GbifUpsertStats)[]) {
         totals[key] += stats[key];

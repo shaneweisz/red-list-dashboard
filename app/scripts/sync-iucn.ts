@@ -19,6 +19,7 @@ import { SupabaseClient } from "@supabase/supabase-js";
 import {
   loadEnvFiles,
   createServiceClient,
+  fetchAllRows,
   buildSpeciesIndex,
   findMatch,
   SyncLogger,
@@ -177,14 +178,12 @@ export async function upsertIucnSpecies(
   species: IucnSpeciesRow[],
   logger: SyncLogger
 ): Promise<{ seenSisTaxonIds: Set<number>; stats: UpsertStats }> {
-  // Load existing species for matching
-  const { data: existing, error: fetchError } = await supabase
-    .from("species")
-    .select("id, scientific_name, sis_taxon_id, gbif_species_key, col_id");
+  // Load existing species for matching (paginated to avoid 1000-row default limit)
+  const existing = await fetchAllRows<ExistingSpecies>(
+    supabase, "species", "id, scientific_name, sis_taxon_id, gbif_species_key, col_id"
+  );
 
-  if (fetchError) throw new Error(`Failed to fetch existing species: ${fetchError.message}`);
-
-  const index = buildSpeciesIndex(existing as ExistingSpecies[]);
+  const index = buildSpeciesIndex(existing);
   const seenSisTaxonIds = new Set<number>();
   const stats: UpsertStats = { matched_by_id: 0, matched_by_col_id: 0, matched_by_name: 0, inserted: 0, errors: 0 };
 
@@ -273,14 +272,11 @@ export async function supersedeMissing(
   seenSisTaxonIds: Set<number>,
   logger: SyncLogger
 ): Promise<number> {
-  // Fetch all active species with IUCN IDs
-  const { data: activeIucn, error } = await supabase
-    .from("species")
-    .select("id, sis_taxon_id, scientific_name")
-    .eq("status", "active")
-    .not("sis_taxon_id", "is", null);
-
-  if (error) throw new Error(`Failed to fetch active IUCN species: ${error.message}`);
+  // Fetch all active species with IUCN IDs (paginated)
+  const activeIucn = await fetchAllRows<{ id: number; sis_taxon_id: number; scientific_name: string }>(
+    supabase, "species", "id, sis_taxon_id, scientific_name",
+    (q) => q.eq("status", "active").not("sis_taxon_id", "is", null)
+  );
 
   let supersededCount = 0;
 
@@ -362,6 +358,7 @@ async function main() {
     const totals: UpsertStats = { inserted: 0, matched_by_id: 0, matched_by_col_id: 0, matched_by_name: 0, errors: 0 };
 
     for (const taxon of taxaToSync) {
+      const taxonStart = Date.now();
       console.log(`\n${taxon.name} (${taxon.id}):`);
 
       // Fetch from IUCN DB
@@ -374,7 +371,8 @@ async function main() {
       const { seenSisTaxonIds, stats } = await upsertIucnSpecies(supabase, species, logger);
       for (const id of seenSisTaxonIds) allSeenIds.add(id);
 
-      logger.log("taxon_complete", { taxon_group: taxon.id, taxon_name: taxon.name, fetched: species.length, ...stats });
+      const taxonDuration = ((Date.now() - taxonStart) / 1000).toFixed(1);
+      logger.log("taxon_complete", { taxon_group: taxon.id, taxon_name: taxon.name, fetched: species.length, ...stats, duration_seconds: Number(taxonDuration) });
 
       // Accumulate totals
       for (const key of Object.keys(totals) as (keyof UpsertStats)[]) {

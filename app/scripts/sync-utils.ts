@@ -59,6 +59,36 @@ export function createServiceClient(): SupabaseClient {
   return createClient(url, key);
 }
 
+/**
+ * Fetch all rows from a Supabase query, paginating past the default 1000-row limit.
+ */
+const PAGE_SIZE = 10000;
+
+export async function fetchAllRows<T>(
+  supabase: SupabaseClient,
+  table: string,
+  select: string,
+  filters?: (query: ReturnType<SupabaseClient["from"]>) => ReturnType<SupabaseClient["from"]>
+): Promise<T[]> {
+  const allRows: T[] = [];
+  let offset = 0;
+
+  while (true) {
+    let query = supabase.from(table).select(select).range(offset, offset + PAGE_SIZE - 1);
+    if (filters) {
+      query = filters(query) as typeof query;
+    }
+    const { data, error } = await query;
+    if (error) throw new Error(`Failed to fetch ${table}: ${error.message}`);
+    if (!data || data.length === 0) break;
+    allRows.push(...(data as T[]));
+    if (data.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
+
+  return allRows;
+}
+
 // =============================================================================
 // NAME NORMALIZATION
 // =============================================================================
@@ -222,6 +252,10 @@ export const IUCN_TAXA: IucnTaxonConfig[] = [
   { id: "crustacea", name: "Crustaceans", filterColumn: "class_name", filterValues: ["MALACOSTRACA", "MAXILLOPODA", "BRANCHIOPODA", "OSTRACODA", "HEXANAUPLIA"] },
   { id: "arachnida", name: "Arachnids", filterColumn: "class_name", filterValues: ["ARACHNIDA"] },
   { id: "corals", name: "Corals", filterColumn: "order_name", filterValues: ["SCLERACTINIA", "ALCYONACEA", "PENNATULACEA"] },
+  // "Other Invertebrates" needs two entries because it spans different filter columns:
+  // non-coral Anthozoa are filtered by order_name (to separate them from corals, which
+  // are also in class ANTHOZOA), while the remaining classes are filtered by class_name.
+  // Both entries share the same taxon_group id to match the IUCN Red List Table 1a grouping.
   { id: "other_invertebrates", name: "Other Invertebrates (non-coral Anthozoa)", filterColumn: "order_name", filterValues: [
     "ACTINIARIA", "ZOANTHARIA", "PENICILLARIA", "MALACALCYONCAEA", "SCLERALCYONACEA",
   ] },

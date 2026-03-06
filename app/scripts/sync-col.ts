@@ -17,6 +17,7 @@ import { SupabaseClient } from "@supabase/supabase-js";
 import {
   loadEnvFiles,
   createServiceClient,
+  fetchAllRows,
   SyncLogger,
 } from "./sync-utils";
 
@@ -98,20 +99,17 @@ export async function resolveColIds(
   logger: SyncLogger,
   fullMode: boolean
 ): Promise<PendingMerge[]> {
-  // Fetch species needing resolution
-  let query = supabase
-    .from("species")
-    .select("id, scientific_name, col_id")
-    .eq("status", "active");
+  // Fetch species needing resolution (paginated to avoid 1000-row default limit)
+  const species = await fetchAllRows<{ id: number; scientific_name: string; col_id: string | null }>(
+    supabase, "species", "id, scientific_name, col_id",
+    (q) => {
+      let filtered = q.eq("status", "active");
+      if (!fullMode) filtered = filtered.is("col_id", null);
+      return filtered;
+    }
+  );
 
-  if (!fullMode) {
-    query = query.is("col_id", null);
-  }
-
-  const { data: species, error } = await query;
-  if (error) throw new Error(`Failed to fetch species: ${error.message}`);
-
-  if (!species || species.length === 0) {
+  if (species.length === 0) {
     console.log("  No species to resolve");
     return [];
   }
