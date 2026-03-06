@@ -23,12 +23,6 @@ create table public.species (
   gbif_occurrence_count integer default 0,
   gbif_occurrences_since_assessment integer,
 
-  -- Catalogue of Life: kept for future use as a universal linking key between
-  -- IUCN and GBIF. GBIF is switching to COL Extended Release as its primary
-  -- taxonomy (https://docs.gbif.org/2026-work-programme/en/), so COL IDs will
-  -- become available natively from the GBIF API — no separate sync needed.
-  col_id text unique,
-
   -- Status tracking for taxonomic changes
   status text not null default 'active',
   constraint species_status_check check (status in ('active', 'superseded')),

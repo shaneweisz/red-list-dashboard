@@ -163,14 +163,13 @@ const BATCH_SIZE = 500;
 export interface UpsertStats {
   inserted: number;
   matched_by_id: number;
-  matched_by_col_id: number;
   matched_by_name: number;
   errors: number;
 }
 
 /**
  * Upsert IUCN species into Supabase.
- * Uses 3-tier matching: sis_taxon_id → col_id → normalized name.
+ * Uses 2-tier matching: sis_taxon_id → normalized name.
  * Returns the set of sis_taxon_ids seen and upsert stats.
  */
 export async function upsertIucnSpecies(
@@ -180,12 +179,12 @@ export async function upsertIucnSpecies(
 ): Promise<{ seenSisTaxonIds: Set<number>; stats: UpsertStats }> {
   // Load existing species for matching (paginated to avoid 1000-row default limit)
   const existing = await fetchAllRows<ExistingSpecies>(
-    supabase, "species", "id, scientific_name, sis_taxon_id, gbif_species_key, col_id"
+    supabase, "species", "id, scientific_name, sis_taxon_id, gbif_species_key"
   );
 
   const index = buildSpeciesIndex(existing);
   const seenSisTaxonIds = new Set<number>();
-  const stats: UpsertStats = { matched_by_id: 0, matched_by_col_id: 0, matched_by_name: 0, inserted: 0, errors: 0 };
+  const stats: UpsertStats = { matched_by_id: 0, matched_by_name: 0, inserted: 0, errors: 0 };
 
   // Classify species into inserts vs updates using in-memory matching
   const toInsert: Record<string, unknown>[] = [];
@@ -244,10 +243,7 @@ export async function upsertIucnSpecies(
       stats.errors++;
       logger.log("error", { name: source.scientific_name, sis_taxon_id: source.sis_taxon_id, error: error.message });
     } else {
-      if (matchType === "by_col_id") {
-        stats.matched_by_col_id++;
-        logger.log("matched_by_col_id", { name: source.scientific_name, sis_taxon_id: source.sis_taxon_id, matched_id: id });
-      } else if (matchType === "by_name") {
+      if (matchType === "by_name") {
         stats.matched_by_name++;
         logger.log("matched_by_name", { name: source.scientific_name, sis_taxon_id: source.sis_taxon_id, matched_id: id });
       } else {
@@ -355,7 +351,7 @@ async function main() {
     });
 
     const allSeenIds = new Set<number>();
-    const totals: UpsertStats = { inserted: 0, matched_by_id: 0, matched_by_col_id: 0, matched_by_name: 0, errors: 0 };
+    const totals: UpsertStats = { inserted: 0, matched_by_id: 0, matched_by_name: 0, errors: 0 };
 
     for (const taxon of taxaToSync) {
       const taxonStart = Date.now();
@@ -403,7 +399,6 @@ async function main() {
     console.log("\n" + "=".repeat(50));
     console.log("sync-iucn complete:");
     console.log(`  Matched by sis_taxon_id: ${totals.matched_by_id.toLocaleString()}`);
-    console.log(`  Matched by col_id:       ${totals.matched_by_col_id.toLocaleString()}`);
     console.log(`  Matched by name:         ${totals.matched_by_name.toLocaleString()}`);
     console.log(`  Inserted new:            ${totals.inserted.toLocaleString()}`);
     console.log(`  Superseded:              ${supersededCount.toLocaleString()}`);

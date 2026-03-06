@@ -307,13 +307,12 @@ const UPSERT_BATCH_SIZE = 500;
 
 /**
  * Upsert GBIF species data into Supabase.
- * - Existing species (matched by gbif_species_key, col_id, or name): UPDATE GBIF columns
+ * - Existing species (matched by gbif_species_key or name): UPDATE GBIF columns
  * - Unmatched GBIF species: INSERT as NE species
  */
 export interface GbifUpsertStats {
   inserted: number;
   matched_by_id: number;
-  matched_by_col_id: number;
   matched_by_name: number;
   errors: number;
 }
@@ -332,11 +331,11 @@ export async function upsertGbifSpecies(
 ): Promise<GbifUpsertStats> {
   // Load existing species for matching (paginated to avoid 1000-row default limit)
   const existing = await fetchAllRows<ExistingSpecies>(
-    supabase, "species", "id, scientific_name, sis_taxon_id, gbif_species_key, col_id"
+    supabase, "species", "id, scientific_name, sis_taxon_id, gbif_species_key"
   );
 
   const index = buildSpeciesIndex(existing as ExistingSpecies[]);
-  const stats: GbifUpsertStats = { matched_by_id: 0, matched_by_col_id: 0, matched_by_name: 0, inserted: 0, errors: 0 };
+  const stats: GbifUpsertStats = { matched_by_id: 0, matched_by_name: 0, inserted: 0, errors: 0 };
 
   // Classify species into inserts vs updates using in-memory matching
   type GbifSource = typeof speciesList[number];
@@ -398,10 +397,7 @@ export async function upsertGbifSpecies(
       stats.errors++;
       logger.log("error", { name: source.scientificName, gbif_species_key: source.speciesKey, error: error.message });
     } else {
-      if (matchType === "by_col_id") {
-        stats.matched_by_col_id++;
-        logger.log("matched_by_col_id", { name: source.scientificName, gbif_species_key: source.speciesKey, matched_id: id });
-      } else if (matchType === "by_name") {
+      if (matchType === "by_name") {
         stats.matched_by_name++;
         logger.log("matched_by_name", { name: source.scientificName, gbif_species_key: source.speciesKey, matched_id: id });
       } else {
@@ -450,7 +446,7 @@ async function main() {
       taxa_count: taxaToSync.length,
     });
 
-    const totals: GbifUpsertStats = { inserted: 0, matched_by_id: 0, matched_by_col_id: 0, matched_by_name: 0, errors: 0 };
+    const totals: GbifUpsertStats = { inserted: 0, matched_by_id: 0, matched_by_name: 0, errors: 0 };
 
     for (const taxon of taxaToSync) {
       const taxonStart = Date.now();
@@ -564,7 +560,6 @@ async function main() {
     console.log("\n" + "=".repeat(50));
     console.log("sync-gbif complete:");
     console.log(`  Matched by gbif_species_key: ${totals.matched_by_id.toLocaleString()}`);
-    console.log(`  Matched by col_id:           ${totals.matched_by_col_id.toLocaleString()}`);
     console.log(`  Matched by name:             ${totals.matched_by_name.toLocaleString()}`);
     console.log(`  Inserted new (NE):           ${totals.inserted.toLocaleString()}`);
     if (totals.errors) {

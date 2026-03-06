@@ -2,7 +2,7 @@
  * Shared utilities for sync scripts.
  *
  * - Species name normalization
- * - Matching logic (primary ID → col_id → name)
+ * - Matching logic (primary ID → name)
  * - JSONL logging
  * - Supabase service client creation
  */
@@ -112,7 +112,6 @@ export interface ExistingSpecies {
   scientific_name: string;
   sis_taxon_id: number | null;
   gbif_species_key: number | null;
-  col_id: string | null;
 }
 
 /**
@@ -121,7 +120,6 @@ export interface ExistingSpecies {
 export interface SpeciesIndex {
   bySisTaxonId: Map<number, ExistingSpecies>;
   byGbifSpeciesKey: Map<number, ExistingSpecies>;
-  byColId: Map<string, ExistingSpecies>;
   byNormalizedName: Map<string, ExistingSpecies>;
 }
 
@@ -129,7 +127,6 @@ export function buildSpeciesIndex(rows: ExistingSpecies[]): SpeciesIndex {
   const index: SpeciesIndex = {
     bySisTaxonId: new Map(),
     byGbifSpeciesKey: new Map(),
-    byColId: new Map(),
     byNormalizedName: new Map(),
   };
 
@@ -140,9 +137,6 @@ export function buildSpeciesIndex(rows: ExistingSpecies[]): SpeciesIndex {
     if (row.gbif_species_key !== null) {
       index.byGbifSpeciesKey.set(row.gbif_species_key, row);
     }
-    if (row.col_id !== null) {
-      index.byColId.set(row.col_id, row);
-    }
     index.byNormalizedName.set(normalizeSpeciesName(row.scientific_name), row);
   }
 
@@ -151,21 +145,18 @@ export function buildSpeciesIndex(rows: ExistingSpecies[]): SpeciesIndex {
 
 export type MatchResult =
   | { match: "by_primary_id"; species: ExistingSpecies }
-  | { match: "by_col_id"; species: ExistingSpecies }
   | { match: "by_name"; species: ExistingSpecies }
   | { match: "none" };
 
 /**
- * Find an existing species row using the 3-tier matching logic:
+ * Find an existing species row using 2-tier matching:
  * 1. Match by primary external ID (sis_taxon_id or gbif_species_key)
- * 2. Match by col_id
- * 3. Match by normalized scientific name
+ * 2. Match by normalized scientific name
  */
 export function findMatch(
   index: SpeciesIndex,
   opts: {
     primaryId?: { type: "sis_taxon_id"; value: number } | { type: "gbif_species_key"; value: number };
-    colId?: string | null;
     scientificName: string;
   }
 ): MatchResult {
@@ -178,13 +169,7 @@ export function findMatch(
     if (found) return { match: "by_primary_id", species: found };
   }
 
-  // Step 2: col_id
-  if (opts.colId) {
-    const found = index.byColId.get(opts.colId);
-    if (found) return { match: "by_col_id", species: found };
-  }
-
-  // Step 3: normalized name
+  // Step 2: normalized name
   const normalized = normalizeSpeciesName(opts.scientificName);
   const found = index.byNormalizedName.get(normalized);
   if (found) return { match: "by_name", species: found };
