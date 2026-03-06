@@ -375,9 +375,10 @@ export async function upsertGbifSpecies(
     const { error } = await supabase.from("species").insert(batch);
     if (error) {
       stats.errors += batch.length;
-      logger.log("error", { event: "batch_insert_failed", count: batch.length, error: error.message });
+      logger.log("batch_insert_failed", { count: batch.length, error: error.message });
     } else {
       stats.inserted += batch.length;
+      logger.log("batch_inserted", { count: batch.length });
     }
     process.stdout.write(`\r  Inserted ${Math.min(i + UPSERT_BATCH_SIZE, toInsert.length)}/${toInsert.length}`);
   }
