@@ -88,7 +88,7 @@ describe("findMatch", () => {
       primaryId: { type: "sis_taxon_id", value: 999 },
       scientificName: "Felis catus",
     });
-    expect(result.match).toBe("by_name");
+    expect(result.match).toBe("by_scientific_name");
     if (result.match !== "none") expect(result.species.id).toBe(3);
   });
 
@@ -96,7 +96,7 @@ describe("findMatch", () => {
     const result = findMatch(index, {
       scientificName: "  PANTHERA LEO  ",
     });
-    expect(result.match).toBe("by_name");
+    expect(result.match).toBe("by_scientific_name");
     if (result.match !== "none") expect(result.species.id).toBe(1);
   });
 
@@ -112,7 +112,7 @@ describe("findMatch", () => {
     const result = findMatch(index, {
       scientificName: "Puma concolor",
     });
-    expect(result.match).toBe("by_name");
+    expect(result.match).toBe("by_scientific_name");
     if (result.match !== "none") expect(result.species.id).toBe(2);
   });
 });

@@ -312,8 +312,8 @@ const UPSERT_BATCH_SIZE = 500;
  */
 export interface GbifUpsertStats {
   inserted: number;
-  matched_by_id: number;
-  matched_by_name: number;
+  matched_by_gbif_key: number;
+  matched_by_scientific_name: number;
   errors: number;
 }
 
@@ -335,7 +335,7 @@ export async function upsertGbifSpecies(
   );
 
   const index = buildSpeciesIndex(existing as ExistingSpecies[]);
-  const stats: GbifUpsertStats = { matched_by_id: 0, matched_by_name: 0, inserted: 0, errors: 0 };
+  const stats: GbifUpsertStats = { matched_by_gbif_key: 0, matched_by_scientific_name: 0, inserted: 0, errors: 0 };
 
   // Classify species into inserts vs updates using in-memory matching
   type GbifSource = typeof speciesList[number];
@@ -389,24 +389,27 @@ export async function upsertGbifSpecies(
   }
   if (toInsert.length > 0) console.log("");
 
-  // Updates must be individual (each targets a different row by id)
-  for (let i = 0; i < toUpdate.length; i++) {
-    const { id, row, source, matchType } = toUpdate[i];
-    const { error } = await supabase.from("species").update(row).eq("id", id);
-    if (error) {
-      stats.errors++;
-      logger.log("error", { name: source.scientificName, gbif_species_key: source.speciesKey, error: error.message });
-    } else {
-      if (matchType === "by_name") {
-        stats.matched_by_name++;
-        logger.log("matched_by_name", { name: source.scientificName, gbif_species_key: source.speciesKey, matched_id: id });
+  // Parallel updates (each targets a different row by id)
+  const UPDATE_CONCURRENCY = 20;
+  for (let i = 0; i < toUpdate.length; i += UPDATE_CONCURRENCY) {
+    const chunk = toUpdate.slice(i, i + UPDATE_CONCURRENCY);
+    const results = await Promise.all(
+      chunk.map(({ id, row }) => supabase.from("species").update(row).eq("id", id))
+    );
+    for (let j = 0; j < chunk.length; j++) {
+      const { source, matchType } = chunk[j];
+      const { error } = results[j];
+      if (error) {
+        stats.errors++;
+        logger.log("error", { name: source.scientificName, gbif_species_key: source.speciesKey, error: error.message });
+      } else if (matchType === "by_scientific_name") {
+        stats.matched_by_scientific_name++;
+        logger.log("matched_by_scientific_name", { name: source.scientificName, gbif_species_key: source.speciesKey, matched_id: chunk[j].id });
       } else {
-        stats.matched_by_id++;
+        stats.matched_by_gbif_key++;
       }
     }
-    if ((i + 1) % UPSERT_BATCH_SIZE === 0 || i === toUpdate.length - 1) {
-      process.stdout.write(`\r  Updated ${i + 1}/${toUpdate.length}`);
-    }
+    process.stdout.write(`\r  Updated ${Math.min(i + UPDATE_CONCURRENCY, toUpdate.length)}/${toUpdate.length}`);
   }
   if (toUpdate.length > 0) console.log("");
 
@@ -446,7 +449,7 @@ async function main() {
       taxa_count: taxaToSync.length,
     });
 
-    const totals: GbifUpsertStats = { inserted: 0, matched_by_id: 0, matched_by_name: 0, errors: 0 };
+    const totals: GbifUpsertStats = { inserted: 0, matched_by_gbif_key: 0, matched_by_scientific_name: 0, errors: 0 };
 
     for (const taxon of taxaToSync) {
       const taxonStart = Date.now();
@@ -559,8 +562,8 @@ async function main() {
 
     console.log("\n" + "=".repeat(50));
     console.log("sync-gbif complete:");
-    console.log(`  Matched by gbif_species_key: ${totals.matched_by_id.toLocaleString()}`);
-    console.log(`  Matched by name:             ${totals.matched_by_name.toLocaleString()}`);
+    console.log(`  Matched by gbif_species_key:  ${totals.matched_by_gbif_key.toLocaleString()}`);
+    console.log(`  Matched by scientific_name:   ${totals.matched_by_scientific_name.toLocaleString()}`);
     console.log(`  Inserted new (NE):           ${totals.inserted.toLocaleString()}`);
     if (totals.errors) {
       console.log(`  Errors:                      ${totals.errors.toLocaleString()}`);

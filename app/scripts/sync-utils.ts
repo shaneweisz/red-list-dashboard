@@ -145,7 +145,7 @@ export function buildSpeciesIndex(rows: ExistingSpecies[]): SpeciesIndex {
 
 export type MatchResult =
   | { match: "by_primary_id"; species: ExistingSpecies }
-  | { match: "by_name"; species: ExistingSpecies }
+  | { match: "by_scientific_name"; species: ExistingSpecies }
   | { match: "none" };
 
 /**
@@ -172,7 +172,7 @@ export function findMatch(
   // Step 2: normalized name
   const normalized = normalizeSpeciesName(opts.scientificName);
   const found = index.byNormalizedName.get(normalized);
-  if (found) return { match: "by_name", species: found };
+  if (found) return { match: "by_scientific_name", species: found };
 
   return { match: "none" };
 }

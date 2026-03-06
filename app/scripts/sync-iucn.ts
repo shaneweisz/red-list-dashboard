@@ -162,8 +162,8 @@ const BATCH_SIZE = 500;
 
 export interface UpsertStats {
   inserted: number;
-  matched_by_id: number;
-  matched_by_name: number;
+  matched_by_sis_taxon_id: number;
+  matched_by_scientific_name: number;
   errors: number;
 }
 
@@ -184,7 +184,7 @@ export async function upsertIucnSpecies(
 
   const index = buildSpeciesIndex(existing);
   const seenSisTaxonIds = new Set<number>();
-  const stats: UpsertStats = { matched_by_id: 0, matched_by_name: 0, inserted: 0, errors: 0 };
+  const stats: UpsertStats = { matched_by_sis_taxon_id: 0, matched_by_scientific_name: 0, inserted: 0, errors: 0 };
 
   // Classify species into inserts vs updates using in-memory matching
   const toInsert: Record<string, unknown>[] = [];
@@ -235,24 +235,27 @@ export async function upsertIucnSpecies(
   }
   if (toInsert.length > 0) console.log("");
 
-  // Updates must be individual (each targets a different row by id)
-  for (let i = 0; i < toUpdate.length; i++) {
-    const { id, row, source, matchType } = toUpdate[i];
-    const { error } = await supabase.from("species").update(row).eq("id", id);
-    if (error) {
-      stats.errors++;
-      logger.log("error", { name: source.scientific_name, sis_taxon_id: source.sis_taxon_id, error: error.message });
-    } else {
-      if (matchType === "by_name") {
-        stats.matched_by_name++;
-        logger.log("matched_by_name", { name: source.scientific_name, sis_taxon_id: source.sis_taxon_id, matched_id: id });
+  // Parallel updates (each targets a different row by id)
+  const UPDATE_CONCURRENCY = 20;
+  for (let i = 0; i < toUpdate.length; i += UPDATE_CONCURRENCY) {
+    const chunk = toUpdate.slice(i, i + UPDATE_CONCURRENCY);
+    const results = await Promise.all(
+      chunk.map(({ id, row }) => supabase.from("species").update(row).eq("id", id))
+    );
+    for (let j = 0; j < chunk.length; j++) {
+      const { source, matchType } = chunk[j];
+      const { error } = results[j];
+      if (error) {
+        stats.errors++;
+        logger.log("error", { name: source.scientific_name, sis_taxon_id: source.sis_taxon_id, error: error.message });
+      } else if (matchType === "by_scientific_name") {
+        stats.matched_by_scientific_name++;
+        logger.log("matched_by_scientific_name", { name: source.scientific_name, sis_taxon_id: source.sis_taxon_id, matched_id: chunk[j].id });
       } else {
-        stats.matched_by_id++;
+        stats.matched_by_sis_taxon_id++;
       }
     }
-    if ((i + 1) % BATCH_SIZE === 0 || i === toUpdate.length - 1) {
-      process.stdout.write(`\r  Updated ${i + 1}/${toUpdate.length}`);
-    }
+    process.stdout.write(`\r  Updated ${Math.min(i + UPDATE_CONCURRENCY, toUpdate.length)}/${toUpdate.length}`);
   }
   if (toUpdate.length > 0) console.log("");
 
@@ -351,7 +354,7 @@ async function main() {
     });
 
     const allSeenIds = new Set<number>();
-    const totals: UpsertStats = { inserted: 0, matched_by_id: 0, matched_by_name: 0, errors: 0 };
+    const totals: UpsertStats = { inserted: 0, matched_by_sis_taxon_id: 0, matched_by_scientific_name: 0, errors: 0 };
 
     for (const taxon of taxaToSync) {
       const taxonStart = Date.now();
@@ -398,8 +401,8 @@ async function main() {
 
     console.log("\n" + "=".repeat(50));
     console.log("sync-iucn complete:");
-    console.log(`  Matched by sis_taxon_id: ${totals.matched_by_id.toLocaleString()}`);
-    console.log(`  Matched by name:         ${totals.matched_by_name.toLocaleString()}`);
+    console.log(`  Matched by sis_taxon_id:     ${totals.matched_by_sis_taxon_id.toLocaleString()}`);
+    console.log(`  Matched by scientific_name:  ${totals.matched_by_scientific_name.toLocaleString()}`);
     console.log(`  Inserted new:            ${totals.inserted.toLocaleString()}`);
     console.log(`  Superseded:              ${supersededCount.toLocaleString()}`);
     if (totals.errors) {
