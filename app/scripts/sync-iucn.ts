@@ -159,16 +159,24 @@ export async function fetchFromIucnDb(
 
 const BATCH_SIZE = 500;
 
+export interface UpsertStats {
+  inserted: number;
+  matched_by_id: number;
+  matched_by_col_id: number;
+  matched_by_name: number;
+  errors: number;
+}
+
 /**
  * Upsert IUCN species into Supabase.
  * Uses 3-tier matching: sis_taxon_id → col_id → normalized name.
- * Returns the set of sis_taxon_ids seen during this sync.
+ * Returns the set of sis_taxon_ids seen and upsert stats.
  */
 export async function upsertIucnSpecies(
   supabase: SupabaseClient,
   species: IucnSpeciesRow[],
   logger: SyncLogger
-): Promise<Set<number>> {
+): Promise<{ seenSisTaxonIds: Set<number>; stats: UpsertStats }> {
   // Load existing species for matching
   const { data: existing, error: fetchError } = await supabase
     .from("species")
@@ -178,7 +186,7 @@ export async function upsertIucnSpecies(
 
   const index = buildSpeciesIndex(existing as ExistingSpecies[]);
   const seenSisTaxonIds = new Set<number>();
-  const stats = { matched_by_id: 0, matched_by_col_id: 0, matched_by_name: 0, inserted: 0, errors: 0 };
+  const stats: UpsertStats = { matched_by_id: 0, matched_by_col_id: 0, matched_by_name: 0, inserted: 0, errors: 0 };
 
   // Classify species into inserts vs updates using in-memory matching
   const toInsert: Record<string, unknown>[] = [];
@@ -221,10 +229,9 @@ export async function upsertIucnSpecies(
     const { error } = await supabase.from("species").insert(batch);
     if (error) {
       stats.errors += batch.length;
-      logger.log("batch_insert_failed", { count: batch.length, error: error.message });
+      logger.log("error", { error: error.message, context: "batch_insert", count: batch.length });
     } else {
       stats.inserted += batch.length;
-      logger.log("batch_inserted", { count: batch.length });
     }
     process.stdout.write(`\r  Inserted ${Math.min(i + BATCH_SIZE, toInsert.length)}/${toInsert.length}`);
   }
@@ -254,16 +261,7 @@ export async function upsertIucnSpecies(
   }
   if (toUpdate.length > 0) console.log("");
 
-  logger.log("summary", {
-    total: species.length,
-    inserted: stats.inserted,
-    matched_by_id: stats.matched_by_id,
-    matched_by_col_id: stats.matched_by_col_id,
-    matched_by_name: stats.matched_by_name,
-    errors: stats.errors,
-  });
-
-  return seenSisTaxonIds;
+  return { seenSisTaxonIds, stats };
 }
 
 /**
@@ -355,7 +353,13 @@ async function main() {
     await pgClient.connect();
     console.log("Connected to IUCN database\n");
 
+    logger.log("sync_start", {
+      taxa: taxaToSync.map((t) => t.id),
+      taxa_count: taxaToSync.length,
+    });
+
     const allSeenIds = new Set<number>();
+    const totals: UpsertStats = { inserted: 0, matched_by_id: 0, matched_by_col_id: 0, matched_by_name: 0, errors: 0 };
 
     for (const taxon of taxaToSync) {
       console.log(`\n${taxon.name} (${taxon.id}):`);
@@ -364,33 +368,49 @@ async function main() {
       const species = await fetchFromIucnDb(pgClient, taxon);
       console.log(`  Fetched ${species.length} species from IUCN DB`);
 
+      logger.log("taxon_start", { taxon_group: taxon.id, taxon_name: taxon.name, fetched: species.length });
+
       // Upsert into Supabase
-      const seenIds = await upsertIucnSpecies(supabase, species, logger);
-      for (const id of seenIds) allSeenIds.add(id);
+      const { seenSisTaxonIds, stats } = await upsertIucnSpecies(supabase, species, logger);
+      for (const id of seenSisTaxonIds) allSeenIds.add(id);
+
+      logger.log("taxon_complete", { taxon_group: taxon.id, taxon_name: taxon.name, fetched: species.length, ...stats });
+
+      // Accumulate totals
+      for (const key of Object.keys(totals) as (keyof UpsertStats)[]) {
+        totals[key] += stats[key];
+      }
     }
 
     // Supersede missing species (only when syncing all taxa)
+    let supersededCount = 0;
     if (!taxonArg) {
       console.log("\nChecking for superseded species...");
-      const supersededCount = await supersedeMissing(supabase, allSeenIds, logger);
+      supersededCount = await supersedeMissing(supabase, allSeenIds, logger);
       console.log(`  ${supersededCount} species marked as superseded`);
     }
 
-    // Print summary
-    const counts = logger.getCounts();
+    // Log + print summary
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
     const minutes = Math.floor(Number(elapsed) / 60);
     const seconds = Number(elapsed) % 60;
 
+    logger.log("sync_complete", {
+      ...totals,
+      superseded: supersededCount,
+      total_species: allSeenIds.size,
+      duration_seconds: Number(elapsed),
+    });
+
     console.log("\n" + "=".repeat(50));
     console.log("sync-iucn complete:");
-    console.log(`  Matched by sis_taxon_id: ${(counts.matched_by_id || 0).toLocaleString()}`);
-    console.log(`  Matched by col_id:       ${(counts.matched_by_col_id || 0).toLocaleString()}`);
-    console.log(`  Matched by name:         ${(counts.matched_by_name || 0).toLocaleString()}`);
-    console.log(`  Inserted new:            ${(counts.inserted || 0).toLocaleString()}`);
-    console.log(`  Superseded:              ${(counts.superseded || 0).toLocaleString()}`);
-    if (counts.error) {
-      console.log(`  Errors:                  ${counts.error.toLocaleString()}`);
+    console.log(`  Matched by sis_taxon_id: ${totals.matched_by_id.toLocaleString()}`);
+    console.log(`  Matched by col_id:       ${totals.matched_by_col_id.toLocaleString()}`);
+    console.log(`  Matched by name:         ${totals.matched_by_name.toLocaleString()}`);
+    console.log(`  Inserted new:            ${totals.inserted.toLocaleString()}`);
+    console.log(`  Superseded:              ${supersededCount.toLocaleString()}`);
+    if (totals.errors) {
+      console.log(`  Errors:                  ${totals.errors.toLocaleString()}`);
     }
     console.log(`  Duration: ${minutes}m ${seconds}s`);
   } finally {

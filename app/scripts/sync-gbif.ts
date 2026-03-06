@@ -309,6 +309,14 @@ const UPSERT_BATCH_SIZE = 500;
  * - Existing species (matched by gbif_species_key, col_id, or name): UPDATE GBIF columns
  * - Unmatched GBIF species: INSERT as NE species
  */
+export interface GbifUpsertStats {
+  inserted: number;
+  matched_by_id: number;
+  matched_by_col_id: number;
+  matched_by_name: number;
+  errors: number;
+}
+
 export async function upsertGbifSpecies(
   supabase: SupabaseClient,
   speciesList: Array<{
@@ -320,7 +328,7 @@ export async function upsertGbifSpecies(
     observationsAfterAssessment: number | null;
   }>,
   logger: SyncLogger
-): Promise<void> {
+): Promise<GbifUpsertStats> {
   // Load existing species for matching
   const { data: existing, error: fetchError } = await supabase
     .from("species")
@@ -329,7 +337,7 @@ export async function upsertGbifSpecies(
   if (fetchError) throw new Error(`Failed to fetch existing species: ${fetchError.message}`);
 
   const index = buildSpeciesIndex(existing as ExistingSpecies[]);
-  const stats = { matched_by_id: 0, matched_by_col_id: 0, matched_by_name: 0, inserted: 0, errors: 0 };
+  const stats: GbifUpsertStats = { matched_by_id: 0, matched_by_col_id: 0, matched_by_name: 0, inserted: 0, errors: 0 };
 
   // Classify species into inserts vs updates using in-memory matching
   type GbifSource = typeof speciesList[number];
@@ -375,10 +383,9 @@ export async function upsertGbifSpecies(
     const { error } = await supabase.from("species").insert(batch);
     if (error) {
       stats.errors += batch.length;
-      logger.log("batch_insert_failed", { count: batch.length, error: error.message });
+      logger.log("error", { error: error.message, context: "batch_insert", count: batch.length });
     } else {
       stats.inserted += batch.length;
-      logger.log("batch_inserted", { count: batch.length });
     }
     process.stdout.write(`\r  Inserted ${Math.min(i + UPSERT_BATCH_SIZE, toInsert.length)}/${toInsert.length}`);
   }
@@ -408,14 +415,7 @@ export async function upsertGbifSpecies(
   }
   if (toUpdate.length > 0) console.log("");
 
-  logger.log("summary", {
-    name: "gbif_upsert",
-    matched_by_id: stats.matched_by_id,
-    matched_by_col_id: stats.matched_by_col_id,
-    matched_by_name: stats.matched_by_name,
-    inserted: stats.inserted,
-    errors: stats.errors,
-  });
+  return stats;
 }
 
 // =============================================================================
@@ -446,6 +446,13 @@ async function main() {
   const logger = new SyncLogger("sync-gbif");
 
   try {
+    logger.log("sync_start", {
+      taxa: taxaToSync.map((t) => t.id),
+      taxa_count: taxaToSync.length,
+    });
+
+    const totals: GbifUpsertStats = { inserted: 0, matched_by_id: 0, matched_by_col_id: 0, matched_by_name: 0, errors: 0 };
+
     for (const taxon of taxaToSync) {
       console.log(`\n${taxon.name} (${taxon.id}):`);
 
@@ -537,23 +544,32 @@ async function main() {
           : null,
       }));
 
-      await upsertGbifSpecies(supabase, speciesList, logger);
+      logger.log("taxon_start", { taxon_id: taxon.id, taxon_name: taxon.name, raw_species: rawResults.length, valid_species: speciesList.length });
+
+      const stats = await upsertGbifSpecies(supabase, speciesList, logger);
+
+      logger.log("taxon_complete", { taxon_id: taxon.id, taxon_name: taxon.name, raw_species: rawResults.length, valid_species: speciesList.length, ...stats });
+
+      for (const key of Object.keys(totals) as (keyof GbifUpsertStats)[]) {
+        totals[key] += stats[key];
+      }
     }
 
-    // Print summary
-    const counts = logger.getCounts();
+    // Log + print summary
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
     const minutes = Math.floor(Number(elapsed) / 60);
     const seconds = Number(elapsed) % 60;
 
+    logger.log("sync_complete", { ...totals, duration_seconds: Number(elapsed) });
+
     console.log("\n" + "=".repeat(50));
     console.log("sync-gbif complete:");
-    console.log(`  Matched by gbif_species_key: ${(counts.matched_by_id || 0).toLocaleString()}`);
-    console.log(`  Matched by col_id:           ${(counts.matched_by_col_id || 0).toLocaleString()}`);
-    console.log(`  Matched by name:             ${(counts.matched_by_name || 0).toLocaleString()}`);
-    console.log(`  Inserted new (NE):           ${(counts.inserted || 0).toLocaleString()}`);
-    if (counts.error) {
-      console.log(`  Errors:                      ${counts.error.toLocaleString()}`);
+    console.log(`  Matched by gbif_species_key: ${totals.matched_by_id.toLocaleString()}`);
+    console.log(`  Matched by col_id:           ${totals.matched_by_col_id.toLocaleString()}`);
+    console.log(`  Matched by name:             ${totals.matched_by_name.toLocaleString()}`);
+    console.log(`  Inserted new (NE):           ${totals.inserted.toLocaleString()}`);
+    if (totals.errors) {
+      console.log(`  Errors:                      ${totals.errors.toLocaleString()}`);
     }
     console.log(`  Duration: ${minutes}m ${seconds}s`);
   } finally {

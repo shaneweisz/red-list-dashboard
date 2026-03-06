@@ -183,7 +183,6 @@ export class SyncLogger {
     this.counts[event] = (this.counts[event] || 0) + 1;
     const entry = {
       ts: new Date().toISOString(),
-      name: data.name || data.scientific_name,
       event,
       ...data,
     };
