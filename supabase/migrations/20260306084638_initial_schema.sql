@@ -46,3 +46,47 @@ alter table public.species enable row level security;
 create policy "Species are readable by everyone"
   on public.species for select using (true);
 
+-- Materialized view for taxa summary (powers /api/redlist/taxa).
+-- Refresh after each sync: REFRESH MATERIALIZED VIEW taxa_summary;
+create materialized view taxa_summary as
+with category_counts as (
+  select
+    taxon_group,
+    jsonb_object_agg(
+      coalesce(iucn_category, 'NE'),
+      cat_count
+    ) as by_category
+  from (
+    select taxon_group, iucn_category, count(*) as cat_count
+    from public.species
+    where status = 'active'
+    group by taxon_group, iucn_category
+  ) sub
+  group by taxon_group
+),
+species_stats as (
+  select
+    taxon_group,
+    count(*) filter (where iucn_category is not null) as total_assessed,
+    count(*) filter (where assessment_date < current_date - interval '10 years') as outdated,
+    count(*) filter (where gbif_species_key is not null) as gbif_species_count,
+    coalesce(sum(gbif_occurrence_count), 0) as total_gbif_observations,
+    coalesce(avg(gbif_occurrence_count) filter (where gbif_species_key is not null), 0) as mean_gbif_obs,
+    percentile_cont(0.5) within group (order by gbif_occurrence_count)
+      filter (where gbif_species_key is not null) as median_gbif_obs
+  from public.species
+  where status = 'active'
+  group by taxon_group
+)
+select
+  s.taxon_group,
+  s.total_assessed,
+  s.outdated,
+  c.by_category,
+  s.gbif_species_count,
+  s.total_gbif_observations,
+  s.mean_gbif_obs,
+  s.median_gbif_obs
+from species_stats s
+join category_counts c using (taxon_group);
+
