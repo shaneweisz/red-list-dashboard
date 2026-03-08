@@ -304,7 +304,6 @@ const REDLIST_CSV_COLUMNS = [
 
 export function writeRedlistCsv(species: IucnSpeciesRow[], outputPath: string): void {
   const rows = species
-    .sort((a, b) => a.sis_taxon_id - b.sis_taxon_id)
     .map((s) => ({
       sis_taxon_id: s.sis_taxon_id,
       scientific_name: s.scientific_name,

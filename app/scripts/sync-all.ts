@@ -240,6 +240,7 @@ async function main() {
       console.log(`${"═".repeat(60)}`);
       console.log(`${group.name} (${group.id})`);
       console.log(`${"═".repeat(60)}`);
+      logger.log("group_start", { group: group.id, name: group.name });
 
       // ── Step 1: Red List ──────────────────────────────────────────
       console.log("\n  ▸ Red List");
@@ -258,6 +259,7 @@ async function main() {
           allLinkResults.push({ sis_taxon_id: s.sis_taxon_id, gbif_species_key: null, match_type: "SKIPPED" });
         }
         const groupDuration = ((Date.now() - groupStart) / 1000).toFixed(1);
+        logger.log("group_complete", { group: group.id, redlist: groupRedlist.length, mode: "skip-gbif", duration_seconds: Number(groupDuration) });
         console.log(`\n  Done (${groupDuration}s)\n`);
         continue;
       }
@@ -294,7 +296,8 @@ async function main() {
       console.log(`    Unlinked: ${noMatch + noGbifData + alreadyLinked} (${noMatch} no match, ${noGbifData} no GBIF data, ${alreadyLinked} duplicate)`);
 
       // ── Step 4: Since-assessment counts ───────────────────────────
-      // Write intermediate CSVs so computeSinceAssessment can read them
+      // Write CSVs so computeSinceAssessment can read links, and so
+      // progress is visible on disk after each taxon group completes.
       console.log("\n  ▸ Since-assessment counts");
       writeRedlistCsv(allRedlistSpecies, path.join(DATA_DIR, "redlist-species.csv"));
       writeLinksCsv(allLinkResults, path.join(DATA_DIR, "species-links.csv"));
@@ -302,24 +305,31 @@ async function main() {
       const saCount = await computeSinceAssessment(group.gbifTaxon!, allGbifSpecies, logger);
       console.log(`    Computed for ${saCount} species`);
 
+      // Write all 3 CSVs after since-assessment updates
+      writeGbifCsv(allGbifSpecies, path.join(DATA_DIR, "gbif-species.csv"));
+
       const groupDuration = ((Date.now() - groupStart) / 1000).toFixed(1);
+      logger.log("group_complete", {
+        group: group.id,
+        redlist: groupRedlist.length,
+        gbif_raw: rawResults.length,
+        gbif_valid: validSpecies.size,
+        linked, exact, fuzzy, noMatch, noGbifData, alreadyLinked,
+        since_assessment: saCount,
+        duration_seconds: Number(groupDuration),
+      });
       console.log(`\n  Done (${groupDuration}s)\n`);
     }
 
-    // ── Write final CSVs ──────────────────────────────────────────────
-    console.log("Writing CSVs...");
+    // ── Final summary ─────────────────────────────────────────────────
     const redlistPath = path.join(DATA_DIR, "redlist-species.csv");
     const gbifPath = path.join(DATA_DIR, "gbif-species.csv");
     const linksPath = path.join(DATA_DIR, "species-links.csv");
-
-    writeRedlistCsv(allRedlistSpecies, redlistPath);
-    console.log(`  ${redlistPath}: ${allRedlistSpecies.length.toLocaleString()} rows`);
-
-    writeGbifCsv(allGbifSpecies, gbifPath);
-    console.log(`  ${gbifPath}: ${allGbifSpecies.size.toLocaleString()} rows`);
-
-    writeLinksCsv(allLinkResults, linksPath);
     const linkedCount = allLinkResults.filter((r) => r.gbif_species_key !== null).length;
+
+    console.log("CSVs written:");
+    console.log(`  ${redlistPath}: ${allRedlistSpecies.length.toLocaleString()} rows`);
+    console.log(`  ${gbifPath}: ${allGbifSpecies.size.toLocaleString()} rows`);
     console.log(`  ${linksPath}: ${allLinkResults.length.toLocaleString()} rows (${linkedCount.toLocaleString()} linked)`);
 
     // ── Push to DB ────────────────────────────────────────────────────
