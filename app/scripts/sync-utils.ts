@@ -1,10 +1,10 @@
 /**
  * Shared utilities for sync scripts.
  *
- * - Species name normalization
- * - Matching logic (primary ID → name)
  * - JSONL logging
  * - Supabase service client creation
+ * - Paginated fetch
+ * - Taxa configuration
  */
 
 import * as fs from "fs";
@@ -73,8 +73,11 @@ export async function fetchAllRows<T>(
   const allRows: T[] = [];
   let offset = 0;
 
+  // Order by first selected column to ensure stable pagination
+  const orderCol = select.split(",")[0].trim();
+
   while (true) {
-    let query = supabase.from(table).select(select).range(offset, offset + PAGE_SIZE - 1);
+    let query = supabase.from(table).select(select).order(orderCol).range(offset, offset + PAGE_SIZE - 1);
     if (filters) {
       query = filters(query) as typeof query;
     }
@@ -90,99 +93,11 @@ export async function fetchAllRows<T>(
 }
 
 // =============================================================================
-// NAME NORMALIZATION
-// =============================================================================
-
-/**
- * Normalize a scientific name for matching:
- * - Lowercase
- * - Trim whitespace
- * - Collapse multiple spaces
- */
-export function normalizeSpeciesName(name: string): string {
-  return name.toLowerCase().trim().replace(/\s+/g, " ");
-}
-
-// =============================================================================
-// MATCHING LOGIC
-// =============================================================================
-
-export interface ExistingSpecies {
-  id: number;
-  scientific_name: string;
-  sis_taxon_id: number | null;
-  gbif_species_key: number | null;
-}
-
-/**
- * Build lookup indexes from existing species rows for efficient matching.
- */
-export interface SpeciesIndex {
-  bySisTaxonId: Map<number, ExistingSpecies>;
-  byGbifSpeciesKey: Map<number, ExistingSpecies>;
-  byNormalizedName: Map<string, ExistingSpecies>;
-}
-
-export function buildSpeciesIndex(rows: ExistingSpecies[]): SpeciesIndex {
-  const index: SpeciesIndex = {
-    bySisTaxonId: new Map(),
-    byGbifSpeciesKey: new Map(),
-    byNormalizedName: new Map(),
-  };
-
-  for (const row of rows) {
-    if (row.sis_taxon_id !== null) {
-      index.bySisTaxonId.set(row.sis_taxon_id, row);
-    }
-    if (row.gbif_species_key !== null) {
-      index.byGbifSpeciesKey.set(row.gbif_species_key, row);
-    }
-    index.byNormalizedName.set(normalizeSpeciesName(row.scientific_name), row);
-  }
-
-  return index;
-}
-
-export type MatchResult =
-  | { match: "by_primary_id"; species: ExistingSpecies }
-  | { match: "by_scientific_name"; species: ExistingSpecies }
-  | { match: "none" };
-
-/**
- * Find an existing species row using 2-tier matching:
- * 1. Match by primary external ID (sis_taxon_id or gbif_species_key)
- * 2. Match by normalized scientific name
- */
-export function findMatch(
-  index: SpeciesIndex,
-  opts: {
-    primaryId?: { type: "sis_taxon_id"; value: number } | { type: "gbif_species_key"; value: number };
-    scientificName: string;
-  }
-): MatchResult {
-  // Step 1: primary ID
-  if (opts.primaryId) {
-    const map = opts.primaryId.type === "sis_taxon_id"
-      ? index.bySisTaxonId
-      : index.byGbifSpeciesKey;
-    const found = map.get(opts.primaryId.value);
-    if (found) return { match: "by_primary_id", species: found };
-  }
-
-  // Step 2: normalized name
-  const normalized = normalizeSpeciesName(opts.scientificName);
-  const found = index.byNormalizedName.get(normalized);
-  if (found) return { match: "by_scientific_name", species: found };
-
-  return { match: "none" };
-}
-
-// =============================================================================
 // JSONL LOGGING
 // =============================================================================
 
 export class SyncLogger {
-  private stream: fs.WriteStream;
+  private stream: fs.WriteStream | null;
   private counts: Record<string, number> = {};
 
   constructor(scriptName: string, logsDir?: string) {
@@ -194,8 +109,17 @@ export class SyncLogger {
     this.stream = fs.createWriteStream(path.join(dir, filename), { flags: "a" });
   }
 
+  /** Create a no-op logger that doesn't write to disk */
+  static noop(): SyncLogger {
+    const logger = Object.create(SyncLogger.prototype) as SyncLogger;
+    logger.stream = null;
+    logger.counts = {};
+    return logger;
+  }
+
   log(event: string, data: Record<string, unknown>): void {
     this.counts[event] = (this.counts[event] || 0) + 1;
+    if (!this.stream) return;
     const entry = {
       ts: new Date().toISOString(),
       event,
@@ -209,7 +133,7 @@ export class SyncLogger {
   }
 
   close(): void {
-    this.stream.end();
+    this.stream?.end();
   }
 }
 
@@ -237,6 +161,8 @@ export const IUCN_TAXA: IucnTaxonConfig[] = [
   { id: "crustacea", name: "Crustaceans", filterColumn: "class_name", filterValues: ["MALACOSTRACA", "MAXILLOPODA", "BRANCHIOPODA", "OSTRACODA", "HEXANAUPLIA"] },
   { id: "arachnida", name: "Arachnids", filterColumn: "class_name", filterValues: ["ARACHNIDA"] },
   { id: "corals", name: "Corals", filterColumn: "order_name", filterValues: ["SCLERACTINIA", "ALCYONACEA", "PENNATULACEA"] },
+  { id: "velvet_worms", name: "Velvet Worms", filterColumn: "class_name", filterValues: ["UDEONYCHOPHORA"] },
+  { id: "horseshoe_crabs", name: "Horseshoe Crabs", filterColumn: "class_name", filterValues: ["MEROSTOMATA"] },
   // "Other Invertebrates" needs two entries because it spans different filter columns:
   // non-coral Anthozoa are filtered by order_name (to separate them from corals, which
   // are also in class ANTHOZOA), while the remaining classes are filtered by class_name.
@@ -246,7 +172,7 @@ export const IUCN_TAXA: IucnTaxonConfig[] = [
   ] },
   { id: "other_invertebrates", name: "Other Invertebrates", filterColumn: "class_name", filterValues: [
     "HOLOTHUROIDEA", "CLITELLATA", "DIPLOPODA", "COLLEMBOLA", "CHILOPODA",
-    "DEMOSPONGIAE", "HYDROZOA", "UDEONYCHOPHORA", "NEMERTEA", "MEROSTOMATA",
+    "DEMOSPONGIAE", "HYDROZOA", "NEMERTEA",
     "ASTEROIDEA", "CALCAREA", "POLYCHAETA", "TURBELLARIA", "ECHINOIDEA",
   ] },
   // Plants
