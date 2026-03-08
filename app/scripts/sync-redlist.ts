@@ -16,16 +16,18 @@
  *   npx tsx scripts/sync-redlist.ts            # Sync all 15 taxa
  */
 
+import * as path from "path";
 import { Client } from "pg";
 import { SupabaseClient } from "@supabase/supabase-js";
 import {
   loadEnvFiles,
-  createServiceClient,
   fetchAllRows,
   SyncLogger,
   IUCN_TAXA,
   IucnTaxonConfig,
   POPULATION_TRENDS,
+  writeCsv,
+  DATA_DIR,
 } from "./sync-utils";
 
 // =============================================================================
@@ -291,6 +293,38 @@ export async function deleteDelisted(
 }
 
 // =============================================================================
+// CSV OUTPUT
+// =============================================================================
+
+const REDLIST_CSV_COLUMNS = [
+  "sis_taxon_id", "scientific_name", "common_name", "class_name", "order_name",
+  "family", "taxon_group", "assessment_id", "iucn_category", "assessment_date",
+  "year_published", "population_trend", "countries",
+];
+
+export function writeRedlistCsv(species: IucnSpeciesRow[], outputPath: string): void {
+  const rows = species
+    .sort((a, b) => a.sis_taxon_id - b.sis_taxon_id)
+    .map((s) => ({
+      sis_taxon_id: s.sis_taxon_id,
+      scientific_name: s.scientific_name,
+      common_name: s.common_name,
+      class_name: s.class_name,
+      order_name: s.order_name,
+      family: s.family,
+      taxon_group: s.taxon_group,
+      assessment_id: s.assessment_id,
+      iucn_category: s.category,
+      assessment_date: s.assessment_date,
+      year_published: s.year_published,
+      population_trend: s.population_trend,
+      countries: s.countries.join(";"),
+    }));
+
+  writeCsv(rows, REDLIST_CSV_COLUMNS, outputPath);
+}
+
+// =============================================================================
 // MAIN
 // =============================================================================
 
@@ -310,11 +344,10 @@ async function main() {
     process.exit(1);
   }
 
-  console.log("sync-redlist: IUCN Red List DB → Supabase");
+  console.log("sync-redlist: IUCN Red List DB → CSV");
   console.log("=".repeat(50));
 
   const startTime = Date.now();
-  const supabase = createServiceClient();
   const logger = new SyncLogger("sync-redlist");
 
   // Connect to IUCN database
@@ -335,58 +368,37 @@ async function main() {
       taxa_count: taxaToSync.length,
     });
 
-    const allSeenIds = new Set<number>();
-    const totals: UpsertStats = { upserted: 0, errors: 0 };
+    const allSpecies: IucnSpeciesRow[] = [];
 
     for (const taxon of taxaToSync) {
       const taxonStart = Date.now();
       console.log(`\n${taxon.name} (${taxon.id}):`);
 
-      // Fetch from IUCN DB
       const species = await fetchFromIucnDb(pgClient, taxon);
       console.log(`  Fetched ${species.length} species from IUCN DB`);
-
-      logger.log("taxon_start", { taxon_group: taxon.id, taxon_name: taxon.name, fetched: species.length });
-
-      // Upsert into Supabase
-      const { seenSisTaxonIds, stats } = await upsertRedlistSpecies(supabase, species, logger);
-      for (const id of seenSisTaxonIds) allSeenIds.add(id);
+      allSpecies.push(...species);
 
       const taxonDuration = ((Date.now() - taxonStart) / 1000).toFixed(1);
-      logger.log("taxon_complete", { taxon_group: taxon.id, taxon_name: taxon.name, fetched: species.length, ...stats, duration_seconds: Number(taxonDuration) });
-
-      // Accumulate totals
-      totals.upserted += stats.upserted;
-      totals.errors += stats.errors;
+      logger.log("taxon_complete", { taxon_group: taxon.id, taxon_name: taxon.name, fetched: species.length, duration_seconds: Number(taxonDuration) });
     }
 
-    // Delete delisted species (only when syncing all taxa)
-    let deletedCount = 0;
-    if (!taxonArg) {
-      console.log("\nChecking for delisted species...");
-      deletedCount = await deleteDelisted(supabase, allSeenIds, logger);
-      console.log(`  ${deletedCount} species deleted from redlist_species`);
-    }
+    // Write CSV
+    const outputPath = path.join(DATA_DIR, "redlist-species.csv");
+    writeRedlistCsv(allSpecies, outputPath);
 
-    // Log + print summary
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
     const minutes = Math.floor(Number(elapsed) / 60);
     const seconds = Number(elapsed) % 60;
 
     logger.log("sync_complete", {
-      ...totals,
-      deleted: deletedCount,
-      total_species: allSeenIds.size,
+      total_species: allSpecies.length,
       duration_seconds: Number(elapsed),
     });
 
     console.log("\n" + "=".repeat(50));
     console.log("sync-redlist complete:");
-    console.log(`  Upserted:  ${totals.upserted.toLocaleString()}`);
-    console.log(`  Deleted:   ${deletedCount.toLocaleString()}`);
-    if (totals.errors) {
-      console.log(`  Errors:    ${totals.errors.toLocaleString()}`);
-    }
+    console.log(`  Species: ${allSpecies.length.toLocaleString()}`);
+    console.log(`  Output:  ${outputPath}`);
     console.log(`  Duration: ${minutes}m ${seconds}s`);
   } finally {
     await pgClient.end();

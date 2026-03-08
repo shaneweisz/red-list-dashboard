@@ -188,3 +188,93 @@ export const POPULATION_TRENDS: Record<string, string> = {
   "2": "Stable",
   "3": "Unknown",
 };
+
+// =============================================================================
+// CSV UTILITIES
+// =============================================================================
+
+export const DATA_DIR = path.join(__dirname, "../data");
+
+/** Escape a field for RFC 4180 CSV. Quotes fields containing commas, quotes, or newlines. */
+function csvEscape(value: string): string {
+  if (value.includes(",") || value.includes('"') || value.includes("\n")) {
+    return '"' + value.replace(/"/g, '""') + '"';
+  }
+  return value;
+}
+
+/** Write rows to a CSV file. Rows are sorted by the first column for diffability. */
+export function writeCsv(
+  rows: Record<string, string | number | null | undefined>[],
+  columns: string[],
+  outputPath: string
+): void {
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  const header = columns.join(",");
+  const lines = rows.map((row) =>
+    columns.map((col) => {
+      const val = row[col];
+      if (val === null || val === undefined || val === "") return "";
+      return csvEscape(String(val));
+    }).join(",")
+  );
+  fs.writeFileSync(outputPath, header + "\n" + lines.join("\n") + "\n");
+}
+
+/** Parse a CSV line respecting quoted fields. */
+function parseCsvLine(line: string): string[] {
+  const fields: string[] = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (i + 1 < line.length && line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        current += ch;
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === ",") {
+        fields.push(current);
+        current = "";
+      } else {
+        current += ch;
+      }
+    }
+  }
+  fields.push(current);
+  return fields;
+}
+
+/** Read a CSV file and parse each row using the provided function. */
+export function readCsv<T>(
+  inputPath: string,
+  parse: (row: Record<string, string>) => T
+): T[] {
+  const content = fs.readFileSync(inputPath, "utf-8");
+  const lines = content.split("\n").filter((l) => l.trim() !== "");
+  if (lines.length === 0) return [];
+
+  const headers = parseCsvLine(lines[0]);
+  const results: T[] = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const values = parseCsvLine(lines[i]);
+    const row: Record<string, string> = {};
+    for (let j = 0; j < headers.length; j++) {
+      row[headers[j]] = values[j] ?? "";
+    }
+    results.push(parse(row));
+  }
+
+  return results;
+}

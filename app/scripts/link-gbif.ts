@@ -1,28 +1,29 @@
 /**
- * link-gbif: GBIF Species Match API → Supabase species table
+ * link-gbif: GBIF Species Match API → species-links.csv
  *
  * Resolves Red List scientific names to GBIF species keys using
- * GBIF's fuzzy matching API, then sets species.gbif_species_key.
+ * GBIF's fuzzy matching API, then writes species-links.csv.
  *
  * This solves name mismatches (e.g. "mackloti" vs "macklotii") by
  * delegating matching to GBIF's own taxonomic backbone.
  *
- * Incremental: only processes unlinked species on subsequent runs.
- *
  * Prerequisites:
- *   1. sync-redlist has run (redlist_species populated)
- *   2. sync-gbif --counts-only has run (gbif_species populated)
+ *   1. sync-redlist has run (redlist-species.csv exists)
+ *   2. sync-gbif --counts-only has run (gbif-species.csv exists)
  *
  * Usage:
  *   npx tsx scripts/link-gbif.ts
  */
 
+import * as path from "path";
 import { SupabaseClient } from "@supabase/supabase-js";
 import {
   loadEnvFiles,
-  createServiceClient,
   fetchAllRows,
   SyncLogger,
+  readCsv,
+  writeCsv,
+  DATA_DIR,
 } from "./sync-utils";
 
 // =============================================================================
@@ -129,7 +130,7 @@ export async function matchGbifSpecies(
 }
 
 // =============================================================================
-// MAIN LOGIC
+// SUPABASE-BASED LINKING (used by integration tests)
 // =============================================================================
 
 export async function linkGbifSpecies(
@@ -257,33 +258,130 @@ export async function linkGbifSpecies(
 }
 
 // =============================================================================
+// CSV-BASED LINKING (used by main)
+// =============================================================================
+
+interface LinkResult {
+  sis_taxon_id: number;
+  gbif_species_key: number | null;
+  match_type: string;
+}
+
+export async function linkGbifFromCsvs(
+  logger: SyncLogger,
+  matchFn: MatchFn = matchGbifSpecies
+): Promise<{ results: LinkResult[]; stats: LinkStats }> {
+  const stats: LinkStats = { exact: 0, fuzzy: 0, no_match: 0, no_gbif_data: 0, already_linked: 0, errors: 0 };
+
+  // Read redlist CSV for species names
+  const redlistPath = path.join(DATA_DIR, "redlist-species.csv");
+  const redlistSpecies = readCsv(redlistPath, (r) => ({
+    sis_taxon_id: parseInt(r.sis_taxon_id, 10),
+    scientific_name: r.scientific_name,
+  }));
+
+  // Read gbif CSV for available keys
+  const gbifPath = path.join(DATA_DIR, "gbif-species.csv");
+  const gbifKeys = new Set(
+    readCsv(gbifPath, (r) => parseInt(r.gbif_species_key, 10))
+  );
+
+  console.log(`  ${redlistSpecies.length} Red List species to match`);
+  console.log(`  ${gbifKeys.size} GBIF species keys available`);
+
+  // Match all names via GBIF API
+  const claimedGbifKeys = new Set<number>();
+  const results: LinkResult[] = [];
+  let matched = 0;
+
+  const matchResults = await mapConcurrent(
+    redlistSpecies,
+    MATCH_CONCURRENCY,
+    async (species) => {
+      try {
+        const { key, matchType } = await matchFn(species.scientific_name);
+        matched++;
+        if (matched % 1000 === 0) {
+          process.stdout.write(`\r  Matched ${matched}/${redlistSpecies.length}`);
+        }
+        return { species, key, matchType };
+      } catch (err) {
+        stats.errors++;
+        logger.log("error", { sis_taxon_id: species.sis_taxon_id, name: species.scientific_name, error: String(err) });
+        return { species, key: null, matchType: "ERROR" };
+      }
+    }
+  );
+  process.stdout.write(`\r  Matched ${redlistSpecies.length}/${redlistSpecies.length}\n`);
+
+  // Classify and deduplicate
+  for (const { species, key, matchType } of matchResults) {
+    if (key === null) {
+      stats.no_match++;
+      results.push({ sis_taxon_id: species.sis_taxon_id, gbif_species_key: null, match_type: matchType });
+      logger.log("no_match", { sis_taxon_id: species.sis_taxon_id, name: species.scientific_name, matchType });
+    } else if (!gbifKeys.has(key)) {
+      stats.no_gbif_data++;
+      results.push({ sis_taxon_id: species.sis_taxon_id, gbif_species_key: null, match_type: "NO_GBIF_DATA" });
+      logger.log("no_gbif_data", { sis_taxon_id: species.sis_taxon_id, name: species.scientific_name, gbif_key: key });
+    } else if (claimedGbifKeys.has(key)) {
+      stats.already_linked++;
+      results.push({ sis_taxon_id: species.sis_taxon_id, gbif_species_key: null, match_type: "DUPLICATE" });
+      logger.log("already_linked", { sis_taxon_id: species.sis_taxon_id, name: species.scientific_name, gbif_key: key });
+    } else {
+      claimedGbifKeys.add(key);
+      results.push({ sis_taxon_id: species.sis_taxon_id, gbif_species_key: key, match_type: matchType });
+      if (matchType === "EXACT") {
+        stats.exact++;
+      } else {
+        stats.fuzzy++;
+        logger.log("fuzzy_match", { sis_taxon_id: species.sis_taxon_id, name: species.scientific_name, gbif_key: key });
+      }
+    }
+  }
+
+  return { results, stats };
+}
+
+// =============================================================================
+// CSV OUTPUT
+// =============================================================================
+
+const LINKS_CSV_COLUMNS = ["sis_taxon_id", "gbif_species_key", "match_type"];
+
+export function writeLinksCsv(results: LinkResult[], outputPath: string): void {
+  const rows = results
+    .sort((a, b) => a.sis_taxon_id - b.sis_taxon_id)
+    .map((r) => ({
+      sis_taxon_id: r.sis_taxon_id,
+      gbif_species_key: r.gbif_species_key,
+      match_type: r.match_type,
+    }));
+
+  writeCsv(rows, LINKS_CSV_COLUMNS, outputPath);
+}
+
+// =============================================================================
 // MAIN
 // =============================================================================
 
 async function main() {
   loadEnvFiles();
 
-  console.log("link-gbif: GBIF Match API → Supabase species table");
+  console.log("link-gbif: GBIF Match API → species-links.csv");
   console.log("=".repeat(50));
 
   const startTime = Date.now();
-  const supabase = createServiceClient();
   const logger = new SyncLogger("link-gbif");
 
   try {
     logger.log("link_start", {});
 
-    const stats = await linkGbifSpecies(supabase, logger);
+    const { results, stats } = await linkGbifFromCsvs(logger);
 
-    // Refresh materialized view
-    console.log("\nRefreshing taxa_summary materialized view...");
-    const { error: viewError } = await supabase.rpc("refresh_taxa_summary");
-    if (viewError) {
-      console.error(`  Error: ${viewError.message}`);
-      logger.log("refresh_view_error", { error: viewError.message });
-    } else {
-      console.log("  Done.");
-    }
+    // Write CSV
+    const outputPath = path.join(DATA_DIR, "species-links.csv");
+    writeLinksCsv(results, outputPath);
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
     const minutes = Math.floor(Number(elapsed) / 60);
@@ -303,6 +401,7 @@ async function main() {
     if (stats.errors) {
       console.log(`  Errors:            ${stats.errors.toLocaleString()}`);
     }
+    console.log(`  Output:  ${outputPath}`);
     console.log(`  Duration: ${minutes}m ${seconds}s`);
   } finally {
     logger.close();
