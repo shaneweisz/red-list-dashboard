@@ -47,7 +47,7 @@ export interface IucnSpeciesRow {
   year_published: string;
   population_trend: string | null;
   countries: string[];
-  taxon_group: string;
+  taxon_group_table1a: string;
 }
 
 // =============================================================================
@@ -110,15 +110,15 @@ export async function fetchFromIucnDb(
       assessment_id: assessmentId,
       scientific_name: row.scientific_name,
       common_name: row.common_name || null,
-      class_name: row.class_name || null,
-      order_name: row.order_name || null,
-      family: row.family || null,
+      class_name: row.class_name?.toLowerCase() || null,
+      order_name: row.order_name?.toLowerCase() || null,
+      family: row.family?.toLowerCase() || null,
       category: row.category,
       assessment_date: assessmentDate,
       year_published: row.year_published,
       population_trend: POPULATION_TRENDS[row.population_trend_code] || null,
       countries: [],
-      taxon_group: taxon.id,
+      taxon_group_table1a: taxon.id,
     });
     assessmentIds.push(assessmentId);
   }
@@ -196,7 +196,7 @@ export async function upsertRedlistSpecies(
         class_name: s.class_name,
         order_name: s.order_name,
         family: s.family,
-        taxon_group: s.taxon_group,
+        taxon_group_table1a: s.taxon_group_table1a,
         assessment_id: s.assessment_id,
         iucn_category: s.category,
         assessment_date: s.assessment_date,
@@ -298,7 +298,7 @@ export async function deleteDelisted(
 
 const REDLIST_CSV_COLUMNS = [
   "sis_taxon_id", "scientific_name", "common_name", "class_name", "order_name",
-  "family", "taxon_group", "assessment_id", "iucn_category", "assessment_date",
+  "family", "taxon_group_table1a", "assessment_id", "iucn_category", "assessment_date",
   "year_published", "population_trend", "countries",
 ];
 
@@ -311,7 +311,7 @@ export function writeRedlistCsv(species: IucnSpeciesRow[], outputPath: string): 
       class_name: s.class_name,
       order_name: s.order_name,
       family: s.family,
-      taxon_group: s.taxon_group,
+      taxon_group_table1a: s.taxon_group_table1a,
       assessment_id: s.assessment_id,
       iucn_category: s.category,
       assessment_date: s.assessment_date,

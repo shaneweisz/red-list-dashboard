@@ -361,7 +361,7 @@ export async function upsertGbifSpecies(
       gbif_species_key: s.speciesKey,
       scientific_name: s.scientificName,
       common_name: s.commonName || null,
-      taxon_group: s.taxonGroup,
+      taxon_group_table1a: s.taxonGroup,
       total_count: s.observationsTotal,
       ...(s.observationsAfterAssessment !== undefined
         ? { count_since_assessment: s.observationsAfterAssessment }
@@ -394,7 +394,7 @@ export interface GbifSpeciesCsvRow {
   gbif_species_key: number;
   scientific_name: string;
   common_name: string;
-  taxon_group: string;
+  taxon_group_table1a: string;
   total_count: number;
   count_since_assessment: number | null;
 }
@@ -408,7 +408,7 @@ function loadGbifCsv(): Map<number, GbifSpeciesCsvRow> {
     gbif_species_key: parseInt(r.gbif_species_key, 10),
     scientific_name: r.scientific_name,
     common_name: r.common_name,
-    taxon_group: r.taxon_group,
+    taxon_group_table1a: r.taxon_group_table1a,
     total_count: parseInt(r.total_count, 10) || 0,
     count_since_assessment: r.count_since_assessment ? parseInt(r.count_since_assessment, 10) : null,
   }));
@@ -463,7 +463,7 @@ export async function computeSinceAssessment(
   // Get gbif keys for this taxon group from the in-memory map
   const taxonGbifKeys = new Set<number>();
   gbifSpeciesMap.forEach((row, key) => {
-    if (row.taxon_group === taxon.id) taxonGbifKeys.add(key);
+    if (row.taxon_group_table1a === taxon.id) taxonGbifKeys.add(key);
   });
 
   const speciesAssessmentYear = loadAssessmentYears(taxonGbifKeys);
@@ -525,7 +525,7 @@ export async function computeSinceAssessment(
 // =============================================================================
 
 const GBIF_CSV_COLUMNS = [
-  "gbif_species_key", "scientific_name", "common_name", "taxon_group",
+  "gbif_species_key", "scientific_name", "common_name", "taxon_group_table1a",
   "total_count", "count_since_assessment",
 ];
 
@@ -536,7 +536,7 @@ export function writeGbifCsv(speciesMap: Map<number, GbifSpeciesCsvRow>, outputP
       gbif_species_key: s.gbif_species_key,
       scientific_name: s.scientific_name,
       common_name: s.common_name || null,
-      taxon_group: s.taxon_group,
+      taxon_group_table1a: s.taxon_group_table1a,
       total_count: s.total_count,
       count_since_assessment: s.count_since_assessment,
     }));
@@ -614,7 +614,7 @@ async function main() {
             gbif_species_key: r.speciesKey,
             scientific_name: info.canonicalName,
             common_name: info.vernacularName ? toTitleCase(info.vernacularName) : "",
-            taxon_group: r.taxonGroup,
+            taxon_group_table1a: r.taxonGroup,
             total_count: r.count,
             count_since_assessment: null,
           });

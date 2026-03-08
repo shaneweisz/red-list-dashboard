@@ -280,7 +280,7 @@ async function main() {
           gbif_species_key: r.speciesKey,
           scientific_name: info.canonicalName,
           common_name: info.vernacularName ? toTitleCase(info.vernacularName) : "",
-          taxon_group: r.taxonGroup,
+          taxon_group_table1a: r.taxonGroup,
           total_count: r.count,
           count_since_assessment: null,
         });
