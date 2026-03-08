@@ -150,7 +150,7 @@ interface ValidatedSpecies {
 // =============================================================================
 
 let rateLimitHits = 0;
-const YEAR_BUCKET_CONCURRENCY = 20;
+const YEAR_BUCKET_CONCURRENCY = 30;
 
 async function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -214,7 +214,17 @@ async function fetchFacets(
 
     let response: Response | undefined;
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      response = await fetch(`https://api.gbif.org/v1/occurrence/search?${params}`);
+      try {
+        response = await fetch(`https://api.gbif.org/v1/occurrence/search?${params}`);
+      } catch (err) {
+        // Network error (ETIMEDOUT, ECONNRESET, etc.) — retry with backoff
+        if (attempt < MAX_RETRIES) {
+          const wait = Math.pow(2, attempt + 1) * 1000;
+          await delay(wait);
+          continue;
+        }
+        throw err;
+      }
       if (response.status === 429) {
         rateLimitHits++;
         const wait = Math.pow(2, attempt + 1) * 1000;

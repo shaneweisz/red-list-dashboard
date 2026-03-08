@@ -29,8 +29,8 @@ import {
 // CONFIGURATION
 // =============================================================================
 
-const MATCH_CONCURRENCY = 20;
-const REQUEST_DELAY = 50; // ms between requests
+const MATCH_CONCURRENCY = 50;
+const UPSERT_BATCH_SIZE = 500;
 const MAX_RETRIES = 5;
 
 // =============================================================================
@@ -181,60 +181,78 @@ export async function linkGbifSpecies(
   console.log(`  ${unlinkedSpecies.length} unlinked species to match`);
   console.log(`  ${gbifKeysInDb.size} GBIF species keys available`);
 
-  let processed = 0;
-
-  await mapConcurrent(unlinkedSpecies, MATCH_CONCURRENCY, async (species) => {
-    const name = nameByTaxon.get(species.sis_taxon_id);
-    if (!name) {
-      stats.errors++;
-      return;
-    }
-
-    try {
-      await delay(REQUEST_DELAY);
-      const { key, matchType } = await matchFn(name);
-
-      if (key === null) {
-        stats.no_match++;
-        logger.log("no_match", { sis_taxon_id: species.sis_taxon_id, name, matchType });
-      } else if (!gbifKeysInDb.has(key)) {
-        stats.no_gbif_data++;
-        logger.log("no_gbif_data", { sis_taxon_id: species.sis_taxon_id, name, gbif_key: key });
-      } else if (claimedGbifKeys.has(key)) {
-        stats.already_linked++;
-        logger.log("already_linked", { sis_taxon_id: species.sis_taxon_id, name, gbif_key: key });
-      } else {
-        // Claim the key before awaiting to prevent concurrent workers racing
-        claimedGbifKeys.add(key);
-
-        // Update species.gbif_species_key
-        const { error } = await supabase
-          .from("species")
-          .update({ gbif_species_key: key })
-          .eq("id", species.id);
-
-        if (error) {
-          stats.errors++;
-          logger.log("error", { sis_taxon_id: species.sis_taxon_id, name, error: error.message });
-        } else if (matchType === "EXACT") {
-          stats.exact++;
-        } else {
-          stats.fuzzy++;
-          logger.log("fuzzy_match", { sis_taxon_id: species.sis_taxon_id, name, gbif_key: key });
-        }
+  // Phase 1: Match all names via GBIF API (no DB writes)
+  let matched = 0;
+  const matchResults = await mapConcurrent(
+    unlinkedSpecies,
+    MATCH_CONCURRENCY,
+    async (species) => {
+      const name = nameByTaxon.get(species.sis_taxon_id);
+      if (!name) {
+        stats.errors++;
+        return null;
       }
-    } catch (err) {
-      stats.errors++;
-      logger.log("error", { sis_taxon_id: species.sis_taxon_id, name, error: String(err) });
-    }
 
-    processed++;
-    if (processed % 1000 === 0 || processed === unlinkedSpecies.length) {
-      process.stdout.write(`\r  Matched ${processed}/${unlinkedSpecies.length}`);
+      try {
+        const { key, matchType } = await matchFn(name);
+        matched++;
+        if (matched % 1000 === 0) {
+          process.stdout.write(`\r  Matched ${matched}/${unlinkedSpecies.length}`);
+        }
+        return { species, name, key, matchType };
+      } catch (err) {
+        stats.errors++;
+        logger.log("error", { sis_taxon_id: species.sis_taxon_id, name, error: String(err) });
+        return null;
+      }
     }
-  });
+  );
+  process.stdout.write(`\r  Matched ${unlinkedSpecies.length}/${unlinkedSpecies.length}\n`);
 
-  console.log("");
+  // Phase 2: Deduplicate and classify results
+  const toUpdate: { sis_taxon_id: number; gbif_species_key: number }[] = [];
+
+  for (const result of matchResults) {
+    if (!result) continue;
+    const { species, name, key, matchType } = result;
+
+    if (key === null) {
+      stats.no_match++;
+      logger.log("no_match", { sis_taxon_id: species.sis_taxon_id, name, matchType });
+    } else if (!gbifKeysInDb.has(key)) {
+      stats.no_gbif_data++;
+      logger.log("no_gbif_data", { sis_taxon_id: species.sis_taxon_id, name, gbif_key: key });
+    } else if (claimedGbifKeys.has(key)) {
+      stats.already_linked++;
+      logger.log("already_linked", { sis_taxon_id: species.sis_taxon_id, name, gbif_key: key });
+    } else {
+      claimedGbifKeys.add(key);
+      toUpdate.push({ sis_taxon_id: species.sis_taxon_id, gbif_species_key: key });
+      if (matchType === "EXACT") {
+        stats.exact++;
+      } else {
+        stats.fuzzy++;
+        logger.log("fuzzy_match", { sis_taxon_id: species.sis_taxon_id, name, gbif_key: key });
+      }
+    }
+  }
+
+  // Phase 3: Batch upsert into species table
+  console.log(`  Updating ${toUpdate.length} species links...`);
+  for (let i = 0; i < toUpdate.length; i += UPSERT_BATCH_SIZE) {
+    const batch = toUpdate.slice(i, i + UPSERT_BATCH_SIZE);
+    const { error } = await supabase
+      .from("species")
+      .upsert(batch, { onConflict: "sis_taxon_id" });
+
+    if (error) {
+      stats.errors += batch.length;
+      logger.log("error", { error: error.message, context: "link_upsert", count: batch.length });
+    }
+    process.stdout.write(`\r  Updated ${Math.min(i + UPSERT_BATCH_SIZE, toUpdate.length)}/${toUpdate.length}`);
+  }
+  if (toUpdate.length > 0) console.log("");
+
   return stats;
 }
 

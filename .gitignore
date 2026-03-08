@@ -42,3 +42,7 @@ brambles-tessera/
 
 TODOs.txt
 .vercel
+
+# Claude Code
+skills-lock.json
+.agents/
