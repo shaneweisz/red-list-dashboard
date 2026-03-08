@@ -31,13 +31,13 @@ import {
 // GBIF TAXA CONFIGURATION
 // =============================================================================
 
-interface GbifQuery {
+export interface GbifQuery {
   keyType: "kingdomKey" | "classKey" | "orderKey";
   keyValue: number;
   taxonGroup: string;
 }
 
-interface GbifTaxonConfig {
+export interface GbifTaxonConfig {
   id: string;
   name: string;
   queries: GbifQuery[];
@@ -45,7 +45,7 @@ interface GbifTaxonConfig {
 
 const FISH_ORDER_KEYS = [389,391,427,428,446,494,495,496,497,498,499,537,538,547,548,549,550,587,588,589,590,696,708,742,752,753,772,773,774,781,836,848,857,860,861,888,889,890,898,929,975,976,1067,1153,1313];
 
-const GBIF_TAXA: Record<string, GbifTaxonConfig> = {
+export const GBIF_TAXA: Record<string, GbifTaxonConfig> = {
   mammalia: {
     id: "mammalia", name: "Mammals",
     queries: [{ keyType: "classKey", keyValue: 359, taxonGroup: "mammalia" }],
@@ -179,7 +179,7 @@ async function mapConcurrent<T, R>(
   return results;
 }
 
-function toTitleCase(s: string): string {
+export function toTitleCase(s: string): string {
   return s.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
 }
 
@@ -258,7 +258,7 @@ async function fetchFacets(
 /**
  * Fetch all species counts for a taxon. Sequential queries (one at a time).
  */
-async function fetchAllSpeciesCounts(taxon: GbifTaxonConfig): Promise<SpeciesCount[]> {
+export async function fetchAllSpeciesCounts(taxon: GbifTaxonConfig): Promise<SpeciesCount[]> {
   const allResults: SpeciesCount[] = [];
 
   for (let i = 0; i < taxon.queries.length; i++) {
@@ -283,7 +283,7 @@ async function fetchAllSpeciesCounts(taxon: GbifTaxonConfig): Promise<SpeciesCou
   return Array.from(seen.values()).sort((a, b) => b.count - a.count);
 }
 
-async function validateSpeciesKeys(speciesKeys: number[]): Promise<Map<number, ValidatedSpecies>> {
+export async function validateSpeciesKeys(speciesKeys: number[]): Promise<Map<number, ValidatedSpecies>> {
   const valid = new Map<number, ValidatedSpecies>();
 
   for (let i = 0; i < speciesKeys.length; i += SPECIES_VALIDATION_BATCH_SIZE) {
@@ -390,7 +390,7 @@ export async function upsertGbifSpecies(
 // SINCE-ASSESSMENT PHASE (reads from local CSVs)
 // =============================================================================
 
-interface GbifSpeciesCsvRow {
+export interface GbifSpeciesCsvRow {
   gbif_species_key: number;
   scientific_name: string;
   common_name: string;

@@ -46,3 +46,4 @@ TODOs.txt
 # Claude Code
 skills-lock.json
 .agents/
+.claude/
