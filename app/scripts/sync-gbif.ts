@@ -329,7 +329,7 @@ async function validateSpeciesKeys(speciesKeys: number[]): Promise<Map<number, V
 // UPSERT LOGIC
 // =============================================================================
 
-const UPSERT_BATCH_SIZE = 500;
+const UPSERT_BATCH_SIZE = 1000;
 
 export interface GbifUpsertStats {
   upserted: number;
@@ -486,7 +486,7 @@ export async function computeSinceAssessment(
   }
   if (yearBuckets.length > 0) console.log("");
 
-  // Update gbif_species with since-assessment counts
+  // Update gbif_species with since-assessment counts (batched upsert)
   let updated = 0;
   let errors = 0;
   const entries = Array.from(sinceAssessmentCounts.entries());
@@ -498,19 +498,15 @@ export async function computeSinceAssessment(
       count_since_assessment: count,
     }));
 
-    // Use upsert to update only count_since_assessment
-    for (const row of rows) {
-      const { error } = await supabase
-        .from("gbif_species")
-        .update({ count_since_assessment: row.count_since_assessment })
-        .eq("gbif_species_key", row.gbif_species_key);
+    const { error } = await supabase
+      .from("gbif_species")
+      .upsert(rows, { onConflict: "gbif_species_key" });
 
-      if (error) {
-        errors++;
-        logger.log("error", { gbif_species_key: row.gbif_species_key, error: error.message });
-      } else {
-        updated++;
-      }
+    if (error) {
+      errors += batch.length;
+      logger.log("error", { error: error.message, context: "since_assessment_upsert", count: batch.length });
+    } else {
+      updated += batch.length;
     }
     process.stdout.write(`\r  Updated ${Math.min(i + UPSERT_BATCH_SIZE, entries.length)}/${entries.length} since-assessment counts`);
   }

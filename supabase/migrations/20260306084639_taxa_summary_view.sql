@@ -56,3 +56,7 @@ set search_path = public
 as $$
   refresh materialized view taxa_summary;
 $$;
+
+-- Restrict refresh to service_role only (prevent abuse via anon/authenticated keys)
+revoke execute on function refresh_taxa_summary() from public, anon, authenticated;
+grant execute on function refresh_taxa_summary() to service_role;

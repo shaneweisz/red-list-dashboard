@@ -163,7 +163,7 @@ export async function fetchFromIucnDb(
 // UPSERT LOGIC
 // =============================================================================
 
-const BATCH_SIZE = 500;
+const BATCH_SIZE = 1000;
 
 export interface UpsertStats {
   upserted: number;
@@ -254,18 +254,23 @@ export async function deleteDelisted(
   const toDelete = existing.filter((r) => !seenSisTaxonIds.has(r.sis_taxon_id));
   let deletedCount = 0;
 
-  // Delete from redlist_species (ON DELETE SET NULL auto-nulls species.sis_taxon_id)
-  for (const row of toDelete) {
+  // Batch delete from redlist_species (ON DELETE SET NULL auto-nulls species.sis_taxon_id)
+  for (let i = 0; i < toDelete.length; i += BATCH_SIZE) {
+    const batch = toDelete.slice(i, i + BATCH_SIZE);
+    const ids = batch.map((r) => r.sis_taxon_id);
+
     const { error } = await supabase
       .from("redlist_species")
       .delete()
-      .eq("sis_taxon_id", row.sis_taxon_id);
+      .in("sis_taxon_id", ids);
 
     if (error) {
-      logger.log("error", { sis_taxon_id: row.sis_taxon_id, event: "delete_failed", error: error.message });
+      logger.log("error", { event: "delete_failed", error: error.message, count: batch.length });
     } else {
-      deletedCount++;
-      logger.log("deleted", { sis_taxon_id: row.sis_taxon_id });
+      deletedCount += batch.length;
+      for (const row of batch) {
+        logger.log("deleted", { sis_taxon_id: row.sis_taxon_id });
+      }
     }
   }
 
