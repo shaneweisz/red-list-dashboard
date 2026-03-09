@@ -172,7 +172,7 @@ function getShapeIcon(
       svgContent = `<circle cx="${s/2}" cy="${s/2}" r="${s/2 - sw}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${sw}"/>`;
       break;
     case "humanOther":
-      svgContent = `<circle cx="${s/2}" cy="${s/2}" r="${s/2 - sw}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${sw}"/><circle cx="${s/2}" cy="${s/2}" r="1.5" fill="${strokeColor}"/>`;
+      svgContent = `<circle cx="${s/2}" cy="${s/2}" r="${s/2 - sw}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${sw}"/><circle cx="${s/2}" cy="${s/2}" r="2" fill="${strokeColor}"/>`;
       break;
     case "machineObservation":
       svgContent = `<rect x="${sw}" y="${sw}" width="${s - sw*2}" height="${s - sw*2}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${sw}"/>`;
@@ -1268,7 +1268,7 @@ export default function OccurrenceMapRow({
                 const inatMatch = inatPhotosByGbifId.get(feature.properties.gbifID);
                 const isFeatureHovered = hoveredFeature?.properties.gbifID === feature.properties.gbifID;
                 const isEmphasized = isHighlighted || isFeatureHovered;
-                const markerSize = isEmphasized ? 10 : (isBrushed ? 10 : (isDimmed ? 6 : 8));
+                const markerSize = isEmphasized ? 14 : (isBrushed ? 14 : (isDimmed ? 9 : 12));
                 const clickHandler = () => {
                   window.open(`https://www.gbif.org/occurrence/${feature.properties.gbifID}`, "_blank");
                 };
@@ -1298,12 +1298,12 @@ export default function OccurrenceMapRow({
                   <CircleMarker
                     key={feature.properties.gbifID || idx}
                     center={[lat, lon]}
-                    radius={isEmphasized ? 5 : (isBrushed ? 5 : (isDimmed ? 3 : 4))}
+                    radius={isEmphasized ? 7 : (isBrushed ? 7 : (isDimmed ? 4 : 6))}
                     pathOptions={{
                       color: strokeColor,
                       fillColor: fillColor,
                       fillOpacity: isDimmed ? 0.15 : (isEmphasized || isBrushed ? 1 : 0.9),
-                      weight: isDimmed ? 1 : (isEmphasized || isBrushed ? 3 : 2),
+                      weight: isDimmed ? 1.5 : (isEmphasized || isBrushed ? 3 : 2.5),
                     }}
                     eventHandlers={hoverHandlers}
                   />
@@ -1314,7 +1314,7 @@ export default function OccurrenceMapRow({
                 <>
                   <CircleMarker
                     center={[hoveredObs.decimalLatitude, hoveredObs.decimalLongitude]}
-                    radius={4}
+                    radius={6}
                     pathOptions={{
                       color: "#1d4ed8",
                       fillColor: "#3b82f6",
