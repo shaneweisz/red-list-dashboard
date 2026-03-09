@@ -1,5 +1,5 @@
 /**
- * pipeline: End-to-end sync orchestrator
+ * sync: End-to-end sync orchestrator
  *
  * Phase 1: Fetch data (per taxon)
  *   For each taxon: fetch Red List → write CSV, fetch GBIF → write CSV
@@ -15,8 +15,8 @@
  *   2. Environment variables (see .env.example)
  *
  * Usage:
- *   npx tsx scripts/pipeline.ts                     # Full sync, all taxa
- *   npx tsx scripts/pipeline.ts mammalia aves        # Specific taxa only
+ *   npx tsx scripts/sync.ts                     # Full sync, all taxa
+ *   npx tsx scripts/sync.ts mammalia aves        # Specific taxa only
  */
 
 import * as path from "path";
@@ -107,13 +107,13 @@ async function main() {
     }
   }
 
-  console.log("pipeline: Full sync");
+  console.log("sync: Full sync");
   console.log("=".repeat(60));
   console.log(`Taxa: ${taxaIds.join(", ")}`);
   console.log();
 
   const startTime = Date.now();
-  const logger = new SyncLogger("pipeline");
+  const logger = new SyncLogger("sync");
 
   const allRedlistSpecies: RedlistSpecies[] = [];
   const allGbifSpecies = new Map<number, GbifSpecies>();
@@ -242,7 +242,7 @@ async function main() {
     const minutes = Math.floor(Number(elapsed) / 60);
     const seconds = Number(elapsed) % 60;
 
-    logger.log("pipeline_complete", {
+    logger.log("sync_complete", {
       redlist_count: allRedlistSpecies.length,
       gbif_count: allGbifSpecies.size,
       linked_count: linkedCount,
@@ -261,7 +261,7 @@ async function main() {
   }
 }
 
-const isDirectRun = process.argv[1]?.endsWith("pipeline.ts") || process.argv[1]?.endsWith("pipeline.js");
+const isDirectRun = process.argv[1]?.endsWith("sync.ts") || process.argv[1]?.endsWith("sync.js");
 if (isDirectRun) {
   main().catch((err) => {
     console.error("Fatal error:", err);
