@@ -61,7 +61,7 @@ function parseGbifRow(r: Record<string, string>) {
     common_name: r.common_name || null,
     taxon_group_table1a: r.taxon_group_table1a,
     total_count: r.total_count ? parseInt(r.total_count, 10) : 0,
-    count_since_assessment: r.count_since_assessment ? parseInt(r.count_since_assessment, 10) : null,
+    count_after_assessment_year: r.count_after_assessment_year ? parseInt(r.count_after_assessment_year, 10) : null,
     synced_at: new Date().toISOString(),
   };
 }

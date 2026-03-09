@@ -282,7 +282,7 @@ async function main() {
           common_name: info.vernacularName ? toTitleCase(info.vernacularName) : "",
           taxon_group_table1a: r.taxonGroup,
           total_count: r.count,
-          count_since_assessment: null,
+          count_after_assessment_year: null,
         });
       }
 

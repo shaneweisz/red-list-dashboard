@@ -6,7 +6,7 @@
  *
  * Two modes:
  *   --counts-only             Fetch + write total counts only
- *   --since-assessment-only   Compute count_since_assessment using local CSVs
+ *   --since-assessment-only   Compute count_after_assessment_year using local CSVs
  *   (no flags)                Run both phases
  *
  * Prerequisites:
@@ -364,7 +364,7 @@ export async function upsertGbifSpecies(
       taxon_group_table1a: s.taxonGroup,
       total_count: s.observationsTotal,
       ...(s.observationsAfterAssessment !== undefined
-        ? { count_since_assessment: s.observationsAfterAssessment }
+        ? { count_after_assessment_year: s.observationsAfterAssessment }
         : {}),
       synced_at: new Date().toISOString(),
     }));
@@ -396,7 +396,7 @@ export interface GbifSpeciesCsvRow {
   common_name: string;
   taxon_group_table1a: string;
   total_count: number;
-  count_since_assessment: number | null;
+  count_after_assessment_year: number | null;
 }
 
 /**
@@ -410,7 +410,7 @@ function loadGbifCsv(): Map<number, GbifSpeciesCsvRow> {
     common_name: r.common_name,
     taxon_group_table1a: r.taxon_group_table1a,
     total_count: parseInt(r.total_count, 10) || 0,
-    count_since_assessment: r.count_since_assessment ? parseInt(r.count_since_assessment, 10) : null,
+    count_after_assessment_year: r.count_after_assessment_year ? parseInt(r.count_after_assessment_year, 10) : null,
   }));
   const map = new Map<number, GbifSpeciesCsvRow>();
   for (const row of rows) map.set(row.gbif_species_key, row);
@@ -452,7 +452,7 @@ function loadAssessmentYears(taxonGbifKeys: Set<number>): Map<number, number> {
 }
 
 /**
- * Compute count_since_assessment for linked species in a taxon group.
+ * Compute count_after_assessment_year for linked species in a taxon group.
  * Reads assessment dates from local CSVs. Returns a map of gbif_species_key → count.
  */
 export async function computeSinceAssessment(
@@ -514,7 +514,7 @@ export async function computeSinceAssessment(
   // Merge since-assessment counts into the in-memory map
   sinceAssessmentCounts.forEach((count, key) => {
     const row = gbifSpeciesMap.get(key);
-    if (row) row.count_since_assessment = count;
+    if (row) row.count_after_assessment_year = count;
   });
 
   return sinceAssessmentCounts.size;
@@ -526,7 +526,7 @@ export async function computeSinceAssessment(
 
 const GBIF_CSV_COLUMNS = [
   "gbif_species_key", "scientific_name", "common_name", "taxon_group_table1a",
-  "total_count", "count_since_assessment",
+  "total_count", "count_after_assessment_year",
 ];
 
 export function writeGbifCsv(speciesMap: Map<number, GbifSpeciesCsvRow>, outputPath: string): void {
@@ -538,7 +538,7 @@ export function writeGbifCsv(speciesMap: Map<number, GbifSpeciesCsvRow>, outputP
       common_name: s.common_name || null,
       taxon_group_table1a: s.taxon_group_table1a,
       total_count: s.total_count,
-      count_since_assessment: s.count_since_assessment,
+      count_after_assessment_year: s.count_after_assessment_year,
     }));
 
   writeCsv(rows, GBIF_CSV_COLUMNS, outputPath);
@@ -616,7 +616,7 @@ async function main() {
             common_name: info.vernacularName ? toTitleCase(info.vernacularName) : "",
             taxon_group_table1a: r.taxonGroup,
             total_count: r.count,
-            count_since_assessment: null,
+            count_after_assessment_year: null,
           });
         }
 
