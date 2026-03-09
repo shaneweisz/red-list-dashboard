@@ -2,17 +2,20 @@
  * push-to-db: Local CSVs → Supabase
  *
  * Reads redlist-species.csv, gbif-species.csv, and species-links.csv,
- * then truncates and reloads all three database tables.
+ * merges them into a single species table, then truncates and reloads.
  *
- * This is the only script that writes to Supabase. The sync/link scripts
- * only produce local CSV files.
+ * Merge logic:
+ *   - Each Red List row becomes a species row (with assessment data).
+ *     If linked to GBIF, the GBIF key and counts are added.
+ *   - Each GBIF row NOT linked to any Red List species becomes a
+ *     GBIF-only species row (no assessment data).
  *
  * Prerequisites:
- *   1. CSV files exist in app/data/ (produced by sync-redlist, sync-gbif, link-gbif)
+ *   1. CSV files exist in app/data/ (produced by pipeline scripts)
  *   2. Environment variables: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
  *
  * Usage:
- *   npx tsx scripts/push-to-db.ts              # Push all tables
+ *   npx tsx scripts/push-to-db.ts              # Push all data
  *   npx tsx scripts/push-to-db.ts --dry-run    # Show what would be pushed
  */
 
@@ -32,10 +35,44 @@ import {
 const BATCH_SIZE = 1000;
 
 // =============================================================================
+// CSV TYPES
+// =============================================================================
+
+interface RedlistCsvRow {
+  sis_taxon_id: number;
+  scientific_name: string;
+  common_name: string | null;
+  class_name: string | null;
+  order_name: string | null;
+  family: string | null;
+  taxon_group: string;
+  assessment_id: number | null;
+  iucn_category: string | null;
+  assessment_date: string | null;
+  year_published: string | null;
+  population_trend: string | null;
+  countries: string[];
+}
+
+interface GbifCsvRow {
+  gbif_species_key: number;
+  scientific_name: string;
+  common_name: string | null;
+  taxon_group: string;
+  gbif_total_count: number;
+  gbif_count_since_assessment: number | null;
+}
+
+interface LinkCsvRow {
+  sis_taxon_id: number;
+  gbif_species_key: number | null;
+}
+
+// =============================================================================
 // CSV PARSERS
 // =============================================================================
 
-function parseRedlistRow(r: Record<string, string>) {
+function parseRedlistRow(r: Record<string, string>): RedlistCsvRow {
   return {
     sis_taxon_id: parseInt(r.sis_taxon_id, 10),
     scientific_name: r.scientific_name,
@@ -43,34 +80,135 @@ function parseRedlistRow(r: Record<string, string>) {
     class_name: r.class_name || null,
     order_name: r.order_name || null,
     family: r.family || null,
-    taxon_group_table1a: r.taxon_group_table1a,
+    taxon_group: r.taxon_group_table1a,
     assessment_id: r.assessment_id ? parseInt(r.assessment_id, 10) : null,
     iucn_category: r.iucn_category || null,
     assessment_date: r.assessment_date || null,
     year_published: r.year_published || null,
     population_trend: r.population_trend || null,
     countries: r.countries ? r.countries.split(";").filter(Boolean) : [],
-    synced_at: new Date().toISOString(),
   };
 }
 
-function parseGbifRow(r: Record<string, string>) {
+function parseGbifRow(r: Record<string, string>): GbifCsvRow {
   return {
     gbif_species_key: parseInt(r.gbif_species_key, 10),
     scientific_name: r.scientific_name,
     common_name: r.common_name || null,
-    taxon_group_table1a: r.taxon_group_table1a,
-    total_count: r.total_count ? parseInt(r.total_count, 10) : 0,
-    count_after_assessment_year: r.count_after_assessment_year ? parseInt(r.count_after_assessment_year, 10) : null,
-    synced_at: new Date().toISOString(),
+    taxon_group: r.taxon_group_table1a,
+    gbif_total_count: r.total_count ? parseInt(r.total_count, 10) : 0,
+    gbif_count_since_assessment: r.count_after_assessment_year
+      ? parseInt(r.count_after_assessment_year, 10)
+      : null,
   };
 }
 
-function parseLinkRow(r: Record<string, string>) {
+function parseLinkRow(r: Record<string, string>): LinkCsvRow {
   return {
     sis_taxon_id: parseInt(r.sis_taxon_id, 10),
     gbif_species_key: r.gbif_species_key ? parseInt(r.gbif_species_key, 10) : null,
   };
+}
+
+// =============================================================================
+// MERGE LOGIC
+// =============================================================================
+
+interface SpeciesDbRow {
+  sis_taxon_id: number | null;
+  gbif_species_key: number | null;
+  scientific_name: string;
+  common_name: string | null;
+  taxon_group: string;
+  class_name: string | null;
+  order_name: string | null;
+  family: string | null;
+  assessment_id: number | null;
+  iucn_category: string | null;
+  assessment_date: string | null;
+  year_published: string | null;
+  population_trend: string | null;
+  countries: string[];
+  gbif_total_count: number | null;
+  gbif_count_since_assessment: number | null;
+  synced_at: string;
+}
+
+function mergeSpecies(
+  redlistRows: RedlistCsvRow[],
+  gbifRows: GbifCsvRow[],
+  linkRows: LinkCsvRow[],
+): SpeciesDbRow[] {
+  const now = new Date().toISOString();
+
+  // Build GBIF lookup
+  const gbifByKey = new Map<number, GbifCsvRow>();
+  for (const g of gbifRows) gbifByKey.set(g.gbif_species_key, g);
+
+  // Build link lookup (sis_taxon_id → gbif_species_key)
+  const linkMap = new Map<number, number>();
+  const claimedGbifKeys = new Set<number>();
+  for (const l of linkRows) {
+    if (l.gbif_species_key !== null) {
+      linkMap.set(l.sis_taxon_id, l.gbif_species_key);
+      claimedGbifKeys.add(l.gbif_species_key);
+    }
+  }
+
+  const merged: SpeciesDbRow[] = [];
+
+  // Red List species (with optional GBIF data if linked)
+  for (const rl of redlistRows) {
+    const gbifKey = linkMap.get(rl.sis_taxon_id) ?? null;
+    const gbif = gbifKey !== null ? gbifByKey.get(gbifKey) : undefined;
+
+    merged.push({
+      sis_taxon_id: rl.sis_taxon_id,
+      gbif_species_key: gbifKey,
+      scientific_name: rl.scientific_name,
+      common_name: rl.common_name,
+      taxon_group: rl.taxon_group,
+      class_name: rl.class_name,
+      order_name: rl.order_name,
+      family: rl.family,
+      assessment_id: rl.assessment_id,
+      iucn_category: rl.iucn_category,
+      assessment_date: rl.assessment_date,
+      year_published: rl.year_published,
+      population_trend: rl.population_trend,
+      countries: rl.countries,
+      gbif_total_count: gbif?.gbif_total_count ?? null,
+      gbif_count_since_assessment: gbif?.gbif_count_since_assessment ?? null,
+      synced_at: now,
+    });
+  }
+
+  // GBIF-only species (not linked to any Red List entry)
+  for (const g of gbifRows) {
+    if (claimedGbifKeys.has(g.gbif_species_key)) continue;
+
+    merged.push({
+      sis_taxon_id: null,
+      gbif_species_key: g.gbif_species_key,
+      scientific_name: g.scientific_name,
+      common_name: g.common_name,
+      taxon_group: g.taxon_group,
+      class_name: null,
+      order_name: null,
+      family: null,
+      assessment_id: null,
+      iucn_category: null,
+      assessment_date: null,
+      year_published: null,
+      population_trend: null,
+      countries: [],
+      gbif_total_count: g.gbif_total_count,
+      gbif_count_since_assessment: g.gbif_count_since_assessment,
+      synced_at: now,
+    });
+  }
+
+  return merged;
 }
 
 // =============================================================================
@@ -83,7 +221,7 @@ async function main() {
   const args = process.argv.slice(2);
   const dryRun = args.includes("--dry-run");
 
-  console.log("push-to-db: Local CSVs → Supabase");
+  console.log("push-to-db: Local CSVs → Supabase (single species table)");
   if (dryRun) console.log("Mode: --dry-run (no writes)");
   console.log("=".repeat(50));
 
@@ -103,9 +241,19 @@ async function main() {
   console.log(`  gbif-species.csv:    ${gbifRows.length.toLocaleString()} rows`);
 
   const linkRows = readCsv(linksPath, parseLinkRow);
-  const linkedRows = linkRows.filter((r) => r.gbif_species_key !== null);
-  const unlinkedRows = linkRows.filter((r) => r.gbif_species_key === null);
-  console.log(`  species-links.csv:   ${linkRows.length.toLocaleString()} rows (${linkedRows.length.toLocaleString()} linked)`);
+  const linkedCount = linkRows.filter((r) => r.gbif_species_key !== null).length;
+  console.log(`  species-links.csv:   ${linkRows.length.toLocaleString()} rows (${linkedCount.toLocaleString()} linked)`);
+
+  // Merge
+  console.log("\nMerging...");
+  const merged = mergeSpecies(redlistRows, gbifRows, linkRows);
+  const redlistOnly = merged.filter((r) => r.sis_taxon_id !== null && r.gbif_species_key === null).length;
+  const gbifOnly = merged.filter((r) => r.sis_taxon_id === null && r.gbif_species_key !== null).length;
+  const both = merged.filter((r) => r.sis_taxon_id !== null && r.gbif_species_key !== null).length;
+  console.log(`  Total rows:     ${merged.length.toLocaleString()}`);
+  console.log(`  Red List only:  ${redlistOnly.toLocaleString()}`);
+  console.log(`  GBIF only:      ${gbifOnly.toLocaleString()}`);
+  console.log(`  Matched (both): ${both.toLocaleString()}`);
 
   if (dryRun) {
     console.log("\n--dry-run: no changes made.");
@@ -119,69 +267,30 @@ async function main() {
     logger.log("push_start", {
       redlist_count: redlistRows.length,
       gbif_count: gbifRows.length,
-      link_count: linkRows.length,
+      linked_count: linkedCount,
+      merged_count: merged.length,
     });
 
-    // Step 1: Delete all rows (child table first due to FKs)
-    console.log("\nClearing tables...");
-
-    const { error: delSpecies } = await supabase.from("species").delete().gte("id", 0);
-    if (delSpecies) throw new Error(`Failed to clear species: ${delSpecies.message}`);
+    // Clear table
+    console.log("\nClearing species table...");
+    const { error: delError } = await supabase.from("species").delete().gte("id", 0);
+    if (delError) throw new Error(`Failed to clear species: ${delError.message}`);
     console.log("  species: cleared");
 
-    const { error: delRedlist } = await supabase.from("redlist_species").delete().gte("sis_taxon_id", 0);
-    if (delRedlist) throw new Error(`Failed to clear redlist_species: ${delRedlist.message}`);
-    console.log("  redlist_species: cleared");
-
-    const { error: delGbif } = await supabase.from("gbif_species").delete().gte("gbif_species_key", 0);
-    if (delGbif) throw new Error(`Failed to clear gbif_species: ${delGbif.message}`);
-    console.log("  gbif_species: cleared");
-
-    // Step 2: Insert redlist_species
-    console.log("\nInserting redlist_species...");
-    for (let i = 0; i < redlistRows.length; i += BATCH_SIZE) {
-      const batch = redlistRows.slice(i, i + BATCH_SIZE);
-      const { error } = await supabase.from("redlist_species").insert(batch);
-      if (error) {
-        logger.log("error", { table: "redlist_species", error: error.message, batch_start: i });
-        throw new Error(`Failed to insert redlist_species batch at ${i}: ${error.message}`);
-      }
-      process.stdout.write(`\r  ${Math.min(i + BATCH_SIZE, redlistRows.length)}/${redlistRows.length}`);
-    }
-    if (redlistRows.length > 0) console.log("");
-
-    // Step 3: Insert gbif_species
-    console.log("Inserting gbif_species...");
-    for (let i = 0; i < gbifRows.length; i += BATCH_SIZE) {
-      const batch = gbifRows.slice(i, i + BATCH_SIZE);
-      const { error } = await supabase.from("gbif_species").insert(batch);
-      if (error) {
-        logger.log("error", { table: "gbif_species", error: error.message, batch_start: i });
-        throw new Error(`Failed to insert gbif_species batch at ${i}: ${error.message}`);
-      }
-      process.stdout.write(`\r  ${Math.min(i + BATCH_SIZE, gbifRows.length)}/${gbifRows.length}`);
-    }
-    if (gbifRows.length > 0) console.log("");
-
-    // Step 4: Insert species links
-    // All redlist species get a row; linked ones also have gbif_species_key
-    console.log("Inserting species links...");
-    const allLinkRows = [
-      ...linkedRows,
-      ...unlinkedRows.map((r) => ({ sis_taxon_id: r.sis_taxon_id })),
-    ];
-    for (let i = 0; i < allLinkRows.length; i += BATCH_SIZE) {
-      const batch = allLinkRows.slice(i, i + BATCH_SIZE);
+    // Insert merged rows
+    console.log("\nInserting species...");
+    for (let i = 0; i < merged.length; i += BATCH_SIZE) {
+      const batch = merged.slice(i, i + BATCH_SIZE);
       const { error } = await supabase.from("species").insert(batch);
       if (error) {
         logger.log("error", { table: "species", error: error.message, batch_start: i });
         throw new Error(`Failed to insert species batch at ${i}: ${error.message}`);
       }
-      process.stdout.write(`\r  ${Math.min(i + BATCH_SIZE, allLinkRows.length)}/${allLinkRows.length}`);
+      process.stdout.write(`\r  ${Math.min(i + BATCH_SIZE, merged.length)}/${merged.length}`);
     }
-    if (allLinkRows.length > 0) console.log("");
+    if (merged.length > 0) console.log("");
 
-    // Step 5: Refresh materialized view
+    // Refresh materialized view
     console.log("\nRefreshing taxa_summary materialized view...");
     const { error: viewError } = await supabase.rpc("refresh_taxa_summary");
     if (viewError) {
@@ -196,18 +305,19 @@ async function main() {
     const seconds = Number(elapsed) % 60;
 
     logger.log("push_complete", {
-      redlist_count: redlistRows.length,
-      gbif_count: gbifRows.length,
-      link_count: allLinkRows.length,
-      linked_count: linkedRows.length,
+      merged_count: merged.length,
+      redlist_only: redlistOnly,
+      gbif_only: gbifOnly,
+      matched: both,
       duration_seconds: Number(elapsed),
     });
 
     console.log("\n" + "=".repeat(50));
     console.log("push-to-db complete:");
-    console.log(`  redlist_species: ${redlistRows.length.toLocaleString()} rows`);
-    console.log(`  gbif_species:    ${gbifRows.length.toLocaleString()} rows`);
-    console.log(`  species links:   ${allLinkRows.length.toLocaleString()} rows (${linkedRows.length.toLocaleString()} linked)`);
+    console.log(`  Species:        ${merged.length.toLocaleString()} rows`);
+    console.log(`  Red List only:  ${redlistOnly.toLocaleString()}`);
+    console.log(`  GBIF only:      ${gbifOnly.toLocaleString()}`);
+    console.log(`  Matched (both): ${both.toLocaleString()}`);
     console.log(`  Duration: ${minutes}m ${seconds}s`);
   } finally {
     logger.close();
