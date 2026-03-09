@@ -1,5 +1,5 @@
 /**
- * since-assessment: GBIF occurrence counts since last Red List assessment
+ * fetch-new-gbif-counts: GBIF occurrence counts since last Red List assessment
  *
  * For each linked species, fetches GBIF occurrence counts from the year
  * after their last assessment to the current year, then updates gbif-species.csv.
@@ -10,8 +10,8 @@
  *   3. redlist-species.csv has gbif_species_key populated (from match)
  *
  * Usage:
- *   npx tsx scripts/since-assessment.ts [taxon]   # One taxon (e.g. mammalia)
- *   npx tsx scripts/since-assessment.ts            # All taxa
+ *   npx tsx scripts/fetch-new-gbif-counts.ts [taxon]   # One taxon (e.g. mammalia)
+ *   npx tsx scripts/fetch-new-gbif-counts.ts            # All taxa
  */
 
 import * as path from "path";
@@ -157,11 +157,11 @@ async function main() {
     process.exit(1);
   }
 
-  console.log("since-assessment: GBIF counts since last assessment");
+  console.log("fetch-new-gbif-counts: GBIF counts since last assessment");
   console.log("=".repeat(50));
 
   const startTime = Date.now();
-  const logger = new SyncLogger("since-assessment");
+  const logger = new SyncLogger("fetch-new-gbif-counts");
 
   try {
     const gbifSpeciesMap = loadGbifCsv();
@@ -184,7 +184,7 @@ async function main() {
     logger.log("complete", { total_computed: totalComputed, duration_seconds: Number(elapsed) });
 
     console.log("\n" + "=".repeat(50));
-    console.log("since-assessment complete:");
+    console.log("fetch-new-gbif-counts complete:");
     console.log(`  Computed: ${totalComputed.toLocaleString()}`);
     console.log(`  Output:   ${outputPath}`);
     console.log(`  Duration: ${minutes}m ${seconds}s`);
@@ -193,7 +193,7 @@ async function main() {
   }
 }
 
-const isDirectRun = process.argv[1]?.endsWith("since-assessment.ts") || process.argv[1]?.endsWith("since-assessment.js");
+const isDirectRun = process.argv[1]?.endsWith("fetch-new-gbif-counts.ts") || process.argv[1]?.endsWith("fetch-new-gbif-counts.js");
 if (isDirectRun) {
   main().catch((err) => {
     console.error("Fatal error:", err);

@@ -7,7 +7,7 @@
  * Phase 2: Match species (all at once)
  *   Match all Red List species to GBIF keys → update redlist CSV
  *
- * Phase 3: Since-assessment counts (per taxon)
+ * Phase 3: Count new GBIF observations (per taxon)
  *   For each taxon: compute counts since assessment → write GBIF CSV
  *
  * Prerequisites:
@@ -41,7 +41,7 @@ import {
   validateSpeciesKeys,
   writeGbifCsv,
 } from "./fetch-gbif";
-import { fetchCountsSinceAssessment } from "./since-assessment";
+import { fetchCountsSinceAssessment } from "./fetch-new-gbif-counts";
 import { matchAllSpecies } from "./match";
 
 // =============================================================================
@@ -237,12 +237,12 @@ async function main() {
     console.log(`\nPhase 2 complete: ${linkedCount} linked out of ${matchedSpecies.length}\n`);
 
     // ══════════════════════════════════════════════════════════════
-    // Phase 3: Since-assessment counts (per GBIF taxon)
+    // Phase 3: Count new GBIF observations (per GBIF taxon)
     // ══════════════════════════════════════════════════════════════
-    console.log("Phase 3: Since-assessment counts");
+    console.log("Phase 3: Count new GBIF observations");
     console.log("═".repeat(60));
     const saStart = Date.now();
-    logger.log("since_assessment_start", {});
+    logger.log("fetch_new_gbif_counts_start", {});
 
     const processedGbifTaxa = new Set<string>();
     for (const taxonId of taxaIds) {
@@ -256,7 +256,7 @@ async function main() {
       const taxonSaDuration = ((Date.now() - taxonSaStart) / 1000).toFixed(1);
       console.log(`  Computed for ${saCount} species`);
 
-      logger.log("since_assessment_taxon", {
+      logger.log("fetch_new_gbif_counts_taxon", {
         taxon: gbifTaxon.id,
         species_computed: saCount,
         duration_seconds: Number(taxonSaDuration),
@@ -266,7 +266,7 @@ async function main() {
     }
 
     const saDuration = ((Date.now() - saStart) / 1000).toFixed(1);
-    logger.log("since_assessment_complete", {
+    logger.log("fetch_new_gbif_counts_complete", {
       duration_seconds: Number(saDuration),
     });
     console.log("\nPhase 3 complete\n");
@@ -291,7 +291,7 @@ async function main() {
       linked_count: linkedCount,
       fetch_seconds: Number(fetchDuration),
       match_seconds: Number(matchDuration),
-      since_assessment_seconds: Number(saDuration),
+      fetch_new_gbif_counts_seconds: Number(saDuration),
       total_seconds: Number(elapsed),
     });
 
