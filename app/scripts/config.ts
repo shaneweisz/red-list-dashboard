@@ -1,10 +1,10 @@
 /**
- * Shared utilities for sync scripts.
+ * Shared configuration and utilities for sync scripts.
  *
+ * - Taxa configuration (Red List + GBIF)
  * - JSONL logging
- * - Supabase service client creation
- * - Paginated fetch
- * - Taxa configuration
+ * - CSV read/write
+ * - Concurrency helpers
  */
 
 import * as fs from "fs";
@@ -59,39 +59,6 @@ export function createServiceClient(): SupabaseClient {
   return createClient(url, key);
 }
 
-/**
- * Fetch all rows from a Supabase query, paginating past the default 1000-row limit.
- */
-const PAGE_SIZE = 10000;
-
-export async function fetchAllRows<T>(
-  supabase: SupabaseClient,
-  table: string,
-  select: string,
-  filters?: (query: ReturnType<SupabaseClient["from"]>) => ReturnType<SupabaseClient["from"]>
-): Promise<T[]> {
-  const allRows: T[] = [];
-  let offset = 0;
-
-  // Order by first selected column to ensure stable pagination
-  const orderCol = select.split(",")[0].trim();
-
-  while (true) {
-    let query = supabase.from(table).select(select).order(orderCol).range(offset, offset + PAGE_SIZE - 1);
-    if (filters) {
-      query = filters(query) as typeof query;
-    }
-    const { data, error } = await query;
-    if (error) throw new Error(`Failed to fetch ${table}: ${error.message}`);
-    if (!data || data.length === 0) break;
-    allRows.push(...(data as T[]));
-    if (data.length < PAGE_SIZE) break;
-    offset += PAGE_SIZE;
-  }
-
-  return allRows;
-}
-
 // =============================================================================
 // JSONL LOGGING
 // =============================================================================
@@ -109,7 +76,6 @@ export class SyncLogger {
     this.stream = fs.createWriteStream(path.join(dir, filename), { flags: "a" });
   }
 
-  /** Create a no-op logger that doesn't write to disk */
   static noop(): SyncLogger {
     const logger = Object.create(SyncLogger.prototype) as SyncLogger;
     logger.stream = null;
@@ -141,14 +107,14 @@ export class SyncLogger {
 // TAXA CONFIG
 // =============================================================================
 
-export interface IucnTaxonConfig {
+export interface RedlistTaxon {
   id: string;
   name: string;
   filterColumn: "kingdom_name" | "phylum_name" | "class_name" | "order_name";
   filterValues: string[];
 }
 
-export const IUCN_TAXA: IucnTaxonConfig[] = [
+export const REDLIST_TAXA: RedlistTaxon[] = [
   // Vertebrates
   { id: "mammalia", name: "Mammals", filterColumn: "class_name", filterValues: ["MAMMALIA"] },
   { id: "aves", name: "Birds", filterColumn: "class_name", filterValues: ["AVES"] },
@@ -190,6 +156,37 @@ export const POPULATION_TRENDS: Record<string, string> = {
 };
 
 // =============================================================================
+// CONCURRENCY & UTILITY HELPERS
+// =============================================================================
+
+export async function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function mapConcurrent<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const i = nextIndex++;
+      results[i] = await fn(items[i]);
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
+  return results;
+}
+
+export function toTitleCase(s: string): string {
+  return s.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+}
+
+// =============================================================================
 // CSV UTILITIES
 // =============================================================================
 
@@ -203,7 +200,7 @@ function csvEscape(value: string): string {
   return value;
 }
 
-/** Write rows to a CSV file. Rows are sorted by the first column for diffability. */
+/** Write rows to a CSV file. */
 export function writeCsv(
   rows: Record<string, string | number | null | undefined>[],
   columns: string[],

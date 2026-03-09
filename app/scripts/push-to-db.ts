@@ -23,7 +23,7 @@ import {
   readCsv,
   DATA_DIR,
   SyncLogger,
-} from "./sync-utils";
+} from "./config";
 
 // =============================================================================
 // CONFIGURATION

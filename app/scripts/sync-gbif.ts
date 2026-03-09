@@ -2,15 +2,14 @@
  * sync-gbif: GBIF API → CSV
  *
  * Fetches per-species observation counts from GBIF and writes to gbif-species.csv.
- * Does NOT touch the species linking table — that's handled by link-gbif.
  *
- * Two modes:
+ * Modes:
  *   --counts-only             Fetch + write total counts only
  *   --since-assessment-only   Compute count_after_assessment_year using local CSVs
  *   (no flags)                Run both phases
  *
  * Prerequisites:
- *   1. For --since-assessment-only: redlist-species.csv and species-links.csv must exist
+ *   For --since-assessment-only: redlist-species.csv and species-links.csv must exist
  *
  * Usage:
  *   npx tsx scripts/sync-gbif.ts <taxon> [--counts-only|--since-assessment-only]
@@ -18,14 +17,16 @@
  */
 
 import * as path from "path";
-import { SupabaseClient } from "@supabase/supabase-js";
 import {
   loadEnvFiles,
   SyncLogger,
   writeCsv,
   readCsv,
   DATA_DIR,
-} from "./sync-utils";
+  delay,
+  mapConcurrent,
+  toTitleCase,
+} from "./config";
 
 // =============================================================================
 // GBIF TAXA CONFIGURATION
@@ -37,7 +38,7 @@ export interface GbifQuery {
   taxonGroup: string;
 }
 
-export interface GbifTaxonConfig {
+export interface GbifTaxon {
   id: string;
   name: string;
   queries: GbifQuery[];
@@ -45,7 +46,7 @@ export interface GbifTaxonConfig {
 
 const FISH_ORDER_KEYS = [389,391,427,428,446,494,495,496,497,498,499,537,538,547,548,549,550,587,588,589,590,696,708,742,752,753,772,773,774,781,836,848,857,860,861,888,889,890,898,929,975,976,1067,1153,1313];
 
-export const GBIF_TAXA: Record<string, GbifTaxonConfig> = {
+export const GBIF_TAXA: Record<string, GbifTaxon> = {
   mammalia: {
     id: "mammalia", name: "Mammals",
     queries: [{ keyType: "classKey", keyValue: 359, taxonGroup: "mammalia" }],
@@ -153,43 +154,10 @@ interface ValidatedSpecies {
 let rateLimitHits = 0;
 const YEAR_BUCKET_CONCURRENCY = 30;
 
-async function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/**
- * Run async tasks with a concurrency limit (worker pool pattern).
- */
-async function mapConcurrent<T, R>(
-  items: T[],
-  concurrency: number,
-  fn: (item: T) => Promise<R>
-): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let nextIndex = 0;
-
-  async function worker() {
-    while (nextIndex < items.length) {
-      const i = nextIndex++;
-      results[i] = await fn(items[i]);
-    }
-  }
-
-  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
-  return results;
-}
-
-export function toTitleCase(s: string): string {
-  return s.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
-}
-
 // =============================================================================
 // GBIF API FUNCTIONS
 // =============================================================================
 
-/**
- * Fetch species occurrence facets for a single taxon key. Sequential with retry.
- */
 async function fetchFacets(
   keyType: string,
   keyValue: number,
@@ -218,7 +186,6 @@ async function fetchFacets(
       try {
         response = await fetch(`https://api.gbif.org/v1/occurrence/search?${params}`);
       } catch (err) {
-        // Network error (ETIMEDOUT, ECONNRESET, etc.) — retry with backoff
         if (attempt < MAX_RETRIES) {
           const wait = Math.pow(2, attempt + 1) * 1000;
           await delay(wait);
@@ -255,10 +222,7 @@ async function fetchFacets(
   return allResults;
 }
 
-/**
- * Fetch all species counts for a taxon. Sequential queries (one at a time).
- */
-export async function fetchAllSpeciesCounts(taxon: GbifTaxonConfig): Promise<SpeciesCount[]> {
+export async function fetchGbifCounts(taxon: GbifTaxon): Promise<SpeciesCount[]> {
   const allResults: SpeciesCount[] = [];
 
   for (let i = 0; i < taxon.queries.length; i++) {
@@ -327,70 +291,10 @@ export async function validateSpeciesKeys(speciesKeys: number[]): Promise<Map<nu
 }
 
 // =============================================================================
-// UPSERT LOGIC
-// =============================================================================
-
-const UPSERT_BATCH_SIZE = 1000;
-
-export interface GbifUpsertStats {
-  upserted: number;
-  errors: number;
-}
-
-/**
- * Upsert species into gbif_species table. Simple PK-based upsert.
- * Does NOT touch the species linking table.
- */
-export async function upsertGbifSpecies(
-  supabase: SupabaseClient,
-  speciesList: Array<{
-    speciesKey: number;
-    scientificName: string;
-    commonName: string;
-    taxonGroup: string;
-    observationsTotal: number;
-    observationsAfterAssessment?: number | null;
-  }>,
-  logger: SyncLogger
-): Promise<GbifUpsertStats> {
-  const stats: GbifUpsertStats = { upserted: 0, errors: 0 };
-
-  for (let i = 0; i < speciesList.length; i += UPSERT_BATCH_SIZE) {
-    const batch = speciesList.slice(i, i + UPSERT_BATCH_SIZE);
-    const rows = batch.map((s) => ({
-      gbif_species_key: s.speciesKey,
-      scientific_name: s.scientificName,
-      common_name: s.commonName || null,
-      taxon_group_table1a: s.taxonGroup,
-      total_count: s.observationsTotal,
-      ...(s.observationsAfterAssessment !== undefined
-        ? { count_after_assessment_year: s.observationsAfterAssessment }
-        : {}),
-      synced_at: new Date().toISOString(),
-    }));
-
-    const { error } = await supabase
-      .from("gbif_species")
-      .upsert(rows, { onConflict: "gbif_species_key" });
-
-    if (error) {
-      stats.errors += batch.length;
-      logger.log("error", { error: error.message, context: "gbif_upsert", count: batch.length });
-    } else {
-      stats.upserted += batch.length;
-    }
-    process.stdout.write(`\r  Upserted ${Math.min(i + UPSERT_BATCH_SIZE, speciesList.length)}/${speciesList.length} into gbif_species`);
-  }
-  if (speciesList.length > 0) console.log("");
-
-  return stats;
-}
-
-// =============================================================================
 // SINCE-ASSESSMENT PHASE (reads from local CSVs)
 // =============================================================================
 
-export interface GbifSpeciesCsvRow {
+export interface GbifSpecies {
   gbif_species_key: number;
   scientific_name: string;
   common_name: string;
@@ -399,12 +303,9 @@ export interface GbifSpeciesCsvRow {
   count_after_assessment_year: number | null;
 }
 
-/**
- * Load the existing gbif-species.csv into a map for merging since-assessment counts.
- */
-function loadGbifCsv(): Map<number, GbifSpeciesCsvRow> {
+function loadGbifCsv(): Map<number, GbifSpecies> {
   const csvPath = path.join(DATA_DIR, "gbif-species.csv");
-  const rows = readCsv<GbifSpeciesCsvRow>(csvPath, (r) => ({
+  const rows = readCsv<GbifSpecies>(csvPath, (r) => ({
     gbif_species_key: parseInt(r.gbif_species_key, 10),
     scientific_name: r.scientific_name,
     common_name: r.common_name,
@@ -412,19 +313,15 @@ function loadGbifCsv(): Map<number, GbifSpeciesCsvRow> {
     total_count: parseInt(r.total_count, 10) || 0,
     count_after_assessment_year: r.count_after_assessment_year ? parseInt(r.count_after_assessment_year, 10) : null,
   }));
-  const map = new Map<number, GbifSpeciesCsvRow>();
+  const map = new Map<number, GbifSpecies>();
   for (const row of rows) map.set(row.gbif_species_key, row);
   return map;
 }
 
-/**
- * Build gbif_species_key → assessment year mapping from local CSVs.
- */
 function loadAssessmentYears(taxonGbifKeys: Set<number>): Map<number, number> {
   const redlistPath = path.join(DATA_DIR, "redlist-species.csv");
   const linksPath = path.join(DATA_DIR, "species-links.csv");
 
-  // Read assessment dates from redlist CSV
   const assessmentDates = new Map<number, string>();
   readCsv(redlistPath, (r) => {
     if (r.assessment_date) {
@@ -433,7 +330,6 @@ function loadAssessmentYears(taxonGbifKeys: Set<number>): Map<number, number> {
     return null;
   });
 
-  // Read links CSV to map gbif_species_key → sis_taxon_id
   const speciesAssessmentYear = new Map<number, number>();
   readCsv(linksPath, (r) => {
     const gbifKey = r.gbif_species_key ? parseInt(r.gbif_species_key, 10) : null;
@@ -451,13 +347,9 @@ function loadAssessmentYears(taxonGbifKeys: Set<number>): Map<number, number> {
   return speciesAssessmentYear;
 }
 
-/**
- * Compute count_after_assessment_year for linked species in a taxon group.
- * Reads assessment dates from local CSVs. Returns a map of gbif_species_key → count.
- */
-export async function computeSinceAssessment(
-  taxon: GbifTaxonConfig,
-  gbifSpeciesMap: Map<number, GbifSpeciesCsvRow>,
+export async function fetchCountsSinceAssessment(
+  taxon: GbifTaxon,
+  gbifSpeciesMap: Map<number, GbifSpecies>,
   logger: SyncLogger
 ): Promise<number> {
   // Get gbif keys for this taxon group from the in-memory map
@@ -471,7 +363,6 @@ export async function computeSinceAssessment(
 
   if (speciesAssessmentYear.size === 0) return 0;
 
-  // Compute year-bucketed counts
   const uniqueYears = Array.from(new Set(Array.from(speciesAssessmentYear.values()))).sort((a, b) => a - b);
   const yearBuckets = uniqueYears.filter((y) => y + 1 <= CURRENT_YEAR);
 
@@ -511,7 +402,6 @@ export async function computeSinceAssessment(
   }
   if (yearBuckets.length > 0) console.log("");
 
-  // Merge since-assessment counts into the in-memory map
   sinceAssessmentCounts.forEach((count, key) => {
     const row = gbifSpeciesMap.get(key);
     if (row) row.count_after_assessment_year = count;
@@ -529,7 +419,7 @@ const GBIF_CSV_COLUMNS = [
   "total_count", "count_after_assessment_year",
 ];
 
-export function writeGbifCsv(speciesMap: Map<number, GbifSpeciesCsvRow>, outputPath: string): void {
+export function writeGbifCsv(speciesMap: Map<number, GbifSpecies>, outputPath: string): void {
   const rows = Array.from(speciesMap.values())
     .sort((a, b) => b.total_count - a.total_count)
     .map((s) => ({
@@ -584,8 +474,7 @@ async function main() {
       mode: countsOnly ? "counts-only" : sinceAssessmentOnly ? "since-assessment-only" : "full",
     });
 
-    // Load existing CSV if doing since-assessment-only (need to merge into it)
-    const gbifSpeciesMap: Map<number, GbifSpeciesCsvRow> = sinceAssessmentOnly
+    const gbifSpeciesMap: Map<number, GbifSpecies> = sinceAssessmentOnly
       ? loadGbifCsv()
       : new Map();
 
@@ -596,10 +485,9 @@ async function main() {
       const taxonStart = Date.now();
       console.log(`\n${taxon.name} (${taxon.id}):`);
 
-      // Phase 1: Total counts
       if (!sinceAssessmentOnly) {
         console.log("  Fetching species observation counts from GBIF...");
-        const rawResults = await fetchAllSpeciesCounts(taxon);
+        const rawResults = await fetchGbifCounts(taxon);
         console.log(`  Raw species: ${rawResults.length}`);
 
         console.log("  Validating species keys...");
@@ -627,10 +515,9 @@ async function main() {
         });
       }
 
-      // Phase 2: Since-assessment counts
       if (!countsOnly) {
         console.log("  Computing since-assessment counts...");
-        const count = await computeSinceAssessment(taxon, gbifSpeciesMap, logger);
+        const count = await fetchCountsSinceAssessment(taxon, gbifSpeciesMap, logger);
         totalSinceAssessment += count;
 
         logger.log("taxon_since_assessment_complete", {
@@ -642,11 +529,9 @@ async function main() {
       logger.log("taxon_complete", { taxon_id: taxon.id, duration_seconds: Number(taxonDuration) });
     }
 
-    // Write CSV
     const outputPath = path.join(DATA_DIR, "gbif-species.csv");
     writeGbifCsv(gbifSpeciesMap, outputPath);
 
-    // Summary
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
     const minutes = Math.floor(Number(elapsed) / 60);
     const seconds = Number(elapsed) % 60;

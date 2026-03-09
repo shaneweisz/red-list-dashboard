@@ -1,40 +1,35 @@
 /**
- * sync-redlist: IUCN Red List DB → Supabase
+ * sync-redlist: IUCN Red List DB → CSV
  *
  * Connects to the IUCN Red List PostgreSQL database (via SSH tunnel)
- * and upserts species data into Supabase.
- *
- * Tables written: redlist_species (PK upsert), species (linking table)
+ * and writes species data to redlist-species.csv.
  *
  * Prerequisites:
  *   1. SSH tunnel to IUCN DB (port 5433)
- *   2. Environment variables: DB_HOST, DB_NAME, DB_USER, DB_PASSWORD,
- *      NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+ *   2. Environment variables: DB_HOST, DB_NAME, DB_USER, DB_PASSWORD
  *
  * Usage:
  *   npx tsx scripts/sync-redlist.ts [taxon]   # Sync one taxon (e.g. mammalia)
- *   npx tsx scripts/sync-redlist.ts            # Sync all 15 taxa
+ *   npx tsx scripts/sync-redlist.ts            # Sync all taxa
  */
 
 import * as path from "path";
 import { Client } from "pg";
-import { SupabaseClient } from "@supabase/supabase-js";
 import {
   loadEnvFiles,
-  fetchAllRows,
   SyncLogger,
-  IUCN_TAXA,
-  IucnTaxonConfig,
+  REDLIST_TAXA,
+  RedlistTaxon,
   POPULATION_TRENDS,
   writeCsv,
   DATA_DIR,
-} from "./sync-utils";
+} from "./config";
 
 // =============================================================================
 // TYPES
 // =============================================================================
 
-export interface IucnSpeciesRow {
+export interface RedlistSpecies {
   sis_taxon_id: number;
   assessment_id: number;
   scientific_name: string;
@@ -54,15 +49,10 @@ export interface IucnSpeciesRow {
 // DATA FETCHING (from IUCN PostgreSQL)
 // =============================================================================
 
-/**
- * Fetch species from IUCN DB for a single taxon group.
- * Extracted for testability — tests mock this and call upsertRedlistSpecies directly.
- */
 export async function fetchFromIucnDb(
   pgClient: Client,
-  taxon: IucnTaxonConfig
-): Promise<IucnSpeciesRow[]> {
-  // Main query: latest global assessment per species
+  taxon: RedlistTaxon
+): Promise<RedlistSpecies[]> {
   const mainQuery = `
     SELECT DISTINCT ON (t.sis_id)
       t.sis_id as sis_taxon_id,
@@ -95,8 +85,7 @@ export async function fetchFromIucnDb(
 
   const mainResult = await pgClient.query(mainQuery, [taxon.filterValues]);
 
-  // Build species list and collect assessment IDs for country fetch
-  const species: IucnSpeciesRow[] = [];
+  const species: RedlistSpecies[] = [];
   const assessmentIds: number[] = [];
 
   for (const row of mainResult.rows) {
@@ -123,7 +112,6 @@ export async function fetchFromIucnDb(
     assessmentIds.push(assessmentId);
   }
 
-  // Batch fetch countries
   if (assessmentIds.length > 0) {
     const countriesQuery = `
       SELECT
@@ -162,137 +150,6 @@ export async function fetchFromIucnDb(
 }
 
 // =============================================================================
-// UPSERT LOGIC
-// =============================================================================
-
-const BATCH_SIZE = 1000;
-
-export interface UpsertStats {
-  upserted: number;
-  errors: number;
-}
-
-/**
- * Upsert IUCN species into redlist_species and species tables.
- * Simple PK-based upsert — no matching logic needed.
- */
-export async function upsertRedlistSpecies(
-  supabase: SupabaseClient,
-  species: IucnSpeciesRow[],
-  logger: SyncLogger
-): Promise<{ seenSisTaxonIds: Set<number>; stats: UpsertStats }> {
-  const seenSisTaxonIds = new Set<number>();
-  const stats: UpsertStats = { upserted: 0, errors: 0 };
-
-  // Batch upsert into redlist_species
-  for (let i = 0; i < species.length; i += BATCH_SIZE) {
-    const batch = species.slice(i, i + BATCH_SIZE);
-    const rows = batch.map((s) => {
-      seenSisTaxonIds.add(s.sis_taxon_id);
-      return {
-        sis_taxon_id: s.sis_taxon_id,
-        scientific_name: s.scientific_name,
-        common_name: s.common_name,
-        class_name: s.class_name,
-        order_name: s.order_name,
-        family: s.family,
-        taxon_group_table1a: s.taxon_group_table1a,
-        assessment_id: s.assessment_id,
-        iucn_category: s.category,
-        assessment_date: s.assessment_date,
-        year_published: s.year_published,
-        population_trend: s.population_trend,
-        countries: s.countries,
-        synced_at: new Date().toISOString(),
-      };
-    });
-
-    const { error } = await supabase
-      .from("redlist_species")
-      .upsert(rows, { onConflict: "sis_taxon_id" });
-
-    if (error) {
-      stats.errors += batch.length;
-      logger.log("error", { error: error.message, context: "redlist_upsert", count: batch.length });
-    } else {
-      stats.upserted += batch.length;
-    }
-    process.stdout.write(`\r  Upserted ${Math.min(i + BATCH_SIZE, species.length)}/${species.length} into redlist_species`);
-  }
-  if (species.length > 0) console.log("");
-
-  // Batch upsert into species linking table (ensure a row exists for each sis_taxon_id)
-  const linkRows = species.map((s) => ({ sis_taxon_id: s.sis_taxon_id }));
-  for (let i = 0; i < linkRows.length; i += BATCH_SIZE) {
-    const batch = linkRows.slice(i, i + BATCH_SIZE);
-    const { error } = await supabase
-      .from("species")
-      .upsert(batch, { onConflict: "sis_taxon_id", ignoreDuplicates: true });
-
-    if (error) {
-      logger.log("error", { error: error.message, context: "species_link_upsert", count: batch.length });
-    }
-    process.stdout.write(`\r  Upserted ${Math.min(i + BATCH_SIZE, linkRows.length)}/${linkRows.length} into species`);
-  }
-  if (linkRows.length > 0) console.log("");
-
-  return { seenSisTaxonIds, stats };
-}
-
-/**
- * Delete species that are no longer in the Red List.
- * ON DELETE SET NULL auto-nulls species.sis_taxon_id, then we clean up orphans.
- */
-export async function deleteDelisted(
-  supabase: SupabaseClient,
-  seenSisTaxonIds: Set<number>,
-  logger: SyncLogger
-): Promise<number> {
-  // Fetch all sis_taxon_ids currently in redlist_species
-  const existing = await fetchAllRows<{ sis_taxon_id: number }>(
-    supabase, "redlist_species", "sis_taxon_id"
-  );
-
-  const toDelete = existing.filter((r) => !seenSisTaxonIds.has(r.sis_taxon_id));
-  let deletedCount = 0;
-
-  // Batch delete from redlist_species (ON DELETE SET NULL auto-nulls species.sis_taxon_id)
-  for (let i = 0; i < toDelete.length; i += BATCH_SIZE) {
-    const batch = toDelete.slice(i, i + BATCH_SIZE);
-    const ids = batch.map((r) => r.sis_taxon_id);
-
-    const { error } = await supabase
-      .from("redlist_species")
-      .delete()
-      .in("sis_taxon_id", ids);
-
-    if (error) {
-      logger.log("error", { event: "delete_failed", error: error.message, count: batch.length });
-    } else {
-      deletedCount += batch.length;
-      for (const row of batch) {
-        logger.log("deleted", { sis_taxon_id: row.sis_taxon_id });
-      }
-    }
-  }
-
-  // Clean up orphaned species rows (both FKs null)
-  const { error: orphanError, count } = await supabase
-    .from("species")
-    .delete({ count: "exact" })
-    .is("sis_taxon_id", null)
-    .is("gbif_species_key", null);
-
-  if (orphanError) {
-    logger.log("error", { event: "orphan_cleanup_failed", error: orphanError.message });
-  } else if (count && count > 0) {
-    console.log(`  Cleaned up ${count} orphaned species link rows`);
-  }
-
-  return deletedCount;
-}
-
-// =============================================================================
 // CSV OUTPUT
 // =============================================================================
 
@@ -302,7 +159,7 @@ const REDLIST_CSV_COLUMNS = [
   "year_published", "population_trend", "countries",
 ];
 
-export function writeRedlistCsv(species: IucnSpeciesRow[], outputPath: string): void {
+export function writeRedlistCsv(species: RedlistSpecies[], outputPath: string): void {
   const rows = species
     .map((s) => ({
       sis_taxon_id: s.sis_taxon_id,
@@ -334,12 +191,12 @@ async function main() {
   const taxonArg = args[0]?.toLowerCase();
 
   const taxaToSync = taxonArg
-    ? IUCN_TAXA.filter((t) => t.id === taxonArg)
-    : IUCN_TAXA;
+    ? REDLIST_TAXA.filter((t) => t.id === taxonArg)
+    : REDLIST_TAXA;
 
   if (taxonArg && taxaToSync.length === 0) {
     console.error(`Unknown taxon: ${taxonArg}`);
-    console.error("Available:", IUCN_TAXA.map((t) => t.id).join(", "));
+    console.error("Available:", REDLIST_TAXA.map((t) => t.id).join(", "));
     process.exit(1);
   }
 
@@ -349,7 +206,6 @@ async function main() {
   const startTime = Date.now();
   const logger = new SyncLogger("sync-redlist");
 
-  // Connect to IUCN database
   const pgClient = new Client({
     host: process.env.DB_HOST || "localhost",
     port: 5433,
@@ -367,7 +223,7 @@ async function main() {
       taxa_count: taxaToSync.length,
     });
 
-    const allSpecies: IucnSpeciesRow[] = [];
+    const allSpecies: RedlistSpecies[] = [];
 
     for (const taxon of taxaToSync) {
       const taxonStart = Date.now();
@@ -381,7 +237,6 @@ async function main() {
       logger.log("taxon_complete", { taxon_group: taxon.id, taxon_name: taxon.name, fetched: species.length, duration_seconds: Number(taxonDuration) });
     }
 
-    // Write CSV
     const outputPath = path.join(DATA_DIR, "redlist-species.csv");
     writeRedlistCsv(allSpecies, outputPath);
 
@@ -405,7 +260,6 @@ async function main() {
   }
 }
 
-// Only run main when executed directly (not when imported by tests)
 const isDirectRun = process.argv[1]?.endsWith("sync-redlist.ts") || process.argv[1]?.endsWith("sync-redlist.js");
 if (isDirectRun) {
   main().catch((err) => {
