@@ -1400,16 +1400,16 @@ export default function RedListView() {
           <table className="w-full text-sm">
             <thead className="bg-zinc-50 dark:bg-zinc-800">
               <tr>
-                <th className="sticky left-0 z-10 bg-zinc-50 dark:bg-zinc-800 px-2 py-3 text-center text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider w-10">
+                <th className="sticky left-0 z-10 bg-zinc-50 dark:bg-zinc-800 px-2 py-3 text-center text-[13px] font-semibold text-zinc-500 dark:text-zinc-300 uppercase tracking-wider w-10">
                   <svg className="w-4 h-4 mx-auto text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                   </svg>
                 </th>
-                <th className="sticky left-[40px] z-10 bg-zinc-50 dark:bg-zinc-800 px-2 md:px-4 py-3 text-left text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider">
+                <th className="sticky left-[40px] z-10 bg-zinc-50 dark:bg-zinc-800 px-2 md:px-4 py-3 text-left text-[13px] font-semibold text-zinc-500 dark:text-zinc-300 uppercase tracking-wider">
                   Species
                 </th>
                 <th
-                  className="px-2 md:px-4 py-3 text-left text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
+                  className="px-2 md:px-4 py-3 text-left text-[13px] font-semibold text-zinc-500 dark:text-zinc-300 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
                   onClick={() => handleSort("category")}
                 >
                   <span className="flex items-center gap-1">
@@ -1420,7 +1420,7 @@ export default function RedListView() {
                   </span>
                 </th>
                 <th
-                  className="px-2 md:px-4 py-3 text-left text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
+                  className="px-2 md:px-4 py-3 text-left text-[13px] font-semibold text-zinc-500 dark:text-zinc-300 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
                   onClick={() => handleSort("year")}
                 >
                   <span className="flex items-center gap-1">
@@ -1430,11 +1430,11 @@ export default function RedListView() {
                     )}
                   </span>
                 </th>
-                <th className="px-3 md:px-4 py-3 text-right text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider min-w-[60px]">
+                <th className="px-3 md:px-4 py-3 text-right text-[13px] font-semibold text-zinc-500 dark:text-zinc-300 uppercase tracking-wider min-w-[60px]">
                   GBIF at Assess.
                 </th>
                 <th
-                  className="px-3 md:px-4 py-3 text-right text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
+                  className="px-3 md:px-4 py-3 text-right text-[13px] font-semibold text-zinc-500 dark:text-zinc-300 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
                   onClick={() => handleSort("newGbif")}
                 >
                   <span className="flex items-center justify-end gap-1">
@@ -1444,14 +1444,14 @@ export default function RedListView() {
                     )}
                   </span>
                 </th>
-                <th className="px-3 md:px-4 py-3 text-right text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider min-w-[60px]">
+                <th className="px-3 md:px-4 py-3 text-right text-[13px] font-semibold text-zinc-500 dark:text-zinc-300 uppercase tracking-wider min-w-[60px]">
                   Papers at Assess.
                 </th>
-                <th className="px-3 md:px-4 py-3 text-right text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider min-w-[60px]">
+                <th className="px-3 md:px-4 py-3 text-right text-[13px] font-semibold text-zinc-500 dark:text-zinc-300 uppercase tracking-wider min-w-[60px]">
                   New Papers
                 </th>
                 <th
-                  className="px-3 md:px-4 py-3 text-left text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider min-w-[80px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
+                  className="px-3 md:px-4 py-3 text-left text-[13px] font-semibold text-zinc-500 dark:text-zinc-300 uppercase tracking-wider min-w-[80px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
                   onClick={() => handleSort("priority")}
                 >
                   <span className="flex items-center gap-1">
