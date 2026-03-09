@@ -1,11 +1,11 @@
 /**
- * fetch-gbif: GBIF API → CSV
+ * fetch-gbif-species: GBIF API → CSV
  *
  * Fetches per-species observation counts from GBIF and writes to gbif-species.csv.
  *
  * Usage:
- *   npx tsx scripts/fetch-gbif.ts [taxon]   # Fetch one taxon (e.g. mammalia)
- *   npx tsx scripts/fetch-gbif.ts            # Fetch all taxa
+ *   npx tsx scripts/fetch-gbif-species.ts [taxon]   # Fetch one taxon (e.g. mammalia)
+ *   npx tsx scripts/fetch-gbif-species.ts            # Fetch all taxa
  */
 
 import * as path from "path";
@@ -324,11 +324,11 @@ async function main() {
     process.exit(1);
   }
 
-  console.log("fetch-gbif: GBIF API → CSV");
+  console.log("fetch-gbif-species: GBIF API → CSV");
   console.log("=".repeat(50));
 
   const startTime = Date.now();
-  const logger = new SyncLogger("fetch-gbif");
+  const logger = new SyncLogger("fetch-gbif-species");
 
   try {
     logger.log("sync_start", {
@@ -387,7 +387,7 @@ async function main() {
   }
 }
 
-const isDirectRun = process.argv[1]?.endsWith("fetch-gbif.ts") || process.argv[1]?.endsWith("fetch-gbif.js");
+const isDirectRun = process.argv[1]?.endsWith("fetch-gbif-species.ts") || process.argv[1]?.endsWith("fetch-gbif-species.js");
 if (isDirectRun) {
   main().catch((err) => {
     console.error("Fatal error:", err);

@@ -32,7 +32,7 @@ import {
   writeRedlistCsv,
   RedlistSpecies,
   REDLIST_TAXA,
-} from "./fetch-redlist";
+} from "./fetch-redlist-species";
 import {
   GBIF_TAXA,
   GbifTaxon,
@@ -40,9 +40,9 @@ import {
   fetchGbifCounts,
   validateSpeciesKeys,
   writeGbifCsv,
-} from "./fetch-gbif";
-import { fetchCountsSinceAssessment } from "./fetch-new-gbif-counts";
-import { matchAllSpecies } from "./match";
+} from "./fetch-gbif-species";
+import { fetchCountsSinceAssessment } from "./fetch-gbif-new-counts";
+import { matchAllSpecies } from "./match-redlist-species-to-gbif";
 
 // =============================================================================
 // REDLIST → GBIF TAXON MAPPING

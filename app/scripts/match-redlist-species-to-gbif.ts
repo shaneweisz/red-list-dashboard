@@ -1,5 +1,5 @@
 /**
- * match: GBIF Species Match API → redlist-species.csv
+ * match-redlist-species-to-gbif: GBIF Species Match API → redlist-species.csv
  *
  * Resolves Red List scientific names to GBIF species keys using
  * GBIF's fuzzy matching API, then writes gbif_species_key and
@@ -10,7 +10,7 @@
  *   2. gbif-species.csv exists (from fetch-gbif)
  *
  * Usage:
- *   npx tsx scripts/match.ts
+ *   npx tsx scripts/match-redlist-species-to-gbif.ts
  */
 
 import * as path from "path";
@@ -25,7 +25,7 @@ import {
 import {
   RedlistSpecies,
   writeRedlistCsv,
-} from "./fetch-redlist";
+} from "./fetch-redlist-species";
 
 // =============================================================================
 // CONFIGURATION
@@ -183,11 +183,11 @@ export async function matchAllSpecies(
 async function main() {
   loadEnvFiles();
 
-  console.log("match: GBIF Match API → redlist-species.csv");
+  console.log("match-redlist-species-to-gbif: GBIF Match API → redlist-species.csv");
   console.log("=".repeat(50));
 
   const startTime = Date.now();
-  const logger = new SyncLogger("match");
+  const logger = new SyncLogger("match-redlist-species-to-gbif");
 
   try {
     logger.log("match_start", {});
@@ -216,7 +216,7 @@ async function main() {
   }
 }
 
-const isDirectRun = process.argv[1]?.endsWith("match.ts") || process.argv[1]?.endsWith("match.js");
+const isDirectRun = process.argv[1]?.endsWith("match-redlist-species-to-gbif.ts") || process.argv[1]?.endsWith("match-redlist-species-to-gbif.js");
 if (isDirectRun) {
   main().catch((err) => {
     console.error("Fatal error:", err);

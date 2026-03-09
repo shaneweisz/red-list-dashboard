@@ -1,5 +1,5 @@
 /**
- * fetch-redlist: IUCN Red List DB → CSV
+ * fetch-redlist-species: IUCN Red List DB → CSV
  *
  * Connects to the IUCN Red List PostgreSQL database (via SSH tunnel)
  * and writes species data to redlist-species.csv.
@@ -9,8 +9,8 @@
  *   2. Environment variables: DB_HOST, DB_NAME, DB_USER, DB_PASSWORD
  *
  * Usage:
- *   npx tsx scripts/fetch-redlist.ts [taxon]   # Sync one taxon (e.g. mammalia)
- *   npx tsx scripts/fetch-redlist.ts            # Sync all taxa
+ *   npx tsx scripts/fetch-redlist-species.ts [taxon]   # Sync one taxon (e.g. mammalia)
+ *   npx tsx scripts/fetch-redlist-species.ts            # Sync all taxa
  */
 
 import * as path from "path";
@@ -254,11 +254,11 @@ async function main() {
     process.exit(1);
   }
 
-  console.log("fetch-redlist: IUCN Red List DB → CSV");
+  console.log("fetch-redlist-species: IUCN Red List DB → CSV");
   console.log("=".repeat(50));
 
   const startTime = Date.now();
-  const logger = new SyncLogger("fetch-redlist");
+  const logger = new SyncLogger("fetch-redlist-species");
 
   const pgClient = new Client({
     host: process.env.DB_HOST || "localhost",
@@ -314,7 +314,7 @@ async function main() {
   }
 }
 
-const isDirectRun = process.argv[1]?.endsWith("fetch-redlist.ts") || process.argv[1]?.endsWith("fetch-redlist.js");
+const isDirectRun = process.argv[1]?.endsWith("fetch-redlist-species.ts") || process.argv[1]?.endsWith("fetch-redlist-species.js");
 if (isDirectRun) {
   main().catch((err) => {
     console.error("Fatal error:", err);
