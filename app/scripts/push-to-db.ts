@@ -1,7 +1,7 @@
 /**
  * push-to-db: Local CSVs → Supabase
  *
- * Reads redlist-species.csv, gbif-species.csv, and species-links.csv,
+ * Reads redlist-species.csv and gbif-species.csv,
  * merges them into a single species table, then truncates and reloads.
  *
  * Merge logic:
@@ -51,6 +51,7 @@ interface RedlistCsvRow {
   year_published: string | null;
   population_trend: string | null;
   countries: string[];
+  gbif_species_key: number | null;
 }
 
 interface GbifCsvRow {
@@ -60,11 +61,6 @@ interface GbifCsvRow {
   table1a_taxon_group: string;
   gbif_total_count: number;
   gbif_count_since_assessment: number | null;
-}
-
-interface LinkCsvRow {
-  sis_taxon_id: number;
-  gbif_species_key: number | null;
 }
 
 // =============================================================================
@@ -86,6 +82,7 @@ function parseRedlistRow(r: Record<string, string>): RedlistCsvRow {
     year_published: r.year_published || null,
     population_trend: r.population_trend || null,
     countries: r.countries ? r.countries.split(";").filter(Boolean) : [],
+    gbif_species_key: r.gbif_species_key ? parseInt(r.gbif_species_key, 10) : null,
   };
 }
 
@@ -99,13 +96,6 @@ function parseGbifRow(r: Record<string, string>): GbifCsvRow {
     gbif_count_since_assessment: r.count_after_assessment_year
       ? parseInt(r.count_after_assessment_year, 10)
       : null,
-  };
-}
-
-function parseLinkRow(r: Record<string, string>): LinkCsvRow {
-  return {
-    sis_taxon_id: parseInt(r.sis_taxon_id, 10),
-    gbif_species_key: r.gbif_species_key ? parseInt(r.gbif_species_key, 10) : null,
   };
 }
 
@@ -136,7 +126,6 @@ interface SpeciesDbRow {
 function mergeSpecies(
   redlistRows: RedlistCsvRow[],
   gbifRows: GbifCsvRow[],
-  linkRows: LinkCsvRow[],
 ): SpeciesDbRow[] {
   const now = new Date().toISOString();
 
@@ -144,21 +133,17 @@ function mergeSpecies(
   const gbifByKey = new Map<number, GbifCsvRow>();
   for (const g of gbifRows) gbifByKey.set(g.gbif_species_key, g);
 
-  // Build link lookup (sis_taxon_id → gbif_species_key)
-  const linkMap = new Map<number, number>();
+  // Collect claimed GBIF keys from redlist rows
   const claimedGbifKeys = new Set<number>();
-  for (const l of linkRows) {
-    if (l.gbif_species_key !== null) {
-      linkMap.set(l.sis_taxon_id, l.gbif_species_key);
-      claimedGbifKeys.add(l.gbif_species_key);
-    }
+  for (const rl of redlistRows) {
+    if (rl.gbif_species_key !== null) claimedGbifKeys.add(rl.gbif_species_key);
   }
 
   const merged: SpeciesDbRow[] = [];
 
   // Red List species (with optional GBIF data if linked)
   for (const rl of redlistRows) {
-    const gbifKey = linkMap.get(rl.sis_taxon_id) ?? null;
+    const gbifKey = rl.gbif_species_key;
     const gbif = gbifKey !== null ? gbifByKey.get(gbifKey) : undefined;
 
     merged.push({
@@ -231,21 +216,17 @@ async function main() {
 
   const redlistPath = path.join(DATA_DIR, "redlist-species.csv");
   const gbifPath = path.join(DATA_DIR, "gbif-species.csv");
-  const linksPath = path.join(DATA_DIR, "species-links.csv");
 
   const redlistRows = readCsv(redlistPath, parseRedlistRow);
-  console.log(`  redlist-species.csv: ${redlistRows.length.toLocaleString()} rows`);
+  const linkedCount = redlistRows.filter((r) => r.gbif_species_key !== null).length;
+  console.log(`  redlist-species.csv: ${redlistRows.length.toLocaleString()} rows (${linkedCount.toLocaleString()} linked)`);
 
   const gbifRows = readCsv(gbifPath, parseGbifRow);
   console.log(`  gbif-species.csv:    ${gbifRows.length.toLocaleString()} rows`);
 
-  const linkRows = readCsv(linksPath, parseLinkRow);
-  const linkedCount = linkRows.filter((r) => r.gbif_species_key !== null).length;
-  console.log(`  species-links.csv:   ${linkRows.length.toLocaleString()} rows (${linkedCount.toLocaleString()} linked)`);
-
   // Merge
   console.log("\nMerging...");
-  const merged = mergeSpecies(redlistRows, gbifRows, linkRows);
+  const merged = mergeSpecies(redlistRows, gbifRows);
   const redlistOnly = merged.filter((r) => r.sis_taxon_id !== null && r.gbif_species_key === null).length;
   const gbifOnly = merged.filter((r) => r.sis_taxon_id === null && r.gbif_species_key !== null).length;
   const both = merged.filter((r) => r.sis_taxon_id !== null && r.gbif_species_key !== null).length;

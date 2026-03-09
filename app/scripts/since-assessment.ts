@@ -7,7 +7,7 @@
  * Prerequisites:
  *   1. redlist-species.csv exists (from fetch-redlist)
  *   2. gbif-species.csv exists (from fetch-gbif)
- *   3. species-links.csv exists (from match)
+ *   3. redlist-species.csv has gbif_species_key populated (from match)
  *
  * Usage:
  *   npx tsx scripts/since-assessment.ts [taxon]   # One taxon (e.g. mammalia)
@@ -58,26 +58,13 @@ function loadGbifCsv(): Map<number, GbifSpecies> {
 
 function loadAssessmentYears(taxonGbifKeys: Set<number>): Map<number, number> {
   const redlistPath = path.join(DATA_DIR, "redlist-species.csv");
-  const linksPath = path.join(DATA_DIR, "species-links.csv");
-
-  const assessmentDates = new Map<number, string>();
-  readCsv(redlistPath, (r) => {
-    if (r.assessment_date) {
-      assessmentDates.set(parseInt(r.sis_taxon_id, 10), r.assessment_date);
-    }
-    return null;
-  });
 
   const speciesAssessmentYear = new Map<number, number>();
-  readCsv(linksPath, (r) => {
+  readCsv(redlistPath, (r) => {
     const gbifKey = r.gbif_species_key ? parseInt(r.gbif_species_key, 10) : null;
-    const sisTaxonId = parseInt(r.sis_taxon_id, 10);
-    if (gbifKey && taxonGbifKeys.has(gbifKey)) {
-      const date = assessmentDates.get(sisTaxonId);
-      if (date) {
-        const year = parseInt(date.slice(0, 4), 10);
-        if (!isNaN(year)) speciesAssessmentYear.set(gbifKey, year);
-      }
+    if (gbifKey && taxonGbifKeys.has(gbifKey) && r.assessment_date) {
+      const year = parseInt(r.assessment_date.slice(0, 4), 10);
+      if (!isNaN(year)) speciesAssessmentYear.set(gbifKey, year);
     }
     return null;
   });

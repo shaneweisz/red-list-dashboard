@@ -91,6 +91,8 @@ export interface RedlistSpecies {
   population_trend: string | null;
   countries: string[];
   taxon_group_table1a: string;
+  gbif_species_key: number | null;
+  match_type: string | null;
 }
 
 // =============================================================================
@@ -156,6 +158,8 @@ export async function fetchFromIucnDb(
       population_trend: POPULATION_TRENDS[row.population_trend_code] || null,
       countries: [],
       taxon_group_table1a: taxon.id,
+      gbif_species_key: null,
+      match_type: null,
     });
     assessmentIds.push(assessmentId);
   }
@@ -204,7 +208,7 @@ export async function fetchFromIucnDb(
 const REDLIST_CSV_COLUMNS = [
   "sis_taxon_id", "scientific_name", "common_name", "class_name", "order_name",
   "family", "taxon_group_table1a", "assessment_id", "iucn_category", "assessment_date",
-  "year_published", "population_trend", "countries",
+  "year_published", "population_trend", "countries", "gbif_species_key", "match_type",
 ];
 
 export function writeRedlistCsv(species: RedlistSpecies[], outputPath: string): void {
@@ -223,6 +227,8 @@ export function writeRedlistCsv(species: RedlistSpecies[], outputPath: string): 
       year_published: s.year_published,
       population_trend: s.population_trend,
       countries: s.countries.join(";"),
+      gbif_species_key: s.gbif_species_key,
+      match_type: s.match_type,
     }));
 
   writeCsv(rows, REDLIST_CSV_COLUMNS, outputPath);

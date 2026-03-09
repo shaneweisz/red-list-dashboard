@@ -5,7 +5,7 @@
  *   For each taxon: fetch Red List → write CSV, fetch GBIF → write CSV
  *
  * Phase 2: Match species (all at once)
- *   Match all Red List species to GBIF keys → write links CSV
+ *   Match all Red List species to GBIF keys → update redlist CSV
  *
  * Phase 3: Since-assessment counts (per taxon)
  *   For each taxon: compute counts since assessment → write GBIF CSV
@@ -42,10 +42,7 @@ import {
   writeGbifCsv,
 } from "./fetch-gbif";
 import { fetchCountsSinceAssessment } from "./since-assessment";
-import {
-  matchAllSpecies,
-  writeLinksCsv,
-} from "./match";
+import { matchAllSpecies } from "./match";
 
 // =============================================================================
 // REDLIST → GBIF TAXON MAPPING
@@ -114,6 +111,7 @@ async function main() {
 
   const startTime = Date.now();
   const logger = new SyncLogger("sync");
+  logger.log("sync_start", { taxa: taxaIds });
 
   const allRedlistSpecies: RedlistSpecies[] = [];
   const allGbifSpecies = new Map<number, GbifSpecies>();
@@ -148,6 +146,7 @@ async function main() {
 
       // ── Red List ──
       console.log("  ▸ Red List");
+      const redlistStart = Date.now();
       let taxonRedlistCount = 0;
       for (const entry of redlistEntries) {
         const species = await fetchFromIucnDb(pgClient, entry);
@@ -158,22 +157,26 @@ async function main() {
 
       writeRedlistCsv(allRedlistSpecies, path.join(DATA_DIR, "redlist-species.csv"));
 
+      const redlistDuration = ((Date.now() - redlistStart) / 1000).toFixed(1);
+      logger.log("fetch_redlist", {
+        taxon: taxonId,
+        species_count: taxonRedlistCount,
+        duration_seconds: Number(redlistDuration),
+      });
+
       // ── GBIF ──
       const gbifTaxon = getGbifTaxon(taxonId);
-      let taxonGbifRaw = 0;
-      let taxonGbifValid = 0;
       if (!fetchedGbifTaxa.has(gbifTaxon.id)) {
         fetchedGbifTaxa.add(gbifTaxon.id);
 
         console.log(`  ▸ GBIF (${gbifTaxon.name})`);
+        const gbifStart = Date.now();
         const rawResults = await fetchGbifCounts(gbifTaxon);
-        taxonGbifRaw = rawResults.length;
-        console.log(`    Raw species: ${taxonGbifRaw}`);
+        console.log(`    Raw species: ${rawResults.length}`);
 
         const speciesKeys = rawResults.map((r) => r.speciesKey);
         const validSpecies = await validateSpeciesKeys(speciesKeys);
-        taxonGbifValid = validSpecies.size;
-        console.log(`    Valid species: ${taxonGbifValid}`);
+        console.log(`    Valid species: ${validSpecies.size}`);
 
         for (const r of rawResults) {
           const info = validSpecies.get(r.speciesKey);
@@ -189,18 +192,19 @@ async function main() {
         }
 
         writeGbifCsv(allGbifSpecies, path.join(DATA_DIR, "gbif-species.csv"));
+
+        const gbifDuration = ((Date.now() - gbifStart) / 1000).toFixed(1);
+        logger.log("fetch_gbif", {
+          taxon: gbifTaxon.id,
+          raw_count: rawResults.length,
+          valid_count: validSpecies.size,
+          duration_seconds: Number(gbifDuration),
+        });
       } else {
         console.log(`  ▸ GBIF (${gbifTaxon.name}) — already fetched`);
       }
 
       const taxonDuration = ((Date.now() - taxonStart) / 1000).toFixed(1);
-      logger.log("fetch_taxon", {
-        taxon: taxonId,
-        redlist_count: taxonRedlistCount,
-        gbif_raw: taxonGbifRaw,
-        gbif_valid: taxonGbifValid,
-        duration_seconds: Number(taxonDuration),
-      });
       console.log(`  Done (${taxonDuration}s)`);
     }
 
@@ -220,18 +224,17 @@ async function main() {
     const matchStart = Date.now();
     logger.log("match_start", {});
 
-    const linkResults = await matchAllSpecies(logger);
-    const linksPath = path.join(DATA_DIR, "species-links.csv");
-    writeLinksCsv(linkResults, linksPath);
+    const matchedSpecies = await matchAllSpecies(logger);
+    writeRedlistCsv(matchedSpecies, path.join(DATA_DIR, "redlist-species.csv"));
 
-    const linkedCount = linkResults.filter((r) => r.gbif_species_key !== null).length;
+    const linkedCount = matchedSpecies.filter((r) => r.gbif_species_key !== null).length;
     const matchDuration = ((Date.now() - matchStart) / 1000).toFixed(1);
     logger.log("match_complete", {
-      total: linkResults.length,
+      total: matchedSpecies.length,
       linked: linkedCount,
       duration_seconds: Number(matchDuration),
     });
-    console.log(`\nPhase 2 complete: ${linkedCount} linked out of ${linkResults.length}\n`);
+    console.log(`\nPhase 2 complete: ${linkedCount} linked out of ${matchedSpecies.length}\n`);
 
     // ══════════════════════════════════════════════════════════════
     // Phase 3: Since-assessment counts (per GBIF taxon)
@@ -275,16 +278,15 @@ async function main() {
     const gbifPath = path.join(DATA_DIR, "gbif-species.csv");
 
     console.log("CSVs written:");
-    console.log(`  ${redlistPath}: ${allRedlistSpecies.length.toLocaleString()} rows`);
+    console.log(`  ${redlistPath}: ${matchedSpecies.length.toLocaleString()} rows (${linkedCount.toLocaleString()} linked)`);
     console.log(`  ${gbifPath}: ${allGbifSpecies.size.toLocaleString()} rows`);
-    console.log(`  ${linksPath}: ${linkResults.length.toLocaleString()} rows (${linkedCount.toLocaleString()} linked)`);
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
     const minutes = Math.floor(Number(elapsed) / 60);
     const seconds = Number(elapsed) % 60;
 
     logger.log("sync_complete", {
-      redlist_count: allRedlistSpecies.length,
+      redlist_count: matchedSpecies.length,
       gbif_count: allGbifSpecies.size,
       linked_count: linkedCount,
       fetch_seconds: Number(fetchDuration),
@@ -295,7 +297,7 @@ async function main() {
 
     console.log("\n" + "=".repeat(60));
     console.log("Sync complete:");
-    console.log(`  Red List species:  ${allRedlistSpecies.length.toLocaleString()}`);
+    console.log(`  Red List species:  ${matchedSpecies.length.toLocaleString()}`);
     console.log(`  GBIF species:      ${allGbifSpecies.size.toLocaleString()}`);
     console.log(`  Linked:            ${linkedCount.toLocaleString()}`);
     console.log(`  Duration: ${minutes}m ${seconds}s`);
