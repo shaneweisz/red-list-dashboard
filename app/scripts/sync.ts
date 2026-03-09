@@ -136,6 +136,8 @@ async function main() {
     // ══════════════════════════════════════════════════════════════
     console.log("Phase 1: Fetch data");
     console.log("═".repeat(60));
+    const fetchStart = Date.now();
+    logger.log("fetch_start", { taxa: taxaIds });
 
     for (const taxonId of taxaIds) {
       const redlistEntries = REDLIST_TAXA.filter((t) => t.id === taxonId);
@@ -143,13 +145,14 @@ async function main() {
       const taxonStart = Date.now();
 
       console.log(`\n${taxonName} (${taxonId})`);
-      logger.log("taxon_start", { taxon: taxonId });
 
       // ── Red List ──
       console.log("  ▸ Red List");
+      let taxonRedlistCount = 0;
       for (const entry of redlistEntries) {
         const species = await fetchFromIucnDb(pgClient, entry);
         console.log(`    ${entry.name}: ${species.length} species`);
+        taxonRedlistCount += species.length;
         allRedlistSpecies.push(...species);
       }
 
@@ -157,16 +160,20 @@ async function main() {
 
       // ── GBIF ──
       const gbifTaxon = getGbifTaxon(taxonId);
+      let taxonGbifRaw = 0;
+      let taxonGbifValid = 0;
       if (!fetchedGbifTaxa.has(gbifTaxon.id)) {
         fetchedGbifTaxa.add(gbifTaxon.id);
 
         console.log(`  ▸ GBIF (${gbifTaxon.name})`);
         const rawResults = await fetchGbifCounts(gbifTaxon);
-        console.log(`    Raw species: ${rawResults.length}`);
+        taxonGbifRaw = rawResults.length;
+        console.log(`    Raw species: ${taxonGbifRaw}`);
 
         const speciesKeys = rawResults.map((r) => r.speciesKey);
         const validSpecies = await validateSpeciesKeys(speciesKeys);
-        console.log(`    Valid species: ${validSpecies.size}`);
+        taxonGbifValid = validSpecies.size;
+        console.log(`    Valid species: ${taxonGbifValid}`);
 
         for (const r of rawResults) {
           const info = validSpecies.get(r.speciesKey);
@@ -187,10 +194,22 @@ async function main() {
       }
 
       const taxonDuration = ((Date.now() - taxonStart) / 1000).toFixed(1);
-      logger.log("taxon_fetch_complete", { taxon: taxonId, duration_seconds: Number(taxonDuration) });
+      logger.log("fetch_taxon", {
+        taxon: taxonId,
+        redlist_count: taxonRedlistCount,
+        gbif_raw: taxonGbifRaw,
+        gbif_valid: taxonGbifValid,
+        duration_seconds: Number(taxonDuration),
+      });
       console.log(`  Done (${taxonDuration}s)`);
     }
 
+    const fetchDuration = ((Date.now() - fetchStart) / 1000).toFixed(1);
+    logger.log("fetch_complete", {
+      redlist_total: allRedlistSpecies.length,
+      gbif_total: allGbifSpecies.size,
+      duration_seconds: Number(fetchDuration),
+    });
     console.log(`\nPhase 1 complete: ${allRedlistSpecies.length} Red List, ${allGbifSpecies.size} GBIF species\n`);
 
     // ══════════════════════════════════════════════════════════════
@@ -198,12 +217,20 @@ async function main() {
     // ══════════════════════════════════════════════════════════════
     console.log("Phase 2: Match species");
     console.log("═".repeat(60));
+    const matchStart = Date.now();
+    logger.log("match_start", {});
 
     const linkResults = await matchAllSpecies(logger);
     const linksPath = path.join(DATA_DIR, "species-links.csv");
     writeLinksCsv(linkResults, linksPath);
 
     const linkedCount = linkResults.filter((r) => r.gbif_species_key !== null).length;
+    const matchDuration = ((Date.now() - matchStart) / 1000).toFixed(1);
+    logger.log("match_complete", {
+      total: linkResults.length,
+      linked: linkedCount,
+      duration_seconds: Number(matchDuration),
+    });
     console.log(`\nPhase 2 complete: ${linkedCount} linked out of ${linkResults.length}\n`);
 
     // ══════════════════════════════════════════════════════════════
@@ -211,6 +238,8 @@ async function main() {
     // ══════════════════════════════════════════════════════════════
     console.log("Phase 3: Since-assessment counts");
     console.log("═".repeat(60));
+    const saStart = Date.now();
+    logger.log("since_assessment_start", {});
 
     const processedGbifTaxa = new Set<string>();
     for (const taxonId of taxaIds) {
@@ -219,12 +248,24 @@ async function main() {
       processedGbifTaxa.add(gbifTaxon.id);
 
       console.log(`\n${gbifTaxon.name} (${gbifTaxon.id})`);
+      const taxonSaStart = Date.now();
       const saCount = await fetchCountsSinceAssessment(gbifTaxon, allGbifSpecies);
+      const taxonSaDuration = ((Date.now() - taxonSaStart) / 1000).toFixed(1);
       console.log(`  Computed for ${saCount} species`);
+
+      logger.log("since_assessment_taxon", {
+        taxon: gbifTaxon.id,
+        species_computed: saCount,
+        duration_seconds: Number(taxonSaDuration),
+      });
 
       writeGbifCsv(allGbifSpecies, path.join(DATA_DIR, "gbif-species.csv"));
     }
 
+    const saDuration = ((Date.now() - saStart) / 1000).toFixed(1);
+    logger.log("since_assessment_complete", {
+      duration_seconds: Number(saDuration),
+    });
     console.log("\nPhase 3 complete\n");
 
     // ══════════════════════════════════════════════════════════════
@@ -246,11 +287,14 @@ async function main() {
       redlist_count: allRedlistSpecies.length,
       gbif_count: allGbifSpecies.size,
       linked_count: linkedCount,
-      duration_seconds: Number(elapsed),
+      fetch_seconds: Number(fetchDuration),
+      match_seconds: Number(matchDuration),
+      since_assessment_seconds: Number(saDuration),
+      total_seconds: Number(elapsed),
     });
 
     console.log("\n" + "=".repeat(60));
-    console.log("Pipeline complete:");
+    console.log("Sync complete:");
     console.log(`  Red List species:  ${allRedlistSpecies.length.toLocaleString()}`);
     console.log(`  GBIF species:      ${allGbifSpecies.size.toLocaleString()}`);
     console.log(`  Linked:            ${linkedCount.toLocaleString()}`);

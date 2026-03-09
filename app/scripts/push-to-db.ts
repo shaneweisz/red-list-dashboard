@@ -45,7 +45,7 @@ interface RedlistCsvRow {
   class_name: string | null;
   order_name: string | null;
   family: string | null;
-  taxon_group: string;
+  table1a_taxon_group: string;
   assessment_id: number | null;
   iucn_category: string | null;
   assessment_date: string | null;
@@ -58,7 +58,7 @@ interface GbifCsvRow {
   gbif_species_key: number;
   scientific_name: string;
   common_name: string | null;
-  taxon_group: string;
+  table1a_taxon_group: string;
   gbif_total_count: number;
   gbif_count_since_assessment: number | null;
 }
@@ -80,7 +80,7 @@ function parseRedlistRow(r: Record<string, string>): RedlistCsvRow {
     class_name: r.class_name || null,
     order_name: r.order_name || null,
     family: r.family || null,
-    taxon_group: r.taxon_group_table1a,
+    table1a_taxon_group: r.taxon_group_table1a,
     assessment_id: r.assessment_id ? parseInt(r.assessment_id, 10) : null,
     iucn_category: r.iucn_category || null,
     assessment_date: r.assessment_date || null,
@@ -95,7 +95,7 @@ function parseGbifRow(r: Record<string, string>): GbifCsvRow {
     gbif_species_key: parseInt(r.gbif_species_key, 10),
     scientific_name: r.scientific_name,
     common_name: r.common_name || null,
-    taxon_group: r.taxon_group_table1a,
+    table1a_taxon_group: r.taxon_group_table1a,
     gbif_total_count: r.total_count ? parseInt(r.total_count, 10) : 0,
     gbif_count_since_assessment: r.count_after_assessment_year
       ? parseInt(r.count_after_assessment_year, 10)
@@ -119,7 +119,7 @@ interface SpeciesDbRow {
   gbif_species_key: number | null;
   scientific_name: string;
   common_name: string | null;
-  taxon_group: string;
+  table1a_taxon_group: string;
   class_name: string | null;
   order_name: string | null;
   family: string | null;
@@ -167,7 +167,7 @@ function mergeSpecies(
       gbif_species_key: gbifKey,
       scientific_name: rl.scientific_name,
       common_name: rl.common_name,
-      taxon_group: rl.taxon_group,
+      table1a_taxon_group: rl.table1a_taxon_group,
       class_name: rl.class_name,
       order_name: rl.order_name,
       family: rl.family,
@@ -192,7 +192,7 @@ function mergeSpecies(
       gbif_species_key: g.gbif_species_key,
       scientific_name: g.scientific_name,
       common_name: g.common_name,
-      taxon_group: g.taxon_group,
+      table1a_taxon_group: g.table1a_taxon_group,
       class_name: null,
       order_name: null,
       family: null,

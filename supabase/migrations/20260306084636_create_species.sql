@@ -13,7 +13,7 @@ create table public.species (
   -- Shared
   scientific_name             text not null,
   common_name                 text,
-  taxon_group                 text not null,
+  table1a_taxon_group                 text not null,
 
   -- Red List assessment data (null for GBIF-only species)
   class_name                  text,
@@ -34,10 +34,14 @@ create table public.species (
   synced_at                   timestamptz default now()
 );
 
+-- Extensions (pg_trgm for fuzzy/substring search, per Supabase convention)
+create schema if not exists extensions;
+create extension if not exists pg_trgm schema extensions;
+
 -- Indexes
 create index idx_species_scientific_name_trgm
   on public.species using gin(scientific_name extensions.gin_trgm_ops);
-create index idx_species_taxon_group on public.species(taxon_group);
+create index idx_species_table1a_taxon_group on public.species(table1a_taxon_group);
 create index idx_species_iucn_category on public.species(iucn_category);
 create index idx_species_assessment_date on public.species(assessment_date);
 create index idx_species_countries on public.species using gin(countries);
@@ -57,22 +61,22 @@ create policy "Species are readable by everyone"
 create materialized view taxa_summary as
 with category_counts as (
   select
-    taxon_group,
+    table1a_taxon_group,
     jsonb_object_agg(
       coalesce(iucn_category, 'NE'),
       cat_count
     ) as by_category
   from (
-    select taxon_group, iucn_category, count(*) as cat_count
+    select table1a_taxon_group, iucn_category, count(*) as cat_count
     from public.species
     where sis_taxon_id is not null
-    group by taxon_group, iucn_category
+    group by table1a_taxon_group, iucn_category
   ) sub
-  group by taxon_group
+  group by table1a_taxon_group
 ),
 species_stats as (
   select
-    taxon_group,
+    table1a_taxon_group,
     count(*) filter (where iucn_category is not null) as total_assessed,
     count(*) filter (where assessment_date < current_date - interval '10 years') as outdated,
     count(*) filter (where gbif_species_key is not null) as gbif_species_count,
@@ -82,10 +86,10 @@ species_stats as (
       filter (where gbif_species_key is not null) as median_gbif_obs
   from public.species
   where sis_taxon_id is not null
-  group by taxon_group
+  group by table1a_taxon_group
 )
 select
-  s.taxon_group,
+  s.table1a_taxon_group,
   s.total_assessed,
   s.outdated,
   c.by_category,
@@ -94,7 +98,7 @@ select
   s.mean_gbif_obs,
   s.median_gbif_obs
 from species_stats s
-join category_counts c using (taxon_group);
+join category_counts c using (table1a_taxon_group);
 
 -- Revoke direct API access — API routes query via service role
 revoke select on taxa_summary from anon, authenticated;
