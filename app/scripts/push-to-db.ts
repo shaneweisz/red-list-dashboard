@@ -25,7 +25,6 @@ import {
   createServiceClient,
   readCsv,
   DATA_DIR,
-  SyncLogger,
 } from "./utils";
 
 // =============================================================================
@@ -261,67 +260,45 @@ async function main() {
   }
 
   const supabase = createServiceClient();
-  const logger = new SyncLogger("push-to-db");
 
-  try {
-    logger.log("push_start", {
-      redlist_count: redlistRows.length,
-      gbif_count: gbifRows.length,
-      linked_count: linkedCount,
-      merged_count: merged.length,
-    });
+  // Clear table
+  console.log("\nClearing species table...");
+  const { error: delError } = await supabase.from("species").delete().gte("id", 0);
+  if (delError) throw new Error(`Failed to clear species: ${delError.message}`);
+  console.log("  species: cleared");
 
-    // Clear table
-    console.log("\nClearing species table...");
-    const { error: delError } = await supabase.from("species").delete().gte("id", 0);
-    if (delError) throw new Error(`Failed to clear species: ${delError.message}`);
-    console.log("  species: cleared");
-
-    // Insert merged rows
-    console.log("\nInserting species...");
-    for (let i = 0; i < merged.length; i += BATCH_SIZE) {
-      const batch = merged.slice(i, i + BATCH_SIZE);
-      const { error } = await supabase.from("species").insert(batch);
-      if (error) {
-        logger.log("error", { table: "species", error: error.message, batch_start: i });
-        throw new Error(`Failed to insert species batch at ${i}: ${error.message}`);
-      }
-      process.stdout.write(`\r  ${Math.min(i + BATCH_SIZE, merged.length)}/${merged.length}`);
+  // Insert merged rows
+  console.log("\nInserting species...");
+  for (let i = 0; i < merged.length; i += BATCH_SIZE) {
+    const batch = merged.slice(i, i + BATCH_SIZE);
+    const { error } = await supabase.from("species").insert(batch);
+    if (error) {
+      throw new Error(`Failed to insert species batch at ${i}: ${error.message}`);
     }
-    if (merged.length > 0) console.log("");
-
-    // Refresh materialized view
-    console.log("\nRefreshing taxa_summary materialized view...");
-    const { error: viewError } = await supabase.rpc("refresh_taxa_summary");
-    if (viewError) {
-      console.error(`  Error: ${viewError.message}`);
-      logger.log("refresh_view_error", { error: viewError.message });
-    } else {
-      console.log("  Done.");
-    }
-
-    const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
-    const minutes = Math.floor(Number(elapsed) / 60);
-    const seconds = Number(elapsed) % 60;
-
-    logger.log("push_complete", {
-      merged_count: merged.length,
-      redlist_only: redlistOnly,
-      gbif_only: gbifOnly,
-      matched: both,
-      duration_seconds: Number(elapsed),
-    });
-
-    console.log("\n" + "=".repeat(50));
-    console.log("push-to-db complete:");
-    console.log(`  Species:        ${merged.length.toLocaleString()} rows`);
-    console.log(`  Red List only:  ${redlistOnly.toLocaleString()}`);
-    console.log(`  GBIF only:      ${gbifOnly.toLocaleString()}`);
-    console.log(`  Matched (both): ${both.toLocaleString()}`);
-    console.log(`  Duration: ${minutes}m ${seconds}s`);
-  } finally {
-    logger.close();
+    process.stdout.write(`\r  ${Math.min(i + BATCH_SIZE, merged.length)}/${merged.length}`);
   }
+  if (merged.length > 0) console.log("");
+
+  // Refresh materialized view
+  console.log("\nRefreshing taxa_summary materialized view...");
+  const { error: viewError } = await supabase.rpc("refresh_taxa_summary");
+  if (viewError) {
+    console.error(`  Error: ${viewError.message}`);
+  } else {
+    console.log("  Done.");
+  }
+
+  const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
+  const minutes = Math.floor(Number(elapsed) / 60);
+  const seconds = Number(elapsed) % 60;
+
+  console.log("\n" + "=".repeat(50));
+  console.log("push-to-db complete:");
+  console.log(`  Species:        ${merged.length.toLocaleString()} rows`);
+  console.log(`  Red List only:  ${redlistOnly.toLocaleString()}`);
+  console.log(`  GBIF only:      ${gbifOnly.toLocaleString()}`);
+  console.log(`  Matched (both): ${both.toLocaleString()}`);
+  console.log(`  Duration: ${minutes}m ${seconds}s`);
 }
 
 const isDirectRun = process.argv[1]?.endsWith("push-to-db.ts") || process.argv[1]?.endsWith("push-to-db.js");
