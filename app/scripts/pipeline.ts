@@ -39,9 +39,9 @@ import {
   GbifSpecies,
   fetchGbifCounts,
   validateSpeciesKeys,
-  fetchCountsSinceAssessment,
   writeGbifCsv,
 } from "./fetch-gbif";
+import { fetchCountsSinceAssessment } from "./since-assessment";
 import {
   matchAllSpecies,
   writeLinksCsv,

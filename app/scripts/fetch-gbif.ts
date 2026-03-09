@@ -3,17 +3,9 @@
  *
  * Fetches per-species observation counts from GBIF and writes to gbif-species.csv.
  *
- * Modes:
- *   --counts-only             Fetch + write total counts only
- *   --since-assessment-only   Compute count_after_assessment_year using local CSVs
- *   (no flags)                Run both phases
- *
- * Prerequisites:
- *   For --since-assessment-only: redlist-species.csv and species-links.csv must exist
- *
  * Usage:
- *   npx tsx scripts/fetch-gbif.ts <taxon> [--counts-only|--since-assessment-only]
- *   npx tsx scripts/fetch-gbif.ts [--counts-only|--since-assessment-only]
+ *   npx tsx scripts/fetch-gbif.ts [taxon]   # Fetch one taxon (e.g. mammalia)
+ *   npx tsx scripts/fetch-gbif.ts            # Fetch all taxa
  */
 
 import * as path from "path";
@@ -21,10 +13,8 @@ import {
   loadEnvFiles,
   SyncLogger,
   writeCsv,
-  readCsv,
   DATA_DIR,
   delay,
-  mapConcurrent,
   toTitleCase,
 } from "./utils";
 
@@ -118,7 +108,6 @@ export const GBIF_TAXA: Record<string, GbifTaxon> = {
 const FACET_LIMIT = 100000;
 const REQUEST_DELAY = 200; // ms between GBIF requests
 const SPECIES_VALIDATION_BATCH_SIZE = 1000;
-const CURRENT_YEAR = new Date().getFullYear();
 const MAX_RETRIES = 5;
 
 const INCLUDED_BASIS_OF_RECORD = [
@@ -147,18 +136,20 @@ interface ValidatedSpecies {
   orderName: string;
 }
 
-// =============================================================================
-// HELPERS
-// =============================================================================
-
-let rateLimitHits = 0;
-const YEAR_BUCKET_CONCURRENCY = 30;
+export interface GbifSpecies {
+  gbif_species_key: number;
+  scientific_name: string;
+  common_name: string;
+  taxon_group_table1a: string;
+  total_count: number;
+  count_after_assessment_year: number | null;
+}
 
 // =============================================================================
 // GBIF API FUNCTIONS
 // =============================================================================
 
-async function fetchFacets(
+export async function fetchFacets(
   keyType: string,
   keyValue: number,
   yearRange?: string,
@@ -194,7 +185,6 @@ async function fetchFacets(
         throw err;
       }
       if (response.status === 429) {
-        rateLimitHits++;
         const wait = Math.pow(2, attempt + 1) * 1000;
         await delay(wait);
         continue;
@@ -291,124 +281,6 @@ export async function validateSpeciesKeys(speciesKeys: number[]): Promise<Map<nu
 }
 
 // =============================================================================
-// SINCE-ASSESSMENT PHASE (reads from local CSVs)
-// =============================================================================
-
-export interface GbifSpecies {
-  gbif_species_key: number;
-  scientific_name: string;
-  common_name: string;
-  taxon_group_table1a: string;
-  total_count: number;
-  count_after_assessment_year: number | null;
-}
-
-function loadGbifCsv(): Map<number, GbifSpecies> {
-  const csvPath = path.join(DATA_DIR, "gbif-species.csv");
-  const rows = readCsv<GbifSpecies>(csvPath, (r) => ({
-    gbif_species_key: parseInt(r.gbif_species_key, 10),
-    scientific_name: r.scientific_name,
-    common_name: r.common_name,
-    taxon_group_table1a: r.taxon_group_table1a,
-    total_count: parseInt(r.total_count, 10) || 0,
-    count_after_assessment_year: r.count_after_assessment_year ? parseInt(r.count_after_assessment_year, 10) : null,
-  }));
-  const map = new Map<number, GbifSpecies>();
-  for (const row of rows) map.set(row.gbif_species_key, row);
-  return map;
-}
-
-function loadAssessmentYears(taxonGbifKeys: Set<number>): Map<number, number> {
-  const redlistPath = path.join(DATA_DIR, "redlist-species.csv");
-  const linksPath = path.join(DATA_DIR, "species-links.csv");
-
-  const assessmentDates = new Map<number, string>();
-  readCsv(redlistPath, (r) => {
-    if (r.assessment_date) {
-      assessmentDates.set(parseInt(r.sis_taxon_id, 10), r.assessment_date);
-    }
-    return null;
-  });
-
-  const speciesAssessmentYear = new Map<number, number>();
-  readCsv(linksPath, (r) => {
-    const gbifKey = r.gbif_species_key ? parseInt(r.gbif_species_key, 10) : null;
-    const sisTaxonId = parseInt(r.sis_taxon_id, 10);
-    if (gbifKey && taxonGbifKeys.has(gbifKey)) {
-      const date = assessmentDates.get(sisTaxonId);
-      if (date) {
-        const year = parseInt(date.slice(0, 4), 10);
-        if (!isNaN(year)) speciesAssessmentYear.set(gbifKey, year);
-      }
-    }
-    return null;
-  });
-
-  return speciesAssessmentYear;
-}
-
-export async function fetchCountsSinceAssessment(
-  taxon: GbifTaxon,
-  gbifSpeciesMap: Map<number, GbifSpecies>,
-): Promise<number> {
-  const taxonGbifKeys = new Set<number>();
-  gbifSpeciesMap.forEach((row, key) => {
-    if (row.taxon_group_table1a === taxon.id) taxonGbifKeys.add(key);
-  });
-
-  const speciesAssessmentYear = loadAssessmentYears(taxonGbifKeys);
-  console.log(`  ${speciesAssessmentYear.size} linked species with assessment dates`);
-
-  if (speciesAssessmentYear.size === 0) return 0;
-
-  const uniqueYears = Array.from(new Set(Array.from(speciesAssessmentYear.values()))).sort((a, b) => a - b);
-  const yearBuckets = uniqueYears.filter((y) => y + 1 <= CURRENT_YEAR);
-
-  const speciesByYear = new Map<number, Set<number>>();
-  speciesAssessmentYear.forEach((year, speciesKey) => {
-    if (!speciesByYear.has(year)) speciesByYear.set(year, new Set());
-    speciesByYear.get(year)!.add(speciesKey);
-  });
-
-  const sinceAssessmentCounts = new Map<number, number>();
-  speciesAssessmentYear.forEach((_year, speciesKey) => {
-    sinceAssessmentCounts.set(speciesKey, 0);
-  });
-
-  console.log(`  ${yearBuckets.length} year buckets x ${taxon.queries.length} queries`);
-
-  for (let qi = 0; qi < taxon.queries.length; qi++) {
-    const q = taxon.queries[qi];
-    let completedBuckets = 0;
-
-    await mapConcurrent(yearBuckets, YEAR_BUCKET_CONCURRENCY, async (assessmentYear) => {
-      const yearRange = `${assessmentYear + 1},${CURRENT_YEAR}`;
-      const results = await fetchFacets(q.keyType, q.keyValue, yearRange);
-      const bucketSpecies = speciesByYear.get(assessmentYear);
-
-      if (bucketSpecies) {
-        for (const r of results) {
-          if (bucketSpecies.has(r.speciesKey)) {
-            sinceAssessmentCounts.set(r.speciesKey, sinceAssessmentCounts.get(r.speciesKey)! + r.count);
-          }
-        }
-      }
-
-      completedBuckets++;
-      process.stdout.write(`\r  Query ${qi + 1}/${taxon.queries.length}: ${completedBuckets}/${yearBuckets.length} year buckets`);
-    });
-  }
-  if (yearBuckets.length > 0) console.log("");
-
-  sinceAssessmentCounts.forEach((count, key) => {
-    const row = gbifSpeciesMap.get(key);
-    if (row) row.count_after_assessment_year = count;
-  });
-
-  return sinceAssessmentCounts.size;
-}
-
-// =============================================================================
 // CSV OUTPUT
 // =============================================================================
 
@@ -440,12 +312,7 @@ async function main() {
   loadEnvFiles();
 
   const args = process.argv.slice(2);
-  const flags = args.filter((a) => a.startsWith("--"));
-  const positionalArgs = args.filter((a) => !a.startsWith("--"));
-  const taxonArg = positionalArgs[0]?.toLowerCase();
-
-  const countsOnly = flags.includes("--counts-only");
-  const sinceAssessmentOnly = flags.includes("--since-assessment-only");
+  const taxonArg = args[0]?.toLowerCase();
 
   const taxaToSync = taxonArg
     ? (GBIF_TAXA[taxonArg] ? [GBIF_TAXA[taxonArg]] : [])
@@ -458,8 +325,6 @@ async function main() {
   }
 
   console.log("fetch-gbif: GBIF API → CSV");
-  if (countsOnly) console.log("Mode: --counts-only");
-  if (sinceAssessmentOnly) console.log("Mode: --since-assessment-only");
   console.log("=".repeat(50));
 
   const startTime = Date.now();
@@ -469,62 +334,38 @@ async function main() {
     logger.log("sync_start", {
       taxa: taxaToSync.map((t) => t.id),
       taxa_count: taxaToSync.length,
-      mode: countsOnly ? "counts-only" : sinceAssessmentOnly ? "since-assessment-only" : "full",
     });
 
-    const gbifSpeciesMap: Map<number, GbifSpecies> = sinceAssessmentOnly
-      ? loadGbifCsv()
-      : new Map();
-
-    let totalFetched = 0;
-    let totalSinceAssessment = 0;
+    const gbifSpeciesMap = new Map<number, GbifSpecies>();
 
     for (const taxon of taxaToSync) {
       const taxonStart = Date.now();
       console.log(`\n${taxon.name} (${taxon.id}):`);
 
-      if (!sinceAssessmentOnly) {
-        console.log("  Fetching species observation counts from GBIF...");
-        const rawResults = await fetchGbifCounts(taxon);
-        console.log(`  Raw species: ${rawResults.length}`);
+      console.log("  Fetching species observation counts from GBIF...");
+      const rawResults = await fetchGbifCounts(taxon);
+      console.log(`  Raw species: ${rawResults.length}`);
 
-        console.log("  Validating species keys...");
-        const speciesKeys = rawResults.map((r) => r.speciesKey);
-        const validSpecies = await validateSpeciesKeys(speciesKeys);
-        console.log(`  Valid species: ${validSpecies.size}`);
+      console.log("  Validating species keys...");
+      const speciesKeys = rawResults.map((r) => r.speciesKey);
+      const validSpecies = await validateSpeciesKeys(speciesKeys);
+      console.log(`  Valid species: ${validSpecies.size}`);
 
-        for (const r of rawResults) {
-          const info = validSpecies.get(r.speciesKey);
-          if (!info) continue;
-          gbifSpeciesMap.set(r.speciesKey, {
-            gbif_species_key: r.speciesKey,
-            scientific_name: info.canonicalName,
-            common_name: info.vernacularName ? toTitleCase(info.vernacularName) : "",
-            taxon_group_table1a: r.taxonGroup,
-            total_count: r.count,
-            count_after_assessment_year: null,
-          });
-        }
-
-        totalFetched += validSpecies.size;
-        logger.log("taxon_counts_complete", {
-          taxon_id: taxon.id, raw_species: rawResults.length,
-          valid_species: validSpecies.size,
-        });
-      }
-
-      if (!countsOnly) {
-        console.log("  Computing since-assessment counts...");
-        const count = await fetchCountsSinceAssessment(taxon, gbifSpeciesMap);
-        totalSinceAssessment += count;
-
-        logger.log("taxon_since_assessment_complete", {
-          taxon_id: taxon.id, linked_species: count,
+      for (const r of rawResults) {
+        const info = validSpecies.get(r.speciesKey);
+        if (!info) continue;
+        gbifSpeciesMap.set(r.speciesKey, {
+          gbif_species_key: r.speciesKey,
+          scientific_name: info.canonicalName,
+          common_name: info.vernacularName ? toTitleCase(info.vernacularName) : "",
+          taxon_group_table1a: r.taxonGroup,
+          total_count: r.count,
+          count_after_assessment_year: null,
         });
       }
 
       const taxonDuration = ((Date.now() - taxonStart) / 1000).toFixed(1);
-      logger.log("taxon_complete", { taxon_id: taxon.id, duration_seconds: Number(taxonDuration) });
+      logger.log("taxon_complete", { taxon_id: taxon.id, raw: rawResults.length, valid: validSpecies.size, duration_seconds: Number(taxonDuration) });
     }
 
     const outputPath = path.join(DATA_DIR, "gbif-species.csv");
@@ -534,19 +375,11 @@ async function main() {
     const minutes = Math.floor(Number(elapsed) / 60);
     const seconds = Number(elapsed) % 60;
 
-    logger.log("sync_complete", { total_species: gbifSpeciesMap.size, since_assessment: totalSinceAssessment, rate_limit_retries: rateLimitHits, duration_seconds: Number(elapsed) });
+    logger.log("sync_complete", { total_species: gbifSpeciesMap.size, duration_seconds: Number(elapsed) });
 
     console.log("\n" + "=".repeat(50));
     console.log("fetch-gbif complete:");
-    if (!sinceAssessmentOnly) {
-      console.log(`  Species:                    ${totalFetched.toLocaleString()}`);
-    }
-    if (!countsOnly) {
-      console.log(`  Since-assessment computed:  ${totalSinceAssessment.toLocaleString()}`);
-    }
-    if (rateLimitHits > 0) {
-      console.log(`  Rate limit retries (429s):  ${rateLimitHits}`);
-    }
+    console.log(`  Species: ${gbifSpeciesMap.size.toLocaleString()}`);
     console.log(`  Output:  ${outputPath}`);
     console.log(`  Duration: ${minutes}m ${seconds}s`);
   } finally {
