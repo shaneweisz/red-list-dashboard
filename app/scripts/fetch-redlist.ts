@@ -1,5 +1,5 @@
 /**
- * sync-redlist: IUCN Red List DB → CSV
+ * fetch-redlist: IUCN Red List DB → CSV
  *
  * Connects to the IUCN Red List PostgreSQL database (via SSH tunnel)
  * and writes species data to redlist-species.csv.
@@ -9,8 +9,8 @@
  *   2. Environment variables: DB_HOST, DB_NAME, DB_USER, DB_PASSWORD
  *
  * Usage:
- *   npx tsx scripts/sync-redlist.ts [taxon]   # Sync one taxon (e.g. mammalia)
- *   npx tsx scripts/sync-redlist.ts            # Sync all taxa
+ *   npx tsx scripts/fetch-redlist.ts [taxon]   # Sync one taxon (e.g. mammalia)
+ *   npx tsx scripts/fetch-redlist.ts            # Sync all taxa
  */
 
 import * as path from "path";
@@ -18,12 +18,60 @@ import { Client } from "pg";
 import {
   loadEnvFiles,
   SyncLogger,
-  REDLIST_TAXA,
-  RedlistTaxon,
-  POPULATION_TRENDS,
   writeCsv,
   DATA_DIR,
-} from "./config";
+} from "./utils";
+
+// =============================================================================
+// TAXA CONFIG
+// =============================================================================
+
+export interface RedlistTaxon {
+  id: string;
+  name: string;
+  filterColumn: "kingdom_name" | "phylum_name" | "class_name" | "order_name";
+  filterValues: string[];
+}
+
+export const REDLIST_TAXA: RedlistTaxon[] = [
+  // Vertebrates
+  { id: "mammalia", name: "Mammals", filterColumn: "class_name", filterValues: ["MAMMALIA"] },
+  { id: "aves", name: "Birds", filterColumn: "class_name", filterValues: ["AVES"] },
+  { id: "reptilia", name: "Reptiles", filterColumn: "class_name", filterValues: ["REPTILIA"] },
+  { id: "amphibia", name: "Amphibians", filterColumn: "class_name", filterValues: ["AMPHIBIA"] },
+  { id: "fishes", name: "Fishes", filterColumn: "class_name", filterValues: ["ACTINOPTERYGII", "CHONDRICHTHYES", "MYXINI", "PETROMYZONTI", "SARCOPTERYGII"] },
+  // Invertebrates
+  { id: "insecta", name: "Insects", filterColumn: "class_name", filterValues: ["INSECTA"] },
+  { id: "mollusca", name: "Molluscs", filterColumn: "phylum_name", filterValues: ["MOLLUSCA"] },
+  { id: "crustacea", name: "Crustaceans", filterColumn: "class_name", filterValues: ["MALACOSTRACA", "MAXILLOPODA", "BRANCHIOPODA", "OSTRACODA", "HEXANAUPLIA"] },
+  { id: "arachnida", name: "Arachnids", filterColumn: "class_name", filterValues: ["ARACHNIDA"] },
+  { id: "corals", name: "Corals", filterColumn: "order_name", filterValues: ["SCLERACTINIA", "ALCYONACEA", "PENNATULACEA"] },
+  { id: "velvet_worms", name: "Velvet Worms", filterColumn: "class_name", filterValues: ["UDEONYCHOPHORA"] },
+  { id: "horseshoe_crabs", name: "Horseshoe Crabs", filterColumn: "class_name", filterValues: ["MEROSTOMATA"] },
+  // "Other Invertebrates" needs two entries because it spans different filter columns:
+  // non-coral Anthozoa are filtered by order_name (to separate them from corals, which
+  // are also in class ANTHOZOA), while the remaining classes are filtered by class_name.
+  // Both entries share the same taxon_group id to match the IUCN Red List Table 1a grouping.
+  { id: "other_invertebrates", name: "Other Invertebrates (non-coral Anthozoa)", filterColumn: "order_name", filterValues: [
+    "ACTINIARIA", "ZOANTHARIA", "PENICILLARIA", "MALACALCYONCAEA", "SCLERALCYONACEA",
+  ] },
+  { id: "other_invertebrates", name: "Other Invertebrates", filterColumn: "class_name", filterValues: [
+    "HOLOTHUROIDEA", "CLITELLATA", "DIPLOPODA", "COLLEMBOLA", "CHILOPODA",
+    "DEMOSPONGIAE", "HYDROZOA", "NEMERTEA",
+    "ASTEROIDEA", "CALCAREA", "POLYCHAETA", "TURBELLARIA", "ECHINOIDEA",
+  ] },
+  // Plants
+  { id: "plantae", name: "Plants", filterColumn: "kingdom_name", filterValues: ["PLANTAE"] },
+  // Fungi & Protists
+  { id: "fungi", name: "Fungi & Protists", filterColumn: "phylum_name", filterValues: ["ASCOMYCOTA", "BASIDIOMYCOTA", "OCHROPHYTA"] },
+];
+
+const POPULATION_TRENDS: Record<string, string> = {
+  "0": "Increasing",
+  "1": "Decreasing",
+  "2": "Stable",
+  "3": "Unknown",
+};
 
 // =============================================================================
 // TYPES
@@ -200,11 +248,11 @@ async function main() {
     process.exit(1);
   }
 
-  console.log("sync-redlist: IUCN Red List DB → CSV");
+  console.log("fetch-redlist: IUCN Red List DB → CSV");
   console.log("=".repeat(50));
 
   const startTime = Date.now();
-  const logger = new SyncLogger("sync-redlist");
+  const logger = new SyncLogger("fetch-redlist");
 
   const pgClient = new Client({
     host: process.env.DB_HOST || "localhost",
@@ -250,7 +298,7 @@ async function main() {
     });
 
     console.log("\n" + "=".repeat(50));
-    console.log("sync-redlist complete:");
+    console.log("fetch-redlist complete:");
     console.log(`  Species: ${allSpecies.length.toLocaleString()}`);
     console.log(`  Output:  ${outputPath}`);
     console.log(`  Duration: ${minutes}m ${seconds}s`);
@@ -260,7 +308,7 @@ async function main() {
   }
 }
 
-const isDirectRun = process.argv[1]?.endsWith("sync-redlist.ts") || process.argv[1]?.endsWith("sync-redlist.js");
+const isDirectRun = process.argv[1]?.endsWith("fetch-redlist.ts") || process.argv[1]?.endsWith("fetch-redlist.js");
 if (isDirectRun) {
   main().catch((err) => {
     console.error("Fatal error:", err);

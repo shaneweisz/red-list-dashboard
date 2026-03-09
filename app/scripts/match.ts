@@ -1,15 +1,15 @@
 /**
- * match-species: GBIF Species Match API → species-links.csv
+ * match: GBIF Species Match API → species-links.csv
  *
  * Resolves Red List scientific names to GBIF species keys using
  * GBIF's fuzzy matching API, then writes species-links.csv.
  *
  * Prerequisites:
- *   1. redlist-species.csv exists (from sync-redlist)
- *   2. gbif-species.csv exists (from sync-gbif)
+ *   1. redlist-species.csv exists (from fetch-redlist)
+ *   2. gbif-species.csv exists (from fetch-gbif)
  *
  * Usage:
- *   npx tsx scripts/match-species.ts
+ *   npx tsx scripts/match.ts
  */
 
 import * as path from "path";
@@ -21,7 +21,7 @@ import {
   DATA_DIR,
   delay,
   mapConcurrent,
-} from "./config";
+} from "./utils";
 
 // =============================================================================
 // CONFIGURATION
@@ -183,11 +183,11 @@ export function writeLinksCsv(results: LinkResult[], outputPath: string): void {
 async function main() {
   loadEnvFiles();
 
-  console.log("match-species: GBIF Match API → species-links.csv");
+  console.log("match: GBIF Match API → species-links.csv");
   console.log("=".repeat(50));
 
   const startTime = Date.now();
-  const logger = new SyncLogger("match-species");
+  const logger = new SyncLogger("match");
 
   try {
     logger.log("match_start", {});
@@ -206,7 +206,7 @@ async function main() {
     logger.log("match_complete", { total: results.length, linked: linkedCount, duration_seconds: Number(elapsed) });
 
     console.log("\n" + "=".repeat(50));
-    console.log("match-species complete:");
+    console.log("match complete:");
     console.log(`  Total:   ${results.length.toLocaleString()}`);
     console.log(`  Linked:  ${linkedCount.toLocaleString()}`);
     console.log(`  Output:  ${outputPath}`);
@@ -216,7 +216,7 @@ async function main() {
   }
 }
 
-const isDirectRun = process.argv[1]?.endsWith("match-species.ts") || process.argv[1]?.endsWith("match-species.js");
+const isDirectRun = process.argv[1]?.endsWith("match.ts") || process.argv[1]?.endsWith("match.js");
 if (isDirectRun) {
   main().catch((err) => {
     console.error("Fatal error:", err);

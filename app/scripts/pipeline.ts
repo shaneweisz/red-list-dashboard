@@ -24,15 +24,15 @@ import { Client } from "pg";
 import {
   loadEnvFiles,
   SyncLogger,
-  REDLIST_TAXA,
   DATA_DIR,
   toTitleCase,
-} from "./config";
+} from "./utils";
 import {
   fetchFromIucnDb,
   writeRedlistCsv,
   RedlistSpecies,
-} from "./sync-redlist";
+  REDLIST_TAXA,
+} from "./fetch-redlist";
 import {
   GBIF_TAXA,
   GbifTaxon,
@@ -41,17 +41,16 @@ import {
   validateSpeciesKeys,
   fetchCountsSinceAssessment,
   writeGbifCsv,
-} from "./sync-gbif";
+} from "./fetch-gbif";
 import {
   matchAllSpecies,
   writeLinksCsv,
-} from "./match-species";
+} from "./match";
 
 // =============================================================================
-// IUCN → GBIF TAXON MAPPING
+// REDLIST → GBIF TAXON MAPPING
 // =============================================================================
 
-/** Map each IUCN taxon id to the GBIF taxon config it belongs to */
 const REDLIST_TO_GBIF: Record<string, string> = {
   mammalia: "mammalia",
   aves: "aves",
@@ -100,7 +99,6 @@ async function main() {
 
   const taxaIds = taxonFilter || uniqueTaxaIds;
 
-  // Validate taxon args
   for (const id of taxaIds) {
     if (!seenIds.has(id)) {
       console.error(`Unknown taxon: ${id}`);
@@ -119,9 +117,8 @@ async function main() {
 
   const allRedlistSpecies: RedlistSpecies[] = [];
   const allGbifSpecies = new Map<number, GbifSpecies>();
-  const fetchedGbifTaxa = new Set<string>(); // Track which GBIF taxa we've already fetched
+  const fetchedGbifTaxa = new Set<string>();
 
-  // Connect to IUCN database
   const pgClient = new Client({
     host: process.env.DB_HOST || "localhost",
     port: 5433,
@@ -156,7 +153,6 @@ async function main() {
         allRedlistSpecies.push(...species);
       }
 
-      // Write CSV incrementally
       writeRedlistCsv(allRedlistSpecies, path.join(DATA_DIR, "redlist-species.csv"));
 
       // ── GBIF ──
@@ -185,7 +181,6 @@ async function main() {
           });
         }
 
-        // Write CSV incrementally
         writeGbifCsv(allGbifSpecies, path.join(DATA_DIR, "gbif-species.csv"));
       } else {
         console.log(`  ▸ GBIF (${gbifTaxon.name}) — already fetched`);
@@ -224,10 +219,9 @@ async function main() {
       processedGbifTaxa.add(gbifTaxon.id);
 
       console.log(`\n${gbifTaxon.name} (${gbifTaxon.id})`);
-      const saCount = await fetchCountsSinceAssessment(gbifTaxon, allGbifSpecies, logger);
+      const saCount = await fetchCountsSinceAssessment(gbifTaxon, allGbifSpecies);
       console.log(`  Computed for ${saCount} species`);
 
-      // Write CSV incrementally
       writeGbifCsv(allGbifSpecies, path.join(DATA_DIR, "gbif-species.csv"));
     }
 

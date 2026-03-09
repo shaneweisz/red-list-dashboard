@@ -1,7 +1,8 @@
 /**
- * Shared configuration and utilities for sync scripts.
+ * Shared utilities for sync scripts.
  *
- * - Taxa configuration (Red List + GBIF)
+ * - Environment loading
+ * - Supabase client
  * - JSONL logging
  * - CSV read/write
  * - Concurrency helpers
@@ -104,58 +105,6 @@ export class SyncLogger {
 }
 
 // =============================================================================
-// TAXA CONFIG
-// =============================================================================
-
-export interface RedlistTaxon {
-  id: string;
-  name: string;
-  filterColumn: "kingdom_name" | "phylum_name" | "class_name" | "order_name";
-  filterValues: string[];
-}
-
-export const REDLIST_TAXA: RedlistTaxon[] = [
-  // Vertebrates
-  { id: "mammalia", name: "Mammals", filterColumn: "class_name", filterValues: ["MAMMALIA"] },
-  { id: "aves", name: "Birds", filterColumn: "class_name", filterValues: ["AVES"] },
-  { id: "reptilia", name: "Reptiles", filterColumn: "class_name", filterValues: ["REPTILIA"] },
-  { id: "amphibia", name: "Amphibians", filterColumn: "class_name", filterValues: ["AMPHIBIA"] },
-  { id: "fishes", name: "Fishes", filterColumn: "class_name", filterValues: ["ACTINOPTERYGII", "CHONDRICHTHYES", "MYXINI", "PETROMYZONTI", "SARCOPTERYGII"] },
-  // Invertebrates
-  { id: "insecta", name: "Insects", filterColumn: "class_name", filterValues: ["INSECTA"] },
-  { id: "mollusca", name: "Molluscs", filterColumn: "phylum_name", filterValues: ["MOLLUSCA"] },
-  { id: "crustacea", name: "Crustaceans", filterColumn: "class_name", filterValues: ["MALACOSTRACA", "MAXILLOPODA", "BRANCHIOPODA", "OSTRACODA", "HEXANAUPLIA"] },
-  { id: "arachnida", name: "Arachnids", filterColumn: "class_name", filterValues: ["ARACHNIDA"] },
-  { id: "corals", name: "Corals", filterColumn: "order_name", filterValues: ["SCLERACTINIA", "ALCYONACEA", "PENNATULACEA"] },
-  { id: "velvet_worms", name: "Velvet Worms", filterColumn: "class_name", filterValues: ["UDEONYCHOPHORA"] },
-  { id: "horseshoe_crabs", name: "Horseshoe Crabs", filterColumn: "class_name", filterValues: ["MEROSTOMATA"] },
-  // "Other Invertebrates" needs two entries because it spans different filter columns:
-  // non-coral Anthozoa are filtered by order_name (to separate them from corals, which
-  // are also in class ANTHOZOA), while the remaining classes are filtered by class_name.
-  // Both entries share the same taxon_group id to match the IUCN Red List Table 1a grouping.
-  { id: "other_invertebrates", name: "Other Invertebrates (non-coral Anthozoa)", filterColumn: "order_name", filterValues: [
-    "ACTINIARIA", "ZOANTHARIA", "PENICILLARIA", "MALACALCYONCAEA", "SCLERALCYONACEA",
-  ] },
-  { id: "other_invertebrates", name: "Other Invertebrates", filterColumn: "class_name", filterValues: [
-    "HOLOTHUROIDEA", "CLITELLATA", "DIPLOPODA", "COLLEMBOLA", "CHILOPODA",
-    "DEMOSPONGIAE", "HYDROZOA", "NEMERTEA",
-    "ASTEROIDEA", "CALCAREA", "POLYCHAETA", "TURBELLARIA", "ECHINOIDEA",
-  ] },
-  // Plants
-  { id: "plantae", name: "Plants", filterColumn: "kingdom_name", filterValues: ["PLANTAE"] },
-  // Fungi & Protists
-  { id: "fungi", name: "Fungi & Protists", filterColumn: "phylum_name", filterValues: ["ASCOMYCOTA", "BASIDIOMYCOTA", "OCHROPHYTA"] },
-];
-
-// Population trend code to text mapping (from IUCN DB)
-export const POPULATION_TRENDS: Record<string, string> = {
-  "0": "Increasing",
-  "1": "Decreasing",
-  "2": "Stable",
-  "3": "Unknown",
-};
-
-// =============================================================================
 // CONCURRENCY & UTILITY HELPERS
 // =============================================================================
 
@@ -192,7 +141,6 @@ export function toTitleCase(s: string): string {
 
 export const DATA_DIR = path.join(__dirname, "../data");
 
-/** Escape a field for RFC 4180 CSV. Quotes fields containing commas, quotes, or newlines. */
 function csvEscape(value: string): string {
   if (value.includes(",") || value.includes('"') || value.includes("\n")) {
     return '"' + value.replace(/"/g, '""') + '"';
@@ -200,7 +148,6 @@ function csvEscape(value: string): string {
   return value;
 }
 
-/** Write rows to a CSV file. */
 export function writeCsv(
   rows: Record<string, string | number | null | undefined>[],
   columns: string[],
@@ -218,7 +165,6 @@ export function writeCsv(
   fs.writeFileSync(outputPath, header + "\n" + lines.join("\n") + "\n");
 }
 
-/** Parse a CSV line respecting quoted fields. */
 function parseCsvLine(line: string): string[] {
   const fields: string[] = [];
   let current = "";
@@ -252,7 +198,6 @@ function parseCsvLine(line: string): string[] {
   return fields;
 }
 
-/** Read a CSV file and parse each row using the provided function. */
 export function readCsv<T>(
   inputPath: string,
   parse: (row: Record<string, string>) => T

@@ -1,5 +1,5 @@
 /**
- * sync-gbif: GBIF API → CSV
+ * fetch-gbif: GBIF API → CSV
  *
  * Fetches per-species observation counts from GBIF and writes to gbif-species.csv.
  *
@@ -12,8 +12,8 @@
  *   For --since-assessment-only: redlist-species.csv and species-links.csv must exist
  *
  * Usage:
- *   npx tsx scripts/sync-gbif.ts <taxon> [--counts-only|--since-assessment-only]
- *   npx tsx scripts/sync-gbif.ts [--counts-only|--since-assessment-only]
+ *   npx tsx scripts/fetch-gbif.ts <taxon> [--counts-only|--since-assessment-only]
+ *   npx tsx scripts/fetch-gbif.ts [--counts-only|--since-assessment-only]
  */
 
 import * as path from "path";
@@ -26,7 +26,7 @@ import {
   delay,
   mapConcurrent,
   toTitleCase,
-} from "./config";
+} from "./utils";
 
 // =============================================================================
 // GBIF TAXA CONFIGURATION
@@ -350,9 +350,7 @@ function loadAssessmentYears(taxonGbifKeys: Set<number>): Map<number, number> {
 export async function fetchCountsSinceAssessment(
   taxon: GbifTaxon,
   gbifSpeciesMap: Map<number, GbifSpecies>,
-  logger: SyncLogger
 ): Promise<number> {
-  // Get gbif keys for this taxon group from the in-memory map
   const taxonGbifKeys = new Set<number>();
   gbifSpeciesMap.forEach((row, key) => {
     if (row.taxon_group_table1a === taxon.id) taxonGbifKeys.add(key);
@@ -459,13 +457,13 @@ async function main() {
     process.exit(1);
   }
 
-  console.log("sync-gbif: GBIF API → CSV");
+  console.log("fetch-gbif: GBIF API → CSV");
   if (countsOnly) console.log("Mode: --counts-only");
   if (sinceAssessmentOnly) console.log("Mode: --since-assessment-only");
   console.log("=".repeat(50));
 
   const startTime = Date.now();
-  const logger = new SyncLogger("sync-gbif");
+  const logger = new SyncLogger("fetch-gbif");
 
   try {
     logger.log("sync_start", {
@@ -517,7 +515,7 @@ async function main() {
 
       if (!countsOnly) {
         console.log("  Computing since-assessment counts...");
-        const count = await fetchCountsSinceAssessment(taxon, gbifSpeciesMap, logger);
+        const count = await fetchCountsSinceAssessment(taxon, gbifSpeciesMap);
         totalSinceAssessment += count;
 
         logger.log("taxon_since_assessment_complete", {
@@ -539,7 +537,7 @@ async function main() {
     logger.log("sync_complete", { total_species: gbifSpeciesMap.size, since_assessment: totalSinceAssessment, rate_limit_retries: rateLimitHits, duration_seconds: Number(elapsed) });
 
     console.log("\n" + "=".repeat(50));
-    console.log("sync-gbif complete:");
+    console.log("fetch-gbif complete:");
     if (!sinceAssessmentOnly) {
       console.log(`  Species:                    ${totalFetched.toLocaleString()}`);
     }
@@ -556,7 +554,7 @@ async function main() {
   }
 }
 
-const isDirectRun = process.argv[1]?.endsWith("sync-gbif.ts") || process.argv[1]?.endsWith("sync-gbif.js");
+const isDirectRun = process.argv[1]?.endsWith("fetch-gbif.ts") || process.argv[1]?.endsWith("fetch-gbif.js");
 if (isDirectRun) {
   main().catch((err) => {
     console.error("Fatal error:", err);
