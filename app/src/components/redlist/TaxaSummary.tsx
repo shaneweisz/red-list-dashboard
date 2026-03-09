@@ -50,9 +50,9 @@ const stickyClasses = "sticky left-0 z-10";
 // Compact cell classes for tighter table spacing
 const cellPad = "px-3 md:px-4 py-2 md:py-2.5";
 const numericTdClasses = `${cellPad} text-right whitespace-nowrap w-0`;
-const numericThClasses = `${cellPad} text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`;
+const numericThClasses = `${cellPad} text-right text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap w-0`;
 const flexTdClasses = `${cellPad} whitespace-nowrap w-0`;
-const flexThClasses = `${cellPad} text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`;
+const flexThClasses = `${cellPad} text-left text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap w-0`;
 
 // Toggleable column IDs (Taxon is always visible)
 type ColumnId = "described" | "assessed" | "pctAssessed" | "outdated" | "pctOutdated" | "breakdown" | "gbifSpecies" | "totalGbifObs" | "meanGbifObs" | "medianGbifObs" | "gbifDistribution";
@@ -270,7 +270,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
         <table className="w-full">
           <thead>
             <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
-              <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`}>Taxon</th>
+              <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} text-left text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap w-0`}>Taxon</th>
               {isVisible("described") && <th className={numericThClasses}>Est. # Described</th>}
               {isVisible("assessed") && <th className={numericThClasses}># Assessed</th>}
               {isVisible("pctAssessed") && <th className={flexThClasses}>% Assessed</th>}
@@ -337,7 +337,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
             style={{ width: `${clampedPercent}%`, backgroundColor: fillColor }}
           />
         </div>
-        <span className="text-sm md:text-base font-medium tabular-nums text-zinc-700 dark:text-zinc-300 w-[52px] text-right">
+        <span className="text-base md:text-lg font-semibold tabular-nums text-zinc-900 dark:text-zinc-100 w-[52px] text-right">
           {percent.toFixed(1)}%
         </span>
       </div>
@@ -484,19 +484,19 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
         <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 ${stickyBg}`}>
           <div className="flex items-center gap-2">
             <TaxaIcon taxonId={id} size={22} className="flex-shrink-0" style={{ color }} />
-            <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{name}</span>
+            <span className="font-semibold text-base md:text-lg text-zinc-900 dark:text-zinc-100">{name}</span>
           </div>
         </td>
         {isVisible("described") && (
           <td className={numericTdClasses}>
-            <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+            <span className="text-base md:text-lg font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums">
               {estimatedDescribed.toLocaleString()}
             </span>
           </td>
         )}
         {isVisible("assessed") && (
           <td className={numericTdClasses}>
-            <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+            <span className="text-base md:text-lg font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums">
               {available ? assessed.toLocaleString() : "—"}
             </span>
           </td>
@@ -512,7 +512,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
         )}
         {isVisible("outdated") && (
           <td className={numericTdClasses}>
-            <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+            <span className="text-base md:text-lg font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums">
               {available ? outdated.toLocaleString() : "—"}
             </span>
           </td>
@@ -528,14 +528,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
         )}
         {isVisible("gbifSpecies") && (
           <td className={numericTdClasses}>
-            <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+            <span className="text-base md:text-lg font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums">
               {gbifObs?.speciesCount != null ? gbifObs.speciesCount.toLocaleString() : "—"}
             </span>
           </td>
         )}
         {isVisible("totalGbifObs") && (
           <td className={numericTdClasses}>
-            <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+            <span className="text-base md:text-lg font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums">
               {gbifObs?.total != null ? gbifObs.total.toLocaleString() : "—"}
             </span>
           </td>
@@ -547,14 +547,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
         )}
         {isVisible("meanGbifObs") && (
           <td className={numericTdClasses}>
-            <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+            <span className="text-base md:text-lg font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums">
               {gbifObs?.mean != null ? gbifObs.mean.toLocaleString() : "—"}
             </span>
           </td>
         )}
         {isVisible("medianGbifObs") && (
           <td className={numericTdClasses}>
-            <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+            <span className="text-base md:text-lg font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums">
               {gbifObs?.median != null ? gbifObs.median.toLocaleString() : "—"}
             </span>
           </td>
@@ -576,7 +576,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
   const renderHead = () => (
     <thead>
       <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
-        <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`}>
+        <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} text-left text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider whitespace-nowrap w-0`}>
           <div className="flex items-center gap-1.5">
             Taxon
             <button

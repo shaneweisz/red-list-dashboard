@@ -1400,16 +1400,16 @@ export default function RedListView() {
           <table className="w-full text-sm">
             <thead className="bg-zinc-50 dark:bg-zinc-800">
               <tr>
-                <th className="sticky left-0 z-10 bg-zinc-50 dark:bg-zinc-800 px-2 py-3 text-center text-xs font-medium text-zinc-500 uppercase tracking-wider w-10">
+                <th className="sticky left-0 z-10 bg-zinc-50 dark:bg-zinc-800 px-2 py-3 text-center text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider w-10">
                   <svg className="w-4 h-4 mx-auto text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                   </svg>
                 </th>
-                <th className="sticky left-[40px] z-10 bg-zinc-50 dark:bg-zinc-800 px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                <th className="sticky left-[40px] z-10 bg-zinc-50 dark:bg-zinc-800 px-2 md:px-4 py-3 text-left text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider">
                   Species
                 </th>
                 <th
-                  className="px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
+                  className="px-2 md:px-4 py-3 text-left text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
                   onClick={() => handleSort("category")}
                 >
                   <span className="flex items-center gap-1">
@@ -1420,7 +1420,7 @@ export default function RedListView() {
                   </span>
                 </th>
                 <th
-                  className="px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
+                  className="px-2 md:px-4 py-3 text-left text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
                   onClick={() => handleSort("year")}
                 >
                   <span className="flex items-center gap-1">
@@ -1430,11 +1430,11 @@ export default function RedListView() {
                     )}
                   </span>
                 </th>
-                <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
+                <th className="px-3 md:px-4 py-3 text-right text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider min-w-[60px]">
                   GBIF at Assess.
                 </th>
                 <th
-                  className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
+                  className="px-3 md:px-4 py-3 text-right text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
                   onClick={() => handleSort("newGbif")}
                 >
                   <span className="flex items-center justify-end gap-1">
@@ -1444,14 +1444,14 @@ export default function RedListView() {
                     )}
                   </span>
                 </th>
-                <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
+                <th className="px-3 md:px-4 py-3 text-right text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider min-w-[60px]">
                   Papers at Assess.
                 </th>
-                <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
+                <th className="px-3 md:px-4 py-3 text-right text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider min-w-[60px]">
                   New Papers
                 </th>
                 <th
-                  className="px-3 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[80px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
+                  className="px-3 md:px-4 py-3 text-left text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider min-w-[80px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
                   onClick={() => handleSort("priority")}
                 >
                   <span className="flex items-center gap-1">
@@ -1546,7 +1546,7 @@ export default function RedListView() {
                         )}
                         <div className="min-w-0">
                           <span
-                            className="italic font-medium text-zinc-900 dark:text-zinc-100 text-xs md:text-sm"
+                            className="italic font-semibold text-zinc-900 dark:text-zinc-100 text-sm md:text-base"
                           >
                             {s.scientific_name}
                           </span>
@@ -1562,9 +1562,9 @@ export default function RedListView() {
                       {details?.criteria && !["DD", "LC", "NT", "EX", "EW", "NE"].includes(s.category) ? (
                         <HoverTooltip text={`${details.criteria}${explainCriteria(details.criteria)}`}>
                           <span
-                            className="px-2 py-0.5 text-xs font-medium rounded cursor-help"
+                            className="px-2.5 py-1 text-sm font-bold rounded cursor-help"
                             style={{
-                              backgroundColor: CATEGORY_COLORS[s.category] + "20",
+                              backgroundColor: CATEGORY_COLORS[s.category] + "30",
                               color: CATEGORY_COLORS[s.category],
                             }}
                           >
@@ -1573,9 +1573,9 @@ export default function RedListView() {
                         </HoverTooltip>
                       ) : (
                         <span
-                          className="px-2 py-0.5 text-xs font-medium rounded"
+                          className="px-2.5 py-1 text-sm font-bold rounded"
                           style={{
-                            backgroundColor: CATEGORY_COLORS[s.category] + "20",
+                            backgroundColor: CATEGORY_COLORS[s.category] + "30",
                             color: s.category === "EX" || s.category === "EW" ? "#fff" : CATEGORY_COLORS[s.category],
                             ...(s.category === "EX" || s.category === "EW" ? { backgroundColor: CATEGORY_COLORS[s.category] } : {})
                           }}
@@ -1584,7 +1584,7 @@ export default function RedListView() {
                         </span>
                       )}
                     </td>
-                    <td className="px-2 md:px-4 py-3 text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
+                    <td className="px-2 md:px-4 py-3 text-zinc-800 dark:text-zinc-200 font-medium whitespace-nowrap">
                       {isNE(s) ? <span className="text-zinc-400">N/A</span> : (
                         <>
                           <HoverTooltip
@@ -1608,7 +1608,7 @@ export default function RedListView() {
                         </>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
+                    <td className="px-4 py-3 text-right text-zinc-800 dark:text-zinc-200 text-sm font-medium tabular-nums whitespace-nowrap">
                       {isNE(s) ? <span className="text-zinc-400">N/A</span> : details?.gbifOccurrences != null && details?.gbifUrl ? (() => {
                         const recordsAtAssessment = details.gbifOccurrences - (details.gbifOccurrencesSinceAssessment ?? 0);
                         return (
@@ -1616,7 +1616,7 @@ export default function RedListView() {
                             href={assessmentYear ? `https://www.gbif.org/occurrence/search?taxon_key=${details.gbifUrl.split('/').pop()}&year=*,${assessmentYear}` : `https://www.gbif.org/occurrence/search?taxon_key=${details.gbifUrl.split('/').pop()}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
+                            className="text-blue-700 dark:text-blue-300 hover:text-blue-800 dark:hover:text-blue-200 font-semibold underline decoration-dotted hover:decoration-solid"
                             onClick={(e) => e.stopPropagation()}
                           >
                             {recordsAtAssessment.toLocaleString()}
@@ -1632,13 +1632,13 @@ export default function RedListView() {
                         </HoverTooltip>
                       ) : "—"}
                     </td>
-                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
+                    <td className="px-4 py-3 text-right text-zinc-800 dark:text-zinc-200 text-sm font-medium tabular-nums whitespace-nowrap">
                       {isNE(s) && s.gbif_occurrence_count != null ? (
                         <a
                           href={`https://www.gbif.org/occurrence/search?taxon_key=${s.gbif_species_key}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
+                          className="text-blue-700 dark:text-blue-300 hover:text-blue-800 dark:hover:text-blue-200 font-semibold underline decoration-dotted hover:decoration-solid"
                           onClick={(e) => e.stopPropagation()}
                         >
                           {s.gbif_occurrence_count.toLocaleString()}
@@ -1648,7 +1648,7 @@ export default function RedListView() {
                           href={`https://www.gbif.org/occurrence/search?taxon_key=${details.gbifUrl.split('/').pop()}&year=${assessmentYear + 1},${new Date().getFullYear()}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
+                          className="text-blue-700 dark:text-blue-300 hover:text-blue-800 dark:hover:text-blue-200 font-semibold underline decoration-dotted hover:decoration-solid"
                           title={assessmentMonth ? `Data count includes ${assessmentYear} from month ${assessmentMonth + 1} onwards` : undefined}
                           onClick={(e) => e.stopPropagation()}
                         >
@@ -1665,7 +1665,7 @@ export default function RedListView() {
                       ) : "—"}
                     </td>
                     {/* Papers When Assessed */}
-                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
+                    <td className="px-4 py-3 text-right text-zinc-800 dark:text-zinc-200 text-sm font-medium tabular-nums whitespace-nowrap">
                       {isNE(s) ? <span className="text-zinc-400">N/A</span> : details?.papersAtAssessment === undefined ? (
                         <span className="inline-block animate-spin h-4 w-4 border-2 border-zinc-400 border-t-transparent rounded-full" />
                       ) : details?.papersAtAssessment != null && assessmentYear ? (
@@ -1673,7 +1673,7 @@ export default function RedListView() {
                           href={`https://openalex.org/works?page=1&filter=default.search%3A%22${encodeURIComponent(s.scientific_name)}%22,publication_year%3A%3C%3D${assessmentYear},type%3A%21dataset&sort=publication_date%3Adesc`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
+                          className="text-blue-700 dark:text-blue-300 hover:text-blue-800 dark:hover:text-blue-200 font-semibold underline decoration-dotted hover:decoration-solid"
                           title={`OpenAlex: search="${s.scientific_name}" AND year<=${assessmentYear} AND type!=dataset`}
                           onClick={(e) => e.stopPropagation()}
                         >
@@ -1682,7 +1682,7 @@ export default function RedListView() {
                       ) : "—"}
                     </td>
                     {/* New Papers */}
-                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
+                    <td className="px-4 py-3 text-right text-zinc-800 dark:text-zinc-200 text-sm font-medium tabular-nums whitespace-nowrap">
                       {details?.openAlexPaperCount === undefined ? (
                         <span className="inline-block animate-spin h-4 w-4 border-2 border-zinc-400 border-t-transparent rounded-full" />
                       ) : details?.openAlexPaperCount != null ? (
@@ -1693,7 +1693,7 @@ export default function RedListView() {
                           }
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
+                          className="text-blue-700 dark:text-blue-300 hover:text-blue-800 dark:hover:text-blue-200 font-semibold underline decoration-dotted hover:decoration-solid"
                           title={s.category === "NE"
                             ? `OpenAlex: search="${s.scientific_name}" AND type!=dataset`
                             : `OpenAlex: search="${s.scientific_name}" AND year>${assessmentYear} AND type!=dataset`
@@ -1716,7 +1716,7 @@ export default function RedListView() {
                           .join(" · ");
                         return (
                           <HoverTooltip text={tooltipText}>
-                            <span className="text-xs font-semibold tabular-nums cursor-help text-zinc-600 dark:text-zinc-400">
+                            <span className="text-sm font-bold tabular-nums cursor-help text-zinc-800 dark:text-zinc-200">
                               {priority.score}
                             </span>
                           </HoverTooltip>
