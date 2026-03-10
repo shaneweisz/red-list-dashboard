@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase/server";
 import { TAXA } from "@/config/taxa";
+import { getTaxonGroups } from "@/lib/supabase/taxon-groups";
 import { CACHE_1H } from "@/lib/cache-headers";
 
 interface TaxonSummary {
@@ -21,24 +22,6 @@ interface TaxonSummary {
   gbifSpeciesCount?: number;
   gbifObsDistribution?: Record<string, number>;
 }
-
-// Maps each TAXA id to the table1a_taxon_group values it aggregates
-const TAXON_GROUP_MAP: Record<string, string[]> = {
-  all: [
-    "mammalia", "aves", "reptilia", "amphibia",
-    "actinopterygii", "chondrichthyes",
-    "insecta", "arachnida", "gastropoda", "bivalvia", "malacostraca", "anthozoa",
-    "plantae", "ascomycota", "basidiomycota",
-  ],
-  mammalia: ["mammalia"],
-  aves: ["aves"],
-  reptilia: ["reptilia"],
-  amphibia: ["amphibia"],
-  fishes: ["actinopterygii", "chondrichthyes"],
-  invertebrates: ["insecta", "arachnida", "gastropoda", "bivalvia", "malacostraca", "anthozoa"],
-  plantae: ["plantae"],
-  fungi: ["ascomycota", "basidiomycota"],
-};
 
 function mergeByCategory(
   rows: Array<{ by_category: Record<string, number> }>
@@ -72,7 +55,7 @@ export async function GET() {
   );
 
   const taxa: TaxonSummary[] = TAXA.map((taxon) => {
-    const groups = TAXON_GROUP_MAP[taxon.id] ?? [];
+    const groups = getTaxonGroups(taxon.id);
     const matchedRows = groups
       .map((g) => rowsByGroup.get(g))
       .filter(Boolean) as typeof data;

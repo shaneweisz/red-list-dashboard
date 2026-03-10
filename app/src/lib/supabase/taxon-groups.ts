@@ -1,8 +1,8 @@
 /**
  * Maps taxa.ts taxon IDs to the table1a_taxon_group values stored in the database.
  *
- * The DB stores 15 specific groups. Combined taxa (fishes, invertebrates, fungi, all)
- * map to multiple DB groups.
+ * The DB stores 21 specific groups from IUCN Table 1a. Combined taxa
+ * (fishes, invertebrates, fungi, all) map to multiple DB groups.
  */
 
 const TAXON_GROUP_MAP: Record<string, string[]> = {
@@ -10,33 +10,49 @@ const TAXON_GROUP_MAP: Record<string, string[]> = {
   aves: ["aves"],
   reptilia: ["reptilia"],
   amphibia: ["amphibia"],
-  fishes: ["actinopterygii", "chondrichthyes"],
+  fishes: ["fishes"],
   invertebrates: [
     "insecta",
     "arachnida",
-    "gastropoda",
-    "bivalvia",
-    "malacostraca",
-    "anthozoa",
+    "mollusca",
+    "crustacea",
+    "corals",
+    "other_invertebrates",
+    "velvet_worms",
+    "horseshoe_crabs",
   ],
-  plantae: ["plantae"],
-  fungi: ["ascomycota", "basidiomycota"],
+  plantae: [
+    "flowering_plants",
+    "gymnosperms",
+    "ferns_and_allies",
+    "mosses",
+    "green_algae",
+    "red_algae",
+    "brown_algae",
+  ],
+  fungi: ["mushrooms"],
   all: [
     "mammalia",
     "aves",
     "reptilia",
     "amphibia",
-    "actinopterygii",
-    "chondrichthyes",
+    "fishes",
     "insecta",
     "arachnida",
-    "gastropoda",
-    "bivalvia",
-    "malacostraca",
-    "anthozoa",
-    "plantae",
-    "ascomycota",
-    "basidiomycota",
+    "mollusca",
+    "crustacea",
+    "corals",
+    "other_invertebrates",
+    "velvet_worms",
+    "horseshoe_crabs",
+    "flowering_plants",
+    "gymnosperms",
+    "ferns_and_allies",
+    "mosses",
+    "green_algae",
+    "red_algae",
+    "brown_algae",
+    "mushrooms",
   ],
 };
 

@@ -6,16 +6,23 @@ import { getTaxonGroups } from "@/lib/supabase/taxon-groups";
 
 // Maps a DB table1a_taxon_group value to the display taxon ID used in the "all" view
 const DB_GROUP_TO_TAXON_ID: Record<string, string> = {
-  actinopterygii: "fishes",
-  chondrichthyes: "fishes",
+  fishes: "fishes",
   insecta: "invertebrates",
   arachnida: "invertebrates",
-  gastropoda: "invertebrates",
-  bivalvia: "invertebrates",
-  malacostraca: "invertebrates",
-  anthozoa: "invertebrates",
-  ascomycota: "fungi",
-  basidiomycota: "fungi",
+  mollusca: "invertebrates",
+  crustacea: "invertebrates",
+  corals: "invertebrates",
+  other_invertebrates: "invertebrates",
+  velvet_worms: "invertebrates",
+  horseshoe_crabs: "invertebrates",
+  flowering_plants: "plantae",
+  gymnosperms: "plantae",
+  ferns_and_allies: "plantae",
+  mosses: "plantae",
+  green_algae: "plantae",
+  red_algae: "plantae",
+  brown_algae: "plantae",
+  mushrooms: "fungi",
 };
 
 function dbGroupToTaxonId(group: string): string {
