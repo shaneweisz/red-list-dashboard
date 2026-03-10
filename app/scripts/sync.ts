@@ -32,7 +32,7 @@ import {
   writeRedlistCsv,
   RedlistSpecies,
   REDLIST_TAXA,
-} from "./01-fetch-redlist-species";
+} from "./fetch-redlist-species";
 import {
   GBIF_TAXA,
   GbifTaxon,
@@ -40,9 +40,9 @@ import {
   fetchGbifCounts,
   validateSpeciesKeys,
   writeGbifCsv,
-} from "./02-fetch-gbif-species";
-import { fetchCountsSinceAssessment } from "./04-fetch-gbif-new-counts";
-import { matchAllSpecies } from "./03-match-redlist-species-to-gbif";
+} from "./fetch-gbif-species";
+import { fetchCountsSinceAssessment } from "./fetch-gbif-new-counts";
+import { matchAllSpecies } from "./match-redlist-species-to-gbif";
 
 function getGbifTaxon(redlistId: string): GbifTaxon {
   const gbifTaxon = GBIF_TAXA[redlistId];

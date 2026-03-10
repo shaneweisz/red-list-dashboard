@@ -10,8 +10,8 @@
  *   3. redlist-species.csv has gbif_species_key populated (from match)
  *
  * Usage:
- *   npx tsx scripts/04-fetch-gbif-new-counts.ts [taxon]   # One taxon (e.g. mammalia)
- *   npx tsx scripts/04-fetch-gbif-new-counts.ts            # All taxa
+ *   npx tsx scripts/fetch-gbif-new-counts.ts [taxon]   # One taxon (e.g. mammalia)
+ *   npx tsx scripts/fetch-gbif-new-counts.ts            # All taxa
  */
 
 import * as path from "path";
@@ -28,7 +28,7 @@ import {
   GbifSpecies,
   fetchFacets,
   writeGbifCsv,
-} from "./02-fetch-gbif-species";
+} from "./fetch-gbif-species";
 
 // =============================================================================
 // CONFIGURATION

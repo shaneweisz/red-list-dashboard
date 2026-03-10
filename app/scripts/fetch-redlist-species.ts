@@ -9,8 +9,8 @@
  *   2. Environment variables: DB_HOST, DB_NAME, DB_USER, DB_PASSWORD
  *
  * Usage:
- *   npx tsx scripts/01-fetch-redlist-species.ts [taxon]   # Sync one taxon (e.g. mammalia)
- *   npx tsx scripts/01-fetch-redlist-species.ts            # Sync all taxa
+ *   npx tsx scripts/fetch-redlist-species.ts [taxon]   # Sync one taxon (e.g. mammalia)
+ *   npx tsx scripts/fetch-redlist-species.ts            # Sync all taxa
  */
 
 import * as path from "path";
