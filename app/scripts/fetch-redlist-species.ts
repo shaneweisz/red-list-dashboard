@@ -61,9 +61,15 @@ export const REDLIST_TAXA: RedlistTaxon[] = [
     "ASTEROIDEA", "CALCAREA", "POLYCHAETA", "TURBELLARIA", "ECHINOIDEA",
   ] },
   // Plants
-  { id: "plantae", name: "Plants", filterColumn: "kingdom_name", filterValues: ["PLANTAE"] },
+  { id: "mosses", name: "Mosses", filterColumn: "phylum_name", filterValues: ["BRYOPHYTA", "ANTHOCEROTOPHYTA", "MARCHANTIOPHYTA"] },
+  { id: "ferns_and_allies", name: "Ferns and Allies", filterColumn: "class_name", filterValues: ["LYCOPODIOPSIDA", "ISOETOPSIDA", "EQUISETOPSIDA", "MARATTIOPSIDA", "POLYPODIOPSIDA", "PSILOTOPSIDA"] },
+  { id: "gymnosperms", name: "Gymnosperms", filterColumn: "class_name", filterValues: ["PINOPSIDA", "CYCADOPSIDA", "GINKGOOPSIDA", "GNETOPSIDA"] },
+  { id: "flowering_plants", name: "Flowering Plants", filterColumn: "class_name", filterValues: ["MAGNOLIOPSIDA", "LILIOPSIDA"] },
+  { id: "green_algae", name: "Green Algae", filterColumn: "phylum_name", filterValues: ["CHLOROPHYTA", "CHAROPHYTA"] },
+  { id: "red_algae", name: "Red Algae", filterColumn: "phylum_name", filterValues: ["RHODOPHYTA"] },
   // Fungi & Protists
-  { id: "fungi", name: "Fungi & Protists", filterColumn: "phylum_name", filterValues: ["ASCOMYCOTA", "BASIDIOMYCOTA", "OCHROPHYTA"] },
+  { id: "mushrooms", name: "Mushrooms, etc.", filterColumn: "phylum_name", filterValues: ["ASCOMYCOTA", "BASIDIOMYCOTA"] },
+  { id: "brown_algae", name: "Brown Algae", filterColumn: "phylum_name", filterValues: ["OCHROPHYTA"] },
 ];
 
 const POPULATION_TRENDS: Record<string, string> = {

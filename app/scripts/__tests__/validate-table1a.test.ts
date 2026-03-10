@@ -29,8 +29,14 @@ const TABLE_1A_2025_1: Record<string, number> = {
   velvet_worms: 11,
   horseshoe_crabs: 4,
   other_invertebrates: 1119,
-  plantae: 74751,
-  fungi: 1318,
+  mosses: 327,
+  ferns_and_allies: 828,
+  gymnosperms: 1061,
+  flowering_plants: 72439,
+  green_algae: 18,
+  red_algae: 78,
+  mushrooms: 1300,
+  brown_algae: 18,
 };
 
 const TOTAL_EXPECTED = 169420;

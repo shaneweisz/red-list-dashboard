@@ -44,34 +44,12 @@ import {
 import { fetchCountsSinceAssessment } from "./fetch-gbif-new-counts";
 import { matchAllSpecies } from "./match-redlist-species-to-gbif";
 
-// =============================================================================
-// REDLIST → GBIF TAXON MAPPING
-// =============================================================================
-
-const REDLIST_TO_GBIF: Record<string, string> = {
-  mammalia: "mammalia",
-  aves: "aves",
-  reptilia: "reptilia",
-  amphibia: "amphibia",
-  fishes: "fishes",
-  insecta: "invertebrates",
-  mollusca: "invertebrates",
-  crustacea: "invertebrates",
-  arachnida: "invertebrates",
-  corals: "invertebrates",
-  velvet_worms: "invertebrates",
-  horseshoe_crabs: "invertebrates",
-  other_invertebrates: "invertebrates",
-  plantae: "plantae",
-  fungi: "fungi",
-};
-
 function getGbifTaxon(redlistId: string): GbifTaxon {
-  const gbifId = REDLIST_TO_GBIF[redlistId];
-  if (!gbifId || !GBIF_TAXA[gbifId]) {
-    throw new Error(`No GBIF taxon mapping for: ${redlistId}`);
+  const gbifTaxon = GBIF_TAXA[redlistId];
+  if (!gbifTaxon) {
+    throw new Error(`No GBIF taxon for: ${redlistId}`);
   }
-  return GBIF_TAXA[gbifId];
+  return gbifTaxon;
 }
 
 // =============================================================================
@@ -216,6 +194,9 @@ async function main() {
     });
     console.log(`\nPhase 1 complete: ${allRedlistSpecies.length} Red List, ${allGbifSpecies.size} GBIF species\n`);
 
+    // Done with the database — close before the long-running GBIF phases
+    await pgClient.end();
+
     // ══════════════════════════════════════════════════════════════
     // Phase 2: Match all species
     // ══════════════════════════════════════════════════════════════
@@ -302,7 +283,6 @@ async function main() {
     console.log(`  Linked:            ${linkedCount.toLocaleString()}`);
     console.log(`  Duration: ${minutes}m ${seconds}s`);
   } finally {
-    await pgClient.end();
     logger.close();
   }
 }

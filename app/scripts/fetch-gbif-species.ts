@@ -23,7 +23,7 @@ import {
 // =============================================================================
 
 export interface GbifQuery {
-  keyType: "kingdomKey" | "classKey" | "orderKey";
+  keyType: "kingdomKey" | "phylumKey" | "classKey" | "orderKey";
   keyValue: number;
   taxonGroup: string;
 }
@@ -37,6 +37,7 @@ export interface GbifTaxon {
 const FISH_ORDER_KEYS = [389,391,427,428,446,494,495,496,497,498,499,537,538,547,548,549,550,587,588,589,590,696,708,742,752,753,772,773,774,781,836,848,857,860,861,888,889,890,898,929,975,976,1067,1153,1313];
 
 export const GBIF_TAXA: Record<string, GbifTaxon> = {
+  // ── Vertebrates ──
   mammalia: {
     id: "mammalia", name: "Mammals",
     queries: [{ keyType: "classKey", keyValue: 359, taxonGroup: "mammalia" }],
@@ -65,39 +66,110 @@ export const GBIF_TAXA: Record<string, GbifTaxon> = {
       { keyType: "classKey" as const, keyValue: 120, taxonGroup: "fishes" },
     ],
   },
-  invertebrates: {
-    id: "invertebrates", name: "Invertebrates",
+  // ── Invertebrates ──
+  insecta: {
+    id: "insecta", name: "Insects",
+    queries: [{ keyType: "classKey", keyValue: 216, taxonGroup: "insecta" }],
+  },
+  mollusca: {
+    id: "mollusca", name: "Molluscs",
     queries: [
-      { keyType: "classKey", keyValue: 216, taxonGroup: "insecta" },
-      { keyType: "classKey", keyValue: 367, taxonGroup: "arachnida" },
       { keyType: "classKey", keyValue: 225, taxonGroup: "mollusca" },
       { keyType: "classKey", keyValue: 137, taxonGroup: "mollusca" },
-      { keyType: "classKey", keyValue: 229, taxonGroup: "crustacea" },
-      { keyType: "classKey", keyValue: 206, taxonGroup: "corals" },
-      { keyType: "classKey", keyValue: 351, taxonGroup: "horseshoe_crabs" },
-      { keyType: "classKey", keyValue: 222, taxonGroup: "other_invertebrates" }, // Holothuroidea
-      { keyType: "classKey", keyValue: 255, taxonGroup: "other_invertebrates" }, // Clitellata
-      { keyType: "classKey", keyValue: 361, taxonGroup: "other_invertebrates" }, // Diplopoda
-      { keyType: "classKey", keyValue: 10713444, taxonGroup: "other_invertebrates" }, // Collembola
-      { keyType: "classKey", keyValue: 360, taxonGroup: "other_invertebrates" }, // Chilopoda
-      { keyType: "classKey", keyValue: 199, taxonGroup: "other_invertebrates" }, // Demospongiae
-      { keyType: "classKey", keyValue: 205, taxonGroup: "other_invertebrates" }, // Hydrozoa
-      { keyType: "classKey", keyValue: 214, taxonGroup: "other_invertebrates" }, // Asteroidea
-      { keyType: "classKey", keyValue: 308, taxonGroup: "other_invertebrates" }, // Calcarea
-      { keyType: "classKey", keyValue: 256, taxonGroup: "other_invertebrates" }, // Polychaeta
-      { keyType: "classKey", keyValue: 341, taxonGroup: "other_invertebrates" }, // Turbellaria
-      { keyType: "classKey", keyValue: 221, taxonGroup: "other_invertebrates" }, // Echinoidea
-      { keyType: "classKey", keyValue: 63, taxonGroup: "other_invertebrates" },  // Nemertea
-      { keyType: "classKey", keyValue: 62, taxonGroup: "velvet_worms" },         // Onychophora
     ],
   },
-  plantae: {
-    id: "plantae", name: "Plants",
-    queries: [{ keyType: "kingdomKey", keyValue: 6, taxonGroup: "plantae" }],
+  crustacea: {
+    id: "crustacea", name: "Crustaceans",
+    queries: [{ keyType: "classKey", keyValue: 229, taxonGroup: "crustacea" }],
   },
-  fungi: {
-    id: "fungi", name: "Fungi",
-    queries: [{ keyType: "kingdomKey", keyValue: 5, taxonGroup: "fungi" }],
+  arachnida: {
+    id: "arachnida", name: "Arachnids",
+    queries: [{ keyType: "classKey", keyValue: 367, taxonGroup: "arachnida" }],
+  },
+  corals: {
+    id: "corals", name: "Corals",
+    queries: [{ keyType: "classKey", keyValue: 206, taxonGroup: "corals" }],
+  },
+  velvet_worms: {
+    id: "velvet_worms", name: "Velvet Worms",
+    queries: [{ keyType: "classKey", keyValue: 62, taxonGroup: "velvet_worms" }],
+  },
+  horseshoe_crabs: {
+    id: "horseshoe_crabs", name: "Horseshoe Crabs",
+    queries: [{ keyType: "classKey", keyValue: 351, taxonGroup: "horseshoe_crabs" }],
+  },
+  other_invertebrates: {
+    id: "other_invertebrates", name: "Other Invertebrates",
+    queries: [
+      { keyType: "classKey", keyValue: 222, taxonGroup: "other_invertebrates" },    // Holothuroidea
+      { keyType: "classKey", keyValue: 255, taxonGroup: "other_invertebrates" },    // Clitellata
+      { keyType: "classKey", keyValue: 361, taxonGroup: "other_invertebrates" },    // Diplopoda
+      { keyType: "classKey", keyValue: 10713444, taxonGroup: "other_invertebrates" }, // Collembola
+      { keyType: "classKey", keyValue: 360, taxonGroup: "other_invertebrates" },    // Chilopoda
+      { keyType: "classKey", keyValue: 199, taxonGroup: "other_invertebrates" },    // Demospongiae
+      { keyType: "classKey", keyValue: 205, taxonGroup: "other_invertebrates" },    // Hydrozoa
+      { keyType: "classKey", keyValue: 214, taxonGroup: "other_invertebrates" },    // Asteroidea
+      { keyType: "classKey", keyValue: 308, taxonGroup: "other_invertebrates" },    // Calcarea
+      { keyType: "classKey", keyValue: 256, taxonGroup: "other_invertebrates" },    // Polychaeta
+      { keyType: "classKey", keyValue: 341, taxonGroup: "other_invertebrates" },    // Turbellaria
+      { keyType: "classKey", keyValue: 221, taxonGroup: "other_invertebrates" },    // Echinoidea
+      { keyType: "classKey", keyValue: 63, taxonGroup: "other_invertebrates" },     // Nemertea
+    ],
+  },
+  // ── Plants ──
+  mosses: {
+    id: "mosses", name: "Mosses",
+    queries: [
+      { keyType: "phylumKey", keyValue: 35, taxonGroup: "mosses" },  // Bryophyta
+      { keyType: "phylumKey", keyValue: 13, taxonGroup: "mosses" },  // Anthocerotophyta
+      { keyType: "phylumKey", keyValue: 9, taxonGroup: "mosses" },   // Marchantiophyta
+    ],
+  },
+  ferns_and_allies: {
+    id: "ferns_and_allies", name: "Ferns and Allies",
+    queries: [
+      { keyType: "classKey", keyValue: 245, taxonGroup: "ferns_and_allies" },     // Lycopodiopsida
+      { keyType: "classKey", keyValue: 7228684, taxonGroup: "ferns_and_allies" },  // Polypodiopsida
+    ],
+  },
+  gymnosperms: {
+    id: "gymnosperms", name: "Gymnosperms",
+    queries: [
+      { keyType: "classKey", keyValue: 194, taxonGroup: "gymnosperms" },  // Pinopsida
+      { keyType: "classKey", keyValue: 228, taxonGroup: "gymnosperms" },  // Cycadopsida
+      { keyType: "classKey", keyValue: 244, taxonGroup: "gymnosperms" },  // Ginkgoopsida
+      { keyType: "classKey", keyValue: 282, taxonGroup: "gymnosperms" },  // Gnetopsida
+    ],
+  },
+  flowering_plants: {
+    id: "flowering_plants", name: "Flowering Plants",
+    queries: [
+      { keyType: "classKey", keyValue: 220, taxonGroup: "flowering_plants" },  // Magnoliopsida
+      { keyType: "classKey", keyValue: 196, taxonGroup: "flowering_plants" },  // Liliopsida
+    ],
+  },
+  green_algae: {
+    id: "green_algae", name: "Green Algae",
+    queries: [
+      { keyType: "phylumKey", keyValue: 36, taxonGroup: "green_algae" },      // Chlorophyta
+      { keyType: "phylumKey", keyValue: 7819616, taxonGroup: "green_algae" },  // Charophyta
+    ],
+  },
+  red_algae: {
+    id: "red_algae", name: "Red Algae",
+    queries: [{ keyType: "phylumKey", keyValue: 106, taxonGroup: "red_algae" }],  // Rhodophyta
+  },
+  // ── Fungi & Protists ──
+  mushrooms: {
+    id: "mushrooms", name: "Mushrooms, etc.",
+    queries: [
+      { keyType: "phylumKey", keyValue: 34, taxonGroup: "mushrooms" },  // Basidiomycota
+      { keyType: "phylumKey", keyValue: 95, taxonGroup: "mushrooms" },  // Ascomycota
+    ],
+  },
+  brown_algae: {
+    id: "brown_algae", name: "Brown Algae",
+    queries: [{ keyType: "phylumKey", keyValue: 98, taxonGroup: "brown_algae" }],  // Ochrophyta
   },
 };
 
