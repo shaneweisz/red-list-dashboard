@@ -180,37 +180,45 @@ export async function matchAllSpecies(
 // MAIN
 // =============================================================================
 
+export async function run(opts: {
+  logger?: SyncLogger;
+} = {}): Promise<void> {
+  const logger = opts.logger ?? SyncLogger.noop();
+
+  const startTime = Date.now();
+
+  logger.log("match_start", {});
+
+  const redlistSpecies = await matchAllSpecies(logger);
+
+  const outputPath = path.join(DATA_DIR, "redlist-species.csv");
+  writeRedlistCsv(redlistSpecies, outputPath);
+
+  const linkedCount = redlistSpecies.filter((r) => r.gbif_species_key !== null).length;
+
+  const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
+  const minutes = Math.floor(Number(elapsed) / 60);
+  const seconds = Number(elapsed) % 60;
+
+  logger.log("match_complete", { total: redlistSpecies.length, linked: linkedCount, duration_seconds: Number(elapsed) });
+
+  console.log("\n" + "=".repeat(50));
+  console.log("match complete:");
+  console.log(`  Total:   ${redlistSpecies.length.toLocaleString()}`);
+  console.log(`  Linked:  ${linkedCount.toLocaleString()}`);
+  console.log(`  Output:  ${outputPath}`);
+  console.log(`  Duration: ${minutes}m ${seconds}s`);
+}
+
 async function main() {
   loadEnvFiles();
 
   console.log("match-redlist-species-to-gbif: GBIF Match API → redlist-species.csv");
   console.log("=".repeat(50));
 
-  const startTime = Date.now();
   const logger = new SyncLogger("match-redlist-species-to-gbif");
-
   try {
-    logger.log("match_start", {});
-
-    const redlistSpecies = await matchAllSpecies(logger);
-
-    const outputPath = path.join(DATA_DIR, "redlist-species.csv");
-    writeRedlistCsv(redlistSpecies, outputPath);
-
-    const linkedCount = redlistSpecies.filter((r) => r.gbif_species_key !== null).length;
-
-    const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
-    const minutes = Math.floor(Number(elapsed) / 60);
-    const seconds = Number(elapsed) % 60;
-
-    logger.log("match_complete", { total: redlistSpecies.length, linked: linkedCount, duration_seconds: Number(elapsed) });
-
-    console.log("\n" + "=".repeat(50));
-    console.log("match complete:");
-    console.log(`  Total:   ${redlistSpecies.length.toLocaleString()}`);
-    console.log(`  Linked:  ${linkedCount.toLocaleString()}`);
-    console.log(`  Output:  ${outputPath}`);
-    console.log(`  Duration: ${minutes}m ${seconds}s`);
+    await run({ logger });
   } finally {
     logger.close();
   }

@@ -140,44 +140,53 @@ export async function fetchCountsSinceAssessment(
 // MAIN
 // =============================================================================
 
+export async function run(opts: {
+  taxa?: string[];
+  logger?: SyncLogger;
+} = {}): Promise<void> {
+  const taxaToSync = getTaxa(opts.taxa);
+  const logger = opts.logger ?? SyncLogger.noop();
+
+  const startTime = Date.now();
+
+  const gbifSpeciesMap = loadGbifCsv();
+  let totalComputed = 0;
+
+  for (const taxon of taxaToSync) {
+    console.log(`\n${taxon.name} (${taxon.id}):`);
+    const count = await fetchCountsSinceAssessment(taxon, gbifSpeciesMap);
+    totalComputed += count;
+    logger.log("fetch_new_gbif_counts_taxon", { taxon_id: taxon.id, computed: count });
+  }
+
+  const outputPath = path.join(DATA_DIR, "gbif-species.csv");
+  writeGbifCsv(gbifSpeciesMap, outputPath);
+
+  const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
+  const minutes = Math.floor(Number(elapsed) / 60);
+  const seconds = Number(elapsed) % 60;
+
+  logger.log("fetch_new_gbif_counts_complete", { total_computed: totalComputed, duration_seconds: Number(elapsed) });
+
+  console.log("\n" + "=".repeat(50));
+  console.log("fetch-gbif-new-counts complete:");
+  console.log(`  Computed: ${totalComputed.toLocaleString()}`);
+  console.log(`  Output:   ${outputPath}`);
+  console.log(`  Duration: ${minutes}m ${seconds}s`);
+}
+
 async function main() {
   loadEnvFiles();
 
   const args = process.argv.slice(2);
   const taxonArg = args[0]?.toLowerCase();
-  const taxaToSync = getTaxa(taxonArg ? [taxonArg] : undefined);
 
   console.log("fetch-gbif-new-counts: GBIF counts since last assessment");
   console.log("=".repeat(50));
 
-  const startTime = Date.now();
   const logger = new SyncLogger("fetch-gbif-new-counts");
-
   try {
-    const gbifSpeciesMap = loadGbifCsv();
-    let totalComputed = 0;
-
-    for (const taxon of taxaToSync) {
-      console.log(`\n${taxon.name} (${taxon.id}):`);
-      const count = await fetchCountsSinceAssessment(taxon, gbifSpeciesMap);
-      totalComputed += count;
-      logger.log("taxon_complete", { taxon_id: taxon.id, computed: count });
-    }
-
-    const outputPath = path.join(DATA_DIR, "gbif-species.csv");
-    writeGbifCsv(gbifSpeciesMap, outputPath);
-
-    const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
-    const minutes = Math.floor(Number(elapsed) / 60);
-    const seconds = Number(elapsed) % 60;
-
-    logger.log("complete", { total_computed: totalComputed, duration_seconds: Number(elapsed) });
-
-    console.log("\n" + "=".repeat(50));
-    console.log("fetch-gbif-new-counts complete:");
-    console.log(`  Computed: ${totalComputed.toLocaleString()}`);
-    console.log(`  Output:   ${outputPath}`);
-    console.log(`  Duration: ${minutes}m ${seconds}s`);
+    await run({ taxa: taxonArg ? [taxonArg] : undefined, logger });
   } finally {
     logger.close();
   }

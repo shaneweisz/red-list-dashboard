@@ -196,19 +196,14 @@ export function writeRedlistCsv(species: RedlistSpecies[], outputPath: string): 
 // MAIN
 // =============================================================================
 
-async function main() {
-  loadEnvFiles();
-
-  const args = process.argv.slice(2);
-  const taxonArg = args[0]?.toLowerCase();
-
-  const taxaToSync = getTaxa(taxonArg ? [taxonArg] : undefined);
-
-  console.log("fetch-redlist-species: IUCN Red List DB → CSV");
-  console.log("=".repeat(50));
+export async function run(opts: {
+  taxa?: string[];
+  logger?: SyncLogger;
+} = {}): Promise<void> {
+  const taxaToSync = getTaxa(opts.taxa);
+  const logger = opts.logger ?? SyncLogger.noop();
 
   const startTime = Date.now();
-  const logger = new SyncLogger("fetch-redlist-species");
 
   const pgClient = new Client({
     host: process.env.DB_HOST || "localhost",
@@ -263,6 +258,22 @@ async function main() {
     console.log(`  Duration: ${minutes}m ${seconds}s`);
   } finally {
     await pgClient.end();
+  }
+}
+
+async function main() {
+  loadEnvFiles();
+
+  const args = process.argv.slice(2);
+  const taxonArg = args[0]?.toLowerCase();
+
+  console.log("fetch-redlist-species: IUCN Red List DB → CSV");
+  console.log("=".repeat(50));
+
+  const logger = new SyncLogger("fetch-redlist-species");
+  try {
+    await run({ taxa: taxonArg ? [taxonArg] : undefined, logger });
+  } finally {
     logger.close();
   }
 }

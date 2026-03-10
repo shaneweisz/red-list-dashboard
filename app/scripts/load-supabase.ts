@@ -199,15 +199,12 @@ function mergeSpecies(
 // MAIN
 // =============================================================================
 
-async function main() {
-  loadEnvFiles();
+export async function run(opts: {
+  dryRun?: boolean;
+} = {}): Promise<void> {
+  const dryRun = opts.dryRun ?? false;
 
-  const args = process.argv.slice(2);
-  const dryRun = args.includes("--dry-run");
-
-  console.log("load-supabase: Local CSVs → Supabase (single species table)");
   if (dryRun) console.log("Mode: --dry-run (no writes)");
-  console.log("=".repeat(50));
 
   const startTime = Date.now();
 
@@ -280,6 +277,18 @@ async function main() {
   console.log(`  GBIF only:      ${gbifOnly.toLocaleString()}`);
   console.log(`  Matched (both): ${both.toLocaleString()}`);
   console.log(`  Duration: ${minutes}m ${seconds}s`);
+}
+
+async function main() {
+  loadEnvFiles();
+
+  const args = process.argv.slice(2);
+  const dryRun = args.includes("--dry-run");
+
+  console.log("load-supabase: Local CSVs → Supabase (single species table)");
+  console.log("=".repeat(50));
+
+  await run({ dryRun });
 }
 
 const isDirectRun = process.argv[1]?.endsWith("load-supabase.ts") || process.argv[1]?.endsWith("load-supabase.js");
