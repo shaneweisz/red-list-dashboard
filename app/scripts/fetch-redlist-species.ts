@@ -21,56 +21,7 @@ import {
   writeCsv,
   DATA_DIR,
 } from "./utils";
-
-// =============================================================================
-// TAXA CONFIG
-// =============================================================================
-
-export interface RedlistTaxon {
-  id: string;
-  name: string;
-  filterColumn: "kingdom_name" | "phylum_name" | "class_name" | "order_name";
-  filterValues: string[];
-}
-
-export const REDLIST_TAXA: RedlistTaxon[] = [
-  // Vertebrates
-  { id: "mammalia", name: "Mammals", filterColumn: "class_name", filterValues: ["MAMMALIA"] },
-  { id: "aves", name: "Birds", filterColumn: "class_name", filterValues: ["AVES"] },
-  { id: "reptilia", name: "Reptiles", filterColumn: "class_name", filterValues: ["REPTILIA"] },
-  { id: "amphibia", name: "Amphibians", filterColumn: "class_name", filterValues: ["AMPHIBIA"] },
-  { id: "fishes", name: "Fishes", filterColumn: "class_name", filterValues: ["ACTINOPTERYGII", "CHONDRICHTHYES", "MYXINI", "PETROMYZONTI", "SARCOPTERYGII"] },
-  // Invertebrates
-  { id: "insecta", name: "Insects", filterColumn: "class_name", filterValues: ["INSECTA"] },
-  { id: "mollusca", name: "Molluscs", filterColumn: "phylum_name", filterValues: ["MOLLUSCA"] },
-  { id: "crustacea", name: "Crustaceans", filterColumn: "class_name", filterValues: ["MALACOSTRACA", "MAXILLOPODA", "BRANCHIOPODA", "OSTRACODA", "HEXANAUPLIA"] },
-  { id: "arachnida", name: "Arachnids", filterColumn: "class_name", filterValues: ["ARACHNIDA"] },
-  { id: "corals", name: "Corals", filterColumn: "order_name", filterValues: ["SCLERACTINIA", "ALCYONACEA", "PENNATULACEA"] },
-  { id: "velvet_worms", name: "Velvet Worms", filterColumn: "class_name", filterValues: ["UDEONYCHOPHORA"] },
-  { id: "horseshoe_crabs", name: "Horseshoe Crabs", filterColumn: "class_name", filterValues: ["MEROSTOMATA"] },
-  // "Other Invertebrates" needs two entries because it spans different filter columns:
-  // non-coral Anthozoa are filtered by order_name (to separate them from corals, which
-  // are also in class ANTHOZOA), while the remaining classes are filtered by class_name.
-  // Both entries share the same taxon_group id to match the IUCN Red List Table 1a grouping.
-  { id: "other_invertebrates", name: "Other Invertebrates (non-coral Anthozoa)", filterColumn: "order_name", filterValues: [
-    "ACTINIARIA", "ZOANTHARIA", "PENICILLARIA", "MALACALCYONCAEA", "SCLERALCYONACEA",
-  ] },
-  { id: "other_invertebrates", name: "Other Invertebrates", filterColumn: "class_name", filterValues: [
-    "HOLOTHUROIDEA", "CLITELLATA", "DIPLOPODA", "COLLEMBOLA", "CHILOPODA",
-    "DEMOSPONGIAE", "HYDROZOA", "NEMERTEA",
-    "ASTEROIDEA", "CALCAREA", "POLYCHAETA", "TURBELLARIA", "ECHINOIDEA",
-  ] },
-  // Plants
-  { id: "mosses", name: "Mosses", filterColumn: "phylum_name", filterValues: ["BRYOPHYTA", "ANTHOCEROTOPHYTA", "MARCHANTIOPHYTA"] },
-  { id: "ferns_and_allies", name: "Ferns and Allies", filterColumn: "class_name", filterValues: ["LYCOPODIOPSIDA", "ISOETOPSIDA", "EQUISETOPSIDA", "MARATTIOPSIDA", "POLYPODIOPSIDA", "PSILOTOPSIDA"] },
-  { id: "gymnosperms", name: "Gymnosperms", filterColumn: "class_name", filterValues: ["PINOPSIDA", "CYCADOPSIDA", "GINKGOOPSIDA", "GNETOPSIDA"] },
-  { id: "flowering_plants", name: "Flowering Plants", filterColumn: "class_name", filterValues: ["MAGNOLIOPSIDA", "LILIOPSIDA"] },
-  { id: "green_algae", name: "Green Algae", filterColumn: "phylum_name", filterValues: ["CHLOROPHYTA", "CHAROPHYTA"] },
-  { id: "red_algae", name: "Red Algae", filterColumn: "phylum_name", filterValues: ["RHODOPHYTA"] },
-  // Fungi & Protists
-  { id: "mushrooms", name: "Mushrooms, etc.", filterColumn: "phylum_name", filterValues: ["ASCOMYCOTA", "BASIDIOMYCOTA"] },
-  { id: "brown_algae", name: "Brown Algae", filterColumn: "phylum_name", filterValues: ["OCHROPHYTA"] },
-];
+import { TAXA, getTaxa, type Taxon, type RedlistQuery } from "./taxa";
 
 const POPULATION_TRENDS: Record<string, string> = {
   "0": "Increasing",
@@ -107,7 +58,8 @@ export interface RedlistSpecies {
 
 export async function fetchFromIucnDb(
   pgClient: Client,
-  taxon: RedlistTaxon
+  taxonId: string,
+  query: RedlistQuery,
 ): Promise<RedlistSpecies[]> {
   const mainQuery = `
     SELECT DISTINCT ON (t.sis_id)
@@ -129,7 +81,7 @@ export async function fetchFromIucnDb(
     LEFT JOIN taxon_common_names tcn ON tcn.taxon_id = t.id
       AND tcn.language_id = 609 AND tcn.main = true
     LEFT JOIN population_trend_lookup pt ON pt.id = a.population_trend_id
-    WHERE t.${taxon.filterColumn} = ANY($1)
+    WHERE t.${query.filterColumn} = ANY($1)
       AND t.latest = true
       AND a.latest = true
       AND a.suppress = false
@@ -139,7 +91,7 @@ export async function fetchFromIucnDb(
     ORDER BY t.sis_id, a.assessment_date DESC
   `;
 
-  const mainResult = await pgClient.query(mainQuery, [taxon.filterValues]);
+  const mainResult = await pgClient.query(mainQuery, [query.filterValues]);
 
   const species: RedlistSpecies[] = [];
   const assessmentIds: number[] = [];
@@ -163,7 +115,7 @@ export async function fetchFromIucnDb(
       year_published: row.year_published,
       population_trend: POPULATION_TRENDS[row.population_trend_code] || null,
       countries: [],
-      taxon_group_table1a: taxon.id,
+      taxon_group_table1a: taxonId,
       gbif_species_key: null,
       match_type: null,
     });
@@ -250,15 +202,7 @@ async function main() {
   const args = process.argv.slice(2);
   const taxonArg = args[0]?.toLowerCase();
 
-  const taxaToSync = taxonArg
-    ? REDLIST_TAXA.filter((t) => t.id === taxonArg)
-    : REDLIST_TAXA;
-
-  if (taxonArg && taxaToSync.length === 0) {
-    console.error(`Unknown taxon: ${taxonArg}`);
-    console.error("Available:", REDLIST_TAXA.map((t) => t.id).join(", "));
-    process.exit(1);
-  }
+  const taxaToSync = getTaxa(taxonArg ? [taxonArg] : undefined);
 
   console.log("fetch-redlist-species: IUCN Red List DB → CSV");
   console.log("=".repeat(50));
@@ -278,9 +222,8 @@ async function main() {
     await pgClient.connect();
     console.log("Connected to IUCN database\n");
 
-    logger.log("sync_start", {
+    logger.log("fetch_redlist_species_start", {
       taxa: taxaToSync.map((t) => t.id),
-      taxa_count: taxaToSync.length,
     });
 
     const allSpecies: RedlistSpecies[] = [];
@@ -289,12 +232,16 @@ async function main() {
       const taxonStart = Date.now();
       console.log(`\n${taxon.name} (${taxon.id}):`);
 
-      const species = await fetchFromIucnDb(pgClient, taxon);
-      console.log(`  Fetched ${species.length} species from IUCN DB`);
-      allSpecies.push(...species);
+      let taxonCount = 0;
+      for (const query of taxon.redlist) {
+        const species = await fetchFromIucnDb(pgClient, taxon.id, query);
+        console.log(`  Fetched ${species.length} species`);
+        taxonCount += species.length;
+        allSpecies.push(...species);
+      }
 
       const taxonDuration = ((Date.now() - taxonStart) / 1000).toFixed(1);
-      logger.log("taxon_complete", { taxon_group: taxon.id, taxon_name: taxon.name, fetched: species.length, duration_seconds: Number(taxonDuration) });
+      logger.log("fetch_redlist_species_taxon", { taxon: taxon.id, fetched: taxonCount, duration_seconds: Number(taxonDuration) });
     }
 
     const outputPath = path.join(DATA_DIR, "redlist-species.csv");
@@ -304,13 +251,13 @@ async function main() {
     const minutes = Math.floor(Number(elapsed) / 60);
     const seconds = Number(elapsed) % 60;
 
-    logger.log("sync_complete", {
+    logger.log("fetch_redlist_species_complete", {
       total_species: allSpecies.length,
       duration_seconds: Number(elapsed),
     });
 
     console.log("\n" + "=".repeat(50));
-    console.log("fetch-redlist complete:");
+    console.log("fetch-redlist-species complete:");
     console.log(`  Species: ${allSpecies.length.toLocaleString()}`);
     console.log(`  Output:  ${outputPath}`);
     console.log(`  Duration: ${minutes}m ${seconds}s`);

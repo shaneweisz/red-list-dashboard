@@ -27,15 +27,13 @@ import {
   DATA_DIR,
   toTitleCase,
 } from "./utils";
+import { TAXA, getTaxa } from "./taxa";
 import {
   fetchFromIucnDb,
   writeRedlistCsv,
   RedlistSpecies,
-  REDLIST_TAXA,
 } from "./fetch-redlist-species";
 import {
-  GBIF_TAXA,
-  GbifTaxon,
   GbifSpecies,
   fetchGbifCounts,
   validateSpeciesKeys,
@@ -43,14 +41,6 @@ import {
 } from "./fetch-gbif-species";
 import { fetchCountsSinceAssessment } from "./fetch-gbif-new-counts";
 import { matchAllSpecies } from "./match-redlist-species-to-gbif";
-
-function getGbifTaxon(redlistId: string): GbifTaxon {
-  const gbifTaxon = GBIF_TAXA[redlistId];
-  if (!gbifTaxon) {
-    throw new Error(`No GBIF taxon for: ${redlistId}`);
-  }
-  return gbifTaxon;
-}
 
 // =============================================================================
 // MAIN
@@ -62,25 +52,8 @@ async function main() {
   const args = process.argv.slice(2);
   const taxonFilter = args.length > 0 ? args.map((a) => a.toLowerCase()) : undefined;
 
-  // Deduplicate REDLIST_TAXA by id (other_invertebrates has two entries)
-  const seenIds = new Set<string>();
-  const uniqueTaxaIds: string[] = [];
-  for (const t of REDLIST_TAXA) {
-    if (!seenIds.has(t.id)) {
-      seenIds.add(t.id);
-      uniqueTaxaIds.push(t.id);
-    }
-  }
-
-  const taxaIds = taxonFilter || uniqueTaxaIds;
-
-  for (const id of taxaIds) {
-    if (!seenIds.has(id)) {
-      console.error(`Unknown taxon: ${id}`);
-      console.error("Available:", uniqueTaxaIds.join(", "));
-      process.exit(1);
-    }
-  }
+  const taxa = getTaxa(taxonFilter);
+  const taxaIds = taxa.map((t) => t.id);
 
   console.log("sync: Full sync");
   console.log("=".repeat(60));
@@ -115,20 +88,18 @@ async function main() {
     const fetchStart = Date.now();
     logger.log("fetch_start", { taxa: taxaIds });
 
-    for (const taxonId of taxaIds) {
-      const redlistEntries = REDLIST_TAXA.filter((t) => t.id === taxonId);
-      const taxonName = redlistEntries[0].name;
+    for (const taxon of taxa) {
       const taxonStart = Date.now();
 
-      console.log(`\n${taxonName} (${taxonId})`);
+      console.log(`\n${taxon.name} (${taxon.id})`);
 
       // ── Red List ──
       console.log("  ▸ Red List");
       const redlistStart = Date.now();
       let taxonRedlistCount = 0;
-      for (const entry of redlistEntries) {
-        const species = await fetchFromIucnDb(pgClient, entry);
-        console.log(`    ${entry.name}: ${species.length} species`);
+      for (const query of taxon.redlist) {
+        const species = await fetchFromIucnDb(pgClient, taxon.id, query);
+        console.log(`    ${species.length} species`);
         taxonRedlistCount += species.length;
         allRedlistSpecies.push(...species);
       }
@@ -137,19 +108,18 @@ async function main() {
 
       const redlistDuration = ((Date.now() - redlistStart) / 1000).toFixed(1);
       logger.log("fetch_redlist_species", {
-        taxon: taxonId,
+        taxon: taxon.id,
         species_count: taxonRedlistCount,
         duration_seconds: Number(redlistDuration),
       });
 
       // ── GBIF ──
-      const gbifTaxon = getGbifTaxon(taxonId);
-      if (!fetchedGbifTaxa.has(gbifTaxon.id)) {
-        fetchedGbifTaxa.add(gbifTaxon.id);
+      if (!fetchedGbifTaxa.has(taxon.id)) {
+        fetchedGbifTaxa.add(taxon.id);
 
-        console.log(`  ▸ GBIF (${gbifTaxon.name})`);
+        console.log(`  ▸ GBIF (${taxon.name})`);
         const gbifStart = Date.now();
-        const rawResults = await fetchGbifCounts(gbifTaxon);
+        const rawResults = await fetchGbifCounts(taxon);
         console.log(`    Raw species: ${rawResults.length}`);
 
         const speciesKeys = rawResults.map((r) => r.speciesKey);
@@ -173,13 +143,13 @@ async function main() {
 
         const gbifDuration = ((Date.now() - gbifStart) / 1000).toFixed(1);
         logger.log("fetch_gbif_species", {
-          taxon: gbifTaxon.id,
+          taxon: taxon.id,
           raw_count: rawResults.length,
           valid_count: validSpecies.size,
           duration_seconds: Number(gbifDuration),
         });
       } else {
-        console.log(`  ▸ GBIF (${gbifTaxon.name}) — already fetched`);
+        console.log(`  ▸ GBIF (${taxon.name}) — already fetched`);
       }
 
       const taxonDuration = ((Date.now() - taxonStart) / 1000).toFixed(1);
@@ -225,20 +195,15 @@ async function main() {
     const saStart = Date.now();
     logger.log("fetch_new_gbif_counts_start", {});
 
-    const processedGbifTaxa = new Set<string>();
-    for (const taxonId of taxaIds) {
-      const gbifTaxon = getGbifTaxon(taxonId);
-      if (processedGbifTaxa.has(gbifTaxon.id)) continue;
-      processedGbifTaxa.add(gbifTaxon.id);
-
-      console.log(`\n${gbifTaxon.name} (${gbifTaxon.id})`);
+    for (const taxon of taxa) {
+      console.log(`\n${taxon.name} (${taxon.id})`);
       const taxonSaStart = Date.now();
-      const saCount = await fetchCountsSinceAssessment(gbifTaxon, allGbifSpecies);
+      const saCount = await fetchCountsSinceAssessment(taxon, allGbifSpecies);
       const taxonSaDuration = ((Date.now() - taxonSaStart) / 1000).toFixed(1);
       console.log(`  Computed for ${saCount} species`);
 
       logger.log("fetch_new_gbif_counts_taxon", {
-        taxon: gbifTaxon.id,
+        taxon: taxon.id,
         species_computed: saCount,
         duration_seconds: Number(taxonSaDuration),
       });

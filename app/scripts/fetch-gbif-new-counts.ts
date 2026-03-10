@@ -22,9 +22,8 @@ import {
   DATA_DIR,
   mapConcurrent,
 } from "./utils";
+import { TAXA, getTaxa, type Taxon } from "./taxa";
 import {
-  GBIF_TAXA,
-  GbifTaxon,
   GbifSpecies,
   fetchFacets,
   writeGbifCsv,
@@ -77,7 +76,7 @@ function loadAssessmentYears(taxonGbifKeys: Set<number>): Map<number, number> {
 // =============================================================================
 
 export async function fetchCountsSinceAssessment(
-  taxon: GbifTaxon,
+  taxon: Taxon,
   gbifSpeciesMap: Map<number, GbifSpecies>,
 ): Promise<number> {
   const taxonGbifKeys = new Set<number>();
@@ -104,10 +103,10 @@ export async function fetchCountsSinceAssessment(
     sinceAssessmentCounts.set(speciesKey, 0);
   });
 
-  console.log(`  ${yearBuckets.length} year buckets x ${taxon.queries.length} queries`);
+  console.log(`  ${yearBuckets.length} year buckets x ${taxon.gbif.length} queries`);
 
-  for (let qi = 0; qi < taxon.queries.length; qi++) {
-    const q = taxon.queries[qi];
+  for (let qi = 0; qi < taxon.gbif.length; qi++) {
+    const q = taxon.gbif[qi];
     let completedBuckets = 0;
 
     await mapConcurrent(yearBuckets, YEAR_BUCKET_CONCURRENCY, async (assessmentYear) => {
@@ -124,7 +123,7 @@ export async function fetchCountsSinceAssessment(
       }
 
       completedBuckets++;
-      process.stdout.write(`\r  Query ${qi + 1}/${taxon.queries.length}: ${completedBuckets}/${yearBuckets.length} year buckets`);
+      process.stdout.write(`\r  Query ${qi + 1}/${taxon.gbif.length}: ${completedBuckets}/${yearBuckets.length} year buckets`);
     });
   }
   if (yearBuckets.length > 0) console.log("");
@@ -146,16 +145,7 @@ async function main() {
 
   const args = process.argv.slice(2);
   const taxonArg = args[0]?.toLowerCase();
-
-  const taxaToSync = taxonArg
-    ? (GBIF_TAXA[taxonArg] ? [GBIF_TAXA[taxonArg]] : [])
-    : Object.values(GBIF_TAXA);
-
-  if (taxonArg && taxaToSync.length === 0) {
-    console.error(`Unknown taxon: ${taxonArg}`);
-    console.error("Available:", Object.keys(GBIF_TAXA).join(", "));
-    process.exit(1);
-  }
+  const taxaToSync = getTaxa(taxonArg ? [taxonArg] : undefined);
 
   console.log("fetch-gbif-new-counts: GBIF counts since last assessment");
   console.log("=".repeat(50));
