@@ -306,20 +306,24 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
     );
   }
 
+  // Separate "all" row from per-taxon rows
+  const allTaxon = taxa.find((t) => t.id === "all");
+  const perTaxa = taxa.filter((t) => t.id !== "all");
+
   // Calculate totals
-  const totalAssessed = taxa.reduce((sum, t) => sum + t.totalAssessed, 0);
-  const totalOutdated = taxa.reduce((sum, t) => sum + t.outdated, 0);
-  const totalDescribed = taxa.reduce((sum, t) => sum + t.estimatedDescribed, 0);
+  const totalAssessed = perTaxa.reduce((sum, t) => sum + t.totalAssessed, 0);
+  const totalOutdated = perTaxa.reduce((sum, t) => sum + t.outdated, 0);
+  const totalDescribed = allTaxon?.estimatedDescribed ?? perTaxa.reduce((sum, t) => sum + t.estimatedDescribed, 0);
   const totalPercentAssessed = (totalAssessed / totalDescribed) * 100;
   const totalPercentOutdated = (totalOutdated / totalAssessed) * 100;
   const totalByCategory: Record<string, number> = {};
-  for (const t of taxa) {
+  for (const t of perTaxa) {
     for (const [cat, count] of Object.entries(t.byCategory || {})) {
       totalByCategory[cat] = (totalByCategory[cat] || 0) + count;
     }
   }
-  const totalGbifObs = taxa.reduce((sum, t) => sum + (t.totalGbifObservations || 0), 0);
-  const totalGbifSpecies = taxa.reduce((sum, t) => sum + (t.gbifSpeciesCount || 0), 0);
+  const totalGbifObs = perTaxa.reduce((sum, t) => sum + (t.totalGbifObservations || 0), 0);
+  const totalGbifSpecies = perTaxa.reduce((sum, t) => sum + (t.gbifSpeciesCount || 0), 0);
   const totalMeanGbifObs = totalGbifSpecies > 0 ? Math.round(totalGbifObs / totalGbifSpecies) : 0;
 
 
@@ -736,7 +740,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
 
           {/* Collapse to selected rows only when taxa selected and modifier key not held */}
           {(selectedTaxa.size > 0 && !modifierHeld)
-            ? taxa
+            ? perTaxa
                 .filter((taxon) => selectedTaxa.has(taxon.id))
                 .map((taxon) =>
                   renderRow(
@@ -755,7 +759,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
                     { total: taxon.totalGbifObservations, mean: taxon.meanGbifObsPerSpecies, median: taxon.medianGbifObsPerSpecies, speciesCount: taxon.gbifSpeciesCount, distribution: taxon.gbifObsDistribution }
                   )
                 )
-            : taxa.map((taxon) =>
+            : perTaxa.map((taxon) =>
                 renderRow(
                   taxon.id,
                   taxon.name,
