@@ -12,7 +12,7 @@
  *
  * Prerequisites:
  *   1. CSV files exist in app/data/ (produced by pipeline scripts)
- *   2. Environment variables: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+ *   2. Environment variables: SUPABASE_URL, SUPABASE_SECRET_KEY
  *
  * Usage:
  *   npx tsx scripts/load-supabase.ts              # Push all data

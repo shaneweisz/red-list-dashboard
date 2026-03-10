@@ -36,11 +36,17 @@ function mergeByCategory(
 }
 
 export async function GET() {
-  const { data, error } = await supabase
-    .from("taxa_summary")
-    .select(
-      "table1a_taxon_group, total_assessed, outdated, by_category, gbif_species_count, total_gbif_observations, mean_gbif_obs, median_gbif_obs"
-    );
+  const { data: rows, error } = await supabase.rpc("get_taxa_summary");
+  const data = (rows ?? []) as Array<{
+    table1a_taxon_group: string;
+    total_assessed: number;
+    outdated: number;
+    by_category: Record<string, number>;
+    gbif_species_count: number;
+    total_gbif_observations: number;
+    mean_gbif_obs: number;
+    median_gbif_obs: number | null;
+  }>;
 
   if (error) {
     return NextResponse.json(
