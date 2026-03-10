@@ -291,7 +291,6 @@ const GBIF_CSV_COLUMNS = [
 
 export function writeGbifCsv(speciesMap: Map<number, GbifSpecies>, outputPath: string): void {
   const rows = Array.from(speciesMap.values())
-    .sort((a, b) => b.total_count - a.total_count)
     .map((s) => ({
       gbif_species_key: s.gbif_species_key,
       scientific_name: s.scientific_name,

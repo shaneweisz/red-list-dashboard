@@ -158,7 +158,7 @@ async function main() {
       writeRedlistCsv(allRedlistSpecies, path.join(DATA_DIR, "redlist-species.csv"));
 
       const redlistDuration = ((Date.now() - redlistStart) / 1000).toFixed(1);
-      logger.log("fetch_redlist", {
+      logger.log("fetch_redlist_species", {
         taxon: taxonId,
         species_count: taxonRedlistCount,
         duration_seconds: Number(redlistDuration),
@@ -194,7 +194,7 @@ async function main() {
         writeGbifCsv(allGbifSpecies, path.join(DATA_DIR, "gbif-species.csv"));
 
         const gbifDuration = ((Date.now() - gbifStart) / 1000).toFixed(1);
-        logger.log("fetch_gbif", {
+        logger.log("fetch_gbif_species", {
           taxon: gbifTaxon.id,
           raw_count: rawResults.length,
           valid_count: validSpecies.size,
@@ -222,14 +222,14 @@ async function main() {
     console.log("Phase 2: Match species");
     console.log("═".repeat(60));
     const matchStart = Date.now();
-    logger.log("match_start", {});
+    logger.log("match_redlist_species_to_gbif_start", {});
 
     const matchedSpecies = await matchAllSpecies(logger);
     writeRedlistCsv(matchedSpecies, path.join(DATA_DIR, "redlist-species.csv"));
 
     const linkedCount = matchedSpecies.filter((r) => r.gbif_species_key !== null).length;
     const matchDuration = ((Date.now() - matchStart) / 1000).toFixed(1);
-    logger.log("match_complete", {
+    logger.log("match_redlist_species_to_gbif_complete", {
       total: matchedSpecies.length,
       linked: linkedCount,
       duration_seconds: Number(matchDuration),
