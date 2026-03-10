@@ -1,5 +1,5 @@
 /**
- * push-to-db: Local CSVs → Supabase
+ * load-supabase: Local CSVs → Supabase
  *
  * Reads redlist-species.csv and gbif-species.csv,
  * merges them into a single species table, then truncates and reloads.
@@ -15,8 +15,8 @@
  *   2. Environment variables: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
  *
  * Usage:
- *   npx tsx scripts/push-to-db.ts              # Push all data
- *   npx tsx scripts/push-to-db.ts --dry-run    # Show what would be pushed
+ *   npx tsx scripts/load-supabase.ts              # Push all data
+ *   npx tsx scripts/load-supabase.ts --dry-run    # Show what would be pushed
  */
 
 import * as path from "path";
@@ -205,7 +205,7 @@ async function main() {
   const args = process.argv.slice(2);
   const dryRun = args.includes("--dry-run");
 
-  console.log("push-to-db: Local CSVs → Supabase (single species table)");
+  console.log("load-supabase: Local CSVs → Supabase (single species table)");
   if (dryRun) console.log("Mode: --dry-run (no writes)");
   console.log("=".repeat(50));
 
@@ -274,7 +274,7 @@ async function main() {
   const seconds = Number(elapsed) % 60;
 
   console.log("\n" + "=".repeat(50));
-  console.log("push-to-db complete:");
+  console.log("load-supabase complete:");
   console.log(`  Species:        ${merged.length.toLocaleString()} rows`);
   console.log(`  Red List only:  ${redlistOnly.toLocaleString()}`);
   console.log(`  GBIF only:      ${gbifOnly.toLocaleString()}`);
@@ -282,7 +282,7 @@ async function main() {
   console.log(`  Duration: ${minutes}m ${seconds}s`);
 }
 
-const isDirectRun = process.argv[1]?.endsWith("push-to-db.ts") || process.argv[1]?.endsWith("push-to-db.js");
+const isDirectRun = process.argv[1]?.endsWith("load-supabase.ts") || process.argv[1]?.endsWith("load-supabase.js");
 if (isDirectRun) {
   main().catch((err) => {
     console.error("Fatal error:", err);

@@ -2,7 +2,7 @@
  * Validates taxa_summary materialized view against IUCN Table 1a (2025-1).
  *
  * Requires actual pipeline data in the DB.
- * Run manually after: sync.ts → push-to-db.ts
+ * Run manually after: sync.ts → load-supabase.ts
  *
  * Usage: TEST_TABLE1A=1 npx vitest run scripts/__tests__/validate-table1a.test.ts
  */
