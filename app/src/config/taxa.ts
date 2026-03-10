@@ -2,13 +2,11 @@
  * Taxa configuration for IUCN Red List and GBIF data
  *
  * Each taxon has:
- * - id: Unique identifier used in API routes and file names
+ * - id: Unique identifier used in API routes
  * - name: Display name
  * - apiEndpoint: IUCN API endpoint path (kingdom or class)
  * - estimatedDescribed: Estimated number of described species (hardcoded for now)
  * - estimatedSource: Source/citation for the estimate
- * - dataFile: Path to the pre-computed JSON file (Red List)
- * - gbifDataFile: Path to the pre-computed CSV file (GBIF species counts)
  * - gbifKingdomKey: GBIF backbone taxonomy kingdom key
  * - gbifClassKey: GBIF backbone taxonomy class key (for filtering within kingdom)
  * - color: Theme color for UI elements
@@ -22,9 +20,6 @@ export interface TaxonConfig {
   estimatedDescribed: number;
   estimatedSource: string;
   estimatedSourceUrl?: string;
-  dataFile: string; // Primary data file
-  dataFiles?: string[]; // Multiple data files for combined taxa
-  gbifDataFile: string;
   gbifKingdomKey?: number;
   gbifClassKey?: number;
   gbifClassKeys?: number[]; // Multiple class keys for taxa like Reptilia
@@ -46,25 +41,6 @@ export const TAXA: TaxonConfig[] = [
     estimatedDescribed: 2174939, // Sum of all taxa
     estimatedSource: "IUCN 2025-2",
     estimatedSourceUrl: "https://nc.iucnredlist.org/redlist/content/attachment_files/2025-2_RL_Table1a.pdf",
-    dataFile: "redlist-all.json", // Not used - we merge all files
-    dataFiles: [
-      "redlist-mammalia.json",
-      "redlist-aves.json",
-      "redlist-reptilia.json",
-      "redlist-amphibia.json",
-      "redlist-actinopterygii.json",
-      "redlist-chondrichthyes.json",
-      "redlist-insecta.json",
-      "redlist-arachnida.json",
-      "redlist-gastropoda.json",
-      "redlist-bivalvia.json",
-      "redlist-malacostraca.json",
-      "redlist-anthozoa.json",
-      "redlist-plantae.json",
-      "redlist-ascomycota.json",
-      "redlist-basidiomycota.json",
-    ],
-    gbifDataFile: "gbif-all.csv",
     color: "#dc2626", // red-600
   },
   {
@@ -74,8 +50,6 @@ export const TAXA: TaxonConfig[] = [
     estimatedDescribed: 6819,
     estimatedSource: IUCN_SOURCE,
     estimatedSourceUrl: IUCN_SOURCE_URL,
-    dataFile: "redlist-mammalia.json",
-    gbifDataFile: "gbif-mammalia.csv",
     gbifKingdomKey: 1,
     gbifClassKey: 359,
     color: "#f97316", // orange-500
@@ -87,8 +61,6 @@ export const TAXA: TaxonConfig[] = [
     estimatedDescribed: 11185,
     estimatedSource: IUCN_SOURCE,
     estimatedSourceUrl: IUCN_SOURCE_URL,
-    dataFile: "redlist-aves.json",
-    gbifDataFile: "gbif-aves.csv",
     gbifKingdomKey: 1,
     gbifClassKey: 212,
     color: "#3b82f6", // blue-500
@@ -100,8 +72,6 @@ export const TAXA: TaxonConfig[] = [
     estimatedDescribed: 12502,
     estimatedSource: IUCN_SOURCE,
     estimatedSourceUrl: IUCN_SOURCE_URL,
-    dataFile: "redlist-reptilia.json",
-    gbifDataFile: "gbif-reptilia.csv",
     gbifKingdomKey: 1,
     // GBIF splits Reptilia into: Squamata, Crocodylia, Testudines
     gbifClassKeys: [11592253, 11493978, 11418114],
@@ -114,8 +84,6 @@ export const TAXA: TaxonConfig[] = [
     estimatedDescribed: 8918,
     estimatedSource: IUCN_SOURCE,
     estimatedSourceUrl: IUCN_SOURCE_URL,
-    dataFile: "redlist-amphibia.json",
-    gbifDataFile: "gbif-amphibia.csv",
     gbifKingdomKey: 1,
     gbifClassKey: 131,
     color: "#14b8a6", // teal-500
@@ -128,9 +96,6 @@ export const TAXA: TaxonConfig[] = [
     estimatedDescribed: 37288,
     estimatedSource: IUCN_SOURCE,
     estimatedSourceUrl: IUCN_SOURCE_URL,
-    dataFile: "redlist-fishes.json",
-    dataFiles: ["redlist-actinopterygii.json", "redlist-chondrichthyes.json"],
-    gbifDataFile: "gbif-fishes.csv",
     gbifKingdomKey: 1,
     // Combined: ray-finned fish orders + Elasmobranchii (121) + Holocephali (120)
     gbifOrderKeys: [389,391,427,428,446,494,495,496,497,498,499,537,538,547,548,549,550,587,588,589,590,696,708,742,752,753,772,773,774,781,836,848,857,860,861,888,889,890,898,929,975,976,1067,1153,1313],
@@ -145,9 +110,6 @@ export const TAXA: TaxonConfig[] = [
     estimatedDescribed: 1508442, // IUCN invertebrates subtotal
     estimatedSource: IUCN_SOURCE,
     estimatedSourceUrl: IUCN_SOURCE_URL,
-    dataFile: "redlist-invertebrates.json",
-    dataFiles: ["redlist-insecta.json", "redlist-arachnida.json", "redlist-gastropoda.json", "redlist-bivalvia.json", "redlist-malacostraca.json", "redlist-anthozoa.json"],
-    gbifDataFile: "gbif-invertebrates.csv",
     gbifKingdomKey: 1,
     gbifClassKeys: [216, 367, 225, 137, 229, 206], // Insecta, Arachnida, Gastropoda, Bivalvia, Malacostraca, Anthozoa
     color: "#78716c", // stone-500
@@ -159,8 +121,6 @@ export const TAXA: TaxonConfig[] = [
     estimatedDescribed: 426132,
     estimatedSource: IUCN_SOURCE,
     estimatedSourceUrl: IUCN_SOURCE_URL,
-    dataFile: "redlist-plantae.json",
-    gbifDataFile: "gbif-plantae.csv",
     gbifKingdomKey: 6,
     color: "#22c55e", // green-500
   },
@@ -172,9 +132,6 @@ export const TAXA: TaxonConfig[] = [
     estimatedDescribed: 162653, // IUCN fungi & protists subtotal
     estimatedSource: IUCN_SOURCE,
     estimatedSourceUrl: IUCN_SOURCE_URL,
-    dataFile: "redlist-fungi.json",
-    dataFiles: ["redlist-ascomycota.json", "redlist-basidiomycota.json"],
-    gbifDataFile: "gbif-fungi.csv",
     gbifKingdomKey: 5,
     color: "#d97706", // amber-600
   },
