@@ -10,7 +10,7 @@
  *   2. gbif-species.csv exists (from fetch-gbif)
  *
  * Usage:
- *   npx tsx scripts/match-redlist-species-to-gbif.ts
+ *   npx tsx scripts/03-match-redlist-species-to-gbif.ts
  */
 
 import * as path from "path";
@@ -25,7 +25,7 @@ import {
 import {
   RedlistSpecies,
   writeRedlistCsv,
-} from "./fetch-redlist-species";
+} from "./01-fetch-redlist-species";
 
 // =============================================================================
 // CONFIGURATION

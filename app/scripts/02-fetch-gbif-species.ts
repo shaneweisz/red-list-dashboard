@@ -4,8 +4,8 @@
  * Fetches per-species observation counts from GBIF and writes to gbif-species.csv.
  *
  * Usage:
- *   npx tsx scripts/fetch-gbif-species.ts [taxon]   # Fetch one taxon (e.g. mammalia)
- *   npx tsx scripts/fetch-gbif-species.ts            # Fetch all taxa
+ *   npx tsx scripts/02-fetch-gbif-species.ts [taxon]   # Fetch one taxon (e.g. mammalia)
+ *   npx tsx scripts/02-fetch-gbif-species.ts            # Fetch all taxa
  */
 
 import * as path from "path";

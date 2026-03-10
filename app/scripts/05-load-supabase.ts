@@ -15,8 +15,8 @@
  *   2. Environment variables: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
  *
  * Usage:
- *   npx tsx scripts/load-supabase.ts              # Push all data
- *   npx tsx scripts/load-supabase.ts --dry-run    # Show what would be pushed
+ *   npx tsx scripts/05-load-supabase.ts              # Push all data
+ *   npx tsx scripts/05-load-supabase.ts --dry-run    # Show what would be pushed
  */
 
 import * as path from "path";
