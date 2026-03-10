@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import * as fs from "fs";
-import * as path from "path";
+import { supabase } from "@/lib/supabase/server";
+import { TAXA } from "@/config/taxa";
 import { CACHE_1H } from "@/lib/cache-headers";
 
 interface TaxonSummary {
@@ -22,51 +22,114 @@ interface TaxonSummary {
   gbifObsDistribution?: Record<string, number>;
 }
 
-interface SummaryFile {
-  taxa: TaxonSummary[];
-  globalGbifMedian?: number;
-  globalGbifDistribution?: Record<string, number>;
-  generatedAt: string;
-}
+// Maps each TAXA id to the table1a_taxon_group values it aggregates
+const TAXON_GROUP_MAP: Record<string, string[]> = {
+  all: [
+    "mammalia", "aves", "reptilia", "amphibia",
+    "actinopterygii", "chondrichthyes",
+    "insecta", "arachnida", "gastropoda", "bivalvia", "malacostraca", "anthozoa",
+    "plantae", "ascomycota", "basidiomycota",
+  ],
+  mammalia: ["mammalia"],
+  aves: ["aves"],
+  reptilia: ["reptilia"],
+  amphibia: ["amphibia"],
+  fishes: ["actinopterygii", "chondrichthyes"],
+  invertebrates: ["insecta", "arachnida", "gastropoda", "bivalvia", "malacostraca", "anthozoa"],
+  plantae: ["plantae"],
+  fungi: ["ascomycota", "basidiomycota"],
+};
 
-// In-memory cache
-let cachedSummary: SummaryFile | null = null;
-let cacheTime = 0;
-const CACHE_TTL = 60 * 60 * 1000; // 1 hour
-
-function loadSummary(): SummaryFile | null {
-  const summaryPath = path.join(process.cwd(), "data", "taxa-summary.json");
-
-  try {
-    if (!fs.existsSync(summaryPath)) {
-      return null;
+function mergeByCategory(
+  rows: Array<{ by_category: Record<string, number> }>
+): Record<string, number> {
+  const merged: Record<string, number> = {};
+  for (const row of rows) {
+    for (const [cat, count] of Object.entries(row.by_category ?? {})) {
+      merged[cat] = (merged[cat] ?? 0) + count;
     }
-    const content = fs.readFileSync(summaryPath, "utf-8");
-    return JSON.parse(content);
-  } catch {
-    return null;
   }
+  return merged;
 }
 
 export async function GET() {
-  // Check cache
-  if (cachedSummary && Date.now() - cacheTime < CACHE_TTL) {
-    return NextResponse.json({ taxa: cachedSummary.taxa, globalGbifMedian: cachedSummary.globalGbifMedian, globalGbifDistribution: cachedSummary.globalGbifDistribution, cached: true }, { headers: CACHE_1H });
-  }
+  const { data, error } = await supabase
+    .from("taxa_summary")
+    .select(
+      "table1a_taxon_group, total_assessed, outdated, by_category, gbif_species_count, total_gbif_observations, mean_gbif_obs, median_gbif_obs"
+    );
 
-  // Load pre-computed summary file (~2KB instead of ~110MB)
-  const summary = loadSummary();
-
-  if (!summary) {
+  if (error) {
     return NextResponse.json(
-      { error: "Taxa summary not found. Run: npx tsx scripts/generate-taxa-summary.ts" },
+      { error: `Failed to query taxa_summary: ${error.message}` },
       { status: 500 }
     );
   }
 
-  // Cache it
-  cachedSummary = summary;
-  cacheTime = Date.now();
+  // Index rows by taxon group for fast lookup
+  const rowsByGroup = new Map(
+    (data ?? []).map((row) => [row.table1a_taxon_group, row])
+  );
 
-  return NextResponse.json({ taxa: summary.taxa, globalGbifMedian: summary.globalGbifMedian, globalGbifDistribution: summary.globalGbifDistribution, cached: false }, { headers: CACHE_1H });
+  const taxa: TaxonSummary[] = TAXA.map((taxon) => {
+    const groups = TAXON_GROUP_MAP[taxon.id] ?? [];
+    const matchedRows = groups
+      .map((g) => rowsByGroup.get(g))
+      .filter(Boolean) as typeof data;
+
+    const available = matchedRows.length > 0;
+
+    const totalAssessed = matchedRows.reduce(
+      (sum, r) => sum + Number(r.total_assessed ?? 0),
+      0
+    );
+    const outdated = matchedRows.reduce(
+      (sum, r) => sum + Number(r.outdated ?? 0),
+      0
+    );
+    const byCategory = mergeByCategory(
+      matchedRows.map((r) => ({ by_category: r.by_category ?? {} }))
+    );
+    const totalGbifObservations = matchedRows.reduce(
+      (sum, r) => sum + Number(r.total_gbif_observations ?? 0),
+      0
+    );
+    const gbifSpeciesCount = matchedRows.reduce(
+      (sum, r) => sum + Number(r.gbif_species_count ?? 0),
+      0
+    );
+    const meanGbifObsPerSpecies =
+      gbifSpeciesCount > 0 ? totalGbifObservations / gbifSpeciesCount : undefined;
+
+    // For combined taxa the per-group medians cannot be recomputed exactly;
+    // use the single-group median when available, otherwise omit.
+    const medianGbifObsPerSpecies =
+      matchedRows.length === 1 && matchedRows[0].median_gbif_obs != null
+        ? Number(matchedRows[0].median_gbif_obs)
+        : undefined;
+
+    return {
+      id: taxon.id,
+      name: taxon.name,
+      color: taxon.color,
+      estimatedDescribed: taxon.estimatedDescribed,
+      available,
+      totalAssessed,
+      percentAssessed:
+        taxon.estimatedDescribed > 0
+          ? (totalAssessed / taxon.estimatedDescribed) * 100
+          : 0,
+      outdated,
+      percentOutdated:
+        totalAssessed > 0 ? (outdated / totalAssessed) * 100 : 0,
+      lastUpdated: null,
+      byCategory,
+      totalGbifObservations: available ? totalGbifObservations : undefined,
+      meanGbifObsPerSpecies: available ? meanGbifObsPerSpecies : undefined,
+      medianGbifObsPerSpecies: available ? medianGbifObsPerSpecies : undefined,
+      gbifSpeciesCount: available ? gbifSpeciesCount : undefined,
+    };
+  });
+
+  return NextResponse.json({ taxa }, { headers: CACHE_1H });
 }

@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import * as fs from "fs";
-import * as path from "path";
-import { getTaxonConfig, TAXA, CATEGORY_COLORS, CATEGORY_NAMES } from "@/config/taxa";
-import { parseGbifCsvLine } from "@/lib/data-utils";
+import { getTaxonConfig, CATEGORY_COLORS, CATEGORY_NAMES } from "@/config/taxa";
 import { CACHE_1H } from "@/lib/cache-headers";
+import { supabase } from "@/lib/supabase/server";
+import { getTaxonGroups } from "@/lib/supabase/taxon-groups";
 
 // Category order for display (most threatened first, NE last)
 const CATEGORY_ORDER = ["EX", "EW", "CR", "EN", "VU", "NT", "LC", "DD", "NE"];
@@ -15,160 +14,38 @@ interface CategoryStats {
   color: string;
 }
 
-interface Species {
-  sis_taxon_id: number;
-  scientific_name?: string;
-  category: string;
-  year_published: string;
-  assessment_date?: string | null;
-  countries?: string[];
+interface SpeciesRow {
+  sis_taxon_id: number | null;
+  gbif_species_key: number | null;
+  iucn_category: string | null;
+  assessment_date: string | null;
+  gbif_total_count: number | null;
+  countries: string[] | null;
 }
 
-// Cache for GBIF CSV lookups (scientific_name_lowercase → observationsTotal)
-interface GbifCsvRow {
-  observationsTotal: number;
-}
-const gbifCsvCache: Map<string, Map<string, GbifCsvRow>> = new Map();
-const gbifCsvCacheLoadTimes: Map<string, number> = new Map();
+async function fetchAllSpecies(taxonId: string): Promise<SpeciesRow[]> {
+  const groups = getTaxonGroups(taxonId);
+  const allRows: SpeciesRow[] = [];
+  const pageSize = 1000;
+  let from = 0;
 
-function loadGbifCsvLookup(taxonId: string): Map<string, GbifCsvRow> {
-  const cacheTime = gbifCsvCacheLoadTimes.get(taxonId) || 0;
-  if (gbifCsvCache.has(taxonId) && Date.now() - cacheTime < CACHE_RELOAD_INTERVAL) {
-    return gbifCsvCache.get(taxonId)!;
+  while (true) {
+    const { data, error } = await supabase
+      .from("species")
+      .select("sis_taxon_id, gbif_species_key, iucn_category, assessment_date, gbif_total_count, countries")
+      .in("table1a_taxon_group", groups)
+      .range(from, from + pageSize - 1);
+
+    if (error) throw new Error(`Supabase query failed: ${error.message}`);
+    if (!data || data.length === 0) break;
+
+    allRows.push(...(data as SpeciesRow[]));
+
+    if (data.length < pageSize) break;
+    from += pageSize;
   }
 
-  const lookup = new Map<string, GbifCsvRow>();
-  const dataDir = path.join(process.cwd(), "data");
-
-  const csvFiles: string[] = [];
-  if (taxonId === "all") {
-    const topLevelTaxa = TAXA.filter(t => t.id !== "all");
-    for (const t of topLevelTaxa) {
-      csvFiles.push(t.gbifDataFile);
-    }
-  } else {
-    const taxon = getTaxonConfig(taxonId);
-    csvFiles.push(taxon.gbifDataFile);
-  }
-
-  for (const csvFile of csvFiles) {
-    const csvPath = path.join(dataDir, csvFile);
-    if (!fs.existsSync(csvPath)) continue;
-
-    try {
-      const content = fs.readFileSync(csvPath, "utf-8");
-      const lines = content.trim().split("\n");
-      const header = lines[0];
-      if (!header.includes("scientific_name")) continue;
-
-      for (let i = 1; i < lines.length; i++) {
-        const record = parseGbifCsvLine(lines[i], { hasScientificName: true, hasSinceAssessment: false });
-        const scientificName = record.scientific_name?.toLowerCase().trim();
-
-        if (scientificName && !isNaN(record.occurrence_count)) {
-          lookup.set(scientificName, { observationsTotal: record.occurrence_count });
-        }
-      }
-    } catch {
-      // CSV not available or malformed, skip
-    }
-  }
-
-  gbifCsvCache.set(taxonId, lookup);
-  gbifCsvCacheLoadTimes.set(taxonId, Date.now());
-  return lookup;
-}
-
-interface PrecomputedData {
-  species: Species[];
-  metadata: {
-    totalSpecies: number;
-    fetchedAt: string;
-    pagesProcessed: number;
-    byCategory: Record<string, number>;
-    taxonId?: string;
-  };
-}
-
-// In-memory cache (keyed by taxon ID)
-const cachedData: Map<string, PrecomputedData | null> = new Map();
-const cacheLoadTimes: Map<string, number> = new Map();
-const CACHE_RELOAD_INTERVAL = 60 * 60 * 1000; // Reload file every hour
-
-function loadPrecomputedData(taxonId: string): PrecomputedData | null {
-  const taxon = getTaxonConfig(taxonId);
-  const dataPath = path.join(process.cwd(), "data", taxon.dataFile);
-
-  try {
-    // First try to load the single data file
-    if (fs.existsSync(dataPath)) {
-      const fileContent = fs.readFileSync(dataPath, "utf-8");
-      return JSON.parse(fileContent) as PrecomputedData;
-    }
-
-    // If single file doesn't exist, try to merge multiple data files (for combined taxa)
-    if (taxon.dataFiles && taxon.dataFiles.length > 0) {
-      const allSpecies: Species[] = [];
-      const byCategory: Record<string, number> = {};
-      let latestFetchedAt = "";
-
-      for (const fileName of taxon.dataFiles) {
-        const filePath = path.join(process.cwd(), "data", fileName);
-        if (fs.existsSync(filePath)) {
-          const fileContent = fs.readFileSync(filePath, "utf-8");
-          const data = JSON.parse(fileContent) as PrecomputedData;
-          allSpecies.push(...data.species);
-
-          // Merge category counts
-          if (data.metadata.byCategory) {
-            for (const [cat, count] of Object.entries(data.metadata.byCategory)) {
-              byCategory[cat] = (byCategory[cat] || 0) + count;
-            }
-          }
-
-          // Track the latest fetch time
-          if (data.metadata.fetchedAt > latestFetchedAt) {
-            latestFetchedAt = data.metadata.fetchedAt;
-          }
-        }
-      }
-
-      if (allSpecies.length > 0) {
-        return {
-          species: allSpecies,
-          metadata: {
-            totalSpecies: allSpecies.length,
-            fetchedAt: latestFetchedAt,
-            pagesProcessed: 0,
-            byCategory,
-            taxonId,
-          },
-        };
-      }
-    }
-
-    console.warn(`Pre-computed data file not found: ${dataPath}`);
-    return null;
-  } catch (error) {
-    console.error(`Error loading pre-computed data for ${taxonId}:`, error);
-    return null;
-  }
-}
-
-function getSpeciesData(taxonId: string): PrecomputedData | null {
-  const cacheTime = cacheLoadTimes.get(taxonId) || 0;
-  const cached = cachedData.get(taxonId);
-  // Reload from file if cache is stale, empty, or was null (retry failed loads)
-  if (!cachedData.has(taxonId) || cached === null || Date.now() - cacheTime > CACHE_RELOAD_INTERVAL) {
-    const data = loadPrecomputedData(taxonId);
-    // Only cache successful loads
-    if (data) {
-      cachedData.set(taxonId, data);
-      cacheLoadTimes.set(taxonId, Date.now());
-    }
-    return data;
-  }
-  return cached || null;
+  return allRows;
 }
 
 export async function GET(request: NextRequest) {
@@ -176,12 +53,14 @@ export async function GET(request: NextRequest) {
   const taxonId = searchParams.get("taxon") || "plantae";
   const taxon = getTaxonConfig(taxonId);
 
-  const data = getSpeciesData(taxonId);
-
-  if (!data) {
+  let allSpecies: SpeciesRow[];
+  try {
+    allSpecies = await fetchAllSpecies(taxonId);
+  } catch (error) {
+    console.error(`Error fetching species from Supabase for ${taxonId}:`, error);
     return NextResponse.json(
       {
-        error: `Species data not available for ${taxon.name}. Run: npx tsx scripts/fetch-redlist-species.ts ${taxonId}`,
+        error: `Species data not available for ${taxon.name}.`,
         taxon: {
           id: taxon.id,
           name: taxon.name,
@@ -193,42 +72,23 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Count NE species from GBIF CSV (species in GBIF but not in Red List)
-  let neCount = 0;
-  try {
-    // Build set of Red List scientific names for matching
-    const redListNames = new Set(
-      data.species.map((s) => s.scientific_name?.toLowerCase?.() || "").filter(Boolean)
-    );
+  // Red List species: have a sis_taxon_id
+  const redListSpecies = allSpecies.filter((s) => s.sis_taxon_id !== null);
+  // NE species: in GBIF but not Red List (gbif_species_key set, sis_taxon_id null)
+  const neSpecies = allSpecies.filter(
+    (s) => s.sis_taxon_id === null && s.gbif_species_key !== null
+  );
 
-    // For "all" taxon, read each individual taxon's CSV
-    const csvFiles = taxonId === "all"
-      ? TAXA.filter(t => t.id !== "all").map(t => t.gbifDataFile)
-      : [taxon.gbifDataFile];
+  const totalAssessed = redListSpecies.length;
+  const neCount = neSpecies.length;
 
-    for (const csvFile of csvFiles) {
-      const gbifCsvPath = path.join(process.cwd(), "data", csvFile);
-      if (!fs.existsSync(gbifCsvPath)) continue;
-
-      const csvContent = fs.readFileSync(gbifCsvPath, "utf-8");
-      const lines = csvContent.trim().split("\n");
-      const header = lines[0];
-      if (!header.includes("scientific_name")) continue;
-
-      for (let i = 1; i < lines.length; i++) {
-        const parts = lines[i].split(",");
-        const scientificName = parts[2]?.toLowerCase?.().trim();
-        if (scientificName && !redListNames.has(scientificName)) {
-          neCount++;
-        }
-      }
-    }
-  } catch {
-    // Ignore errors counting NE species
+  // Build category counts from Red List species
+  const byCategoryData: Record<string, number> = { NE: neCount };
+  for (const s of redListSpecies) {
+    const cat = s.iucn_category || "DD";
+    byCategoryData[cat] = (byCategoryData[cat] || 0) + 1;
   }
 
-  // Build category stats from precomputed data
-  const byCategoryData: Record<string, number> = { ...data.metadata.byCategory, NE: neCount };
   const byCategory: CategoryStats[] = CATEGORY_ORDER.map((code) => ({
     code,
     name: CATEGORY_NAMES[code],
@@ -236,9 +96,9 @@ export async function GET(request: NextRequest) {
     color: CATEGORY_COLORS[code],
   }));
 
-  const totalWithNE = data.metadata.totalSpecies + neCount;
+  const sampleSize = totalAssessed + neCount;
 
-  // Compute year-range distribution
+  // Compute year-range distribution (Red List species only, skip NE category)
   const currentYear = new Date().getFullYear();
   const yearRanges = [
     { range: "0-1 years", shortRange: "0-1y", count: 0 },
@@ -247,8 +107,8 @@ export async function GET(request: NextRequest) {
     { range: "11-20 years", shortRange: "11-20y", count: 0 },
     { range: "20+ years", shortRange: ">20y", count: 0 },
   ];
-  for (const s of data.species) {
-    if (!s.assessment_date || s.category === "NE") continue;
+  for (const s of redListSpecies) {
+    if (!s.assessment_date) continue;
     const yr = new Date(s.assessment_date).getFullYear();
     const diff = currentYear - yr;
     if (diff <= 1) yearRanges[0].count++;
@@ -258,8 +118,7 @@ export async function GET(request: NextRequest) {
     else yearRanges[4].count++;
   }
 
-  // Compute GBIF observation distribution
-  const gbifLookup = loadGbifCsvLookup(taxonId);
+  // Compute GBIF observation distribution (Red List species only)
   const obsRanges = [
     { range: "0", shortRange: "0", count: 0 },
     { range: "1-10", shortRange: "1-10", count: 0 },
@@ -268,9 +127,8 @@ export async function GET(request: NextRequest) {
     { range: "1K-10K", shortRange: "1K-10K", count: 0 },
     { range: "10K+", shortRange: "10K+", count: 0 },
   ];
-  for (const s of data.species) {
-    const row = gbifLookup.get((s.scientific_name || "").toLowerCase().trim());
-    const obs = row?.observationsTotal ?? 0;
+  for (const s of redListSpecies) {
+    const obs = s.gbif_total_count ?? 0;
     if (obs === 0) obsRanges[0].count++;
     else if (obs <= 10) obsRanges[1].count++;
     else if (obs <= 100) obsRanges[2].count++;
@@ -279,9 +137,9 @@ export async function GET(request: NextRequest) {
     else obsRanges[5].count++;
   }
 
-  // Compute country counts
+  // Compute country counts (Red List species only)
   const countryCounts: Record<string, number> = {};
-  for (const s of data.species) {
+  for (const s of redListSpecies) {
     if (s.countries) {
       for (const code of s.countries) {
         countryCounts[code] = (countryCounts[code] || 0) + 1;
@@ -289,22 +147,23 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({
-    totalAssessed: data.metadata.totalSpecies,
-    byCategory,
-    sampleSize: totalWithNE,
-    lastUpdated: data.metadata.fetchedAt,
-    cached: true,
-    taxon: {
-      id: taxon.id,
-      name: taxon.name,
-      estimatedDescribed: taxon.estimatedDescribed,
-      estimatedSource: taxon.estimatedSource,
-      color: taxon.color,
+  return NextResponse.json(
+    {
+      totalAssessed,
+      byCategory,
+      sampleSize,
+      taxon: {
+        id: taxon.id,
+        name: taxon.name,
+        estimatedDescribed: taxon.estimatedDescribed,
+        estimatedSource: taxon.estimatedSource,
+        color: taxon.color,
+      },
+      // Pre-computed chart distributions
+      yearRanges,
+      obsRanges,
+      countryCounts,
     },
-    // Pre-computed chart distributions
-    yearRanges,
-    obsRanges,
-    countryCounts,
-  }, { headers: CACHE_1H });
+    { headers: CACHE_1H }
+  );
 }

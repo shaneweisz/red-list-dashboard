@@ -1,29 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { promises as fs } from "fs";
-import path from "path";
 import { getTaxonConfig, TaxonConfig } from "@/config/taxa";
 import {
-  parseGbifCsvLine,
   filterSpecies,
   paginate,
   computeDistribution,
   type SpeciesRecord,
 } from "@/lib/data-utils";
 import { CACHE_5M } from "@/lib/cache-headers";
-
-interface RedListSpecies {
-  scientific_name: string;
-  category: string;
-}
-
-// Cache per taxon (for CSV data)
-const dataCache: Record<string, SpeciesRecord[]> = {};
-
-// Valid species keys cache (for filtering live queries)
-const validSpeciesKeysCache: Record<string, Set<number>> = {};
-
-// Red List lookup cache: scientific_name (lowercase) -> category
-const redListCache: Record<string, Map<string, string>> = {};
+import { supabase } from "@/lib/supabase/server";
+import { getTaxonGroups } from "@/lib/supabase/taxon-groups";
 
 // Data source keys for live queries
 const DATA_SOURCES: Record<string, { type: "dataset" | "publishingOrg"; key: string }> = {
@@ -32,92 +17,67 @@ const DATA_SOURCES: Record<string, { type: "dataset" | "publishingOrg"; key: str
   BSBI: { type: "publishingOrg", key: "aa569acf-991d-4467-b327-8442f30ddbd2" },
 };
 
-async function loadRedListLookup(taxon: TaxonConfig): Promise<Map<string, string>> {
-  const cacheKey = taxon.id;
-  if (redListCache[cacheKey]) return redListCache[cacheKey];
+async function loadRedListLookup(taxonId: string): Promise<Map<string, string>> {
+  const groups = getTaxonGroups(taxonId);
+
+  const { data, error } = await supabase
+    .from("species")
+    .select("scientific_name, iucn_category")
+    .not("sis_taxon_id", "is", null)
+    .in("table1a_taxon_group", groups)
+    .limit(500000);
+
+  if (error) throw new Error(`Supabase error loading red list lookup: ${error.message}`);
 
   const lookup = new Map<string, string>();
-
-  // Load from primary dataFile or multiple dataFiles
-  const files = taxon.dataFiles || [taxon.dataFile];
-
-  for (const file of files) {
-    const filePath = path.join(process.cwd(), "data", file);
-    try {
-      const content = await fs.readFile(filePath, "utf-8");
-      const data = JSON.parse(content);
-      const species: RedListSpecies[] = data.species || [];
-
-      for (const sp of species) {
-        if (sp.scientific_name && sp.category) {
-          // Normalize name for matching (lowercase, trim)
-          const normalizedName = sp.scientific_name.toLowerCase().trim();
-          lookup.set(normalizedName, sp.category);
-        }
-      }
-    } catch {
-      // File not found or invalid, skip
+  for (const row of data ?? []) {
+    if (row.scientific_name && row.iucn_category) {
+      lookup.set(row.scientific_name.toLowerCase().trim(), row.iucn_category);
     }
   }
-
-  redListCache[cacheKey] = lookup;
   return lookup;
 }
 
-async function loadCsvData(taxonId: string): Promise<SpeciesRecord[]> {
-  if (dataCache[taxonId]) return dataCache[taxonId];
+async function loadSupabaseData(taxonId: string): Promise<SpeciesRecord[]> {
+  const groups = getTaxonGroups(taxonId);
 
-  const taxon = getTaxonConfig(taxonId);
-  const filePath = path.join(process.cwd(), "data", taxon.gbifDataFile);
+  const { data, error } = await supabase
+    .from("species")
+    .select(
+      "gbif_species_key, gbif_total_count, scientific_name, iucn_category, gbif_count_since_assessment"
+    )
+    .not("gbif_species_key", "is", null)
+    .in("table1a_taxon_group", groups)
+    .order("gbif_total_count", { ascending: false })
+    .limit(500000);
 
-  try {
-    const fileContent = await fs.readFile(filePath, "utf-8");
-    const lines = fileContent.trim().split("\n");
-    const header = lines[0];
-    const hasScientificName = header.includes("scientific_name");
+  if (error) throw new Error(`Supabase error loading species: ${error.message}`);
 
-    // Load Red List lookup for this taxon
-    const redListLookup = await loadRedListLookup(taxon);
-
-    const hasSinceAssessment = header.includes("observations_after_assessment_year") || header.includes("occurrences_since_assessment");
-
-    // Skip header, parse each line, then enrich with Red List category
-    dataCache[taxonId] = lines.slice(1).map((line) => {
-      const record = parseGbifCsvLine(line, { hasScientificName, hasSinceAssessment });
-
-      // Look up Red List category by scientific name
-      let redlist_category: string | null = null;
-      if (record.scientific_name) {
-        const normalizedName = record.scientific_name.toLowerCase().trim();
-        redlist_category = redListLookup.get(normalizedName) || null;
-      }
-
-      return { ...record, redlist_category };
-    });
-
-    // Also build the valid species keys set for filtering live queries
-    validSpeciesKeysCache[taxonId] = new Set(
-      dataCache[taxonId].map(r => r.species_key)
-    );
-
-    return dataCache[taxonId];
-  } catch {
-    // File doesn't exist for this taxon yet
-    return [];
-  }
+  return (data ?? []).map((row) => ({
+    species_key: row.gbif_species_key as number,
+    occurrence_count: row.gbif_total_count ?? 0,
+    scientific_name: row.scientific_name ?? undefined,
+    redlist_category: row.iucn_category ?? null,
+    observations_after_assessment_year: row.gbif_count_since_assessment ?? null,
+  }));
 }
 
-// Get valid species keys from CSV (for filtering live query results)
 async function getValidSpeciesKeys(taxonId: string): Promise<Set<number>> {
-  if (validSpeciesKeysCache[taxonId]) return validSpeciesKeysCache[taxonId];
+  const groups = getTaxonGroups(taxonId);
 
-  // Load CSV data which will populate the cache
-  await loadCsvData(taxonId);
+  const { data, error } = await supabase
+    .from("species")
+    .select("gbif_species_key")
+    .not("gbif_species_key", "is", null)
+    .in("table1a_taxon_group", groups)
+    .limit(500000);
 
-  return validSpeciesKeysCache[taxonId] || new Set();
+  if (error) throw new Error(`Supabase error loading species keys: ${error.message}`);
+
+  return new Set((data ?? []).map((row) => row.gbif_species_key as number));
 }
 
-// Handle unfiltered requests using CSV data (accurate, pre-validated species)
+// Handle unfiltered requests using Supabase data (accurate, pre-validated species)
 async function handleCsvRequest(
   taxonId: string,
   page: number,
@@ -127,7 +87,7 @@ async function handleCsvRequest(
   sortOrder: string,
   redlistFilter: string | null
 ) {
-  const data = await loadCsvData(taxonId);
+  const data = await loadSupabaseData(taxonId);
 
   // Filter by occurrence count range and Red List category
   let filtered = filterSpecies(data, { minCount, maxCount, redlistFilter });
@@ -136,7 +96,7 @@ async function handleCsvRequest(
   if (sortOrder === "asc") {
     filtered = [...filtered].sort((a, b) => a.occurrence_count - b.occurrence_count);
   }
-  // Default is already sorted desc from the CSV
+  // Default is already sorted desc from the Supabase query
 
   // Paginate
   const paginated = paginate(filtered, page, limit);
@@ -186,9 +146,9 @@ async function handleLiveRequest(
   maxUncertainty: string | null,
   dataSource: string | null
 ) {
-  const redListLookup = await loadRedListLookup(taxon);
+  const redListLookup = await loadRedListLookup(taxonId);
 
-  // Get valid species keys from CSV to filter out subspecies/synonyms
+  // Get valid species keys from Supabase to filter out subspecies/synonyms
   const validSpeciesKeys = await getValidSpeciesKeys(taxonId);
 
   // Use GBIF occurrence search with facets
@@ -269,7 +229,7 @@ async function handleLiveRequest(
     });
   }
 
-  // Convert facets to species records, filtering to only valid species from CSV
+  // Convert facets to species records, filtering to only valid species from Supabase
   const allSpecies = speciesFacets.counts
     .map((facet: { name: string; count: number }) => ({
       speciesKey: parseInt(facet.name),
@@ -400,7 +360,7 @@ export async function GET(request: NextRequest) {
         dataSource
       );
     } else {
-      // Use pre-computed CSV data for accurate species counts
+      // Use pre-computed Supabase data for accurate species counts
       return await handleCsvRequest(
         taxonId,
         page,

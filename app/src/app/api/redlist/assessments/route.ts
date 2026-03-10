@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import * as fs from "fs";
-import * as path from "path";
-import { getTaxonConfig } from "@/config/taxa";
+import { supabase } from "@/lib/supabase/server";
+import { getTaxonGroups } from "@/lib/supabase/taxon-groups";
 import { CACHE_1H } from "@/lib/cache-headers";
 
 interface YearRange {
@@ -9,90 +8,6 @@ interface YearRange {
   count: number;
   minYear: number;
   maxYear: number;
-}
-
-interface Species {
-  assessment_date: string | null;
-}
-
-interface PrecomputedData {
-  species: Species[];
-  metadata: {
-    totalSpecies: number;
-    fetchedAt: string;
-    taxonId?: string;
-  };
-}
-
-// In-memory cache (keyed by taxon ID)
-const cachedData: Map<string, PrecomputedData | null> = new Map();
-const cacheLoadTimes: Map<string, number> = new Map();
-const CACHE_RELOAD_INTERVAL = 60 * 60 * 1000; // Reload file every hour
-
-function loadPrecomputedData(taxonId: string): PrecomputedData | null {
-  const taxon = getTaxonConfig(taxonId);
-  const dataPath = path.join(process.cwd(), "data", taxon.dataFile);
-
-  try {
-    // First try to load the single data file
-    if (fs.existsSync(dataPath)) {
-      const fileContent = fs.readFileSync(dataPath, "utf-8");
-      return JSON.parse(fileContent) as PrecomputedData;
-    }
-
-    // If single file doesn't exist, try to merge multiple data files (for combined taxa)
-    if (taxon.dataFiles && taxon.dataFiles.length > 0) {
-      const allSpecies: Species[] = [];
-      let latestFetchedAt = "";
-
-      for (const fileName of taxon.dataFiles) {
-        const filePath = path.join(process.cwd(), "data", fileName);
-        if (fs.existsSync(filePath)) {
-          const fileContent = fs.readFileSync(filePath, "utf-8");
-          const data = JSON.parse(fileContent) as PrecomputedData;
-          allSpecies.push(...data.species);
-
-          // Track the latest fetch time
-          if (data.metadata.fetchedAt > latestFetchedAt) {
-            latestFetchedAt = data.metadata.fetchedAt;
-          }
-        }
-      }
-
-      if (allSpecies.length > 0) {
-        return {
-          species: allSpecies,
-          metadata: {
-            totalSpecies: allSpecies.length,
-            fetchedAt: latestFetchedAt,
-            taxonId,
-          },
-        };
-      }
-    }
-
-    console.warn(`Pre-computed data file not found: ${dataPath}`);
-    return null;
-  } catch (error) {
-    console.error(`Error loading pre-computed data for ${taxonId}:`, error);
-    return null;
-  }
-}
-
-function getSpeciesData(taxonId: string): PrecomputedData | null {
-  const cacheTime = cacheLoadTimes.get(taxonId) || 0;
-  const cached = cachedData.get(taxonId);
-  // Reload from file if cache is stale, empty, or was null (retry failed loads)
-  if (!cachedData.has(taxonId) || cached === null || Date.now() - cacheTime > CACHE_RELOAD_INTERVAL) {
-    const data = loadPrecomputedData(taxonId);
-    // Only cache successful loads
-    if (data) {
-      cachedData.set(taxonId, data);
-      cacheLoadTimes.set(taxonId, Date.now());
-    }
-    return data;
-  }
-  return cached || null;
 }
 
 function getYearRange(yearsSince: number): string {
@@ -103,21 +18,49 @@ function getYearRange(yearsSince: number): string {
   return "20+ years";
 }
 
+const PAGE_SIZE = 10_000;
+
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const taxonId = searchParams.get("taxon") || "plantae";
-  const taxon = getTaxonConfig(taxonId);
+  const groups = getTaxonGroups(taxonId);
 
-  const data = getSpeciesData(taxonId);
+  // Fetch all assessment_date values for the taxon, paginating past Supabase's default limit
+  const allDates: (string | null)[] = [];
+  let from = 0;
+  let totalCount: number | null = null;
 
-  if (!data) {
-    return NextResponse.json(
-      {
-        error: `Species data not available for ${taxon.name}. Run: npx tsx scripts/fetch-redlist-species.ts ${taxonId}`,
-      },
-      { status: 503 }
-    );
+  while (true) {
+    const { data, error, count } = await supabase
+      .from("species")
+      .select("assessment_date", { count: "exact" })
+      .not("sis_taxon_id", "is", null)
+      .in("table1a_taxon_group", groups)
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) {
+      console.error("Supabase error fetching assessments:", error);
+      return NextResponse.json(
+        { error: "Failed to fetch species data from database." },
+        { status: 503 }
+      );
+    }
+
+    if (totalCount === null) {
+      totalCount = count ?? 0;
+    }
+
+    if (data && data.length > 0) {
+      for (const row of data) {
+        allDates.push((row as { assessment_date: string | null }).assessment_date);
+      }
+    }
+
+    if (!data || data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
   }
+
+  const sampleSize = totalCount ?? allDates.length;
 
   const currentYear = new Date().getFullYear();
   const yearCounts: Record<string, number> = {
@@ -128,10 +71,9 @@ export async function GET(request: NextRequest) {
     "20+ years": 0,
   };
 
-  // Count species by year range (based on assessment_date)
-  for (const species of data.species) {
-    if (species.assessment_date) {
-      const assessmentYear = new Date(species.assessment_date).getFullYear();
+  for (const assessmentDate of allDates) {
+    if (assessmentDate) {
+      const assessmentYear = new Date(assessmentDate).getFullYear();
       if (!isNaN(assessmentYear)) {
         const yearsSince = currentYear - assessmentYear;
         const range = getYearRange(yearsSince);
@@ -140,7 +82,6 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Build year ranges array in order
   const yearRanges: YearRange[] = [
     { range: "0-1 years", count: yearCounts["0-1 years"], minYear: 0, maxYear: 1 },
     { range: "2-5 years", count: yearCounts["2-5 years"], minYear: 2, maxYear: 5 },
@@ -149,10 +90,13 @@ export async function GET(request: NextRequest) {
     { range: "20+ years", count: yearCounts["20+ years"], minYear: 21, maxYear: 999 },
   ];
 
-  return NextResponse.json({
-    yearsSinceAssessment: yearRanges,
-    sampleSize: data.metadata.totalSpecies,
-    lastUpdated: data.metadata.fetchedAt,
-    cached: true,
-  }, { headers: CACHE_1H });
+  return NextResponse.json(
+    {
+      yearsSinceAssessment: yearRanges,
+      sampleSize,
+      lastUpdated: new Date().toISOString(),
+      cached: true,
+    },
+    { headers: CACHE_1H }
+  );
 }

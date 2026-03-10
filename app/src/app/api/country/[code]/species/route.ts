@@ -1,81 +1,44 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTaxonConfig, TaxonConfig } from "@/config/taxa";
-import { promises as fs } from "fs";
-import path from "path";
+import { getTaxonConfig } from "@/config/taxa";
 import { computeDistribution } from "@/lib/data-utils";
 import { CACHE_5M } from "@/lib/cache-headers";
+import { supabase } from "@/lib/supabase/server";
+import { getTaxonGroups } from "@/lib/supabase/taxon-groups";
 
-interface RedListSpecies {
-  scientific_name: string;
-  category: string;
-}
-
-// Red List lookup cache: taxon -> (scientific_name lowercase -> category)
-const redListCache: Record<string, Map<string, string>> = {};
-
-// GBIF species key -> scientific name cache (from our pre-computed CSV files)
-const gbifNameCache: Record<string, Map<number, string>> = {};
-
-async function loadRedListLookup(taxon: TaxonConfig): Promise<Map<string, string>> {
-  const cacheKey = taxon.id;
-  if (redListCache[cacheKey]) return redListCache[cacheKey];
+async function loadRedListLookup(taxonId: string): Promise<Map<string, string>> {
+  const groups = getTaxonGroups(taxonId);
+  // Query species with IUCN data
+  const { data } = await supabase
+    .from('species')
+    .select('scientific_name, iucn_category')
+    .not('sis_taxon_id', 'is', null)
+    .in('table1a_taxon_group', groups)
+    .limit(500000);
 
   const lookup = new Map<string, string>();
-
-  // Load from primary dataFile or multiple dataFiles
-  const files = taxon.dataFiles || [taxon.dataFile];
-
-  for (const file of files) {
-    const filePath = path.join(process.cwd(), "data", file);
-    try {
-      const content = await fs.readFile(filePath, "utf-8");
-      const data = JSON.parse(content);
-      const species: RedListSpecies[] = data.species || [];
-
-      for (const sp of species) {
-        if (sp.scientific_name && sp.category) {
-          const normalizedName = sp.scientific_name.toLowerCase().trim();
-          lookup.set(normalizedName, sp.category);
-        }
-      }
-    } catch {
-      // File not found or invalid, skip
+  for (const row of data || []) {
+    if (row.scientific_name && row.iucn_category) {
+      lookup.set(row.scientific_name.toLowerCase().trim(), row.iucn_category);
     }
   }
-
-  redListCache[cacheKey] = lookup;
   return lookup;
 }
 
-// Load species key -> name mapping from GBIF CSV
-async function loadGbifNameLookup(taxon: TaxonConfig): Promise<Map<number, string>> {
-  const cacheKey = taxon.id;
-  if (gbifNameCache[cacheKey]) return gbifNameCache[cacheKey];
+async function loadGbifNameLookup(taxonId: string): Promise<Map<number, string>> {
+  const groups = getTaxonGroups(taxonId);
+  const { data } = await supabase
+    .from('species')
+    .select('gbif_species_key, scientific_name')
+    .not('gbif_species_key', 'is', null)
+    .in('table1a_taxon_group', groups)
+    .limit(500000);
 
   const lookup = new Map<number, string>();
-  const filePath = path.join(process.cwd(), "data", taxon.gbifDataFile);
-
-  try {
-    const content = await fs.readFile(filePath, "utf-8");
-    const lines = content.trim().split("\n");
-    const header = lines[0];
-    const hasScientificName = header.includes("scientific_name");
-
-    if (hasScientificName) {
-      for (let i = 1; i < lines.length; i++) {
-        const parts = lines[i].split(",");
-        const speciesKey = parseInt(parts[0], 10);
-        const scientificName = parts[2];
-        if (speciesKey && scientificName) {
-          lookup.set(speciesKey, scientificName);
-        }
-      }
+  for (const row of data || []) {
+    if (row.gbif_species_key && row.scientific_name) {
+      lookup.set(row.gbif_species_key, row.scientific_name);
     }
-  } catch {
-    // File not found, skip
   }
-
-  gbifNameCache[cacheKey] = lookup;
   return lookup;
 }
 
@@ -110,8 +73,8 @@ export async function GET(
   const taxon = getTaxonConfig(taxonId);
 
   // Load lookups early so we can filter by Red List status
-  const redListLookup = await loadRedListLookup(taxon);
-  const gbifNameLookup = await loadGbifNameLookup(taxon);
+  const redListLookup = await loadRedListLookup(taxonId);
+  const gbifNameLookup = await loadGbifNameLookup(taxonId);
 
   try {
     // Use GBIF occurrence search with facets to get species counts for the country
