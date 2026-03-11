@@ -33,6 +33,10 @@ declare
   v_has_ne boolean := 'NE' = any(coalesce(p_categories, '{}'::text[]));
   v_search text := nullif(trim(p_search), '');
 begin
+  p_page_size := least(p_page_size, 100);
+  v_search := case when v_search is not null
+    then replace(replace(v_search, '%', '\%'), '_', '\_')
+    else null end;
   select json_build_object(
     'species', coalesce(sp.arr, '[]'::json),
     'total', coalesce(cnt.total, 0),

@@ -218,7 +218,7 @@ const DIFF_FIELDS: (keyof SpeciesDbRow)[] = [
   "scientific_name", "common_name", "table1a_taxon_group",
   "class_name", "order_name", "family",
   "assessment_id", "iucn_category", "assessment_date", "year_published",
-  "population_trend", "gbif_species_key", "sis_taxon_id",
+  "population_trend", "countries", "gbif_species_key", "sis_taxon_id",
   "gbif_total_count", "gbif_count_since_assessment",
 ];
 

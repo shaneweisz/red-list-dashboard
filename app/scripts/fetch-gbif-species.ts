@@ -108,7 +108,7 @@ export async function fetchFacets(
         }
         throw err;
       }
-      if (response.status === 429) {
+      if (response.status === 429 || (response.status >= 500 && response.status < 600)) {
         const wait = Math.pow(2, attempt + 1) * 1000;
         await delay(wait);
         continue;

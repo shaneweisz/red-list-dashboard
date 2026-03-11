@@ -95,6 +95,10 @@ function DebouncedSearchInput({
   const [localValue, setLocalValue] = useState(initialValue);
 
   useEffect(() => {
+    setLocalValue(initialValue);
+  }, [initialValue]);
+
+  useEffect(() => {
     const timer = setTimeout(() => {
       onSearch(localValue.toLowerCase());
     }, 200);
@@ -190,6 +194,7 @@ export default function RedListView() {
     selectedCategories, setSelectedCategories,
     selectedYearRanges, setSelectedYearRanges,
     selectedCountries, setSelectedCountries,
+    selectedObsRanges, setSelectedObsRanges,
     searchFilter, setSearchFilter,
     sortField, sortDirection, setSort,
     clearAllFilters,
@@ -218,8 +223,6 @@ export default function RedListView() {
     });
   }, [setSelectedTaxa]);
 
-
-  const [selectedObsRanges, setSelectedObsRanges] = useState<Set<string>>(new Set());
 
   const [showOnlyStarred, setShowOnlyStarred] = useState(false);
 

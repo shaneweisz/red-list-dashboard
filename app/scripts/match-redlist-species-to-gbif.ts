@@ -59,8 +59,17 @@ export async function matchGbifSpecies(
 
   let response: Response | undefined;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    response = await fetch(`https://api.gbif.org/v1/species/match?${params}`);
-    if (response.status === 429) {
+    try {
+      response = await fetch(`https://api.gbif.org/v1/species/match?${params}`);
+    } catch (err) {
+      if (attempt < MAX_RETRIES) {
+        const wait = Math.pow(2, attempt + 1) * 1000;
+        await delay(wait);
+        continue;
+      }
+      throw err;
+    }
+    if (response.status === 429 || (response.status >= 500 && response.status < 600)) {
       const wait = Math.pow(2, attempt + 1) * 1000;
       await delay(wait);
       continue;

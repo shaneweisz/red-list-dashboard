@@ -61,8 +61,8 @@ export async function POST(request: NextRequest) {
     p_obs_ranges: body.obsRanges?.length ? body.obsRanges : null,
     p_sort_field: body.sortField || "priority",
     p_sort_direction: body.sortDirection || "desc",
-    p_page: body.page || 1,
-    p_page_size: body.pageSize || 10,
+    p_page: Math.max(1, Math.floor(body.page || 1)),
+    p_page_size: Math.min(100, Math.max(1, Math.floor(body.pageSize || 10))),
   });
 
   if (error) {

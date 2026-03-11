@@ -20,6 +20,9 @@ export function parseParams(search: string) {
     countries: p.get("countries")
       ? new Set(p.get("countries")!.split(",").filter(Boolean))
       : new Set<string>(),
+    obsRanges: p.get("obsRanges")
+      ? new Set(p.get("obsRanges")!.split(",").filter(Boolean))
+      : new Set<string>(),
     search: p.get("search") || "",
     sortField: (
       sortParam === "category" ? "category" :
@@ -37,6 +40,7 @@ export function buildQs(state: {
   categories: Set<string>;
   yearRanges: Set<string>;
   countries: Set<string>;
+  obsRanges: Set<string>;
   search: string;
   sortField: "year" | "category" | "newGbif" | "priority" | null;
   sortDirection: "asc" | "desc";
@@ -46,6 +50,7 @@ export function buildQs(state: {
   if (state.categories.size > 0) p.set("categories", [...state.categories].join(","));
   if (state.yearRanges.size > 0) p.set("years", [...state.yearRanges].join(","));
   if (state.countries.size > 0) p.set("countries", [...state.countries].join(","));
+  if (state.obsRanges.size > 0) p.set("obsRanges", [...state.obsRanges].join(","));
   if (state.search) p.set("search", state.search);
   // null / "priority" desc is the default — only write non-default sort to URL
   const isDefaultSort = state.sortField === null || state.sortField === "priority";
@@ -143,6 +148,18 @@ export function useFilterParams() {
     [syncUrl]
   );
 
+  const setSelectedObsRanges = useCallback(
+    (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+      setState(prev => {
+        const nextObsRanges = typeof updater === "function" ? updater(prev.obsRanges) : updater;
+        const next = { ...prev, obsRanges: nextObsRanges };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
   const setSearchFilter = useCallback(
     (value: string) => {
       setState(prev => {
@@ -172,6 +189,7 @@ export function useFilterParams() {
         categories: new Set<string>(),
         yearRanges: new Set<string>(),
         countries: new Set<string>(),
+        obsRanges: new Set<string>(),
         search: "",
         sortField: null,
         sortDirection: "desc" as const,
@@ -189,6 +207,7 @@ export function useFilterParams() {
         categories: new Set<string>(),
         yearRanges: new Set<string>(),
         countries: new Set<string>(),
+        obsRanges: new Set<string>(),
         search: "",
         sortField: null,
         sortDirection: "desc" as const,
@@ -203,6 +222,7 @@ export function useFilterParams() {
     selectedCategories: state.categories,
     selectedYearRanges: state.yearRanges,
     selectedCountries: state.countries,
+    selectedObsRanges: state.obsRanges,
     searchFilter: state.search,
     sortField: state.sortField,
     sortDirection: state.sortDirection,
@@ -211,6 +231,7 @@ export function useFilterParams() {
     setSelectedCategories,
     setSelectedYearRanges,
     setSelectedCountries,
+    setSelectedObsRanges,
     setSearchFilter,
     setSort,
     clearAllFilters,
