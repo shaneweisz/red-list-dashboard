@@ -11,7 +11,7 @@ import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
 import { useFilterParams } from "@/hooks/useFilterParams";
-import { useDashboardQuery, type DashboardSpecies } from "@/hooks/useDashboardQuery";
+import { useRedListSpeciesQuery, type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import { TREND_FLAG_META, type TrendResult } from "@/lib/trend-analysis";
 import AssessmentAssistant from "../AssessmentAssistant";
 
@@ -48,8 +48,8 @@ function Spinner({ className = "" }: { className?: string }) {
   );
 }
 
-// Use DashboardSpecies from the hook; alias for convenience
-type Species = DashboardSpecies;
+// Use RedListSpecies from the hook; alias for convenience
+type Species = RedListSpecies;
 
 interface InatDefaultImage {
   squareUrl: string | null;
@@ -233,7 +233,7 @@ export default function RedListView() {
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 10;
 
-  // ── Server-side dashboard query (replaces client-side filtering) ──────
+  // ── Server-side species query (replaces client-side filtering) ────────
   // Determine which taxa groups to query: if taxa are selected, join them;
   // otherwise default to "all"
   const activeTaxonId = useMemo(() => {
@@ -242,7 +242,7 @@ export default function RedListView() {
     return "all"; // multiple taxa selected — query all, filter on server
   }, [selectedTaxa]);
 
-  const dashboardFilters = useMemo(() => ({
+  const speciesFilters = useMemo(() => ({
     taxonId: activeTaxonId,
     categories: [...selectedCategories],
     yearRanges: [...selectedYearRanges],
@@ -255,13 +255,13 @@ export default function RedListView() {
     pageSize: PAGE_SIZE,
   }), [activeTaxonId, selectedCategories, selectedYearRanges, selectedCountries, searchFilter, selectedObsRanges, sortField, sortDirection, currentPage]);
 
-  const { data: dashboardData, isLoading: speciesLoading, error } = useDashboardQuery(dashboardFilters);
+  const { data: speciesData, isLoading: speciesLoading, error } = useRedListSpeciesQuery(speciesFilters);
 
-  // Derived data from the dashboard query
-  const paginatedSpecies = dashboardData?.species ?? [];
-  const totalFiltered = dashboardData?.total ?? 0;
-  const neCount = dashboardData?.ne_count ?? 0;
-  const crossFilters = dashboardData?.cross_filters;
+  // Derived data from the species query
+  const paginatedSpecies = speciesData?.species ?? [];
+  const totalFiltered = speciesData?.total ?? 0;
+  const neCount = speciesData?.ne_count ?? 0;
+  const crossFilters = speciesData?.cross_filters;
 
   // Species details cache (images, criteria, common names)
   const [speciesDetails, setSpeciesDetails] = useState<Record<number, SpeciesDetails>>({});
@@ -791,7 +791,7 @@ export default function RedListView() {
                 <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
               </div>
               <div className="flex-1 min-h-[225px] flex items-center justify-center">
-                {speciesLoading && !dashboardData ? (
+                {speciesLoading && !speciesData ? (
                   <Spinner />
                 ) : categoryDataWithPercent.length > 0 ? (
                   <FilterBarChart
@@ -823,7 +823,7 @@ export default function RedListView() {
                 <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
               </div>
               <div className="flex-1 min-h-[225px] flex items-center justify-center">
-                {speciesLoading && !dashboardData ? (
+                {speciesLoading && !speciesData ? (
                   <Spinner />
                 ) : assessmentYearData.length > 0 ? (
                   <FilterBarChart
@@ -849,7 +849,7 @@ export default function RedListView() {
                   precomputedStats={countryStatsForMap}
                   selectedTaxa={selectedTaxa}
                 />
-              ) : speciesLoading && !dashboardData ? (
+              ) : speciesLoading && !speciesData ? (
                 <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 min-h-[280px] flex flex-col">
                   <div className="flex items-center justify-between mb-1">
                     <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
@@ -886,7 +886,7 @@ export default function RedListView() {
                 <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
               </div>
               <div className="flex-1 min-h-[225px] flex items-center justify-center">
-                {speciesLoading && !dashboardData ? (
+                {speciesLoading && !speciesData ? (
                   <Spinner />
                 ) : gbifObsData.length > 0 ? (
                   <FilterBarChart

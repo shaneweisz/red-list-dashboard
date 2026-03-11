@@ -3,7 +3,7 @@ import { supabase } from "@/lib/supabase/server";
 import { getTaxonGroups } from "@/lib/supabase/taxon-groups";
 import { CACHE_5M } from "@/lib/cache-headers";
 
-interface DashboardRequest {
+interface RedListSpeciesRequest {
   taxonId?: string;
   categories?: string[];
   yearRanges?: string[];
@@ -42,7 +42,7 @@ function mapTaxonId(group: string): string {
 }
 
 export async function POST(request: NextRequest) {
-  let body: DashboardRequest;
+  let body: RedListSpeciesRequest;
   try {
     body = await request.json();
   } catch {
@@ -66,9 +66,9 @@ export async function POST(request: NextRequest) {
   });
 
   if (error) {
-    console.error("dashboard_query error:", error);
+    console.error("species query error:", error);
     return NextResponse.json(
-      { error: `Dashboard query failed: ${error.message}` },
+      { error: `Species query failed: ${error.message}` },
       { status: 500 }
     );
   }

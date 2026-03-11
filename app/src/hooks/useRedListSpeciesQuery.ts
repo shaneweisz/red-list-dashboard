@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
-export interface DashboardSpecies {
+export interface RedListSpecies {
   id: number;
   sis_taxon_id: number | null;
   assessment_id: number | null;
@@ -33,14 +33,14 @@ export interface CrossFilters {
   obs_ranges: Record<string, number>;
 }
 
-export interface DashboardData {
-  species: DashboardSpecies[];
+export interface RedListSpeciesQueryData {
+  species: RedListSpecies[];
   total: number;
   cross_filters: CrossFilters;
   ne_count: number;
 }
 
-export interface DashboardFilters {
+export interface RedListSpeciesFilters {
   taxonId: string;
   categories: string[];
   yearRanges: string[];
@@ -55,14 +55,14 @@ export interface DashboardFilters {
 
 // ── Hook ─────────────────────────────────────────────────────────────────
 
-export function useDashboardQuery(filters: DashboardFilters) {
-  const [data, setData] = useState<DashboardData | null>(null);
+export function useRedListSpeciesQuery(filters: RedListSpeciesFilters) {
+  const [data, setData] = useState<RedListSpeciesQueryData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const fetchDashboard = useCallback(async (f: DashboardFilters, signal: AbortSignal) => {
-    const res = await fetch("/api/redlist/dashboard", {
+  const fetchRedListSpecies = useCallback(async (f: RedListSpeciesFilters, signal: AbortSignal) => {
+    const res = await fetch("/api/redlist/species", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -82,10 +82,10 @@ export function useDashboardQuery(filters: DashboardFilters) {
 
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      throw new Error(body.error || `Dashboard API returned ${res.status}`);
+      throw new Error(body.error || `Species query API returned ${res.status}`);
     }
 
-    return res.json() as Promise<DashboardData>;
+    return res.json() as Promise<RedListSpeciesQueryData>;
   }, []);
 
   useEffect(() => {
@@ -97,7 +97,7 @@ export function useDashboardQuery(filters: DashboardFilters) {
     setIsLoading(true);
     setError(null);
 
-    fetchDashboard(filters, controller.signal)
+    fetchRedListSpecies(filters, controller.signal)
       .then((result) => {
         if (!controller.signal.aborted) {
           setData(result);
@@ -126,7 +126,7 @@ export function useDashboardQuery(filters: DashboardFilters) {
     filters.sortDirection,
     filters.page,
     filters.pageSize,
-    fetchDashboard,
+    fetchRedListSpecies,
   ]);
 
   return { data, isLoading, error };
