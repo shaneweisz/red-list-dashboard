@@ -45,7 +45,7 @@ const BATCH_SIZE = 1000;
 // CSV TYPES
 // =============================================================================
 
-interface RedlistCsvRow {
+export interface RedlistCsvRow {
   sis_taxon_id: number;
   scientific_name: string;
   common_name: string | null;
@@ -62,7 +62,7 @@ interface RedlistCsvRow {
   gbif_species_key: number | null;
 }
 
-interface GbifCsvRow {
+export interface GbifCsvRow {
   gbif_species_key: number;
   scientific_name: string;
   common_name: string | null;
@@ -111,7 +111,7 @@ function parseGbifRow(r: Record<string, string>): GbifCsvRow {
 // MERGE LOGIC
 // =============================================================================
 
-interface SpeciesDbRow {
+export interface SpeciesDbRow {
   sis_taxon_id: number | null;
   gbif_species_key: number | null;
   scientific_name: string;
@@ -131,7 +131,7 @@ interface SpeciesDbRow {
   synced_at: string;
 }
 
-function mergeSpecies(
+export function mergeSpecies(
   redlistRows: RedlistCsvRow[],
   gbifRows: GbifCsvRow[],
   syncTimestamp: string,
@@ -207,7 +207,7 @@ function mergeSpecies(
 // =============================================================================
 
 /** Key used to match rows across syncs */
-function rowKey(row: SpeciesDbRow): string {
+export function rowKey(row: SpeciesDbRow): string {
   if (row.sis_taxon_id !== null) return `sis:${row.sis_taxon_id}`;
   if (row.gbif_species_key !== null) return `gbif:${row.gbif_species_key}`;
   return `name:${row.scientific_name}`;
@@ -235,7 +235,7 @@ interface DiffResult {
   unchanged: number;
 }
 
-function diffMerged(oldRows: SpeciesDbRow[], newRows: SpeciesDbRow[]): DiffResult {
+export function diffMerged(oldRows: SpeciesDbRow[], newRows: SpeciesDbRow[]): DiffResult {
   const oldByKey = new Map<string, SpeciesDbRow>();
   for (const r of oldRows) oldByKey.set(rowKey(r), r);
 
