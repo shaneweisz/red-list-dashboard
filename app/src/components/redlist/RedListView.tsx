@@ -11,7 +11,8 @@ import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
 import { useFilterParams } from "@/hooks/useFilterParams";
-import { useRedListSpeciesQuery, type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
+import { useRedListSpecies, type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
+import { computePriority, type PriorityResult } from "@/lib/prioritization";
 import AssessmentAssistant from "../AssessmentAssistant";
 
 // Dynamically import OccurrenceMapRow to avoid SSR issues with Leaflet
@@ -235,35 +236,74 @@ export default function RedListView() {
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 10;
 
-  // ── Server-side species query (replaces client-side filtering) ────────
-  // Determine which taxa groups to query: if taxa are selected, join them;
-  // otherwise default to "all"
+  // ── Data fetching ────────────────────────────────────────────────────
   const activeTaxonId = useMemo(() => {
     if (selectedTaxa.size === 0) return "all";
     if (selectedTaxa.size === 1) return [...selectedTaxa][0];
-    return "all"; // multiple taxa selected — query all, filter on server
+    return "all";
   }, [selectedTaxa]);
 
-  const speciesFilters = useMemo(() => ({
-    taxonId: activeTaxonId,
-    categories: [...selectedCategories],
-    yearRanges: [...selectedYearRanges],
-    countries: [...selectedCountries],
-    search: searchFilter,
-    obsRanges: [...selectedObsRanges],
-    sortField: sortField || "priority",
-    sortDirection: sortDirection,
-    page: currentPage,
-    pageSize: PAGE_SIZE,
-  }), [activeTaxonId, selectedCategories, selectedYearRanges, selectedCountries, searchFilter, selectedObsRanges, sortField, sortDirection, currentPage]);
+  const { species: assessedSpecies, isLoading: speciesLoading, error } = useRedListSpecies(activeTaxonId);
 
-  const { data: speciesData, isLoading: speciesLoading, error } = useRedListSpeciesQuery(speciesFilters);
+  // NE species lazy loading (only fetched when NE category is selected)
+  const [neSpecies, setNeSpecies] = useState<RedListSpecies[]>([]);
+  const [neSpeciesFetched, setNeSpeciesFetched] = useState(false);
 
-  // Derived data from the species query
-  const paginatedSpecies = speciesData?.species ?? [];
-  const totalFiltered = speciesData?.total ?? 0;
-  const neCount = speciesData?.ne_count ?? 0;
-  const crossFilters = speciesData?.cross_filters;
+  useEffect(() => {
+    if (!selectedCategories.has("NE") || neSpeciesFetched) return;
+    fetch(`/api/redlist/species?taxon=${encodeURIComponent(activeTaxonId)}&category=NE`)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => { if (data?.species) setNeSpecies(data.species); setNeSpeciesFetched(true); })
+      .catch(() => {});
+  }, [selectedCategories, neSpeciesFetched, activeTaxonId]);
+
+  // Reset NE fetch when taxon changes
+  useEffect(() => { setNeSpecies([]); setNeSpeciesFetched(false); }, [activeTaxonId]);
+
+  // All species = assessed + NE
+  const species = useMemo(() => [...assessedSpecies, ...neSpecies], [assessedSpecies, neSpecies]);
+  const neCount = neSpecies.length;
+
+  // Filter by selected taxa
+  const taxaFilteredSpecies = useMemo(() => {
+    if (selectedTaxa.size === 0) return species;
+    return species.filter(s => s.taxon_id && selectedTaxa.has(s.taxon_id));
+  }, [species, selectedTaxa]);
+
+  // Helper to check if species matches year range filter
+  const matchesYearRangeFilter = (assessmentDate: string | null, yearRanges: Set<string> = selectedYearRanges): boolean => {
+    if (yearRanges.size === 0) return true;
+    if (!assessmentDate) return false;
+    const currentYr = new Date().getFullYear();
+    const yearsSince = currentYr - new Date(assessmentDate).getFullYear();
+    for (const range of yearRanges) {
+      switch (range) {
+        case "0-1 years": if (yearsSince <= 1) return true; break;
+        case "2-5 years": if (yearsSince >= 2 && yearsSince <= 5) return true; break;
+        case "6-10 years": if (yearsSince >= 6 && yearsSince <= 10) return true; break;
+        case "11-20 years": if (yearsSince >= 11 && yearsSince <= 20) return true; break;
+        case "20+ years": if (yearsSince > 20) return true; break;
+      }
+    }
+    return false;
+  };
+
+  // Helper to check if species matches GBIF observation range filter
+  const matchesObsRangeFilter = (obsCount: number | null | undefined, obsRanges: Set<string> = selectedObsRanges): boolean => {
+    if (obsRanges.size === 0) return true;
+    const obs = obsCount ?? 0;
+    for (const range of obsRanges) {
+      switch (range) {
+        case "0": if (obs === 0) return true; break;
+        case "1-10": if (obs >= 1 && obs <= 10) return true; break;
+        case "11-100": if (obs >= 11 && obs <= 100) return true; break;
+        case "101-1K": if (obs >= 101 && obs <= 1000) return true; break;
+        case "1K-10K": if (obs >= 1001 && obs <= 10000) return true; break;
+        case "10K+": if (obs > 10000) return true; break;
+      }
+    }
+    return false;
+  };
 
   // Species details cache (images, criteria, common names)
   const [speciesDetails, setSpeciesDetails] = useState<Record<number, SpeciesDetails>>({});
@@ -364,10 +404,18 @@ export default function RedListView() {
     setDragOverSpecies(null);
   };
 
-  // ── Chart data derived from cross-filters (server-computed) ────────────
+  // ── Cross-filter chart data (client-computed) ────────────────────────
 
+  // Category chart: apply all filters EXCEPT category
   const categoryDataWithPercent = useMemo(() => {
-    const counts = crossFilters?.categories ?? {};
+    const counts: Record<string, number> = {};
+    taxaFilteredSpecies.forEach(s => {
+      if (s.category === "NE") return;
+      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
+      if (selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
+      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      counts[s.category] = (counts[s.category] || 0) + 1;
+    });
     const DISPLAY_ORDER = ["EX", "EW", "CR", "EN", "VU", "NT", "LC", "DD"];
     const total = DISPLAY_ORDER.reduce((sum, code) => sum + (counts[code] || 0), 0);
     return DISPLAY_ORDER.map(code => ({
@@ -378,43 +426,77 @@ export default function RedListView() {
       percent: total > 0 ? (((counts[code] || 0) / total) * 100).toFixed(1) : "0",
       label: `${(counts[code] || 0).toLocaleString()} (${total > 0 ? (((counts[code] || 0) / total) * 100).toFixed(1) : 0}%)`,
     }));
-  }, [crossFilters]);
+  }, [taxaFilteredSpecies, selectedCountries, selectedYearRanges, selectedObsRanges]);
 
+  // Year chart: apply all filters EXCEPT year range
   const assessmentYearData = useMemo(() => {
-    const counts = crossFilters?.years ?? {};
+    const currentYr = new Date().getFullYear();
     const ranges = [
-      { range: "0-1 years", shortRange: "0-1y", count: counts["0-1 years"] || 0, minYear: 0 },
-      { range: "2-5 years", shortRange: "2-5y", count: counts["2-5 years"] || 0, minYear: 2 },
-      { range: "6-10 years", shortRange: "6-10y", count: counts["6-10 years"] || 0, minYear: 6 },
-      { range: "11-20 years", shortRange: "11-20y", count: counts["11-20 years"] || 0, minYear: 11 },
-      { range: "20+ years", shortRange: ">20y", count: counts["20+ years"] || 0, minYear: 21 },
+      { range: "0-1 years", shortRange: "0-1y", count: 0, minYear: 0 },
+      { range: "2-5 years", shortRange: "2-5y", count: 0, minYear: 2 },
+      { range: "6-10 years", shortRange: "6-10y", count: 0, minYear: 6 },
+      { range: "11-20 years", shortRange: "11-20y", count: 0, minYear: 11 },
+      { range: "20+ years", shortRange: ">20y", count: 0, minYear: 21 },
     ];
+    taxaFilteredSpecies.forEach(s => {
+      if (!s.assessment_date || s.category === "NE") return;
+      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
+      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
+      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      const diff = currentYr - new Date(s.assessment_date).getFullYear();
+      if (diff <= 1) ranges[0].count++;
+      else if (diff <= 5) ranges[1].count++;
+      else if (diff <= 10) ranges[2].count++;
+      else if (diff <= 20) ranges[3].count++;
+      else ranges[4].count++;
+    });
     const total = ranges.reduce((sum, r) => sum + r.count, 0);
     return ranges.map(r => ({
       ...r,
       label: `${r.count.toLocaleString()} (${total > 0 ? ((r.count / total) * 100).toFixed(1) : 0}%)`,
     }));
-  }, [crossFilters]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedObsRanges]);
 
+  // GBIF observations chart: apply all filters EXCEPT obs range
   const gbifObsData = useMemo(() => {
-    const counts = crossFilters?.obs_ranges ?? {};
     const ranges = [
-      { range: "0", shortRange: "0", count: counts["0"] || 0 },
-      { range: "1-10", shortRange: "1-10", count: counts["1-10"] || 0 },
-      { range: "11-100", shortRange: "11-100", count: counts["11-100"] || 0 },
-      { range: "101-1K", shortRange: "101-1K", count: counts["101-1K"] || 0 },
-      { range: "1K-10K", shortRange: "1K-10K", count: counts["1K-10K"] || 0 },
-      { range: "10K+", shortRange: "10K+", count: counts["10K+"] || 0 },
+      { range: "0", shortRange: "0", count: 0 },
+      { range: "1-10", shortRange: "1-10", count: 0 },
+      { range: "11-100", shortRange: "11-100", count: 0 },
+      { range: "101-1K", shortRange: "101-1K", count: 0 },
+      { range: "1K-10K", shortRange: "1K-10K", count: 0 },
+      { range: "10K+", shortRange: "10K+", count: 0 },
     ];
+    taxaFilteredSpecies.forEach(s => {
+      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
+      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
+      if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
+      const obs = s.gbif_occurrence_count ?? 0;
+      if (obs === 0) ranges[0].count++;
+      else if (obs <= 10) ranges[1].count++;
+      else if (obs <= 100) ranges[2].count++;
+      else if (obs <= 1000) ranges[3].count++;
+      else if (obs <= 10000) ranges[4].count++;
+      else ranges[5].count++;
+    });
     const total = ranges.reduce((sum, r) => sum + r.count, 0);
     return ranges.map(r => ({
       ...r,
       label: `${r.count.toLocaleString()} (${total > 0 ? ((r.count / total) * 100).toFixed(1) : 0}%)`,
     }));
-  }, [crossFilters]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges]);
 
+  // Country chart: apply all filters EXCEPT country
   const { countryCounts, uniqueCountries, countryStatsForMap } = useMemo(() => {
-    const counts = crossFilters?.countries ?? {};
+    const counts: Record<string, number> = {};
+    taxaFilteredSpecies.forEach(s => {
+      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
+      if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
+      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      s.countries.forEach(code => {
+        counts[code] = (counts[code] || 0) + 1;
+      });
+    });
     const sorted = Object.entries(counts)
       .sort((a, b) => {
         const nameA = ALPHA2_TO_NAME[a[0]] || a[0];
@@ -429,7 +511,82 @@ export default function RedListView() {
       ])
     );
     return { countryCounts: counts, uniqueCountries: sorted, countryStatsForMap: statsForMap };
-  }, [crossFilters]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges]);
+
+  // ── Priority scoring ─────────────────────────────────────────────────
+  const priorityMap = useMemo(() => {
+    const map = new Map<number, PriorityResult>();
+    const yr = new Date().getFullYear();
+    for (const s of taxaFilteredSpecies) {
+      if (s.sis_taxon_id != null) {
+        map.set(s.sis_taxon_id, computePriority(s, yr));
+      }
+    }
+    return map;
+  }, [taxaFilteredSpecies]);
+
+  // ── Client-side filtering and sorting ──────────────────────────────
+  const CATEGORY_ORDER: Record<string, number> = {
+    EX: 0, EW: 1, CR: 2, EN: 3, VU: 4, NT: 5, LC: 6, DD: 7, NE: 8,
+  };
+
+  const { filteredSpecies, sortedSpecies } = useMemo(() => {
+    const filtered = taxaFilteredSpecies.filter((s) => {
+      const matchesCategory = selectedCategories.size === 0 || selectedCategories.has(s.category);
+      const matchesYear = s.category === "NE" || matchesYearRangeFilter(s.assessment_date);
+      const matchesObs = matchesObsRangeFilter(s.gbif_occurrence_count);
+      const matchesCountry = selectedCountries.size === 0 || s.countries.some(c => selectedCountries.has(c));
+      const matchesSearch =
+        !searchFilter ||
+        s.scientific_name.toLowerCase().includes(searchFilter) ||
+        s.common_name?.toLowerCase().includes(searchFilter);
+      const matchesStarred = !showOnlyStarred || (s.sis_taxon_id != null && pinnedSet.has(s.sis_taxon_id));
+      return matchesCategory && matchesYear && matchesObs && matchesCountry && matchesSearch && matchesStarred;
+    });
+
+    const sorted = [...filtered].sort((a, b) => {
+      if (showOnlyStarred && a.sis_taxon_id != null && b.sis_taxon_id != null) {
+        const aIdx = pinnedSpecies.indexOf(a.sis_taxon_id);
+        const bIdx = pinnedSpecies.indexOf(b.sis_taxon_id);
+        return aIdx - bIdx;
+      }
+
+      let comparison = 0;
+      if (!sortField || sortField === "priority") {
+        const scoreA = (a.sis_taxon_id != null ? priorityMap.get(a.sis_taxon_id)?.score : 0) ?? 0;
+        const scoreB = (b.sis_taxon_id != null ? priorityMap.get(b.sis_taxon_id)?.score : 0) ?? 0;
+        comparison = scoreA - scoreB;
+      } else if (sortField === "year") {
+        const dateA = a.assessment_date ? new Date(a.assessment_date).getTime() : 0;
+        const dateB = b.assessment_date ? new Date(b.assessment_date).getTime() : 0;
+        comparison = dateA - dateB;
+      } else if (sortField === "category") {
+        comparison = (CATEGORY_ORDER[a.category] ?? 99) - (CATEGORY_ORDER[b.category] ?? 99);
+      } else if (sortField === "newGbif") {
+        if (a.category === "NE" || b.category === "NE") {
+          comparison = (a.gbif_occurrence_count ?? -1) - (b.gbif_occurrence_count ?? -1);
+        } else {
+          comparison = (a.gbif_observations_after_assessment_year ?? -1) - (b.gbif_observations_after_assessment_year ?? -1);
+        }
+      }
+
+      if (comparison === 0) {
+        comparison = (a.sis_taxon_id ?? a.id) - (b.sis_taxon_id ?? b.id);
+      }
+
+      return sortDirection === "asc" ? comparison : -comparison;
+    });
+
+    return { filteredSpecies: filtered, sortedSpecies: sorted };
+  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedCountries, searchFilter, showOnlyStarred, priorityMap, pinnedSet, pinnedSpecies, sortField, sortDirection]);
+
+  // ── Client-side pagination ─────────────────────────────────────────
+  const totalFiltered = filteredSpecies.length;
+  const totalPages = Math.ceil(sortedSpecies.length / PAGE_SIZE);
+  const paginatedSpecies = sortedSpecies.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE
+  );
 
   // Helper to get country display name
   const getCountryName = (code: string) => ALPHA2_TO_NAME[code] || code;
@@ -453,9 +610,6 @@ export default function RedListView() {
   const handleClearCountry = () => {
     setSelectedCountries(new Set());
   };
-
-  // Pagination (server-side — total comes from DB)
-  const totalPages = Math.ceil(totalFiltered / PAGE_SIZE);
 
   // Handle sort toggle
   const handleSort = (field: "year" | "category" | "newGbif" | "priority") => {
@@ -750,7 +904,7 @@ export default function RedListView() {
                 <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
               </div>
               <div className="flex-1 min-h-[225px] flex items-center justify-center">
-                {speciesLoading && !speciesData ? (
+                {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
                 ) : categoryDataWithPercent.length > 0 ? (
                   <FilterBarChart
@@ -782,7 +936,7 @@ export default function RedListView() {
                 <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
               </div>
               <div className="flex-1 min-h-[225px] flex items-center justify-center">
-                {speciesLoading && !speciesData ? (
+                {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
                 ) : assessmentYearData.length > 0 ? (
                   <FilterBarChart
@@ -808,7 +962,7 @@ export default function RedListView() {
                   precomputedStats={countryStatsForMap}
                   selectedTaxa={selectedTaxa}
                 />
-              ) : speciesLoading && !speciesData ? (
+              ) : speciesLoading && assessedSpecies.length === 0 ? (
                 <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 min-h-[280px] flex flex-col">
                   <div className="flex items-center justify-between mb-1">
                     <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
@@ -845,7 +999,7 @@ export default function RedListView() {
                 <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
               </div>
               <div className="flex-1 min-h-[225px] flex items-center justify-center">
-                {speciesLoading && !speciesData ? (
+                {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
                 ) : gbifObsData.length > 0 ? (
                   <FilterBarChart
@@ -991,7 +1145,7 @@ export default function RedListView() {
         </div>
 
         {/* Species table */}
-        {speciesLoading && !speciesData ? (
+        {speciesLoading && assessedSpecies.length === 0 ? (
           <div className="flex items-center justify-center py-12">
             <Spinner className="h-6 w-6" />
           </div>
@@ -1319,13 +1473,19 @@ export default function RedListView() {
                     </td>
                     {/* Priority score */}
                     <td className="px-3 md:px-4 py-3 whitespace-nowrap">
-                      {s.priority_score === 0 ? (
-                        <span className="text-zinc-300 dark:text-zinc-700">—</span>
-                      ) : (
-                        <span className="text-xs font-semibold tabular-nums text-zinc-600 dark:text-zinc-400">
-                          {s.priority_score}
-                        </span>
-                      )}
+                      {(() => {
+                        const priority = s.sis_taxon_id != null ? priorityMap.get(s.sis_taxon_id) : null;
+                        const score = priority?.score ?? 0;
+                        return score === 0 ? (
+                          <span className="text-zinc-300 dark:text-zinc-700">—</span>
+                        ) : (
+                          <HoverTooltip text={`Staleness: ${priority!.breakdown.staleness}/25, New data: ${priority!.breakdown.newData}/25, Category: ${priority!.breakdown.category}/50`}>
+                            <span className="text-xs font-semibold tabular-nums text-zinc-600 dark:text-zinc-400 cursor-help">
+                              {score}
+                            </span>
+                          </HoverTooltip>
+                        );
+                      })()}
                     </td>
                   </tr>
                   {selectedSpeciesKey === speciesKey && (

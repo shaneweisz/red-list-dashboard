@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -23,73 +23,27 @@ export interface RedListSpecies {
   gbif_species_key: number | null;
   gbif_occurrence_count: number | null;
   gbif_observations_after_assessment_year: number | null;
-  priority_score: number;
 }
 
-export interface CrossFilters {
-  categories: Record<string, number>;
-  years: Record<string, number>;
-  countries: Record<string, number>;
-  obs_ranges: Record<string, number>;
-}
-
-export interface RedListSpeciesQueryData {
+interface SpeciesResponse {
   species: RedListSpecies[];
   total: number;
-  cross_filters: CrossFilters;
-  ne_count: number;
-}
-
-export interface RedListSpeciesFilters {
-  taxonId: string;
-  categories: string[];
-  yearRanges: string[];
-  countries: string[];
-  search: string;
-  obsRanges: string[];
-  sortField: string;
-  sortDirection: string;
-  page: number;
-  pageSize: number;
+  error?: string;
 }
 
 // ── Hook ─────────────────────────────────────────────────────────────────
 
-export function useRedListSpeciesQuery(filters: RedListSpeciesFilters) {
-  const [data, setData] = useState<RedListSpeciesQueryData | null>(null);
+/**
+ * Fetches all species for a given taxon from the API.
+ * Only re-fetches when taxonId changes.
+ */
+export function useRedListSpecies(taxonId: string) {
+  const [species, setSpecies] = useState<RedListSpecies[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const fetchRedListSpecies = useCallback(async (f: RedListSpeciesFilters, signal: AbortSignal) => {
-    const res = await fetch("/api/redlist/species", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        taxonId: f.taxonId,
-        categories: f.categories.length ? f.categories : undefined,
-        yearRanges: f.yearRanges.length ? f.yearRanges : undefined,
-        countries: f.countries.length ? f.countries : undefined,
-        search: f.search || undefined,
-        obsRanges: f.obsRanges.length ? f.obsRanges : undefined,
-        sortField: f.sortField,
-        sortDirection: f.sortDirection,
-        page: f.page,
-        pageSize: f.pageSize,
-      }),
-      signal,
-    });
-
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.error || `Species query API returned ${res.status}`);
-    }
-
-    return res.json() as Promise<RedListSpeciesQueryData>;
-  }, []);
-
   useEffect(() => {
-    // Cancel previous in-flight request
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -97,10 +51,19 @@ export function useRedListSpeciesQuery(filters: RedListSpeciesFilters) {
     setIsLoading(true);
     setError(null);
 
-    fetchRedListSpecies(filters, controller.signal)
-      .then((result) => {
+    fetch(`/api/redlist/species?taxon=${encodeURIComponent(taxonId)}`, {
+      signal: controller.signal,
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error || `Species API returned ${res.status}`);
+        }
+        return res.json() as Promise<SpeciesResponse>;
+      })
+      .then((data) => {
         if (!controller.signal.aborted) {
-          setData(result);
+          setSpecies(data.species);
         }
       })
       .catch((err) => {
@@ -115,19 +78,7 @@ export function useRedListSpeciesQuery(filters: RedListSpeciesFilters) {
       });
 
     return () => controller.abort();
-  }, [
-    filters.taxonId,
-    filters.categories.join(","),
-    filters.yearRanges.join(","),
-    filters.countries.join(","),
-    filters.search,
-    filters.obsRanges.join(","),
-    filters.sortField,
-    filters.sortDirection,
-    filters.page,
-    filters.pageSize,
-    fetchRedListSpecies,
-  ]);
+  }, [taxonId]);
 
-  return { data, isLoading, error };
+  return { species, isLoading, error };
 }
