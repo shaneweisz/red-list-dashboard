@@ -1,22 +1,11 @@
--- Composite and partial indexes to speed up redlist_species_query lateral joins.
+-- Rename dashboard_query → redlist_species_query
 
--- Partial index for assessed species (used by most lateral joins)
-create index if not exists idx_species_group_assessed
-  on species (table1a_taxon_group)
-  where sis_taxon_id is not null;
+-- Revoke + drop the old function
+revoke execute on function dashboard_query from anon, authenticated;
+drop function if exists dashboard_query;
 
--- Partial index for NE species (used by NE count lateral join)
-create index if not exists idx_species_group_ne
-  on species (table1a_taxon_group)
-  where sis_taxon_id is null;
-
--- Composite: taxon group + category (used by category cross-filter)
-create index if not exists idx_species_group_category
-  on species (table1a_taxon_group, iucn_category)
-  where sis_taxon_id is not null;
-
--- Revert dashboard_query to v1 lateral joins (CTE approach was slower)
-create or replace function dashboard_query(
+-- Recreate with new name (same body as the latest version in 20260310300000)
+create or replace function redlist_species_query(
   p_taxon_groups     text[],
   p_categories       text[]  default null,
   p_year_ranges      text[]  default null,
@@ -453,4 +442,4 @@ begin
 end;
 $$;
 
-grant execute on function dashboard_query to anon, authenticated;
+grant execute on function redlist_species_query to anon, authenticated;

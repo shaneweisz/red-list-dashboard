@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
   const taxonId = body.taxonId || "all";
   const groups = getTaxonGroups(taxonId);
 
-  const { data, error } = await supabase.rpc("dashboard_query", {
+  const { data, error } = await supabase.rpc("redlist_species_query", {
     p_taxon_groups: groups,
     p_categories: body.categories?.length ? body.categories : null,
     p_year_ranges: body.yearRanges?.length ? body.yearRanges : null,
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
   });
 
   if (error) {
-    console.error("species query error:", error);
+    console.error("redlist_species_query error:", error);
     return NextResponse.json(
       { error: `Species query failed: ${error.message}` },
       { status: 500 }
