@@ -988,14 +988,20 @@ export default function RedListView() {
         </div>
 
         {/* Species table */}
-        {speciesLoading ? (
+        {speciesLoading && !speciesData ? (
           <div className="flex items-center justify-center py-12">
             <Spinner className="h-6 w-6" />
           </div>
         ) : (
         <>
+        <div className="relative">
+          {speciesLoading && (
+            <div className="absolute inset-0 z-20 flex items-center justify-center">
+              <Spinner className="h-6 w-6" />
+            </div>
+          )}
         <div
-          className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-x-auto"
+          className={`bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-x-auto transition-opacity duration-150 ${speciesLoading ? "opacity-50 pointer-events-none" : ""}`}
           onScroll={(e) => {
             e.currentTarget.style.setProperty('--scroll-left', `${e.currentTarget.scrollLeft}px`);
           }}
@@ -1435,6 +1441,7 @@ export default function RedListView() {
               )}
             </tbody>
           </table>
+        </div>
         </div>
 
         {/* Pagination */}
