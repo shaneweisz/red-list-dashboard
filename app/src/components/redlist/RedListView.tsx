@@ -12,7 +12,6 @@ import { ALPHA2_TO_NAME } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
 import { useFilterParams } from "@/hooks/useFilterParams";
 import { useRedListSpeciesQuery, type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
-import { TREND_FLAG_META, type TrendResult } from "@/lib/trend-analysis";
 import AssessmentAssistant from "../AssessmentAssistant";
 
 // Dynamically import OccurrenceMapRow to avoid SSR issues with Leaflet
@@ -265,9 +264,6 @@ export default function RedListView() {
 
   // Species details cache (images, criteria, common names)
   const [speciesDetails, setSpeciesDetails] = useState<Record<number, SpeciesDetails>>({});
-
-  // Observation trend flags (fetched per-page from GBIF year-faceted data)
-  const [speciesTrends, setSpeciesTrends] = useState<Record<number, TrendResult>>({});
 
   // Row expansion state
   const [selectedSpeciesKey, setSelectedSpeciesKey] = useState<number | null>(null);
@@ -654,46 +650,6 @@ export default function RedListView() {
 
     fetchCriteria();
   }, [selectedSpeciesKey, paginatedSpecies, speciesDetails]);
-
-  // Fetch observation trends for visible species (batched per-page)
-  useEffect(() => {
-    // Only fetch trends for species with GBIF keys that we haven't fetched yet
-    const toFetch = paginatedSpecies.filter(
-      (s) => s.gbif_species_key && !speciesTrends[s.gbif_species_key] && s.category !== "EX" && s.category !== "EW"
-    );
-    if (toFetch.length === 0) return;
-
-    const controller = new AbortController();
-
-    async function fetchTrends() {
-      const keys = toFetch.map((s) => s.gbif_species_key!).join(",");
-      const categories = toFetch.map((s) => s.category).join(",");
-      const taxons = toFetch.map((s) => s.taxon_id ?? s.taxon_group ?? "").join(",");
-      try {
-        const res = await fetch(
-          `/api/redlist/trends?keys=${keys}&categories=${categories}&taxons=${taxons}`,
-          { signal: controller.signal }
-        );
-        if (!res.ok || controller.signal.aborted) return;
-        const data = await res.json();
-        if (data.trends) {
-          setSpeciesTrends((prev) => {
-            const next = { ...prev };
-            // Key by gbif_species_key for O(1) lookup
-            for (const [key, trend] of Object.entries(data.trends)) {
-              next[Number(key)] = trend as TrendResult;
-            }
-            return next;
-          });
-        }
-      } catch {
-        // Abort or network error — ignore
-      }
-    }
-
-    fetchTrends();
-    return () => controller.abort("cleanup");
-  }, [paginatedSpecies, speciesTrends]);
 
   // Handle category bar click (Cmd/Ctrl+click for multi-select, regular click replaces)
   const handleCategoryClick = (data: { payload?: { code?: string } }, event: React.MouseEvent) => {
