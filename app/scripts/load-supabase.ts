@@ -397,7 +397,7 @@ async function fetchAllSpecies(supabase: SupabaseClient, columns: string = "*"):
 
     if (error) throw new Error(`Failed to fetch species: ${error.message}`);
     if (!data || data.length === 0) break;
-    rows.push(...data);
+    rows.push(...(data as unknown as Record<string, unknown>[]));
     offset += PAGE_SIZE;
     if (data.length < PAGE_SIZE) break;
   }
