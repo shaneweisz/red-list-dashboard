@@ -148,22 +148,12 @@ function csvEscape(value: string): string {
   return value;
 }
 
-function timestampPrefix(): string {
-  const now = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return (
-    `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}` +
-    `T${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
-  );
-}
-
 export function writeCsv(
   rows: Record<string, string | number | null | undefined>[],
   columns: string[],
   outputPath: string
 ): void {
-  const dir = path.dirname(outputPath);
-  fs.mkdirSync(dir, { recursive: true });
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
   const header = columns.join(",");
   const lines = rows.map((row) =>
     columns.map((col) => {
@@ -172,31 +162,7 @@ export function writeCsv(
       return csvEscape(String(val));
     }).join(",")
   );
-  const content = header + "\n" + lines.join("\n") + "\n";
-
-  // Write timestamped copy
-  const basename = path.basename(outputPath);
-  const timestampedPath = path.join(dir, `${timestampPrefix()}_${basename}`);
-  fs.writeFileSync(timestampedPath, content);
-  console.log(`  Saved ${path.relative(process.cwd(), timestampedPath)}`);
-
-  // Also write canonical path (for downstream readers)
-  fs.writeFileSync(outputPath, content);
-}
-
-/**
- * Find the latest timestamped CSV matching a base filename.
- * Falls back to the canonical (un-prefixed) path if no timestamped version exists.
- */
-export function latestCsvPath(baseName: string, dir: string = DATA_DIR): string {
-  const pattern = new RegExp(`^\\d{8}T\\d{6}_${baseName.replace(".", "\\.")}$`);
-  const matches = fs.readdirSync(dir)
-    .filter((f) => pattern.test(f))
-    .sort();
-  if (matches.length > 0) {
-    return path.join(dir, matches[matches.length - 1]);
-  }
-  return path.join(dir, baseName);
+  fs.writeFileSync(outputPath, header + "\n" + lines.join("\n") + "\n");
 }
 
 function parseCsvLine(line: string): string[] {
