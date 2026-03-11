@@ -18,7 +18,9 @@
  *   npx tsx scripts/sync.ts mammalia aves        # Specific taxa only
  */
 
-import { loadEnvFiles, SyncLogger } from "./utils";
+import fs from "fs";
+import path from "path";
+import { DATA_DIR, loadEnvFiles, SyncLogger } from "./utils";
 import { run as fetchRedlistSpecies } from "./fetch-redlist-species";
 import { run as fetchGbifSpecies } from "./fetch-gbif-species";
 import { run as matchRedlistSpeciesToGbif } from "./match-redlist-species-to-gbif";
@@ -41,6 +43,16 @@ async function main() {
 
   try {
     logger.log("sync_start", { taxa: taxaFilter ?? "all" });
+
+    // Back up existing CSVs before overwriting
+    for (const name of ["redlist-species", "gbif-species"]) {
+      const csvPath = path.join(DATA_DIR, `${name}.csv`);
+      if (fs.existsSync(csvPath)) {
+        const backupPath = path.join(DATA_DIR, `${name}-backup.csv`);
+        fs.copyFileSync(csvPath, backupPath);
+        console.log(`Backed up ${name}.csv → ${name}-backup.csv`);
+      }
+    }
 
     // Phase 1: Red List
     console.log("Phase 1: fetch-redlist-species");
