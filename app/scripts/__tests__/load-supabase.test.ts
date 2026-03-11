@@ -339,8 +339,9 @@ describe("diffMerged", () => {
     expect(diff.added.map((r) => r.sis_taxon_id).sort()).toEqual([201, 202]);
   });
 
-  it("handles species lump: two old species → one new species", () => {
-    // e.g. Two species lumped into one under a single sis_taxon_id
+  it("handles species lump: two old species → one new species (all new IDs)", () => {
+    // IUCN retires both old sis_taxon_ids and creates a new one for the lumped taxon
+    // e.g. Bos grunniens (301) + Bos mutus (302) → Bos grunniens (400)
     const oldRows = [
       makeDbRow({
         sis_taxon_id: 301,
@@ -354,15 +355,16 @@ describe("diffMerged", () => {
       }),
     ];
     const newRows = [makeDbRow({
-      sis_taxon_id: 301,
+      sis_taxon_id: 400,
       scientific_name: "Bos grunniens",
       table1a_taxon_group: "mammalia",
     })];
     const diff = diffMerged(oldRows, newRows);
 
-    expect(diff.removed).toHaveLength(1);
-    expect(diff.removed[0].sis_taxon_id).toBe(302);
-    expect(diff.unchanged).toBe(1);
+    expect(diff.removed).toHaveLength(2);
+    expect(diff.removed.map((r) => r.sis_taxon_id).sort()).toEqual([301, 302]);
+    expect(diff.added).toHaveLength(1);
+    expect(diff.added[0].sis_taxon_id).toBe(400);
   });
 
   it("handles taxonomic rename: same sis_taxon_id, new scientific_name", () => {
