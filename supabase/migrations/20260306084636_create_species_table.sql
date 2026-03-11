@@ -34,21 +34,6 @@ create table public.species (
   synced_at                   timestamptz default now()
 );
 
--- Extensions (pg_trgm for fuzzy/substring search, per Supabase convention)
-create schema if not exists extensions;
-create extension if not exists pg_trgm schema extensions;
-
--- Indexes
-create index idx_species_scientific_name_trgm
-  on public.species using gin(scientific_name extensions.gin_trgm_ops);
-create index idx_species_table1a_taxon_group on public.species(table1a_taxon_group);
-create index idx_species_iucn_category on public.species(iucn_category);
-create index idx_species_assessment_date on public.species(assessment_date);
-create index idx_species_countries on public.species using gin(countries);
-create index idx_species_gbif_total_count on public.species(gbif_total_count);
-create index idx_species_class_name on public.species(class_name);
-create index idx_species_order_name on public.species(order_name);
-
 -- RLS
 alter table public.species enable row level security;
 create policy "Species are readable by everyone"

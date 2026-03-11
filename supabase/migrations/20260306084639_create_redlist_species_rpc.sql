@@ -1,10 +1,10 @@
--- dashboard_query: Single RPC for the Red List dashboard.
+-- redlist_species_query: Single RPC for POST /api/redlist/species.
 --
 -- Returns paginated, sorted species plus cross-filtered chart aggregations
 -- in one database round-trip. Each chart dimension (category, year, obs, country)
 -- gets counts with all OTHER filters applied but its own excluded.
 
-create or replace function dashboard_query(
+create or replace function redlist_species_query(
   p_taxon_groups     text[],
   p_categories       text[]  default null,
   p_year_ranges      text[]  default null,
@@ -20,6 +20,7 @@ returns json
 language plpgsql
 stable
 set search_path = public
+set statement_timeout = '5s'
 as $$
 declare
   result json;
@@ -46,12 +47,11 @@ begin
   into result
   from
 
-  -- ── Base CTE: taxon group + search (always applied) ──────────────────
   lateral (
-    select true -- just drives the from clause
+    select true
   ) _driver
 
-  -- ── Species list (fully filtered, sorted, paginated) ─────────────────
+  -- Species list (fully filtered, sorted, paginated)
   left join lateral (
     select json_agg(row_to_json(t)) as arr
     from (
@@ -73,7 +73,6 @@ begin
         s.gbif_species_key,
         s.gbif_total_count as gbif_occurrence_count,
         s.gbif_count_since_assessment as gbif_observations_after_assessment_year,
-        -- Priority score
         case
           when s.iucn_category in ('EX', 'EW') then 0
           else
@@ -98,11 +97,9 @@ begin
         end as priority_score
       from species s
       where s.table1a_taxon_group = any(p_taxon_groups)
-        -- Search filter
         and (v_search is null
              or s.scientific_name ilike '%' || v_search || '%'
              or s.common_name ilike '%' || v_search || '%')
-        -- Category filter (NE = sis_taxon_id IS NULL)
         and (
           (not v_has_categories and s.sis_taxon_id is not null)
           or (v_has_categories and (
@@ -110,9 +107,8 @@ begin
             or (s.sis_taxon_id is null and v_has_ne)
           ))
         )
-        -- Year range filter (NE species skip this)
         and (
-          s.sis_taxon_id is null  -- NE skips year filter
+          s.sis_taxon_id is null
           or not v_has_year_ranges
           or (
             case
@@ -125,9 +121,7 @@ begin
             end
           ) = any(p_year_ranges)
         )
-        -- Country filter
         and (not v_has_countries or s.countries && p_countries)
-        -- Observation range filter
         and (not v_has_obs_ranges or (
           case
             when coalesce(s.gbif_total_count, 0) = 0 then '0'
@@ -205,13 +199,13 @@ begin
         case when p_sort_field = 'year' and p_sort_direction = 'asc' then s.assessment_date end asc nulls last,
         case when p_sort_field = 'newGbif' and p_sort_direction = 'desc' then coalesce(s.gbif_count_since_assessment, -1) end desc,
         case when p_sort_field = 'newGbif' and p_sort_direction = 'asc' then coalesce(s.gbif_count_since_assessment, -1) end asc,
-        s.id  -- stable tiebreaker
+        s.id
       limit p_page_size
       offset v_offset
     ) t
   ) sp on true
 
-  -- ── Total count of filtered species ──────────────────────────────────
+  -- Total count
   left join lateral (
     select count(*)::int as total
     from species s
@@ -253,18 +247,17 @@ begin
       ) = any(p_obs_ranges))
   ) cnt on true
 
-  -- ── Cross-filter: categories (exclude category filter, exclude NE) ───
+  -- Cross-filter: categories
   left join lateral (
     select json_object_agg(cat, cnt) as obj
     from (
       select s.iucn_category as cat, count(*)::int as cnt
       from species s
       where s.table1a_taxon_group = any(p_taxon_groups)
-        and s.sis_taxon_id is not null  -- exclude NE from category chart
+        and s.sis_taxon_id is not null
         and (v_search is null
              or s.scientific_name ilike '%' || v_search || '%'
              or s.common_name ilike '%' || v_search || '%')
-        -- Apply year, country, obs filters (NOT category)
         and (
           not v_has_year_ranges
           or (
@@ -293,7 +286,7 @@ begin
     ) sub
   ) cf_cat on true
 
-  -- ── Cross-filter: year ranges (exclude year filter, exclude NE) ──────
+  -- Cross-filter: year ranges
   left join lateral (
     select json_object_agg(bucket, cnt) as obj
     from (
@@ -308,12 +301,11 @@ begin
         count(*)::int as cnt
       from species s
       where s.table1a_taxon_group = any(p_taxon_groups)
-        and s.sis_taxon_id is not null  -- exclude NE
+        and s.sis_taxon_id is not null
         and s.assessment_date is not null
         and (v_search is null
              or s.scientific_name ilike '%' || v_search || '%'
              or s.common_name ilike '%' || v_search || '%')
-        -- Apply category, country, obs filters (NOT year)
         and (
           not v_has_categories
           or s.iucn_category = any(p_categories)
@@ -333,7 +325,7 @@ begin
     ) sub
   ) cf_yr on true
 
-  -- ── Cross-filter: countries (exclude country filter) ─────────────────
+  -- Cross-filter: countries
   left join lateral (
     select json_object_agg(country, cnt) as obj
     from (
@@ -343,7 +335,6 @@ begin
         and (v_search is null
              or s.scientific_name ilike '%' || v_search || '%'
              or s.common_name ilike '%' || v_search || '%')
-        -- Apply category, year, obs filters (NOT country)
         and (
           (not v_has_categories and s.sis_taxon_id is not null)
           or (v_has_categories and (
@@ -379,7 +370,7 @@ begin
     ) sub
   ) cf_co on true
 
-  -- ── Cross-filter: observation ranges (exclude obs filter) ────────────
+  -- Cross-filter: observation ranges
   left join lateral (
     select json_object_agg(bucket, cnt) as obj
     from (
@@ -398,7 +389,6 @@ begin
         and (v_search is null
              or s.scientific_name ilike '%' || v_search || '%'
              or s.common_name ilike '%' || v_search || '%')
-        -- Apply category, year, country filters (NOT obs)
         and (
           (not v_has_categories and s.sis_taxon_id is not null)
           or (v_has_categories and (
@@ -425,16 +415,15 @@ begin
     ) sub
   ) cf_obs on true
 
-  -- ── NE count (for the NE button, exclude category filter) ────────────
+  -- NE count
   left join lateral (
     select count(*)::int as cnt
     from species s
     where s.table1a_taxon_group = any(p_taxon_groups)
-      and s.sis_taxon_id is null  -- NE only
+      and s.sis_taxon_id is null
       and (v_search is null
            or s.scientific_name ilike '%' || v_search || '%'
            or s.common_name ilike '%' || v_search || '%')
-      -- Apply country, obs filters (NOT category, NOT year since NE has no year)
       and (not v_has_countries or s.countries && p_countries)
       and (not v_has_obs_ranges or (
         case
@@ -452,5 +441,4 @@ begin
 end;
 $$;
 
--- Grant execute to anon so it's callable via the Supabase client
-grant execute on function dashboard_query to anon, authenticated;
+grant execute on function redlist_species_query to anon, authenticated;

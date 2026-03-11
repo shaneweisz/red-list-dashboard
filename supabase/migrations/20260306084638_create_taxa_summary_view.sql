@@ -1,6 +1,5 @@
 -- Materialized view for taxa summary (powers /api/redlist/taxa).
 -- Scoped to Red List species (sis_taxon_id IS NOT NULL).
--- No joins needed — all data is in the single species table.
 -- Refresh after each sync: SELECT refresh_taxa_summary();
 
 create materialized view taxa_summary as
@@ -45,7 +44,7 @@ select
 from species_stats s
 join category_counts c using (table1a_taxon_group);
 
--- Revoke direct API access — API routes query via service role
+-- Revoke direct API access — accessed via get_taxa_summary() RPC
 revoke select on taxa_summary from anon, authenticated;
 
 -- Function to refresh the materialized view (callable via supabase.rpc)
@@ -61,3 +60,17 @@ $$;
 -- Restrict refresh to service_role only
 revoke execute on function refresh_taxa_summary() from public, anon, authenticated;
 grant execute on function refresh_taxa_summary() to service_role;
+
+-- RPC wrapper for anon access
+create or replace function get_taxa_summary()
+returns json
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select json_agg(row_to_json(t))
+  from taxa_summary t;
+$$;
+
+grant execute on function get_taxa_summary() to anon, authenticated;
