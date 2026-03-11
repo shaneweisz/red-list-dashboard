@@ -8,6 +8,9 @@ create extension if not exists pg_trgm schema extensions;
 create index idx_species_scientific_name_trgm
   on public.species using gin(scientific_name extensions.gin_trgm_ops);
 
+create index idx_species_common_name_trgm
+  on public.species using gin(common_name extensions.gin_trgm_ops);
+
 -- Column indexes for common filter/sort dimensions
 create index idx_species_table1a_taxon_group on public.species(table1a_taxon_group);
 create index idx_species_iucn_category on public.species(iucn_category);
