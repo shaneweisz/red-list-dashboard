@@ -26,6 +26,7 @@
  */
 
 import * as path from "path";
+import * as fs from "fs";
 import {
   loadEnvFiles,
   createServiceClient,
@@ -276,34 +277,88 @@ function diffMerged(oldRows: SpeciesDbRow[], newRows: SpeciesDbRow[]): DiffResul
   return { added, removed, updated, unchanged };
 }
 
-/** Group items by taxon, pick first from each group */
-function onePerTaxon<T extends { row: SpeciesDbRow }>(items: T[]): T[] {
-  const seen = new Set<string>();
-  const result: T[] = [];
-  for (const item of items) {
-    const taxon = item.row.table1a_taxon_group;
-    if (!seen.has(taxon)) {
-      seen.add(taxon);
-      result.push(item);
-    }
-  }
-  return result;
+function createLogStream(mode: "dry-run" | "load"): fs.WriteStream {
+  const logsDir = path.join(__dirname, "../logs");
+  fs.mkdirSync(logsDir, { recursive: true });
+  const ts = new Date().toISOString().replace(/:/g, "-").replace(/\.\d+Z$/, "Z");
+  const filename = `${ts}_load-supabase${mode === "dry-run" ? "_dry-run" : ""}.jsonl`;
+  const filepath = path.join(logsDir, filename);
+  console.log(`  Log file: ${filepath}`);
+  return fs.createWriteStream(filepath, { flags: "a" });
 }
 
-function formatSpeciesKey(row: SpeciesDbRow): string {
-  return row.sis_taxon_id ? `sis:${row.sis_taxon_id}` : `gbif:${row.gbif_species_key}`;
+function logLine(stream: fs.WriteStream, event: string, data: Record<string, unknown>): void {
+  stream.write(JSON.stringify({ ts: new Date().toISOString(), event, ...data }) + "\n");
 }
 
-function printDiff(diff: DiffResult): void {
+function writeDiffLog(stream: fs.WriteStream, diff: DiffResult): void {
   const { added, removed, updated, unchanged } = diff;
 
-  console.log("\n--- Dry-run diff (DB → CSVs) ---\n");
+  // Summary
+  logLine(stream, "diff_summary", {
+    unchanged,
+    added: added.length,
+    updated: updated.length,
+    removed: removed.length,
+  });
+
+  // Field change counts
+  if (updated.length > 0) {
+    const fieldCounts: Record<string, number> = {};
+    for (const { changes } of updated) {
+      for (const c of changes) {
+        fieldCounts[c.field] = (fieldCounts[c.field] || 0) + 1;
+      }
+    }
+    logLine(stream, "updated_fields", fieldCounts);
+  }
+
+  // Every addition
+  for (const row of added) {
+    logLine(stream, "added", {
+      sis_taxon_id: row.sis_taxon_id,
+      gbif_species_key: row.gbif_species_key,
+      scientific_name: row.scientific_name,
+      common_name: row.common_name,
+      taxon_group: row.table1a_taxon_group,
+    });
+  }
+
+  // Every update
+  for (const { row, changes } of updated) {
+    const changesObj: Record<string, { old: unknown; new: unknown }> = {};
+    for (const c of changes) {
+      changesObj[c.field] = { old: c.old, new: c.new };
+    }
+    logLine(stream, "updated", {
+      sis_taxon_id: row.sis_taxon_id,
+      gbif_species_key: row.gbif_species_key,
+      scientific_name: row.scientific_name,
+      taxon_group: row.table1a_taxon_group,
+      changes: changesObj,
+    });
+  }
+
+  // Every removal
+  for (const row of removed) {
+    logLine(stream, "removed", {
+      sis_taxon_id: row.sis_taxon_id,
+      gbif_species_key: row.gbif_species_key,
+      scientific_name: row.scientific_name,
+      taxon_group: row.table1a_taxon_group,
+    });
+  }
+}
+
+function printDiffSummary(diff: DiffResult): void {
+  const { added, removed, updated, unchanged } = diff;
+
+  console.log("\n--- Diff (DB → CSVs) ---\n");
   console.log(`  Unchanged: ${unchanged.toLocaleString()}`);
   console.log(`  Added:     ${added.length.toLocaleString()}`);
   console.log(`  Updated:   ${updated.length.toLocaleString()}`);
   console.log(`  Removed:   ${removed.length.toLocaleString()}`);
 
-  // Summarize what fields changed
   if (updated.length > 0) {
     const fieldCounts: Record<string, number> = {};
     for (const { changes } of updated) {
@@ -314,51 +369,6 @@ function printDiff(diff: DiffResult): void {
     console.log("\n  Updated fields:");
     for (const [field, count] of Object.entries(fieldCounts).sort((a, b) => b[1] - a[1])) {
       console.log(`    ${field}: ${count.toLocaleString()} rows`);
-    }
-  }
-
-  // Group updates by change type for per-taxon examples
-  if (updated.length > 0) {
-    const byChangeType = new Map<string, { row: SpeciesDbRow; changes: FieldChange[] }[]>();
-    for (const entry of updated) {
-      for (const c of entry.changes) {
-        const list = byChangeType.get(c.field) ?? [];
-        list.push(entry);
-        byChangeType.set(c.field, list);
-      }
-    }
-
-    for (const [field, entries] of byChangeType) {
-      const examples = onePerTaxon(entries);
-      console.log(`\n  ${field} changes (1 per taxon, ${entries.length.toLocaleString()} total):`);
-      for (const { row, changes } of examples) {
-        const change = changes.find((c) => c.field === field)!;
-        console.log(`    e.g. [${row.table1a_taxon_group}] ${formatSpeciesKey(row)} ${row.scientific_name}: ${JSON.stringify(change.old)} → ${JSON.stringify(change.new)}`);
-      }
-    }
-  }
-
-  // Added: one per taxon
-  if (added.length > 0) {
-    const byTaxon = new Map<string, SpeciesDbRow>();
-    for (const row of added) {
-      if (!byTaxon.has(row.table1a_taxon_group)) byTaxon.set(row.table1a_taxon_group, row);
-    }
-    console.log(`\n  Added species (1 per taxon, ${added.length.toLocaleString()} total):`);
-    for (const [taxon, row] of byTaxon) {
-      console.log(`    e.g. [${taxon}] ${formatSpeciesKey(row)} ${row.scientific_name}`);
-    }
-  }
-
-  // Removed: one per taxon
-  if (removed.length > 0) {
-    const byTaxon = new Map<string, SpeciesDbRow>();
-    for (const row of removed) {
-      if (!byTaxon.has(row.table1a_taxon_group)) byTaxon.set(row.table1a_taxon_group, row);
-    }
-    console.log(`\n  Removed species (1 per taxon, ${removed.length.toLocaleString()} total):`);
-    for (const [taxon, row] of byTaxon) {
-      console.log(`    e.g. [${taxon}] ${formatSpeciesKey(row)} ${row.scientific_name}`);
     }
   }
 }
@@ -464,15 +474,30 @@ export async function run(opts: {
   );
   console.log(`  ${existingRaw.length.toLocaleString()} existing rows`);
 
+  // Compute diff (used for both dry-run logging and live logging)
+  const dbRows = dryRun
+    ? existingRaw.map(dbRowToSpeciesDbRow)
+    : null; // live path doesn't need full rows for diff — computed post-sync
+
   if (dryRun) {
-    const dbRows = existingRaw.map(dbRowToSpeciesDbRow);
-    const diff = diffMerged(dbRows, merged);
-    printDiff(diff);
+    const diff = diffMerged(dbRows!, merged);
+    const logStream = createLogStream("dry-run");
+    writeDiffLog(logStream, diff);
+    logStream.end();
+    printDiffSummary(diff);
     console.log("\n--dry-run: no changes made.");
     return;
   }
 
   const existing = existingRaw as unknown as ExistingSpecies[];
+  const logStream = createLogStream("load");
+  logLine(logStream, "load_start", {
+    merged_total: merged.length,
+    redlist_only: redlistOnly,
+    gbif_only: gbifOnly,
+    matched_both: both,
+    existing_in_db: existing.length,
+  });
 
   const existingBySisTaxonId = new Map<number, ExistingSpecies>();
   const existingByGbifKey = new Map<number, ExistingSpecies>();
@@ -503,6 +528,11 @@ export async function run(opts: {
       if (error) {
         throw new Error(`Failed to promote gbif_species_key=${p.gbif_species_key}: ${error.message}`);
       }
+      logLine(logStream, "promoted", {
+        sis_taxon_id: p.sis_taxon_id,
+        gbif_species_key: p.gbif_species_key,
+        scientific_name: p.scientific_name,
+      });
     }
     console.log("  Done.");
   }
@@ -560,6 +590,18 @@ export async function run(opts: {
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
   const minutes = Math.floor(Number(elapsed) / 60);
   const seconds = Number(elapsed) % 60;
+
+  const summary = {
+    species_total: merged.length,
+    redlist_only: redlistOnly,
+    gbif_only: gbifOnly,
+    matched_both: both,
+    promotions: promotions.length,
+    stale_deleted: deleteCount ?? 0,
+    duration_seconds: Number(elapsed),
+  };
+  logLine(logStream, "load_complete", summary);
+  logStream.end();
 
   console.log("\n" + "=".repeat(50));
   console.log("load-supabase complete:");
