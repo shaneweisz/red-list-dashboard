@@ -203,12 +203,24 @@ export default function RedListView() {
 
   // Taxon toggle handler (used by TaxaSummary)
   // Regular click: select only that taxon (or deselect if already sole selection)
-  // Cmd/Ctrl+Click: multi-select toggle
+  // Cmd/Ctrl+Click on taxon row: multi-select toggle (expands taxa summary to show all rows)
   const handleToggleTaxon = useCallback((taxonId: string, event: React.MouseEvent) => {
     const isMulti = event.metaKey || event.ctrlKey;
+
+    // "all" row: always single-select (toggle on/off), no multi-select
+    if (taxonId === "all") {
+      setSelectedTaxa(prev => {
+        if (prev.has("all")) return new Set<string>();
+        return new Set(["all"]);
+      });
+      return;
+    }
+
     setSelectedTaxa(prev => {
       if (isMulti) {
+        // Remove "all" if present when multi-selecting specific taxa
         const next = new Set(prev);
+        next.delete("all");
         if (next.has(taxonId)) {
           next.delete(taxonId);
         } else {
@@ -237,10 +249,11 @@ export default function RedListView() {
   const PAGE_SIZE = 10;
 
   // ── Data fetching ────────────────────────────────────────────────────
-  const activeTaxonId = useMemo(() => {
-    if (selectedTaxa.size === 0) return "all";
+  const activeTaxonId = useMemo((): string | null => {
+    if (selectedTaxa.size === 0) return null; // No fetch on initial load
+    if (selectedTaxa.has("all")) return "all";
     if (selectedTaxa.size === 1) return [...selectedTaxa][0];
-    return "all";
+    return "all"; // Multi-taxa → fetch all, filter client-side
   }, [selectedTaxa]);
 
   const { species: assessedSpecies, isLoading: speciesLoading, error } = useRedListSpecies(activeTaxonId);
@@ -250,7 +263,7 @@ export default function RedListView() {
   const [neSpeciesFetched, setNeSpeciesFetched] = useState(false);
 
   useEffect(() => {
-    if (!selectedCategories.has("NE") || neSpeciesFetched) return;
+    if (!selectedCategories.has("NE") || neSpeciesFetched || activeTaxonId === null) return;
     fetch(`/api/redlist/species?taxon=${encodeURIComponent(activeTaxonId)}&category=NE`)
       .then(res => res.ok ? res.json() : null)
       .then(data => { if (data?.species) setNeSpecies(data.species); setNeSpeciesFetched(true); })
@@ -892,7 +905,8 @@ export default function RedListView() {
         </div>
       )}
 
-      {/* Charts, search, and species table - always visible below summary */}
+      {/* Charts, search, and species table - only visible after a taxon is selected */}
+      {selectedTaxa.size > 0 && (
       <div className="space-y-3">
 
           {/* Charts and map */}
@@ -1638,6 +1652,7 @@ export default function RedListView() {
         )}
       </div>
       </div>
+      )}
 
       {/* Fixed image preview portal */}
       <img

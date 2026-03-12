@@ -37,14 +37,23 @@ interface SpeciesResponse {
  * Fetches all species for a given taxon from the API.
  * Only re-fetches when taxonId changes.
  */
-export function useRedListSpecies(taxonId: string) {
+export function useRedListSpecies(taxonId: string | null) {
   const [species, setSpecies] = useState<RedListSpecies[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     abortRef.current?.abort();
+
+    // null means "don't fetch" — return empty state
+    if (taxonId === null) {
+      setSpecies([]);
+      setIsLoading(false);
+      setError(null);
+      return;
+    }
+
     const controller = new AbortController();
     abortRef.current = controller;
 
