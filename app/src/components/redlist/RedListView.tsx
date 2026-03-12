@@ -11,7 +11,7 @@ import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
 import { useFilterParams } from "@/hooks/useFilterParams";
-import { useRedListSpecies, type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
+import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import { computePriority, type PriorityResult } from "@/lib/prioritization";
 import AssessmentAssistant from "../AssessmentAssistant";
 
@@ -249,29 +249,101 @@ export default function RedListView() {
   const PAGE_SIZE = 10;
 
   // ── Data fetching ────────────────────────────────────────────────────
-  const activeTaxonId = useMemo((): string | null => {
-    if (selectedTaxa.size === 0) return null; // No fetch on initial load
-    if (selectedTaxa.has("all")) return "all";
-    if (selectedTaxa.size === 1) return [...selectedTaxa][0];
-    return "all"; // Multi-taxa → fetch all, filter client-side
-  }, [selectedTaxa]);
+  // Cache of fetched species per taxon ID. When "all" is fetched, it supersedes
+  // individual taxa caches. Each taxon is fetched at most once.
+  const [speciesByTaxon, setSpeciesByTaxon] = useState<Record<string, RedListSpecies[]>>({});
+  const [loadingTaxa, setLoadingTaxa] = useState<Set<string>>(new Set());
+  const [error, setError] = useState<string | null>(null);
+  const abortRefs = useRef<Record<string, AbortController>>({});
 
-  const { species: assessedSpecies, isLoading: speciesLoading, error } = useRedListSpecies(activeTaxonId);
+  // Determine which taxa need fetching
+  useEffect(() => {
+    if (selectedTaxa.size === 0) return;
+
+    const taxaToFetch = [...selectedTaxa].filter(t => !speciesByTaxon[t] && !loadingTaxa.has(t));
+    // If "all" is already cached, no individual fetches needed
+    if (speciesByTaxon["all"] && !selectedTaxa.has("all")) {
+      // "all" data covers everything — no new fetches needed
+      return;
+    }
+    if (taxaToFetch.length === 0) return;
+
+    for (const taxonId of taxaToFetch) {
+      // If fetching "all", abort any in-flight individual taxon fetches
+      if (taxonId === "all") {
+        Object.entries(abortRefs.current).forEach(([id, ctrl]) => {
+          if (id !== "all") ctrl.abort();
+        });
+      }
+
+      const controller = new AbortController();
+      abortRefs.current[taxonId] = controller;
+
+      setLoadingTaxa(prev => new Set(prev).add(taxonId));
+
+      fetch(`/api/redlist/species?taxon=${encodeURIComponent(taxonId)}`, { signal: controller.signal })
+        .then(async res => {
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            throw new Error(body.error || `Species API returned ${res.status}`);
+          }
+          return res.json();
+        })
+        .then(data => {
+          if (!controller.signal.aborted) {
+            setSpeciesByTaxon(prev => ({ ...prev, [taxonId]: data.species }));
+          }
+        })
+        .catch(err => {
+          if (!controller.signal.aborted) {
+            setError(err instanceof Error ? err.message : "Unknown error");
+          }
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) {
+            setLoadingTaxa(prev => { const next = new Set(prev); next.delete(taxonId); return next; });
+          }
+          delete abortRefs.current[taxonId];
+        });
+    }
+  }, [selectedTaxa, speciesByTaxon, loadingTaxa]);
+
+  const speciesLoading = loadingTaxa.size > 0;
+
+  // Merge species from all fetched taxa relevant to current selection
+  const assessedSpecies = useMemo(() => {
+    if (selectedTaxa.size === 0) return [];
+    // If "all" is cached, use it directly
+    if (speciesByTaxon["all"]) return speciesByTaxon["all"];
+    // Otherwise merge per-taxon caches
+    const merged: RedListSpecies[] = [];
+    for (const taxonId of selectedTaxa) {
+      if (speciesByTaxon[taxonId]) merged.push(...speciesByTaxon[taxonId]);
+    }
+    return merged;
+  }, [selectedTaxa, speciesByTaxon]);
 
   // NE species lazy loading (only fetched when NE category is selected)
   const [neSpecies, setNeSpecies] = useState<RedListSpecies[]>([]);
   const [neSpeciesFetched, setNeSpeciesFetched] = useState(false);
+  // Determine taxon for NE fetch: "all" if selected or multi-taxa, otherwise the single taxon
+  const neFetchTaxon = useMemo(() => {
+    if (selectedTaxa.size === 0) return null;
+    if (selectedTaxa.has("all")) return "all";
+    if (selectedTaxa.size === 1) return [...selectedTaxa][0];
+    return "all";
+  }, [selectedTaxa]);
 
   useEffect(() => {
-    if (!selectedCategories.has("NE") || neSpeciesFetched || activeTaxonId === null) return;
-    fetch(`/api/redlist/species?taxon=${encodeURIComponent(activeTaxonId)}&category=NE`)
+    if (!selectedCategories.has("NE") || neSpeciesFetched || neFetchTaxon === null) return;
+    fetch(`/api/redlist/species?taxon=${encodeURIComponent(neFetchTaxon)}&category=NE`)
       .then(res => res.ok ? res.json() : null)
       .then(data => { if (data?.species) setNeSpecies(data.species); setNeSpeciesFetched(true); })
       .catch(() => {});
-  }, [selectedCategories, neSpeciesFetched, activeTaxonId]);
+  }, [selectedCategories, neSpeciesFetched, neFetchTaxon]);
 
-  // Reset NE fetch when taxon changes
-  useEffect(() => { setNeSpecies([]); setNeSpeciesFetched(false); }, [activeTaxonId]);
+  // Reset NE fetch when taxon selection changes
+  useEffect(() => { setNeSpecies([]); setNeSpeciesFetched(false); }, [neFetchTaxon]);
 
   // All species = assessed + NE
   const species = useMemo(() => [...assessedSpecies, ...neSpecies], [assessedSpecies, neSpecies]);

@@ -89,6 +89,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Tracks whether the taxa table is expanded for multi-select.
+  // Set to true only when the user Cmd/Ctrl+clicks a taxon row;
+  // cleared when the modifier key is released.
+  const [taxaExpanded, setTaxaExpanded] = useState(false);
   const [focusMode, setFocusMode] = useState<FocusMode>("redlist");
   const [hiddenColumns, setHiddenColumns] = useState<Set<ColumnId>>(new Set(DEFAULT_HIDDEN_COLUMNS));
   const [showColumnMenu, setShowColumnMenu] = useState(false);
@@ -124,6 +128,21 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [showColumnMenu]);
+
+  // Collapse taxa table when Cmd/Ctrl is released after a multi-select click
+  useEffect(() => {
+    if (!taxaExpanded) return;
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (!e.metaKey && !e.ctrlKey) setTaxaExpanded(false);
+    };
+    const onBlur = () => setTaxaExpanded(false);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, [taxaExpanded]);
 
   // Auto-scroll to show Assessed column on mobile (skip past Est. Described)
   const autoScroll = useCallback((el: HTMLDivElement) => {
@@ -462,6 +481,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
         key={id}
         onClick={(e) => {
           if (!isAllRow && !available) return;
+          // Expand taxa table when Cmd/Ctrl+clicking a taxon row (not "all")
+          if (!isAllRow && (e.metaKey || e.ctrlKey)) {
+            setTaxaExpanded(true);
+          }
           onToggleTaxon(id, e);
         }}
         className={`transition-colors ${rowBg} ${hoverClass}`}
@@ -723,11 +746,12 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
 
           {/* Collapse logic:
               - "all" selected → hide all per-taxa rows (only All Species row shown above)
+              - taxaExpanded (Cmd/Ctrl held after clicking taxon row) → show all rows for multi-select
               - specific taxa selected → show only those taxa rows
               - nothing selected → show all taxa rows (landing page) */}
           {selectedTaxa.has("all")
             ? null
-            : (selectedTaxa.size > 0
+            : (selectedTaxa.size > 0 && !taxaExpanded
               ? perTaxa
                   .filter((taxon) => selectedTaxa.has(taxon.id))
                   .map((taxon) =>
