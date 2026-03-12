@@ -1,4 +1,4 @@
--- Materialized view for taxa summary (powers /api/redlist/taxa).
+-- Materialized view for taxa summary (powers /api/redlist/taxa-summary).
 -- Scoped to Red List species (sis_taxon_id IS NOT NULL).
 -- Refresh after each sync: SELECT refresh_taxa_summary();
 

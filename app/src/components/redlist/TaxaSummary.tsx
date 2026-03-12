@@ -163,7 +163,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
   useEffect(() => {
     async function fetchTaxa() {
       try {
-        const res = await fetch("/api/redlist/taxa");
+        const res = await fetch("/api/redlist/taxa-summary");
         if (!res.ok) throw new Error("Failed to load taxa");
         const data = await res.json();
         setTaxa(data.taxa);
