@@ -569,14 +569,14 @@ export async function run(opts: {
 
   // Phase 3: Delete stale rows (not touched in this sync)
   console.log("\nDeleting stale rows...");
-  const { count: deleteCount, error: deleteError } = await supabase
+  const { count: totalDeleted, error: deleteError } = await supabase
     .from("species")
     .delete({ count: "exact" })
     .lt("synced_at", syncTimestamp);
   if (deleteError) {
     throw new Error(`Failed to delete stale rows: ${deleteError.message}`);
   }
-  console.log(`  Deleted ${(deleteCount ?? 0).toLocaleString()} stale rows.`);
+  console.log(`  Deleted ${(totalDeleted ?? 0).toLocaleString()} stale rows.`);
 
   // Refresh materialized view
   console.log("\nRefreshing taxa_summary materialized view...");
@@ -597,7 +597,7 @@ export async function run(opts: {
     gbif_only: gbifOnly,
     matched_both: both,
     promotions: promotions.length,
-    stale_deleted: deleteCount ?? 0,
+    stale_deleted: totalDeleted ?? 0,
     duration_seconds: Number(elapsed),
   };
   logLine(logStream, "load_complete", summary);
@@ -610,7 +610,7 @@ export async function run(opts: {
   console.log(`  GBIF only:      ${gbifOnly.toLocaleString()}`);
   console.log(`  Matched (both): ${both.toLocaleString()}`);
   console.log(`  Promotions:     ${promotions.length}`);
-  console.log(`  Stale deleted:  ${deleteCount ?? 0}`);
+  console.log(`  Stale deleted:  ${totalDeleted ?? 0}`);
   console.log(`  Duration: ${minutes}m ${seconds}s`);
 }
 
