@@ -49,6 +49,15 @@ interface GbifRow {
   count_after_assessment_year: number | null;
 }
 
+export interface PreviousAssessment {
+  id: number;
+  year: string;
+  category: string;
+  date: string | null;
+  assessors: string | null;
+  reviewers: string | null;
+}
+
 export interface SpeciesRow {
   id: number;
   sis_taxon_id: number | null;
@@ -68,6 +77,7 @@ export interface SpeciesRow {
   gbif_species_key: number | null;
   gbif_occurrence_count: number | null;
   gbif_observations_after_assessment_year: number | null;
+  previous_assessments: PreviousAssessment[];
 }
 
 export interface TaxaSummaryRow {
@@ -148,8 +158,11 @@ function parseGbifRow(r: Record<string, string>): GbifRow {
 // CACHE
 // =============================================================================
 
+type HistoryMap = Record<string, PreviousAssessment[]>;
+
 const redlistCache = new Map<string, RedlistRow[]>();
 const gbifCache = new Map<string, Map<number, GbifRow>>();
+const historyCache = new Map<string, HistoryMap>();
 let taxaSummaryCache: TaxaSummaryRow[] | null = null;
 
 function loadRedlistForGroup(group: string): RedlistRow[] {
@@ -162,6 +175,18 @@ function loadRedlistForGroup(group: string): RedlistRow[] {
   const rows = readCsv(csvPath, parseRedlistRow);
   redlistCache.set(group, rows);
   return rows;
+}
+
+function loadHistoryForGroup(group: string): HistoryMap {
+  if (historyCache.has(group)) return historyCache.get(group)!;
+  const jsonPath = path.join(REDLIST_DIR, `${group}-history.json`);
+  if (!fs.existsSync(jsonPath)) {
+    historyCache.set(group, {});
+    return {};
+  }
+  const data = JSON.parse(fs.readFileSync(jsonPath, "utf-8")) as HistoryMap;
+  historyCache.set(group, data);
+  return data;
 }
 
 function loadGbifForGroup(group: string): Map<number, GbifRow> {
@@ -194,6 +219,7 @@ export function getSpecies(groups: string[], includeNE: boolean): SpeciesRow[] {
   for (const group of groups) {
     const redlistRows = loadRedlistForGroup(group);
     const gbifMap = loadGbifForGroup(group);
+    const historyMap = loadHistoryForGroup(group);
 
     for (const r of redlistRows) {
       let gbifOccurrenceCount: number | null = null;
@@ -207,6 +233,10 @@ export function getSpecies(groups: string[], includeNE: boolean): SpeciesRow[] {
           linkedGbifKeys.add(r.gbif_species_key);
         }
       }
+
+      // Get previous assessments (all except the current/latest one)
+      const allAssessments = historyMap[String(r.sis_taxon_id)] ?? [];
+      const previousAssessments = allAssessments.filter((a) => a.id !== r.assessment_id);
 
       results.push({
         id: r.sis_taxon_id,
@@ -227,6 +257,7 @@ export function getSpecies(groups: string[], includeNE: boolean): SpeciesRow[] {
         gbif_species_key: r.gbif_species_key,
         gbif_occurrence_count: gbifOccurrenceCount,
         gbif_observations_after_assessment_year: gbifObsAfterAssessment,
+        previous_assessments: previousAssessments,
       });
     }
 
@@ -253,6 +284,7 @@ export function getSpecies(groups: string[], includeNE: boolean): SpeciesRow[] {
           gbif_species_key: gbif.gbif_species_key,
           gbif_occurrence_count: gbif.total_count,
           gbif_observations_after_assessment_year: gbif.count_after_assessment_year,
+          previous_assessments: [],
         });
       }
     }

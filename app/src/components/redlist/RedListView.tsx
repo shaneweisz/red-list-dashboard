@@ -1658,7 +1658,7 @@ export default function RedListView() {
                                 currentAssessmentId={s.assessment_id ?? 0}
                                 currentCategory={s.category}
                                 currentAssessmentDate={s.assessment_date}
-                                previousAssessments={[]}
+                                previousAssessments={(s.previous_assessments ?? []).map((a) => ({ year: a.year, assessment_id: a.id, category: a.category, assessors: a.assessors, reviewers: a.reviewers }))}
                                 speciesUrl={`https://www.iucnredlist.org/species/${s.sis_taxon_id}/${s.assessment_id}`}
                               />
                             </div>

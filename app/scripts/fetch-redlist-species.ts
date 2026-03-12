@@ -13,6 +13,7 @@
  *   npx tsx scripts/fetch-redlist-species.ts            # Sync all taxa
  */
 
+import * as fs from "fs";
 import * as path from "path";
 import { Client } from "pg";
 import {
@@ -22,7 +23,7 @@ import {
   readCsv,
   REDLIST_DIR,
 } from "./utils";
-import { getTaxa, type RedlistQuery } from "./taxa";
+import { getTaxa, type RedlistQuery, type Taxon } from "./taxa";
 
 const POPULATION_TRENDS: Record<string, string> = {
   "0": "Increasing",
@@ -161,6 +162,84 @@ export async function fetchFromIucnDb(
 }
 
 // =============================================================================
+// ASSESSMENT HISTORY
+// =============================================================================
+
+export interface AssessmentHistoryEntry {
+  id: number;
+  year: string;
+  category: string;
+  date: string | null;
+  assessors: string | null;
+  reviewers: string | null;
+}
+
+export type AssessmentHistoryMap = Record<string, AssessmentHistoryEntry[]>;
+
+export async function fetchAssessmentHistory(
+  pgClient: Client,
+  taxon: Taxon,
+): Promise<AssessmentHistoryMap> {
+  const result: AssessmentHistoryMap = {};
+
+  for (const query of taxon.redlist) {
+    const sql = `
+      SELECT
+        t.sis_id as sis_taxon_id,
+        a.id as assessment_id,
+        a.year_published,
+        rlc.code as category,
+        a.assessment_date,
+        ac_assessors.supplementary_fields->>'full' as assessors,
+        ac_reviewers.supplementary_fields->>'full' as reviewers
+      FROM taxons t
+      JOIN assessments a ON a.taxon_id = t.id
+      JOIN assessment_scopes ascope ON ascope.assessment_id = a.id
+      JOIN red_list_category_lookup rlc ON rlc.id = a.red_list_category_id
+      LEFT JOIN assessment_credits ac_assessors ON ac_assessors.assessment_id = a.id AND ac_assessors.credit_type_id = 1
+      LEFT JOIN assessment_credits ac_reviewers ON ac_reviewers.assessment_id = a.id AND ac_reviewers.credit_type_id = 2
+      WHERE t.${query.filterColumn} = ANY($1)
+        AND t.latest = true
+        AND a.suppress = false
+        AND ascope.scope_lookup_id = 15
+        AND t.infra_name IS NULL
+        AND t.subpopulation_name IS NULL
+      ORDER BY t.sis_id, a.year_published DESC, a.id DESC
+    `;
+
+    const rows = (await pgClient.query(sql, [query.filterValues])).rows;
+
+    for (const row of rows) {
+      const sisTaxonId = String(row.sis_taxon_id);
+      const yearPublished = String(row.year_published);
+
+      if (!result[sisTaxonId]) result[sisTaxonId] = [];
+
+      // Deduplicate: keep only the first (highest assessment_id) per year
+      const existing = result[sisTaxonId];
+      if (existing.length > 0 && existing[existing.length - 1].year === yearPublished) {
+        continue;
+      }
+
+      const assessmentDate = row.assessment_date
+        ? new Date(row.assessment_date).toISOString().split("T")[0]
+        : null;
+
+      existing.push({
+        id: Number(row.assessment_id),
+        year: yearPublished,
+        category: row.category,
+        date: assessmentDate,
+        assessors: row.assessors || null,
+        reviewers: row.reviewers || null,
+      });
+    }
+  }
+
+  return result;
+}
+
+// =============================================================================
 // CSV OUTPUT
 // =============================================================================
 
@@ -220,9 +299,11 @@ export function readRedlistCsv(taxonId: string): RedlistSpecies[] {
 
 export async function run(opts: {
   taxa?: string[];
+  historyOnly?: boolean;
   logger?: SyncLogger;
 } = {}): Promise<void> {
   const taxaToSync = getTaxa(opts.taxa);
+  const historyOnly = opts.historyOnly ?? false;
   const logger = opts.logger ?? SyncLogger.noop();
 
   const startTime = Date.now();
@@ -241,6 +322,7 @@ export async function run(opts: {
 
     logger.log("fetch_redlist_species_start", {
       taxa: taxaToSync.map((t) => t.id),
+      historyOnly,
     });
 
     let totalSpecies = 0;
@@ -249,20 +331,27 @@ export async function run(opts: {
       const taxonStart = Date.now();
       console.log(`\n${taxon.name} (${taxon.id}):`);
 
-      const taxonSpecies: RedlistSpecies[] = [];
-      for (const query of taxon.redlist) {
-        const species = await fetchFromIucnDb(pgClient, taxon.id, query);
-        console.log(`  Fetched ${species.length} species`);
-        taxonSpecies.push(...species);
+      if (!historyOnly) {
+        const taxonSpecies: RedlistSpecies[] = [];
+        for (const query of taxon.redlist) {
+          const species = await fetchFromIucnDb(pgClient, taxon.id, query);
+          console.log(`  Fetched ${species.length} species`);
+          taxonSpecies.push(...species);
+        }
+
+        const outputPath = path.join(REDLIST_DIR, `${taxon.id}.csv`);
+        writeRedlistCsv(taxonSpecies, outputPath);
+        console.log(`  Wrote ${taxonSpecies.length} species → ${outputPath}`);
+        totalSpecies += taxonSpecies.length;
       }
 
-      const outputPath = path.join(REDLIST_DIR, `${taxon.id}.csv`);
-      writeRedlistCsv(taxonSpecies, outputPath);
-      console.log(`  Wrote ${taxonSpecies.length} species → ${outputPath}`);
+      const history = await fetchAssessmentHistory(pgClient, taxon);
+      const historyPath = path.join(REDLIST_DIR, `${taxon.id}-history.json`);
+      fs.writeFileSync(historyPath, JSON.stringify(history) + "\n");
+      console.log(`  Wrote history for ${Object.keys(history).length} species → ${historyPath}`);
 
-      totalSpecies += taxonSpecies.length;
       const taxonDuration = ((Date.now() - taxonStart) / 1000).toFixed(1);
-      logger.log("fetch_redlist_species_taxon", { taxon: taxon.id, fetched: taxonSpecies.length, duration_seconds: Number(taxonDuration) });
+      logger.log("fetch_redlist_species_taxon", { taxon: taxon.id, fetched: totalSpecies, duration_seconds: Number(taxonDuration) });
     }
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
@@ -276,7 +365,7 @@ export async function run(opts: {
 
     console.log("\n" + "=".repeat(50));
     console.log("fetch-redlist-species complete:");
-    console.log(`  Species: ${totalSpecies.toLocaleString()}`);
+    if (!historyOnly) console.log(`  Species: ${totalSpecies.toLocaleString()}`);
     console.log(`  Output:  ${REDLIST_DIR}/`);
     console.log(`  Duration: ${minutes}m ${seconds}s`);
   } finally {
@@ -288,14 +377,15 @@ async function main() {
   loadEnvFiles();
 
   const args = process.argv.slice(2);
-  const taxonArg = args[0]?.toLowerCase();
+  const historyOnly = args.includes("--history-only");
+  const taxonArg = args.find((a) => !a.startsWith("--"))?.toLowerCase();
 
-  console.log("fetch-redlist-species: IUCN Red List DB → CSV");
+  console.log(`fetch-redlist-species: IUCN Red List DB → ${historyOnly ? "history JSON" : "CSV + history JSON"}`);
   console.log("=".repeat(50));
 
   const logger = new SyncLogger("fetch-redlist-species");
   try {
-    await run({ taxa: taxonArg ? [taxonArg] : undefined, logger });
+    await run({ taxa: taxonArg ? [taxonArg] : undefined, historyOnly, logger });
   } finally {
     logger.close();
   }

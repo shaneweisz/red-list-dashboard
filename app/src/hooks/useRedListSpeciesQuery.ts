@@ -23,6 +23,7 @@ export interface RedListSpecies {
   gbif_species_key: number | null;
   gbif_occurrence_count: number | null;
   gbif_observations_after_assessment_year: number | null;
+  previous_assessments: { id: number; year: string; category: string; date: string | null; assessors: string | null; reviewers: string | null }[];
 }
 
 interface SpeciesResponse {

@@ -7,6 +7,8 @@ interface PreviousAssessment {
   year: string;
   assessment_id: number;
   category: string;
+  assessors?: string | null;
+  reviewers?: string | null;
 }
 
 interface AssessmentDetail {
@@ -682,7 +684,7 @@ function AssessmentDetailView({
   assessment,
 }: {
   detail: AssessmentDetail;
-  assessment: { year: string; assessment_id: number; category: string };
+  assessment: { year: string; assessment_id: number; category: string; assessors?: string | null; reviewers?: string | null };
 }) {
   const catCode = getCategoryCode(detail.red_list_category) !== "?" ? getCategoryCode(detail.red_list_category) : assessment.category;
   const trendText = getTrendText(detail.population_trend);
@@ -737,6 +739,14 @@ function AssessmentDetailView({
           </span>
         )}
       </div>
+
+      {/* Assessors & Reviewers */}
+      {(assessment.assessors || assessment.reviewers) && (
+        <div className="text-xs text-zinc-500 dark:text-zinc-400 space-y-0.5">
+          {assessment.assessors && <div><span className="font-medium">Assessors:</span> {assessment.assessors}</div>}
+          {assessment.reviewers && <div><span className="font-medium">Reviewers:</span> {assessment.reviewers}</div>}
+        </div>
+      )}
 
       {/* Key metrics grid */}
       <SupplementaryMetrics info={detail.supplementary_info} />
