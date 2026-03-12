@@ -351,7 +351,7 @@ export default function RedListView() {
 
   // Filter by selected taxa
   const taxaFilteredSpecies = useMemo(() => {
-    if (selectedTaxa.size === 0) return species;
+    if (selectedTaxa.size === 0 || selectedTaxa.has("all")) return species;
     return species.filter(s => s.taxon_id && selectedTaxa.has(s.taxon_id));
   }, [species, selectedTaxa]);
 
