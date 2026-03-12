@@ -17,22 +17,12 @@
  *   npx tsx scripts/sync.ts mammalia aves        # Specific taxa only
  */
 
-import fs from "fs";
-import path from "path";
-import { REDLIST_DIR, GBIF_DIR, loadEnvFiles, SyncLogger } from "./utils";
+import { loadEnvFiles, SyncLogger } from "./utils";
 import { run as fetchRedlistSpecies } from "./fetch-redlist-species";
 import { run as fetchGbifSpecies } from "./fetch-gbif-species";
 import { run as matchRedlistSpeciesToGbif } from "./match-redlist-species-to-gbif";
 import { run as fetchGbifNewCounts } from "./fetch-gbif-new-counts";
 import { run as buildTaxaSummary } from "./build-taxa-summary";
-
-function backupDir(srcDir: string, backupSuffix: string): void {
-  if (!fs.existsSync(srcDir)) return;
-  const backupDir = srcDir + backupSuffix;
-  if (fs.existsSync(backupDir)) fs.rmSync(backupDir, { recursive: true });
-  fs.cpSync(srcDir, backupDir, { recursive: true });
-  console.log(`Backed up ${path.basename(srcDir)}/ → ${path.basename(srcDir)}${backupSuffix}/`);
-}
 
 async function main() {
   loadEnvFiles();
@@ -51,10 +41,6 @@ async function main() {
 
   try {
     logger.log("sync_start", { taxa: taxaFilter ?? "all" });
-
-    // Back up existing per-taxon dirs before overwriting
-    backupDir(REDLIST_DIR, "-backup");
-    backupDir(GBIF_DIR, "-backup");
 
     // Phase 1: Red List
     console.log("Phase 1: fetch-redlist-species");
