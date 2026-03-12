@@ -2,7 +2,7 @@
  * fetch-redlist-species: IUCN Red List DB → CSV
  *
  * Connects to the IUCN Red List PostgreSQL database (via SSH tunnel)
- * and writes species data to redlist-species.csv.
+ * and writes per-taxon species data to data/redlist/{taxonId}.csv.
  *
  * Prerequisites:
  *   1. SSH tunnel to IUCN DB (port 5433)
@@ -19,9 +19,10 @@ import {
   loadEnvFiles,
   SyncLogger,
   writeCsv,
-  DATA_DIR,
+  readCsv,
+  REDLIST_DIR,
 } from "./utils";
-import { TAXA, getTaxa, type Taxon, type RedlistQuery } from "./taxa";
+import { getTaxa, type RedlistQuery } from "./taxa";
 
 const POPULATION_TRENDS: Record<string, string> = {
   "0": "Increasing",
@@ -192,6 +193,27 @@ export function writeRedlistCsv(species: RedlistSpecies[], outputPath: string): 
   writeCsv(rows, REDLIST_CSV_COLUMNS, outputPath);
 }
 
+export function readRedlistCsv(taxonId: string): RedlistSpecies[] {
+  const csvPath = path.join(REDLIST_DIR, `${taxonId}.csv`);
+  return readCsv<RedlistSpecies>(csvPath, (r) => ({
+    sis_taxon_id: parseInt(r.sis_taxon_id, 10),
+    assessment_id: parseInt(r.assessment_id, 10),
+    scientific_name: r.scientific_name,
+    common_name: r.common_name || null,
+    class_name: r.class_name || null,
+    order_name: r.order_name || null,
+    family: r.family || null,
+    category: r.iucn_category || "",
+    assessment_date: r.assessment_date || null,
+    year_published: r.year_published || "",
+    population_trend: r.population_trend || null,
+    countries: r.countries ? r.countries.split(";").filter(Boolean) : [],
+    taxon_group_table1a: r.taxon_group_table1a,
+    gbif_species_key: r.gbif_species_key ? parseInt(r.gbif_species_key, 10) : null,
+    match_type: r.match_type || null,
+  }));
+}
+
 // =============================================================================
 // MAIN
 // =============================================================================
@@ -221,40 +243,41 @@ export async function run(opts: {
       taxa: taxaToSync.map((t) => t.id),
     });
 
-    const allSpecies: RedlistSpecies[] = [];
+    let totalSpecies = 0;
 
     for (const taxon of taxaToSync) {
       const taxonStart = Date.now();
       console.log(`\n${taxon.name} (${taxon.id}):`);
 
-      let taxonCount = 0;
+      const taxonSpecies: RedlistSpecies[] = [];
       for (const query of taxon.redlist) {
         const species = await fetchFromIucnDb(pgClient, taxon.id, query);
         console.log(`  Fetched ${species.length} species`);
-        taxonCount += species.length;
-        allSpecies.push(...species);
+        taxonSpecies.push(...species);
       }
 
-      const taxonDuration = ((Date.now() - taxonStart) / 1000).toFixed(1);
-      logger.log("fetch_redlist_species_taxon", { taxon: taxon.id, fetched: taxonCount, duration_seconds: Number(taxonDuration) });
-    }
+      const outputPath = path.join(REDLIST_DIR, `${taxon.id}.csv`);
+      writeRedlistCsv(taxonSpecies, outputPath);
+      console.log(`  Wrote ${taxonSpecies.length} species → ${outputPath}`);
 
-    const outputPath = path.join(DATA_DIR, "redlist-species.csv");
-    writeRedlistCsv(allSpecies, outputPath);
+      totalSpecies += taxonSpecies.length;
+      const taxonDuration = ((Date.now() - taxonStart) / 1000).toFixed(1);
+      logger.log("fetch_redlist_species_taxon", { taxon: taxon.id, fetched: taxonSpecies.length, duration_seconds: Number(taxonDuration) });
+    }
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
     const minutes = Math.floor(Number(elapsed) / 60);
     const seconds = Number(elapsed) % 60;
 
     logger.log("fetch_redlist_species_complete", {
-      total_species: allSpecies.length,
+      total_species: totalSpecies,
       duration_seconds: Number(elapsed),
     });
 
     console.log("\n" + "=".repeat(50));
     console.log("fetch-redlist-species complete:");
-    console.log(`  Species: ${allSpecies.length.toLocaleString()}`);
-    console.log(`  Output:  ${outputPath}`);
+    console.log(`  Species: ${totalSpecies.toLocaleString()}`);
+    console.log(`  Output:  ${REDLIST_DIR}/`);
     console.log(`  Duration: ${minutes}m ${seconds}s`);
   } finally {
     await pgClient.end();

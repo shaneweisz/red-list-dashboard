@@ -1,8 +1,8 @@
 /**
- * Maps taxa.ts taxon IDs to the table1a_taxon_group values stored in the database.
+ * Maps taxa.ts taxon IDs to the table1a_taxon_group values used in per-taxon CSV filenames.
  *
- * The DB stores 21 specific groups from IUCN Table 1a. Combined taxa
- * (fishes, invertebrates, fungi, all) map to multiple DB groups.
+ * The sync scripts produce 21 per-taxon CSV files (one per IUCN Table 1a group).
+ * Combined taxa (fishes, invertebrates, fungi, all) map to multiple groups.
  */
 
 const TAXON_GROUP_MAP: Record<string, string[]> = {
@@ -57,7 +57,7 @@ const TAXON_GROUP_MAP: Record<string, string[]> = {
 };
 
 /**
- * Get the DB table1a_taxon_group values for a taxa.ts taxon ID.
+ * Get the table1a_taxon_group values for a taxa.ts taxon ID.
  * Falls back to treating the taxonId itself as a single group.
  */
 export function getTaxonGroups(taxonId: string): string[] {

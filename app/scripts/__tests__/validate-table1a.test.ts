@@ -1,19 +1,17 @@
 /**
- * Validates taxa_summary materialized view against IUCN Table 1a (2025-1).
+ * Validates taxa-summary.json against IUCN Table 1a (2025-1).
  *
- * Requires actual pipeline data in the DB.
- * Run manually after: sync.ts → load-supabase.ts
+ * Requires actual pipeline data files.
+ * Run manually after: sync.ts
  *
  * Usage: TEST_TABLE1A=1 npx vitest run scripts/__tests__/validate-table1a.test.ts
  */
 
 import { describe, it, expect } from "vitest";
-import { createClient } from "@supabase/supabase-js";
+import * as fs from "fs";
+import * as path from "path";
 
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SECRET_KEY!,
-);
+const DATA_DIR = path.join(__dirname, "../../data");
 
 const TABLE_1A_2025_1: Record<string, number> = {
   mammalia: 6025,
@@ -42,17 +40,19 @@ const TABLE_1A_2025_1: Record<string, number> = {
 const TOTAL_EXPECTED = 169420;
 
 describe.skipIf(!process.env.TEST_TABLE1A)("taxa_summary vs Table 1a (2025-1)", () => {
-  it("total_assessed per table1a_taxon_group matches Table 1a expected values", async () => {
-    const { data, error } = await supabase
-      .from("taxa_summary")
-      .select("table1a_taxon_group, total_assessed");
+  it("total_assessed per table1a_taxon_group matches Table 1a expected values", () => {
+    const summaryPath = path.join(DATA_DIR, "taxa-summary.json");
+    expect(fs.existsSync(summaryPath), "taxa-summary.json must exist").toBe(true);
 
-    expect(error).toBeNull();
-    expect(data).not.toBeNull();
-    expect(data!.length).toBeGreaterThan(0);
+    const data = JSON.parse(fs.readFileSync(summaryPath, "utf-8")) as Array<{
+      table1a_taxon_group: string;
+      total_assessed: number;
+    }>;
+
+    expect(data.length).toBeGreaterThan(0);
 
     const actual = new Map<string, number>();
-    for (const row of data!) {
+    for (const row of data) {
       actual.set(row.table1a_taxon_group, row.total_assessed);
     }
 

@@ -34,9 +34,12 @@ yarn-error.log*
 .env*
 !.env.example
 
-# sync script data (CSVs) and logs
-/data
+# sync script logs and old data backups
 /logs
+/data/_old-single-csvs
+/data/test-subsets
+/data/redlist-backup
+/data/gbif-backup
 
 # vercel
 .vercel

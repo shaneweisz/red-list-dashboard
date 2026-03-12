@@ -1,7 +1,7 @@
 /**
  * fetch-gbif-species: GBIF API → CSV
  *
- * Fetches per-species observation counts from GBIF and writes to gbif-species.csv.
+ * Fetches per-species observation counts from GBIF and writes per-taxon to data/gbif/{taxonId}.csv.
  *
  * Usage:
  *   npx tsx scripts/fetch-gbif-species.ts [taxon]   # Fetch one taxon (e.g. mammalia)
@@ -13,11 +13,12 @@ import {
   loadEnvFiles,
   SyncLogger,
   writeCsv,
-  DATA_DIR,
+  readCsv,
+  GBIF_DIR,
   delay,
   toTitleCase,
 } from "./utils";
-import { TAXA, getTaxa, type Taxon, type GbifQuery } from "./taxa";
+import { getTaxa, type Taxon, type GbifQuery } from "./taxa";
 
 // =============================================================================
 // GBIF TAXA (legacy lookup — used by fetch-gbif-new-counts)
@@ -241,6 +242,21 @@ export function writeGbifCsv(speciesMap: Map<number, GbifSpecies>, outputPath: s
   writeCsv(rows, GBIF_CSV_COLUMNS, outputPath);
 }
 
+export function readGbifCsv(taxonId: string): Map<number, GbifSpecies> {
+  const csvPath = path.join(GBIF_DIR, `${taxonId}.csv`);
+  const rows = readCsv<GbifSpecies>(csvPath, (r) => ({
+    gbif_species_key: parseInt(r.gbif_species_key, 10),
+    scientific_name: r.scientific_name,
+    common_name: r.common_name,
+    taxon_group_table1a: r.taxon_group_table1a,
+    total_count: parseInt(r.total_count, 10) || 0,
+    count_after_assessment_year: r.count_after_assessment_year ? parseInt(r.count_after_assessment_year, 10) : null,
+  }));
+  const map = new Map<number, GbifSpecies>();
+  for (const row of rows) map.set(row.gbif_species_key, row);
+  return map;
+}
+
 // =============================================================================
 // MAIN
 // =============================================================================
@@ -259,7 +275,7 @@ export async function run(opts: {
     taxa_count: taxaToSync.length,
   });
 
-  const gbifSpeciesMap = new Map<number, GbifSpecies>();
+  let totalSpecies = 0;
 
   for (const taxon of taxaToSync) {
     const taxonStart = Date.now();
@@ -274,10 +290,11 @@ export async function run(opts: {
     const validSpecies = await validateSpeciesKeys(speciesKeys);
     console.log(`  Valid species: ${validSpecies.size}`);
 
+    const taxonMap = new Map<number, GbifSpecies>();
     for (const r of rawResults) {
       const info = validSpecies.get(r.speciesKey);
       if (!info) continue;
-      gbifSpeciesMap.set(r.speciesKey, {
+      taxonMap.set(r.speciesKey, {
         gbif_species_key: r.speciesKey,
         scientific_name: info.canonicalName,
         common_name: info.vernacularName ? toTitleCase(info.vernacularName) : "",
@@ -287,23 +304,25 @@ export async function run(opts: {
       });
     }
 
+    const outputPath = path.join(GBIF_DIR, `${taxon.id}.csv`);
+    writeGbifCsv(taxonMap, outputPath);
+    console.log(`  Wrote ${taxonMap.size} species → ${outputPath}`);
+
+    totalSpecies += taxonMap.size;
     const taxonDuration = ((Date.now() - taxonStart) / 1000).toFixed(1);
     logger.log("fetch_gbif_species_taxon", { taxon_id: taxon.id, raw: rawResults.length, valid: validSpecies.size, duration_seconds: Number(taxonDuration) });
   }
-
-  const outputPath = path.join(DATA_DIR, "gbif-species.csv");
-  writeGbifCsv(gbifSpeciesMap, outputPath);
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
   const minutes = Math.floor(Number(elapsed) / 60);
   const seconds = Number(elapsed) % 60;
 
-  logger.log("fetch_gbif_species_complete", { total_species: gbifSpeciesMap.size, duration_seconds: Number(elapsed) });
+  logger.log("fetch_gbif_species_complete", { total_species: totalSpecies, duration_seconds: Number(elapsed) });
 
   console.log("\n" + "=".repeat(50));
   console.log("fetch-gbif-species complete:");
-  console.log(`  Species: ${gbifSpeciesMap.size.toLocaleString()}`);
-  console.log(`  Output:  ${outputPath}`);
+  console.log(`  Species: ${totalSpecies.toLocaleString()}`);
+  console.log(`  Output:  ${GBIF_DIR}/`);
   console.log(`  Duration: ${minutes}m ${seconds}s`);
 }
 

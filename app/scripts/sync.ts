@@ -2,12 +2,11 @@
  * sync: End-to-end CSV sync orchestrator
  *
  * Runs all CSV pipeline phases in sequence:
- *   Phase 1: fetch-redlist-species  (IUCN DB → CSV)
- *   Phase 2: fetch-gbif-species     (GBIF API → CSV)
- *   Phase 3: match-redlist-species-to-gbif (GBIF Match API → CSV)
- *   Phase 4: fetch-gbif-new-counts  (GBIF API → CSV)
- *
- * To push CSVs to Supabase, run load-supabase.ts separately.
+ *   Phase 1: fetch-redlist-species  (IUCN DB → per-taxon CSVs)
+ *   Phase 2: fetch-gbif-species     (GBIF API → per-taxon CSVs)
+ *   Phase 3: match-redlist-species-to-gbif (GBIF Match API → updates redlist CSVs)
+ *   Phase 4: fetch-gbif-new-counts  (GBIF API → updates GBIF CSVs)
+ *   Phase 5: build-taxa-summary     (per-taxon CSVs → taxa-summary.json)
  *
  * Prerequisites:
  *   1. SSH tunnel to IUCN DB (port 5433)
@@ -20,11 +19,20 @@
 
 import fs from "fs";
 import path from "path";
-import { DATA_DIR, loadEnvFiles, SyncLogger } from "./utils";
+import { REDLIST_DIR, GBIF_DIR, loadEnvFiles, SyncLogger } from "./utils";
 import { run as fetchRedlistSpecies } from "./fetch-redlist-species";
 import { run as fetchGbifSpecies } from "./fetch-gbif-species";
 import { run as matchRedlistSpeciesToGbif } from "./match-redlist-species-to-gbif";
 import { run as fetchGbifNewCounts } from "./fetch-gbif-new-counts";
+import { run as buildTaxaSummary } from "./build-taxa-summary";
+
+function backupDir(srcDir: string, backupSuffix: string): void {
+  if (!fs.existsSync(srcDir)) return;
+  const backupDir = srcDir + backupSuffix;
+  if (fs.existsSync(backupDir)) fs.rmSync(backupDir, { recursive: true });
+  fs.cpSync(srcDir, backupDir, { recursive: true });
+  console.log(`Backed up ${path.basename(srcDir)}/ → ${path.basename(srcDir)}${backupSuffix}/`);
+}
 
 async function main() {
   loadEnvFiles();
@@ -44,15 +52,9 @@ async function main() {
   try {
     logger.log("sync_start", { taxa: taxaFilter ?? "all" });
 
-    // Back up existing CSVs before overwriting
-    for (const name of ["redlist-species", "gbif-species"]) {
-      const csvPath = path.join(DATA_DIR, `${name}.csv`);
-      if (fs.existsSync(csvPath)) {
-        const backupPath = path.join(DATA_DIR, `${name}-backup.csv`);
-        fs.copyFileSync(csvPath, backupPath);
-        console.log(`Backed up ${name}.csv → ${name}-backup.csv`);
-      }
-    }
+    // Back up existing per-taxon dirs before overwriting
+    backupDir(REDLIST_DIR, "-backup");
+    backupDir(GBIF_DIR, "-backup");
 
     // Phase 1: Red List
     console.log("Phase 1: fetch-redlist-species");
@@ -73,6 +75,11 @@ async function main() {
     console.log("\nPhase 4: fetch-gbif-new-counts");
     console.log("═".repeat(60));
     await fetchGbifNewCounts({ taxa: taxaFilter, logger });
+
+    // Phase 5: Build taxa summary
+    console.log("\nPhase 5: build-taxa-summary");
+    console.log("═".repeat(60));
+    await buildTaxaSummary();
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
     const minutes = Math.floor(Number(elapsed) / 60);

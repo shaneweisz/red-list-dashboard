@@ -2,7 +2,6 @@
  * Shared utilities for sync scripts.
  *
  * - Environment loading
- * - Supabase client
  * - JSONL logging
  * - CSV read/write
  * - Concurrency helpers
@@ -10,7 +9,6 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 // =============================================================================
 // ENV LOADING
@@ -45,19 +43,6 @@ function loadEnvFile(filePath: string): void {
   } catch {
     // File doesn't exist, skip
   }
-}
-
-// =============================================================================
-// SUPABASE CLIENT
-// =============================================================================
-
-export function createServiceClient(): SupabaseClient {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SECRET_KEY;
-  if (!url || !key) {
-    throw new Error("Missing SUPABASE_URL or SUPABASE_SECRET_KEY");
-  }
-  return createClient(url, key);
 }
 
 // =============================================================================
@@ -140,6 +125,8 @@ export function toTitleCase(s: string): string {
 // =============================================================================
 
 export const DATA_DIR = path.join(__dirname, "../data");
+export const REDLIST_DIR = path.join(DATA_DIR, "redlist");
+export const GBIF_DIR = path.join(DATA_DIR, "gbif");
 
 function csvEscape(value: string): string {
   if (value.includes(",") || value.includes('"') || value.includes("\n")) {
