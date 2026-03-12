@@ -65,7 +65,7 @@ export async function fetchFromIucnDb(
   const mainQuery = `
     SELECT DISTINCT ON (t.sis_id)
       t.sis_id as sis_taxon_id,
-      a.redlist_id as assessment_id,
+      a.id as assessment_id,
       t.scientific_name,
       tcn.name as common_name,
       t.class_name,
@@ -126,13 +126,13 @@ export async function fetchFromIucnDb(
   if (assessmentIds.length > 0) {
     const countriesQuery = `
       SELECT
-        a.redlist_id as assessment_id,
+        a.id as assessment_id,
         ll.code as country_code
       FROM assessments a
       JOIN assessment_locations al ON al.assessment_id = a.id
       JOIN location_lookup ll ON ll.id = al.location_id
       JOIN legend_lookup leg ON leg.id = al.legend_id
-      WHERE a.redlist_id = ANY($1)
+      WHERE a.id = ANY($1)
         AND leg.origin = 'Native'
         AND leg.presence = 'Extant'
         AND LENGTH(ll.code) = 2
