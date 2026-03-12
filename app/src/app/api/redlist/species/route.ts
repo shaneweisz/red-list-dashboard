@@ -81,10 +81,9 @@ function mapRow(row: DbSpeciesRow) {
 
 /**
  * Fetch all species rows for the given taxon groups in batches.
- * Supabase limits to 1000 rows per request by default.
  */
 async function fetchAllSpecies(groups: string[], includeNE: boolean) {
-  const BATCH_SIZE = 1000;
+  const BATCH_SIZE = 50_000;
   const allRows: DbSpeciesRow[] = [];
   let offset = 0;
 
