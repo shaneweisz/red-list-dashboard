@@ -4,11 +4,10 @@
  * Reads redlist-species.csv and gbif-species.csv,
  * merges them into a single species table, then upserts into Supabase.
  *
- * Upsert strategy (cascading match):
+ * Sync strategy (diff-based):
  *   1. Promote: GBIF-only rows that now have a sis_taxon_id get updated
- *   2. Red List species: upsert ON CONFLICT (sis_taxon_id)
- *   3. GBIF-only species: upsert ON CONFLICT (gbif_species_key)
- *   4. Stale rows (not touched in this sync) are deleted
+ *   2. Diff: compare merged CSVs against current DB rows
+ *   3. Insert only new rows, update only changed rows, delete only removed rows
  *
  * Merge logic:
  *   - Each Red List row becomes a species row (with assessment data).
@@ -377,12 +376,6 @@ function printDiffSummary(diff: DiffResult): void {
 // DATABASE HELPERS
 // =============================================================================
 
-interface ExistingSpecies {
-  id: number;
-  sis_taxon_id: number | null;
-  gbif_species_key: number | null;
-}
-
 async function fetchAllSpecies(supabase: SupabaseClient, columns: string = "*"): Promise<Record<string, unknown>[]> {
   const rows: Record<string, unknown>[] = [];
   const PAGE_SIZE = 1_000; // Supabase API caps responses at 1000 rows
@@ -467,20 +460,14 @@ export async function run(opts: {
 
   const supabase = createServiceClient();
 
-  // Fetch existing species from DB
+  // Fetch existing species from DB (all columns for diff computation)
   console.log("\nFetching existing species from DB...");
-  const existingRaw = await fetchAllSpecies(supabase,
-    dryRun ? "*" : "id, sis_taxon_id, gbif_species_key"
-  );
-  console.log(`  ${existingRaw.length.toLocaleString()} existing rows`);
-
-  // Compute diff (used for both dry-run logging and live logging)
-  const dbRows = dryRun
-    ? existingRaw.map(dbRowToSpeciesDbRow)
-    : null; // live path doesn't need full rows for diff — computed post-sync
+  const existingRaw = await fetchAllSpecies(supabase);
+  const existingDbRows = existingRaw.map(dbRowToSpeciesDbRow);
+  console.log(`  ${existingDbRows.length.toLocaleString()} existing rows`);
 
   if (dryRun) {
-    const diff = diffMerged(dbRows!, merged);
+    const diff = diffMerged(existingDbRows, merged);
     const logStream = createLogStream("dry-run");
     writeDiffLog(logStream, diff);
     logStream.end();
@@ -489,33 +476,33 @@ export async function run(opts: {
     return;
   }
 
-  const existing = existingRaw as unknown as ExistingSpecies[];
   const logStream = createLogStream("load");
   logLine(logStream, "load_start", {
     merged_total: merged.length,
     redlist_only: redlistOnly,
     gbif_only: gbifOnly,
     matched_both: both,
-    existing_in_db: existing.length,
+    existing_in_db: existingDbRows.length,
   });
-
-  const existingBySisTaxonId = new Map<number, ExistingSpecies>();
-  const existingByGbifKey = new Map<number, ExistingSpecies>();
-  for (const e of existing) {
-    if (e.sis_taxon_id !== null) existingBySisTaxonId.set(e.sis_taxon_id, e);
-    if (e.gbif_species_key !== null) existingByGbifKey.set(e.gbif_species_key, e);
-  }
 
   // Phase 0: Handle promotions (GBIF-only → linked)
   // A Red List row with gbif_species_key=X might match an existing GBIF-only row.
-  // We must add sis_taxon_id to the existing row first, so the Phase 1 upsert
-  // ON CONFLICT (sis_taxon_id) matches it instead of violating the gbif_species_key unique constraint.
+  // We must add sis_taxon_id to the existing row first, so the diff sees it as an
+  // update (same key) rather than a remove+add (different keys).
+  const existingBySisTaxonId = new Set<number>();
+  const existingByGbifKey = new Map<number, number>(); // gbif_key → index
+  for (let i = 0; i < existingDbRows.length; i++) {
+    const e = existingDbRows[i];
+    if (e.sis_taxon_id !== null) existingBySisTaxonId.add(e.sis_taxon_id);
+    if (e.gbif_species_key !== null) existingByGbifKey.set(e.gbif_species_key, i);
+  }
+
   const promotions = merged.filter((row) =>
     row.sis_taxon_id !== null &&
     row.gbif_species_key !== null &&
     !existingBySisTaxonId.has(row.sis_taxon_id) &&
     existingByGbifKey.has(row.gbif_species_key!) &&
-    existingByGbifKey.get(row.gbif_species_key!)!.sis_taxon_id === null
+    existingDbRows[existingByGbifKey.get(row.gbif_species_key!)!].sis_taxon_id === null
   );
 
   if (promotions.length > 0) {
@@ -533,50 +520,78 @@ export async function run(opts: {
         gbif_species_key: p.gbif_species_key,
         scientific_name: p.scientific_name,
       });
+      // Update in-memory so diff sees promoted row with correct key
+      const idx = existingByGbifKey.get(p.gbif_species_key!)!;
+      existingDbRows[idx].sis_taxon_id = p.sis_taxon_id;
     }
     console.log("  Done.");
   }
 
-  // Phase 1: Upsert Red List species ON CONFLICT (sis_taxon_id)
-  const redlistMerged = merged.filter((r) => r.sis_taxon_id !== null);
-  console.log(`\nUpserting ${redlistMerged.length.toLocaleString()} Red List species...`);
-  for (let i = 0; i < redlistMerged.length; i += BATCH_SIZE) {
-    const batch = redlistMerged.slice(i, i + BATCH_SIZE);
-    const { error } = await supabase
-      .from("species")
-      .upsert(batch, { onConflict: "sis_taxon_id" });
-    if (error) {
-      throw new Error(`Failed to upsert Red List batch at ${i}: ${error.message}`);
-    }
-    process.stdout.write(`\r  ${Math.min(i + BATCH_SIZE, redlistMerged.length).toLocaleString()}/${redlistMerged.length.toLocaleString()}`);
-  }
-  if (redlistMerged.length > 0) console.log("");
+  // Compute diff (after promotions applied to in-memory rows)
+  const diff = diffMerged(existingDbRows, merged);
+  writeDiffLog(logStream, diff);
+  printDiffSummary(diff);
 
-  // Phase 2: Upsert GBIF-only species ON CONFLICT (gbif_species_key)
-  const gbifOnlyMerged = merged.filter((r) => r.sis_taxon_id === null);
-  console.log(`\nUpserting ${gbifOnlyMerged.length.toLocaleString()} GBIF-only species...`);
-  for (let i = 0; i < gbifOnlyMerged.length; i += BATCH_SIZE) {
-    const batch = gbifOnlyMerged.slice(i, i + BATCH_SIZE);
-    const { error } = await supabase
-      .from("species")
-      .upsert(batch, { onConflict: "gbif_species_key" });
-    if (error) {
-      throw new Error(`Failed to upsert GBIF batch at ${i}: ${error.message}`);
-    }
-    process.stdout.write(`\r  ${Math.min(i + BATCH_SIZE, gbifOnlyMerged.length).toLocaleString()}/${gbifOnlyMerged.length.toLocaleString()}`);
-  }
-  if (gbifOnlyMerged.length > 0) console.log("");
+  // Phase 1: Insert new rows
+  if (diff.added.length > 0) {
+    const addedRedlist = diff.added.filter((r) => r.sis_taxon_id !== null);
+    const addedGbifOnly = diff.added.filter((r) => r.sis_taxon_id === null);
 
-  // Phase 3: Delete stale rows (not touched in this sync)
-  console.log("\nDeleting stale rows...");
-  const { count: totalDeleted, error: deleteError } = await supabase
-    .from("species")
-    .delete({ count: "exact" })
-    .lt("synced_at", syncTimestamp);
-  if (deleteError) {
-    throw new Error(`Failed to delete stale rows: ${deleteError.message}`);
+    console.log(`\nInserting ${diff.added.length.toLocaleString()} new rows...`);
+    for (let i = 0; i < addedRedlist.length; i += BATCH_SIZE) {
+      const batch = addedRedlist.slice(i, i + BATCH_SIZE);
+      const { error } = await supabase.from("species").insert(batch);
+      if (error) throw new Error(`Failed to insert Red List batch at ${i}: ${error.message}`);
+    }
+    for (let i = 0; i < addedGbifOnly.length; i += BATCH_SIZE) {
+      const batch = addedGbifOnly.slice(i, i + BATCH_SIZE);
+      const { error } = await supabase.from("species").insert(batch);
+      if (error) throw new Error(`Failed to insert GBIF-only batch at ${i}: ${error.message}`);
+    }
+    console.log("  Done.");
   }
-  console.log(`  Deleted ${(totalDeleted ?? 0).toLocaleString()} stale rows.`);
+
+  // Phase 2: Update changed rows
+  if (diff.updated.length > 0) {
+    const updatedRedlist = diff.updated.filter((u) => u.row.sis_taxon_id !== null).map((u) => u.row);
+    const updatedGbifOnly = diff.updated.filter((u) => u.row.sis_taxon_id === null).map((u) => u.row);
+
+    console.log(`\nUpdating ${diff.updated.length.toLocaleString()} changed rows...`);
+    for (let i = 0; i < updatedRedlist.length; i += BATCH_SIZE) {
+      const batch = updatedRedlist.slice(i, i + BATCH_SIZE);
+      const { error } = await supabase.from("species").upsert(batch, { onConflict: "sis_taxon_id" });
+      if (error) throw new Error(`Failed to update Red List batch at ${i}: ${error.message}`);
+    }
+    for (let i = 0; i < updatedGbifOnly.length; i += BATCH_SIZE) {
+      const batch = updatedGbifOnly.slice(i, i + BATCH_SIZE);
+      const { error } = await supabase.from("species").upsert(batch, { onConflict: "gbif_species_key" });
+      if (error) throw new Error(`Failed to update GBIF-only batch at ${i}: ${error.message}`);
+    }
+    console.log("  Done.");
+  }
+
+  // Phase 3: Delete removed rows
+  if (diff.removed.length > 0) {
+    const removedSisIds = diff.removed
+      .filter((r) => r.sis_taxon_id !== null)
+      .map((r) => r.sis_taxon_id!);
+    const removedGbifKeys = diff.removed
+      .filter((r) => r.sis_taxon_id === null && r.gbif_species_key !== null)
+      .map((r) => r.gbif_species_key!);
+
+    console.log(`\nDeleting ${diff.removed.length.toLocaleString()} removed rows...`);
+    for (let i = 0; i < removedSisIds.length; i += BATCH_SIZE) {
+      const batch = removedSisIds.slice(i, i + BATCH_SIZE);
+      const { error } = await supabase.from("species").delete().in("sis_taxon_id", batch);
+      if (error) throw new Error(`Failed to delete by sis_taxon_id: ${error.message}`);
+    }
+    for (let i = 0; i < removedGbifKeys.length; i += BATCH_SIZE) {
+      const batch = removedGbifKeys.slice(i, i + BATCH_SIZE);
+      const { error } = await supabase.from("species").delete().in("gbif_species_key", batch);
+      if (error) throw new Error(`Failed to delete by gbif_species_key: ${error.message}`);
+    }
+    console.log("  Done.");
+  }
 
   // Refresh materialized view
   console.log("\nRefreshing taxa_summary materialized view...");
@@ -593,11 +608,11 @@ export async function run(opts: {
 
   const summary = {
     species_total: merged.length,
-    redlist_only: redlistOnly,
-    gbif_only: gbifOnly,
-    matched_both: both,
+    added: diff.added.length,
+    updated: diff.updated.length,
+    removed: diff.removed.length,
+    unchanged: diff.unchanged,
     promotions: promotions.length,
-    stale_deleted: totalDeleted ?? 0,
     duration_seconds: Number(elapsed),
   };
   logLine(logStream, "load_complete", summary);
@@ -605,12 +620,12 @@ export async function run(opts: {
 
   console.log("\n" + "=".repeat(50));
   console.log("load-supabase complete:");
-  console.log(`  Species:        ${merged.length.toLocaleString()} rows`);
-  console.log(`  Red List only:  ${redlistOnly.toLocaleString()}`);
-  console.log(`  GBIF only:      ${gbifOnly.toLocaleString()}`);
-  console.log(`  Matched (both): ${both.toLocaleString()}`);
-  console.log(`  Promotions:     ${promotions.length}`);
-  console.log(`  Stale deleted:  ${totalDeleted ?? 0}`);
+  console.log(`  Species:     ${merged.length.toLocaleString()} rows`);
+  console.log(`  Added:       ${diff.added.length.toLocaleString()}`);
+  console.log(`  Updated:     ${diff.updated.length.toLocaleString()}`);
+  console.log(`  Removed:     ${diff.removed.length.toLocaleString()}`);
+  console.log(`  Unchanged:   ${diff.unchanged.toLocaleString()}`);
+  console.log(`  Promotions:  ${promotions.length}`);
   console.log(`  Duration: ${minutes}m ${seconds}s`);
 }
 
