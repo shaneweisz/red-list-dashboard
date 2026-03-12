@@ -169,24 +169,38 @@ export async function validateSpeciesKeys(speciesKeys: number[]): Promise<Map<nu
 
     const results = await Promise.all(
       batch.map(async (key) => {
-        try {
-          const res = await fetch(`https://api.gbif.org/v1/species/${key}`, {
-            headers: { "Accept-Language": "en" },
-          });
-          if (!res.ok) return { key, rank: "UNKNOWN", status: "UNKNOWN", canonicalName: "", vernacularName: "", className: "", orderName: "" };
-          const data = await res.json();
-          return {
-            key,
-            rank: data.rank || "UNKNOWN",
-            status: data.taxonomicStatus || "UNKNOWN",
-            canonicalName: data.canonicalName || data.scientificName || "",
-            vernacularName: data.vernacularName || "",
-            className: data.class || "",
-            orderName: data.order || "",
-          };
-        } catch {
-          return { key, rank: "ERROR", status: "ERROR", canonicalName: "", vernacularName: "", className: "", orderName: "" };
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+          try {
+            const res = await fetch(`https://api.gbif.org/v1/species/${key}`, {
+              headers: { "Accept-Language": "en" },
+            });
+            if (res.status === 429 || (res.status >= 500 && res.status < 600)) {
+              if (attempt < MAX_RETRIES) {
+                await delay(Math.pow(2, attempt + 1) * 1000);
+                continue;
+              }
+              return { key, rank: "UNKNOWN", status: "UNKNOWN", canonicalName: "", vernacularName: "", className: "", orderName: "" };
+            }
+            if (!res.ok) return { key, rank: "UNKNOWN", status: "UNKNOWN", canonicalName: "", vernacularName: "", className: "", orderName: "" };
+            const data = await res.json();
+            return {
+              key,
+              rank: data.rank || "UNKNOWN",
+              status: data.taxonomicStatus || "UNKNOWN",
+              canonicalName: data.canonicalName || data.scientificName || "",
+              vernacularName: data.vernacularName || "",
+              className: data.class || "",
+              orderName: data.order || "",
+            };
+          } catch {
+            if (attempt < MAX_RETRIES) {
+              await delay(Math.pow(2, attempt + 1) * 1000);
+              continue;
+            }
+            return { key, rank: "ERROR", status: "ERROR", canonicalName: "", vernacularName: "", className: "", orderName: "" };
+          }
         }
+        return { key, rank: "ERROR", status: "ERROR", canonicalName: "", vernacularName: "", className: "", orderName: "" };
       })
     );
 
