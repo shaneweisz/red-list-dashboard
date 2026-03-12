@@ -234,9 +234,7 @@ export function getSpecies(groups: string[], includeNE: boolean): SpeciesRow[] {
         }
       }
 
-      // Get previous assessments (all except the current/latest one)
-      const allAssessments = historyMap[String(r.sis_taxon_id)] ?? [];
-      const previousAssessments = allAssessments.filter((a) => a.id !== r.assessment_id);
+      const previousAssessments = historyMap[String(r.sis_taxon_id)] ?? [];
 
       results.push({
         id: r.sis_taxon_id,

@@ -355,15 +355,20 @@ export default function RedListAssessments({
   previousAssessments,
   speciesUrl,
 }: RedListAssessmentsProps) {
-  // All assessments timeline: current + previous, sorted oldest-first (left to right)
-  const allAssessments = [
-    {
-      year: currentAssessmentDate?.split("-")[0] || "Current",
-      assessment_id: currentAssessmentId,
-      category: currentCategory,
-    },
-    ...previousAssessments,
-  ].sort((a, b) => (a.year || "0").localeCompare(b.year || "0"));
+  // All assessments timeline, sorted oldest-first (left to right).
+  // If previousAssessments includes the current one, use it directly;
+  // otherwise fall back to constructing from current* props.
+  const hasCurrentInHistory = previousAssessments.some((a) => a.assessment_id === currentAssessmentId);
+  const allAssessments = hasCurrentInHistory
+    ? [...previousAssessments].sort((a, b) => (a.year || "0").localeCompare(b.year || "0"))
+    : [
+        {
+          year: currentAssessmentDate?.split("-")[0] || "Current",
+          assessment_id: currentAssessmentId,
+          category: currentCategory,
+        },
+        ...previousAssessments,
+      ].sort((a, b) => (a.year || "0").localeCompare(b.year || "0"));
 
   const [selectedIndex, setSelectedIndex] = useState(allAssessments.length - 1);
   const [compareMode, setCompareMode] = useState(false);
