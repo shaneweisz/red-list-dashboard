@@ -10,6 +10,7 @@ import CitesSummary from "../CitesSummary";
 import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
+import { speciesMatchesSubgroup, getSubgroupDef } from "@/config/taxa-hierarchy";
 import { useFilterParams } from "@/hooks/useFilterParams";
 import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import AssessmentAssistant from "../AssessmentAssistant";
@@ -245,6 +246,7 @@ export default function RedListView() {
   // Filters synced with URL search params for shareable links
   const {
     selectedTaxa, setSelectedTaxa,
+    selectedSubgroup, setSubgroup,
     selectedCategories, setSelectedCategories,
     selectedYearRanges, setSelectedYearRanges,
     selectedCountries, setSelectedCountries,
@@ -428,11 +430,17 @@ export default function RedListView() {
   const species = useMemo(() => [...assessedSpecies, ...neSpecies], [assessedSpecies, neSpecies]);
   const neCount = neSpecies.length;
 
-  // Filter by selected taxa
+  // Filter by selected taxa + subgroup
   const taxaFilteredSpecies = useMemo(() => {
-    if (selectedTaxa.size === 0 || selectedTaxa.has("all")) return species;
-    return species.filter(s => s.taxon_id && selectedTaxa.has(s.taxon_id));
-  }, [species, selectedTaxa]);
+    let filtered = species;
+    if (selectedTaxa.size > 0 && !selectedTaxa.has("all")) {
+      filtered = filtered.filter(s => s.taxon_id && selectedTaxa.has(s.taxon_id));
+    }
+    if (selectedSubgroup) {
+      filtered = filtered.filter(s => speciesMatchesSubgroup(s, selectedSubgroup));
+    }
+    return filtered;
+  }, [species, selectedTaxa, selectedSubgroup]);
 
   // Helper to check if species matches year range filter
   const matchesYearRangeFilter = (assessmentDate: string | null, yearRanges: Set<string> = selectedYearRanges): boolean => {
@@ -1027,6 +1035,8 @@ export default function RedListView() {
       <TaxaSummary
         onToggleTaxon={handleToggleTaxon}
         selectedTaxa={selectedTaxa}
+        selectedSubgroup={selectedSubgroup}
+        onSelectSubgroup={setSubgroup}
       />
 
       {/* Error state */}
@@ -1192,6 +1202,18 @@ export default function RedListView() {
                 <span className="text-xs">×</span>
               </button>
             ))}
+            {selectedSubgroup && (() => {
+              const sgInfo = getSubgroupDef(selectedSubgroup);
+              return (
+                <button
+                  onClick={() => setSubgroup(null)}
+                  className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
+                >
+                  {sgInfo?.def.name ?? selectedSubgroup}
+                  <span className="text-xs">×</span>
+                </button>
+              );
+            })()}
             {Array.from(selectedCategories).filter(cat => cat !== "NE").map(cat => (
               <button
                 key={cat}
@@ -1233,7 +1255,7 @@ export default function RedListView() {
                 <span className="text-xs">×</span>
               </button>
             ))}
-            {(selectedTaxa.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || showOnlyStarred) && (
+            {(selectedTaxa.size > 0 || selectedSubgroup || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || showOnlyStarred) && (
               <button
                 onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setSelectedObsRanges(new Set()); setShowOnlyStarred(false); }}
                 className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 underline"

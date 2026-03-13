@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { FaInfoCircle } from "react-icons/fa";
+import { FaInfoCircle, FaChevronRight, FaChevronDown } from "react-icons/fa";
 import { HiOutlineAdjustmentsHorizontal } from "react-icons/hi2";
 import TaxaIcon from "@/components/TaxaIcon";
 import { CATEGORY_COLORS, CATEGORY_NAMES, CATEGORY_ORDER } from "@/config/taxa";
+import { TAXA_SUBGROUPS } from "@/config/taxa-hierarchy";
 
 const IUCN_SOURCE_URL = "https://nc.iucnredlist.org/redlist/content/attachment_files/2025-2_RL_Table1a.pdf";
 
@@ -33,10 +34,24 @@ interface TaxonSummary {
   gbifObsDistribution?: Record<string, number>;
 }
 
+interface SubGroupSummary {
+  id: string;
+  name: string;
+  estimatedDescribed: number;
+  totalAssessed: number;
+  outdated: number;
+  byCategory: Record<string, number>;
+}
+
 interface Props {
   onToggleTaxon: (taxonId: string, event: React.MouseEvent) => void;
   selectedTaxa: Set<string>;
+  selectedSubgroup: string | null;
+  onSelectSubgroup: (subgroupId: string | null) => void;
 }
+
+// Taxa IDs that have expandable subgroups
+const EXPANDABLE_TAXA = new Set(Object.keys(TAXA_SUBGROUPS));
 
 // Bar color helpers
 const getAssessedBarColor = (percent: number) =>
@@ -82,7 +97,7 @@ const FOCUS_HIDDEN: Record<FocusMode, Set<ColumnId>> = {
 
 const DEFAULT_HIDDEN_COLUMNS = FOCUS_HIDDEN.redlist;
 
-export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
+export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroup, onSelectSubgroup }: Props) {
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [globalGbifMedian, setGlobalGbifMedian] = useState<number | undefined>();
   const [globalGbifDistribution, setGlobalGbifDistribution] = useState<Record<string, number> | undefined>();
@@ -93,6 +108,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
   // Set to true only when the user Cmd/Ctrl+clicks a taxon row;
   // cleared when the modifier key is released.
   const [taxaExpanded, setTaxaExpanded] = useState(false);
+  // Which taxa are expanded to show subgroups (e.g., "reptilia", "fishes")
+  const [expandedTaxa, setExpandedTaxa] = useState<Set<string>>(new Set());
+  // Fetched subgroup data keyed by taxonId
+  const [subgroupData, setSubgroupData] = useState<Record<string, SubGroupSummary[]>>({});
+  const [loadingSubgroups, setLoadingSubgroups] = useState<Set<string>>(new Set());
   const [focusMode, setFocusMode] = useState<FocusMode>("redlist");
   const [hiddenColumns, setHiddenColumns] = useState<Set<ColumnId>>(new Set(DEFAULT_HIDDEN_COLUMNS));
   const [showColumnMenu, setShowColumnMenu] = useState(false);
@@ -159,6 +179,37 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
       autoScroll(scrollRef.current);
     }
   }, [taxa, autoScroll]);
+
+  // Fetch subgroup data when a taxon is expanded
+  const toggleExpand = useCallback(async (taxonId: string) => {
+    setExpandedTaxa((prev) => {
+      const next = new Set(prev);
+      if (next.has(taxonId)) {
+        next.delete(taxonId);
+      } else {
+        next.add(taxonId);
+      }
+      return next;
+    });
+
+    // Fetch subgroup data if not already loaded
+    if (!subgroupData[taxonId] && !loadingSubgroups.has(taxonId)) {
+      setLoadingSubgroups((prev) => new Set(prev).add(taxonId));
+      try {
+        const res = await fetch(`/api/redlist/taxa-subgroups?taxonId=${taxonId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setSubgroupData((prev) => ({ ...prev, [taxonId]: data.subgroups }));
+        }
+      } finally {
+        setLoadingSubgroups((prev) => {
+          const next = new Set(prev);
+          next.delete(taxonId);
+          return next;
+        });
+      }
+    }
+  }, [subgroupData, loadingSubgroups]);
 
   useEffect(() => {
     async function fetchTaxa() {
@@ -580,6 +631,222 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
     );
   };
 
+  // Render a taxon row with optional expandable subgroups
+  const renderTaxonWithSubgroups = (taxon: TaxonSummary, isSelected: boolean) => {
+    const hasSubgroups = EXPANDABLE_TAXA.has(taxon.id);
+    const isExpanded = expandedTaxa.has(taxon.id);
+    const subs = subgroupData[taxon.id] ?? [];
+    const isLoadingSubs = loadingSubgroups.has(taxon.id);
+
+    return (
+      <React.Fragment key={taxon.id}>
+        <tr
+          className={`transition-colors ${
+            isSelected ? "bg-zinc-100 dark:bg-zinc-800" : ""
+          } ${taxon.available ? "hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer" : "opacity-50 cursor-not-allowed"}`}
+          onClick={(e) => {
+            if (!taxon.available) return;
+            if (e.metaKey || e.ctrlKey) setTaxaExpanded(true);
+            onToggleTaxon(taxon.id, e);
+          }}
+        >
+          <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 ${isSelected ? "bg-zinc-100 dark:bg-zinc-800" : "bg-white dark:bg-zinc-900"}`}>
+            <div className="flex items-center gap-2">
+              <TaxaIcon taxonId={taxon.id} size={22} className="flex-shrink-0" style={{ color: taxon.color }} />
+              <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{taxon.name}</span>
+              {hasSubgroups && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleExpand(taxon.id);
+                  }}
+                  className="p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                  title={isExpanded ? "Collapse subgroups" : "Expand subgroups"}
+                >
+                  {isLoadingSubs ? (
+                    <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  ) : isExpanded ? (
+                    <FaChevronDown size={10} />
+                  ) : (
+                    <FaChevronRight size={10} />
+                  )}
+                </button>
+              )}
+            </div>
+          </td>
+          {isVisible("described") && (
+            <td className={numericTdClasses}>
+              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+                {taxon.estimatedDescribed.toLocaleString()}
+              </span>
+            </td>
+          )}
+          {isVisible("assessed") && (
+            <td className={numericTdClasses}>
+              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+                {taxon.available ? taxon.totalAssessed.toLocaleString() : "—"}
+              </span>
+            </td>
+          )}
+          {isVisible("pctAssessed") && (
+            <td className={flexTdClasses}>
+              {taxon.available
+                ? renderBar(taxon.percentAssessed, getAssessedBarColor(taxon.percentAssessed), false)
+                : <span className="text-sm text-zinc-400">—</span>}
+            </td>
+          )}
+          {isVisible("outdated") && (
+            <td className={numericTdClasses}>
+              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+                {taxon.available ? taxon.outdated.toLocaleString() : "—"}
+              </span>
+            </td>
+          )}
+          {isVisible("pctOutdated") && (
+            <td className={flexTdClasses}>
+              {taxon.available
+                ? renderBar(taxon.percentOutdated, getOutdatedBarColor(taxon.percentOutdated), false)
+                : <span className="text-sm text-zinc-400">—</span>}
+            </td>
+          )}
+          {isVisible("gbifSpecies") && (
+            <td className={numericTdClasses}>
+              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+                {taxon.gbifSpeciesCount != null ? taxon.gbifSpeciesCount.toLocaleString() : "—"}
+              </span>
+            </td>
+          )}
+          {isVisible("totalGbifObs") && (
+            <td className={numericTdClasses}>
+              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+                {taxon.totalGbifObservations != null ? taxon.totalGbifObservations.toLocaleString() : "—"}
+              </span>
+            </td>
+          )}
+          {isVisible("gbifDistribution") && (
+            <td className={flexTdClasses}>
+              {taxon.gbifObsDistribution
+                ? renderDistributionBar(taxon.gbifObsDistribution)
+                : <span className="text-sm text-zinc-400">—</span>}
+            </td>
+          )}
+          {isVisible("meanGbifObs") && (
+            <td className={numericTdClasses}>
+              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+                {taxon.meanGbifObsPerSpecies != null ? taxon.meanGbifObsPerSpecies.toLocaleString() : "—"}
+              </span>
+            </td>
+          )}
+          {isVisible("medianGbifObs") && (
+            <td className={numericTdClasses}>
+              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+                {taxon.medianGbifObsPerSpecies != null ? taxon.medianGbifObsPerSpecies.toLocaleString() : "—"}
+              </span>
+            </td>
+          )}
+          {isVisible("breakdown") && (
+            <td className={flexTdClasses}>
+              {taxon.available
+                ? renderBreakdownBar(taxon.byCategory || {})
+                : <span className="text-sm text-zinc-400">—</span>}
+            </td>
+          )}
+        </tr>
+
+        {/* Expanded subgroup rows */}
+        {isExpanded && subs.map((sg) => {
+          const sgPctAssessed = sg.estimatedDescribed > 0 ? (sg.totalAssessed / sg.estimatedDescribed) * 100 : 0;
+          const sgPctOutdated = sg.totalAssessed > 0 ? (sg.outdated / sg.totalAssessed) * 100 : 0;
+          const isSgSelected = selectedSubgroup === sg.id;
+          return (
+            <tr
+              key={`${taxon.id}-${sg.id}`}
+              className={`transition-colors cursor-pointer ${
+                isSgSelected
+                  ? "bg-violet-50 dark:bg-violet-900/20"
+                  : "hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30"
+              }`}
+              onClick={() => {
+                // Toggle: click again to deselect
+                onSelectSubgroup(isSgSelected ? null : sg.id);
+                // Also select the parent taxon if not already
+                if (!isSgSelected && !selectedTaxa.has(taxon.id)) {
+                  onToggleTaxon(taxon.id, { metaKey: false, ctrlKey: false } as React.MouseEvent);
+                }
+              }}
+            >
+              <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 ${isSgSelected ? "bg-violet-50 dark:bg-violet-900/20" : "bg-white dark:bg-zinc-900"}`}>
+                <div className="flex items-center gap-2 pl-8">
+                  <span
+                    className="w-2 h-2 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: taxon.color, opacity: isSgSelected ? 1 : 0.6 }}
+                  />
+                  <span className={`text-sm ${isSgSelected ? "font-medium text-violet-700 dark:text-violet-300" : "text-zinc-700 dark:text-zinc-300"}`}>{sg.name}</span>
+                </div>
+              </td>
+              {isVisible("described") && (
+                <td className={numericTdClasses}>
+                  <span className="text-sm text-zinc-600 dark:text-zinc-400 tabular-nums">
+                    {sg.estimatedDescribed.toLocaleString()}
+                  </span>
+                </td>
+              )}
+              {isVisible("assessed") && (
+                <td className={numericTdClasses}>
+                  <span className="text-sm text-zinc-600 dark:text-zinc-400 tabular-nums">
+                    {sg.totalAssessed.toLocaleString()}
+                  </span>
+                </td>
+              )}
+              {isVisible("pctAssessed") && (
+                <td className={flexTdClasses}>
+                  {renderBar(sgPctAssessed, getAssessedBarColor(sgPctAssessed), false)}
+                </td>
+              )}
+              {isVisible("outdated") && (
+                <td className={numericTdClasses}>
+                  <span className="text-sm text-zinc-600 dark:text-zinc-400 tabular-nums">
+                    {sg.outdated.toLocaleString()}
+                  </span>
+                </td>
+              )}
+              {isVisible("pctOutdated") && (
+                <td className={flexTdClasses}>
+                  {sg.totalAssessed > 0
+                    ? renderBar(sgPctOutdated, getOutdatedBarColor(sgPctOutdated), false)
+                    : <span className="text-sm text-zinc-400">—</span>}
+                </td>
+              )}
+              {isVisible("gbifSpecies") && (
+                <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
+              )}
+              {isVisible("totalGbifObs") && (
+                <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
+              )}
+              {isVisible("gbifDistribution") && (
+                <td className={flexTdClasses}><span className="text-sm text-zinc-400">—</span></td>
+              )}
+              {isVisible("meanGbifObs") && (
+                <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
+              )}
+              {isVisible("medianGbifObs") && (
+                <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
+              )}
+              {isVisible("breakdown") && (
+                <td className={flexTdClasses}>
+                  {renderBreakdownBar(sg.byCategory)}
+                </td>
+              )}
+            </tr>
+          );
+        })}
+      </React.Fragment>
+    );
+  };
+
   // Table header
   const renderHead = () => (
     <thead>
@@ -744,49 +1011,15 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
             </tr>
           )}
 
-          {/* Collapse logic:
-              - "all" selected → hide all per-taxa rows (only All Species row shown above)
-              - taxaExpanded (Cmd/Ctrl held after clicking taxon row) → show all rows for multi-select
-              - specific taxa selected → show only those taxa rows
-              - nothing selected → show all taxa rows (landing page) */}
+          {/* Per-taxon rows with expandable subgroups */}
           {selectedTaxa.has("all")
             ? null
             : (selectedTaxa.size > 0 && !taxaExpanded
               ? perTaxa
                   .filter((taxon) => selectedTaxa.has(taxon.id))
-                  .map((taxon) =>
-                    renderRow(
-                      taxon.id,
-                      taxon.name,
-                      taxon.color,
-                      taxon.estimatedDescribed,
-                      taxon.totalAssessed,
-                      taxon.percentAssessed,
-                      taxon.outdated,
-                      taxon.percentOutdated,
-                      taxon.byCategory || {},
-                      true,
-                      taxon.available,
-                      false,
-                      { total: taxon.totalGbifObservations, mean: taxon.meanGbifObsPerSpecies, median: taxon.medianGbifObsPerSpecies, speciesCount: taxon.gbifSpeciesCount, distribution: taxon.gbifObsDistribution }
-                    )
-                  )
+                  .map((taxon) => renderTaxonWithSubgroups(taxon, true))
               : perTaxa.map((taxon) =>
-                  renderRow(
-                    taxon.id,
-                    taxon.name,
-                    taxon.color,
-                    taxon.estimatedDescribed,
-                    taxon.totalAssessed,
-                    taxon.percentAssessed,
-                    taxon.outdated,
-                    taxon.percentOutdated,
-                    taxon.byCategory || {},
-                    selectedTaxa.has(taxon.id),
-                    taxon.available,
-                    false,
-                    { total: taxon.totalGbifObservations, mean: taxon.meanGbifObsPerSpecies, median: taxon.medianGbifObsPerSpecies, speciesCount: taxon.gbifSpeciesCount, distribution: taxon.gbifObsDistribution }
-                  )
+                  renderTaxonWithSubgroups(taxon, selectedTaxa.has(taxon.id))
                 )
             )
           }

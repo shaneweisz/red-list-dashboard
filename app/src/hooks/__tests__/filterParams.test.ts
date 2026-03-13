@@ -99,6 +99,7 @@ describe("buildQs", () => {
     countries: new Set<string>(),
     obsRanges: new Set<string>(),
     search: "",
+    subgroup: null,
     sortField: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
     sortDirection: "desc" as const,
   };
@@ -183,6 +184,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
   it("round-trips a complex state", () => {
     const original = {
       taxa: new Set(["mammalia"]),
+      subgroup: null,
       categories: new Set(["CR", "EN"]),
       yearRanges: new Set(["11-20 years"]),
       countries: new Set(["ZA"]),
@@ -207,6 +209,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
   it("round-trips empty/default state", () => {
     const original = {
       taxa: new Set<string>(),
+      subgroup: null,
       categories: new Set<string>(),
       yearRanges: new Set<string>(),
       countries: new Set<string>(),
@@ -229,6 +232,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
   it("round-trips sort=newGbif", () => {
     const original = {
       taxa: new Set<string>(),
+      subgroup: null,
       categories: new Set<string>(),
       yearRanges: new Set<string>(),
       countries: new Set<string>(),

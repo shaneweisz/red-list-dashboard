@@ -11,6 +11,7 @@ export function parseParams(search: string) {
     taxa: p.get("taxa")
       ? new Set(p.get("taxa")!.split(",").filter(Boolean))
       : new Set<string>(),
+    subgroup: p.get("subgroup") || null,
     categories: p.get("categories")
       ? new Set(p.get("categories")!.split(",").filter(Boolean))
       : new Set<string>(),
@@ -38,6 +39,7 @@ export function parseParams(search: string) {
 
 export function buildQs(state: {
   taxa: Set<string>;
+  subgroup: string | null;
   categories: Set<string>;
   yearRanges: Set<string>;
   countries: Set<string>;
@@ -48,6 +50,7 @@ export function buildQs(state: {
 }): string {
   const p = new URLSearchParams();
   if (state.taxa.size > 0) p.set("taxa", [...state.taxa].join(","));
+  if (state.subgroup) p.set("subgroup", state.subgroup);
   if (state.categories.size > 0) p.set("categories", [...state.categories].join(","));
   if (state.yearRanges.size > 0) p.set("years", [...state.yearRanges].join(","));
   if (state.countries.size > 0) p.set("countries", [...state.countries].join(","));
@@ -161,6 +164,17 @@ export function useFilterParams() {
     [syncUrl]
   );
 
+  const setSubgroup = useCallback(
+    (value: string | null) => {
+      setState(prev => {
+        const next = { ...prev, subgroup: value };
+        queueMicrotask(() => syncUrl(next, true));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
   const setSearchFilter = useCallback(
     (value: string) => {
       setState(prev => {
@@ -187,6 +201,7 @@ export function useFilterParams() {
     setState(prev => {
       const next = {
         ...prev,
+        subgroup: null,
         categories: new Set<string>(),
         yearRanges: new Set<string>(),
         countries: new Set<string>(),
@@ -205,6 +220,7 @@ export function useFilterParams() {
       const next = {
         ...prev,
         taxa: new Set<string>(),
+        subgroup: null,
         categories: new Set<string>(),
         yearRanges: new Set<string>(),
         countries: new Set<string>(),
@@ -220,6 +236,7 @@ export function useFilterParams() {
 
   return {
     selectedTaxa: state.taxa,
+    selectedSubgroup: state.subgroup,
     selectedCategories: state.categories,
     selectedYearRanges: state.yearRanges,
     selectedCountries: state.countries,
@@ -229,6 +246,7 @@ export function useFilterParams() {
     sortDirection: state.sortDirection,
 
     setSelectedTaxa,
+    setSubgroup,
     setSelectedCategories,
     setSelectedYearRanges,
     setSelectedCountries,
