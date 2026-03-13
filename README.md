@@ -23,7 +23,8 @@ The key innovation — linking assessment data to real-world observations:
 
 2. **Observation Counts**: For each species, the dashboard shows:
    - **Total GBIF** — all geo-referenced occurrence records
-   - **% New GBIF** — percentage of records added after the last assessment date
+   - **New GBIF** — count of records added after the assessment year
+   - **% New GBIF** — percentage of records added after the assessment year
 
 3. **Record Type Breakdown**: Shows the source of records:
    - Human observations (including iNaturalist subset)

@@ -183,6 +183,64 @@ function HoverTooltip({ children, text }: { children: React.ReactNode; text: str
 }
 
 
+function GbifInfoTooltip() {
+  const [isHovered, setIsHovered] = useState(false);
+  const [position, setPosition] = useState({ top: 0, left: 0 });
+  const triggerRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (isHovered && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setPosition({
+        top: rect.top - 8,
+        left: rect.left + rect.width / 2,
+      });
+    }
+  }, [isHovered]);
+
+  return (
+    <span
+      ref={triggerRef}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <svg className="w-3 h-3 text-zinc-400 dark:text-zinc-500 cursor-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <path d="M12 16v-4M12 8h.01" />
+      </svg>
+      {isHovered && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed z-[99999] bg-zinc-900 dark:bg-zinc-800 text-white text-[9px] leading-snug rounded px-2 py-1.5 shadow-lg w-64"
+          style={{
+            top: position.top,
+            left: position.left,
+            transform: 'translateX(-50%) translateY(-100%)',
+          }}
+        >
+          <div className="font-medium text-[10px] mb-0.5">Georeferenced GBIF records only:</div>
+          <div className="text-zinc-400"><code className="bg-zinc-800 dark:bg-zinc-700 px-0.5 rounded">hasCoordinate=true</code> · <code className="bg-zinc-800 dark:bg-zinc-700 px-0.5 rounded">hasGeospatialIssue=false</code></div>
+          <div className="font-medium text-zinc-100 mt-1">Included:</div>
+          <ul className="text-zinc-300 list-disc list-inside">
+            <li><code className="bg-zinc-800 dark:bg-zinc-700 px-0.5 rounded">HUMAN_OBSERVATION</code> <span className="text-zinc-400">(e.g. iNat, eBird)</span></li>
+            <li><code className="bg-zinc-800 dark:bg-zinc-700 px-0.5 rounded">MACHINE_OBSERVATION</code> <span className="text-zinc-400">(e.g. camera traps)</span></li>
+            <li><code className="bg-zinc-800 dark:bg-zinc-700 px-0.5 rounded">MATERIAL_SAMPLE</code> <span className="text-zinc-400">(e.g. eDNA)</span></li>
+            <li><code className="bg-zinc-800 dark:bg-zinc-700 px-0.5 rounded">OCCURRENCE</code></li>
+            <li><code className="bg-zinc-800 dark:bg-zinc-700 px-0.5 rounded">OBSERVATION</code></li>
+          </ul>
+          <div className="font-medium text-zinc-100 mt-1">Excluded:</div>
+          <ul className="text-zinc-300 list-disc list-inside">
+            <li><code className="bg-zinc-800 dark:bg-zinc-700 px-0.5 rounded">PRESERVED_SPECIMEN</code> <span className="text-zinc-400">(e.g. museums)</span></li>
+            <li><code className="bg-zinc-800 dark:bg-zinc-700 px-0.5 rounded">FOSSIL_SPECIMEN</code></li>
+            <li><code className="bg-zinc-800 dark:bg-zinc-700 px-0.5 rounded">LIVING_SPECIMEN</code> <span className="text-zinc-400">(e.g. zoos)</span></li>
+            <li><code className="bg-zinc-800 dark:bg-zinc-700 px-0.5 rounded">MATERIAL_CITATION</code></li>
+          </ul>
+        </div>,
+        document.body
+      )}
+    </span>
+  );
+}
+
 export default function RedListView() {
   // Filters synced with URL search params for shareable links
   const {
@@ -958,6 +1016,7 @@ export default function RedListView() {
   };
 
   const currentYear = new Date().getFullYear();
+  const GBIF_FILTERS = "has_coordinate=true&has_geospatial_issue=false&basis_of_record=HUMAN_OBSERVATION&basis_of_record=MACHINE_OBSERVATION&basis_of_record=OCCURRENCE&basis_of_record=MATERIAL_SAMPLE&basis_of_record=OBSERVATION";
   const isNE = (s: Species) => s.category === "NE";
 
   return (
@@ -1062,23 +1121,7 @@ export default function RedListView() {
             {/* GBIF Observations */}
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">GBIF Observations</span>
-                <div className="relative group/gbifinfo inline-flex ml-1">
-                  <svg className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 cursor-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10" />
-                    <path d="M12 16v-4M12 8h.01" />
-                  </svg>
-                  <div className="absolute left-0 bottom-full mb-1.5 z-50 hidden group-hover/gbifinfo:block">
-                    <div className="bg-zinc-900 dark:bg-zinc-800 text-white text-[9px] leading-snug rounded px-2 py-1.5 shadow-lg w-52">
-                      <div className="font-medium text-[10px] mb-0.5">Georeferenced GBIF records only</div>
-                      <div className="text-zinc-400">hasCoordinate=true · hasGeospatialIssue=false</div>
-                      <div className="font-medium text-zinc-100 mt-1">Included:</div>
-                      <div className="text-zinc-300">HUMAN_OBSERVATION (iNat, eBird) · MACHINE_OBSERVATION (camera traps) · MATERIAL_SAMPLE (eDNA) · OCCURRENCE · OBSERVATION</div>
-                      <div className="font-medium text-zinc-100 mt-1">Excluded:</div>
-                      <div className="text-zinc-300">PRESERVED_SPECIMEN (museums) · FOSSIL_SPECIMEN · LIVING_SPECIMEN (zoos) · MATERIAL_CITATION</div>
-                    </div>
-                  </div>
-                </div>
+                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">GBIF Observations <GbifInfoTooltip /></span>
                               </div>
               <div className="flex-1 min-h-[180px] flex items-center justify-center">
                 {speciesLoading && assessedSpecies.length === 0 ? (
@@ -1284,9 +1327,21 @@ export default function RedListView() {
                 >
                   <span className="flex items-center justify-end gap-1">
                     Total GBIF
+                    <GbifInfoTooltip />
                     {sortField === "newGbif" && (
                       <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
                     )}
+                  </span>
+                </th>
+                <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] select-none">
+                  <span className="flex items-center justify-end gap-1">
+                    New GBIF
+                    <HoverTooltip text="Records added after the assessment year (not the exact date). Uses the year following the assessment as the start of the range.">
+                      <svg className="w-3 h-3 text-zinc-400 dark:text-zinc-500 cursor-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M12 16v-4M12 8h.01" />
+                      </svg>
+                    </HoverTooltip>
                   </span>
                 </th>
                 <th
@@ -1451,7 +1506,7 @@ export default function RedListView() {
                     <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
                       {details?.gbifOccurrences != null && details?.gbifUrl ? (
                         <a
-                          href={`https://www.gbif.org/occurrence/search?taxon_key=${details.gbifUrl.split('/').pop()}`}
+                          href={`https://www.gbif.org/occurrence/search?taxon_key=${details.gbifUrl.split('/').pop()}&${GBIF_FILTERS}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
@@ -1461,7 +1516,7 @@ export default function RedListView() {
                         </a>
                       ) : s.gbif_occurrence_count != null && s.gbif_species_key ? (
                         <a
-                          href={`https://www.gbif.org/occurrence/search?taxon_key=${s.gbif_species_key}`}
+                          href={`https://www.gbif.org/occurrence/search?taxon_key=${s.gbif_species_key}&${GBIF_FILTERS}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
@@ -1479,6 +1534,30 @@ export default function RedListView() {
                         </HoverTooltip>
                       ) : "—"}
                     </td>
+                    {/* New GBIF */}
+                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
+                      {isNE(s) ? (
+                        <span className="text-zinc-400">N/A</span>
+                      ) : (() => {
+                        const newObs = details?.gbifOccurrencesSinceAssessment ?? s.gbif_observations_after_assessment_year;
+                        if (newObs == null) return "—";
+                        const key = details?.gbifUrl?.split('/').pop() ?? s.gbif_species_key;
+                        if (key && assessmentYear) {
+                          return (
+                            <a
+                              href={`https://www.gbif.org/occurrence/search?taxon_key=${key}&year=${assessmentYear + 1},${currentYear}&${GBIF_FILTERS}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {newObs.toLocaleString()}
+                            </a>
+                          );
+                        }
+                        return newObs.toLocaleString();
+                      })()}
+                    </td>
                     {/* % New GBIF */}
                     <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
                       {isNE(s) ? <span className="text-zinc-400">N/A</span> : (() => {
@@ -1492,7 +1571,7 @@ export default function RedListView() {
                   </tr>
                   {selectedSpeciesKey === speciesKey && (
                     <tr>
-                      <td colSpan={7} className="p-0 bg-zinc-50 dark:bg-zinc-800/30">
+                      <td colSpan={8} className="p-0 bg-zinc-50 dark:bg-zinc-800/30">
                         <div style={{ maxWidth: 'calc(100vw - 2rem)', transform: 'translateX(var(--scroll-left, 0px))' }}>
                           {/* Tab bar */}
                           <div className="flex items-center border-b border-zinc-200 dark:border-zinc-700" onClick={(e) => e.stopPropagation()}>
@@ -1599,7 +1678,7 @@ export default function RedListView() {
               })}
               {totalFiltered === 0 && !speciesLoading && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-zinc-500">
+                  <td colSpan={8} className="px-4 py-8 text-center text-zinc-500">
                     No species found
                   </td>
                 </tr>
