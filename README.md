@@ -21,9 +21,9 @@ The key innovation — linking assessment data to real-world observations:
 
 1. **Species Matching**: Each IUCN species is matched to GBIF using their species matching API (handles exact, fuzzy, and variant matches). Results stored in `data/mapping.csv`.
 
-2. **Temporal Split**: GBIF records are split into two counts:
-   - **Records at Assessment** — all occurrence data available when the assessment was made
-   - **New Records Since** — observations added after the assessment date
+2. **Observation Counts**: For each species, the dashboard shows:
+   - **Total GBIF** — all geo-referenced occurrence records
+   - **% New GBIF** — percentage of records added after the last assessment date
 
 3. **Record Type Breakdown**: Shows the source of records:
    - Human observations (including iNaturalist subset)
@@ -38,28 +38,20 @@ The key innovation — linking assessment data to real-world observations:
 Shows all taxonomic groups with species counts, assessment coverage, outdated assessment percentages, and GBIF occurrence totals. Click a row to drill down. Includes a Red List vs GBIF focus mode toggle and column visibility controls.
 
 ### Interactive Filter Charts
-Three clickable charts for filtering species:
-- **Category Distribution** — EX/EW/CR/EN/VU/NT/LC/DD
-- **Years Since Assessment** — highlights species not reassessed in 10+ years
-- **Assessment Count** — how many times a species has been reassessed
+Four clickable charts for filtering species:
+- **Risk Category** — EX/EW/CR/EN/VU/NT/LC/DD
+- **Years Since Assessed** — highlights species not reassessed in 10+ years
+- **Country** — world map with species/GBIF toggle
+- **GBIF Observations** — distribution by observation count range
 
 Charts support multi-select filtering (Cmd/Ctrl+click to select multiple) and cross-filter with the search bar.
 
 ### Species Table
 - Search by scientific name
-- Sortable by priority score, assessment year, category, or new GBIF records
-- Links to IUCN assessment pages
-- Shows assessment history with category changes over time
-- GBIF columns show records at assessment vs new records (with tooltips showing record type breakdown)
+- Sortable by assessment date (default, oldest first), category, total GBIF records, or % new GBIF
+- Secondary sort by total GBIF (descending) when primary values tie
+- Links to IUCN assessment pages and GBIF occurrence search
 - Pin species to the top of the table with drag-to-reorder
-
-### Prioritization Scoring
-Each species gets a priority score (0–100) based on:
-- **Staleness** (0–25 pts) — how old the assessment is
-- **New data** (0–25 pts) — new GBIF records since assessment
-- **Threat category** (0–50 pts) — threat level, with Data Deficient weighted highest
-
-Used as the default sort order to surface species most in need of reassessment.
 
 ### Expandable Species Rows
 Click any species row to see a tabbed (or stacked) detail view:
