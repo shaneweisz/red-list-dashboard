@@ -10,8 +10,8 @@ const CACHE_DURATION = 60 * 60 * 1000;
 /**
  * GET /api/wikipedia?name=<scientific_name>
  *
- * Fetches the Wikipedia summary for a species by its scientific name.
- * Uses the Wikipedia REST API to get the page summary (extract, thumbnail, URL).
+ * Fetches the full Wikipedia article for a species by its scientific name.
+ * Uses the Wikipedia REST API mobile-sections endpoint to get all sections.
  */
 export async function GET(request: NextRequest) {
   const name = request.nextUrl.searchParams.get("name");
@@ -30,51 +30,75 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Wikipedia titles use underscores for spaces
     const title = name.trim().replace(/ /g, "_");
 
-    const resp = await fetch(`${WIKIPEDIA_API}/page/summary/${encodeURIComponent(title)}`, {
-      headers: { "Accept": "application/json" },
-    });
+    // Fetch summary (for thumbnail, description, URLs) and full sections in parallel
+    const [summaryResp, sectionsResp] = await Promise.all([
+      fetch(`${WIKIPEDIA_API}/page/summary/${encodeURIComponent(title)}`, {
+        headers: { Accept: "application/json" },
+      }),
+      fetch(`${WIKIPEDIA_API}/page/mobile-sections/${encodeURIComponent(title)}`, {
+        headers: { Accept: "application/json" },
+      }),
+    ]);
 
-    if (resp.status === 404) {
+    if (summaryResp.status === 404 || sectionsResp.status === 404) {
       const result = { found: false, scientificName: name };
       wikiCache.set(cacheKey, { data: result, timestamp: Date.now() });
       return NextResponse.json(result, { headers: CACHE_1H });
     }
 
-    if (!resp.ok) {
+    if (!summaryResp.ok) {
       return NextResponse.json(
-        { error: `Wikipedia API error: ${resp.status}` },
-        { status: resp.status }
+        { error: `Wikipedia API error: ${summaryResp.status}` },
+        { status: summaryResp.status }
       );
     }
 
-    const data = await resp.json();
+    const [summaryData, sectionsData] = await Promise.all([
+      summaryResp.json(),
+      sectionsResp.ok ? sectionsResp.json() : null,
+    ]);
+
+    // Extract lead section HTML
+    const leadHtml = sectionsData?.lead?.sections?.[0]?.text || summaryData.extract_html || null;
+
+    // Extract remaining sections (title + HTML content)
+    const sections: { title: string; html: string; toclevel: number }[] = [];
+    if (sectionsData?.remaining?.sections) {
+      for (const s of sectionsData.remaining.sections) {
+        if (s.text && s.line) {
+          sections.push({
+            title: s.line,
+            html: s.text,
+            toclevel: s.toclevel ?? 1,
+          });
+        }
+      }
+    }
 
     const result = {
       found: true,
       scientificName: name,
-      title: data.title,
-      extract: data.extract,
-      extractHtml: data.extract_html,
-      description: data.description || null,
-      thumbnail: data.thumbnail
+      title: summaryData.title,
+      description: summaryData.description || null,
+      leadHtml,
+      sections,
+      thumbnail: summaryData.thumbnail
         ? {
-            source: data.thumbnail.source,
-            width: data.thumbnail.width,
-            height: data.thumbnail.height,
+            source: summaryData.thumbnail.source,
+            width: summaryData.thumbnail.width,
+            height: summaryData.thumbnail.height,
           }
         : null,
-      originalImage: data.originalimage
+      originalImage: summaryData.originalimage
         ? {
-            source: data.originalimage.source,
-            width: data.originalimage.width,
-            height: data.originalimage.height,
+            source: summaryData.originalimage.source,
+            width: summaryData.originalimage.width,
+            height: summaryData.originalimage.height,
           }
         : null,
-      pageUrl: data.content_urls?.desktop?.page || null,
-      mobileUrl: data.content_urls?.mobile?.page || null,
+      pageUrl: summaryData.content_urls?.desktop?.page || null,
     };
 
     wikiCache.set(cacheKey, { data: result, timestamp: Date.now() });

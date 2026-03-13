@@ -2,13 +2,19 @@
 
 import { useState, useEffect } from "react";
 
+interface WikiSection {
+  title: string;
+  html: string;
+  toclevel: number;
+}
+
 interface WikipediaData {
   found: boolean;
   scientificName: string;
   title?: string;
-  extract?: string;
-  extractHtml?: string;
   description?: string | null;
+  leadHtml?: string | null;
+  sections?: WikiSection[];
   thumbnail?: {
     source: string;
     width: number;
@@ -20,8 +26,42 @@ interface WikipediaData {
     height: number;
   } | null;
   pageUrl?: string | null;
-  mobileUrl?: string | null;
   cached?: boolean;
+}
+
+function CollapsibleSection({ section }: { section: WikiSection }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden">
+      <button
+        className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors"
+        onClick={() => setOpen(!open)}
+      >
+        <span
+          className={`font-medium text-zinc-800 dark:text-zinc-200 ${section.toclevel === 1 ? "text-sm" : "text-xs"}`}
+        >
+          {section.title}
+        </span>
+        <svg
+          className={`w-4 h-4 text-zinc-400 transition-transform shrink-0 ml-2 ${open ? "rotate-180" : ""}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <div className="px-4 pb-4 border-t border-zinc-100 dark:border-zinc-800">
+          <div
+            className="pt-3 text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed prose prose-sm dark:prose-invert max-w-none"
+            dangerouslySetInnerHTML={{ __html: section.html }}
+          />
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function WikipediaSummary({
@@ -108,6 +148,11 @@ export default function WikipediaSummary({
     );
   }
 
+  // Filter out sections that are just references/external links/metadata
+  const contentSections = (data.sections || []).filter(
+    (s) => s.toclevel <= 2
+  );
+
   return (
     <div className="p-4 md:p-6 space-y-4">
       {/* Header with title and link */}
@@ -134,7 +179,7 @@ export default function WikipediaSummary({
         )}
       </div>
 
-      {/* Content with optional thumbnail */}
+      {/* Lead section with optional thumbnail */}
       <div className="flex flex-col sm:flex-row gap-4">
         {data.thumbnail && (
           <div className="shrink-0">
@@ -153,19 +198,24 @@ export default function WikipediaSummary({
             </a>
           </div>
         )}
-        <div className="flex-1 min-w-0">
-          {data.extractHtml ? (
+        {data.leadHtml && (
+          <div className="flex-1 min-w-0">
             <div
               className="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed prose prose-sm dark:prose-invert max-w-none"
-              dangerouslySetInnerHTML={{ __html: data.extractHtml }}
+              dangerouslySetInnerHTML={{ __html: data.leadHtml }}
             />
-          ) : data.extract ? (
-            <p className="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">
-              {data.extract}
-            </p>
-          ) : null}
-        </div>
+          </div>
+        )}
       </div>
+
+      {/* Collapsible sections */}
+      {contentSections.length > 0 && (
+        <div className="space-y-2">
+          {contentSections.map((section, i) => (
+            <CollapsibleSection key={i} section={section} />
+          ))}
+        </div>
+      )}
 
       {/* Footer attribution */}
       <div className="text-[10px] text-zinc-400 dark:text-zinc-500 pt-2">
