@@ -46,8 +46,8 @@ interface SubGroupSummary {
 interface Props {
   onToggleTaxon: (taxonId: string, event: React.MouseEvent) => void;
   selectedTaxa: Set<string>;
-  selectedSubgroup: string | null;
-  onSelectSubgroup: (subgroupId: string | null) => void;
+  selectedSubgroups: Set<string>;
+  onToggleSubgroup: (subgroupId: string) => void;
 }
 
 // Taxa IDs that have expandable subgroups
@@ -97,7 +97,7 @@ const FOCUS_HIDDEN: Record<FocusMode, Set<ColumnId>> = {
 
 const DEFAULT_HIDDEN_COLUMNS = FOCUS_HIDDEN.redlist;
 
-export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroup, onSelectSubgroup }: Props) {
+export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup }: Props) {
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [globalGbifMedian, setGlobalGbifMedian] = useState<number | undefined>();
   const [globalGbifDistribution, setGlobalGbifDistribution] = useState<Record<string, number> | undefined>();
@@ -760,7 +760,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         {isExpanded && subs.map((sg) => {
           const sgPctAssessed = sg.estimatedDescribed > 0 ? (sg.totalAssessed / sg.estimatedDescribed) * 100 : 0;
           const sgPctOutdated = sg.totalAssessed > 0 ? (sg.outdated / sg.totalAssessed) * 100 : 0;
-          const isSgSelected = selectedSubgroup === sg.id;
+          const isSgSelected = selectedSubgroups.has(sg.id);
           return (
             <tr
               key={`${taxon.id}-${sg.id}`}
@@ -770,8 +770,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                   : "hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30"
               }`}
               onClick={() => {
-                // Toggle: click again to deselect
-                onSelectSubgroup(isSgSelected ? null : sg.id);
+                onToggleSubgroup(sg.id);
                 // Also select the parent taxon if not already
                 if (!isSgSelected && !selectedTaxa.has(taxon.id)) {
                   onToggleTaxon(taxon.id, { metaKey: false, ctrlKey: false } as React.MouseEvent);
