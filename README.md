@@ -35,7 +35,7 @@ The key innovation — linking assessment data to real-world observations:
 ## Features
 
 ### Taxa Summary Table
-Shows all taxonomic groups with species counts and GBIF occurrence totals. Click a row to drill down.
+Shows all taxonomic groups with species counts, assessment coverage, outdated assessment percentages, and GBIF occurrence totals. Click a row to drill down. Includes a Red List vs GBIF focus mode toggle and column visibility controls.
 
 ### Interactive Filter Charts
 Three clickable charts for filtering species:
@@ -47,17 +47,33 @@ Charts support multi-select filtering (Cmd/Ctrl+click to select multiple) and cr
 
 ### Species Table
 - Search by scientific name
+- Sortable by priority score, assessment year, category, or new GBIF records
 - Links to IUCN assessment pages
 - Shows assessment history with category changes over time
 - GBIF columns show records at assessment vs new records (with tooltips showing record type breakdown)
+- Pin species to the top of the table with drag-to-reorder
+
+### Prioritization Scoring
+Each species gets a priority score (0–100) based on:
+- **Staleness** (0–25 pts) — how old the assessment is
+- **New data** (0–25 pts) — new GBIF records since assessment
+- **Threat category** (0–50 pts) — threat level, with Data Deficient weighted highest
+
+Used as the default sort order to surface species most in need of reassessment.
 
 ### Expandable Species Rows
-Click any species row to see:
-- **iNaturalist photos** — recent observations with images
-- **Interactive map** — GBIF occurrence points plotted on a Leaflet map
+Click any species row to see a tabbed (or stacked) detail view:
+- **GBIF Map** — occurrence points on a Leaflet map + iNaturalist photo gallery
+- **Literature** — papers published since the last assessment (from OpenAlex and Nosible)
+- **Red List** — full assessment details including criteria, population trend, threats, conservation actions, and rationale
+- **CITES** — trade status, suspensions, quotas, and trade flow map
 
-### GBIF Dashboard (`/gbif`)
-Alternative view focused on occurrence data with a world map for country-level filtering.
+### Assessment Criteria Estimation
+Interactive IUCN Criterion B calculator using GBIF occurrence data:
+- Computes EOO (Extent of Occurrence), AOO (Area of Occupancy), and number of locations
+- Temporal trend analysis
+- Adjustable parameters (min year, max uncertainty, grid size, cluster distance)
+- Visualizes convex hull and grid cells on the map
 
 ### GBIF Match Status Indicators
 Shows data quality warnings when GBIF species matching is imperfect:
@@ -65,6 +81,9 @@ Shows data quality warnings when GBIF species matching is imperfect:
 - **FUZZY/VARIANT** — name variations matched
 - **HIGHERRANK** — matched to genus/family only (counts may include other species)
 - **NONE** — species not found in GBIF
+
+### Dark Mode
+Light, dark, and system theme modes.
 
 ---
 
@@ -86,9 +105,11 @@ Data Flow:
 │  GBIF API       │────▶│  Static CSVs    │────▶ API Routes ────▶ Dashboard UI
 │  (pre-cached)   │     │  data/gbif/     │
 └─────────────────┘     └─────────────────┘
-                        ┌─────────────────┐
-                        │  GBIF REST API  │────▶ Live queries (occurrences, photos)
-                        └─────────────────┘
+
+Live external APIs:
+  GBIF REST API     → occurrence points, record breakdowns, iNaturalist photos
+  Species+ API      → CITES listings, trade data
+  OpenAlex / Nosible → scientific literature since last assessment
 ```
 
 ## Data Sync Pipeline
@@ -106,7 +127,6 @@ npx tsx scripts/sync.ts mammalia aves    # Specific taxa only
 3. `match-redlist-species-to-gbif` — GBIF Match API → `data/mapping.csv`
 4. `fetch-gbif-new-counts` — GBIF API → updates GBIF CSVs with temporal splits
 5. `build-taxa-summary` — aggregates per-taxon CSVs → `data/taxa-summary.json`
-
 
 ## Getting Started
 
@@ -135,6 +155,7 @@ Create `app/.env.local` with:
 
 ```
 RED_LIST_API_KEY=your_iucn_api_key
+SPECIES_PLUS_API_KEY=your_cites_species_plus_api_key
 ```
 
 ## Tech Stack
