@@ -29,7 +29,7 @@ export default function RedListPage() {
               IUCN Red List Assessments Dashboard
             </h1>
             <p className="text-sm md:text-base text-zinc-600 dark:text-zinc-400">
-              Click taxa rows to filter, use charts and search to explore species
+              Click taxa rows to filter (Cmd/Ctrl+click to multiselect), use charts and search to explore species
             </p>
           </div>
           <div className="flex items-center gap-2">

@@ -986,8 +986,7 @@ export default function RedListView() {
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Risk Category</span>
-                <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
-              </div>
+                              </div>
               <div className="flex-1 min-h-[225px] flex items-center justify-center">
                 {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
@@ -1018,8 +1017,7 @@ export default function RedListView() {
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Years Since Assessed</span>
-                <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
-              </div>
+                              </div>
               <div className="flex-1 min-h-[225px] flex items-center justify-center">
                 {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
@@ -1051,7 +1049,7 @@ export default function RedListView() {
                 <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 min-h-[280px] flex flex-col">
                   <div className="flex items-center justify-between mb-1">
                     <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                      Country <span className="font-normal text-[10px] text-zinc-400">(cmd/ctrl+click to multiselect)</span>
+                      Country
                     </h2>
                   </div>
                   <div className="flex-1 flex items-center justify-center">
@@ -1081,8 +1079,7 @@ export default function RedListView() {
                     </div>
                   </div>
                 </div>
-                <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
-              </div>
+                              </div>
               <div className="flex-1 min-h-[225px] flex items-center justify-center">
                 {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
