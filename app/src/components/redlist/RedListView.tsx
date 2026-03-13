@@ -250,6 +250,7 @@ export default function RedListView() {
   const [loadingTaxa, setLoadingTaxa] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const abortRefs = useRef<Record<string, AbortController>>({});
+  const prefetchPromiseRef = useRef<Promise<void> | null>(null);
 
   // Determine which taxa need fetching
   useEffect(() => {
@@ -264,6 +265,15 @@ export default function RedListView() {
     if (taxaToFetch.length === 0) return;
 
     for (const taxonId of taxaToFetch) {
+      // Reuse the in-flight background prefetch instead of duplicating the request
+      if (taxonId === "all" && prefetchPromiseRef.current) {
+        setLoadingTaxa(prev => new Set(prev).add("all"));
+        prefetchPromiseRef.current.then(() => {
+          setLoadingTaxa(prev => { const next = new Set(prev); next.delete("all"); return next; });
+        });
+        continue;
+      }
+
       // If fetching "all", abort any in-flight individual taxon fetches
       if (taxonId === "all") {
         Object.entries(abortRefs.current).forEach(([id, ctrl]) => {
@@ -302,6 +312,22 @@ export default function RedListView() {
         });
     }
   }, [selectedTaxa, speciesByTaxon, loadingTaxa]);
+
+  // Prefetch all species on mount so taxa clicks feel instant
+  useEffect(() => {
+    const controller = new AbortController();
+    const promise = fetch("/api/redlist/species?taxon=all", { signal: controller.signal })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data && !controller.signal.aborted) {
+          setSpeciesByTaxon(prev => prev["all"] ? prev : { ...prev, all: data.species });
+        }
+      })
+      .catch(() => {})
+      .finally(() => { prefetchPromiseRef.current = null; });
+    prefetchPromiseRef.current = promise;
+    return () => { controller.abort(); prefetchPromiseRef.current = null; };
+  }, []);
 
   const speciesLoading = loadingTaxa.size > 0;
 
