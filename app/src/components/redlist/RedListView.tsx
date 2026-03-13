@@ -11,6 +11,7 @@ import WikipediaSummary from "../WikipediaSummary";
 import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
+import { speciesMatchesSubgroup, getSubgroupDef } from "@/config/taxa-hierarchy";
 import ReviewerChart from "./ReviewerChart";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { useFilterParams } from "@/hooks/useFilterParams";
@@ -248,6 +249,7 @@ export default function RedListView() {
   // Filters synced with URL search params for shareable links
   const {
     selectedTaxa, setSelectedTaxa,
+    selectedSubgroups, setSelectedSubgroups,
     selectedCategories, setSelectedCategories,
     selectedYearRanges, setSelectedYearRanges,
     selectedCountries, setSelectedCountries,
@@ -443,11 +445,19 @@ export default function RedListView() {
   const species = useMemo(() => [...assessedSpecies, ...neSpecies], [assessedSpecies, neSpecies]);
   const neCount = neSpecies.length;
 
-  // Filter by selected taxa
+  // Filter by selected taxa + subgroup
   const taxaFilteredSpecies = useMemo(() => {
-    if (selectedTaxa.size === 0 || selectedTaxa.has("all")) return species;
-    return species.filter(s => s.taxon_id && selectedTaxa.has(s.taxon_id));
-  }, [species, selectedTaxa]);
+    let filtered = species;
+    if (selectedTaxa.size > 0 && !selectedTaxa.has("all")) {
+      filtered = filtered.filter(s => s.taxon_id && selectedTaxa.has(s.taxon_id));
+    }
+    if (selectedSubgroups.size > 0) {
+      filtered = filtered.filter(s =>
+        Array.from(selectedSubgroups).some(sg => speciesMatchesSubgroup(s, sg))
+      );
+    }
+    return filtered;
+  }, [species, selectedTaxa, selectedSubgroups]);
 
   // Helper to check if species matches year range filter
   const matchesYearRangeFilter = (assessmentDate: string | null, yearRanges: Set<string> = selectedYearRanges): boolean => {
@@ -1113,6 +1123,15 @@ export default function RedListView() {
       <TaxaSummary
         onToggleTaxon={handleToggleTaxon}
         selectedTaxa={selectedTaxa}
+        selectedSubgroups={selectedSubgroups}
+        onToggleSubgroup={(sgId) => {
+          setSelectedSubgroups(prev => {
+            const next = new Set(prev);
+            if (next.has(sgId)) next.delete(sgId);
+            else next.add(sgId);
+            return next;
+          });
+        }}
       />
 
       {/* Error state */}
@@ -1290,6 +1309,19 @@ export default function RedListView() {
                 <span className="text-xs">×</span>
               </button>
             ))}
+            {Array.from(selectedSubgroups).map(sgId => {
+              const sgInfo = getSubgroupDef(sgId);
+              return (
+                <button
+                  key={sgId}
+                  onClick={() => setSelectedSubgroups(prev => { const next = new Set(prev); next.delete(sgId); return next; })}
+                  className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
+                >
+                  {sgInfo?.def.name ?? sgId}
+                  <span className="text-xs">×</span>
+                </button>
+              );
+            })}
             {Array.from(selectedCategories).filter(cat => cat !== "NE").map(cat => (
               <button
                 key={cat}
@@ -1341,9 +1373,9 @@ export default function RedListView() {
                 <span className="text-xs">×</span>
               </button>
             ))}
-            {(selectedTaxa.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedReviewers.size > 0 || showOnlyStarred) && (
+            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedReviewers.size > 0 || showOnlyStarred) && (
               <button
-                onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setSelectedObsRanges(new Set()); setSelectedReviewers(new Set()); setShowOnlyStarred(false); }}
+                onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setSelectedSubgroups(new Set()); setSelectedObsRanges(new Set()); setSelectedReviewers(new Set()); setShowOnlyStarred(false); }}
                 className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 underline"
               >
                 Clear all

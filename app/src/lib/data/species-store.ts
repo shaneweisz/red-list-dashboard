@@ -330,3 +330,142 @@ export function getTaxaSummary(): TaxaSummaryRow[] {
   taxaSummaryCache = JSON.parse(content) as TaxaSummaryRow[];
   return taxaSummaryCache;
 }
+
+// =============================================================================
+// SUBGROUP SUMMARIES
+// =============================================================================
+
+export interface SubGroupSummary {
+  id: string;
+  name: string;
+  estimatedDescribed: number;
+  totalAssessed: number;
+  outdated: number;
+  byCategory: Record<string, number>;
+}
+
+interface SubGroupFilter {
+  groups: string[];
+  classNames?: string[];
+  orderNames?: string[];
+  excludeOrders?: string[];
+}
+
+interface SubGroupDef {
+  id: string;
+  name: string;
+  estimatedDescribed: number;
+  source: string;
+  sourceUrl: string;
+  filter: SubGroupFilter;
+}
+
+const CURRENT_YEAR = new Date().getFullYear();
+const OUTDATED_THRESHOLD_YEARS = 10;
+
+/**
+ * Is an assessment outdated? Uses the same logic as build-taxa-summary.ts:
+ * outdated if assessment_date is >10 years ago, or if assessment_date is missing.
+ */
+export function isOutdated(assessmentDate: string | null, currentYear = CURRENT_YEAR): boolean {
+  if (!assessmentDate) return true; // No date → treat as outdated
+  const year = parseInt(assessmentDate.slice(0, 4), 10);
+  if (isNaN(year)) return true;
+  return currentYear - year > OUTDATED_THRESHOLD_YEARS;
+}
+
+function matchesFilter(row: RedlistRow, filter: SubGroupFilter): boolean {
+  // Check class filter
+  if (filter.classNames && filter.classNames.length > 0) {
+    const cls = (row.class_name ?? "").toLowerCase();
+    if (!filter.classNames.includes(cls)) return false;
+  }
+  // Check order include filter
+  if (filter.orderNames && filter.orderNames.length > 0) {
+    const ord = (row.order_name ?? "").toLowerCase();
+    if (!filter.orderNames.includes(ord)) return false;
+  }
+  // Check order exclude filter
+  if (filter.excludeOrders && filter.excludeOrders.length > 0) {
+    const ord = (row.order_name ?? "").toLowerCase();
+    if (filter.excludeOrders.includes(ord)) return false;
+  }
+  return true;
+}
+
+/**
+ * Compute summary stats for each subgroup by filtering the actual CSV data.
+ */
+export function getSubgroupSummaries(subgroups: SubGroupDef[]): SubGroupSummary[] {
+  // Deduplicate: figure out which CSV groups we need to load
+  const allGroups = new Set<string>();
+  for (const sg of subgroups) {
+    for (const g of sg.filter.groups) allGroups.add(g);
+  }
+
+  // Load all needed CSV rows, grouped by their table1a group
+  const rowsByGroup = new Map<string, RedlistRow[]>();
+  for (const group of allGroups) {
+    rowsByGroup.set(group, loadRedlistForGroup(group));
+  }
+
+  // Track which rows from "other_invertebrates" are claimed by specific subgroups
+  // so the catch-all "Other Invertebrates" subgroup can exclude them
+  const claimedRowIds = new Set<number>();
+
+  const results: SubGroupSummary[] = [];
+
+  for (const sg of subgroups) {
+    let totalAssessed = 0;
+    let outdated = 0;
+    const byCategory: Record<string, number> = {};
+
+    const isOtherInvertsCatchAll =
+      sg.id === "other-invertebrates" &&
+      sg.filter.groups.includes("other_invertebrates");
+
+    for (const group of sg.filter.groups) {
+      const rows = rowsByGroup.get(group) ?? [];
+      for (const row of rows) {
+        if (!matchesFilter(row, sg.filter)) continue;
+
+        // For the "Other Invertebrates" catch-all, skip rows claimed by
+        // echinoderms/worms subgroups
+        if (isOtherInvertsCatchAll && group === "other_invertebrates") {
+          if (claimedRowIds.has(row.sis_taxon_id)) continue;
+        }
+
+        totalAssessed++;
+        if (isOutdated(row.assessment_date)) outdated++;
+        const cat = row.category;
+        if (cat) byCategory[cat] = (byCategory[cat] ?? 0) + 1;
+      }
+    }
+
+    // If this is echinoderms or worms, record which other_invertebrates rows
+    // were claimed so the catch-all can skip them
+    if (
+      sg.id !== "other-invertebrates" &&
+      sg.filter.groups.includes("other_invertebrates") &&
+      (sg.filter.classNames || sg.filter.orderNames)
+    ) {
+      const rows = rowsByGroup.get("other_invertebrates") ?? [];
+      for (const row of rows) {
+        if (matchesFilter(row, sg.filter)) {
+          claimedRowIds.add(row.sis_taxon_id);
+        }
+      }
+    }
+
+    results.push({
+      id: sg.id,
+      name: sg.name,
+      estimatedDescribed: sg.estimatedDescribed,
+      totalAssessed,
+      outdated,
+      byCategory,
+    });
+  }
+
+  return results;
+}

@@ -11,6 +11,9 @@ export function parseParams(search: string) {
     taxa: p.get("taxa")
       ? new Set(p.get("taxa")!.split(",").filter(Boolean))
       : new Set<string>(),
+    subgroups: p.get("subgroups")
+      ? new Set(p.get("subgroups")!.split(",").filter(Boolean))
+      : new Set<string>(),
     categories: p.get("categories")
       ? new Set(p.get("categories")!.split(",").filter(Boolean))
       : new Set<string>(),
@@ -41,6 +44,7 @@ export function parseParams(search: string) {
 
 export function buildQs(state: {
   taxa: Set<string>;
+  subgroups: Set<string>;
   categories: Set<string>;
   yearRanges: Set<string>;
   countries: Set<string>;
@@ -52,6 +56,7 @@ export function buildQs(state: {
 }): string {
   const p = new URLSearchParams();
   if (state.taxa.size > 0) p.set("taxa", [...state.taxa].join(","));
+  if (state.subgroups.size > 0) p.set("subgroups", [...state.subgroups].join(","));
   if (state.categories.size > 0) p.set("categories", [...state.categories].join(","));
   if (state.yearRanges.size > 0) p.set("years", [...state.yearRanges].join(","));
   if (state.countries.size > 0) p.set("countries", [...state.countries].join(","));
@@ -166,6 +171,18 @@ export function useFilterParams() {
     [syncUrl]
   );
 
+  const setSelectedSubgroups = useCallback(
+    (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+      setState(prev => {
+        const nextSubgroups = typeof updater === "function" ? updater(prev.subgroups) : updater;
+        const next = { ...prev, subgroups: nextSubgroups };
+        queueMicrotask(() => syncUrl(next, true));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
   const setSelectedReviewers = useCallback(
     (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
       setState(prev => {
@@ -204,6 +221,7 @@ export function useFilterParams() {
     setState(prev => {
       const next = {
         ...prev,
+        subgroups: new Set<string>(),
         categories: new Set<string>(),
         yearRanges: new Set<string>(),
         countries: new Set<string>(),
@@ -223,6 +241,7 @@ export function useFilterParams() {
       const next = {
         ...prev,
         taxa: new Set<string>(),
+        subgroups: new Set<string>(),
         categories: new Set<string>(),
         yearRanges: new Set<string>(),
         countries: new Set<string>(),
@@ -239,6 +258,7 @@ export function useFilterParams() {
 
   return {
     selectedTaxa: state.taxa,
+    selectedSubgroups: state.subgroups,
     selectedCategories: state.categories,
     selectedYearRanges: state.yearRanges,
     selectedCountries: state.countries,
@@ -249,6 +269,7 @@ export function useFilterParams() {
     sortDirection: state.sortDirection,
 
     setSelectedTaxa,
+    setSelectedSubgroups,
     setSelectedCategories,
     setSelectedYearRanges,
     setSelectedCountries,
