@@ -53,12 +53,7 @@ describe("parseParams", () => {
     expect(result.sortField).toBe("year");
   });
 
-  it("parses sort=priority", () => {
-    const result = parseParams("?sort=priority");
-    expect(result.sortField).toBe("priority");
-  });
-
-  it("defaults unknown sort values to null (priority score)", () => {
+  it("defaults unknown sort values to null", () => {
     const result = parseParams("?sort=unknown");
     expect(result.sortField).toBe(null);
   });
@@ -99,7 +94,7 @@ describe("buildQs", () => {
     countries: new Set<string>(),
     obsRanges: new Set<string>(),
     search: "",
-    sortField: null as "year" | "category" | "newGbif" | "priority" | null,
+    sortField: null as "year" | "category" | "newGbif" | null,
     sortDirection: "desc" as const,
   };
 
@@ -142,8 +137,8 @@ describe("buildQs", () => {
     expect(qs).toBe("");
   });
 
-  it("omits sort param for priority sortField (same as default)", () => {
-    const qs = buildQs({ ...emptyState, sortField: "priority" });
+  it("omits sort param for year sortField (same as default)", () => {
+    const qs = buildQs({ ...emptyState, sortField: "year" });
     expect(qs).toBe("");
   });
 
@@ -165,10 +160,10 @@ describe("buildQs", () => {
     expect(params.get("dir")).toBe("asc");
   });
 
-  it("omits dir=desc for category/year sort (desc is default)", () => {
-    const qs = buildQs({ ...emptyState, sortField: "year", sortDirection: "desc" });
+  it("omits dir=desc for category sort (desc is default)", () => {
+    const qs = buildQs({ ...emptyState, sortField: "category", sortDirection: "desc" });
     const params = new URLSearchParams(qs);
-    expect(params.get("sort")).toBe("year");
+    expect(params.get("sort")).toBe("category");
     expect(params.has("dir")).toBe(false);
   });
 });
@@ -182,7 +177,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
       countries: new Set(["ZA"]),
       obsRanges: new Set<string>(),
       search: "shrew",
-      sortField: "year" as const,
+      sortField: "category" as const,
       sortDirection: "asc" as const,
     };
 
@@ -206,7 +201,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
       countries: new Set<string>(),
       obsRanges: new Set<string>(),
       search: "",
-      sortField: null as "year" | "category" | "newGbif" | "priority" | null,
+      sortField: null as "year" | "category" | "newGbif" | null,
       sortDirection: "desc" as const,
     };
 

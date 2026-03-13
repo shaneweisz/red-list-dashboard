@@ -12,7 +12,6 @@ import { ALPHA2_TO_NAME } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
 import { useFilterParams } from "@/hooks/useFilterParams";
 import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
-import { computePriority, type PriorityResult } from "@/lib/prioritization";
 import AssessmentAssistant from "../AssessmentAssistant";
 
 // Dynamically import OccurrenceMapRow to avoid SSR issues with Leaflet
@@ -71,10 +70,6 @@ interface SpeciesDetails {
   gbifMatchStatus: GbifMatchStatus | null;
   // undefined = still loading (show spinner), null = fetched, no image
   inatDefaultImage: InatDefaultImage | null | undefined;
-  // undefined = still loading (show spinner), null = fetched, no data
-  openAlexPaperCount: number | null | undefined;
-  // undefined = still loading (show spinner), null = fetched, no data
-  papersAtAssessment: number | null | undefined;
   // Whether criteria/gbifMatchStatus have been fetched (to avoid re-fetching on null)
   criteriaFetched?: boolean;
   gbifMatchFetched?: boolean;
@@ -608,18 +603,6 @@ export default function RedListView() {
     return { countryCounts: counts, uniqueCountries: sorted, countryStatsForMap: statsForMap };
   }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, matchesSearch]);
 
-  // ── Priority scoring ─────────────────────────────────────────────────
-  const priorityMap = useMemo(() => {
-    const map = new Map<number, PriorityResult>();
-    const yr = new Date().getFullYear();
-    for (const s of taxaFilteredSpecies) {
-      if (s.sis_taxon_id != null) {
-        map.set(s.sis_taxon_id, computePriority(s, yr));
-      }
-    }
-    return map;
-  }, [taxaFilteredSpecies]);
-
   // ── Client-side filtering and sorting ──────────────────────────────
   const CATEGORY_ORDER: Record<string, number> = {
     EX: 0, EW: 1, CR: 2, EN: 3, VU: 4, NT: 5, LC: 6, DD: 7, NE: 8,
@@ -647,22 +630,14 @@ export default function RedListView() {
       }
 
       let comparison = 0;
-      if (!sortField || sortField === "priority") {
-        const scoreA = (a.sis_taxon_id != null ? priorityMap.get(a.sis_taxon_id)?.score : 0) ?? 0;
-        const scoreB = (b.sis_taxon_id != null ? priorityMap.get(b.sis_taxon_id)?.score : 0) ?? 0;
-        comparison = scoreA - scoreB;
-      } else if (sortField === "year") {
+      if (!sortField || sortField === "year") {
         const dateA = a.assessment_date ? new Date(a.assessment_date).getTime() : 0;
         const dateB = b.assessment_date ? new Date(b.assessment_date).getTime() : 0;
         comparison = dateA - dateB;
       } else if (sortField === "category") {
         comparison = (CATEGORY_ORDER[a.category] ?? 99) - (CATEGORY_ORDER[b.category] ?? 99);
       } else if (sortField === "newGbif") {
-        if (a.category === "NE" || b.category === "NE") {
-          comparison = (a.gbif_occurrence_count ?? -1) - (b.gbif_occurrence_count ?? -1);
-        } else {
-          comparison = (a.gbif_observations_after_assessment_year ?? -1) - (b.gbif_observations_after_assessment_year ?? -1);
-        }
+        comparison = (a.gbif_occurrence_count ?? -1) - (b.gbif_occurrence_count ?? -1);
       }
 
       if (comparison === 0) {
@@ -673,7 +648,7 @@ export default function RedListView() {
     });
 
     return { filteredSpecies: filtered, sortedSpecies: sorted };
-  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedCountries, searchFilter, showOnlyStarred, priorityMap, pinnedSet, pinnedSpecies, sortField, sortDirection]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedCountries, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection]);
 
   // ── Client-side pagination ─────────────────────────────────────────
   const totalFiltered = filteredSpecies.length;
@@ -707,8 +682,8 @@ export default function RedListView() {
   };
 
   // Handle sort toggle
-  const handleSort = (field: "year" | "category" | "newGbif" | "priority") => {
-    const currentField = sortField === null ? "priority" : sortField;
+  const handleSort = (field: "year" | "category" | "newGbif") => {
+    const currentField = sortField === null ? "year" : sortField;
     if (currentField === field) {
       if (sortDirection === "desc") {
         setSort(field, "asc");
@@ -742,8 +717,6 @@ export default function RedListView() {
           gbifOccurrencesSinceAssessment: s.gbif_observations_after_assessment_year ?? null,
           gbifMatchStatus: { matchType: 'EXACT' },
           inatDefaultImage: undefined, // Loading — fetched per-page below
-          openAlexPaperCount: undefined, // Loading — fetched per-page below
-          papersAtAssessment: undefined, // Loading — fetched per-page below
         };
       } else {
         newDetails[s.id] = {
@@ -754,8 +727,6 @@ export default function RedListView() {
           gbifOccurrencesSinceAssessment: null,
           gbifMatchStatus: { matchType: 'NONE' },
           inatDefaultImage: undefined, // Loading
-          openAlexPaperCount: undefined, // Loading
-          papersAtAssessment: undefined, // Loading
         };
       }
     }
@@ -764,7 +735,7 @@ export default function RedListView() {
     }
   }, [paginatedSpecies, speciesDetails]);
 
-  // Fetch iNat profile pic + OpenAlex paper counts for visible species (lightweight per-page calls)
+  // Fetch iNat profile pic for visible species (lightweight per-page calls)
   // Also resolve GBIF match status for species not found in CSV (HIGHERRANK vs NONE)
   useEffect(() => {
     const speciesToFetch = paginatedSpecies.filter(
@@ -782,28 +753,19 @@ export default function RedListView() {
     async function fetchLightweightDetails() {
       const promises = speciesToFetch.map(async (s) => {
         try {
-          const assessmentDate = s.assessment_date ? new Date(s.assessment_date) : null;
-          const assessmentYear = assessmentDate ? assessmentDate.getFullYear().toString() : "";
-
-          // Build parallel fetch list: iNat image + OpenAlex papers
-          // + GBIF match check for species not in CSV
-          const fetchPromises: [Promise<Response>, Promise<Response | null>, Promise<Response | null>] = [
+          // Build parallel fetch list: iNat image + GBIF match check for species not in CSV
+          const fetchPromises: [Promise<Response>, Promise<Response | null>] = [
             fetch(
               `https://api.inaturalist.org/v1/taxa?q=${encodeURIComponent(s.scientific_name)}&rank=species&per_page=1`,
               { signal }
             ),
-            s.category === "NE"
-              ? fetch(`/api/literature?scientificName=${encodeURIComponent(s.scientific_name)}&assessmentYear=0&limit=1`, { signal })
-              : assessmentYear
-                ? fetch(`/api/literature?scientificName=${encodeURIComponent(s.scientific_name)}&assessmentYear=${assessmentYear}&limit=1`, { signal })
-                : Promise.resolve(null),
             // Check GBIF match status for species missing from CSV
             !s.gbif_species_key
               ? fetch(`https://api.gbif.org/v1/species/match?name=${encodeURIComponent(s.scientific_name)}`, { signal })
               : Promise.resolve(null),
           ];
 
-          const [inatRes, litRes, gbifMatchRes] = await Promise.all(fetchPromises);
+          const [inatRes, gbifMatchRes] = await Promise.all(fetchPromises);
 
           let inatDefaultImage: InatDefaultImage | null = null;
           if (inatRes.ok) {
@@ -817,14 +779,6 @@ export default function RedListView() {
             }
           }
 
-          let openAlexPaperCount: number | null = null;
-          let papersAtAssessment: number | null = null;
-          if (litRes?.ok) {
-            const litData = await litRes.json();
-            openAlexPaperCount = litData.totalPapersSinceAssessment ?? null;
-            papersAtAssessment = litData.papersAtAssessment ?? null;
-          }
-
           let gbifMatchStatus: GbifMatchStatus | null = null;
           if (gbifMatchRes?.ok) {
             const gbifMatch = await gbifMatchRes.json();
@@ -835,9 +789,9 @@ export default function RedListView() {
             };
           }
 
-          return { id: s.id, inatDefaultImage, openAlexPaperCount, papersAtAssessment, gbifMatchStatus };
+          return { id: s.id, inatDefaultImage, gbifMatchStatus };
         } catch {
-          return { id: s.id, inatDefaultImage: null, openAlexPaperCount: null, papersAtAssessment: null, gbifMatchStatus: null };
+          return { id: s.id, inatDefaultImage: null, gbifMatchStatus: null };
         }
       });
 
@@ -848,8 +802,6 @@ export default function RedListView() {
       for (const r of results) {
         updates[r.id] = {
           inatDefaultImage: r.inatDefaultImage,
-          openAlexPaperCount: r.openAlexPaperCount,
-          papersAtAssessment: r.papersAtAssessment,
           gbifMatchFetched: true,
           ...(r.gbifMatchStatus ? { gbifMatchStatus: r.gbifMatchStatus } : {}),
         };
@@ -1292,36 +1244,19 @@ export default function RedListView() {
                     )}
                   </span>
                 </th>
-                <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
-                  GBIF at Assess.
-                </th>
                 <th
                   className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
                   onClick={() => handleSort("newGbif")}
                 >
                   <span className="flex items-center justify-end gap-1">
-                    New GBIF
+                    Total GBIF
                     {sortField === "newGbif" && (
                       <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
                     )}
                   </span>
                 </th>
                 <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
-                  Papers at Assess.
-                </th>
-                <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
-                  New Papers
-                </th>
-                <th
-                  className="px-3 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[80px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
-                  onClick={() => handleSort("priority")}
-                >
-                  <span className="flex items-center gap-1">
-                    Priority
-                    {(sortField === "priority" || sortField === null) && (
-                      <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
-                    )}
-                  </span>
+                  % New GBIF
                 </th>
               </tr>
             </thead>
@@ -1330,7 +1265,6 @@ export default function RedListView() {
                 const speciesKey = s.sis_taxon_id ?? s.gbif_species_key ?? s.id;
                 const assessmentDateObj = s.assessment_date ? new Date(s.assessment_date) : null;
                 const assessmentYear = assessmentDateObj ? assessmentDateObj.getFullYear() : null;
-                const assessmentMonth = assessmentDateObj ? assessmentDateObj.getMonth() + 1 : null; // 1-12
                 const yearsSinceAssessment = assessmentYear ? currentYear - assessmentYear : null;
                 const details = speciesDetails[s.id];
                 const gbifSpeciesKey = s.gbif_species_key || (details?.gbifUrl ? parseInt(details.gbifUrl.split('/').pop() || '0') : null);
@@ -1471,32 +1405,19 @@ export default function RedListView() {
                         </>
                       )}
                     </td>
+                    {/* Total GBIF */}
                     <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
-                      {isNE(s) ? <span className="text-zinc-400">N/A</span> : details?.gbifOccurrences != null && details?.gbifUrl ? (() => {
-                        const recordsAtAssessment = details.gbifOccurrences - (details.gbifOccurrencesSinceAssessment ?? 0);
-                        return (
-                          <a
-                            href={assessmentYear ? `https://www.gbif.org/occurrence/search?taxon_key=${details.gbifUrl.split('/').pop()}&year=*,${assessmentYear}` : `https://www.gbif.org/occurrence/search?taxon_key=${details.gbifUrl.split('/').pop()}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            {recordsAtAssessment.toLocaleString()}
-                          </a>
-                        );
-                      })() : details?.gbifMatchStatus?.matchType === 'HIGHERRANK' || details?.gbifMatchStatus?.matchType === 'NONE' ? (
-                        <HoverTooltip
-                          text={details.gbifMatchStatus.matchType === 'HIGHERRANK'
-                            ? `Name not found in GBIF (matched to ${details.gbifMatchStatus.matchedRank?.toLowerCase() || 'higher rank'} instead). May be due to a taxonomic split, synonym, or naming difference.`
-                            : "Species not found in GBIF. May be due to a taxonomic split, synonym, or naming difference."}
+                      {details?.gbifOccurrences != null && details?.gbifUrl ? (
+                        <a
+                          href={`https://www.gbif.org/occurrence/search?taxon_key=${details.gbifUrl.split('/').pop()}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
+                          onClick={(e) => e.stopPropagation()}
                         >
-                          <span className="text-zinc-400 cursor-help">?</span>
-                        </HoverTooltip>
-                      ) : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
-                      {isNE(s) && s.gbif_occurrence_count != null ? (
+                          {details.gbifOccurrences.toLocaleString()}
+                        </a>
+                      ) : s.gbif_occurrence_count != null && s.gbif_species_key ? (
                         <a
                           href={`https://www.gbif.org/occurrence/search?taxon_key=${s.gbif_species_key}`}
                           target="_blank"
@@ -1505,17 +1426,6 @@ export default function RedListView() {
                           onClick={(e) => e.stopPropagation()}
                         >
                           {s.gbif_occurrence_count.toLocaleString()}
-                        </a>
-                      ) : details?.gbifOccurrencesSinceAssessment != null && details?.gbifUrl && assessmentYear ? (
-                        <a
-                          href={`https://www.gbif.org/occurrence/search?taxon_key=${details.gbifUrl.split('/').pop()}&year=${assessmentYear + 1},${new Date().getFullYear()}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
-                          title={assessmentMonth ? `Data count includes ${assessmentYear} from month ${assessmentMonth + 1} onwards` : undefined}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {details.gbifOccurrencesSinceAssessment.toLocaleString()}
                         </a>
                       ) : details?.gbifMatchStatus?.matchType === 'HIGHERRANK' || details?.gbifMatchStatus?.matchType === 'NONE' ? (
                         <HoverTooltip
@@ -1527,66 +1437,20 @@ export default function RedListView() {
                         </HoverTooltip>
                       ) : "—"}
                     </td>
-                    {/* Papers When Assessed */}
+                    {/* % New GBIF */}
                     <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
-                      {isNE(s) ? <span className="text-zinc-400">N/A</span> : details?.papersAtAssessment === undefined ? (
-                        <span className="inline-block animate-spin h-4 w-4 border-2 border-zinc-400 border-t-transparent rounded-full" />
-                      ) : details?.papersAtAssessment != null && assessmentYear ? (
-                        <a
-                          href={`https://openalex.org/works?page=1&filter=default.search%3A%22${encodeURIComponent(s.scientific_name)}%22,publication_year%3A%3C%3D${assessmentYear},type%3A%21dataset&sort=publication_date%3Adesc`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
-                          title={`OpenAlex: search="${s.scientific_name}" AND year<=${assessmentYear} AND type!=dataset`}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {details.papersAtAssessment.toLocaleString()}
-                        </a>
-                      ) : "—"}
-                    </td>
-                    {/* New Papers */}
-                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
-                      {details?.openAlexPaperCount === undefined ? (
-                        <span className="inline-block animate-spin h-4 w-4 border-2 border-zinc-400 border-t-transparent rounded-full" />
-                      ) : details?.openAlexPaperCount != null ? (
-                        <a
-                          href={s.category === "NE"
-                            ? `https://openalex.org/works?page=1&filter=default.search%3A%22${encodeURIComponent(s.scientific_name)}%22,type%3A%21dataset&sort=publication_date%3Adesc`
-                            : `https://openalex.org/works?page=1&filter=default.search%3A%22${encodeURIComponent(s.scientific_name)}%22,publication_year%3A%3E${assessmentYear},type%3A%21dataset&sort=publication_date%3Adesc`
-                          }
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
-                          title={s.category === "NE"
-                            ? `OpenAlex: search="${s.scientific_name}" AND type!=dataset`
-                            : `OpenAlex: search="${s.scientific_name}" AND year>${assessmentYear} AND type!=dataset`
-                          }
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {details.openAlexPaperCount.toLocaleString()}
-                        </a>
-                      ) : "—"}
-                    </td>
-                    {/* Priority score */}
-                    <td className="px-3 md:px-4 py-3 whitespace-nowrap">
-                      {(() => {
-                        const priority = s.sis_taxon_id != null ? priorityMap.get(s.sis_taxon_id) : null;
-                        const score = priority?.score ?? 0;
-                        return score === 0 ? (
-                          <span className="text-zinc-300 dark:text-zinc-700">—</span>
-                        ) : (
-                          <HoverTooltip text={`Staleness: ${priority!.breakdown.staleness}/25, New data: ${priority!.breakdown.newData}/25, Category: ${priority!.breakdown.category}/50`}>
-                            <span className="text-xs font-semibold tabular-nums text-zinc-600 dark:text-zinc-400 cursor-help">
-                              {score}
-                            </span>
-                          </HoverTooltip>
-                        );
+                      {isNE(s) ? <span className="text-zinc-400">N/A</span> : (() => {
+                        const total = details?.gbifOccurrences ?? s.gbif_occurrence_count;
+                        const newObs = details?.gbifOccurrencesSinceAssessment ?? s.gbif_observations_after_assessment_year;
+                        if (total == null || total === 0 || newObs == null) return "—";
+                        const pct = (newObs / total) * 100;
+                        return `${pct < 1 && pct > 0 ? "<1" : Math.round(pct)}%`;
                       })()}
                     </td>
                   </tr>
                   {selectedSpeciesKey === speciesKey && (
                     <tr>
-                      <td colSpan={10} className="p-0 bg-zinc-50 dark:bg-zinc-800/30">
+                      <td colSpan={7} className="p-0 bg-zinc-50 dark:bg-zinc-800/30">
                         <div style={{ maxWidth: 'calc(100vw - 2rem)', transform: 'translateX(var(--scroll-left, 0px))' }}>
                           {/* Tab bar */}
                           <div className="flex items-center border-b border-zinc-200 dark:border-zinc-700" onClick={(e) => e.stopPropagation()}>
@@ -1693,7 +1557,7 @@ export default function RedListView() {
               })}
               {totalFiltered === 0 && !speciesLoading && (
                 <tr>
-                  <td colSpan={10} className="px-4 py-8 text-center text-zinc-500">
+                  <td colSpan={7} className="px-4 py-8 text-center text-zinc-500">
                     No species found
                   </td>
                 </tr>
