@@ -13,6 +13,8 @@ interface AssessorChartProps {
   allAssessors: Array<{ code: string; count: number; label: string }>;
   selectedAssessors: Set<string>;
   onAssessorClick: (data: { payload?: { code?: string } }, event: React.MouseEvent) => void;
+  /** Toggle an assessor in/out of selection (used by search list) */
+  onAssessorToggle: (code: string) => void;
   loading?: boolean;
 }
 
@@ -22,6 +24,7 @@ export default function AssessorChart({
   allAssessors,
   selectedAssessors,
   onAssessorClick,
+  onAssessorToggle,
   loading,
 }: AssessorChartProps) {
   const [search, setSearch] = useState("");
@@ -117,7 +120,7 @@ export default function AssessorChart({
                   return (
                     <button
                       key={entry.code}
-                      onClick={(e) => handleAssessorSelect(entry.code, e)}
+                      onClick={() => onAssessorToggle(entry.code)}
                       className={`w-full flex items-center justify-between px-2 py-1 rounded text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors ${
                         isSelected
                           ? "bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300"

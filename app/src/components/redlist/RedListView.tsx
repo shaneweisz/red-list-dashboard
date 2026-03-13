@@ -292,6 +292,17 @@ export default function RedListView() {
     });
   }, [setSelectedTaxa]);
 
+  // Reset all other filters when taxa selection changes
+  const prevTaxaRef = useRef(selectedTaxa);
+  useEffect(() => {
+    const prev = prevTaxaRef.current;
+    prevTaxaRef.current = selectedTaxa;
+    // Skip if taxa haven't actually changed (same reference or same contents)
+    if (prev === selectedTaxa) return;
+    if (prev.size === selectedTaxa.size && [...selectedTaxa].every(t => prev.has(t))) return;
+    clearAllFilters();
+    setShowOnlyStarred(false);
+  }, [selectedTaxa, clearAllFilters]);
 
   const [showOnlyStarred, setShowOnlyStarred] = useState(false);
 
@@ -1063,6 +1074,16 @@ export default function RedListView() {
     });
   };
 
+  // Toggle a single assessor in/out of selection (used by search list)
+  const handleAssessorToggle = useCallback((code: string) => {
+    setSelectedReviewers(prev => {
+      const next = new Set(prev);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
+      return next;
+    });
+  }, [setSelectedReviewers]);
+
   // Handle reviewer bar click
   const handleAssessorClick = (data: { payload?: { code?: string } }, event: React.MouseEvent) => {
     const code = data.payload?.code;
@@ -1214,6 +1235,7 @@ export default function RedListView() {
               allAssessors={assessorChartData}
               selectedAssessors={selectedReviewers}
               onAssessorClick={handleAssessorClick}
+              onAssessorToggle={handleAssessorToggle}
               loading={speciesLoading && assessedSpecies.length === 0}
             />
           </div>
