@@ -363,6 +363,17 @@ interface SubGroupDef {
 const CURRENT_YEAR = new Date().getFullYear();
 const OUTDATED_THRESHOLD_YEARS = 10;
 
+/**
+ * Is an assessment outdated? Uses the same logic as build-taxa-summary.ts:
+ * outdated if assessment_date is >10 years ago, or if assessment_date is missing.
+ */
+export function isOutdated(assessmentDate: string | null, currentYear = CURRENT_YEAR): boolean {
+  if (!assessmentDate) return true; // No date → treat as outdated
+  const year = parseInt(assessmentDate.slice(0, 4), 10);
+  if (isNaN(year)) return true;
+  return currentYear - year > OUTDATED_THRESHOLD_YEARS;
+}
+
 function matchesFilter(row: RedlistRow, filter: SubGroupFilter): boolean {
   // Check class filter
   if (filter.classNames && filter.classNames.length > 0) {
@@ -425,12 +436,7 @@ export function getSubgroupSummaries(subgroups: SubGroupDef[]): SubGroupSummary[
         }
 
         totalAssessed++;
-        if (row.assessment_date) {
-          const yr = parseInt(row.assessment_date.slice(0, 4), 10);
-          if (!isNaN(yr) && CURRENT_YEAR - yr > OUTDATED_THRESHOLD_YEARS) outdated++;
-        } else {
-          outdated++; // No assessment date = treat as outdated
-        }
+        if (isOutdated(row.assessment_date)) outdated++;
         const cat = row.category;
         if (cat) byCategory[cat] = (byCategory[cat] ?? 0) + 1;
       }
