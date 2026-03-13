@@ -1271,7 +1271,7 @@ export default function RedListView() {
                 >
                   <span className="flex items-center gap-1">
                     Assess. Date
-                    {sortField === "year" && (
+                    {(sortField === "year" || sortField === null) && (
                       <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
                     )}
                   </span>
