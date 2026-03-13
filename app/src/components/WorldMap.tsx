@@ -259,10 +259,10 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
     <div className="relative bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 p-3 h-full flex flex-col">
       {/* Header with controls */}
       <div className="flex items-center justify-between mb-1">
+        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+          Country
+        </h2>
         <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-            Country
-          </h2>
           {/* Color mode toggle */}
           <div className="flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md p-0.5 text-[10px]">
             <button
