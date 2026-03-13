@@ -261,7 +261,7 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
       <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-            Country <span className="font-normal text-[10px] text-zinc-400">(cmd/ctrl+click to multiselect)</span>
+            Country
           </h2>
           {/* Color mode toggle */}
           <div className="flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md p-0.5 text-[10px]">
