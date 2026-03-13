@@ -987,7 +987,7 @@ export default function RedListView() {
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Risk Category</span>
                               </div>
-              <div className="flex-1 min-h-[225px] flex items-center justify-center">
+              <div className="flex-1 min-h-[180px] flex items-center justify-center">
                 {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
                 ) : categoryDataWithPercent.length > 0 ? (
@@ -1018,7 +1018,7 @@ export default function RedListView() {
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Years Since Assessed</span>
                               </div>
-              <div className="flex-1 min-h-[225px] flex items-center justify-center">
+              <div className="flex-1 min-h-[180px] flex items-center justify-center">
                 {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
                 ) : assessmentYearData.length > 0 ? (
@@ -1080,7 +1080,7 @@ export default function RedListView() {
                   </div>
                 </div>
                               </div>
-              <div className="flex-1 min-h-[225px] flex items-center justify-center">
+              <div className="flex-1 min-h-[180px] flex items-center justify-center">
                 {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
                 ) : gbifObsData.length > 0 ? (
