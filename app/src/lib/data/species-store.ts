@@ -360,7 +360,8 @@ interface SubGroupDef {
   filter: SubGroupFilter;
 }
 
-const OUTDATED_THRESHOLD_YEAR = new Date().getFullYear() - 10;
+const CURRENT_YEAR = new Date().getFullYear();
+const OUTDATED_THRESHOLD_YEARS = 10;
 
 function matchesFilter(row: RedlistRow, filter: SubGroupFilter): boolean {
   // Check class filter
@@ -424,8 +425,12 @@ export function getSubgroupSummaries(subgroups: SubGroupDef[]): SubGroupSummary[
         }
 
         totalAssessed++;
-        const yr = parseInt(row.year_published, 10);
-        if (!isNaN(yr) && yr <= OUTDATED_THRESHOLD_YEAR) outdated++;
+        if (row.assessment_date) {
+          const yr = parseInt(row.assessment_date.slice(0, 4), 10);
+          if (!isNaN(yr) && CURRENT_YEAR - yr > OUTDATED_THRESHOLD_YEARS) outdated++;
+        } else {
+          outdated++; // No assessment date = treat as outdated
+        }
         const cat = row.category;
         if (cat) byCategory[cat] = (byCategory[cat] ?? 0) + 1;
       }
