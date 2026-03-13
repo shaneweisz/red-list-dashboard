@@ -789,8 +789,35 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               </td>
               {isVisible("described") && (
                 <td className={numericTdClasses}>
-                  <span className="text-sm text-zinc-600 dark:text-zinc-400 tabular-nums">
+                  <span className="text-sm text-zinc-600 dark:text-zinc-400 tabular-nums inline-flex items-center gap-1">
                     {sg.estimatedDescribed.toLocaleString()}
+                    {(() => {
+                      const sgDefs = TAXA_SUBGROUPS[taxon.id];
+                      const sgDef = sgDefs?.find(d => d.id === sg.id);
+                      if (!sgDef?.source) return null;
+                      return (
+                        <span className="relative group/src">
+                          {sgDef.sourceUrl ? (
+                            <a
+                              href={sgDef.sourceUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                            >
+                              <FaInfoCircle size={10} />
+                            </a>
+                          ) : (
+                            <span className="text-zinc-400">
+                              <FaInfoCircle size={10} />
+                            </span>
+                          )}
+                          <span className="absolute right-0 top-1/2 -translate-y-1/2 mr-5 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover/src:opacity-100 group-hover/src:visible z-50 shadow-lg normal-case max-w-[300px] whitespace-normal text-left">
+                            {sgDef.source}
+                          </span>
+                        </span>
+                      );
+                    })()}
                   </span>
                 </td>
               )}

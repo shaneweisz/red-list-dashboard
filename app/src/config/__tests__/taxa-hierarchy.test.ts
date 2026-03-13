@@ -43,6 +43,14 @@ describe("TAXA_SUBGROUPS data integrity", () => {
     }
   });
 
+  it("every subgroup has a non-empty source citation", () => {
+    for (const subs of Object.values(TAXA_SUBGROUPS)) {
+      for (const sg of subs) {
+        expect(sg.source.length, `${sg.id} missing source`).toBeGreaterThan(0);
+      }
+    }
+  });
+
   it("every filter has at least one group", () => {
     for (const subs of Object.values(TAXA_SUBGROUPS)) {
       for (const sg of subs) {
