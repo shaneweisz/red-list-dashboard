@@ -720,8 +720,10 @@ export default function RedListView() {
         comparison = dateA - dateB;
       } else if (sortField === "category") {
         comparison = (CATEGORY_ORDER[a.category] ?? 99) - (CATEGORY_ORDER[b.category] ?? 99);
-      } else if (sortField === "newGbif") {
+      } else if (sortField === "totalGbif") {
         comparison = (a.gbif_occurrence_count ?? -1) - (b.gbif_occurrence_count ?? -1);
+      } else if (sortField === "newGbif") {
+        comparison = (a.gbif_observations_after_assessment_year ?? -1) - (b.gbif_observations_after_assessment_year ?? -1);
       } else if (sortField === "pctNewGbif") {
         const pctA = (a.gbif_occurrence_count && a.gbif_occurrence_count > 0 && a.gbif_observations_after_assessment_year != null)
           ? a.gbif_observations_after_assessment_year / a.gbif_occurrence_count : -1;
@@ -777,7 +779,7 @@ export default function RedListView() {
   };
 
   // Handle sort toggle
-  const handleSort = (field: "year" | "category" | "newGbif" | "pctNewGbif") => {
+  const handleSort = (field: "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif") => {
     const currentField = sortField === null ? "year" : sortField;
     if (currentField === field) {
       if (sortDirection === "desc") {
@@ -1323,17 +1325,20 @@ export default function RedListView() {
                 </th>
                 <th
                   className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
-                  onClick={() => handleSort("newGbif")}
+                  onClick={() => handleSort("totalGbif")}
                 >
                   <span className="flex items-center justify-end gap-1">
                     Total GBIF
                     <GbifInfoTooltip />
-                    {sortField === "newGbif" && (
+                    {sortField === "totalGbif" && (
                       <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
                     )}
                   </span>
                 </th>
-                <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] select-none">
+                <th
+                  className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
+                  onClick={() => handleSort("newGbif")}
+                >
                   <span className="flex items-center justify-end gap-1">
                     New GBIF
                     <HoverTooltip text="Records added after the assessment year (not the exact date). Uses the year following the assessment as the start of the range.">
@@ -1342,6 +1347,9 @@ export default function RedListView() {
                         <path d="M12 16v-4M12 8h.01" />
                       </svg>
                     </HoverTooltip>
+                    {sortField === "newGbif" && (
+                      <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
+                    )}
                   </span>
                 </th>
                 <th

@@ -38,6 +38,11 @@ describe("parseParams", () => {
     expect(result.search).toBe("elephant shrew");
   });
 
+  it("parses sort=totalGbif", () => {
+    const result = parseParams("?sort=totalGbif");
+    expect(result.sortField).toBe("totalGbif");
+  });
+
   it("parses sort=newGbif", () => {
     const result = parseParams("?sort=newGbif");
     expect(result.sortField).toBe("newGbif");
@@ -94,7 +99,7 @@ describe("buildQs", () => {
     countries: new Set<string>(),
     obsRanges: new Set<string>(),
     search: "",
-    sortField: null as "year" | "category" | "newGbif" | "pctNewGbif" | null,
+    sortField: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
     sortDirection: "desc" as const,
   };
 
@@ -146,6 +151,12 @@ describe("buildQs", () => {
     const qs = buildQs({ ...emptyState, sortField: "category" });
     const params = new URLSearchParams(qs);
     expect(params.get("sort")).toBe("category");
+  });
+
+  it("writes sort=totalGbif when explicitly set", () => {
+    const qs = buildQs({ ...emptyState, sortField: "totalGbif" });
+    const params = new URLSearchParams(qs);
+    expect(params.get("sort")).toBe("totalGbif");
   });
 
   it("writes sort=newGbif when explicitly set", () => {
@@ -201,7 +212,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
       countries: new Set<string>(),
       obsRanges: new Set<string>(),
       search: "",
-      sortField: null as "year" | "category" | "newGbif" | "pctNewGbif" | null,
+      sortField: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
       sortDirection: "desc" as const,
     };
 
