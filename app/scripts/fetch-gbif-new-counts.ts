@@ -28,6 +28,7 @@ import {
   readGbifCsv,
 } from "./fetch-gbif-species";
 import { readRedlistCsv } from "./fetch-redlist-species";
+import { readMappingCsv } from "./match-redlist-species-to-gbif";
 
 // =============================================================================
 // CONFIGURATION
@@ -41,12 +42,15 @@ const YEAR_BUCKET_CONCURRENCY = 30;
 // =============================================================================
 
 function loadAssessmentYears(taxonId: string, taxonGbifKeys: Set<number>): Map<number, number> {
+  const mapping = readMappingCsv();
   const speciesAssessmentYear = new Map<number, number>();
   const redlistSpecies = readRedlistCsv(taxonId);
   for (const s of redlistSpecies) {
-    if (s.gbif_species_key && taxonGbifKeys.has(s.gbif_species_key) && s.assessment_date) {
+    const m = mapping.get(s.sis_taxon_id);
+    const gbifKey = m?.gbif_species_key;
+    if (gbifKey && taxonGbifKeys.has(gbifKey) && s.assessment_date) {
       const year = parseInt(s.assessment_date.slice(0, 4), 10);
-      if (!isNaN(year)) speciesAssessmentYear.set(s.gbif_species_key, year);
+      if (!isNaN(year)) speciesAssessmentYear.set(gbifKey, year);
     }
   }
   return speciesAssessmentYear;

@@ -1,10 +1,7 @@
 /**
  * Validates taxa-summary.json against IUCN Table 1a (2025-1).
  *
- * Requires actual pipeline data files.
- * Run manually after: sync.ts
- *
- * Usage: TEST_TABLE1A=1 npx vitest run scripts/__tests__/validate-table1a.test.ts
+ * Requires data files from sync.ts to be present.
  */
 
 import { describe, it, expect } from "vitest";
@@ -39,7 +36,7 @@ const TABLE_1A_2025_1: Record<string, number> = {
 
 const TOTAL_EXPECTED = 169420;
 
-describe.skipIf(!process.env.TEST_TABLE1A)("taxa_summary vs Table 1a (2025-1)", () => {
+describe("taxa_summary vs Table 1a (2025-1)", () => {
   it("total_assessed per table1a_taxon_group matches Table 1a expected values", () => {
     const summaryPath = path.join(DATA_DIR, "taxa-summary.json");
     expect(fs.existsSync(summaryPath), "taxa-summary.json must exist").toBe(true);

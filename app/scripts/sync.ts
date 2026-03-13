@@ -4,7 +4,7 @@
  * Runs all CSV pipeline phases in sequence:
  *   Phase 1: fetch-redlist-species  (IUCN DB → per-taxon CSVs)
  *   Phase 2: fetch-gbif-species     (GBIF API → per-taxon CSVs)
- *   Phase 3: match-redlist-species-to-gbif (GBIF Match API → updates redlist CSVs)
+ *   Phase 3: match-redlist-species-to-gbif (GBIF Match API → data/mapping.csv)
  *   Phase 4: fetch-gbif-new-counts  (GBIF API → updates GBIF CSVs)
  *   Phase 5: build-taxa-summary     (per-taxon CSVs → taxa-summary.json)
  *

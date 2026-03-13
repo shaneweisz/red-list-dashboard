@@ -50,8 +50,6 @@ export interface RedlistSpecies {
   population_trend: string | null;
   countries: string[];
   taxon_group_table1a: string;
-  gbif_species_key: number | null;
-  match_type: string | null;
 }
 
 // =============================================================================
@@ -118,8 +116,6 @@ export async function fetchFromIucnDb(
       population_trend: POPULATION_TRENDS[row.population_trend_code] || null,
       countries: [],
       taxon_group_table1a: taxonId,
-      gbif_species_key: null,
-      match_type: null,
     });
     assessmentIds.push(assessmentId);
   }
@@ -246,7 +242,7 @@ export async function fetchAssessmentHistory(
 const REDLIST_CSV_COLUMNS = [
   "sis_taxon_id", "scientific_name", "common_name", "class_name", "order_name",
   "family", "taxon_group_table1a", "assessment_id", "iucn_category", "assessment_date",
-  "year_published", "population_trend", "countries", "gbif_species_key", "match_type",
+  "year_published", "population_trend", "countries",
 ];
 
 export function writeRedlistCsv(species: RedlistSpecies[], outputPath: string): void {
@@ -265,8 +261,6 @@ export function writeRedlistCsv(species: RedlistSpecies[], outputPath: string): 
       year_published: s.year_published,
       population_trend: s.population_trend,
       countries: s.countries.join(";"),
-      gbif_species_key: s.gbif_species_key,
-      match_type: s.match_type,
     }));
 
   writeCsv(rows, REDLIST_CSV_COLUMNS, outputPath);
@@ -288,8 +282,6 @@ export function readRedlistCsv(taxonId: string): RedlistSpecies[] {
     population_trend: r.population_trend || null,
     countries: r.countries ? r.countries.split(";").filter(Boolean) : [],
     taxon_group_table1a: r.taxon_group_table1a,
-    gbif_species_key: r.gbif_species_key ? parseInt(r.gbif_species_key, 10) : null,
-    match_type: r.match_type || null,
   }));
 }
 
@@ -346,7 +338,9 @@ export async function run(opts: {
       }
 
       const history = await fetchAssessmentHistory(pgClient, taxon);
-      const historyPath = path.join(REDLIST_DIR, `${taxon.id}-history.json`);
+      const historyDir = path.join(REDLIST_DIR, "history");
+      fs.mkdirSync(historyDir, { recursive: true });
+      const historyPath = path.join(historyDir, `${taxon.id}.json`);
       fs.writeFileSync(historyPath, JSON.stringify(history) + "\n");
       console.log(`  Wrote history for ${Object.keys(history).length} species → ${historyPath}`);
 

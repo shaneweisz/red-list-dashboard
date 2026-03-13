@@ -1,9 +1,9 @@
 /**
- * match-redlist-species-to-gbif: GBIF Species Match API → per-taxon redlist CSVs
+ * match-redlist-species-to-gbif: GBIF Species Match API → data/mapping.csv
  *
  * Resolves Red List scientific names to GBIF species keys using
- * GBIF's fuzzy matching API, then writes gbif_species_key and
- * match_type back to data/redlist/{taxonId}.csv.
+ * GBIF's fuzzy matching API, then writes a single data/mapping.csv
+ * with columns: sis_taxon_id, gbif_species_key, match_type.
  *
  * Prerequisites:
  *   1. Per-taxon redlist CSVs exist in data/redlist/ (from fetch-redlist)
@@ -18,16 +18,15 @@ import * as fs from "fs";
 import {
   loadEnvFiles,
   SyncLogger,
+  DATA_DIR,
   REDLIST_DIR,
   GBIF_DIR,
+  writeCsv,
+  readCsv,
   delay,
   mapConcurrent,
 } from "./utils";
-import {
-  RedlistSpecies,
-  writeRedlistCsv,
-  readRedlistCsv,
-} from "./fetch-redlist-species";
+import { readRedlistCsv } from "./fetch-redlist-species";
 import { readGbifCsv } from "./fetch-gbif-species";
 import { TAXA } from "./taxa";
 
@@ -41,6 +40,12 @@ const MAX_RETRIES = 5;
 // =============================================================================
 // TYPES
 // =============================================================================
+
+export interface MappingEntry {
+  sis_taxon_id: number;
+  gbif_species_key: number | null;
+  match_type: string;
+}
 
 interface GbifMatchResponse {
   usageKey?: number;
@@ -99,15 +104,52 @@ export async function matchGbifSpecies(
 }
 
 // =============================================================================
+// MAPPING CSV
+// =============================================================================
+
+const MAPPING_CSV_PATH = path.join(DATA_DIR, "mapping.csv");
+const MAPPING_CSV_COLUMNS = ["sis_taxon_id", "gbif_species_key", "match_type"];
+
+export function writeMappingCsv(entries: MappingEntry[]): void {
+  const rows = entries.map((e) => ({
+    sis_taxon_id: e.sis_taxon_id,
+    gbif_species_key: e.gbif_species_key,
+    match_type: e.match_type,
+  }));
+  writeCsv(rows, MAPPING_CSV_COLUMNS, MAPPING_CSV_PATH);
+}
+
+export function readMappingCsv(): Map<number, { gbif_species_key: number | null; match_type: string }> {
+  if (!fs.existsSync(MAPPING_CSV_PATH)) return new Map();
+  const entries = readCsv<MappingEntry>(MAPPING_CSV_PATH, (r) => ({
+    sis_taxon_id: parseInt(r.sis_taxon_id, 10),
+    gbif_species_key: r.gbif_species_key ? parseInt(r.gbif_species_key, 10) : null,
+    match_type: r.match_type || "",
+  }));
+  const map = new Map<number, { gbif_species_key: number | null; match_type: string }>();
+  for (const e of entries) {
+    map.set(e.sis_taxon_id, { gbif_species_key: e.gbif_species_key, match_type: e.match_type });
+  }
+  return map;
+}
+
+// =============================================================================
 // MATCHING
 // =============================================================================
 
-function loadAllRedlistSpecies(): RedlistSpecies[] {
-  const allSpecies: RedlistSpecies[] = [];
+interface SpeciesInput {
+  sis_taxon_id: number;
+  scientific_name: string;
+}
+
+function loadAllRedlistSpecies(): SpeciesInput[] {
+  const allSpecies: SpeciesInput[] = [];
   for (const taxon of TAXA) {
     const csvPath = path.join(REDLIST_DIR, `${taxon.id}.csv`);
     if (!fs.existsSync(csvPath)) continue;
-    allSpecies.push(...readRedlistCsv(taxon.id));
+    for (const s of readRedlistCsv(taxon.id)) {
+      allSpecies.push({ sis_taxon_id: s.sis_taxon_id, scientific_name: s.scientific_name });
+    }
   }
   return allSpecies;
 }
@@ -125,7 +167,7 @@ function loadAllGbifKeys(): Set<number> {
 
 export async function matchAllSpecies(
   logger: SyncLogger
-): Promise<RedlistSpecies[]> {
+): Promise<MappingEntry[]> {
   const redlistSpecies = loadAllRedlistSpecies();
   const gbifKeys = loadAllGbifKeys();
 
@@ -155,23 +197,21 @@ export async function matchAllSpecies(
   );
   process.stdout.write(`\r  Matched ${redlistSpecies.length}/${redlistSpecies.length}\n`);
 
+  const entries: MappingEntry[] = [];
+
   for (const { species, key, matchType } of matchResults) {
     if (key === null) {
       noMatch++;
-      species.gbif_species_key = null;
-      species.match_type = matchType;
+      entries.push({ sis_taxon_id: species.sis_taxon_id, gbif_species_key: null, match_type: matchType });
     } else if (!gbifKeys.has(key)) {
       noGbifData++;
-      species.gbif_species_key = null;
-      species.match_type = "NO_GBIF_DATA";
+      entries.push({ sis_taxon_id: species.sis_taxon_id, gbif_species_key: null, match_type: "NO_GBIF_DATA" });
     } else if (claimedGbifKeys.has(key)) {
       alreadyLinked++;
-      species.gbif_species_key = null;
-      species.match_type = "DUPLICATE";
+      entries.push({ sis_taxon_id: species.sis_taxon_id, gbif_species_key: null, match_type: "DUPLICATE" });
     } else {
       claimedGbifKeys.add(key);
-      species.gbif_species_key = key;
-      species.match_type = matchType;
+      entries.push({ sis_taxon_id: species.sis_taxon_id, gbif_species_key: key, match_type: matchType });
       if (matchType === "EXACT") exact++;
       else fuzzy++;
     }
@@ -181,7 +221,7 @@ export async function matchAllSpecies(
   console.log(`  Linked: ${linked} (${exact} exact, ${fuzzy} fuzzy)`);
   console.log(`  Unlinked: ${noMatch + noGbifData + alreadyLinked} (${noMatch} no match, ${noGbifData} no GBIF data, ${alreadyLinked} duplicate)`);
 
-  return redlistSpecies;
+  return entries;
 }
 
 // =============================================================================
@@ -197,39 +237,30 @@ export async function run(opts: {
 
   logger.log("match_start", {});
 
-  const redlistSpecies = await matchAllSpecies(logger);
+  const entries = await matchAllSpecies(logger);
 
-  // Group by taxon and write per-taxon CSVs
-  const byTaxon = new Map<string, RedlistSpecies[]>();
-  for (const s of redlistSpecies) {
-    const group = byTaxon.get(s.taxon_group_table1a) || [];
-    group.push(s);
-    byTaxon.set(s.taxon_group_table1a, group);
-  }
-  for (const [taxonId, species] of byTaxon) {
-    writeRedlistCsv(species, path.join(REDLIST_DIR, `${taxonId}.csv`));
-  }
+  writeMappingCsv(entries);
 
-  const linkedCount = redlistSpecies.filter((r) => r.gbif_species_key !== null).length;
+  const linkedCount = entries.filter((e) => e.gbif_species_key !== null).length;
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
   const minutes = Math.floor(Number(elapsed) / 60);
   const seconds = Number(elapsed) % 60;
 
-  logger.log("match_complete", { total: redlistSpecies.length, linked: linkedCount, duration_seconds: Number(elapsed) });
+  logger.log("match_complete", { total: entries.length, linked: linkedCount, duration_seconds: Number(elapsed) });
 
   console.log("\n" + "=".repeat(50));
   console.log("match complete:");
-  console.log(`  Total:   ${redlistSpecies.length.toLocaleString()}`);
+  console.log(`  Total:   ${entries.length.toLocaleString()}`);
   console.log(`  Linked:  ${linkedCount.toLocaleString()}`);
-  console.log(`  Output:  ${REDLIST_DIR}/`);
+  console.log(`  Output:  ${MAPPING_CSV_PATH}`);
   console.log(`  Duration: ${minutes}m ${seconds}s`);
 }
 
 async function main() {
   loadEnvFiles();
 
-  console.log("match-redlist-species-to-gbif: GBIF Match API → per-taxon redlist CSVs");
+  console.log("match-redlist-species-to-gbif: GBIF Match API → data/mapping.csv");
   console.log("=".repeat(50));
 
   const logger = new SyncLogger("match-redlist-species-to-gbif");
