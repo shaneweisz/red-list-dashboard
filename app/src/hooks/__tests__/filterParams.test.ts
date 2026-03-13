@@ -94,7 +94,7 @@ describe("buildQs", () => {
     countries: new Set<string>(),
     obsRanges: new Set<string>(),
     search: "",
-    sortField: null as "year" | "category" | "newGbif" | null,
+    sortField: null as "year" | "category" | "newGbif" | "pctNewGbif" | null,
     sortDirection: "desc" as const,
   };
 
@@ -201,7 +201,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
       countries: new Set<string>(),
       obsRanges: new Set<string>(),
       search: "",
-      sortField: null as "year" | "category" | "newGbif" | null,
+      sortField: null as "year" | "category" | "newGbif" | "pctNewGbif" | null,
       sortDirection: "desc" as const,
     };
 

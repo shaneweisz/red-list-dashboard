@@ -664,6 +664,12 @@ export default function RedListView() {
         comparison = (CATEGORY_ORDER[a.category] ?? 99) - (CATEGORY_ORDER[b.category] ?? 99);
       } else if (sortField === "newGbif") {
         comparison = (a.gbif_occurrence_count ?? -1) - (b.gbif_occurrence_count ?? -1);
+      } else if (sortField === "pctNewGbif") {
+        const pctA = (a.gbif_occurrence_count && a.gbif_occurrence_count > 0 && a.gbif_observations_after_assessment_year != null)
+          ? a.gbif_observations_after_assessment_year / a.gbif_occurrence_count : -1;
+        const pctB = (b.gbif_occurrence_count && b.gbif_occurrence_count > 0 && b.gbif_observations_after_assessment_year != null)
+          ? b.gbif_observations_after_assessment_year / b.gbif_occurrence_count : -1;
+        comparison = pctA - pctB;
       }
 
       if (comparison === 0) {
@@ -708,7 +714,7 @@ export default function RedListView() {
   };
 
   // Handle sort toggle
-  const handleSort = (field: "year" | "category" | "newGbif") => {
+  const handleSort = (field: "year" | "category" | "newGbif" | "pctNewGbif") => {
     const currentField = sortField === null ? "year" : sortField;
     if (currentField === field) {
       if (sortDirection === "desc") {
@@ -1281,8 +1287,16 @@ export default function RedListView() {
                     )}
                   </span>
                 </th>
-                <th className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px]">
-                  % New GBIF
+                <th
+                  className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
+                  onClick={() => handleSort("pctNewGbif")}
+                >
+                  <span className="flex items-center justify-end gap-1">
+                    % New GBIF
+                    {sortField === "pctNewGbif" && (
+                      <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
+                    )}
+                  </span>
                 </th>
               </tr>
             </thead>

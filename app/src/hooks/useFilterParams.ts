@@ -28,8 +28,9 @@ export function parseParams(search: string) {
       sortParam === "category" ? "category" :
       sortParam === "year" ? "year" :
       sortParam === "newGbif" ? "newGbif" :
+      sortParam === "pctNewGbif" ? "pctNewGbif" :
       null
-    ) as "year" | "category" | "newGbif" | null,
+    ) as "year" | "category" | "newGbif" | "pctNewGbif" | null,
     sortDirection: (p.get("dir") === "asc" ? "asc" : "desc") as "asc" | "desc",
   };
 }
@@ -41,7 +42,7 @@ export function buildQs(state: {
   countries: Set<string>;
   obsRanges: Set<string>;
   search: string;
-  sortField: "year" | "category" | "newGbif" | null;
+  sortField: "year" | "category" | "newGbif" | "pctNewGbif" | null;
   sortDirection: "asc" | "desc";
 }): string {
   const p = new URLSearchParams();
@@ -171,7 +172,7 @@ export function useFilterParams() {
   );
 
   const setSort = useCallback(
-    (field: "year" | "category" | "newGbif" | null, direction: "asc" | "desc") => {
+    (field: "year" | "category" | "newGbif" | "pctNewGbif" | null, direction: "asc" | "desc") => {
       setState(prev => {
         const next = { ...prev, sortField: field, sortDirection: direction };
         queueMicrotask(() => syncUrl(next, false));
