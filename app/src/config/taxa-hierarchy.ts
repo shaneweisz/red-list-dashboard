@@ -25,8 +25,8 @@ export interface SubGroupDef {
   estimatedDescribed: number;
   /** Short citation shown in tooltip */
   source: string;
-  /** URL to the source, if available */
-  sourceUrl?: string;
+  /** URL to the source */
+  sourceUrl: string;
   filter: SubGroupFilter;
 }
 
@@ -123,6 +123,7 @@ export const TAXA_SUBGROUPS: Record<string, SubGroupDef[]> = {
       name: "Beetles",
       estimatedDescribed: 392_000,
       source: "Zhang 2011, Zootaxa 3148",
+      sourceUrl: "https://doi.org/10.11646/zootaxa.3148.1.1",
       filter: { groups: ["insecta"], orderNames: ["coleoptera"] },
     },
     {
@@ -130,6 +131,7 @@ export const TAXA_SUBGROUPS: Record<string, SubGroupDef[]> = {
       name: "Butterflies & Moths",
       estimatedDescribed: 160_000,
       source: "Zhang 2011, Zootaxa 3148",
+      sourceUrl: "https://doi.org/10.11646/zootaxa.3148.1.1",
       filter: { groups: ["insecta"], orderNames: ["lepidoptera"] },
     },
     {
@@ -137,6 +139,7 @@ export const TAXA_SUBGROUPS: Record<string, SubGroupDef[]> = {
       name: "Flies & Mosquitoes",
       estimatedDescribed: 155_000,
       source: "Zhang 2011, Zootaxa 3148",
+      sourceUrl: "https://doi.org/10.11646/zootaxa.3148.1.1",
       filter: { groups: ["insecta"], orderNames: ["diptera"] },
     },
     {
@@ -144,6 +147,7 @@ export const TAXA_SUBGROUPS: Record<string, SubGroupDef[]> = {
       name: "Bees, Wasps & Ants",
       estimatedDescribed: 153_000,
       source: "Zhang 2011, Zootaxa 3148",
+      sourceUrl: "https://doi.org/10.11646/zootaxa.3148.1.1",
       filter: { groups: ["insecta"], orderNames: ["hymenoptera"] },
     },
     {
@@ -151,6 +155,7 @@ export const TAXA_SUBGROUPS: Record<string, SubGroupDef[]> = {
       name: "True Bugs",
       estimatedDescribed: 82_000,
       source: "Zhang 2011, Zootaxa 3148",
+      sourceUrl: "https://doi.org/10.11646/zootaxa.3148.1.1",
       filter: { groups: ["insecta"], orderNames: ["hemiptera"] },
     },
     {
@@ -175,6 +180,7 @@ export const TAXA_SUBGROUPS: Record<string, SubGroupDef[]> = {
       // Remainder: 1,003,469 - 392,000 - 160,000 - 155,000 - 153,000 - 82,000 - 26,000 - 6,400 = 29,069
       estimatedDescribed: 29_069,
       source: "Remainder from IUCN Table 1a total of 1,003,469 (Catalogue of Life 2025)",
+      sourceUrl: "https://doi.org/10.48580/dgnfb",
       filter: {
         groups: ["insecta"],
         excludeOrders: [
@@ -246,6 +252,7 @@ export const TAXA_SUBGROUPS: Record<string, SubGroupDef[]> = {
       // minus Echinoderms 7,000 and Worms 27,800 = 195,909
       estimatedDescribed: 195_909,
       source: "Remainder from IUCN Table 1a 'Others' + Velvet Worms + Horseshoe Crabs, minus Echinoderms & Worms",
+      sourceUrl: "https://doi.org/10.48580/dgnfb",
       filter: {
         groups: ["other_invertebrates", "velvet_worms", "horseshoe_crabs"],
         excludeOrders: [], // read all, but we exclude the classes already covered above
@@ -328,6 +335,7 @@ export const TAXA_SUBGROUPS: Record<string, SubGroupDef[]> = {
       // Remainder: 369,000 - 36,000 - 26,900 - 20,800 - 18,900 - 2,600 - 4,600 - 88,600 = 170,600
       estimatedDescribed: 170_600,
       source: "Remainder from IUCN Table 1a total of 369,000 (State of the World's Plants 2017)",
+      sourceUrl: "https://doi.org/10.48580/dgnfb",
       filter: {
         groups: ["flowering_plants"],
         excludeOrders: [

@@ -355,8 +355,8 @@ interface SubGroupDef {
   id: string;
   name: string;
   estimatedDescribed: number;
-  source?: string;
-  sourceUrl?: string;
+  source: string;
+  sourceUrl: string;
   filter: SubGroupFilter;
 }
 
