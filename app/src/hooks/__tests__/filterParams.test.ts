@@ -89,6 +89,23 @@ describe("parseParams", () => {
     const result = parseParams("?taxa=,mammalia,,aves,");
     expect(result.taxa).toEqual(new Set(["mammalia", "aves"]));
   });
+
+  it("parses subgroup", () => {
+    const result = parseParams("?subgroup=sharks-rays");
+    expect(result.subgroup).toBe("sharks-rays");
+  });
+
+  it("defaults subgroup to null when absent", () => {
+    const result = parseParams("?taxa=fishes");
+    expect(result.subgroup).toBeNull();
+  });
+
+  it("parses subgroup with other params", () => {
+    const result = parseParams("?taxa=fishes&subgroup=bony-fish&categories=CR");
+    expect(result.taxa).toEqual(new Set(["fishes"]));
+    expect(result.subgroup).toBe("bony-fish");
+    expect(result.categories).toEqual(new Set(["CR"]));
+  });
 });
 
 describe("buildQs", () => {
@@ -136,6 +153,17 @@ describe("buildQs", () => {
     const qs = buildQs({ ...emptyState, search: "elephant" });
     const params = new URLSearchParams(qs);
     expect(params.get("search")).toBe("elephant");
+  });
+
+  it("includes subgroup when set", () => {
+    const qs = buildQs({ ...emptyState, subgroup: "sharks-rays" });
+    const params = new URLSearchParams(qs);
+    expect(params.get("subgroup")).toBe("sharks-rays");
+  });
+
+  it("omits subgroup when null", () => {
+    const qs = buildQs({ ...emptyState, subgroup: null });
+    expect(qs).toBe("");
   });
 
   it("omits sort param for null sortField (default)", () => {
@@ -227,6 +255,43 @@ describe("parseParams ↔ buildQs round-trip", () => {
     expect(parsed.search).toBe("");
     expect(parsed.sortField).toBe(null);
     expect(parsed.sortDirection).toBe("desc");
+  });
+
+  it("round-trips subgroup", () => {
+    const original = {
+      taxa: new Set(["fishes"]),
+      subgroup: "sharks-rays",
+      categories: new Set<string>(),
+      yearRanges: new Set<string>(),
+      countries: new Set<string>(),
+      obsRanges: new Set<string>(),
+      search: "",
+      sortField: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
+      sortDirection: "desc" as const,
+    };
+
+    const qs = buildQs(original);
+    const parsed = parseParams(qs);
+    expect(parsed.subgroup).toBe("sharks-rays");
+    expect(parsed.taxa).toEqual(new Set(["fishes"]));
+  });
+
+  it("round-trips null subgroup", () => {
+    const original = {
+      taxa: new Set<string>(),
+      subgroup: null,
+      categories: new Set<string>(),
+      yearRanges: new Set<string>(),
+      countries: new Set<string>(),
+      obsRanges: new Set<string>(),
+      search: "",
+      sortField: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
+      sortDirection: "desc" as const,
+    };
+
+    const qs = buildQs(original);
+    const parsed = parseParams(qs);
+    expect(parsed.subgroup).toBeNull();
   });
 
   it("round-trips sort=newGbif", () => {
