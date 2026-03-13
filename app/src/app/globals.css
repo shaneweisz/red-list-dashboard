@@ -45,6 +45,53 @@ th.sticky {
   box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.3);
 }
 
+/* Wikipedia HTML content styling */
+.wiki-content a {
+  color: #2563eb;
+  text-decoration: none;
+}
+.wiki-content a:hover {
+  text-decoration: underline;
+}
+.dark .wiki-content a {
+  color: #60a5fa;
+}
+.wiki-content ul,
+.wiki-content ol {
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+.wiki-content ul {
+  list-style: disc;
+}
+.wiki-content ol {
+  list-style: decimal;
+}
+.wiki-content p {
+  margin: 0.5em 0;
+}
+.wiki-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.5em 0;
+  font-size: 0.8125rem;
+}
+.wiki-content th,
+.wiki-content td {
+  border: 1px solid #e4e4e7;
+  padding: 0.25rem 0.5rem;
+  text-align: left;
+}
+.dark .wiki-content th,
+.dark .wiki-content td {
+  border-color: #3f3f46;
+}
+.wiki-content h3,
+.wiki-content h4 {
+  font-weight: 600;
+  margin: 0.75em 0 0.25em;
+}
+
 /* Shape marker icons: strip default leaflet-div-icon styles */
 .shape-marker-icon {
   background: none !important;
