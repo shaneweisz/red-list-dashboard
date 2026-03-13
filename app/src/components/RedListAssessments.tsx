@@ -7,6 +7,8 @@ interface PreviousAssessment {
   year: string;
   assessment_id: number;
   category: string;
+  assessors?: string | null;
+  reviewers?: string | null;
 }
 
 interface AssessmentDetail {
@@ -353,15 +355,20 @@ export default function RedListAssessments({
   previousAssessments,
   speciesUrl,
 }: RedListAssessmentsProps) {
-  // All assessments timeline: current + previous, sorted oldest-first (left to right)
-  const allAssessments = [
-    {
-      year: currentAssessmentDate?.split("-")[0] || "Current",
-      assessment_id: currentAssessmentId,
-      category: currentCategory,
-    },
-    ...previousAssessments,
-  ].sort((a, b) => (a.year || "0").localeCompare(b.year || "0"));
+  // All assessments timeline, sorted oldest-first (left to right).
+  // If previousAssessments includes the current one, use it directly;
+  // otherwise fall back to constructing from current* props.
+  const hasCurrentInHistory = previousAssessments.some((a) => a.assessment_id === currentAssessmentId);
+  const allAssessments = hasCurrentInHistory
+    ? [...previousAssessments].sort((a, b) => (a.year || "0").localeCompare(b.year || "0"))
+    : [
+        {
+          year: currentAssessmentDate?.split("-")[0] || "Current",
+          assessment_id: currentAssessmentId,
+          category: currentCategory,
+        },
+        ...previousAssessments,
+      ].sort((a, b) => (a.year || "0").localeCompare(b.year || "0"));
 
   const [selectedIndex, setSelectedIndex] = useState(allAssessments.length - 1);
   const [compareMode, setCompareMode] = useState(false);
@@ -682,7 +689,7 @@ function AssessmentDetailView({
   assessment,
 }: {
   detail: AssessmentDetail;
-  assessment: { year: string; assessment_id: number; category: string };
+  assessment: { year: string; assessment_id: number; category: string; assessors?: string | null; reviewers?: string | null };
 }) {
   const catCode = getCategoryCode(detail.red_list_category) !== "?" ? getCategoryCode(detail.red_list_category) : assessment.category;
   const trendText = getTrendText(detail.population_trend);
@@ -737,6 +744,14 @@ function AssessmentDetailView({
           </span>
         )}
       </div>
+
+      {/* Assessors & Reviewers */}
+      {(assessment.assessors || assessment.reviewers) && (
+        <div className="text-xs text-zinc-500 dark:text-zinc-400 space-y-0.5">
+          {assessment.assessors && <div><span className="font-medium">Assessors:</span> {assessment.assessors}</div>}
+          {assessment.reviewers && <div><span className="font-medium">Reviewers:</span> {assessment.reviewers}</div>}
+        </div>
+      )}
 
       {/* Key metrics grid */}
       <SupplementaryMetrics info={detail.supplementary_info} />

@@ -1,302 +1,393 @@
-{
-  "taxa": [
-    {
-      "id": "mammalia",
-      "name": "Mammals",
-      "color": "#f97316",
-      "estimatedDescribed": 6819,
-      "available": true,
-      "totalAssessed": 6036,
-      "percentAssessed": 88.5,
-      "outdated": 1065,
-      "percentOutdated": 17.6,
-      "lastUpdated": "2026-02-26T14:45:56.830Z",
-      "byCategory": {
-        "DD": 789,
-        "VU": 567,
-        "EN": 559,
-        "LC": 3391,
-        "NT": 401,
-        "CR": 238,
-        "EX": 90,
-        "EW": 1
-      },
-      "totalGbifObservations": 37533596,
-      "meanGbifObsPerSpecies": 7768,
-      "medianGbifObsPerSpecies": 45,
-      "gbifSpeciesCount": 4832,
-      "gbifObsDistribution": {
-        "1": 389,
-        "2–10": 1078,
-        "11–100": 1448,
-        "101–1K": 1117,
-        "1K–10K": 523,
-        "10K–100K": 203,
-        "100K–1M": 67,
-        ">1M": 7
-      }
+[
+  {
+    "table1a_taxon_group": "mammalia",
+    "total_assessed": 6025,
+    "outdated": 1140,
+    "by_category": {
+      "CR": 239,
+      "VU": 570,
+      "EN": 554,
+      "LC": 3384,
+      "DD": 797,
+      "NT": 393,
+      "EX": 85,
+      "EW": 1,
+      "LR/lc": 1,
+      "LR/nt": 1
     },
-    {
-      "id": "aves",
-      "name": "Birds",
-      "color": "#3b82f6",
-      "estimatedDescribed": 11185,
-      "available": true,
-      "totalAssessed": 11185,
-      "percentAssessed": 100,
-      "outdated": 0,
-      "percentOutdated": 0,
-      "lastUpdated": "2026-02-26T14:45:57.000Z",
-      "byCategory": {
-        "LC": 8757,
-        "VU": 668,
-        "DD": 36,
-        "NT": 967,
-        "EN": 372,
-        "CR": 216,
-        "EW": 5,
-        "EX": 164
-      },
-      "totalGbifObservations": 2275387754,
-      "meanGbifObsPerSpecies": 203305,
-      "medianGbifObsPerSpecies": 5248,
-      "gbifSpeciesCount": 11192,
-      "gbifObsDistribution": {
-        "1": 95,
-        "2–10": 268,
-        "11–100": 719,
-        "101–1K": 1884,
-        "1K–10K": 3660,
-        "10K–100K": 2947,
-        "100K–1M": 1196,
-        ">1M": 423
-      }
-    },
-    {
-      "id": "reptilia",
-      "name": "Reptiles",
-      "color": "#84cc16",
-      "estimatedDescribed": 12502,
-      "available": true,
-      "totalAssessed": 10368,
-      "percentAssessed": 82.9,
-      "outdated": 5394,
-      "percentOutdated": 52,
-      "lastUpdated": "2026-02-26T14:45:57.060Z",
-      "byCategory": {
-        "CR": 432,
-        "DD": 1502,
-        "LC": 6406,
-        "EN": 800,
-        "VU": 627,
-        "NT": 567,
-        "EX": 32,
-        "EW": 2
-      },
-      "totalGbifObservations": 8059475,
-      "meanGbifObsPerSpecies": 884,
-      "medianGbifObsPerSpecies": 22,
-      "gbifSpeciesCount": 9116,
-      "gbifObsDistribution": {
-        "1": 876,
-        "2–10": 2599,
-        "11–100": 3031,
-        "101–1K": 1865,
-        "1K–10K": 628,
-        "10K–100K": 103,
-        "100K–1M": 14,
-        ">1M": 0
-      }
-    },
-    {
-      "id": "amphibia",
-      "name": "Amphibians",
-      "color": "#14b8a6",
-      "estimatedDescribed": 8918,
-      "available": true,
-      "totalAssessed": 8051,
-      "percentAssessed": 90.3,
-      "outdated": 862,
-      "percentOutdated": 10.7,
-      "lastUpdated": "2026-02-26T14:45:57.113Z",
-      "byCategory": {
-        "EN": 1291,
-        "LC": 3733,
-        "CR": 825,
-        "VU": 814,
-        "DD": 896,
-        "NT": 453,
-        "EW": 2,
-        "EX": 37
-      },
-      "totalGbifObservations": 7923379,
-      "meanGbifObsPerSpecies": 1357,
-      "medianGbifObsPerSpecies": 16,
-      "gbifSpeciesCount": 5839,
-      "gbifObsDistribution": {
-        "1": 725,
-        "2–10": 1769,
-        "11–100": 1904,
-        "101–1K": 1028,
-        "1K–10K": 312,
-        "10K–100K": 84,
-        "100K–1M": 17,
-        ">1M": 0
-      }
-    },
-    {
-      "id": "fishes",
-      "name": "Fishes",
-      "color": "#06b6d4",
-      "estimatedDescribed": 37288,
-      "available": true,
-      "totalAssessed": 28982,
-      "percentAssessed": 77.7,
-      "outdated": 11159,
-      "percentOutdated": 38.5,
-      "lastUpdated": "2026-02-26T14:45:57.295Z",
-      "byCategory": {
-        "CR": 875,
-        "DD": 5387,
-        "VU": 1698,
-        "LC": 18409,
-        "EN": 1487,
-        "EX": 91,
-        "EW": 11,
-        "NT": 1024
-      },
-      "totalGbifObservations": 87346678,
-      "meanGbifObsPerSpecies": 3807,
-      "medianGbifObsPerSpecies": 17,
-      "gbifSpeciesCount": 22945,
-      "gbifObsDistribution": {
-        "1": 3100,
-        "2–10": 6709,
-        "11–100": 6507,
-        "101–1K": 3810,
-        "1K–10K": 1822,
-        "10K–100K": 858,
-        "100K–1M": 127,
-        ">1M": 12
-      }
-    },
-    {
-      "id": "invertebrates",
-      "name": "Invertebrates",
-      "color": "#78716c",
-      "estimatedDescribed": 1508442,
-      "available": true,
-      "totalAssessed": 27584,
-      "percentAssessed": 1.8,
-      "outdated": 12368,
-      "percentOutdated": 44.8,
-      "lastUpdated": "2026-02-26T14:45:57.952Z",
-      "byCategory": {
-        "CR": 1603,
-        "EN": 2423,
-        "VU": 2625,
-        "DD": 6505,
-        "LC": 12173,
-        "NT": 1871,
-        "EX": 370,
-        "EW": 14
-      },
-      "totalGbifObservations": 273543805,
-      "meanGbifObsPerSpecies": 839,
-      "medianGbifObsPerSpecies": 7,
-      "gbifSpeciesCount": 325941,
-      "gbifObsDistribution": {
-        "1": 57125,
-        "2–10": 127849,
-        "11–100": 86960,
-        "101–1K": 38995,
-        "1K–10K": 12180,
-        "10K–100K": 2432,
-        "100K–1M": 366,
-        ">1M": 34
-      }
-    },
-    {
-      "id": "plantae",
-      "name": "Plants",
-      "color": "#22c55e",
-      "estimatedDescribed": 426132,
-      "available": true,
-      "totalAssessed": 76864,
-      "percentAssessed": 18,
-      "outdated": 18432,
-      "percentOutdated": 24,
-      "lastUpdated": "2026-02-26T14:45:58.960Z",
-      "byCategory": {
-        "EN": 12707,
-        "CR": 6445,
-        "LC": 35732,
-        "NT": 4880,
-        "VU": 10596,
-        "DD": 6317,
-        "EW": 46,
-        "EX": 141
-      },
-      "totalGbifObservations": 402126562,
-      "meanGbifObsPerSpecies": 2006,
-      "medianGbifObsPerSpecies": 13,
-      "gbifSpeciesCount": 200419,
-      "gbifObsDistribution": {
-        "1": 29466,
-        "2–10": 64862,
-        "11–100": 58235,
-        "101–1K": 31784,
-        "1K–10K": 12042,
-        "10K–100K": 3208,
-        "100K–1M": 794,
-        ">1M": 28
-      }
-    },
-    {
-      "id": "fungi",
-      "name": "Fungi",
-      "color": "#d97706",
-      "estimatedDescribed": 162653,
-      "available": true,
-      "totalAssessed": 1302,
-      "percentAssessed": 0.8,
-      "outdated": 45,
-      "percentOutdated": 3.5,
-      "lastUpdated": "2026-02-26T14:45:59.144Z",
-      "byCategory": {
-        "EN": 129,
-        "CR": 48,
-        "NT": 110,
-        "DD": 290,
-        "LC": 491,
-        "VU": 234
-      },
-      "totalGbifObservations": 29055742,
-      "meanGbifObsPerSpecies": 558,
-      "medianGbifObsPerSpecies": 9,
-      "gbifSpeciesCount": 52066,
-      "gbifObsDistribution": {
-        "1": 9225,
-        "2–10": 17935,
-        "11–100": 13562,
-        "101–1K": 7835,
-        "1K–10K": 2894,
-        "10K–100K": 600,
-        "100K–1M": 15,
-        ">1M": 0
-      }
-    }
-  ],
-  "globalGbifMedian": 10,
-  "globalGbifDistribution": {
-    "1": 101001,
-    "2–10": 223069,
-    "11–100": 172366,
-    "101–1K": 88318,
-    "1K–10K": 34061,
-    "10K–100K": 10435,
-    "100K–1M": 2596,
-    ">1M": 504
+    "gbif_species_count": 4842,
+    "total_gbif_observations": 37697402,
+    "mean_gbif_obs": 7785.502271788517,
+    "median_gbif_obs": 46
   },
-  "generatedAt": "2026-02-26T14:45:59.305Z"
-}
+  {
+    "table1a_taxon_group": "aves",
+    "total_assessed": 11195,
+    "outdated": 0,
+    "by_category": {
+      "NT": 935,
+      "LC": 8742,
+      "VU": 693,
+      "EN": 395,
+      "CR": 223,
+      "EW": 5,
+      "EX": 164,
+      "DD": 38
+    },
+    "gbif_species_count": 11188,
+    "total_gbif_observations": 2278001967,
+    "mean_gbif_obs": 203611.18761172684,
+    "median_gbif_obs": 5234.5
+  },
+  {
+    "table1a_taxon_group": "reptilia",
+    "total_assessed": 10316,
+    "outdated": 5658,
+    "by_category": {
+      "EN": 792,
+      "LR/nt": 16,
+      "NT": 552,
+      "LC": 6358,
+      "CR": 428,
+      "VU": 626,
+      "EX": 32,
+      "DD": 1502,
+      "LR/lc": 6,
+      "EW": 2,
+      "LR/cd": 2
+    },
+    "gbif_species_count": 9129,
+    "total_gbif_observations": 8115181,
+    "mean_gbif_obs": 888.9452294884434,
+    "median_gbif_obs": 23
+  },
+  {
+    "table1a_taxon_group": "amphibia",
+    "total_assessed": 8009,
+    "outdated": 940,
+    "by_category": {
+      "LC": 3737,
+      "EN": 1266,
+      "VU": 809,
+      "CR": 798,
+      "DD": 908,
+      "NT": 452,
+      "EX": 37,
+      "EW": 2
+    },
+    "gbif_species_count": 5850,
+    "total_gbif_observations": 7966369,
+    "mean_gbif_obs": 1361.7724786324786,
+    "median_gbif_obs": 17
+  },
+  {
+    "table1a_taxon_group": "fishes",
+    "total_assessed": 28866,
+    "outdated": 11717,
+    "by_category": {
+      "CR": 871,
+      "EX": 91,
+      "EN": 1479,
+      "VU": 1696,
+      "EW": 11,
+      "LC": 18262,
+      "NT": 1022,
+      "DD": 5431,
+      "LR/lc": 1,
+      "LR/nt": 2
+    },
+    "gbif_species_count": 22978,
+    "total_gbif_observations": 79936569,
+    "mean_gbif_obs": 3478.830577073723,
+    "median_gbif_obs": 17
+  },
+  {
+    "table1a_taxon_group": "insecta",
+    "total_assessed": 13442,
+    "outdated": 5619,
+    "by_category": {
+      "EN": 1062,
+      "EX": 59,
+      "VU": 1007,
+      "DD": 3405,
+      "CR": 496,
+      "LC": 6540,
+      "LR/nt": 45,
+      "NT": 808,
+      "LR/lc": 16,
+      "EW": 1,
+      "LR/cd": 3
+    },
+    "gbif_species_count": 251347,
+    "total_gbif_observations": 212749255,
+    "mean_gbif_obs": 846.4364205659905,
+    "median_gbif_obs": 8
+  },
+  {
+    "table1a_taxon_group": "mollusca",
+    "total_assessed": 9144,
+    "outdated": 6988,
+    "by_category": {
+      "CR": 749,
+      "EN": 652,
+      "DD": 2239,
+      "EX": 294,
+      "VU": 1072,
+      "LC": 3361,
+      "NT": 631,
+      "LR/nt": 118,
+      "LR/lc": 16,
+      "EW": 12
+    },
+    "gbif_species_count": 29004,
+    "total_gbif_observations": 14875025,
+    "mean_gbif_obs": 512.8611570817818,
+    "median_gbif_obs": 6
+  },
+  {
+    "table1a_taxon_group": "crustacea",
+    "total_assessed": 3310,
+    "outdated": 3066,
+    "by_category": {
+      "VU": 417,
+      "CR": 160,
+      "DD": 1207,
+      "EN": 182,
+      "EX": 11,
+      "LR/cd": 9,
+      "LC": 1244,
+      "LR/lc": 2,
+      "NT": 76,
+      "LR/nt": 1,
+      "EW": 1
+    },
+    "gbif_species_count": 19519,
+    "total_gbif_observations": 14300680,
+    "mean_gbif_obs": 732.6543368000409,
+    "median_gbif_obs": 6
+  },
+  {
+    "table1a_taxon_group": "arachnida",
+    "total_assessed": 994,
+    "outdated": 209,
+    "by_category": {
+      "EN": 147,
+      "VU": 97,
+      "DD": 102,
+      "NT": 51,
+      "LC": 485,
+      "CR": 103,
+      "EX": 9
+    },
+    "gbif_species_count": 21654,
+    "total_gbif_observations": 6319523,
+    "mean_gbif_obs": 291.84090699177983,
+    "median_gbif_obs": 5
+  },
+  {
+    "table1a_taxon_group": "corals",
+    "total_assessed": 916,
+    "outdated": 18,
+    "by_category": {
+      "VU": 57,
+      "DD": 131,
+      "CR": 31,
+      "LC": 428,
+      "EN": 245,
+      "NT": 24
+    },
+    "gbif_species_count": 5450,
+    "total_gbif_observations": 25246101,
+    "mean_gbif_obs": 4632.312110091743,
+    "median_gbif_obs": 7
+  },
+  {
+    "table1a_taxon_group": "velvet_worms",
+    "total_assessed": 11,
+    "outdated": 11,
+    "by_category": {
+      "EN": 2,
+      "DD": 1,
+      "CR": 3,
+      "VU": 4,
+      "LR/nt": 1
+    },
+    "gbif_species_count": 78,
+    "total_gbif_observations": 1605,
+    "mean_gbif_obs": 20.576923076923077,
+    "median_gbif_obs": 4
+  },
+  {
+    "table1a_taxon_group": "horseshoe_crabs",
+    "total_assessed": 4,
+    "outdated": 2,
+    "by_category": {
+      "DD": 2,
+      "VU": 1,
+      "EN": 1
+    },
+    "gbif_species_count": 4,
+    "total_gbif_observations": 21529,
+    "mean_gbif_obs": 5382.25,
+    "median_gbif_obs": 337.5
+  },
+  {
+    "table1a_taxon_group": "other_invertebrates",
+    "total_assessed": 1119,
+    "outdated": 586,
+    "by_category": {
+      "CR": 60,
+      "VU": 46,
+      "LC": 290,
+      "DD": 543,
+      "EN": 76,
+      "LR/nt": 2,
+      "EX": 7,
+      "NT": 95
+    },
+    "gbif_species_count": 19325,
+    "total_gbif_observations": 14707763,
+    "mean_gbif_obs": 761.0744113842173,
+    "median_gbif_obs": 7
+  },
+  {
+    "table1a_taxon_group": "mosses",
+    "total_assessed": 327,
+    "outdated": 86,
+    "by_category": {
+      "CR": 48,
+      "NT": 35,
+      "EX": 4,
+      "EN": 72,
+      "VU": 61,
+      "LC": 67,
+      "LR/lc": 3,
+      "DD": 37
+    },
+    "gbif_species_count": 7567,
+    "total_gbif_observations": 11533609,
+    "mean_gbif_obs": 1524.1983613056693,
+    "median_gbif_obs": 8
+  },
+  {
+    "table1a_taxon_group": "ferns_and_allies",
+    "total_assessed": 828,
+    "outdated": 448,
+    "by_category": {
+      "DD": 109,
+      "NT": 53,
+      "EN": 120,
+      "VU": 116,
+      "CR": 89,
+      "LC": 338,
+      "EX": 2,
+      "EW": 1
+    },
+    "gbif_species_count": 6759,
+    "total_gbif_observations": 12039061,
+    "mean_gbif_obs": 1781.1896730285546,
+    "median_gbif_obs": 9
+  },
+  {
+    "table1a_taxon_group": "gymnosperms",
+    "total_assessed": 1061,
+    "outdated": 629,
+    "by_category": {
+      "LC": 444,
+      "EN": 200,
+      "CR": 92,
+      "VU": 158,
+      "NT": 143,
+      "DD": 19,
+      "EW": 5
+    },
+    "gbif_species_count": 970,
+    "total_gbif_observations": 6969104,
+    "mean_gbif_obs": 7184.643298969072,
+    "median_gbif_obs": 36
+  },
+  {
+    "table1a_taxon_group": "flowering_plants",
+    "total_assessed": 72439,
+    "outdated": 17688,
+    "by_category": {
+      "LR/cd": 111,
+      "VU": 9939,
+      "LC": 34128,
+      "EN": 11762,
+      "NT": 4033,
+      "LR/nt": 287,
+      "DD": 5874,
+      "CR": 5995,
+      "EW": 40,
+      "EX": 131,
+      "LR/lc": 139
+    },
+    "gbif_species_count": 180751,
+    "total_gbif_observations": 373068692,
+    "mean_gbif_obs": 2063.992409447251,
+    "median_gbif_obs": 13
+  },
+  {
+    "table1a_taxon_group": "green_algae",
+    "total_assessed": 18,
+    "outdated": 13,
+    "by_category": {
+      "DD": 6,
+      "LC": 11,
+      "NT": 1
+    },
+    "gbif_species_count": 2761,
+    "total_gbif_observations": 1205432,
+    "mean_gbif_obs": 436.5925389351684,
+    "median_gbif_obs": 17
+  },
+  {
+    "table1a_taxon_group": "red_algae",
+    "total_assessed": 78,
+    "outdated": 58,
+    "by_category": {
+      "EX": 1,
+      "DD": 60,
+      "LC": 8,
+      "VU": 3,
+      "CR": 6
+    },
+    "gbif_species_count": 2655,
+    "total_gbif_observations": 1134613,
+    "mean_gbif_obs": 427.34952919020714,
+    "median_gbif_obs": 16
+  },
+  {
+    "table1a_taxon_group": "mushrooms",
+    "total_assessed": 1300,
+    "outdated": 45,
+    "by_category": {
+      "EN": 129,
+      "CR": 48,
+      "VU": 234,
+      "NT": 110,
+      "LC": 490,
+      "DD": 289
+    },
+    "gbif_species_count": 51715,
+    "total_gbif_observations": 28776277,
+    "mean_gbif_obs": 556.4396596732089,
+    "median_gbif_obs": 9
+  },
+  {
+    "table1a_taxon_group": "brown_algae",
+    "total_assessed": 18,
+    "outdated": 15,
+    "by_category": {
+      "CR": 4,
+      "DD": 12,
+      "EN": 1,
+      "VU": 1
+    },
+    "gbif_species_count": 6344,
+    "total_gbif_observations": 11242568,
+    "mean_gbif_obs": 1772.1576292559898,
+    "median_gbif_obs": 18
+  }
+]

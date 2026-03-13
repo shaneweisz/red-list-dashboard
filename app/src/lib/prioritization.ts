@@ -25,7 +25,7 @@ export interface ScoreBreakdown {
 interface PrioritizableSpecies {
   category: string;
   assessment_date: string | null;
-  gbif_occurrence_count?: number;
+  gbif_occurrence_count?: number | null;
   gbif_observations_after_assessment_year?: number | null;
 }
 

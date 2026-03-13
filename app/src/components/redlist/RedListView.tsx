@@ -11,8 +11,8 @@ import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
 import { useFilterParams } from "@/hooks/useFilterParams";
-import { computePriority, BREAKDOWN_LABELS, type PriorityResult, type ScoreBreakdown } from "@/lib/prioritization";
-import { TREND_FLAG_META, type TrendResult, type TrendFlag } from "@/lib/trend-analysis";
+import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
+import { computePriority, type PriorityResult } from "@/lib/prioritization";
 import AssessmentAssistant from "../AssessmentAssistant";
 
 // Dynamically import OccurrenceMapRow to avoid SSR issues with Leaflet
@@ -48,72 +48,8 @@ function Spinner({ className = "" }: { className?: string }) {
   );
 }
 
-interface CategoryStats {
-  code: string;
-  name: string;
-  count: number;
-  color: string;
-}
-
-interface TaxonInfo {
-  id: string;
-  name: string;
-  estimatedDescribed: number;
-  estimatedSource: string;
-  color: string;
-}
-
-interface YearRangeItem {
-  range: string;
-  shortRange: string;
-  count: number;
-}
-
-interface ObsRangeItem {
-  range: string;
-  shortRange: string;
-  count: number;
-}
-
-interface StatsResponse {
-  totalAssessed: number;
-  byCategory: CategoryStats[];
-  sampleSize: number;
-  lastUpdated: string;
-  cached: boolean;
-  error?: string;
-  taxon?: TaxonInfo;
-  yearRanges?: YearRangeItem[];
-  obsRanges?: ObsRangeItem[];
-  countryCounts?: Record<string, number>;
-}
-
-
-interface PreviousAssessment {
-  year: string;
-  assessment_id: number;
-  category: string;
-}
-
-interface Species {
-  sis_taxon_id: number;
-  assessment_id: number;
-  scientific_name: string;
-  common_name?: string | null;
-  family: string | null;
-  category: string;
-  assessment_date: string | null;
-  year_published: string;
-  url?: string;
-  population_trend: string | null;
-  countries: string[];
-  assessment_count?: number;
-  previous_assessments?: PreviousAssessment[];
-  taxon_id?: string; // Present when viewing "all" taxa
-  gbif_species_key?: number; // GBIF species key (from CSV)
-  gbif_occurrence_count?: number; // Total GBIF occurrences (from CSV)
-  gbif_observations_after_assessment_year?: number | null; // Pre-computed from GBIF CSV
-}
+// Use RedListSpecies from the hook; alias for convenience
+type Species = RedListSpecies;
 
 interface InatDefaultImage {
   squareUrl: string | null;
@@ -144,14 +80,6 @@ interface SpeciesDetails {
   gbifMatchFetched?: boolean;
 }
 
-interface SpeciesResponse {
-  species: Species[];
-  total: number;
-  error?: string;
-  taxon?: TaxonInfo;
-}
-
-
 
 // Debounced search input - manages own state for instant typing, debounces parent updates
 function DebouncedSearchInput({
@@ -166,6 +94,10 @@ function DebouncedSearchInput({
   className?: string;
 }) {
   const [localValue, setLocalValue] = useState(initialValue);
+
+  useEffect(() => {
+    setLocalValue(initialValue);
+  }, [initialValue]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -263,6 +195,7 @@ export default function RedListView() {
     selectedCategories, setSelectedCategories,
     selectedYearRanges, setSelectedYearRanges,
     selectedCountries, setSelectedCountries,
+    selectedObsRanges, setSelectedObsRanges,
     searchFilter, setSearchFilter,
     sortField, sortDirection, setSort,
     clearAllFilters,
@@ -270,12 +203,24 @@ export default function RedListView() {
 
   // Taxon toggle handler (used by TaxaSummary)
   // Regular click: select only that taxon (or deselect if already sole selection)
-  // Cmd/Ctrl+Click: multi-select toggle
+  // Cmd/Ctrl+Click on taxon row: multi-select toggle (expands taxa summary to show all rows)
   const handleToggleTaxon = useCallback((taxonId: string, event: React.MouseEvent) => {
     const isMulti = event.metaKey || event.ctrlKey;
+
+    // "all" row: always single-select (toggle on/off), no multi-select
+    if (taxonId === "all") {
+      setSelectedTaxa(prev => {
+        if (prev.has("all")) return new Set<string>();
+        return new Set(["all"]);
+      });
+      return;
+    }
+
     setSelectedTaxa(prev => {
       if (isMulti) {
+        // Remove "all" if present when multi-selecting specific taxa
         const next = new Set(prev);
+        next.delete("all");
         if (next.has(taxonId)) {
           next.delete(taxonId);
         } else {
@@ -292,17 +237,6 @@ export default function RedListView() {
   }, [setSelectedTaxa]);
 
 
-  const [selectedObsRanges, setSelectedObsRanges] = useState<Set<string>>(new Set());
-
-  const [species, setSpecies] = useState<Species[]>([]);
-  const [speciesLoading, setSpeciesLoading] = useState(true);
-  const [neCount, setNeCount] = useState<number>(0);
-  const [error, setError] = useState<string | null>(null);
-
-  // Pre-computed chart data from stats API (shown instantly before species load)
-  const [precomputedStats, setPrecomputedStats] = useState<StatsResponse | null>(null);
-  const [statsLoaded, setStatsLoaded] = useState(false);
-
   const [showOnlyStarred, setShowOnlyStarred] = useState(false);
 
   // Stable callback for debounced search input
@@ -314,11 +248,150 @@ export default function RedListView() {
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 10;
 
+  // ── Data fetching ────────────────────────────────────────────────────
+  // Cache of fetched species per taxon ID. When "all" is fetched, it supersedes
+  // individual taxa caches. Each taxon is fetched at most once.
+  const [speciesByTaxon, setSpeciesByTaxon] = useState<Record<string, RedListSpecies[]>>({});
+  const [loadingTaxa, setLoadingTaxa] = useState<Set<string>>(new Set());
+  const [error, setError] = useState<string | null>(null);
+  const abortRefs = useRef<Record<string, AbortController>>({});
+
+  // Determine which taxa need fetching
+  useEffect(() => {
+    if (selectedTaxa.size === 0) return;
+
+    const taxaToFetch = [...selectedTaxa].filter(t => !speciesByTaxon[t] && !loadingTaxa.has(t));
+    // If "all" is already cached, no individual fetches needed
+    if (speciesByTaxon["all"] && !selectedTaxa.has("all")) {
+      // "all" data covers everything — no new fetches needed
+      return;
+    }
+    if (taxaToFetch.length === 0) return;
+
+    for (const taxonId of taxaToFetch) {
+      // If fetching "all", abort any in-flight individual taxon fetches
+      if (taxonId === "all") {
+        Object.entries(abortRefs.current).forEach(([id, ctrl]) => {
+          if (id !== "all") ctrl.abort();
+        });
+      }
+
+      const controller = new AbortController();
+      abortRefs.current[taxonId] = controller;
+
+      setLoadingTaxa(prev => new Set(prev).add(taxonId));
+
+      fetch(`/api/redlist/species?taxon=${encodeURIComponent(taxonId)}`, { signal: controller.signal })
+        .then(async res => {
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            throw new Error(body.error || `Species API returned ${res.status}`);
+          }
+          return res.json();
+        })
+        .then(data => {
+          if (!controller.signal.aborted) {
+            setSpeciesByTaxon(prev => ({ ...prev, [taxonId]: data.species }));
+          }
+        })
+        .catch(err => {
+          if (!controller.signal.aborted) {
+            setError(err instanceof Error ? err.message : "Unknown error");
+          }
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) {
+            setLoadingTaxa(prev => { const next = new Set(prev); next.delete(taxonId); return next; });
+          }
+          delete abortRefs.current[taxonId];
+        });
+    }
+  }, [selectedTaxa, speciesByTaxon, loadingTaxa]);
+
+  const speciesLoading = loadingTaxa.size > 0;
+
+  // Merge species from all fetched taxa relevant to current selection
+  const assessedSpecies = useMemo(() => {
+    if (selectedTaxa.size === 0) return [];
+    // If "all" is cached, use it directly
+    if (speciesByTaxon["all"]) return speciesByTaxon["all"];
+    // Otherwise merge per-taxon caches
+    const merged: RedListSpecies[] = [];
+    for (const taxonId of selectedTaxa) {
+      if (speciesByTaxon[taxonId]) merged.push(...speciesByTaxon[taxonId]);
+    }
+    return merged;
+  }, [selectedTaxa, speciesByTaxon]);
+
+  // NE species lazy loading (only fetched when NE category is selected)
+  const [neSpecies, setNeSpecies] = useState<RedListSpecies[]>([]);
+  const [neSpeciesFetched, setNeSpeciesFetched] = useState(false);
+  // Determine taxon for NE fetch: "all" if selected or multi-taxa, otherwise the single taxon
+  const neFetchTaxon = useMemo(() => {
+    if (selectedTaxa.size === 0) return null;
+    if (selectedTaxa.has("all")) return "all";
+    if (selectedTaxa.size === 1) return [...selectedTaxa][0];
+    return "all";
+  }, [selectedTaxa]);
+
+  useEffect(() => {
+    if (!selectedCategories.has("NE") || neSpeciesFetched || neFetchTaxon === null) return;
+    fetch(`/api/redlist/species?taxon=${encodeURIComponent(neFetchTaxon)}&category=NE`)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => { if (data?.species) setNeSpecies(data.species); setNeSpeciesFetched(true); })
+      .catch(() => {});
+  }, [selectedCategories, neSpeciesFetched, neFetchTaxon]);
+
+  // Reset NE fetch when taxon selection changes
+  useEffect(() => { setNeSpecies([]); setNeSpeciesFetched(false); }, [neFetchTaxon]);
+
+  // All species = assessed + NE
+  const species = useMemo(() => [...assessedSpecies, ...neSpecies], [assessedSpecies, neSpecies]);
+  const neCount = neSpecies.length;
+
+  // Filter by selected taxa
+  const taxaFilteredSpecies = useMemo(() => {
+    if (selectedTaxa.size === 0 || selectedTaxa.has("all")) return species;
+    return species.filter(s => s.taxon_id && selectedTaxa.has(s.taxon_id));
+  }, [species, selectedTaxa]);
+
+  // Helper to check if species matches year range filter
+  const matchesYearRangeFilter = (assessmentDate: string | null, yearRanges: Set<string> = selectedYearRanges): boolean => {
+    if (yearRanges.size === 0) return true;
+    if (!assessmentDate) return false;
+    const currentYr = new Date().getFullYear();
+    const yearsSince = currentYr - new Date(assessmentDate).getFullYear();
+    for (const range of yearRanges) {
+      switch (range) {
+        case "0-1 years": if (yearsSince <= 1) return true; break;
+        case "2-5 years": if (yearsSince >= 2 && yearsSince <= 5) return true; break;
+        case "6-10 years": if (yearsSince >= 6 && yearsSince <= 10) return true; break;
+        case "11-20 years": if (yearsSince >= 11 && yearsSince <= 20) return true; break;
+        case "20+ years": if (yearsSince > 20) return true; break;
+      }
+    }
+    return false;
+  };
+
+  // Helper to check if species matches GBIF observation range filter
+  const matchesObsRangeFilter = (obsCount: number | null | undefined, obsRanges: Set<string> = selectedObsRanges): boolean => {
+    if (obsRanges.size === 0) return true;
+    const obs = obsCount ?? 0;
+    for (const range of obsRanges) {
+      switch (range) {
+        case "0": if (obs === 0) return true; break;
+        case "1-10": if (obs >= 1 && obs <= 10) return true; break;
+        case "11-100": if (obs >= 11 && obs <= 100) return true; break;
+        case "101-1K": if (obs >= 101 && obs <= 1000) return true; break;
+        case "1K-10K": if (obs >= 1001 && obs <= 10000) return true; break;
+        case "10K+": if (obs > 10000) return true; break;
+      }
+    }
+    return false;
+  };
+
   // Species details cache (images, criteria, common names)
   const [speciesDetails, setSpeciesDetails] = useState<Record<number, SpeciesDetails>>({});
-
-  // Observation trend flags (fetched per-page from GBIF year-faceted data)
-  const [speciesTrends, setSpeciesTrends] = useState<Record<number, TrendResult>>({});
 
   // Row expansion state
   const [selectedSpeciesKey, setSelectedSpeciesKey] = useState<number | null>(null);
@@ -416,182 +489,39 @@ export default function RedListView() {
     setDragOverSpecies(null);
   };
 
-  // Fetch stats first (fast ~3KB, shows charts instantly)
-  useEffect(() => {
-    fetch("/api/redlist/stats?taxon=all")
-      .then(async (res) => {
-        if (!res.ok) return null;
-        return res.json() as Promise<StatsResponse>;
-      })
-      .then((statsData) => {
-        if (statsData) {
-          setPrecomputedStats(statsData);
-          const ne = statsData.byCategory?.find((c: CategoryStats) => c.code === "NE");
-          if (ne) setNeCount(ne.count);
-        }
-      })
-      .catch(() => {})
-      .finally(() => setStatsLoaded(true));
-  }, []);
+  // ── Cross-filter chart data (client-computed) ────────────────────────
 
-  // Fetch full species data (slow ~35MB, populates table)
-  useEffect(() => {
-    setError(null);
-    setSpeciesLoading(true);
+  const matchesSearch = useCallback((s: Species) => {
+    if (!searchFilter) return true;
+    return s.scientific_name.toLowerCase().includes(searchFilter) ||
+      !!s.common_name?.toLowerCase().includes(searchFilter);
+  }, [searchFilter]);
 
-    fetch("/api/redlist/species?taxon=all")
-      .then(async (res) => {
-        if (!res.ok) {
-          const text = await res.text().catch(() => "");
-          let msg: string;
-          try { msg = JSON.parse(text)?.error; } catch { msg = ""; }
-          throw new Error(msg || `Species API returned ${res.status}`);
-        }
-        return res.json() as Promise<SpeciesResponse>;
-      })
-      .then((speciesData) => {
-        if (speciesData.error) throw new Error(speciesData.error);
-        setSpecies(speciesData.species);
-      })
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load species"))
-      .finally(() => setSpeciesLoading(false));
-  }, []);
-
-  // Track whether NE species have been fetched
-  const [neSpeciesFetched, setNeSpeciesFetched] = useState(false);
-  const [neLoading, setNeLoading] = useState(false);
-
-  // Fetch NE species when NE category is selected
-  useEffect(() => {
-    if (!selectedCategories.has("NE")) return;
-    if (neSpeciesFetched) return;
-
-    async function fetchNESpecies() {
-      setNeLoading(true);
-      try {
-        const res = await fetch("/api/redlist/species?taxon=all&category=NE");
-        if (res.ok) {
-          const data = await res.json();
-          if (data.species && data.species.length > 0) {
-            setSpecies(prev => {
-              const nonNE = prev.filter(s => s.category !== "NE");
-              return [...nonNE, ...data.species];
-            });
-          }
-          setNeSpeciesFetched(true);
-        }
-      } catch {
-        // Ignore errors fetching NE species
-      } finally {
-        setNeLoading(false);
-      }
-    }
-
-    fetchNESpecies();
-  }, [selectedCategories, neSpeciesFetched]);
-
-  // Helper to check if species matches year range filter (based on assessment date)
-  // Accepts optional yearRanges param for cross-filtering (defaults to current filter state)
-  const matchesYearRangeFilter = (assessmentDate: string | null, yearRanges: Set<string> = selectedYearRanges): boolean => {
-    if (yearRanges.size === 0) return true;
-    if (!assessmentDate) return false;
-    const currentYear = new Date().getFullYear();
-    const assessmentYear = new Date(assessmentDate).getFullYear();
-    const yearsSince = currentYear - assessmentYear;
-
-    // Check if matches ANY of the selected ranges
-    for (const range of yearRanges) {
-      switch (range) {
-        case "0-1 years": if (yearsSince <= 1) return true; break;
-        case "2-5 years": if (yearsSince >= 2 && yearsSince <= 5) return true; break;
-        case "6-10 years": if (yearsSince >= 6 && yearsSince <= 10) return true; break;
-        case "11-20 years": if (yearsSince >= 11 && yearsSince <= 20) return true; break;
-        case "20+ years": if (yearsSince > 20) return true; break;
-      }
-    }
-    return false;
-  };
-
-  // Helper to check if species matches GBIF observation range filter
-  // Accepts optional obsRanges param for cross-filtering (defaults to current filter state)
-  const matchesObsRangeFilter = (obsCount: number | undefined, obsRanges: Set<string> = selectedObsRanges): boolean => {
-    if (obsRanges.size === 0) return true;
-    const obs = obsCount ?? 0;
-    for (const range of obsRanges) {
-      switch (range) {
-        case "0": if (obs === 0) return true; break;
-        case "1-10": if (obs >= 1 && obs <= 10) return true; break;
-        case "11-100": if (obs >= 11 && obs <= 100) return true; break;
-        case "101-1K": if (obs >= 101 && obs <= 1000) return true; break;
-        case "1K-10K": if (obs >= 1001 && obs <= 10000) return true; break;
-        case "10K+": if (obs > 10000) return true; break;
-      }
-    }
-    return false;
-  };
-
-  // Filter species by selected taxa (first level filter before charts)
-  const taxaFilteredSpecies = useMemo(() => {
-    if (selectedTaxa.size === 0) return species;
-    return species.filter(s => s.taxon_id && selectedTaxa.has(s.taxon_id));
-  }, [species, selectedTaxa]);
-
-  // Compute category stats: use pre-computed stats while species are loading (no taxa filter),
-  // then switch to client-computed data for reactivity to taxa filter changes
+  // Category chart: apply all filters EXCEPT category
   const categoryDataWithPercent = useMemo(() => {
-    // Use pre-computed stats from API when species haven't loaded and no taxa filter active
-    if (speciesLoading && precomputedStats?.byCategory && selectedTaxa.size === 0) {
-      const DISPLAY_ORDER = ["EX", "EW", "CR", "EN", "VU", "NT", "LC", "DD"];
-      const statsMap: Record<string, number> = {};
-      for (const cat of precomputedStats.byCategory) {
-        statsMap[cat.code] = cat.count;
-      }
-      const total = DISPLAY_ORDER.reduce((sum, code) => sum + (statsMap[code] || 0), 0);
-      return DISPLAY_ORDER
-        .map(code => ({
-          code,
-          name: code,
-          count: statsMap[code] || 0,
-          color: CATEGORY_COLORS[code] || "#999",
-          percent: total > 0 ? (((statsMap[code] || 0) / total) * 100).toFixed(1) : "0",
-          label: `${(statsMap[code] || 0).toLocaleString()} (${total > 0 ? (((statsMap[code] || 0) / total) * 100).toFixed(1) : 0}%)`,
-        }));
-    }
-
-    // Cross-filter: apply all filters EXCEPT category, so the category chart
-    // shows the distribution within the constraints of other active filters
     const counts: Record<string, number> = {};
     taxaFilteredSpecies.forEach(s => {
       if (s.category === "NE") return;
+      if (!matchesSearch(s)) return;
       if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
       if (selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
       if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
       counts[s.category] = (counts[s.category] || 0) + 1;
     });
-    const total = Object.values(counts).reduce((sum, c) => sum + c, 0);
     const DISPLAY_ORDER = ["EX", "EW", "CR", "EN", "VU", "NT", "LC", "DD"];
-    return DISPLAY_ORDER
-      .map(code => ({
-        code,
-        name: code,
-        count: counts[code] || 0,
-        color: CATEGORY_COLORS[code] || "#999",
-        percent: total > 0 ? (((counts[code] || 0) / total) * 100).toFixed(1) : "0",
-        label: `${(counts[code] || 0).toLocaleString()} (${total > 0 ? (((counts[code] || 0) / total) * 100).toFixed(1) : 0}%)`,
-      }));
-  }, [taxaFilteredSpecies, speciesLoading, precomputedStats, selectedTaxa, selectedCountries, selectedYearRanges, selectedObsRanges]);
+    const total = DISPLAY_ORDER.reduce((sum, code) => sum + (counts[code] || 0), 0);
+    return DISPLAY_ORDER.map(code => ({
+      code,
+      name: code,
+      count: counts[code] || 0,
+      color: CATEGORY_COLORS[code] || "#999",
+      percent: total > 0 ? (((counts[code] || 0) / total) * 100).toFixed(1) : "0",
+      label: `${(counts[code] || 0).toLocaleString()} (${total > 0 ? (((counts[code] || 0) / total) * 100).toFixed(1) : 0}%)`,
+    }));
+  }, [taxaFilteredSpecies, selectedCountries, selectedYearRanges, selectedObsRanges, matchesSearch]);
 
-  // Compute years-since-assessment stats: pre-computed while loading, then client-computed
+  // Year chart: apply all filters EXCEPT year range
   const assessmentYearData = useMemo(() => {
-    if (speciesLoading && precomputedStats?.yearRanges && selectedTaxa.size === 0) {
-      const total = precomputedStats.yearRanges.reduce((sum, r) => sum + r.count, 0);
-      return precomputedStats.yearRanges.map(r => ({
-        ...r,
-        minYear: 0,
-        label: `${r.count.toLocaleString()} (${total > 0 ? ((r.count / total) * 100).toFixed(1) : 0}%)`,
-      }));
-    }
-
     const currentYr = new Date().getFullYear();
     const ranges = [
       { range: "0-1 years", shortRange: "0-1y", count: 0, minYear: 0 },
@@ -600,14 +530,13 @@ export default function RedListView() {
       { range: "11-20 years", shortRange: "11-20y", count: 0, minYear: 11 },
       { range: "20+ years", shortRange: ">20y", count: 0, minYear: 21 },
     ];
-    // Cross-filter: apply all filters EXCEPT year range
     taxaFilteredSpecies.forEach(s => {
       if (!s.assessment_date || s.category === "NE") return;
+      if (!matchesSearch(s)) return;
       if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
       if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
       if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
-      const yr = new Date(s.assessment_date).getFullYear();
-      const diff = currentYr - yr;
+      const diff = currentYr - new Date(s.assessment_date).getFullYear();
       if (diff <= 1) ranges[0].count++;
       else if (diff <= 5) ranges[1].count++;
       else if (diff <= 10) ranges[2].count++;
@@ -619,18 +548,10 @@ export default function RedListView() {
       ...r,
       label: `${r.count.toLocaleString()} (${total > 0 ? ((r.count / total) * 100).toFixed(1) : 0}%)`,
     }));
-  }, [taxaFilteredSpecies, speciesLoading, precomputedStats, selectedTaxa, selectedCategories, selectedCountries, selectedObsRanges]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedObsRanges, matchesSearch]);
 
-  // Compute GBIF observation count distribution: pre-computed while loading, then client-computed
+  // GBIF observations chart: apply all filters EXCEPT obs range
   const gbifObsData = useMemo(() => {
-    if (speciesLoading && precomputedStats?.obsRanges && selectedTaxa.size === 0) {
-      const total = precomputedStats.obsRanges.reduce((sum, r) => sum + r.count, 0);
-      return precomputedStats.obsRanges.map(r => ({
-        ...r,
-        label: `${r.count.toLocaleString()} (${total > 0 ? ((r.count / total) * 100).toFixed(1) : 0}%)`,
-      }));
-    }
-
     const ranges = [
       { range: "0", shortRange: "0", count: 0 },
       { range: "1-10", shortRange: "1-10", count: 0 },
@@ -639,8 +560,8 @@ export default function RedListView() {
       { range: "1K-10K", shortRange: "1K-10K", count: 0 },
       { range: "10K+", shortRange: "10K+", count: 0 },
     ];
-    // Cross-filter: apply all filters EXCEPT observation range
     taxaFilteredSpecies.forEach(s => {
+      if (!matchesSearch(s)) return;
       if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
       if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
       if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
@@ -657,38 +578,20 @@ export default function RedListView() {
       ...r,
       label: `${r.count.toLocaleString()} (${total > 0 ? ((r.count / total) * 100).toFixed(1) : 0}%)`,
     }));
-  }, [taxaFilteredSpecies, speciesLoading, precomputedStats, selectedTaxa, selectedCategories, selectedCountries, selectedYearRanges]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, matchesSearch]);
 
-  // Compute priority scores for all species (client-side, from already-loaded data)
-  const priorityMap = useMemo(() => {
-    const map = new Map<number, PriorityResult>();
-    const yr = new Date().getFullYear();
-    for (const s of taxaFilteredSpecies) {
-      const result = computePriority(s, yr);
-      map.set(s.sis_taxon_id, result);
-    }
-    return map;
-  }, [taxaFilteredSpecies]);
-
-  // Get unique countries: pre-computed while loading, then client-computed
+  // Country chart: apply all filters EXCEPT country
   const { countryCounts, uniqueCountries, countryStatsForMap } = useMemo(() => {
-    let counts: Record<string, number>;
-
-    if (speciesLoading && precomputedStats?.countryCounts && selectedTaxa.size === 0) {
-      counts = precomputedStats.countryCounts;
-    } else {
-      counts = {};
-      // Cross-filter: apply all filters EXCEPT country
-      taxaFilteredSpecies.forEach(s => {
-        if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
-        if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
-        if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
-        s.countries.forEach(code => {
-          counts[code] = (counts[code] || 0) + 1;
-        });
+    const counts: Record<string, number> = {};
+    taxaFilteredSpecies.forEach(s => {
+      if (!matchesSearch(s)) return;
+      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
+      if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
+      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      s.countries.forEach(code => {
+        counts[code] = (counts[code] || 0) + 1;
       });
-    }
-
+    });
     const sorted = Object.entries(counts)
       .sort((a, b) => {
         const nameA = ALPHA2_TO_NAME[a[0]] || a[0];
@@ -696,17 +599,89 @@ export default function RedListView() {
         return nameA.localeCompare(nameB);
       })
       .map(([code]) => code);
-
-    // Species counts only; GBIF occurrence counts are fetched from the API by WorldMap
     const statsForMap = Object.fromEntries(
       Object.entries(counts).map(([code, count]) => [
         code,
         { occurrences: 0, species: count }
       ])
     );
-
     return { countryCounts: counts, uniqueCountries: sorted, countryStatsForMap: statsForMap };
-  }, [taxaFilteredSpecies, speciesLoading, precomputedStats, selectedTaxa, selectedCategories, selectedYearRanges, selectedObsRanges]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, matchesSearch]);
+
+  // ── Priority scoring ─────────────────────────────────────────────────
+  const priorityMap = useMemo(() => {
+    const map = new Map<number, PriorityResult>();
+    const yr = new Date().getFullYear();
+    for (const s of taxaFilteredSpecies) {
+      if (s.sis_taxon_id != null) {
+        map.set(s.sis_taxon_id, computePriority(s, yr));
+      }
+    }
+    return map;
+  }, [taxaFilteredSpecies]);
+
+  // ── Client-side filtering and sorting ──────────────────────────────
+  const CATEGORY_ORDER: Record<string, number> = {
+    EX: 0, EW: 1, CR: 2, EN: 3, VU: 4, NT: 5, LC: 6, DD: 7, NE: 8,
+  };
+
+  const { filteredSpecies, sortedSpecies } = useMemo(() => {
+    const filtered = taxaFilteredSpecies.filter((s) => {
+      const matchesCategory = selectedCategories.size === 0 || selectedCategories.has(s.category);
+      const matchesYear = s.category === "NE" || matchesYearRangeFilter(s.assessment_date);
+      const matchesObs = matchesObsRangeFilter(s.gbif_occurrence_count);
+      const matchesCountry = selectedCountries.size === 0 || s.countries.some(c => selectedCountries.has(c));
+      const matchesSearch =
+        !searchFilter ||
+        s.scientific_name.toLowerCase().includes(searchFilter) ||
+        s.common_name?.toLowerCase().includes(searchFilter);
+      const matchesStarred = !showOnlyStarred || (s.sis_taxon_id != null && pinnedSet.has(s.sis_taxon_id));
+      return matchesCategory && matchesYear && matchesObs && matchesCountry && matchesSearch && matchesStarred;
+    });
+
+    const sorted = [...filtered].sort((a, b) => {
+      if (showOnlyStarred && a.sis_taxon_id != null && b.sis_taxon_id != null) {
+        const aIdx = pinnedSpecies.indexOf(a.sis_taxon_id);
+        const bIdx = pinnedSpecies.indexOf(b.sis_taxon_id);
+        return aIdx - bIdx;
+      }
+
+      let comparison = 0;
+      if (!sortField || sortField === "priority") {
+        const scoreA = (a.sis_taxon_id != null ? priorityMap.get(a.sis_taxon_id)?.score : 0) ?? 0;
+        const scoreB = (b.sis_taxon_id != null ? priorityMap.get(b.sis_taxon_id)?.score : 0) ?? 0;
+        comparison = scoreA - scoreB;
+      } else if (sortField === "year") {
+        const dateA = a.assessment_date ? new Date(a.assessment_date).getTime() : 0;
+        const dateB = b.assessment_date ? new Date(b.assessment_date).getTime() : 0;
+        comparison = dateA - dateB;
+      } else if (sortField === "category") {
+        comparison = (CATEGORY_ORDER[a.category] ?? 99) - (CATEGORY_ORDER[b.category] ?? 99);
+      } else if (sortField === "newGbif") {
+        if (a.category === "NE" || b.category === "NE") {
+          comparison = (a.gbif_occurrence_count ?? -1) - (b.gbif_occurrence_count ?? -1);
+        } else {
+          comparison = (a.gbif_observations_after_assessment_year ?? -1) - (b.gbif_observations_after_assessment_year ?? -1);
+        }
+      }
+
+      if (comparison === 0) {
+        comparison = (a.sis_taxon_id ?? a.id) - (b.sis_taxon_id ?? b.id);
+      }
+
+      return sortDirection === "asc" ? comparison : -comparison;
+    });
+
+    return { filteredSpecies: filtered, sortedSpecies: sorted };
+  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedCountries, searchFilter, showOnlyStarred, priorityMap, pinnedSet, pinnedSpecies, sortField, sortDirection]);
+
+  // ── Client-side pagination ─────────────────────────────────────────
+  const totalFiltered = filteredSpecies.length;
+  const totalPages = Math.ceil(sortedSpecies.length / PAGE_SIZE);
+  const paginatedSpecies = sortedSpecies.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE
+  );
 
   // Helper to get country display name
   const getCountryName = (code: string) => ALPHA2_TO_NAME[code] || code;
@@ -716,19 +691,12 @@ export default function RedListView() {
     const isMultiSelect = event.metaKey || event.ctrlKey;
     setSelectedCountries(prev => {
       if (isMultiSelect) {
-        // Toggle in/out of set
         const next = new Set(prev);
-        if (next.has(countryCode)) {
-          next.delete(countryCode);
-        } else {
-          next.add(countryCode);
-        }
+        if (next.has(countryCode)) next.delete(countryCode);
+        else next.add(countryCode);
         return next;
       } else {
-        // Single select: toggle off if already selected, otherwise replace
-        if (prev.size === 1 && prev.has(countryCode)) {
-          return new Set();
-        }
+        if (prev.size === 1 && prev.has(countryCode)) return new Set();
         return new Set([countryCode]);
       }
     });
@@ -738,81 +706,8 @@ export default function RedListView() {
     setSelectedCountries(new Set());
   };
 
-  // Category order for sorting (most threatened first)
-  const CATEGORY_ORDER: Record<string, number> = {
-    EX: 0, EW: 1, CR: 2, EN: 3, VU: 4, NT: 5, LC: 6, DD: 7, NE: 8,
-  };
-
-  // Memoized filter and sort for performance with large datasets
-  const { filteredSpecies, sortedSpecies } = useMemo(() => {
-    // Filter taxa-filtered species based on category, year range, country, and search
-    const filtered = taxaFilteredSpecies.filter((s) => {
-      const matchesCategory = selectedCategories.size === 0 || selectedCategories.has(s.category);
-      // NE species have no assessment date, so skip year range filter for them
-      const matchesYear = s.category === "NE" || matchesYearRangeFilter(s.assessment_date);
-      const matchesObs = matchesObsRangeFilter(s.gbif_occurrence_count);
-      const matchesCountry = selectedCountries.size === 0 || s.countries.some(c => selectedCountries.has(c));
-      const matchesSearch =
-        !searchFilter ||
-        s.scientific_name.toLowerCase().includes(searchFilter) ||
-        s.common_name?.toLowerCase().includes(searchFilter);
-      const matchesStarred = !showOnlyStarred || pinnedSet.has(s.sis_taxon_id);
-      return matchesCategory && matchesYear && matchesObs && matchesCountry && matchesSearch && matchesStarred;
-    });
-
-    // Sort filtered species
-    const sorted = [...filtered].sort((a, b) => {
-      // When showing only starred, sort by pinned order
-      if (showOnlyStarred) {
-        const aIdx = pinnedSpecies.indexOf(a.sis_taxon_id);
-        const bIdx = pinnedSpecies.indexOf(b.sis_taxon_id);
-        return aIdx - bIdx;
-      }
-
-      let comparison = 0;
-      if (!sortField || sortField === "priority") {
-        const scoreA = priorityMap.get(a.sis_taxon_id)?.score ?? 0;
-        const scoreB = priorityMap.get(b.sis_taxon_id)?.score ?? 0;
-        comparison = scoreA - scoreB;
-      } else if (sortField === "year") {
-        // Sort by assessment date
-        const dateA = a.assessment_date ? new Date(a.assessment_date).getTime() : 0;
-        const dateB = b.assessment_date ? new Date(b.assessment_date).getTime() : 0;
-        comparison = dateA - dateB;
-      } else if (sortField === "category") {
-        comparison = (CATEGORY_ORDER[a.category] ?? 99) - (CATEGORY_ORDER[b.category] ?? 99);
-      } else if (sortField === "newGbif") {
-        // NE species don't have post-assessment counts; sort by total GBIF records instead
-        if (a.category === "NE" || b.category === "NE") {
-          comparison = (a.gbif_occurrence_count ?? -1) - (b.gbif_occurrence_count ?? -1);
-        } else {
-          const countA = a.gbif_observations_after_assessment_year ?? -1;
-          const countB = b.gbif_observations_after_assessment_year ?? -1;
-          comparison = countA - countB;
-        }
-      }
-
-      // Stable tiebreaker by ID to prevent sort instability between renders
-      if (comparison === 0) {
-        comparison = a.sis_taxon_id - b.sis_taxon_id;
-      }
-
-      return sortDirection === "asc" ? comparison : -comparison;
-    });
-
-    return { filteredSpecies: filtered, sortedSpecies: sorted };
-  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedCountries, searchFilter, showOnlyStarred, priorityMap, pinnedSet, pinnedSpecies, sortField, sortDirection]);
-
-  // Pagination calculations
-  const totalPages = Math.ceil(sortedSpecies.length / PAGE_SIZE);
-  const paginatedSpecies = sortedSpecies.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE
-  );
-
   // Handle sort toggle
   const handleSort = (field: "year" | "category" | "newGbif" | "priority") => {
-    // Treat null and "priority" as equivalent for toggle logic
     const currentField = sortField === null ? "priority" : sortField;
     if (currentField === field) {
       if (sortDirection === "desc") {
@@ -831,15 +726,15 @@ export default function RedListView() {
     setCurrentPage(1);
   }, [selectedTaxa, selectedCategories, selectedYearRanges, selectedObsRanges, searchFilter, selectedCountries, showOnlyStarred]);
 
-  // Populate basic speciesDetails from CSV-enriched data (GBIF counts instant, no API calls)
+  // Populate basic speciesDetails from DB data (GBIF counts instant, no API calls)
   // inatDefaultImage / openAlexPaperCount / papersAtAssessment are left as undefined → spinner
   useEffect(() => {
     const newDetails: Record<number, SpeciesDetails> = {};
     for (const s of paginatedSpecies) {
-      if (speciesDetails[s.sis_taxon_id]) continue; // Already have details
+      if (speciesDetails[s.id]) continue; // Already have details
 
       if (s.gbif_species_key) {
-        newDetails[s.sis_taxon_id] = {
+        newDetails[s.id] = {
           criteria: null,
           commonName: s.common_name || null,
           gbifUrl: `https://www.gbif.org/species/${s.gbif_species_key}`,
@@ -851,7 +746,7 @@ export default function RedListView() {
           papersAtAssessment: undefined, // Loading — fetched per-page below
         };
       } else {
-        newDetails[s.sis_taxon_id] = {
+        newDetails[s.id] = {
           criteria: null,
           commonName: s.common_name || null,
           gbifUrl: null,
@@ -874,7 +769,7 @@ export default function RedListView() {
   useEffect(() => {
     const speciesToFetch = paginatedSpecies.filter(
       (s) => {
-        const d = speciesDetails[s.sis_taxon_id];
+        const d = speciesDetails[s.id];
         // Fetch if we have basic details but inatDefaultImage is still undefined (not yet fetched)
         return d && d.inatDefaultImage === undefined;
       }
@@ -940,9 +835,9 @@ export default function RedListView() {
             };
           }
 
-          return { id: s.sis_taxon_id, inatDefaultImage, openAlexPaperCount, papersAtAssessment, gbifMatchStatus };
+          return { id: s.id, inatDefaultImage, openAlexPaperCount, papersAtAssessment, gbifMatchStatus };
         } catch {
-          return { id: s.sis_taxon_id, inatDefaultImage: null, openAlexPaperCount: null, papersAtAssessment: null, gbifMatchStatus: null };
+          return { id: s.id, inatDefaultImage: null, openAlexPaperCount: null, papersAtAssessment: null, gbifMatchStatus: null };
         }
       });
 
@@ -978,9 +873,9 @@ export default function RedListView() {
   // Fetch IUCN criteria on row expansion (lightweight — no GBIF calls; the map handles those)
   useEffect(() => {
     if (!selectedSpeciesKey) return;
-    const s = paginatedSpecies.find((sp) => sp.sis_taxon_id === selectedSpeciesKey);
+    const s = paginatedSpecies.find((sp) => sp.id === selectedSpeciesKey);
     if (!s || s.category === "NE") return;
-    const existing = speciesDetails[s.sis_taxon_id];
+    const existing = speciesDetails[s.id];
     if (!existing || existing.criteriaFetched) return;
 
     async function fetchCriteria() {
@@ -993,8 +888,8 @@ export default function RedListView() {
           const data = await res.json();
           setSpeciesDetails((prev) => ({
             ...prev,
-            [s.sis_taxon_id]: {
-              ...prev[s.sis_taxon_id],
+            [s.id]: {
+              ...prev[s.id],
               criteria: data.criteria || null,
               criteriaFetched: true,
             },
@@ -1007,46 +902,6 @@ export default function RedListView() {
 
     fetchCriteria();
   }, [selectedSpeciesKey, paginatedSpecies, speciesDetails]);
-
-  // Fetch observation trends for visible species (batched per-page)
-  useEffect(() => {
-    // Only fetch trends for species with GBIF keys that we haven't fetched yet
-    const toFetch = paginatedSpecies.filter(
-      (s) => s.gbif_species_key && !speciesTrends[s.gbif_species_key] && s.category !== "EX" && s.category !== "EW"
-    );
-    if (toFetch.length === 0) return;
-
-    const controller = new AbortController();
-
-    async function fetchTrends() {
-      const keys = toFetch.map((s) => s.gbif_species_key!).join(",");
-      const categories = toFetch.map((s) => s.category).join(",");
-      const taxons = toFetch.map((s) => s.taxon_id || "").join(",");
-      try {
-        const res = await fetch(
-          `/api/redlist/trends?keys=${keys}&categories=${categories}&taxons=${taxons}`,
-          { signal: controller.signal }
-        );
-        if (!res.ok || controller.signal.aborted) return;
-        const data = await res.json();
-        if (data.trends) {
-          setSpeciesTrends((prev) => {
-            const next = { ...prev };
-            // Key by gbif_species_key for O(1) lookup
-            for (const [key, trend] of Object.entries(data.trends)) {
-              next[Number(key)] = trend as TrendResult;
-            }
-            return next;
-          });
-        }
-      } catch {
-        // Abort or network error — ignore
-      }
-    }
-
-    fetchTrends();
-    return () => controller.abort("cleanup");
-  }, [paginatedSpecies, speciesTrends]);
 
   // Handle category bar click (Cmd/Ctrl+click for multi-select, regular click replaces)
   const handleCategoryClick = (data: { payload?: { code?: string } }, event: React.MouseEvent) => {
@@ -1132,7 +987,8 @@ export default function RedListView() {
         </div>
       )}
 
-      {/* Charts, search, and species table - always visible below summary */}
+      {/* Charts, search, and species table - only visible after a taxon is selected */}
+      {selectedTaxa.size > 0 && (
       <div className="space-y-3">
 
           {/* Charts and map */}
@@ -1144,7 +1000,7 @@ export default function RedListView() {
                 <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
               </div>
               <div className="flex-1 min-h-[225px] flex items-center justify-center">
-                {!statsLoaded ? (
+                {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
                 ) : categoryDataWithPercent.length > 0 ? (
                   <FilterBarChart
@@ -1176,7 +1032,7 @@ export default function RedListView() {
                 <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
               </div>
               <div className="flex-1 min-h-[225px] flex items-center justify-center">
-                {!statsLoaded ? (
+                {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
                 ) : assessmentYearData.length > 0 ? (
                   <FilterBarChart
@@ -1202,7 +1058,7 @@ export default function RedListView() {
                   precomputedStats={countryStatsForMap}
                   selectedTaxa={selectedTaxa}
                 />
-              ) : !statsLoaded ? (
+              ) : speciesLoading && assessedSpecies.length === 0 ? (
                 <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 min-h-[280px] flex flex-col">
                   <div className="flex items-center justify-between mb-1">
                     <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
@@ -1239,7 +1095,7 @@ export default function RedListView() {
                 <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
               </div>
               <div className="flex-1 min-h-[225px] flex items-center justify-center">
-                {!statsLoaded ? (
+                {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
                 ) : gbifObsData.length > 0 ? (
                   <FilterBarChart
@@ -1355,7 +1211,7 @@ export default function RedListView() {
               </button>
             )}
             <span className="ml-auto text-sm md:text-base font-semibold text-zinc-700 dark:text-zinc-300 tabular-nums">
-              {filteredSpecies.length.toLocaleString()} species
+              {totalFiltered.toLocaleString()} species
             </span>
             {neCount > 0 && (
               <button
@@ -1385,14 +1241,20 @@ export default function RedListView() {
         </div>
 
         {/* Species table */}
-        {speciesLoading ? (
+        {speciesLoading && assessedSpecies.length === 0 ? (
           <div className="flex items-center justify-center py-12">
             <Spinner className="h-6 w-6" />
           </div>
         ) : (
         <>
+        <div className="relative">
+          {speciesLoading && (
+            <div className="absolute inset-0 z-20 flex items-center justify-center">
+              <Spinner className="h-6 w-6" />
+            </div>
+          )}
         <div
-          className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-x-auto"
+          className={`bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-x-auto transition-opacity duration-150 ${speciesLoading ? "opacity-50 pointer-events-none" : ""}`}
           onScroll={(e) => {
             e.currentTarget.style.setProperty('--scroll-left', `${e.currentTarget.scrollLeft}px`);
           }}
@@ -1465,28 +1327,29 @@ export default function RedListView() {
             </thead>
             <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
               {paginatedSpecies.map((s) => {
+                const speciesKey = s.sis_taxon_id ?? s.gbif_species_key ?? s.id;
                 const assessmentDateObj = s.assessment_date ? new Date(s.assessment_date) : null;
                 const assessmentYear = assessmentDateObj ? assessmentDateObj.getFullYear() : null;
                 const assessmentMonth = assessmentDateObj ? assessmentDateObj.getMonth() + 1 : null; // 1-12
                 const yearsSinceAssessment = assessmentYear ? currentYear - assessmentYear : null;
-                const details = speciesDetails[s.sis_taxon_id];
+                const details = speciesDetails[s.id];
                 const gbifSpeciesKey = s.gbif_species_key || (details?.gbifUrl ? parseInt(details.gbifUrl.split('/').pop() || '0') : null);
-                const isPinned = pinnedSet.has(s.sis_taxon_id);
-                const isDragging = draggedSpecies === s.sis_taxon_id;
-                const isDragOver = dragOverSpecies === s.sis_taxon_id && draggedSpecies !== s.sis_taxon_id;
+                const isPinned = pinnedSet.has(speciesKey);
+                const isDragging = draggedSpecies === speciesKey;
+                const isDragOver = dragOverSpecies === speciesKey && draggedSpecies !== speciesKey;
                 return (
-                  <React.Fragment key={s.sis_taxon_id}>
+                  <React.Fragment key={s.id}>
                   <tr
-                    className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer ${selectedSpeciesKey === s.sis_taxon_id ? "bg-zinc-100 dark:bg-zinc-800" : ""} ${isDragging ? "opacity-50" : ""} ${isDragOver ? "border-t-2 border-amber-500" : ""}`}
-                    onClick={() => { setSelectedSpeciesKey(selectedSpeciesKey === s.sis_taxon_id ? null : s.sis_taxon_id); setActiveDetailTab("gbif"); }}
+                    className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer ${selectedSpeciesKey === speciesKey ? "bg-zinc-100 dark:bg-zinc-800" : ""} ${isDragging ? "opacity-50" : ""} ${isDragOver ? "border-t-2 border-amber-500" : ""}`}
+                    onClick={() => { setSelectedSpeciesKey(selectedSpeciesKey === speciesKey ? null : speciesKey); setActiveDetailTab("gbif"); }}
                     draggable={isPinned && showOnlyStarred}
-                    onDragStart={(e) => handleDragStart(e, s.sis_taxon_id)}
-                    onDragOver={(e) => handleDragOver(e, s.sis_taxon_id)}
+                    onDragStart={(e) => handleDragStart(e, speciesKey)}
+                    onDragOver={(e) => handleDragOver(e, speciesKey)}
                     onDragLeave={handleDragLeave}
-                    onDrop={(e) => handleDrop(e, s.sis_taxon_id)}
+                    onDrop={(e) => handleDrop(e, speciesKey)}
                     onDragEnd={handleDragEnd}
                   >
-                    <td className={`sticky left-0 z-10 px-2 py-2 text-center ${selectedSpeciesKey === s.sis_taxon_id ? "bg-zinc-100 dark:bg-zinc-800" : "bg-white dark:bg-zinc-900"}`}>
+                    <td className={`sticky left-0 z-10 px-2 py-2 text-center ${selectedSpeciesKey === speciesKey ? "bg-zinc-100 dark:bg-zinc-800" : "bg-white dark:bg-zinc-900"}`}>
                       <div className="flex items-center justify-center gap-1">
                         {isPinned && showOnlyStarred && (
                           <span className="cursor-grab text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300" title="Drag to reorder">
@@ -1498,7 +1361,7 @@ export default function RedListView() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            togglePinned(s.sis_taxon_id);
+                            togglePinned(speciesKey);
                           }}
                           className={`p-1 rounded transition-colors ${isPinned ? "text-amber-500 hover:text-amber-600" : "text-zinc-300 hover:text-amber-400 dark:text-zinc-600 dark:hover:text-amber-400"}`}
                           title={isPinned ? "Unpin species" : "Pin species"}
@@ -1509,7 +1372,7 @@ export default function RedListView() {
                         </button>
                       </div>
                     </td>
-                    <td className={`sticky left-[40px] z-10 px-2 md:px-4 py-2 ${selectedSpeciesKey === s.sis_taxon_id ? "bg-zinc-100 dark:bg-zinc-800" : "bg-white dark:bg-zinc-900"}`}>
+                    <td className={`sticky left-[40px] z-10 px-2 md:px-4 py-2 ${selectedSpeciesKey === speciesKey ? "bg-zinc-100 dark:bg-zinc-800" : "bg-white dark:bg-zinc-900"}`}>
                       <div className="flex items-center gap-2">
                         {/* iNat profile pic */}
                         {details?.inatDefaultImage === undefined ? (
@@ -1588,7 +1451,7 @@ export default function RedListView() {
                       {isNE(s) ? <span className="text-zinc-400">N/A</span> : (
                         <>
                           <HoverTooltip
-                            text={`Published: ${s.year_published}${s.previous_assessments && s.previous_assessments.length > 0 ? ` | Previous: ${s.previous_assessments.slice().reverse().map(pa => `${pa.year} (${pa.category})`).join(", ")}` : ""}`}
+                            text={`Published: ${s.year_published || "N/A"}`}
                           >
                             <span
                               className="cursor-help"
@@ -1707,24 +1570,21 @@ export default function RedListView() {
                     {/* Priority score */}
                     <td className="px-3 md:px-4 py-3 whitespace-nowrap">
                       {(() => {
-                        const priority = priorityMap.get(s.sis_taxon_id);
-                        if (!priority || priority.score === 0) return <span className="text-zinc-300 dark:text-zinc-700">—</span>;
-                        const b = priority.breakdown;
-                        const tooltipText = (Object.keys(b) as (keyof ScoreBreakdown)[])
-                          .filter(k => b[k] > 0)
-                          .map(k => `${BREAKDOWN_LABELS[k]}: ${b[k]}`)
-                          .join(" · ");
-                        return (
-                          <HoverTooltip text={tooltipText}>
-                            <span className="text-xs font-semibold tabular-nums cursor-help text-zinc-600 dark:text-zinc-400">
-                              {priority.score}
+                        const priority = s.sis_taxon_id != null ? priorityMap.get(s.sis_taxon_id) : null;
+                        const score = priority?.score ?? 0;
+                        return score === 0 ? (
+                          <span className="text-zinc-300 dark:text-zinc-700">—</span>
+                        ) : (
+                          <HoverTooltip text={`Staleness: ${priority!.breakdown.staleness}/25, New data: ${priority!.breakdown.newData}/25, Category: ${priority!.breakdown.category}/50`}>
+                            <span className="text-xs font-semibold tabular-nums text-zinc-600 dark:text-zinc-400 cursor-help">
+                              {score}
                             </span>
                           </HoverTooltip>
                         );
                       })()}
                     </td>
                   </tr>
-                  {selectedSpeciesKey === s.sis_taxon_id && (
+                  {selectedSpeciesKey === speciesKey && (
                     <tr>
                       <td colSpan={10} className="p-0 bg-zinc-50 dark:bg-zinc-800/30">
                         <div style={{ maxWidth: 'calc(100vw - 2rem)', transform: 'translateX(var(--scroll-left, 0px))' }}>
@@ -1804,12 +1664,12 @@ export default function RedListView() {
                           {s.category !== "NE" && (
                             <div style={{ display: stackedDetailView || activeDetailTab === "redlist" ? undefined : "none" }}>
                               <RedListAssessments
-                                sisTaxonId={s.sis_taxon_id}
-                                currentAssessmentId={s.assessment_id}
+                                sisTaxonId={s.sis_taxon_id ?? undefined}
+                                currentAssessmentId={s.assessment_id ?? 0}
                                 currentCategory={s.category}
                                 currentAssessmentDate={s.assessment_date}
-                                previousAssessments={s.previous_assessments || []}
-                                speciesUrl={s.url || `https://www.iucnredlist.org/species/${s.sis_taxon_id}/${s.assessment_id}`}
+                                previousAssessments={(s.previous_assessments ?? []).map((a) => ({ year: a.year, assessment_id: a.id, category: a.category, assessors: a.assessors, reviewers: a.reviewers }))}
+                                speciesUrl={`https://www.iucnredlist.org/species/${s.sis_taxon_id}/${s.assessment_id}`}
                               />
                             </div>
                           )}
@@ -1831,32 +1691,23 @@ export default function RedListView() {
                   </React.Fragment>
                 );
               })}
-              {filteredSpecies.length === 0 && (
+              {totalFiltered === 0 && !speciesLoading && (
                 <tr>
                   <td colSpan={10} className="px-4 py-8 text-center text-zinc-500">
-                    {neLoading ? (
-                      <div className="flex items-center justify-center gap-2">
-                        <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                        </svg>
-                        Loading NE species...
-                      </div>
-                    ) : (
-                      "No species found"
-                    )}
+                    No species found
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+        </div>
 
         {/* Pagination */}
         {totalPages > 1 && (
           <div className="flex flex-col sm:flex-row items-center justify-between px-3 md:px-4 py-3 border-t border-zinc-200 dark:border-zinc-800 gap-2">
             <div className="text-xs md:text-sm text-zinc-500">
-              {(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, filteredSpecies.length)} of {filteredSpecies.length}
+              {(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, totalFiltered)} of {totalFiltered}
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -1883,6 +1734,7 @@ export default function RedListView() {
         )}
       </div>
       </div>
+      )}
 
       {/* Fixed image preview portal */}
       <img

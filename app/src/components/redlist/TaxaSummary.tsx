@@ -89,7 +89,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [modifierHeld, setModifierHeld] = useState(false);
+  // Tracks whether the taxa table is expanded for multi-select.
+  // Set to true only when the user Cmd/Ctrl+clicks a taxon row;
+  // cleared when the modifier key is released.
+  const [taxaExpanded, setTaxaExpanded] = useState(false);
   const [focusMode, setFocusMode] = useState<FocusMode>("redlist");
   const [hiddenColumns, setHiddenColumns] = useState<Set<ColumnId>>(new Set(DEFAULT_HIDDEN_COLUMNS));
   const [showColumnMenu, setShowColumnMenu] = useState(false);
@@ -126,24 +129,20 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
     return () => document.removeEventListener("mousedown", handler);
   }, [showColumnMenu]);
 
-  // Track Cmd/Ctrl key state for delayed collapse
+  // Collapse taxa table when Cmd/Ctrl is released after a multi-select click
   useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey) setModifierHeld(true);
-    };
+    if (!taxaExpanded) return;
     const onKeyUp = (e: KeyboardEvent) => {
-      if (!e.metaKey && !e.ctrlKey) setModifierHeld(false);
+      if (!e.metaKey && !e.ctrlKey) setTaxaExpanded(false);
     };
-    const onBlur = () => setModifierHeld(false);
-    window.addEventListener("keydown", onKeyDown);
+    const onBlur = () => setTaxaExpanded(false);
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("blur", onBlur);
     return () => {
-      window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
     };
-  }, []);
+  }, [taxaExpanded]);
 
   // Auto-scroll to show Assessed column on mobile (skip past Est. Described)
   const autoScroll = useCallback((el: HTMLDivElement) => {
@@ -164,7 +163,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
   useEffect(() => {
     async function fetchTaxa() {
       try {
-        const res = await fetch("/api/redlist/taxa");
+        const res = await fetch("/api/redlist/taxa-summary");
         if (!res.ok) throw new Error("Failed to load taxa");
         const data = await res.json();
         setTaxa(data.taxa);
@@ -306,20 +305,24 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
     );
   }
 
+  // Separate "all" row from per-taxon rows
+  const allTaxon = taxa.find((t) => t.id === "all");
+  const perTaxa = taxa.filter((t) => t.id !== "all");
+
   // Calculate totals
-  const totalAssessed = taxa.reduce((sum, t) => sum + t.totalAssessed, 0);
-  const totalOutdated = taxa.reduce((sum, t) => sum + t.outdated, 0);
-  const totalDescribed = taxa.reduce((sum, t) => sum + t.estimatedDescribed, 0);
+  const totalAssessed = perTaxa.reduce((sum, t) => sum + t.totalAssessed, 0);
+  const totalOutdated = perTaxa.reduce((sum, t) => sum + t.outdated, 0);
+  const totalDescribed = allTaxon?.estimatedDescribed ?? perTaxa.reduce((sum, t) => sum + t.estimatedDescribed, 0);
   const totalPercentAssessed = (totalAssessed / totalDescribed) * 100;
   const totalPercentOutdated = (totalOutdated / totalAssessed) * 100;
   const totalByCategory: Record<string, number> = {};
-  for (const t of taxa) {
+  for (const t of perTaxa) {
     for (const [cat, count] of Object.entries(t.byCategory || {})) {
       totalByCategory[cat] = (totalByCategory[cat] || 0) + count;
     }
   }
-  const totalGbifObs = taxa.reduce((sum, t) => sum + (t.totalGbifObservations || 0), 0);
-  const totalGbifSpecies = taxa.reduce((sum, t) => sum + (t.gbifSpeciesCount || 0), 0);
+  const totalGbifObs = perTaxa.reduce((sum, t) => sum + (t.totalGbifObservations || 0), 0);
+  const totalGbifSpecies = perTaxa.reduce((sum, t) => sum + (t.gbifSpeciesCount || 0), 0);
   const totalMeanGbifObs = totalGbifSpecies > 0 ? Math.round(totalGbifObs / totalGbifSpecies) : 0;
 
 
@@ -455,19 +458,20 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
     isAllRow = false,
     gbifObs?: { total?: number; mean?: number; median?: number; speciesCount?: number; distribution?: Record<string, number> }
   ) => {
+    const isAllSelected = isAllRow && selectedTaxa.has("all");
     const rowBg = isAllRow
-      ? "bg-zinc-50/80 dark:bg-zinc-800/60"
+      ? isAllSelected ? "bg-zinc-100 dark:bg-zinc-800" : "bg-zinc-50/80 dark:bg-zinc-800/60"
       : isSelected
         ? "bg-zinc-100 dark:bg-zinc-800"
         : "";
     const hoverClass = isAllRow
-      ? ""
+      ? "hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
       : available
         ? "hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer"
         : "opacity-50 cursor-not-allowed";
 
     const stickyBg = isAllRow
-      ? "bg-zinc-50 dark:bg-zinc-800/60"
+      ? isAllSelected ? "bg-zinc-100 dark:bg-zinc-800" : "bg-zinc-50 dark:bg-zinc-800/60"
       : isSelected
         ? "bg-zinc-100 dark:bg-zinc-800"
         : "bg-white dark:bg-zinc-900";
@@ -476,7 +480,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
       <tr
         key={id}
         onClick={(e) => {
-          if (isAllRow || !available) return;
+          if (!isAllRow && !available) return;
+          // Expand taxa table when Cmd/Ctrl+clicking a taxon row (not "all")
+          if (!isAllRow && (e.metaKey || e.ctrlKey)) {
+            setTaxaExpanded(true);
+          }
           onToggleTaxon(id, e);
         }}
         className={`transition-colors ${rowBg} ${hoverClass}`}
@@ -727,18 +735,43 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
             { total: totalGbifObs, mean: totalMeanGbifObs, median: globalGbifMedian, speciesCount: totalGbifSpecies, distribution: globalGbifDistribution }
           )}
 
-          {/* Separator */}
-          <tr>
-            <td colSpan={visibleColCount} className="p-0">
-              <div className="border-b-2 border-zinc-200 dark:border-zinc-700" />
-            </td>
-          </tr>
+          {/* Separator - hide when only "All Species" is selected */}
+          {!selectedTaxa.has("all") && (
+            <tr>
+              <td colSpan={visibleColCount} className="p-0">
+                <div className="border-b-2 border-zinc-200 dark:border-zinc-700" />
+              </td>
+            </tr>
+          )}
 
-          {/* Collapse to selected rows only when taxa selected and modifier key not held */}
-          {(selectedTaxa.size > 0 && !modifierHeld)
-            ? taxa
-                .filter((taxon) => selectedTaxa.has(taxon.id))
-                .map((taxon) =>
+          {/* Collapse logic:
+              - "all" selected → hide all per-taxa rows (only All Species row shown above)
+              - taxaExpanded (Cmd/Ctrl held after clicking taxon row) → show all rows for multi-select
+              - specific taxa selected → show only those taxa rows
+              - nothing selected → show all taxa rows (landing page) */}
+          {selectedTaxa.has("all")
+            ? null
+            : (selectedTaxa.size > 0 && !taxaExpanded
+              ? perTaxa
+                  .filter((taxon) => selectedTaxa.has(taxon.id))
+                  .map((taxon) =>
+                    renderRow(
+                      taxon.id,
+                      taxon.name,
+                      taxon.color,
+                      taxon.estimatedDescribed,
+                      taxon.totalAssessed,
+                      taxon.percentAssessed,
+                      taxon.outdated,
+                      taxon.percentOutdated,
+                      taxon.byCategory || {},
+                      true,
+                      taxon.available,
+                      false,
+                      { total: taxon.totalGbifObservations, mean: taxon.meanGbifObsPerSpecies, median: taxon.medianGbifObsPerSpecies, speciesCount: taxon.gbifSpeciesCount, distribution: taxon.gbifObsDistribution }
+                    )
+                  )
+              : perTaxa.map((taxon) =>
                   renderRow(
                     taxon.id,
                     taxon.name,
@@ -749,29 +782,13 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa }: Props) {
                     taxon.outdated,
                     taxon.percentOutdated,
                     taxon.byCategory || {},
-                    true,
+                    selectedTaxa.has(taxon.id),
                     taxon.available,
                     false,
                     { total: taxon.totalGbifObservations, mean: taxon.meanGbifObsPerSpecies, median: taxon.medianGbifObsPerSpecies, speciesCount: taxon.gbifSpeciesCount, distribution: taxon.gbifObsDistribution }
                   )
                 )
-            : taxa.map((taxon) =>
-                renderRow(
-                  taxon.id,
-                  taxon.name,
-                  taxon.color,
-                  taxon.estimatedDescribed,
-                  taxon.totalAssessed,
-                  taxon.percentAssessed,
-                  taxon.outdated,
-                  taxon.percentOutdated,
-                  taxon.byCategory || {},
-                  selectedTaxa.has(taxon.id),
-                  taxon.available,
-                  false,
-                  { total: taxon.totalGbifObservations, mean: taxon.meanGbifObsPerSpecies, median: taxon.medianGbifObsPerSpecies, speciesCount: taxon.gbifSpeciesCount, distribution: taxon.gbifObsDistribution }
-                )
-              )
+            )
           }
         </tbody>
       </table>

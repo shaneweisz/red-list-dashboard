@@ -30,8 +30,14 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files
 .env*
+!.env.example
+
+# sync script logs
+/logs
+/data/_old-single-csvs
+/data/test-subsets
 
 # vercel
 .vercel
