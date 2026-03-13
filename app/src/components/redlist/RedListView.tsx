@@ -12,6 +12,8 @@ import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
 import { speciesMatchesSubgroup, getSubgroupDef } from "@/config/taxa-hierarchy";
+import ReviewerChart from "./ReviewerChart";
+import { parseAssessors } from "@/lib/parseAssessors";
 import { useFilterParams } from "@/hooks/useFilterParams";
 import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import AssessmentAssistant from "../AssessmentAssistant";
@@ -252,6 +254,7 @@ export default function RedListView() {
     selectedYearRanges, setSelectedYearRanges,
     selectedCountries, setSelectedCountries,
     selectedObsRanges, setSelectedObsRanges,
+    selectedReviewers, setSelectedReviewers,
     searchFilter, setSearchFilter,
     sortField, sortDirection, setSort,
     clearAllFilters,
@@ -292,6 +295,17 @@ export default function RedListView() {
     });
   }, [setSelectedTaxa]);
 
+  // Reset all other filters when taxa selection changes
+  const prevTaxaRef = useRef(selectedTaxa);
+  useEffect(() => {
+    const prev = prevTaxaRef.current;
+    prevTaxaRef.current = selectedTaxa;
+    // Skip if taxa haven't actually changed (same reference or same contents)
+    if (prev === selectedTaxa) return;
+    if (prev.size === selectedTaxa.size && [...selectedTaxa].every(t => prev.has(t))) return;
+    clearAllFilters();
+    setShowOnlyStarred(false);
+  }, [selectedTaxa, clearAllFilters]);
 
   const [showOnlyStarred, setShowOnlyStarred] = useState(false);
 
@@ -478,6 +492,21 @@ export default function RedListView() {
     return false;
   };
 
+  // Helper to get assessors from a species' most recent previous assessment
+  const getSpeciesAssessors = useCallback((s: Species): string[] => {
+    if (s.previous_assessments.length === 0) return [];
+    // Use the most recent assessment (first in array)
+    const latest = s.previous_assessments[0];
+    return parseAssessors(latest.assessors);
+  }, []);
+
+  // Helper to check if species matches assessor filter
+  const matchesAssessorFilter = useCallback((s: Species, assessors: Set<string> = selectedReviewers): boolean => {
+    if (assessors.size === 0) return true;
+    const speciesAssessors = getSpeciesAssessors(s);
+    return speciesAssessors.some(a => assessors.has(a));
+  }, [selectedReviewers, getSpeciesAssessors]);
+
   // Species details cache (images, criteria, common names)
   const [speciesDetails, setSpeciesDetails] = useState<Record<number, SpeciesDetails>>({});
 
@@ -594,6 +623,7 @@ export default function RedListView() {
       if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
       if (selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
       if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      if (selectedReviewers.size > 0 && !matchesAssessorFilter(s, selectedReviewers)) return;
       counts[s.category] = (counts[s.category] || 0) + 1;
     });
     const DISPLAY_ORDER = ["EX", "EW", "CR", "EN", "VU", "NT", "LC", "DD"];
@@ -606,7 +636,7 @@ export default function RedListView() {
       percent: total > 0 ? (((counts[code] || 0) / total) * 100).toFixed(1) : "0",
       label: `${(counts[code] || 0).toLocaleString()} (${total > 0 ? (((counts[code] || 0) / total) * 100).toFixed(1) : 0}%)`,
     }));
-  }, [taxaFilteredSpecies, selectedCountries, selectedYearRanges, selectedObsRanges, matchesSearch]);
+  }, [taxaFilteredSpecies, selectedCountries, selectedYearRanges, selectedObsRanges, selectedReviewers, matchesSearch, matchesAssessorFilter]);
 
   // Year chart: apply all filters EXCEPT year range
   const assessmentYearData = useMemo(() => {
@@ -624,6 +654,7 @@ export default function RedListView() {
       if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
       if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
       if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      if (selectedReviewers.size > 0 && !matchesAssessorFilter(s, selectedReviewers)) return;
       const diff = currentYr - new Date(s.assessment_date).getFullYear();
       if (diff <= 1) ranges[0].count++;
       else if (diff <= 5) ranges[1].count++;
@@ -636,7 +667,7 @@ export default function RedListView() {
       ...r,
       label: `${r.count.toLocaleString()} (${total > 0 ? ((r.count / total) * 100).toFixed(1) : 0}%)`,
     }));
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedObsRanges, matchesSearch]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedObsRanges, selectedReviewers, matchesSearch, matchesAssessorFilter]);
 
   // GBIF observations chart: apply all filters EXCEPT obs range
   const gbifObsData = useMemo(() => {
@@ -653,6 +684,7 @@ export default function RedListView() {
       if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
       if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
       if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
+      if (selectedReviewers.size > 0 && !matchesAssessorFilter(s, selectedReviewers)) return;
       const obs = s.gbif_occurrence_count ?? 0;
       if (obs === 0) ranges[0].count++;
       else if (obs <= 10) ranges[1].count++;
@@ -666,7 +698,7 @@ export default function RedListView() {
       ...r,
       label: `${r.count.toLocaleString()} (${total > 0 ? ((r.count / total) * 100).toFixed(1) : 0}%)`,
     }));
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, matchesSearch]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedReviewers, matchesSearch, matchesAssessorFilter]);
 
   // Country chart: apply all filters EXCEPT country
   const { countryCounts, uniqueCountries, countryStatsForMap } = useMemo(() => {
@@ -676,6 +708,7 @@ export default function RedListView() {
       if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
       if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
       if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      if (selectedReviewers.size > 0 && !matchesAssessorFilter(s, selectedReviewers)) return;
       s.countries.forEach(code => {
         counts[code] = (counts[code] || 0) + 1;
       });
@@ -694,7 +727,30 @@ export default function RedListView() {
       ])
     );
     return { countryCounts: counts, uniqueCountries: sorted, countryStatsForMap: statsForMap };
-  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, matchesSearch]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedReviewers, matchesSearch, matchesAssessorFilter]);
+
+  // Assessor chart: apply all filters EXCEPT assessor
+  const assessorChartData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    taxaFilteredSpecies.forEach(s => {
+      if (!matchesSearch(s)) return;
+      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
+      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
+      if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
+      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      const assessors = getSpeciesAssessors(s);
+      for (const a of assessors) {
+        counts[a] = (counts[a] || 0) + 1;
+      }
+    });
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count]) => ({
+        code: name,
+        count,
+        label: count.toLocaleString(),
+      }));
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, matchesSearch, getSpeciesAssessors]);
 
   // ── Client-side filtering and sorting ──────────────────────────────
   const CATEGORY_ORDER: Record<string, number> = {
@@ -711,8 +767,9 @@ export default function RedListView() {
         !searchFilter ||
         s.scientific_name.toLowerCase().includes(searchFilter) ||
         s.common_name?.toLowerCase().includes(searchFilter);
+      const matchesReviewer = matchesAssessorFilter(s);
       const matchesStarred = !showOnlyStarred || (s.sis_taxon_id != null && pinnedSet.has(s.sis_taxon_id));
-      return matchesCategory && matchesYear && matchesObs && matchesCountry && matchesSearch && matchesStarred;
+      return matchesCategory && matchesYear && matchesObs && matchesCountry && matchesSearch && matchesReviewer && matchesStarred;
     });
 
     const sorted = [...filtered].sort((a, b) => {
@@ -754,7 +811,7 @@ export default function RedListView() {
     });
 
     return { filteredSpecies: filtered, sortedSpecies: sorted };
-  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedCountries, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedCountries, selectedReviewers, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection, matchesAssessorFilter]);
 
   // ── Client-side pagination ─────────────────────────────────────────
   const totalFiltered = filteredSpecies.length;
@@ -805,7 +862,7 @@ export default function RedListView() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedTaxa, selectedCategories, selectedYearRanges, selectedObsRanges, searchFilter, selectedCountries, showOnlyStarred]);
+  }, [selectedTaxa, selectedCategories, selectedYearRanges, selectedObsRanges, selectedReviewers, searchFilter, selectedCountries, showOnlyStarred]);
 
   // Populate basic speciesDetails from DB data (GBIF counts instant, no API calls)
   // inatDefaultImage / openAlexPaperCount / papersAtAssessment are left as undefined → spinner
@@ -1026,6 +1083,34 @@ export default function RedListView() {
     });
   };
 
+  // Toggle a single assessor in/out of selection (used by search list)
+  const handleAssessorToggle = useCallback((code: string) => {
+    setSelectedReviewers(prev => {
+      const next = new Set(prev);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
+      return next;
+    });
+  }, [setSelectedReviewers]);
+
+  // Handle reviewer bar click
+  const handleAssessorClick = (data: { payload?: { code?: string } }, event: React.MouseEvent) => {
+    const code = data.payload?.code;
+    if (!code) return;
+    const isMultiSelect = event.metaKey || event.ctrlKey;
+    setSelectedReviewers(prev => {
+      if (isMultiSelect) {
+        const next = new Set(prev);
+        if (next.has(code)) next.delete(code);
+        else next.add(code);
+        return next;
+      } else {
+        if (prev.size === 1 && prev.has(code)) return new Set();
+        return new Set([code]);
+      }
+    });
+  };
+
   const currentYear = new Date().getFullYear();
   const GBIF_FILTERS = "has_coordinate=true&has_geospatial_issue=false&basis_of_record=HUMAN_OBSERVATION&basis_of_record=MACHINE_OBSERVATION&basis_of_record=OCCURRENCE&basis_of_record=MATERIAL_SAMPLE&basis_of_record=OBSERVATION";
   const isNE = (s: Species) => s.category === "NE";
@@ -1052,14 +1137,14 @@ export default function RedListView() {
       {selectedTaxa.size > 0 && (
       <div className="space-y-3">
 
-          {/* Charts and map */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+          {/* Charts row 1: bar charts */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Risk Category */}
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Risk Category</span>
                               </div>
-              <div className="flex-1 min-h-[180px] flex items-center justify-center">
+              <div className="flex-1 min-h-[150px] flex items-center justify-center">
                 {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
                 ) : categoryDataWithPercent.length > 0 ? (
@@ -1085,58 +1170,12 @@ export default function RedListView() {
               </div>
             </div>
 
-            {/* Years Since Assessed */}
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Years Since Assessed</span>
-                              </div>
-              <div className="flex-1 min-h-[180px] flex items-center justify-center">
-                {speciesLoading && assessedSpecies.length === 0 ? (
-                  <Spinner />
-                ) : assessmentYearData.length > 0 ? (
-                  <FilterBarChart
-                    data={assessmentYearData}
-                    dataKey="shortRange"
-                    selectedItems={selectedYearRanges}
-                    onBarClick={handleYearClick}
-                    barColor="#3b82f6"
-                    yAxisWidth={36}
-                    rightMargin={85}
-                  />
-                ) : null}
-              </div>
-            </div>
-
-            {/* Country Map */}
-            <div>
-              {Object.keys(countryStatsForMap).length > 0 ? (
-                <WorldMap
-                  selectedCountries={selectedCountries}
-                  onCountrySelect={handleCountrySelect}
-                  onClearSelection={handleClearCountry}
-                  precomputedStats={countryStatsForMap}
-                  selectedTaxa={selectedTaxa}
-                />
-              ) : speciesLoading && assessedSpecies.length === 0 ? (
-                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 min-h-[280px] flex flex-col">
-                  <div className="flex items-center justify-between mb-1">
-                    <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                      Country
-                    </h2>
-                  </div>
-                  <div className="flex-1 flex items-center justify-center">
-                    <Spinner />
-                  </div>
-                </div>
-              ) : null}
-            </div>
-
             {/* GBIF Observations */}
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">GBIF Observations <GbifInfoTooltip /></span>
                               </div>
-              <div className="flex-1 min-h-[180px] flex items-center justify-center">
+              <div className="flex-1 min-h-[150px] flex items-center justify-center">
                 {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
                 ) : gbifObsData.length > 0 ? (
@@ -1152,6 +1191,64 @@ export default function RedListView() {
                 ) : null}
               </div>
             </div>
+
+            {/* Years Since Assessed */}
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Years Since Assessed</span>
+                              </div>
+              <div className="flex-1 min-h-[150px] flex items-center justify-center">
+                {speciesLoading && assessedSpecies.length === 0 ? (
+                  <Spinner />
+                ) : assessmentYearData.length > 0 ? (
+                  <FilterBarChart
+                    data={assessmentYearData}
+                    dataKey="shortRange"
+                    selectedItems={selectedYearRanges}
+                    onBarClick={handleYearClick}
+                    barColor="#3b82f6"
+                    yAxisWidth={36}
+                    rightMargin={85}
+                  />
+                ) : null}
+              </div>
+            </div>
+          </div>
+
+          {/* Charts row 2: Country map + Reviewers */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Country Map */}
+            <div>
+              {Object.keys(countryStatsForMap).length > 0 ? (
+                <WorldMap
+                  selectedCountries={selectedCountries}
+                  onCountrySelect={handleCountrySelect}
+                  onClearSelection={handleClearCountry}
+                  precomputedStats={countryStatsForMap}
+                  selectedTaxa={selectedTaxa}
+                />
+              ) : speciesLoading && assessedSpecies.length === 0 ? (
+                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 min-h-[320px] flex flex-col">
+                  <div className="flex items-center justify-between mb-1">
+                    <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                      Country
+                    </h2>
+                  </div>
+                  <div className="flex-1 flex items-center justify-center">
+                    <Spinner />
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            {/* Reviewers */}
+            <ReviewerChart
+              allAssessors={assessorChartData}
+              selectedAssessors={selectedReviewers}
+              onAssessorClick={handleAssessorClick}
+              onAssessorToggle={handleAssessorToggle}
+              loading={speciesLoading && assessedSpecies.length === 0}
+            />
           </div>
 
       {/* Search and Species Table */}
@@ -1256,9 +1353,19 @@ export default function RedListView() {
                 <span className="text-xs">×</span>
               </button>
             ))}
-            {(selectedTaxa.size > 0 || selectedSubgroup || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || showOnlyStarred) && (
+            {Array.from(selectedReviewers).map(name => (
               <button
-                onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setSelectedObsRanges(new Set()); setShowOnlyStarred(false); }}
+                key={name}
+                onClick={() => setSelectedReviewers(prev => { const next = new Set(prev); next.delete(name); return next; })}
+                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
+              >
+                {name}
+                <span className="text-xs">×</span>
+              </button>
+            ))}
+            {(selectedTaxa.size > 0 || selectedSubgroup || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedReviewers.size > 0 || showOnlyStarred) && (
+              <button
+                onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setSelectedObsRanges(new Set()); setSelectedReviewers(new Set()); setShowOnlyStarred(false); }}
                 className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 underline"
               >
                 Clear all
