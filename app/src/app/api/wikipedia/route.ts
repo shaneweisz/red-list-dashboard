@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CACHE_1H } from "@/lib/cache-headers";
 
-const WIKIPEDIA_API = "https://en.wikipedia.org/api/rest_v1";
+const WIKIPEDIA_REST = "https://en.wikipedia.org/api/rest_v1";
+const WIKIPEDIA_ACTION = "https://en.wikipedia.org/w/api.php";
 
 interface WikiSection {
   id: number;
@@ -35,15 +36,14 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const userAgent =
+    "RedListDashboard/1.0 (https://github.com/red-list-dashboard)";
+
   try {
     // Step 1: Get summary via the REST API (includes extract + thumbnail)
     const summaryRes = await fetch(
-      `${WIKIPEDIA_API}/page/summary/${encodeURIComponent(name)}`,
-      {
-        headers: {
-          "Api-User-Agent": "RedListDashboard/1.0 (https://github.com/red-list-dashboard)",
-        },
-      }
+      `${WIKIPEDIA_REST}/page/summary/${encodeURIComponent(name)}`,
+      { headers: { "Api-User-Agent": userAgent } }
     );
 
     if (summaryRes.status === 404) {
@@ -54,39 +54,49 @@ export async function GET(request: NextRequest) {
 
     if (!summaryRes.ok) {
       return NextResponse.json(
-        { found: false, error: `Wikipedia API returned ${summaryRes.status}` } satisfies WikiResponse,
+        {
+          found: false,
+          error: `Wikipedia API returned ${summaryRes.status}`,
+        } satisfies WikiResponse,
         { status: 502 }
       );
     }
 
     const summaryData = await summaryRes.json();
+    const title: string = summaryData.title;
 
-    // Step 2: Get the mobile-sections to parse out individual sections
-    const sectionsRes = await fetch(
-      `${WIKIPEDIA_API}/page/mobile-sections/${encodeURIComponent(summaryData.title)}`,
-      {
-        headers: {
-          "Api-User-Agent": "RedListDashboard/1.0 (https://github.com/red-list-dashboard)",
-        },
-      }
-    );
+    // Step 2: Use the MediaWiki action API to get parsed sections
+    // action=parse returns the full page broken into sections
+    const parseUrl = new URL(WIKIPEDIA_ACTION);
+    parseUrl.searchParams.set("action", "parse");
+    parseUrl.searchParams.set("page", title);
+    parseUrl.searchParams.set("prop", "sections|text");
+    parseUrl.searchParams.set("format", "json");
+    parseUrl.searchParams.set("disabletoc", "true");
+
+    const parseRes = await fetch(parseUrl.toString(), {
+      headers: { "Api-User-Agent": userAgent },
+    });
 
     let sections: WikiSection[] = [];
-    if (sectionsRes.ok) {
-      const sectionsData = await sectionsRes.json();
-      sections = (sectionsData.remaining?.sections || []).map(
-        (s: { id: number; line: string; toclevel: number; text: string }) => ({
-          id: s.id,
-          title: s.line,
-          level: s.toclevel,
-          html: s.text,
-        })
-      );
+    if (parseRes.ok) {
+      const parseData = await parseRes.json();
+      const parsedSections: {
+        index: string;
+        line: string;
+        toclevel: number;
+        byteoffset: number;
+      }[] = parseData?.parse?.sections || [];
+      const fullHtml: string = parseData?.parse?.text?.["*"] || "";
+
+      if (fullHtml && parsedSections.length > 0) {
+        sections = extractSections(fullHtml, parsedSections);
+      }
     }
 
     const result: WikiResponse = {
       found: true,
-      title: summaryData.title,
+      title,
       pageUrl: summaryData.content_urls?.desktop?.page,
       summary: summaryData.extract_html || summaryData.extract,
       thumbnail: summaryData.thumbnail
@@ -109,4 +119,83 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+/**
+ * Extract individual section HTML from the full parsed page HTML.
+ *
+ * MediaWiki wraps each section in heading tags (h2, h3, etc.) with
+ * id attributes matching the section anchor. We split on these headings
+ * to isolate each section's content.
+ */
+function extractSections(
+  fullHtml: string,
+  tocSections: {
+    index: string;
+    line: string;
+    toclevel: number;
+  }[]
+): WikiSection[] {
+  const results: WikiSection[] = [];
+
+  // Filter out pseudo-sections (like "References", "External links" that are mostly just links)
+  const skipTitles = new Set([
+    "References",
+    "External links",
+    "Further reading",
+    "Notes",
+    "See also",
+    "Bibliography",
+  ]);
+
+  for (let i = 0; i < tocSections.length; i++) {
+    const sec = tocSections[i];
+    if (skipTitles.has(sec.line)) continue;
+
+    const headingLevel = sec.toclevel + 1; // toclevel 1 = h2, 2 = h3, etc.
+    const headingTag = `h${headingLevel}`;
+
+    // Find this section's heading in the HTML
+    // MediaWiki uses <h2><span class="mw-headline" id="...">Title</span>...
+    const headingPattern = new RegExp(
+      `<${headingTag}[^>]*>\\s*<span[^>]*id="[^"]*"[^>]*>\\s*${escapeRegExp(sec.line)}`,
+      "i"
+    );
+    const headingMatch = headingPattern.exec(fullHtml);
+    if (!headingMatch) continue;
+
+    // Content starts after the closing heading tag
+    const afterHeading = fullHtml.indexOf(
+      `</${headingTag}>`,
+      headingMatch.index
+    );
+    if (afterHeading === -1) continue;
+    const contentStart = afterHeading + `</${headingTag}>`.length;
+
+    // Content ends at the next heading of equal or higher level (h2 for toclevel 1, etc.)
+    // or at the end of the HTML
+    let contentEnd = fullHtml.length;
+    for (let level = 2; level <= headingLevel; level++) {
+      const nextHeading = fullHtml.indexOf(`<h${level}`, contentStart);
+      if (nextHeading !== -1 && nextHeading < contentEnd) {
+        contentEnd = nextHeading;
+      }
+    }
+
+    const html = fullHtml.slice(contentStart, contentEnd).trim();
+    if (!html) continue;
+
+    results.push({
+      id: parseInt(sec.index, 10),
+      title: sec.line,
+      level: sec.toclevel,
+      html,
+    });
+  }
+
+  return results;
+}
+
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
