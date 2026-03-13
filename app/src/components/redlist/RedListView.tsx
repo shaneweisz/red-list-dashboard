@@ -1573,7 +1573,7 @@ export default function RedListView() {
                         const newObs = details?.gbifOccurrencesSinceAssessment ?? s.gbif_observations_after_assessment_year;
                         if (total == null || total === 0 || newObs == null) return "—";
                         const pct = (newObs / total) * 100;
-                        return `${pct < 1 && pct > 0 ? "<1" : Math.round(pct)}%`;
+                        return `${pct < 0.1 && pct > 0 ? "<0.1" : pct.toFixed(1)}%`;
                       })()}
                     </td>
                   </tr>
