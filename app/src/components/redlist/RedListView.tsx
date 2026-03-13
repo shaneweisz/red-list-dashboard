@@ -672,16 +672,16 @@ export default function RedListView() {
         comparison = pctA - pctB;
       }
 
-      // Secondary sort: total GBIF desc
-      if (comparison === 0) {
-        comparison = (b.gbif_occurrence_count ?? -1) - (a.gbif_occurrence_count ?? -1);
-      }
-      // Tertiary tiebreaker: stable ID order
-      if (comparison === 0) {
-        comparison = (a.sis_taxon_id ?? a.id) - (b.sis_taxon_id ?? b.id);
-      }
+      // Apply primary sort direction
+      const primary = sortDirection === "asc" ? comparison : -comparison;
+      if (primary !== 0) return primary;
 
-      return sortDirection === "asc" ? comparison : -comparison;
+      // Secondary sort: total GBIF desc (always, regardless of primary direction)
+      const gbifCmp = (b.gbif_occurrence_count ?? -1) - (a.gbif_occurrence_count ?? -1);
+      if (gbifCmp !== 0) return gbifCmp;
+
+      // Tertiary tiebreaker: stable ID order
+      return (a.sis_taxon_id ?? a.id) - (b.sis_taxon_id ?? b.id);
     });
 
     return { filteredSpecies: filtered, sortedSpecies: sorted };
