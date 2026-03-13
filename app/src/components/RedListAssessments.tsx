@@ -381,9 +381,11 @@ export default function RedListAssessments({
   detailsRef.current = assessmentDetails;
   const loadingRef = useRef(loadingIds);
   loadingRef.current = loadingIds;
+  const errorRef = useRef(errorIds);
+  errorRef.current = errorIds;
 
   const fetchAssessment = useCallback(async (assessmentId: number) => {
-    if (detailsRef.current[assessmentId] || loadingRef.current.has(assessmentId)) return;
+    if (detailsRef.current[assessmentId] || loadingRef.current.has(assessmentId) || errorRef.current.has(assessmentId)) return;
 
     setLoadingIds((prev) => new Set(prev).add(assessmentId));
     setErrorIds((prev) => {

@@ -27,10 +27,11 @@ export function parseParams(search: string) {
     sortField: (
       sortParam === "category" ? "category" :
       sortParam === "year" ? "year" :
+      sortParam === "totalGbif" ? "totalGbif" :
       sortParam === "newGbif" ? "newGbif" :
-      sortParam === "priority" ? "priority" :
+      sortParam === "pctNewGbif" ? "pctNewGbif" :
       null
-    ) as "year" | "category" | "newGbif" | "priority" | null,
+    ) as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
     sortDirection: (p.get("dir") === "asc" ? "asc" : "desc") as "asc" | "desc",
   };
 }
@@ -42,7 +43,7 @@ export function buildQs(state: {
   countries: Set<string>;
   obsRanges: Set<string>;
   search: string;
-  sortField: "year" | "category" | "newGbif" | "priority" | null;
+  sortField: "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null;
   sortDirection: "asc" | "desc";
 }): string {
   const p = new URLSearchParams();
@@ -52,8 +53,8 @@ export function buildQs(state: {
   if (state.countries.size > 0) p.set("countries", [...state.countries].join(","));
   if (state.obsRanges.size > 0) p.set("obsRanges", [...state.obsRanges].join(","));
   if (state.search) p.set("search", state.search);
-  // null / "priority" desc is the default — only write non-default sort to URL
-  const isDefaultSort = state.sortField === null || state.sortField === "priority";
+  // null / "year" desc is the default — only write non-default sort to URL
+  const isDefaultSort = state.sortField === null || state.sortField === "year";
   if (!isDefaultSort) {
     p.set("sort", state.sortField!);
     if (state.sortDirection !== "desc") p.set("dir", state.sortDirection);
@@ -172,7 +173,7 @@ export function useFilterParams() {
   );
 
   const setSort = useCallback(
-    (field: "year" | "category" | "newGbif" | "priority" | null, direction: "asc" | "desc") => {
+    (field: "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null, direction: "asc" | "desc") => {
       setState(prev => {
         const next = { ...prev, sortField: field, sortDirection: direction };
         queueMicrotask(() => syncUrl(next, false));

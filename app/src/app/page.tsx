@@ -21,7 +21,7 @@ const RedListView = dynamic(
 export default function RedListPage() {
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 px-6 py-4 md:px-16 md:py-8">
-      <main className="max-w-7xl mx-auto">
+      <main className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="mb-4 md:mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
           <div>
@@ -29,7 +29,7 @@ export default function RedListPage() {
               IUCN Red List Assessments Dashboard
             </h1>
             <p className="text-sm md:text-base text-zinc-600 dark:text-zinc-400">
-              Click taxa rows to filter, use charts and search to explore species
+              Click taxa rows to filter, use charts and search to explore species. Cmd/Ctrl+click to multiselect.
             </p>
           </div>
           <div className="flex items-center gap-2">
