@@ -49,6 +49,8 @@ const NAME_TO_ALPHA2: Record<string, string> = {
   "Yemen": "YE", "Zambia": "ZM", "Zimbabwe": "ZW", "Palestine": "PS", "Kosovo": "XK",
   "North Macedonia": "MK", "New Caledonia": "NC", "W. Sahara": "EH", "Fr. S. Antarctic Lands": "TF",
   "Falkland Is.": "FK",
+  // Small island nations not in 110m TopoJSON but useful for search
+  "Maldives": "MV",
 };
 
 // Complete ISO 3166-1 alpha-2 to country name mapping (for display)
@@ -119,6 +121,7 @@ const COUNTRY_CENTROIDS: Record<string, [number, number]> = {
   "Yemen": [48, 15.5], "Zambia": [28, -15], "Zimbabwe": [30, -20], "Palestine": [35.3, 31.9], "Kosovo": [21, 42.6],
   "North Macedonia": [21.7, 41.5], "New Caledonia": [165.5, -21.5], "W. Sahara": [-13, 24.5],
   "Fr. S. Antarctic Lands": [69, -49], "Falkland Is.": [-59, -52],
+  "Maldives": [73.5, 3.2],
 };
 
 // Sorted list of country names for search
