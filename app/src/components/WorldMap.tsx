@@ -49,8 +49,14 @@ const NAME_TO_ALPHA2: Record<string, string> = {
   "Yemen": "YE", "Zambia": "ZM", "Zimbabwe": "ZW", "Palestine": "PS", "Kosovo": "XK",
   "North Macedonia": "MK", "New Caledonia": "NC", "W. Sahara": "EH", "Fr. S. Antarctic Lands": "TF",
   "Falkland Is.": "FK",
-  // Small island nations not in 110m TopoJSON but useful for search
-  "Maldives": "MV",
+  // Small/micro nations not in 110m TopoJSON but useful for search
+  "Andorra": "AD", "Antigua and Barbuda": "AG", "Bahamas": "BS", "Bahrain": "BH", "Barbados": "BB",
+  "Belize": "BZ", "Cape Verde": "CV", "Comoros": "KM", "Dominica": "DM", "Grenada": "GD",
+  "Kiribati": "KI", "Liechtenstein": "LI", "Maldives": "MV", "Malta": "MT", "Marshall Islands": "MH",
+  "Mauritius": "MU", "Micronesia": "FM", "Monaco": "MC", "Nauru": "NR", "Palau": "PW",
+  "Samoa": "WS", "San Marino": "SM", "São Tomé and Príncipe": "ST", "Seychelles": "SC",
+  "Saint Kitts and Nevis": "KN", "Saint Lucia": "LC", "Saint Vincent and the Grenadines": "VC",
+  "Tonga": "TO", "Tuvalu": "TV", "Vatican City": "VA",
 };
 
 // Complete ISO 3166-1 alpha-2 to country name mapping (for display)
@@ -121,7 +127,17 @@ const COUNTRY_CENTROIDS: Record<string, [number, number]> = {
   "Yemen": [48, 15.5], "Zambia": [28, -15], "Zimbabwe": [30, -20], "Palestine": [35.3, 31.9], "Kosovo": [21, 42.6],
   "North Macedonia": [21.7, 41.5], "New Caledonia": [165.5, -21.5], "W. Sahara": [-13, 24.5],
   "Fr. S. Antarctic Lands": [69, -49], "Falkland Is.": [-59, -52],
-  "Maldives": [73.5, 3.2],
+  // Small/micro nations
+  "Andorra": [1.6, 42.5], "Antigua and Barbuda": [-61.8, 17.1], "Bahamas": [-77.4, 25], "Bahrain": [50.6, 26],
+  "Barbados": [-59.5, 13.2], "Belize": [-88.5, 17.2], "Cape Verde": [-24, 16], "Comoros": [44.3, -12.2],
+  "Dominica": [-61.4, 15.4], "Grenada": [-61.7, 12.1], "Kiribati": [173, 1.5], "Liechtenstein": [9.6, 47.2],
+  "Maldives": [73.5, 3.2], "Malta": [14.4, 35.9], "Marshall Islands": [171.4, 7.1],
+  "Mauritius": [57.6, -20.3], "Micronesia": [158.2, 6.9], "Monaco": [7.4, 43.7], "Nauru": [166.9, -0.5],
+  "Palau": [134.6, 7.5], "Samoa": [-172.1, -13.8], "San Marino": [12.5, 43.9],
+  "São Tomé and Príncipe": [6.6, 0.2], "Seychelles": [55.5, -4.7],
+  "Saint Kitts and Nevis": [-62.7, 17.3], "Saint Lucia": [-61, 13.9],
+  "Saint Vincent and the Grenadines": [-61.2, 13.2], "Tonga": [-175.2, -21.2],
+  "Tuvalu": [179.2, -8.5], "Vatican City": [12.5, 41.9],
 };
 
 // Sorted list of country names for search
@@ -226,7 +242,7 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
     if (coords) {
       setCenter(coords);
       // Zoom level depends on country size - small countries zoom more
-      const smallCountries = new Set(["Singapore", "Luxembourg", "Cyprus", "Jamaica", "Trinidad and Tobago", "Brunei", "Qatar", "Kuwait", "Lebanon", "Djibouti", "eSwatini", "Lesotho", "Gambia", "Guinea-Bissau", "Slovenia", "Montenegro", "Kosovo", "North Macedonia"]);
+      const smallCountries = new Set(["Singapore", "Luxembourg", "Cyprus", "Jamaica", "Trinidad and Tobago", "Brunei", "Qatar", "Kuwait", "Lebanon", "Djibouti", "eSwatini", "Lesotho", "Gambia", "Guinea-Bissau", "Slovenia", "Montenegro", "Kosovo", "North Macedonia", "Andorra", "Antigua and Barbuda", "Bahrain", "Barbados", "Belize", "Cape Verde", "Comoros", "Dominica", "Grenada", "Kiribati", "Liechtenstein", "Maldives", "Malta", "Marshall Islands", "Mauritius", "Micronesia", "Monaco", "Nauru", "Palau", "Samoa", "San Marino", "São Tomé and Príncipe", "Seychelles", "Saint Kitts and Nevis", "Saint Lucia", "Saint Vincent and the Grenadines", "Tonga", "Tuvalu", "Vatican City"]);
       const largeCountries = new Set(["Russia", "Canada", "United States of America", "China", "Brazil", "Australia", "India", "Argentina"]);
       const zoomLevel = smallCountries.has(countryName) ? 6 : largeCountries.has(countryName) ? 2.5 : 4;
       setZoom(zoomLevel);
