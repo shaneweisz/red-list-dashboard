@@ -515,12 +515,15 @@ export default function RedListView() {
     return parseAssessors(latest.reviewers);
   }, []);
 
-  // Helper to check if species matches assessor filter
-  const matchesAssessorFilter = useCallback((s: Species, assessors: Set<string> = selectedReviewers): boolean => {
-    if (assessors.size === 0) return true;
-    const speciesAssessors = getSpeciesAssessors(s);
-    return speciesAssessors.some(a => assessors.has(a));
-  }, [selectedReviewers, getSpeciesAssessors]);
+  // Track whether the chart is in "assessors" or "reviewers" mode
+  const [reviewerFilterMode, setReviewerFilterMode] = useState<"assessors" | "reviewers">("assessors");
+
+  // Helper to check if species matches assessor/reviewer filter (mode-aware)
+  const matchesAssessorFilter = useCallback((s: Species, selected: Set<string> = selectedReviewers): boolean => {
+    if (selected.size === 0) return true;
+    const names = reviewerFilterMode === "assessors" ? getSpeciesAssessors(s) : getSpeciesReviewers(s);
+    return names.some(a => selected.has(a));
+  }, [selectedReviewers, reviewerFilterMode, getSpeciesAssessors, getSpeciesReviewers]);
 
   // Species details cache (images, criteria, common names)
   const [speciesDetails, setSpeciesDetails] = useState<Record<number, SpeciesDetails>>({});
@@ -1302,6 +1305,11 @@ export default function RedListView() {
               onAssessorClick={handleAssessorClick}
               onAssessorToggle={handleAssessorToggle}
               loading={speciesLoading && assessedSpecies.length === 0}
+              viewMode={reviewerFilterMode}
+              onViewModeChange={(mode) => {
+                setReviewerFilterMode(mode);
+                setSelectedReviewers(new Set());
+              }}
             />
           </div>
 

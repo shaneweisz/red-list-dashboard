@@ -9,20 +9,18 @@ const FilterBarChart = dynamic(
 );
 
 type ChartEntry = { code: string; count: number; label: string };
+type ViewMode = "assessors" | "reviewers";
 
 interface AssessorChartProps {
-  /** All assessor entries with counts, sorted descending by count */
   allAssessors: ChartEntry[];
-  /** All reviewer entries with counts, sorted descending by count */
   allReviewers: ChartEntry[];
   selectedAssessors: Set<string>;
   onAssessorClick: (data: { payload?: { code?: string } }, event: React.MouseEvent) => void;
-  /** Toggle an assessor in/out of selection (used by search list) */
   onAssessorToggle: (code: string) => void;
   loading?: boolean;
+  viewMode: ViewMode;
+  onViewModeChange: (mode: ViewMode) => void;
 }
-
-type ViewMode = "assessors" | "reviewers";
 
 const PAGE_SIZE = 10;
 
@@ -33,8 +31,9 @@ export default function AssessorChart({
   onAssessorClick,
   onAssessorToggle,
   loading,
+  viewMode,
+  onViewModeChange,
 }: AssessorChartProps) {
-  const [viewMode, setViewMode] = useState<ViewMode>("assessors");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
   const [searchPage, setSearchPage] = useState(0);
@@ -67,7 +66,7 @@ export default function AssessorChart({
 
   // Reset search and pages when toggling view mode
   const handleViewModeChange = (mode: ViewMode) => {
-    setViewMode(mode);
+    onViewModeChange(mode);
     setSearch("");
     setPage(0);
     setSearchPage(0);
