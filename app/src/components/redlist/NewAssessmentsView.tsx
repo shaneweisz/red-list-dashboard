@@ -356,9 +356,9 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
   const allSpecies = useMemo(() => {
     if (selectedTaxa.size === 0) return [];
     if (speciesByTaxon["all"]) return speciesByTaxon["all"];
-    const merged: RedListSpecies[] = [];
+    let merged: RedListSpecies[] = [];
     for (const taxonId of selectedTaxa) {
-      if (speciesByTaxon[taxonId]) merged.push(...speciesByTaxon[taxonId]);
+      if (speciesByTaxon[taxonId]) merged = merged.concat(speciesByTaxon[taxonId]);
     }
     return merged;
   }, [selectedTaxa, speciesByTaxon]);
