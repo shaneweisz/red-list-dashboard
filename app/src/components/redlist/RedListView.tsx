@@ -17,6 +17,8 @@ import { parseAssessors } from "@/lib/parseAssessors";
 import { useFilterParams } from "@/hooks/useFilterParams";
 import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import AssessmentAssistant from "../AssessmentAssistant";
+import { useLanguage } from "@/i18n/LanguageContext";
+import { getTranslatedCategoryName, getTranslatedTaxonName } from "@/i18n/translations";
 
 // Dynamically import OccurrenceMapRow to avoid SSR issues with Leaflet
 const OccurrenceMapRow = dynamic(
@@ -253,6 +255,7 @@ interface RedListViewProps {
 }
 
 export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange, onSubgroupsChange }: RedListViewProps = {}) {
+  const { t, locale } = useLanguage();
   // Filters synced with URL search params for shareable links
   const {
     selectedTaxa, setSelectedTaxa,
@@ -1242,7 +1245,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
             {/* Risk Category */}
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Risk Category</span>
+                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{t.riskCategory}</span>
                               </div>
               <div className="flex-1 min-h-[150px] flex items-center justify-center">
                 {speciesLoading && assessedSpecies.length === 0 ? (
@@ -1255,16 +1258,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                     onBarClick={handleCategoryClick}
                     yAxisWidth={26}
                     rightMargin={55}
-                    labelFormatter={(code) => ({
-                      EX: "Extinct",
-                      EW: "Extinct in the Wild",
-                      CR: "Critically Endangered",
-                      EN: "Endangered",
-                      VU: "Vulnerable",
-                      NT: "Near Threatened",
-                      LC: "Least Concern",
-                      DD: "Data Deficient",
-                    }[code] || code)}
+                    labelFormatter={(code) => getTranslatedCategoryName(locale, code)}
                   />
                 ) : null}
               </div>
@@ -1273,7 +1267,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
             {/* GBIF Observations */}
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">GBIF Observations <GbifInfoTooltip /></span>
+                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">{t.gbifObservations} <GbifInfoTooltip /></span>
                               </div>
               <div className="flex-1 min-h-[150px] flex items-center justify-center">
                 {speciesLoading && assessedSpecies.length === 0 ? (
@@ -1295,7 +1289,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
             {/* Years Since Assessed */}
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Years Since Assessed</span>
+                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{t.yearsSinceAssessed}</span>
                               </div>
               <div className="flex-1 min-h-[150px] flex items-center justify-center">
                 {speciesLoading && assessedSpecies.length === 0 ? (
@@ -1363,7 +1357,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
               <DebouncedSearchInput
                 onSearch={handleSearch}
                 initialValue={searchFilter}
-                placeholder="Search species..."
+                placeholder={t.searchSpecies}
                 className="w-full px-3 md:px-4 py-2 pl-9 md:pl-10 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm"
               />
               <svg
@@ -1388,7 +1382,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                   <svg className="w-4 h-4" fill={showOnlyStarred ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                   </svg>
-                  <span className="hidden sm:inline">Starred</span> ({pinnedSpecies.length})
+                  <span className="hidden sm:inline">{t.starred}</span> ({pinnedSpecies.length})
                 </button>
               </>
             )}
@@ -1399,7 +1393,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                 className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full flex items-center gap-1 hover:opacity-80"
                 style={{ backgroundColor: (TAXA_BY_ID[taxonId]?.color || "#666") + "20", color: TAXA_BY_ID[taxonId]?.color || "#666" }}
               >
-                {TAXA_BY_ID[taxonId]?.name || taxonId}
+                {getTranslatedTaxonName(locale, taxonId) || TAXA_BY_ID[taxonId]?.name || taxonId}
                 <span className="text-xs">×</span>
               </button>
             ))}
@@ -1506,9 +1500,9 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                     ? "bg-zinc-500 text-white"
                     : "bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700"
                 }`}
-                title="Show Not Evaluated species from GBIF"
+                title={t.showNotEvaluated}
               >
-                Not Evaluated
+                {t.notEvaluated}
                 <span className="text-[10px] opacity-70">({neCount.toLocaleString()})</span>
               </button>
             )}
@@ -1635,7 +1629,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                     <td className={`sticky left-0 z-10 px-2 py-2 text-center ${selectedSpeciesKey === speciesKey ? "bg-zinc-100 dark:bg-zinc-800" : "bg-white dark:bg-zinc-900"}`}>
                       <div className="flex items-center justify-center gap-1">
                         {isPinned && showOnlyStarred && (
-                          <span className="cursor-grab text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300" title="Drag to reorder">
+                          <span className="cursor-grab text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300" title={t.dragToReorder}>
                             <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
                               <path d="M8 6a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm0 6a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm0 6a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm8-12a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm0 6a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm0 6a2 2 0 1 1-4 0 2 2 0 0 1 4 0z" />
                             </svg>
@@ -1647,7 +1641,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                             togglePinned(speciesKey);
                           }}
                           className={`p-1 rounded transition-colors ${isPinned ? "text-amber-500 hover:text-amber-600" : "text-zinc-300 hover:text-amber-400 dark:text-zinc-600 dark:hover:text-amber-400"}`}
-                          title={isPinned ? "Unpin species" : "Pin species"}
+                          title={isPinned ? t.unpinSpecies : t.pinSpecies}
                         >
                           <svg className="w-4 h-4" fill={isPinned ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
@@ -1866,7 +1860,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                               </>
                             )}
                             {stackedDetailView && (
-                              <span className="px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">All Sections</span>
+                              <span className="px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">{t.allSections}</span>
                             )}
                             <button
                               className="ml-auto px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 flex items-center gap-1"

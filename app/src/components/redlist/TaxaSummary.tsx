@@ -7,6 +7,8 @@ import { HiOutlineAdjustmentsHorizontal } from "react-icons/hi2";
 import TaxaIcon from "@/components/TaxaIcon";
 import { CATEGORY_COLORS, CATEGORY_NAMES, CATEGORY_ORDER } from "@/config/taxa";
 import { TAXA_SUBGROUPS, getSubgroupDef } from "@/config/taxa-hierarchy";
+import { useLanguage } from "@/i18n/LanguageContext";
+import { getTranslatedTaxonName, getTranslatedCategoryName } from "@/i18n/translations";
 
 const IUCN_SOURCE_URL = "https://nc.iucnredlist.org/redlist/content/attachment_files/2025-2_RL_Table1a.pdf";
 
@@ -98,6 +100,7 @@ const FOCUS_HIDDEN: Record<FocusMode, Set<ColumnId>> = {
 const DEFAULT_HIDDEN_COLUMNS = FOCUS_HIDDEN.redlist;
 
 export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup }: Props) {
+  const { t, locale } = useLanguage();
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [globalGbifMedian, setGlobalGbifMedian] = useState<number | undefined>();
   const [globalGbifDistribution, setGlobalGbifDistribution] = useState<Record<string, number> | undefined>();
@@ -425,7 +428,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         count: byCategory[cat],
         pct: (byCategory[cat] / total) * 100,
         color: CATEGORY_COLORS[cat] || "#a3a3a3",
-        name: CATEGORY_NAMES[cat] || cat,
+        name: getTranslatedCategoryName(locale, cat),
       }));
 
     return (
@@ -767,7 +770,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 ${isSelected ? "bg-zinc-100 dark:bg-zinc-800" : "bg-white dark:bg-zinc-900"}`}>
             <div className="flex items-center gap-2">
               <TaxaIcon taxonId={taxon.id} size={22} className="flex-shrink-0" style={{ color: taxon.color }} />
-              <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{taxon.name}</span>
+              <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{getTranslatedTaxonName(locale, taxon.id) || taxon.name}</span>
               {hasSubgroups && (
                 <button
                   onClick={(e) => {

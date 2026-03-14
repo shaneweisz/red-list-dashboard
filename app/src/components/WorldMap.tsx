@@ -8,6 +8,7 @@ import {
   ZoomableGroup,
 } from "react-simple-maps";
 import { geoCentroid } from "d3-geo";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 // Using the recommended TopoJSON from react-simple-maps
 const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json";
@@ -161,6 +162,7 @@ const MIN_ZOOM = 1.0;
 const MAX_ZOOM = 8.0;
 
 function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, selectedTaxon, precomputedStats, selectedTaxa }: WorldMapProps) {
+  const { t } = useLanguage();
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoveredCountryCode, setHoveredCountryCode] = useState<string | null>(null);
   const [speciesStats, setSpeciesStats] = useState<CountryStats>(precomputedStats || {});
@@ -350,7 +352,7 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
       {/* Header with controls */}
       <div className="flex items-center justify-between mb-1 gap-2">
         <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0">
-          Country
+          {t.country}
         </h2>
         <div className="flex items-center gap-2">
           {/* Country search */}

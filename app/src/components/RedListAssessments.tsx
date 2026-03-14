@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { CATEGORY_COLORS, CATEGORY_NAMES } from "@/config/taxa";
+import { useLanguage } from "@/i18n/LanguageContext";
+import { getTranslatedCategoryName } from "@/i18n/translations";
 
 interface PreviousAssessment {
   year: string;
@@ -107,9 +109,10 @@ function getTrendText(trend: AssessmentDetail["population_trend"]): string {
 }
 
 function CategoryBadge({ code, small }: { code: string; small?: boolean }) {
+  const { locale } = useLanguage();
   const normalized = normalizeCategory(code);
   const color = CATEGORY_COLORS[normalized] || "#6b7280";
-  const name = CATEGORY_NAMES[normalized] || code;
+  const name = getTranslatedCategoryName(locale, normalized);
   const isLegacy = code !== normalized && !CATEGORY_NAMES[code];
   return (
     <span
