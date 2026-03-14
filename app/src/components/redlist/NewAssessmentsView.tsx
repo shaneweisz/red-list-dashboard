@@ -181,6 +181,7 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
   // Data
   const [speciesByTaxon, setSpeciesByTaxon] = useState<Record<string, RedListSpecies[]>>({});
   const [loadingTaxa, setLoadingTaxa] = useState<Set<string>>(new Set());
+  const loadingTaxaRef = useRef<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const abortRefs = useRef<Record<string, AbortController>>({});
   const prefetchPromiseRef = useRef<Promise<void> | null>(null);
@@ -258,14 +259,17 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
   useEffect(() => {
     if (selectedTaxa.size === 0) return;
 
-    const taxaToFetch = [...selectedTaxa].filter(t => !speciesByTaxon[t] && !loadingTaxa.has(t));
+    const taxaToFetch = [...selectedTaxa].filter(t => !speciesByTaxon[t] && !loadingTaxaRef.current.has(t));
     if (speciesByTaxon["all"] && !selectedTaxa.has("all")) return;
     if (taxaToFetch.length === 0) return;
 
     for (const taxonId of taxaToFetch) {
       if (taxonId === "all" && prefetchPromiseRef.current) {
+        loadingTaxaRef.current = new Set(loadingTaxaRef.current).add("all");
         setLoadingTaxa(prev => new Set(prev).add("all"));
         prefetchPromiseRef.current.then(() => {
+          loadingTaxaRef.current = new Set(loadingTaxaRef.current);
+          loadingTaxaRef.current.delete("all");
           setLoadingTaxa(prev => { const next = new Set(prev); next.delete("all"); return next; });
         });
         continue;
@@ -279,6 +283,7 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
 
       const controller = new AbortController();
       abortRefs.current[taxonId] = controller;
+      loadingTaxaRef.current = new Set(loadingTaxaRef.current).add(taxonId);
       setLoadingTaxa(prev => new Set(prev).add(taxonId));
 
       fetch(`/api/redlist/species?taxon=${encodeURIComponent(taxonId)}&category=NE`, { signal: controller.signal })
@@ -301,12 +306,15 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
         })
         .finally(() => {
           if (!controller.signal.aborted) {
+            loadingTaxaRef.current = new Set(loadingTaxaRef.current);
+            loadingTaxaRef.current.delete(taxonId);
             setLoadingTaxa(prev => { const next = new Set(prev); next.delete(taxonId); return next; });
           }
           delete abortRefs.current[taxonId];
         });
     }
-  }, [selectedTaxa, speciesByTaxon, loadingTaxa]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTaxa, speciesByTaxon]);
 
   // Prefetch all NE species on mount
   useEffect(() => {
