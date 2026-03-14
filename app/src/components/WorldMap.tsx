@@ -7,6 +7,7 @@ import {
   Geography,
   ZoomableGroup,
 } from "react-simple-maps";
+import { geoCentroid } from "d3-geo";
 
 // Using the recommended TopoJSON from react-simple-maps
 const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json";
@@ -86,58 +87,6 @@ export const ALPHA2_TO_NAME: Record<string, string> = {
   "UM": "U.S. Minor Outlying Islands", "VA": "Vatican City", "VC": "Saint Vincent and the Grenadines",
   "VG": "British Virgin Islands", "VI": "U.S. Virgin Islands", "WF": "Wallis and Futuna",
   "WS": "Samoa", "YT": "Mayotte",
-};
-
-// Approximate country centroids [longitude, latitude] for zoom-to-country
-const COUNTRY_CENTROIDS: Record<string, [number, number]> = {
-  "Afghanistan": [67, 33], "Albania": [20, 41], "Algeria": [3, 28], "Angola": [17.5, -12.5], "Argentina": [-64, -34],
-  "Armenia": [45, 40], "Australia": [134, -25], "Austria": [14, 47.5], "Azerbaijan": [48, 40.5], "Bangladesh": [90, 24],
-  "Belarus": [28, 53], "Belgium": [4.5, 50.5], "Benin": [2.3, 9.5], "Bhutan": [90.5, 27.5], "Bolivia": [-65, -17],
-  "Bosnia and Herz.": [18, 44], "Botswana": [24, -22], "Brazil": [-53, -10], "Brunei": [115, 4.5], "Bulgaria": [25, 43],
-  "Burkina Faso": [-1.5, 12], "Burundi": [30, -3.5], "Cambodia": [105, 13], "Cameroon": [12.5, 6], "Canada": [-96, 62],
-  "Central African Rep.": [21, 7], "Chad": [19, 15], "Chile": [-71, -30], "China": [105, 35], "Colombia": [-72, 4],
-  "Congo": [15, -1], "Dem. Rep. Congo": [24, -3], "Costa Rica": [-84, 10], "Côte d'Ivoire": [-5.5, 7.5],
-  "Croatia": [16.5, 45], "Cuba": [-79, 22], "Cyprus": [33, 35], "Czechia": [15.5, 49.8], "Denmark": [10, 56],
-  "Djibouti": [43, 11.5], "Dominican Rep.": [-70, 19], "Ecuador": [-78.5, -1.5], "Egypt": [30, 27], "El Salvador": [-89, 13.8],
-  "Eq. Guinea": [10, 1.5], "Eritrea": [39, 15], "Estonia": [25, 59], "eSwatini": [31.5, -26.5], "Ethiopia": [40, 8],
-  "Fiji": [178, -18], "Finland": [26, 64], "France": [2, 46], "Gabon": [11.5, -0.5], "Gambia": [-15.5, 13.5],
-  "Georgia": [43.5, 42], "Germany": [10, 51], "Ghana": [-1.2, 8], "Greece": [22, 39], "Greenland": [-42, 72],
-  "Guatemala": [-90.5, 15.5], "Guinea": [-12, 11], "Guinea-Bissau": [-15, 12], "Guyana": [-59, 5],
-  "Haiti": [-72, 19], "Honduras": [-87, 15], "Hungary": [19.5, 47], "Iceland": [-19, 65], "India": [79, 22],
-  "Indonesia": [120, -5], "Iran": [53, 32], "Iraq": [44, 33], "Ireland": [-8, 53], "Israel": [35, 31.5],
-  "Italy": [12.5, 42.5], "Jamaica": [-77.5, 18.2], "Japan": [138, 36], "Jordan": [36, 31],
-  "Kazakhstan": [67, 48], "Kenya": [38, 1], "North Korea": [127, 40], "South Korea": [128, 36], "Kuwait": [48, 29.5],
-  "Kyrgyzstan": [75, 41], "Laos": [102, 18], "Latvia": [25, 57], "Lebanon": [35.8, 34], "Lesotho": [28.5, -29.5],
-  "Liberia": [-9.5, 6.5], "Libya": [17, 27], "Lithuania": [24, 55.5], "Luxembourg": [6.1, 49.8], "Madagascar": [47, -20],
-  "Malawi": [34, -13.5], "Malaysia": [110, 4], "Mali": [-2, 17], "Mauritania": [-10.5, 20], "Mexico": [-102, 23],
-  "Moldova": [29, 47], "Mongolia": [104, 47], "Montenegro": [19.3, 42.5], "Morocco": [-6, 32], "Mozambique": [35, -18],
-  "Myanmar": [96, 19], "Namibia": [17, -22], "Nepal": [84, 28], "Netherlands": [5.5, 52.5], "New Zealand": [174, -41],
-  "Nicaragua": [-85, 13], "Niger": [8, 16], "Nigeria": [8, 10], "Norway": [9, 62], "Oman": [56, 21],
-  "Pakistan": [70, 30], "Panama": [-80, 9], "Papua New Guinea": [147, -6], "Paraguay": [-58, -23], "Peru": [-76, -10],
-  "Philippines": [122, 13], "Poland": [20, 52], "Portugal": [-8, 39.5], "Puerto Rico": [-66.5, 18.2], "Qatar": [51.2, 25.3],
-  "Romania": [25, 46], "Russia": [100, 60], "Rwanda": [30, -2], "Saudi Arabia": [45, 24], "Senegal": [-14.5, 14.5],
-  "Serbia": [21, 44], "Sierra Leone": [-11.8, 8.5], "Singapore": [104, 1.3], "Slovakia": [19.5, 48.7], "Slovenia": [15, 46],
-  "Solomon Is.": [160, -9], "Somalia": [46, 6], "South Africa": [25, -29], "S. Sudan": [30, 7], "Spain": [-4, 40],
-  "Sri Lanka": [81, 8], "Sudan": [30, 15], "Suriname": [-56, 4], "Sweden": [15, 62], "Switzerland": [8, 47],
-  "Syria": [38, 35], "Taiwan": [121, 24], "Tajikistan": [69, 39], "Tanzania": [35, -6], "Thailand": [101, 15],
-  "Timor-Leste": [126, -8.5], "Togo": [1.2, 8], "Trinidad and Tobago": [-61, 10.5], "Tunisia": [9, 34],
-  "Turkey": [35, 39], "Turkmenistan": [60, 39], "Uganda": [32, 1.5], "Ukraine": [32, 49],
-  "United Arab Emirates": [54, 24], "United Kingdom": [-2, 54], "United States of America": [-97, 38],
-  "Uruguay": [-56, -33], "Uzbekistan": [65, 41], "Vanuatu": [167, -16], "Venezuela": [-66, 8], "Vietnam": [106, 16],
-  "Yemen": [48, 15.5], "Zambia": [28, -15], "Zimbabwe": [30, -20], "Palestine": [35.3, 31.9], "Kosovo": [21, 42.6],
-  "North Macedonia": [21.7, 41.5], "New Caledonia": [165.5, -21.5], "W. Sahara": [-13, 24.5],
-  "Fr. S. Antarctic Lands": [69, -49], "Falkland Is.": [-59, -52],
-  // Small/micro nations
-  "Andorra": [1.6, 42.5], "Antigua and Barbuda": [-61.8, 17.1], "Bahamas": [-77.4, 25], "Bahrain": [50.6, 26],
-  "Barbados": [-59.5, 13.2], "Belize": [-88.5, 17.2], "Cape Verde": [-24, 16], "Comoros": [44.3, -12.2],
-  "Dominica": [-61.4, 15.4], "Grenada": [-61.7, 12.1], "Kiribati": [173, 1.5], "Liechtenstein": [9.6, 47.2],
-  "Maldives": [73.5, 3.2], "Malta": [14.4, 35.9], "Marshall Islands": [171.4, 7.1],
-  "Mauritius": [57.6, -20.3], "Micronesia": [158.2, 6.9], "Monaco": [7.4, 43.7], "Nauru": [166.9, -0.5],
-  "Palau": [134.6, 7.5], "Samoa": [-172.1, -13.8], "San Marino": [12.5, 43.9],
-  "São Tomé and Príncipe": [6.6, 0.2], "Seychelles": [55.5, -4.7],
-  "Saint Kitts and Nevis": [-62.7, 17.3], "Saint Lucia": [-61, 13.9],
-  "Saint Vincent and the Grenadines": [-61.2, 13.2], "Tonga": [-175.2, -21.2],
-  "Tuvalu": [179.2, -8.5], "Vatican City": [12.5, 41.9],
 };
 
 // Sorted list of country names for search
@@ -238,7 +187,7 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
   }, [searchQuery]);
 
   const handleZoomToCountry = useCallback((countryName: string) => {
-    const coords = COUNTRY_CENTROIDS[countryName];
+    const coords = centroidsRef.current[countryName];
     if (coords) {
       setCenter(coords);
       // Zoom level depends on country size - small countries zoom more
@@ -279,6 +228,9 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
+
+  // Centroids computed from TopoJSON geometries (computed once on first render)
+  const centroidsRef = useRef<Record<string, [number, number]>>({});
 
   // Cache occurrence results by taxa key to avoid refetching on toggle
   const occurrenceCacheRef = useRef<Record<string, CountryStats>>({});
@@ -519,8 +471,18 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
             }}
           >
             <Geographies geography={GEO_URL}>
-              {({ geographies }) =>
-                geographies
+              {({ geographies }) => {
+                // Compute centroids from geometry on first load
+                if (Object.keys(centroidsRef.current).length === 0) {
+                  for (const geo of geographies) {
+                    const name = geo.properties.name;
+                    if (name && name !== "Antarctica") {
+                      const [lng, lat] = geoCentroid(geo);
+                      centroidsRef.current[name] = [lng, lat];
+                    }
+                  }
+                }
+                return geographies
                   .filter((geo) => geo.properties.name !== "Antarctica")
                   .map((geo) => {
                   const countryName = geo.properties.name;
@@ -569,8 +531,8 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
                       }}
                     />
                   );
-                })
-              }
+                });
+              }}
             </Geographies>
           </ZoomableGroup>
         </ComposableMap>
