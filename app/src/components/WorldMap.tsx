@@ -179,6 +179,7 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
 
   const filteredCountries = useMemo(() => {
     if (!searchQuery.trim()) return [];
@@ -216,6 +217,15 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
 
   const handleZoomOut = useCallback(() => {
     setZoom((z: number) => Math.max(z / 1.5, MIN_ZOOM));
+  }, []);
+
+  // Prevent trackpad zoom/scroll from zooming the whole page when over the map
+  useEffect(() => {
+    const el = mapContainerRef.current;
+    if (!el) return;
+    const handler = (e: WheelEvent) => e.preventDefault();
+    el.addEventListener("wheel", handler, { passive: false });
+    return () => el.removeEventListener("wheel", handler);
   }, []);
 
   // Close search dropdown on outside click
@@ -443,7 +453,7 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
       )}
 
       {/* Map */}
-      <div className="flex-1 rounded-lg overflow-hidden relative" style={{ minHeight: "200px" }}>
+      <div ref={mapContainerRef} className="flex-1 rounded-lg overflow-hidden relative" style={{ minHeight: "200px", touchAction: "none" }}>
         {(loading || (colorMode === "occurrences" && !occurrenceStats)) && (
           <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-zinc-900/50 z-10">
             <svg className="animate-spin h-5 w-5 text-zinc-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
