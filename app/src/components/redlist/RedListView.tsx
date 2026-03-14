@@ -245,7 +245,14 @@ function GbifInfoTooltip() {
   );
 }
 
-export default function RedListView() {
+interface RedListViewProps {
+  sharedTaxa?: Set<string>;
+  sharedSubgroups?: Set<string>;
+  onTaxaChange?: (taxa: Set<string>) => void;
+  onSubgroupsChange?: (subgroups: Set<string>) => void;
+}
+
+export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange, onSubgroupsChange }: RedListViewProps = {}) {
   // Filters synced with URL search params for shareable links
   const {
     selectedTaxa, setSelectedTaxa,
@@ -260,6 +267,28 @@ export default function RedListView() {
     sortField, sortDirection, setSort,
     clearAllFilters,
   } = useFilterParams();
+
+  // Initialize from shared state on mount (when switching from another view)
+  const initializedRef = useRef(false);
+  useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+    if (sharedTaxa && sharedTaxa.size > 0 && selectedTaxa.size === 0) {
+      setSelectedTaxa(sharedTaxa);
+    }
+    if (sharedSubgroups && sharedSubgroups.size > 0 && selectedSubgroups.size === 0) {
+      setSelectedSubgroups(sharedSubgroups);
+    }
+  }, [sharedTaxa, sharedSubgroups, selectedTaxa, selectedSubgroups, setSelectedTaxa, setSelectedSubgroups]);
+
+  // Sync taxa/subgroup changes up to parent
+  useEffect(() => {
+    onTaxaChange?.(selectedTaxa);
+  }, [selectedTaxa, onTaxaChange]);
+
+  useEffect(() => {
+    onSubgroupsChange?.(selectedSubgroups);
+  }, [selectedSubgroups, onSubgroupsChange]);
 
   // Taxon toggle handler (used by TaxaSummary)
   // Regular click: select only that taxon (or deselect if already sole selection)

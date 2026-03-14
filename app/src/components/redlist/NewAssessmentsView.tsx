@@ -132,10 +132,34 @@ function GbifInfoTooltip() {
   );
 }
 
-export default function NewAssessmentsView() {
-  // Taxa selection
-  const [selectedTaxa, setSelectedTaxa] = useState<Set<string>>(new Set());
-  const [selectedSubgroups, setSelectedSubgroups] = useState<Set<string>>(new Set());
+interface NewAssessmentsViewProps {
+  sharedTaxa?: Set<string>;
+  sharedSubgroups?: Set<string>;
+  onTaxaChange?: (taxa: Set<string>) => void;
+  onSubgroupsChange?: (subgroups: Set<string>) => void;
+}
+
+export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxaChange, onSubgroupsChange }: NewAssessmentsViewProps = {}) {
+  // Taxa selection — initialize from shared state
+  const [selectedTaxa, setSelectedTaxaLocal] = useState<Set<string>>(sharedTaxa ?? new Set());
+  const [selectedSubgroups, setSelectedSubgroupsLocal] = useState<Set<string>>(sharedSubgroups ?? new Set());
+
+  // Wrap setters to sync up to parent
+  const setSelectedTaxa = useCallback((updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+    setSelectedTaxaLocal(prev => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      onTaxaChange?.(next);
+      return next;
+    });
+  }, [onTaxaChange]);
+
+  const setSelectedSubgroups = useCallback((updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+    setSelectedSubgroupsLocal(prev => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      onSubgroupsChange?.(next);
+      return next;
+    });
+  }, [onSubgroupsChange]);
 
   // Search & sort
   const [searchFilter, setSearchFilter] = useState("");
@@ -567,17 +591,17 @@ export default function NewAssessmentsView() {
       {selectedTaxa.size > 0 && (
         <div className="space-y-3">
           {/* GBIF Observations chart */}
-          <div className="max-w-md">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">
                   GBIF Observations <GbifInfoTooltip />
                 </span>
               </div>
-              <div className="flex-1 min-h-[150px] flex items-center justify-center">
+              <div style={{ height: 180 }} className="flex items-center justify-center">
                 {speciesLoading && allSpecies.length === 0 ? (
                   <Spinner />
-                ) : gbifObsData.length > 0 ? (
+                ) : (
                   <FilterBarChart
                     data={gbifObsData}
                     dataKey="shortRange"
@@ -587,7 +611,7 @@ export default function NewAssessmentsView() {
                     yAxisWidth={42}
                     rightMargin={85}
                   />
-                ) : null}
+                )}
               </div>
             </div>
           </div>
