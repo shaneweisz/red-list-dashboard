@@ -9,7 +9,7 @@ import {
 } from "react-simple-maps";
 
 // Using the recommended TopoJSON from react-simple-maps
-const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
+const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json";
 
 // Country name (from TopoJSON) to ISO 3166-1 alpha-2 mapping for GBIF
 const NAME_TO_ALPHA2: Record<string, string> = {
