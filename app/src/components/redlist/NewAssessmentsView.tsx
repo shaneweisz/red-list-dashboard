@@ -180,9 +180,7 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
 
   // Data
   const [speciesByTaxon, setSpeciesByTaxon] = useState<Record<string, RedListSpecies[]>>({});
-  const speciesByTaxonRef = useRef<Record<string, RedListSpecies[]>>({});
   const [loadingTaxa, setLoadingTaxa] = useState<Set<string>>(new Set());
-  const loadingTaxaRef = useRef<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const abortRefs = useRef<Record<string, AbortController>>({});
   const prefetchPromiseRef = useRef<Promise<void> | null>(null);
@@ -256,33 +254,18 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
     setShowOnlyStarred(false);
   }, [selectedTaxa]);
 
-  // Helper: update speciesByTaxon state and ref together
-  const updateSpeciesByTaxon = useCallback((updater: (prev: Record<string, RedListSpecies[]>) => Record<string, RedListSpecies[]>) => {
-    setSpeciesByTaxon(prev => {
-      const next = updater(prev);
-      speciesByTaxonRef.current = next;
-      return next;
-    });
-  }, []);
-
   // Fetch NE species for selected taxa
   useEffect(() => {
     if (selectedTaxa.size === 0) return;
 
-    const cached = speciesByTaxonRef.current;
-    const taxaToFetch = [...selectedTaxa].filter(t => !cached[t] && !loadingTaxaRef.current.has(t));
-    if (cached["all"] && !selectedTaxa.has("all")) return;
+    const taxaToFetch = [...selectedTaxa].filter(t => !speciesByTaxon[t] && !loadingTaxa.has(t));
+    if (speciesByTaxon["all"] && !selectedTaxa.has("all")) return;
     if (taxaToFetch.length === 0) return;
-
-    const controllers: AbortController[] = [];
 
     for (const taxonId of taxaToFetch) {
       if (taxonId === "all" && prefetchPromiseRef.current) {
-        loadingTaxaRef.current = new Set(loadingTaxaRef.current).add("all");
         setLoadingTaxa(prev => new Set(prev).add("all"));
         prefetchPromiseRef.current.then(() => {
-          loadingTaxaRef.current = new Set(loadingTaxaRef.current);
-          loadingTaxaRef.current.delete("all");
           setLoadingTaxa(prev => { const next = new Set(prev); next.delete("all"); return next; });
         });
         continue;
@@ -295,9 +278,7 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
       }
 
       const controller = new AbortController();
-      controllers.push(controller);
       abortRefs.current[taxonId] = controller;
-      loadingTaxaRef.current = new Set(loadingTaxaRef.current).add(taxonId);
       setLoadingTaxa(prev => new Set(prev).add(taxonId));
 
       fetch(`/api/redlist/species?taxon=${encodeURIComponent(taxonId)}&category=NE`, { signal: controller.signal })
@@ -310,7 +291,7 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
         })
         .then(data => {
           if (!controller.signal.aborted) {
-            updateSpeciesByTaxon(prev => ({ ...prev, [taxonId]: data.species }));
+            setSpeciesByTaxon(prev => ({ ...prev, [taxonId]: data.species }));
           }
         })
         .catch(err => {
@@ -320,19 +301,12 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
         })
         .finally(() => {
           if (!controller.signal.aborted) {
-            loadingTaxaRef.current = new Set(loadingTaxaRef.current);
-            loadingTaxaRef.current.delete(taxonId);
             setLoadingTaxa(prev => { const next = new Set(prev); next.delete(taxonId); return next; });
           }
           delete abortRefs.current[taxonId];
         });
     }
-
-    return () => {
-      controllers.forEach(c => c.abort());
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTaxa]);
+  }, [selectedTaxa, speciesByTaxon, loadingTaxa]);
 
   // Prefetch all NE species on mount
   useEffect(() => {
@@ -341,14 +315,14 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
       .then(res => res.ok ? res.json() : null)
       .then(data => {
         if (data && !controller.signal.aborted) {
-          updateSpeciesByTaxon(prev => prev["all"] ? prev : { ...prev, all: data.species });
+          setSpeciesByTaxon(prev => prev["all"] ? prev : { ...prev, all: data.species });
         }
       })
       .catch(() => {})
       .finally(() => { prefetchPromiseRef.current = null; });
     prefetchPromiseRef.current = promise;
     return () => { controller.abort(); prefetchPromiseRef.current = null; };
-  }, [updateSpeciesByTaxon]);
+  }, []);
 
   const speciesLoading = loadingTaxa.size > 0;
 

@@ -358,45 +358,28 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
   // Cache of fetched species per taxon ID. When "all" is fetched, it supersedes
   // individual taxa caches. Each taxon is fetched at most once.
   const [speciesByTaxon, setSpeciesByTaxon] = useState<Record<string, RedListSpecies[]>>({});
-  const speciesByTaxonRef = useRef<Record<string, RedListSpecies[]>>({});
   const [loadingTaxa, setLoadingTaxa] = useState<Set<string>>(new Set());
-  const loadingTaxaRef = useRef<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const abortRefs = useRef<Record<string, AbortController>>({});
   const prefetchPromiseRef = useRef<Promise<void> | null>(null);
-
-  // Helper: update speciesByTaxon state and ref together
-  const updateSpeciesByTaxon = useCallback((updater: (prev: Record<string, RedListSpecies[]>) => Record<string, RedListSpecies[]>) => {
-    setSpeciesByTaxon(prev => {
-      const next = updater(prev);
-      speciesByTaxonRef.current = next;
-      return next;
-    });
-  }, []);
 
   // Determine which taxa need fetching
   useEffect(() => {
     if (selectedTaxa.size === 0) return;
 
-    const cached = speciesByTaxonRef.current;
-    const taxaToFetch = [...selectedTaxa].filter(t => !cached[t] && !loadingTaxaRef.current.has(t));
+    const taxaToFetch = [...selectedTaxa].filter(t => !speciesByTaxon[t] && !loadingTaxa.has(t));
     // If "all" is already cached, no individual fetches needed
-    if (cached["all"] && !selectedTaxa.has("all")) {
+    if (speciesByTaxon["all"] && !selectedTaxa.has("all")) {
       // "all" data covers everything — no new fetches needed
       return;
     }
     if (taxaToFetch.length === 0) return;
 
-    const controllers: AbortController[] = [];
-
     for (const taxonId of taxaToFetch) {
       // Reuse the in-flight background prefetch instead of duplicating the request
       if (taxonId === "all" && prefetchPromiseRef.current) {
-        loadingTaxaRef.current = new Set(loadingTaxaRef.current).add("all");
         setLoadingTaxa(prev => new Set(prev).add("all"));
         prefetchPromiseRef.current.then(() => {
-          loadingTaxaRef.current = new Set(loadingTaxaRef.current);
-          loadingTaxaRef.current.delete("all");
           setLoadingTaxa(prev => { const next = new Set(prev); next.delete("all"); return next; });
         });
         continue;
@@ -410,10 +393,8 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
       }
 
       const controller = new AbortController();
-      controllers.push(controller);
       abortRefs.current[taxonId] = controller;
 
-      loadingTaxaRef.current = new Set(loadingTaxaRef.current).add(taxonId);
       setLoadingTaxa(prev => new Set(prev).add(taxonId));
 
       fetch(`/api/redlist/species?taxon=${encodeURIComponent(taxonId)}`, { signal: controller.signal })
@@ -426,7 +407,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
         })
         .then(data => {
           if (!controller.signal.aborted) {
-            updateSpeciesByTaxon(prev => ({ ...prev, [taxonId]: data.species }));
+            setSpeciesByTaxon(prev => ({ ...prev, [taxonId]: data.species }));
           }
         })
         .catch(err => {
@@ -436,19 +417,12 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
         })
         .finally(() => {
           if (!controller.signal.aborted) {
-            loadingTaxaRef.current = new Set(loadingTaxaRef.current);
-            loadingTaxaRef.current.delete(taxonId);
             setLoadingTaxa(prev => { const next = new Set(prev); next.delete(taxonId); return next; });
           }
           delete abortRefs.current[taxonId];
         });
     }
-
-    return () => {
-      controllers.forEach(c => c.abort());
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTaxa]);
+  }, [selectedTaxa, speciesByTaxon, loadingTaxa]);
 
   // Prefetch all species on mount so taxa clicks feel instant
   useEffect(() => {
@@ -457,14 +431,14 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
       .then(res => res.ok ? res.json() : null)
       .then(data => {
         if (data && !controller.signal.aborted) {
-          updateSpeciesByTaxon(prev => prev["all"] ? prev : { ...prev, all: data.species });
+          setSpeciesByTaxon(prev => prev["all"] ? prev : { ...prev, all: data.species });
         }
       })
       .catch(() => {})
       .finally(() => { prefetchPromiseRef.current = null; });
     prefetchPromiseRef.current = promise;
     return () => { controller.abort(); prefetchPromiseRef.current = null; };
-  }, [updateSpeciesByTaxon]);
+  }, []);
 
   const speciesLoading = loadingTaxa.size > 0;
 
