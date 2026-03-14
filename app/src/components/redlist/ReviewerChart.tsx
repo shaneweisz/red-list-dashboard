@@ -14,9 +14,10 @@ type ViewMode = "assessors" | "reviewers";
 interface AssessorChartProps {
   allAssessors: ChartEntry[];
   allReviewers: ChartEntry[];
-  selectedAssessors: Set<string>;
-  onAssessorClick: (data: { payload?: { code?: string } }, event: React.MouseEvent) => void;
-  onAssessorToggle: (code: string) => void;
+  /** The selected items for the currently active tab */
+  selectedItems: Set<string>;
+  onBarClick: (data: { payload?: { code?: string } }, event: React.MouseEvent) => void;
+  onItemToggle: (code: string) => void;
   loading?: boolean;
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
@@ -27,9 +28,9 @@ const PAGE_SIZE = 10;
 export default function AssessorChart({
   allAssessors,
   allReviewers,
-  selectedAssessors,
-  onAssessorClick,
-  onAssessorToggle,
+  selectedItems,
+  onBarClick,
+  onItemToggle,
   loading,
   viewMode,
   onViewModeChange,
@@ -151,11 +152,11 @@ export default function AssessorChart({
             {paginatedSearchResults.length > 0 ? (
               <div className="space-y-0.5">
                 {paginatedSearchResults.map((entry) => {
-                  const isSelected = selectedAssessors.has(entry.code);
+                  const isSelected = selectedItems.has(entry.code);
                   return (
                     <button
                       key={entry.code}
-                      onClick={() => onAssessorToggle(entry.code)}
+                      onClick={() => onItemToggle(entry.code)}
                       className={`w-full flex items-center justify-between px-2 py-1 rounded text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors ${
                         isSelected
                           ? "bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300"
@@ -176,8 +177,8 @@ export default function AssessorChart({
           <FilterBarChart
             data={paginated}
             dataKey="code"
-            selectedItems={selectedAssessors}
-            onBarClick={onAssessorClick}
+            selectedItems={selectedItems}
+            onBarClick={onBarClick}
             barColor="#8b5cf6"
             yAxisWidth={150}
             leftMargin={-30}
