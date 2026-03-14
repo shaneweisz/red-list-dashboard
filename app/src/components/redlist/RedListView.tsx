@@ -297,12 +297,18 @@ export default function RedListView() {
 
   // Reset all other filters when taxa selection changes
   const prevTaxaRef = useRef(selectedTaxa);
+  const skipClearOnTaxaChangeRef = useRef(false);
   useEffect(() => {
     const prev = prevTaxaRef.current;
     prevTaxaRef.current = selectedTaxa;
     // Skip if taxa haven't actually changed (same reference or same contents)
     if (prev === selectedTaxa) return;
     if (prev.size === selectedTaxa.size && [...selectedTaxa].every(t => prev.has(t))) return;
+    // Skip clearing when taxa changed as a side-effect of subgroup selection
+    if (skipClearOnTaxaChangeRef.current) {
+      skipClearOnTaxaChangeRef.current = false;
+      return;
+    }
     clearAllFilters();
     setShowOnlyStarred(false);
   }, [selectedTaxa, clearAllFilters]);
@@ -1124,13 +1130,21 @@ export default function RedListView() {
         onToggleTaxon={handleToggleTaxon}
         selectedTaxa={selectedTaxa}
         selectedSubgroups={selectedSubgroups}
-        onToggleSubgroup={(sgId) => {
+        onToggleSubgroup={(sgId, parentTaxonId) => {
+          const wasSelected = selectedSubgroups.has(sgId);
           setSelectedSubgroups(prev => {
             const next = new Set(prev);
             if (next.has(sgId)) next.delete(sgId);
             else next.add(sgId);
             return next;
           });
+          // When selecting a subgroup, ensure parent taxon is selected (collapse to it)
+          if (!wasSelected && parentTaxonId) {
+            if (!selectedTaxa.has(parentTaxonId) || selectedTaxa.size !== 1) {
+              skipClearOnTaxaChangeRef.current = true;
+              setSelectedTaxa(new Set([parentTaxonId]));
+            }
+          }
         }}
       />
 
