@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo, memo } from "react";
+import React, { useState, useEffect, useRef, useMemo, memo, useCallback } from "react";
 import {
   ComposableMap,
   Geographies,
@@ -80,6 +80,50 @@ export const ALPHA2_TO_NAME: Record<string, string> = {
   "WS": "Samoa", "YT": "Mayotte",
 };
 
+// Approximate country centroids [longitude, latitude] for zoom-to-country
+const COUNTRY_CENTROIDS: Record<string, [number, number]> = {
+  "Afghanistan": [67, 33], "Albania": [20, 41], "Algeria": [3, 28], "Angola": [17.5, -12.5], "Argentina": [-64, -34],
+  "Armenia": [45, 40], "Australia": [134, -25], "Austria": [14, 47.5], "Azerbaijan": [48, 40.5], "Bangladesh": [90, 24],
+  "Belarus": [28, 53], "Belgium": [4.5, 50.5], "Benin": [2.3, 9.5], "Bhutan": [90.5, 27.5], "Bolivia": [-65, -17],
+  "Bosnia and Herz.": [18, 44], "Botswana": [24, -22], "Brazil": [-53, -10], "Brunei": [115, 4.5], "Bulgaria": [25, 43],
+  "Burkina Faso": [-1.5, 12], "Burundi": [30, -3.5], "Cambodia": [105, 13], "Cameroon": [12.5, 6], "Canada": [-96, 62],
+  "Central African Rep.": [21, 7], "Chad": [19, 15], "Chile": [-71, -30], "China": [105, 35], "Colombia": [-72, 4],
+  "Congo": [15, -1], "Dem. Rep. Congo": [24, -3], "Costa Rica": [-84, 10], "Côte d'Ivoire": [-5.5, 7.5],
+  "Croatia": [16.5, 45], "Cuba": [-79, 22], "Cyprus": [33, 35], "Czechia": [15.5, 49.8], "Denmark": [10, 56],
+  "Djibouti": [43, 11.5], "Dominican Rep.": [-70, 19], "Ecuador": [-78.5, -1.5], "Egypt": [30, 27], "El Salvador": [-89, 13.8],
+  "Eq. Guinea": [10, 1.5], "Eritrea": [39, 15], "Estonia": [25, 59], "eSwatini": [31.5, -26.5], "Ethiopia": [40, 8],
+  "Fiji": [178, -18], "Finland": [26, 64], "France": [2, 46], "Gabon": [11.5, -0.5], "Gambia": [-15.5, 13.5],
+  "Georgia": [43.5, 42], "Germany": [10, 51], "Ghana": [-1.2, 8], "Greece": [22, 39], "Greenland": [-42, 72],
+  "Guatemala": [-90.5, 15.5], "Guinea": [-12, 11], "Guinea-Bissau": [-15, 12], "Guyana": [-59, 5],
+  "Haiti": [-72, 19], "Honduras": [-87, 15], "Hungary": [19.5, 47], "Iceland": [-19, 65], "India": [79, 22],
+  "Indonesia": [120, -5], "Iran": [53, 32], "Iraq": [44, 33], "Ireland": [-8, 53], "Israel": [35, 31.5],
+  "Italy": [12.5, 42.5], "Jamaica": [-77.5, 18.2], "Japan": [138, 36], "Jordan": [36, 31],
+  "Kazakhstan": [67, 48], "Kenya": [38, 1], "North Korea": [127, 40], "South Korea": [128, 36], "Kuwait": [48, 29.5],
+  "Kyrgyzstan": [75, 41], "Laos": [102, 18], "Latvia": [25, 57], "Lebanon": [35.8, 34], "Lesotho": [28.5, -29.5],
+  "Liberia": [-9.5, 6.5], "Libya": [17, 27], "Lithuania": [24, 55.5], "Luxembourg": [6.1, 49.8], "Madagascar": [47, -20],
+  "Malawi": [34, -13.5], "Malaysia": [110, 4], "Mali": [-2, 17], "Mauritania": [-10.5, 20], "Mexico": [-102, 23],
+  "Moldova": [29, 47], "Mongolia": [104, 47], "Montenegro": [19.3, 42.5], "Morocco": [-6, 32], "Mozambique": [35, -18],
+  "Myanmar": [96, 19], "Namibia": [17, -22], "Nepal": [84, 28], "Netherlands": [5.5, 52.5], "New Zealand": [174, -41],
+  "Nicaragua": [-85, 13], "Niger": [8, 16], "Nigeria": [8, 10], "Norway": [9, 62], "Oman": [56, 21],
+  "Pakistan": [70, 30], "Panama": [-80, 9], "Papua New Guinea": [147, -6], "Paraguay": [-58, -23], "Peru": [-76, -10],
+  "Philippines": [122, 13], "Poland": [20, 52], "Portugal": [-8, 39.5], "Puerto Rico": [-66.5, 18.2], "Qatar": [51.2, 25.3],
+  "Romania": [25, 46], "Russia": [100, 60], "Rwanda": [30, -2], "Saudi Arabia": [45, 24], "Senegal": [-14.5, 14.5],
+  "Serbia": [21, 44], "Sierra Leone": [-11.8, 8.5], "Singapore": [104, 1.3], "Slovakia": [19.5, 48.7], "Slovenia": [15, 46],
+  "Solomon Is.": [160, -9], "Somalia": [46, 6], "South Africa": [25, -29], "S. Sudan": [30, 7], "Spain": [-4, 40],
+  "Sri Lanka": [81, 8], "Sudan": [30, 15], "Suriname": [-56, 4], "Sweden": [15, 62], "Switzerland": [8, 47],
+  "Syria": [38, 35], "Taiwan": [121, 24], "Tajikistan": [69, 39], "Tanzania": [35, -6], "Thailand": [101, 15],
+  "Timor-Leste": [126, -8.5], "Togo": [1.2, 8], "Trinidad and Tobago": [-61, 10.5], "Tunisia": [9, 34],
+  "Turkey": [35, 39], "Turkmenistan": [60, 39], "Uganda": [32, 1.5], "Ukraine": [32, 49],
+  "United Arab Emirates": [54, 24], "United Kingdom": [-2, 54], "United States of America": [-97, 38],
+  "Uruguay": [-56, -33], "Uzbekistan": [65, 41], "Vanuatu": [167, -16], "Venezuela": [-66, 8], "Vietnam": [106, 16],
+  "Yemen": [48, 15.5], "Zambia": [28, -15], "Zimbabwe": [30, -20], "Palestine": [35.3, 31.9], "Kosovo": [21, 42.6],
+  "North Macedonia": [21.7, 41.5], "New Caledonia": [165.5, -21.5], "W. Sahara": [-13, 24.5],
+  "Fr. S. Antarctic Lands": [69, -49], "Falkland Is.": [-59, -52],
+};
+
+// Sorted list of country names for search
+const COUNTRY_NAMES_SORTED = Object.keys(NAME_TO_ALPHA2).sort();
+
 interface CountryStats {
   [countryCode: string]: {
     occurrences: number;
@@ -143,6 +187,11 @@ interface WorldMapProps {
   selectedTaxa?: Set<string>;
 }
 
+const DEFAULT_CENTER: [number, number] = [10, 10];
+const DEFAULT_ZOOM = 1.0;
+const MIN_ZOOM = 1.0;
+const MAX_ZOOM = 8.0;
+
 function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, selectedTaxon, precomputedStats, selectedTaxa }: WorldMapProps) {
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoveredCountryCode, setHoveredCountryCode] = useState<string | null>(null);
@@ -151,6 +200,66 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
   const [loading, setLoading] = useState(!precomputedStats);
   const [occurrenceLoading, setOccurrenceLoading] = useState(false);
   const [colorMode, setColorMode] = useState<ColorMode>("species");
+
+  // Zoom & pan state
+  const [center, setCenter] = useState<[number, number]>(DEFAULT_CENTER);
+  const [zoom, setZoom] = useState(DEFAULT_ZOOM);
+
+  // Country search state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  const filteredCountries = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase();
+    return COUNTRY_NAMES_SORTED.filter(name => name.toLowerCase().includes(q)).slice(0, 8);
+  }, [searchQuery]);
+
+  const handleZoomToCountry = useCallback((countryName: string) => {
+    const coords = COUNTRY_CENTROIDS[countryName];
+    if (coords) {
+      setCenter(coords);
+      // Zoom level depends on country size - small countries zoom more
+      const smallCountries = new Set(["Singapore", "Luxembourg", "Cyprus", "Jamaica", "Trinidad and Tobago", "Brunei", "Qatar", "Kuwait", "Lebanon", "Djibouti", "eSwatini", "Lesotho", "Gambia", "Guinea-Bissau", "Slovenia", "Montenegro", "Kosovo", "North Macedonia"]);
+      const largeCountries = new Set(["Russia", "Canada", "United States of America", "China", "Brazil", "Australia", "India", "Argentina"]);
+      const zoomLevel = smallCountries.has(countryName) ? 6 : largeCountries.has(countryName) ? 2.5 : 4;
+      setZoom(zoomLevel);
+    }
+    setSearchQuery("");
+    setSearchOpen(false);
+    // Also select the country
+    const alpha2 = NAME_TO_ALPHA2[countryName];
+    if (alpha2) {
+      onCountrySelect(alpha2, countryName, { ctrlKey: true, metaKey: false } as unknown as React.MouseEvent);
+    }
+  }, [onCountrySelect]);
+
+  const handleResetZoom = useCallback(() => {
+    setCenter(DEFAULT_CENTER);
+    setZoom(DEFAULT_ZOOM);
+  }, []);
+
+  const handleZoomIn = useCallback(() => {
+    setZoom((z: number) => Math.min(z * 1.5, MAX_ZOOM));
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    setZoom((z: number) => Math.max(z / 1.5, MIN_ZOOM));
+  }, []);
+
+  // Close search dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setSearchOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
 
   // Cache occurrence results by taxa key to avoid refetching on toggle
   const occurrenceCacheRef = useRef<Record<string, CountryStats>>({});
@@ -258,11 +367,63 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
   return (
     <div className="relative bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 p-3 h-full flex flex-col">
       {/* Header with controls */}
-      <div className="flex items-center justify-between mb-1">
-        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+      <div className="flex items-center justify-between mb-1 gap-2">
+        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0">
           Country
         </h2>
         <div className="flex items-center gap-2">
+          {/* Country search */}
+          <div ref={searchContainerRef} className="relative">
+            <div className="flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md">
+              <svg className="w-3 h-3 ml-1.5 text-zinc-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                ref={searchInputRef}
+                type="text"
+                placeholder="Search country..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setSearchOpen(true);
+                  setHighlightedIndex(0);
+                }}
+                onFocus={() => { if (searchQuery) setSearchOpen(true); }}
+                onKeyDown={(e) => {
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    setHighlightedIndex(i => Math.min(i + 1, filteredCountries.length - 1));
+                  } else if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    setHighlightedIndex(i => Math.max(i - 1, 0));
+                  } else if (e.key === "Enter" && filteredCountries[highlightedIndex]) {
+                    e.preventDefault();
+                    handleZoomToCountry(filteredCountries[highlightedIndex]);
+                  } else if (e.key === "Escape") {
+                    setSearchOpen(false);
+                    setSearchQuery("");
+                    searchInputRef.current?.blur();
+                  }
+                }}
+                className="bg-transparent text-[11px] text-zinc-700 dark:text-zinc-300 placeholder-zinc-400 px-1.5 py-1 w-28 focus:w-36 transition-all outline-none"
+              />
+            </div>
+            {/* Search dropdown */}
+            {searchOpen && filteredCountries.length > 0 && (
+              <div className="absolute top-full left-0 mt-1 w-52 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg z-30 overflow-hidden">
+                {filteredCountries.map((name, i) => (
+                  <button
+                    key={name}
+                    className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${i === highlightedIndex ? "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300" : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700"}`}
+                    onMouseEnter={() => setHighlightedIndex(i)}
+                    onClick={() => handleZoomToCountry(name)}
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           {/* Color mode toggle */}
           <div className="flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md p-0.5 text-[10px]">
             <button
@@ -328,7 +489,16 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
           }}
           style={{ width: "100%", height: "100%", position: "absolute", top: 0, left: 0 }}
         >
-          <ZoomableGroup center={[10, 10]} zoom={1.0} minZoom={1.0} maxZoom={1.0}>
+          <ZoomableGroup
+            center={center}
+            zoom={zoom}
+            minZoom={MIN_ZOOM}
+            maxZoom={MAX_ZOOM}
+            onMoveEnd={({ coordinates, zoom: z }) => {
+              setCenter(coordinates as [number, number]);
+              setZoom(z);
+            }}
+          >
             <Geographies geography={GEO_URL}>
               {({ geographies }) =>
                 geographies
@@ -385,6 +555,36 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
             </Geographies>
           </ZoomableGroup>
         </ComposableMap>
+        {/* Zoom controls */}
+        <div className="absolute bottom-2 right-2 flex flex-col gap-1 z-10">
+          <button
+            onClick={handleZoomIn}
+            disabled={zoom >= MAX_ZOOM}
+            className="w-7 h-7 flex items-center justify-center rounded bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 shadow-sm hover:bg-zinc-50 dark:hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+            title="Zoom in"
+          >
+            +
+          </button>
+          <button
+            onClick={handleZoomOut}
+            disabled={zoom <= MIN_ZOOM}
+            className="w-7 h-7 flex items-center justify-center rounded bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 shadow-sm hover:bg-zinc-50 dark:hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+            title="Zoom out"
+          >
+            &minus;
+          </button>
+          {zoom > MIN_ZOOM && (
+            <button
+              onClick={handleResetZoom}
+              className="w-7 h-7 flex items-center justify-center rounded bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 shadow-sm hover:bg-zinc-50 dark:hover:bg-zinc-700 text-[10px] font-medium transition-colors"
+              title="Reset zoom"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
