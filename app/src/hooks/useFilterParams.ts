@@ -26,6 +26,9 @@ export function parseParams(search: string) {
     obsRanges: p.get("obsRanges")
       ? new Set(p.get("obsRanges")!.split(",").filter(Boolean))
       : new Set<string>(),
+    assessors: p.get("assessors")
+      ? new Set(p.get("assessors")!.split(",").filter(Boolean))
+      : new Set<string>(),
     reviewers: p.get("reviewers")
       ? new Set(p.get("reviewers")!.split(",").filter(Boolean))
       : new Set<string>(),
@@ -49,6 +52,7 @@ export function buildQs(state: {
   yearRanges: Set<string>;
   countries: Set<string>;
   obsRanges: Set<string>;
+  assessors: Set<string>;
   reviewers: Set<string>;
   search: string;
   sortField: "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null;
@@ -61,6 +65,7 @@ export function buildQs(state: {
   if (state.yearRanges.size > 0) p.set("years", [...state.yearRanges].join(","));
   if (state.countries.size > 0) p.set("countries", [...state.countries].join(","));
   if (state.obsRanges.size > 0) p.set("obsRanges", [...state.obsRanges].join(","));
+  if (state.assessors.size > 0) p.set("assessors", [...state.assessors].join(","));
   if (state.reviewers.size > 0) p.set("reviewers", [...state.reviewers].join(","));
   if (state.search) p.set("search", state.search);
   // null / "year" desc is the default — only write non-default sort to URL
@@ -183,6 +188,18 @@ export function useFilterParams() {
     [syncUrl]
   );
 
+  const setSelectedAssessors = useCallback(
+    (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+      setState(prev => {
+        const nextAssessors = typeof updater === "function" ? updater(prev.assessors) : updater;
+        const next = { ...prev, assessors: nextAssessors };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
   const setSelectedReviewers = useCallback(
     (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
       setState(prev => {
@@ -226,6 +243,7 @@ export function useFilterParams() {
         yearRanges: new Set<string>(),
         countries: new Set<string>(),
         obsRanges: new Set<string>(),
+        assessors: new Set<string>(),
         reviewers: new Set<string>(),
         search: "",
         sortField: null,
@@ -246,6 +264,7 @@ export function useFilterParams() {
         yearRanges: new Set<string>(),
         countries: new Set<string>(),
         obsRanges: new Set<string>(),
+        assessors: new Set<string>(),
         reviewers: new Set<string>(),
         search: "",
         sortField: null,
@@ -263,6 +282,7 @@ export function useFilterParams() {
     selectedYearRanges: state.yearRanges,
     selectedCountries: state.countries,
     selectedObsRanges: state.obsRanges,
+    selectedAssessors: state.assessors,
     selectedReviewers: state.reviewers,
     searchFilter: state.search,
     sortField: state.sortField,
@@ -274,6 +294,7 @@ export function useFilterParams() {
     setSelectedYearRanges,
     setSelectedCountries,
     setSelectedObsRanges,
+    setSelectedAssessors,
     setSelectedReviewers,
     setSearchFilter,
     setSort,

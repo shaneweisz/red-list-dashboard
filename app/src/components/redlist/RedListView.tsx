@@ -254,6 +254,7 @@ export default function RedListView() {
     selectedYearRanges, setSelectedYearRanges,
     selectedCountries, setSelectedCountries,
     selectedObsRanges, setSelectedObsRanges,
+    selectedAssessors, setSelectedAssessors,
     selectedReviewers, setSelectedReviewers,
     searchFilter, setSearchFilter,
     sortField, sortDirection, setSort,
@@ -508,12 +509,27 @@ export default function RedListView() {
     return parseAssessors(latest.assessors);
   }, []);
 
-  // Helper to check if species matches assessor filter
-  const matchesAssessorFilter = useCallback((s: Species, assessors: Set<string> = selectedReviewers): boolean => {
-    if (assessors.size === 0) return true;
-    const speciesAssessors = getSpeciesAssessors(s);
-    return speciesAssessors.some(a => assessors.has(a));
-  }, [selectedReviewers, getSpeciesAssessors]);
+  // Helper to get reviewers from a species' most recent previous assessment
+  const getSpeciesReviewers = useCallback((s: Species): string[] => {
+    if (s.previous_assessments.length === 0) return [];
+    const latest = s.previous_assessments[0];
+    return parseAssessors(latest.reviewers);
+  }, []);
+
+  // Track which tab is active in the assessors/reviewers chart
+  const [reviewerFilterMode, setReviewerFilterMode] = useState<"assessors" | "reviewers">("assessors");
+
+  // Helper to check if species matches the assessors filter
+  const matchesAssessorsFilter = useCallback((s: Species): boolean => {
+    if (selectedAssessors.size === 0) return true;
+    return getSpeciesAssessors(s).some(a => selectedAssessors.has(a));
+  }, [selectedAssessors, getSpeciesAssessors]);
+
+  // Helper to check if species matches the reviewers filter
+  const matchesReviewersFilter = useCallback((s: Species): boolean => {
+    if (selectedReviewers.size === 0) return true;
+    return getSpeciesReviewers(s).some(r => selectedReviewers.has(r));
+  }, [selectedReviewers, getSpeciesReviewers]);
 
   // Species details cache (images, criteria, common names)
   const [speciesDetails, setSpeciesDetails] = useState<Record<number, SpeciesDetails>>({});
@@ -631,7 +647,8 @@ export default function RedListView() {
       if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
       if (selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
       if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
-      if (selectedReviewers.size > 0 && !matchesAssessorFilter(s, selectedReviewers)) return;
+      if (!matchesAssessorsFilter(s)) return;
+      if (!matchesReviewersFilter(s)) return;
       counts[s.category] = (counts[s.category] || 0) + 1;
     });
     const DISPLAY_ORDER = ["EX", "EW", "CR", "EN", "VU", "NT", "LC", "DD"];
@@ -644,7 +661,7 @@ export default function RedListView() {
       percent: total > 0 ? (((counts[code] || 0) / total) * 100).toFixed(1) : "0",
       label: `${(counts[code] || 0).toLocaleString()} (${total > 0 ? (((counts[code] || 0) / total) * 100).toFixed(1) : 0}%)`,
     }));
-  }, [taxaFilteredSpecies, selectedCountries, selectedYearRanges, selectedObsRanges, selectedReviewers, matchesSearch, matchesAssessorFilter]);
+  }, [taxaFilteredSpecies, selectedCountries, selectedYearRanges, selectedObsRanges, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
 
   // Year chart: apply all filters EXCEPT year range
   const assessmentYearData = useMemo(() => {
@@ -662,7 +679,8 @@ export default function RedListView() {
       if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
       if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
       if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
-      if (selectedReviewers.size > 0 && !matchesAssessorFilter(s, selectedReviewers)) return;
+      if (!matchesAssessorsFilter(s)) return;
+      if (!matchesReviewersFilter(s)) return;
       const diff = currentYr - new Date(s.assessment_date).getFullYear();
       if (diff <= 1) ranges[0].count++;
       else if (diff <= 5) ranges[1].count++;
@@ -675,7 +693,7 @@ export default function RedListView() {
       ...r,
       label: `${r.count.toLocaleString()} (${total > 0 ? ((r.count / total) * 100).toFixed(1) : 0}%)`,
     }));
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedObsRanges, selectedReviewers, matchesSearch, matchesAssessorFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedObsRanges, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
 
   // GBIF observations chart: apply all filters EXCEPT obs range
   const gbifObsData = useMemo(() => {
@@ -692,7 +710,8 @@ export default function RedListView() {
       if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
       if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
       if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
-      if (selectedReviewers.size > 0 && !matchesAssessorFilter(s, selectedReviewers)) return;
+      if (!matchesAssessorsFilter(s)) return;
+      if (!matchesReviewersFilter(s)) return;
       const obs = s.gbif_occurrence_count ?? 0;
       if (obs === 0) ranges[0].count++;
       else if (obs <= 10) ranges[1].count++;
@@ -706,7 +725,7 @@ export default function RedListView() {
       ...r,
       label: `${r.count.toLocaleString()} (${total > 0 ? ((r.count / total) * 100).toFixed(1) : 0}%)`,
     }));
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedReviewers, matchesSearch, matchesAssessorFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
 
   // Country chart: apply all filters EXCEPT country
   const { countryCounts, uniqueCountries, countryStatsForMap } = useMemo(() => {
@@ -716,7 +735,8 @@ export default function RedListView() {
       if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
       if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
       if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
-      if (selectedReviewers.size > 0 && !matchesAssessorFilter(s, selectedReviewers)) return;
+      if (!matchesAssessorsFilter(s)) return;
+      if (!matchesReviewersFilter(s)) return;
       s.countries.forEach(code => {
         counts[code] = (counts[code] || 0) + 1;
       });
@@ -735,9 +755,9 @@ export default function RedListView() {
       ])
     );
     return { countryCounts: counts, uniqueCountries: sorted, countryStatsForMap: statsForMap };
-  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedReviewers, matchesSearch, matchesAssessorFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
 
-  // Assessor chart: apply all filters EXCEPT assessor
+  // Assessor chart: apply all filters EXCEPT assessors (include reviewers)
   const assessorChartData = useMemo(() => {
     const counts: Record<string, number> = {};
     taxaFilteredSpecies.forEach(s => {
@@ -746,6 +766,7 @@ export default function RedListView() {
       if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
       if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
       if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      if (!matchesReviewersFilter(s)) return;
       const assessors = getSpeciesAssessors(s);
       for (const a of assessors) {
         counts[a] = (counts[a] || 0) + 1;
@@ -758,7 +779,31 @@ export default function RedListView() {
         count,
         label: count.toLocaleString(),
       }));
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, matchesSearch, getSpeciesAssessors]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, matchesSearch, matchesReviewersFilter, getSpeciesAssessors]);
+
+  // Reviewer chart: apply all filters EXCEPT reviewers (include assessors)
+  const reviewerChartData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    taxaFilteredSpecies.forEach(s => {
+      if (!matchesSearch(s)) return;
+      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
+      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
+      if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
+      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      if (!matchesAssessorsFilter(s)) return;
+      const reviewers = getSpeciesReviewers(s);
+      for (const r of reviewers) {
+        counts[r] = (counts[r] || 0) + 1;
+      }
+    });
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count]) => ({
+        code: name,
+        count,
+        label: count.toLocaleString(),
+      }));
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, matchesSearch, matchesAssessorsFilter, getSpeciesReviewers]);
 
   // ── Client-side filtering and sorting ──────────────────────────────
   const CATEGORY_ORDER: Record<string, number> = {
@@ -775,9 +820,10 @@ export default function RedListView() {
         !searchFilter ||
         s.scientific_name.toLowerCase().includes(searchFilter) ||
         s.common_name?.toLowerCase().includes(searchFilter);
-      const matchesReviewer = matchesAssessorFilter(s);
+      const matchesAssessor = matchesAssessorsFilter(s);
+      const matchesReviewer = matchesReviewersFilter(s);
       const matchesStarred = !showOnlyStarred || (s.sis_taxon_id != null && pinnedSet.has(s.sis_taxon_id));
-      return matchesCategory && matchesYear && matchesObs && matchesCountry && matchesSearch && matchesReviewer && matchesStarred;
+      return matchesCategory && matchesYear && matchesObs && matchesCountry && matchesSearch && matchesAssessor && matchesReviewer && matchesStarred;
     });
 
     const sorted = [...filtered].sort((a, b) => {
@@ -819,7 +865,7 @@ export default function RedListView() {
     });
 
     return { filteredSpecies: filtered, sortedSpecies: sorted };
-  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedCountries, selectedReviewers, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection, matchesAssessorFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedCountries, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection, matchesAssessorsFilter, matchesReviewersFilter]);
 
   // ── Client-side pagination ─────────────────────────────────────────
   const totalFiltered = filteredSpecies.length;
@@ -870,7 +916,7 @@ export default function RedListView() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedTaxa, selectedCategories, selectedYearRanges, selectedObsRanges, selectedReviewers, searchFilter, selectedCountries, showOnlyStarred]);
+  }, [selectedTaxa, selectedCategories, selectedYearRanges, selectedObsRanges, selectedAssessors, selectedReviewers, searchFilter, selectedCountries, showOnlyStarred]);
 
   // Populate basic speciesDetails from DB data (GBIF counts instant, no API calls)
   // inatDefaultImage / openAlexPaperCount / papersAtAssessment are left as undefined → spinner
@@ -1091,22 +1137,24 @@ export default function RedListView() {
     });
   };
 
-  // Toggle a single assessor in/out of selection (used by search list)
+  // Toggle a single assessor/reviewer in/out of selection (used by search list)
   const handleAssessorToggle = useCallback((code: string) => {
-    setSelectedReviewers(prev => {
+    const setter = reviewerFilterMode === "assessors" ? setSelectedAssessors : setSelectedReviewers;
+    setter(prev => {
       const next = new Set(prev);
       if (next.has(code)) next.delete(code);
       else next.add(code);
       return next;
     });
-  }, [setSelectedReviewers]);
+  }, [reviewerFilterMode, setSelectedAssessors, setSelectedReviewers]);
 
-  // Handle reviewer bar click
+  // Handle assessor/reviewer bar click
   const handleAssessorClick = (data: { payload?: { code?: string } }, event: React.MouseEvent) => {
     const code = data.payload?.code;
     if (!code) return;
     const isMultiSelect = event.metaKey || event.ctrlKey;
-    setSelectedReviewers(prev => {
+    const setter = reviewerFilterMode === "assessors" ? setSelectedAssessors : setSelectedReviewers;
+    setter(prev => {
       if (isMultiSelect) {
         const next = new Set(prev);
         if (next.has(code)) next.delete(code);
@@ -1267,10 +1315,13 @@ export default function RedListView() {
             {/* Reviewers */}
             <ReviewerChart
               allAssessors={assessorChartData}
-              selectedAssessors={selectedReviewers}
-              onAssessorClick={handleAssessorClick}
-              onAssessorToggle={handleAssessorToggle}
+              allReviewers={reviewerChartData}
+              selectedItems={reviewerFilterMode === "assessors" ? selectedAssessors : selectedReviewers}
+              onBarClick={handleAssessorClick}
+              onItemToggle={handleAssessorToggle}
               loading={speciesLoading && assessedSpecies.length === 0}
+              viewMode={reviewerFilterMode}
+              onViewModeChange={setReviewerFilterMode}
             />
           </div>
 
@@ -1377,19 +1428,29 @@ export default function RedListView() {
                 <span className="text-xs">×</span>
               </button>
             ))}
-            {Array.from(selectedReviewers).map(name => (
+            {Array.from(selectedAssessors).map(name => (
               <button
-                key={name}
-                onClick={() => setSelectedReviewers(prev => { const next = new Set(prev); next.delete(name); return next; })}
+                key={`a-${name}`}
+                onClick={() => setSelectedAssessors(prev => { const next = new Set(prev); next.delete(name); return next; })}
                 className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
               >
-                {name}
+                {name} <span className="text-[10px] opacity-60">(assessor)</span>
                 <span className="text-xs">×</span>
               </button>
             ))}
-            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedReviewers.size > 0 || showOnlyStarred) && (
+            {Array.from(selectedReviewers).map(name => (
               <button
-                onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setSelectedSubgroups(new Set()); setSelectedObsRanges(new Set()); setSelectedReviewers(new Set()); setShowOnlyStarred(false); }}
+                key={`r-${name}`}
+                onClick={() => setSelectedReviewers(prev => { const next = new Set(prev); next.delete(name); return next; })}
+                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-fuchsia-100 text-fuchsia-600 dark:bg-fuchsia-900/30 dark:text-fuchsia-400 flex items-center gap-1 hover:opacity-80"
+              >
+                {name} <span className="text-[10px] opacity-60">(reviewer)</span>
+                <span className="text-xs">×</span>
+              </button>
+            ))}
+            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred) && (
+              <button
+                onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setSelectedSubgroups(new Set()); setSelectedObsRanges(new Set()); setSelectedAssessors(new Set()); setSelectedReviewers(new Set()); setShowOnlyStarred(false); }}
                 className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 underline"
               >
                 Clear all
