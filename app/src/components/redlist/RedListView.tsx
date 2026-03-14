@@ -448,9 +448,9 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
     // If "all" is cached, use it directly
     if (speciesByTaxon["all"]) return speciesByTaxon["all"];
     // Otherwise merge per-taxon caches
-    const merged: RedListSpecies[] = [];
+    let merged: RedListSpecies[] = [];
     for (const taxonId of selectedTaxa) {
-      if (speciesByTaxon[taxonId]) merged.push(...speciesByTaxon[taxonId]);
+      if (speciesByTaxon[taxonId]) merged = merged.concat(speciesByTaxon[taxonId]);
     }
     return merged;
   }, [selectedTaxa, speciesByTaxon]);
