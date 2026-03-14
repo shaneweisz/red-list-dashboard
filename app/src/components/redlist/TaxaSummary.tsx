@@ -6,7 +6,7 @@ import { FaInfoCircle, FaChevronRight, FaChevronDown } from "react-icons/fa";
 import { HiOutlineAdjustmentsHorizontal } from "react-icons/hi2";
 import TaxaIcon from "@/components/TaxaIcon";
 import { CATEGORY_COLORS, CATEGORY_NAMES, CATEGORY_ORDER } from "@/config/taxa";
-import { TAXA_SUBGROUPS } from "@/config/taxa-hierarchy";
+import { TAXA_SUBGROUPS, getSubgroupDef } from "@/config/taxa-hierarchy";
 
 const IUCN_SOURCE_URL = "https://nc.iucnredlist.org/redlist/content/attachment_files/2025-2_RL_Table1a.pdf";
 
@@ -47,7 +47,7 @@ interface Props {
   onToggleTaxon: (taxonId: string, event: React.MouseEvent) => void;
   selectedTaxa: Set<string>;
   selectedSubgroups: Set<string>;
-  onToggleSubgroup: (subgroupId: string) => void;
+  onToggleSubgroup: (subgroupId: string, parentTaxonId: string) => void;
 }
 
 // Taxa IDs that have expandable subgroups
@@ -210,6 +210,21 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       }
     }
   }, [subgroupData, loadingSubgroups]);
+
+  // Auto-expand parent taxa when subgroups are selected (e.g. from URL)
+  useEffect(() => {
+    if (selectedSubgroups.size === 0) return;
+    const parentsToExpand = new Set<string>();
+    for (const sgId of selectedSubgroups) {
+      const info = getSubgroupDef(sgId);
+      if (info && !expandedTaxa.has(info.taxonId)) {
+        parentsToExpand.add(info.taxonId);
+      }
+    }
+    for (const taxonId of parentsToExpand) {
+      toggleExpand(taxonId);
+    }
+  }, [selectedSubgroups]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     async function fetchTaxa() {
@@ -770,15 +785,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                   : "hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30"
               }`}
               onClick={() => {
-                onToggleSubgroup(sg.id);
-                // Also select the parent taxon if not already
-                if (!isSgSelected && !selectedTaxa.has(taxon.id)) {
-                  onToggleTaxon(taxon.id, { metaKey: false, ctrlKey: false } as React.MouseEvent);
-                }
+                onToggleSubgroup(sg.id, taxon.id);
               }}
             >
               <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 ${isSgSelected ? "bg-violet-50 dark:bg-violet-900/20" : "bg-white dark:bg-zinc-900"}`}>
-                <div className="flex items-center gap-2 pl-8">
+                <div className="flex items-center gap-2">
                   <span
                     className="w-2 h-2 rounded-full flex-shrink-0"
                     style={{ backgroundColor: taxon.color, opacity: isSgSelected ? 1 : 0.6 }}
