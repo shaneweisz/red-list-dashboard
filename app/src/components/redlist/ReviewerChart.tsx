@@ -8,9 +8,13 @@ const FilterBarChart = dynamic(
   { ssr: false, loading: () => <div className="h-full animate-pulse bg-zinc-200 dark:bg-zinc-800 rounded" /> }
 );
 
+type ChartEntry = { code: string; count: number; label: string };
+
 interface AssessorChartProps {
   /** All assessor entries with counts, sorted descending by count */
-  allAssessors: Array<{ code: string; count: number; label: string }>;
+  allAssessors: ChartEntry[];
+  /** All reviewer entries with counts, sorted descending by count */
+  allReviewers: ChartEntry[];
   selectedAssessors: Set<string>;
   onAssessorClick: (data: { payload?: { code?: string } }, event: React.MouseEvent) => void;
   /** Toggle an assessor in/out of selection (used by search list) */
@@ -18,31 +22,38 @@ interface AssessorChartProps {
   loading?: boolean;
 }
 
+type ViewMode = "assessors" | "reviewers";
+
 const PAGE_SIZE = 10;
 
 export default function AssessorChart({
   allAssessors,
+  allReviewers,
   selectedAssessors,
   onAssessorClick,
   onAssessorToggle,
   loading,
 }: AssessorChartProps) {
+  const [viewMode, setViewMode] = useState<ViewMode>("assessors");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
   const [searchPage, setSearchPage] = useState(0);
 
-  // Global max for consistent bar scaling across pages
-  const globalMax = allAssessors.length > 0 ? allAssessors[0].count : 0;
+  const activeData = viewMode === "assessors" ? allAssessors : allReviewers;
+  const activeLabel = viewMode === "assessors" ? "assessors" : "reviewers";
 
-  const totalPages = Math.ceil(allAssessors.length / PAGE_SIZE);
-  const paginated = allAssessors.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  // Global max for consistent bar scaling across pages
+  const globalMax = activeData.length > 0 ? activeData[0].count : 0;
+
+  const totalPages = Math.ceil(activeData.length / PAGE_SIZE);
+  const paginated = activeData.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   // Search results: filtered + sorted desc by count
   const searchResults = useMemo(() => {
     if (!search) return [];
     const q = search.toLowerCase();
-    return allAssessors.filter(r => r.code.toLowerCase().includes(q));
-  }, [allAssessors, search]);
+    return activeData.filter(r => r.code.toLowerCase().includes(q));
+  }, [activeData, search]);
 
   const searchTotalPages = Math.ceil(searchResults.length / PAGE_SIZE);
   const paginatedSearchResults = searchResults.slice(searchPage * PAGE_SIZE, (searchPage + 1) * PAGE_SIZE);
@@ -54,15 +65,40 @@ export default function AssessorChart({
     if (!value) setPage(0);
   };
 
-  const handleAssessorSelect = (code: string, event: React.MouseEvent) => {
-    // Wrap as payload to match the onBarClick signature
-    onAssessorClick({ payload: { code } }, event);
+  // Reset search and pages when toggling view mode
+  const handleViewModeChange = (mode: ViewMode) => {
+    setViewMode(mode);
+    setSearch("");
+    setPage(0);
+    setSearchPage(0);
   };
 
   return (
     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Assessors</span>
+        {/* Toggle between Assessors and Reviewers */}
+        <div className="inline-flex rounded-md bg-zinc-100 dark:bg-zinc-800 p-0.5">
+          <button
+            onClick={() => handleViewModeChange("assessors")}
+            className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
+              viewMode === "assessors"
+                ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
+                : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+            }`}
+          >
+            Assessors
+          </button>
+          <button
+            onClick={() => handleViewModeChange("reviewers")}
+            className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
+              viewMode === "reviewers"
+                ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
+                : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+            }`}
+          >
+            Reviewers
+          </button>
+        </div>
         <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
       </div>
 
@@ -72,7 +108,7 @@ export default function AssessorChart({
           type="text"
           value={search}
           onChange={(e) => handleSearchChange(e.target.value)}
-          placeholder="Search assessors..."
+          placeholder={`Search ${activeLabel}...`}
           className="w-full px-2.5 py-1 pl-7 pr-14 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-red-500 text-xs"
         />
         <svg
@@ -134,7 +170,7 @@ export default function AssessorChart({
                 })}
               </div>
             ) : (
-              <span className="text-xs text-zinc-400">No matching assessors</span>
+              <span className="text-xs text-zinc-400">No matching {activeLabel}</span>
             )}
           </div>
         ) : paginated.length > 0 ? (
@@ -152,14 +188,14 @@ export default function AssessorChart({
             yAxisTickMaxLength={22}
           />
         ) : (
-          <span className="text-xs text-zinc-400">No assessor data</span>
+          <span className="text-xs text-zinc-400">No {activeLabel} data</span>
         )}
       </div>
 
       {/* Pagination */}
       {(() => {
         const activePage = search ? searchPage : page;
-        const activeTotal = search ? searchResults.length : allAssessors.length;
+        const activeTotal = search ? searchResults.length : activeData.length;
         const activePages = search ? searchTotalPages : totalPages;
         const setActivePage = search ? setSearchPage : setPage;
         if (activePages <= 1) return null;

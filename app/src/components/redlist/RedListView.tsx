@@ -508,6 +508,13 @@ export default function RedListView() {
     return parseAssessors(latest.assessors);
   }, []);
 
+  // Helper to get reviewers from a species' most recent previous assessment
+  const getSpeciesReviewers = useCallback((s: Species): string[] => {
+    if (s.previous_assessments.length === 0) return [];
+    const latest = s.previous_assessments[0];
+    return parseAssessors(latest.reviewers);
+  }, []);
+
   // Helper to check if species matches assessor filter
   const matchesAssessorFilter = useCallback((s: Species, assessors: Set<string> = selectedReviewers): boolean => {
     if (assessors.size === 0) return true;
@@ -759,6 +766,29 @@ export default function RedListView() {
         label: count.toLocaleString(),
       }));
   }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, matchesSearch, getSpeciesAssessors]);
+
+  // Reviewer chart: apply all filters EXCEPT assessor/reviewer (same cross-filter logic)
+  const reviewerChartData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    taxaFilteredSpecies.forEach(s => {
+      if (!matchesSearch(s)) return;
+      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
+      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
+      if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
+      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      const reviewers = getSpeciesReviewers(s);
+      for (const r of reviewers) {
+        counts[r] = (counts[r] || 0) + 1;
+      }
+    });
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count]) => ({
+        code: name,
+        count,
+        label: count.toLocaleString(),
+      }));
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, matchesSearch, getSpeciesReviewers]);
 
   // ── Client-side filtering and sorting ──────────────────────────────
   const CATEGORY_ORDER: Record<string, number> = {
@@ -1267,6 +1297,7 @@ export default function RedListView() {
             {/* Reviewers */}
             <ReviewerChart
               allAssessors={assessorChartData}
+              allReviewers={reviewerChartData}
               selectedAssessors={selectedReviewers}
               onAssessorClick={handleAssessorClick}
               onAssessorToggle={handleAssessorToggle}
