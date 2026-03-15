@@ -6,8 +6,9 @@
  * `countries` column of the per-taxon data/gbif/{taxonId}.csv.
  *
  * Usage:
- *   npx tsx scripts/fetch-gbif-country-data.ts [taxon]   # One taxon (e.g. mammalia)
- *   npx tsx scripts/fetch-gbif-country-data.ts            # All taxa
+ *   npx tsx scripts/fetch-gbif-country-data.ts [taxon]           # One taxon, skip already-fetched
+ *   npx tsx scripts/fetch-gbif-country-data.ts                   # All taxa, skip already-fetched
+ *   npx tsx scripts/fetch-gbif-country-data.ts --refresh [taxon] # Re-fetch all species
  */
 
 import * as path from "path";
@@ -88,9 +89,11 @@ async function fetchCountryFacet(speciesKey: number): Promise<string[]> {
 
 export async function run(opts: {
   taxa?: string[];
+  refresh?: boolean;
   logger?: SyncLogger;
 } = {}): Promise<void> {
   const taxaToSync = getTaxa(opts.taxa);
+  const refresh = opts.refresh ?? false;
   const logger = opts.logger ?? SyncLogger.noop();
 
   const startTime = Date.now();
@@ -98,6 +101,7 @@ export async function run(opts: {
   logger.log("fetch_gbif_country_data_start", {
     taxa: taxaToSync.map((t) => t.id),
     taxa_count: taxaToSync.length,
+    refresh,
   });
 
   let totalUpdated = 0;
@@ -109,9 +113,9 @@ export async function run(opts: {
     const gbifSpeciesMap = readGbifCsv(taxon.id);
     const speciesList = Array.from(gbifSpeciesMap.values());
 
-    // Only fetch for species that don't already have country data
-    const needsFetch = speciesList.filter((s) => !s.countries);
-    console.log(`  ${speciesList.length} species total, ${needsFetch.length} need country data`);
+    // In refresh mode, re-fetch all species; otherwise only those missing country data
+    const needsFetch = refresh ? speciesList : speciesList.filter((s) => !s.countries);
+    console.log(`  ${speciesList.length} species total, ${needsFetch.length} need country data${refresh ? " (refresh)" : ""}`);
 
     if (needsFetch.length === 0) {
       console.log("  Skipping (all species already have country data)");
@@ -172,14 +176,16 @@ async function main() {
   loadEnvFiles();
 
   const args = process.argv.slice(2);
-  const taxonArg = args[0]?.toLowerCase();
+  const refresh = args.includes("--refresh");
+  const taxonArg = args.find((a) => a !== "--refresh")?.toLowerCase();
 
   console.log("fetch-gbif-country-data: GBIF country occurrences per species");
+  if (refresh) console.log("  Mode: --refresh (re-fetching all species)");
   console.log("=".repeat(50));
 
   const logger = new SyncLogger("fetch-gbif-country-data");
   try {
-    await run({ taxa: taxonArg ? [taxonArg] : undefined, logger });
+    await run({ taxa: taxonArg ? [taxonArg] : undefined, refresh, logger });
   } finally {
     logger.close();
   }
