@@ -45,6 +45,10 @@ const MapOccurrenceTooltip = dynamic(
   () => import("./MapOccurrenceTooltip"),
   { ssr: false }
 );
+const InatContributorsChart = dynamic(
+  () => import("./InatContributorsChart"),
+  { ssr: false }
+);
 
 // Syncs two Leaflet maps: when one moves/zooms, the other follows
 function MapSync({ syncRef }: { syncRef: React.MutableRefObject<{ center: [number, number]; zoom: number } | null> }) {
@@ -1895,6 +1899,9 @@ export default function OccurrenceMapRow({
               renderMapPanel(filteredOccurrences, filteredBbox, null)
             )}
           </div>
+
+          {/* ── Top iNaturalist Observers / Identifiers ── */}
+          <InatContributorsChart speciesKey={speciesKey} />
         </div>
       </div>
     </div>
