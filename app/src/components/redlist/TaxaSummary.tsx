@@ -671,7 +671,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               className="w-3 h-3 rounded-full flex-shrink-0"
               style={{ backgroundColor: taxon.color }}
             />
-            <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{sg.name}</span>
+            <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{t(`subgroup.${sg.id}` as any) !== `subgroup.${sg.id}` ? t(`subgroup.${sg.id}` as any) : sg.name}</span>
           </div>
         </td>
         {isVisible("described") && (
@@ -900,7 +900,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                     className="w-2 h-2 rounded-full flex-shrink-0"
                     style={{ backgroundColor: taxon.color, opacity: isSgSelected ? 1 : 0.6 }}
                   />
-                  <span className={`text-sm ${isSgSelected ? "font-medium text-violet-700 dark:text-violet-300" : "text-zinc-700 dark:text-zinc-300"}`}>{sg.name}</span>
+                  <span className={`text-sm ${isSgSelected ? "font-medium text-violet-700 dark:text-violet-300" : "text-zinc-700 dark:text-zinc-300"}`}>{t(`subgroup.${sg.id}` as any) !== `subgroup.${sg.id}` ? t(`subgroup.${sg.id}` as any) : sg.name}</span>
                 </div>
               </td>
               {isVisible("described") && (

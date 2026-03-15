@@ -673,7 +673,7 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
                       onClick={() => setSelectedSubgroups(prev => { const next = new Set(prev); next.delete(sgId); return next; })}
                       className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
                     >
-                      {sgInfo?.def.name ?? sgId}
+                      {t(`subgroup.${sgId}` as any) !== `subgroup.${sgId}` ? t(`subgroup.${sgId}` as any) : (sgInfo?.def.name ?? sgId)}
                       <span className="text-xs">&times;</span>
                     </button>
                   );

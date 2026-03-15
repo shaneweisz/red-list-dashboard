@@ -98,10 +98,17 @@ export async function POST(request: NextRequest) {
 }
 
 async function translateChunk(text: string, langpair: string): Promise<string> {
-  const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${langpair}`;
+  // Use POST to avoid URL length limits with long texts
+  const url = "https://api.mymemory.translated.net/get";
 
+  const params = new URLSearchParams({ q: text, langpair });
   const res = await fetch(url, {
-    headers: { "User-Agent": "RedListDashboard/1.0" },
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "User-Agent": "RedListDashboard/1.0",
+    },
+    body: params.toString(),
   });
 
   if (!res.ok) {

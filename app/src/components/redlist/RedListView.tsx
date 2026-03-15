@@ -1404,7 +1404,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                   onClick={() => setSelectedSubgroups(prev => { const next = new Set(prev); next.delete(sgId); return next; })}
                   className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
                 >
-                  {sgInfo?.def.name ?? sgId}
+                  {t(`subgroup.${sgId}` as any) !== `subgroup.${sgId}` ? t(`subgroup.${sgId}` as any) : (sgInfo?.def.name ?? sgId)}
                   <span className="text-xs">×</span>
                 </button>
               );
@@ -1826,14 +1826,14 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                                   className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "gbif" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"} ${!gbifSpeciesKey ? "opacity-50 cursor-default" : ""}`}
                                   onClick={() => gbifSpeciesKey && setActiveDetailTab("gbif")}
                                 >
-                                  GBIF + iNaturalist{!gbifSpeciesKey && <span className="ml-1 text-xs text-zinc-400">(no match)</span>}
+                                  {t("tab.gbifINaturalist")}{!gbifSpeciesKey && <span className="ml-1 text-xs text-zinc-400">{t("tab.noMatch")}</span>}
                                 </button>
                                 {(assessmentYear || s.category === "NE") && (
                                   <button
                                     className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "literature" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                     onClick={() => setActiveDetailTab("literature")}
                                   >
-                                    OpenAlex Papers
+                                    {t("tab.openAlexPapers")}
                                   </button>
                                 )}
                                 {s.category !== "NE" && (
@@ -1841,30 +1841,30 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                                     className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "redlist" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                     onClick={() => setActiveDetailTab("redlist")}
                                   >
-                                    IUCN Red List Assessments
+                                    {t("tab.iucnAssessments")}
                                   </button>
                                 )}
                                 <button
                                   className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "wikipedia" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                   onClick={() => setActiveDetailTab("wikipedia")}
                                 >
-                                  Wikipedia
+                                  {t("tab.wikipedia")}
                                 </button>
                                 <button
                                   className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "cites" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                   onClick={() => setActiveDetailTab("cites")}
                                 >
-                                  CITES
+                                  {t("tab.cites")}
                                 </button>
                               </>
                             )}
                             {stackedDetailView && (
-                              <span className="px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">All Sections</span>
+                              <span className="px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">{t("tab.allSections")}</span>
                             )}
                             <button
                               className="ml-auto px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 flex items-center gap-1"
                               onClick={() => setStackedDetailView(!stackedDetailView)}
-                              title={stackedDetailView ? "Switch to tabbed view" : "Switch to stacked view"}
+                              title={stackedDetailView ? t("tab.switchToTabbed") : t("tab.switchToStacked")}
                             >
                               {stackedDetailView ? (
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" strokeWidth="2"/><path d="M9 3v18" strokeWidth="2"/></svg>

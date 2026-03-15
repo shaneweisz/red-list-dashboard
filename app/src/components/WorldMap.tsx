@@ -352,7 +352,7 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
       {/* Header with controls */}
       <div className="flex items-center justify-between mb-1 gap-2">
         <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0">
-          Country
+          {t("chart.country")}
         </h2>
         <div className="flex items-center gap-2">
           {/* Country search */}
