@@ -12,16 +12,18 @@ import {
   LabelList,
 } from "recharts";
 
-interface Observer {
+interface Contributor {
   login: string;
   name: string | null;
-  observationCount: number;
+  count: number;
   iconUrl: string | null;
 }
 
 interface InatContributorsChartProps {
   speciesKey: number;
 }
+
+type ViewMode = "observers" | "identifiers";
 
 const PAGE_SIZE = 10;
 
@@ -30,15 +32,15 @@ function ClickableYAxisTick({
   x,
   y,
   payload,
-  observers,
+  contributors,
 }: {
   x: number;
   y: number;
   payload: { value: string };
-  observers: Observer[];
+  contributors: Contributor[];
 }) {
-  const obs = observers.find((o) => o.login === payload.value);
-  const displayName = obs?.name || obs?.login || payload.value;
+  const c = contributors.find((o) => o.login === payload.value);
+  const displayName = c?.name || c?.login || payload.value;
   const truncated =
     displayName.length > 20 ? displayName.slice(0, 20) + "…" : displayName;
 
@@ -66,10 +68,13 @@ function ClickableYAxisTick({
 export default function InatContributorsChart({
   speciesKey,
 }: InatContributorsChartProps) {
-  const [observers, setObservers] = useState<Observer[]>([]);
+  const [observers, setObservers] = useState<Contributor[]>([]);
+  const [identifiers, setIdentifiers] = useState<Contributor[]>([]);
   const [totalObservers, setTotalObservers] = useState(0);
+  const [totalIdentifiers, setTotalIdentifiers] = useState(0);
   const [inatTaxonId, setInatTaxonId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<ViewMode>("observers");
   const [page, setPage] = useState(0);
 
   useEffect(() => {
@@ -77,32 +82,39 @@ export default function InatContributorsChart({
     fetch(`/api/species/${speciesKey}/inat-top-observers`)
       .then((res) => res.json())
       .then((data) => {
-        if (data.observers) {
-          setObservers(data.observers);
-          setTotalObservers(data.totalObservers || 0);
-          setInatTaxonId(data.inatTaxonId || null);
-        }
+        if (data.observers) setObservers(data.observers);
+        if (data.identifiers) setIdentifiers(data.identifiers);
+        setTotalObservers(data.totalObservers || 0);
+        setTotalIdentifiers(data.totalIdentifiers || 0);
+        setInatTaxonId(data.inatTaxonId || null);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [speciesKey]);
 
-  const globalMax = observers.length > 0 ? observers[0].observationCount : 0;
-  const totalPages = Math.ceil(observers.length / PAGE_SIZE);
-  const paginated = observers.slice(
-    page * PAGE_SIZE,
-    (page + 1) * PAGE_SIZE
-  );
+  const activeData = viewMode === "observers" ? observers : identifiers;
+  const activeTotal = viewMode === "observers" ? totalObservers : totalIdentifiers;
+  const activeLabel = viewMode === "observers" ? "observers" : "identifiers";
+  const countLabel = viewMode === "observers" ? "Observations" : "Identifications";
+
+  const globalMax = activeData.length > 0 ? activeData[0].count : 0;
+  const totalPages = Math.ceil(activeData.length / PAGE_SIZE);
+  const paginated = activeData.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   const chartData = useMemo(
     () =>
-      paginated.map((obs) => ({
-        code: obs.login,
-        count: obs.observationCount,
-        label: obs.observationCount.toLocaleString(),
+      paginated.map((c) => ({
+        code: c.login,
+        count: c.count,
+        label: c.count.toLocaleString(),
       })),
     [paginated]
   );
+
+  const handleViewModeChange = (mode: ViewMode) => {
+    setViewMode(mode);
+    setPage(0);
+  };
 
   if (loading) {
     return (
@@ -112,7 +124,7 @@ export default function InatContributorsChart({
             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
           </svg>
           <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-            Top iNaturalist Observers
+            Top iNaturalist Contributors
           </span>
         </div>
         <div className="h-[250px] flex items-center justify-center">
@@ -129,7 +141,7 @@ export default function InatContributorsChart({
     );
   }
 
-  if (observers.length === 0) {
+  if (observers.length === 0 && identifiers.length === 0) {
     return null;
   }
 
@@ -137,15 +149,32 @@ export default function InatContributorsChart({
     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
       <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-2">
-          <svg className="w-4 h-4 text-green-600" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
-          </svg>
-          <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-            Top iNaturalist Observers
-          </span>
-          {totalObservers > 0 && (
+          {/* Toggle between Observers and Identifiers */}
+          <div className="inline-flex rounded-md bg-zinc-100 dark:bg-zinc-800 p-0.5">
+            <button
+              onClick={() => handleViewModeChange("observers")}
+              className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
+                viewMode === "observers"
+                  ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
+                  : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+              }`}
+            >
+              Observers
+            </button>
+            <button
+              onClick={() => handleViewModeChange("identifiers")}
+              className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
+                viewMode === "identifiers"
+                  ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
+                  : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+              }`}
+            >
+              Identifiers
+            </button>
+          </div>
+          {activeTotal > 0 && (
             <span className="text-[10px] text-zinc-400 tabular-nums">
-              ({totalObservers.toLocaleString()} total)
+              ({activeTotal.toLocaleString()} total)
             </span>
           )}
         </div>
@@ -183,18 +212,18 @@ export default function InatContributorsChart({
                     x={props.x as number}
                     y={props.y as number}
                     payload={props.payload as { value: string }}
-                    observers={observers}
+                    contributors={activeData}
                   />
                 )}
               />
               <Tooltip
                 formatter={(value: number) => [
                   value.toLocaleString(),
-                  "Observations",
+                  countLabel,
                 ]}
                 labelFormatter={(login: string) => {
-                  const obs = observers.find((o) => o.login === login);
-                  return obs?.name || login;
+                  const c = activeData.find((o) => o.login === login);
+                  return c?.name || login;
                 }}
                 contentStyle={{
                   backgroundColor: "#18181b",
@@ -217,7 +246,7 @@ export default function InatContributorsChart({
             </BarChart>
           </ResponsiveContainer>
         ) : (
-          <span className="text-xs text-zinc-400">No observer data</span>
+          <span className="text-xs text-zinc-400">No {activeLabel} data</span>
         )}
       </div>
 
@@ -233,8 +262,8 @@ export default function InatContributorsChart({
           </button>
           <span>
             {page * PAGE_SIZE + 1}-
-            {Math.min((page + 1) * PAGE_SIZE, observers.length)} of{" "}
-            {observers.length}
+            {Math.min((page + 1) * PAGE_SIZE, activeData.length)} of{" "}
+            {activeData.length}
           </span>
           <button
             onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}

@@ -1790,9 +1790,6 @@ export default function OccurrenceMapRow({
             </div>
           </div>
 
-          {/* ── Top iNaturalist Observers ── */}
-          <InatContributorsChart speciesKey={speciesKey} />
-
           {/* ── iNat filmstrip (left) + Map (right) ── */}
           <div className="flex flex-col sm:flex-row gap-2">
             {/* iNat photo filmstrip — 2-col grid on sm+, horizontal row on mobile */}
@@ -1902,6 +1899,9 @@ export default function OccurrenceMapRow({
               renderMapPanel(filteredOccurrences, filteredBbox, null)
             )}
           </div>
+
+          {/* ── Top iNaturalist Observers / Identifiers ── */}
+          <InatContributorsChart speciesKey={speciesKey} />
         </div>
       </div>
     </div>
