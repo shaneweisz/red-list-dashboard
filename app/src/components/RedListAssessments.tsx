@@ -2,6 +2,15 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { CATEGORY_COLORS, CATEGORY_NAMES } from "@/config/taxa";
+import { TranslatableText } from "./TranslatableText";
+import { useTranslation, type TFunction } from "@/i18n";
+
+const LOCALE_MAP: Record<string, string> = {
+  en: "en-GB",
+  fr: "fr-FR",
+  pt: "pt-BR",
+  es: "es-ES",
+};
 
 interface PreviousAssessment {
   year: string;
@@ -67,11 +76,12 @@ interface RedListAssessmentsProps {
 }
 
 // Format ISO date string to human-readable form (e.g. "25 July 2022")
-function formatDate(iso: string): string {
+function formatDate(iso: string, language?: string): string {
   try {
     const d = new Date(iso);
     if (isNaN(d.getTime())) return iso;
-    return d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+    const locale = LOCALE_MAP[language || "en"] || "en-GB";
+    return d.toLocaleDateString(locale, { day: "numeric", month: "long", year: "numeric" });
   } catch {
     return iso;
   }
@@ -139,7 +149,7 @@ function stripHtml(html: string): string {
     .trim();
 }
 
-// Collapsible section for narrative text
+// Collapsible section for narrative text with optional translation
 function NarrativeSection({ title, content }: { title: string; content: string }) {
   const [expanded, setExpanded] = useState(true);
   const text = stripHtml(content);
@@ -162,7 +172,7 @@ function NarrativeSection({ title, content }: { title: string; content: string }
       </button>
       {expanded && (
         <div className="pb-3 pl-5 text-sm text-zinc-600 dark:text-zinc-400 whitespace-pre-line leading-relaxed">
-          {text}
+          <TranslatableText text={text} />
         </div>
       )}
     </div>
@@ -173,9 +183,11 @@ function NarrativeSection({ title, content }: { title: string; content: string }
 function AssessmentComparison({
   older,
   newer,
+  t,
 }: {
   older: AssessmentDetail;
   newer: AssessmentDetail;
+  t: TFunction;
 }) {
   const olderCat = getCategoryCode(older.red_list_category);
   const newerCat = getCategoryCode(newer.red_list_category);
@@ -189,12 +201,12 @@ function AssessmentComparison({
   const worsened = newerOrder < olderOrder;
 
   const sections: { key: string; title: string; field: keyof AssessmentDetail }[] = [
-    { key: "rationale", title: "Rationale", field: "rationale" },
-    { key: "population", title: "Population", field: "population" },
-    { key: "habitat", title: "Habitat & Ecology", field: "habitat" },
-    { key: "threats", title: "Threats", field: "threats" },
-    { key: "conservation", title: "Conservation Actions", field: "conservation_actions" },
-    { key: "range", title: "Geographic Range", field: "range" },
+    { key: "rationale", title: t("field.rationale"), field: "rationale" },
+    { key: "population", title: t("field.population"), field: "population" },
+    { key: "habitat", title: t("field.habitat"), field: "habitat" },
+    { key: "threats", title: t("field.threats"), field: "threats" },
+    { key: "conservation", title: t("field.conservationActions"), field: "conservation_actions" },
+    { key: "range", title: t("field.geographicRange"), field: "range" },
   ];
 
   return (
@@ -216,21 +228,21 @@ function AssessmentComparison({
           </svg>
           <CategoryBadge code={newerCat} small />
           <span className="ml-1">
-            {improved ? "Status improved" : worsened ? "Status worsened" : "Category changed"}
+            {improved ? t("assessment.statusImproved") : worsened ? t("assessment.statusWorsened") : t("assessment.categoryChanged")}
           </span>
         </div>
       )}
       {!categoryChanged && (
         <div className="flex items-center gap-2 p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50 text-sm text-zinc-500">
           <CategoryBadge code={newerCat} small />
-          <span>Category unchanged between assessments</span>
+          <span>{t("assessment.categoryUnchanged")}</span>
         </div>
       )}
 
       {/* Criteria change */}
       {older.criteria !== newer.criteria && (older.criteria || newer.criteria) && (
         <div className="text-sm space-y-1">
-          <div className="font-medium text-zinc-700 dark:text-zinc-300">Criteria</div>
+          <div className="font-medium text-zinc-700 dark:text-zinc-300">{t("metric.criteria")}</div>
           <div className="flex gap-4 text-xs">
             {older.criteria && (
               <span className="text-zinc-400 line-through">{older.criteria}</span>
@@ -257,6 +269,7 @@ function AssessmentComparison({
             newerText={newerText}
             olderYear={older.year_published || older.assessment_date?.split("-")[0] || "?"}
             newerYear={newer.year_published || newer.assessment_date?.split("-")[0] || "?"}
+            t={t}
           />
         );
       })}
@@ -268,7 +281,7 @@ function AssessmentComparison({
         return ot === nt;
       }) && (
         <div className="text-sm text-zinc-400 italic py-2">
-          No changes in narrative text between these assessments.
+          {t("assessment.noChanges")}
         </div>
       )}
     </div>
@@ -281,12 +294,14 @@ function ComparisonSection({
   newerText,
   olderYear,
   newerYear,
+  t,
 }: {
   title: string;
   olderText: string | null;
   newerText: string | null;
   olderYear: string;
   newerYear: string;
+  t: TFunction;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -305,21 +320,21 @@ function ComparisonSection({
         </svg>
         {title}
         <span className="text-xs text-zinc-400 font-normal">
-          (changed)
+          {t("assessment.changed")}
         </span>
       </button>
       {expanded && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-0 divide-y md:divide-y-0 md:divide-x divide-zinc-100 dark:divide-zinc-800">
           <div className="p-3">
-            <div className="text-xs font-medium text-zinc-400 mb-1">{olderYear} assessment</div>
+            <div className="text-xs font-medium text-zinc-400 mb-1">{olderYear} {t("assessment.assessment")}</div>
             <div className="text-xs text-zinc-500 dark:text-zinc-400 whitespace-pre-line leading-relaxed max-h-60 overflow-y-auto">
-              {olderText || <span className="italic">Not available</span>}
+              {olderText || <span className="italic">{t("assessment.notAvailable")}</span>}
             </div>
           </div>
           <div className="p-3">
-            <div className="text-xs font-medium text-zinc-400 mb-1">{newerYear} assessment</div>
+            <div className="text-xs font-medium text-zinc-400 mb-1">{newerYear} {t("assessment.assessment")}</div>
             <div className="text-xs text-zinc-500 dark:text-zinc-400 whitespace-pre-line leading-relaxed max-h-60 overflow-y-auto">
-              {newerText || <span className="italic">Not available</span>}
+              {newerText || <span className="italic">{t("assessment.notAvailable")}</span>}
             </div>
           </div>
         </div>
@@ -355,6 +370,8 @@ export default function RedListAssessments({
   previousAssessments,
   speciesUrl,
 }: RedListAssessmentsProps) {
+  const { t, language } = useTranslation();
+
   // All assessments timeline, sorted oldest-first (left to right).
   // If previousAssessments includes the current one, use it directly;
   // otherwise fall back to constructing from current* props.
@@ -437,10 +454,10 @@ export default function RedListAssessments({
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            Red List Assessments
+            {t("assessment.title")}
           </h3>
           <span className="text-xs text-zinc-400">
-            {allAssessments.length} assessment{allAssessments.length !== 1 ? "s" : ""}
+            {allAssessments.length} {t("assessment.assessment")}{allAssessments.length !== 1 ? "s" : ""}
           </span>
         </div>
 
@@ -455,7 +472,7 @@ export default function RedListAssessments({
               }`}
               onClick={() => setCompareMode(!compareMode)}
             >
-              {compareMode ? "Exit comparison" : "Compare"}
+              {compareMode ? t("assessment.exitComparison") : t("assessment.compare")}
             </button>
           )}
 
@@ -466,7 +483,7 @@ export default function RedListAssessments({
             rel="noopener noreferrer"
             className="text-xs text-blue-500 hover:underline flex items-center gap-1"
           >
-            View on IUCN
+            {t("assessment.viewOnIucn")}
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
             </svg>
@@ -508,37 +525,37 @@ export default function RedListAssessments({
       </div>
 
       {/* Content */}
-      {isLoading && <Spinner text="Loading assessment..." />}
+      {isLoading && <Spinner text={t("assessment.loading")} />}
 
       {hasError && (
         <div className="text-sm text-red-500 py-2">
-          Failed to load assessment details.{" "}
+          {t("assessment.failedToLoad")}{" "}
           <button
             className="underline hover:text-red-600"
             onClick={() => selectedAssessment && fetchAssessment(selectedAssessment.assessment_id)}
           >
-            Retry
+            {t("assessment.retry")}
           </button>
         </div>
       )}
 
       {/* Single assessment view */}
       {!compareMode && selectedDetail && !isLoading && (
-        <AssessmentDetailView detail={selectedDetail} assessment={selectedAssessment} />
+        <AssessmentDetailView detail={selectedDetail} assessment={selectedAssessment} t={t} language={language} />
       )}
 
       {/* Comparison view */}
       {compareMode && !isLoading && !isCompareLoading && selectedDetail && olderDetail && (
-        <AssessmentComparison older={olderDetail} newer={selectedDetail} />
+        <AssessmentComparison older={olderDetail} newer={selectedDetail} t={t} />
       )}
 
       {compareMode && !isLoading && isCompareLoading && (
-        <Spinner text="Loading comparison assessment..." />
+        <Spinner text={t("assessment.loadingComparison")} />
       )}
 
       {compareMode && !olderAssessment && (
         <div className="text-sm text-zinc-400 py-2 italic">
-          No previous assessment to compare with. This is the earliest assessment.
+          {t("assessment.noPrevious")}
         </div>
       )}
 
@@ -546,7 +563,7 @@ export default function RedListAssessments({
       <div className="text-[10px] text-zinc-400 dark:text-zinc-500 pt-2 space-y-1">
         <p>
           IUCN ({new Date().getFullYear()}).{" "}
-          <em>The IUCN Red List of Threatened Species.</em> Version 2025-2.{" "}
+          <em>{t("iucn.attribution")}</em> {t("iucn.version")}{" "}
           <a
             href="https://www.iucnredlist.org"
             target="_blank"
@@ -562,7 +579,7 @@ export default function RedListAssessments({
             rel="noopener noreferrer"
             className="hover:underline"
           >
-            Terms of Use
+            {t("iucn.termsOfUse")}
           </a>
           .
         </p>
@@ -583,8 +600,10 @@ function formatMetric(value: string | number | null, unit?: string): string | nu
 // Compact grid showing key quantitative metrics from supplementary_info
 function SupplementaryMetrics({
   info,
+  t,
 }: {
   info: AssessmentDetail["supplementary_info"];
+  t: TFunction;
 }) {
   if (!info) return null;
 
@@ -594,7 +613,7 @@ function SupplementaryMetrics({
   if (info.estimated_extent_of_occurence) {
     const v = formatMetric(info.estimated_extent_of_occurence, "km²");
     if (v) metrics.push({
-      label: "EOO",
+      label: t("metric.eoo"),
       value: v,
       declining: info.continuing_decline_in_extent_of_occurence === "Yes",
     });
@@ -602,7 +621,7 @@ function SupplementaryMetrics({
   if (info.estimated_area_of_occupancy) {
     const v = formatMetric(info.estimated_area_of_occupancy, "km²");
     if (v) metrics.push({
-      label: "AOO",
+      label: t("metric.aoo"),
       value: v,
       declining: info.continuing_decline_in_area_of_occupancy === "Yes",
     });
@@ -610,7 +629,7 @@ function SupplementaryMetrics({
   if (info.population_size) {
     const v = formatMetric(info.population_size);
     if (v) metrics.push({
-      label: "Population",
+      label: t("metric.populationLabel"),
       value: v,
       declining: info.population_continuing_decline === "Yes",
     });
@@ -618,17 +637,17 @@ function SupplementaryMetrics({
   if (info.number_of_locations) {
     const v = formatMetric(info.number_of_locations);
     if (v) metrics.push({
-      label: "Locations",
+      label: t("metric.locations"),
       value: v,
       declining: info.continuing_decline_in_number_of_locations === "Yes",
     });
   }
   if (info.no_of_subpopulations) {
-    metrics.push({ label: "Subpopulations", value: info.no_of_subpopulations });
+    metrics.push({ label: t("metric.subpopulations"), value: info.no_of_subpopulations });
   }
   if (info.generational_length) {
     const v = formatMetric(info.generational_length, "yr");
-    if (v) metrics.push({ label: "Generation length", value: v });
+    if (v) metrics.push({ label: t("metric.generationLength"), value: v });
   }
 
   // Elevation range
@@ -636,11 +655,11 @@ function SupplementaryMetrics({
     const lo = info.lower_elevation_limit;
     const hi = info.upper_elevation_limit;
     if (lo != null && hi != null) {
-      metrics.push({ label: "Elevation", value: `${lo.toLocaleString()}–${hi.toLocaleString()} m` });
+      metrics.push({ label: t("metric.elevation"), value: `${lo.toLocaleString()}–${hi.toLocaleString()} m` });
     } else if (hi != null) {
-      metrics.push({ label: "Elevation", value: `≤ ${hi.toLocaleString()} m` });
+      metrics.push({ label: t("metric.elevation"), value: `≤ ${hi.toLocaleString()} m` });
     } else if (lo != null) {
-      metrics.push({ label: "Elevation", value: `≥ ${lo.toLocaleString()} m` });
+      metrics.push({ label: t("metric.elevation"), value: `≥ ${lo.toLocaleString()} m` });
     }
   }
 
@@ -649,20 +668,20 @@ function SupplementaryMetrics({
     const shallow = info.upper_depth_limit;
     const deep = info.lower_depth_limit;
     if (shallow != null && deep != null) {
-      metrics.push({ label: "Depth", value: `${shallow.toLocaleString()}–${deep.toLocaleString()} m` });
+      metrics.push({ label: t("metric.depth"), value: `${shallow.toLocaleString()}–${deep.toLocaleString()} m` });
     } else if (deep != null) {
-      metrics.push({ label: "Depth", value: `≤ ${deep.toLocaleString()} m` });
+      metrics.push({ label: t("metric.depth"), value: `≤ ${deep.toLocaleString()} m` });
     }
   }
 
   if (info.movement_patterns) {
-    metrics.push({ label: "Movement", value: info.movement_patterns });
+    metrics.push({ label: t("metric.movement"), value: info.movement_patterns });
   }
   if (info.congregatory) {
-    metrics.push({ label: "Congregatory", value: info.congregatory });
+    metrics.push({ label: t("metric.congregatory"), value: info.congregatory });
   }
   if (info.population_severely_fragmented === "Yes") {
-    metrics.push({ label: "Severely fragmented", value: "Yes" });
+    metrics.push({ label: t("metric.severelyFragmented"), value: "Yes" });
   }
 
   if (metrics.length === 0) return null;
@@ -689,9 +708,13 @@ function SupplementaryMetrics({
 function AssessmentDetailView({
   detail,
   assessment,
+  t,
+  language,
 }: {
   detail: AssessmentDetail;
   assessment: { year: string; assessment_id: number; category: string; assessors?: string | null; reviewers?: string | null };
+  t: TFunction;
+  language: string;
 }) {
   const catCode = getCategoryCode(detail.red_list_category) !== "?" ? getCategoryCode(detail.red_list_category) : assessment.category;
   const trendText = getTrendText(detail.population_trend);
@@ -703,12 +726,12 @@ function AssessmentDetailView({
         <CategoryBadge code={catCode} />
         {detail.criteria && (
           <span className="text-sm text-zinc-500 font-mono">
-            Criteria: {detail.criteria}
+            {t("metric.criteria")} {detail.criteria}
           </span>
         )}
         {trendText && (
           <span className="text-xs text-zinc-400 flex items-center gap-1">
-            Trend:{" "}
+            {t("metric.trend")}{" "}
             <span className={
               trendText.toLowerCase().includes("decreasing")
                 ? "text-red-500"
@@ -722,12 +745,12 @@ function AssessmentDetailView({
         )}
         {detail.possibly_extinct && (
           <span className="text-xs px-2 py-0.5 bg-black/10 dark:bg-white/10 text-red-600 dark:text-red-400 rounded font-medium">
-            Possibly Extinct
+            {t("metric.possiblyExtinct")}
           </span>
         )}
         {detail.possibly_extinct_in_the_wild && (
           <span className="text-xs px-2 py-0.5 bg-black/10 dark:bg-white/10 text-red-600 dark:text-red-400 rounded font-medium">
-            Possibly Extinct in the Wild
+            {t("metric.possiblyExtinctWild")}
           </span>
         )}
       </div>
@@ -735,14 +758,14 @@ function AssessmentDetailView({
       {/* Date and systems */}
       <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-400">
         {detail.assessment_date && (
-          <span>Assessed: {formatDate(detail.assessment_date)}</span>
+          <span>{t("metric.assessed")} {formatDate(detail.assessment_date, language)}</span>
         )}
         {detail.year_published && (
-          <span>Published: {detail.year_published}</span>
+          <span>{t("metric.published")} {detail.year_published}</span>
         )}
         {detail.systems && detail.systems.length > 0 && (
           <span>
-            Systems: {detail.systems.map((s) => typeof s === "string" ? s : (s.description || s.code)).join(", ")}
+            {t("metric.systems")} {detail.systems.map((s) => typeof s === "string" ? s : (s.description || s.code)).join(", ")}
           </span>
         )}
       </div>
@@ -750,29 +773,29 @@ function AssessmentDetailView({
       {/* Assessors & Reviewers */}
       {(assessment.assessors || assessment.reviewers) && (
         <div className="text-xs text-zinc-500 dark:text-zinc-400 space-y-0.5">
-          {assessment.assessors && <div><span className="font-medium">Assessors:</span> {assessment.assessors}</div>}
-          {assessment.reviewers && <div><span className="font-medium">Reviewers:</span> {assessment.reviewers}</div>}
+          {assessment.assessors && <div><span className="font-medium">{t("metric.assessors")}</span> {assessment.assessors}</div>}
+          {assessment.reviewers && <div><span className="font-medium">{t("metric.reviewers")}</span> {assessment.reviewers}</div>}
         </div>
       )}
 
       {/* Key metrics grid */}
-      <SupplementaryMetrics info={detail.supplementary_info} />
+      <SupplementaryMetrics info={detail.supplementary_info} t={t} />
 
       {/* Narrative sections */}
       <div className="border border-zinc-100 dark:border-zinc-800 rounded-lg overflow-hidden px-3 divide-y divide-zinc-100 dark:divide-zinc-800">
-        {detail.rationale && <NarrativeSection title="Rationale" content={detail.rationale} />}
-        {detail.population && <NarrativeSection title="Population" content={detail.population} />}
-        {detail.habitat && <NarrativeSection title="Habitat & Ecology" content={detail.habitat} />}
-        {detail.threats && <NarrativeSection title="Threats" content={detail.threats} />}
-        {detail.conservation_actions && <NarrativeSection title="Conservation Actions" content={detail.conservation_actions} />}
-        {detail.use_trade && <NarrativeSection title="Use & Trade" content={detail.use_trade} />}
-        {detail.range && <NarrativeSection title="Geographic Range" content={detail.range} />}
+        {detail.rationale && <NarrativeSection title={t("field.rationale")} content={detail.rationale} />}
+        {detail.population && <NarrativeSection title={t("field.population")} content={detail.population} />}
+        {detail.habitat && <NarrativeSection title={t("field.habitat")} content={detail.habitat} />}
+        {detail.threats && <NarrativeSection title={t("field.threats")} content={detail.threats} />}
+        {detail.conservation_actions && <NarrativeSection title={t("field.conservationActions")} content={detail.conservation_actions} />}
+        {detail.use_trade && <NarrativeSection title={t("field.useTrade")} content={detail.use_trade} />}
+        {detail.range && <NarrativeSection title={t("field.geographicRange")} content={detail.range} />}
       </div>
 
       {/* Structured data: Habitats */}
       {detail.habitats && detail.habitats.length > 0 && (
         <div>
-          <h4 className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1">Habitats</h4>
+          <h4 className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1">{t("data.habitats")}</h4>
           <div className="flex flex-wrap gap-1">
             {detail.habitats.map((h, i) => {
               const name = typeof h === "string" ? h : h.name;
@@ -796,24 +819,24 @@ function AssessmentDetailView({
       {/* Structured data: Threats */}
       {detail.threat_classification && detail.threat_classification.length > 0 && (
         <div>
-          <h4 className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1">Threat Classification</h4>
+          <h4 className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1">{t("data.threatClassification")}</h4>
           <div className="flex flex-wrap gap-1">
-            {detail.threat_classification.map((t, i) => {
-              if (typeof t === "string") {
+            {detail.threat_classification.map((tc, i) => {
+              if (typeof tc === "string") {
                 return (
                   <span key={i} className="text-xs px-2 py-0.5 rounded bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400">
-                    {t}
+                    {tc}
                   </span>
                 );
               }
-              const tooltipParts = [t.name];
-              if (t.timing) tooltipParts.push(`Timing: ${t.timing}`);
-              if (t.scope) tooltipParts.push(`Scope: ${t.scope}`);
-              if (t.severity) tooltipParts.push(`Severity: ${t.severity}`);
-              if (t.score) tooltipParts.push(`Impact: ${t.score}`);
-              if (t.stresses && t.stresses.length > 0) tooltipParts.push(`Stresses: ${t.stresses.join(", ")}`);
-              const isOngoing = t.timing?.toLowerCase().includes("ongoing");
-              const isSevere = t.severity?.toLowerCase().includes("rapid") || t.severity?.toLowerCase().includes("very rapid");
+              const tooltipParts = [tc.name];
+              if (tc.timing) tooltipParts.push(`${t("data.timing")} ${tc.timing}`);
+              if (tc.scope) tooltipParts.push(`${t("data.scope")} ${tc.scope}`);
+              if (tc.severity) tooltipParts.push(`${t("data.severity")} ${tc.severity}`);
+              if (tc.score) tooltipParts.push(`${t("data.impact")} ${tc.score}`);
+              if (tc.stresses && tc.stresses.length > 0) tooltipParts.push(`${t("data.stresses")} ${tc.stresses.join(", ")}`);
+              const isOngoing = tc.timing?.toLowerCase().includes("ongoing");
+              const isSevere = tc.severity?.toLowerCase().includes("rapid") || tc.severity?.toLowerCase().includes("very rapid");
               return (
                 <span
                   key={i}
@@ -824,9 +847,9 @@ function AssessmentDetailView({
                   }`}
                   title={tooltipParts.join("\n")}
                 >
-                  {t.code && <span className="opacity-50 mr-1">{t.code}</span>}
-                  {t.name}
-                  {t.timing && <span className="ml-1 opacity-50">({t.timing})</span>}
+                  {tc.code && <span className="opacity-50 mr-1">{tc.code}</span>}
+                  {tc.name}
+                  {tc.timing && <span className="ml-1 opacity-50">({tc.timing})</span>}
                 </span>
               );
             })}
@@ -837,7 +860,7 @@ function AssessmentDetailView({
       {/* Structured data: Conservation Actions */}
       {detail.conservation_actions_classification && detail.conservation_actions_classification.length > 0 && (
         <div>
-          <h4 className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1">Conservation Actions</h4>
+          <h4 className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1">{t("data.conservationActions")}</h4>
           <div className="flex flex-wrap gap-1">
             {detail.conservation_actions_classification.map((c, i) => (
               <span
@@ -854,14 +877,14 @@ function AssessmentDetailView({
       {/* No narrative data message */}
       {!detail.rationale && !detail.population && !detail.habitat && !detail.threats && !detail.conservation_actions && !detail.range && (
         <div className="text-sm text-zinc-400 py-2 italic">
-          No detailed narrative data available for this assessment. View the full assessment on{" "}
+          {t("assessment.noNarrative")}{" "}
           <a
             href={detail.url || `https://www.iucnredlist.org/species/${detail.sis_taxon_id}/${detail.assessment_id}`}
             target="_blank"
             rel="noopener noreferrer"
             className="text-blue-500 hover:underline"
           >
-            IUCN Red List
+            {t("assessment.iucnRedList")}
           </a>
           .
         </div>

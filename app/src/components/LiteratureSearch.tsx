@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { generateNameVariants } from "@/lib/nameVariants";
+import { useTranslation } from "@/i18n";
 
 interface LiteratureResult {
   title: string;
@@ -26,6 +27,7 @@ function PaperRow({
   isExpanded: boolean;
   onToggle: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <>
       <tr
@@ -74,21 +76,21 @@ function PaperRow({
               {/* Authors */}
               {paper.authors && (
                 <div className="text-xs text-zinc-500">
-                  <span className="font-medium text-zinc-600 dark:text-zinc-400">Authors:</span>{" "}
+                  <span className="font-medium text-zinc-600 dark:text-zinc-400">{t("lit.authors")}</span>{" "}
                   {paper.authors}
                 </div>
               )}
               {/* Journal (shown on mobile since hidden in table) */}
               {paper.source && (
                 <div className="text-xs text-zinc-500 md:hidden">
-                  <span className="font-medium text-zinc-600 dark:text-zinc-400">Journal:</span>{" "}
+                  <span className="font-medium text-zinc-600 dark:text-zinc-400">{t("lit.journal")}</span>{" "}
                   {paper.source}
                 </div>
               )}
               {/* Abstract */}
               {paper.abstract && (
                 <div className="text-xs text-zinc-500 leading-relaxed">
-                  <span className="font-medium text-zinc-600 dark:text-zinc-400">Abstract:</span>{" "}
+                  <span className="font-medium text-zinc-600 dark:text-zinc-400">{t("lit.abstract")}</span>{" "}
                   {paper.abstract}
                 </div>
               )}
@@ -101,7 +103,7 @@ function PaperRow({
                   onClick={(e) => e.stopPropagation()}
                   className="inline-flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 dark:hover:text-blue-400"
                 >
-                  View paper
+                  {t("lit.viewPaper")}
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                   </svg>
@@ -152,6 +154,7 @@ export default function NewLiteratureSinceAssessment({
   assessmentYear,
   className = "",
 }: NewLiteratureSinceAssessmentProps) {
+  const { t } = useTranslation();
   const [mode, setMode] = useState<"after" | "before">("after");
   const [data, setData] = useState<LiteratureResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -163,7 +166,7 @@ export default function NewLiteratureSinceAssessment({
   const nameVariants = generateNameVariants(scientificName);
   const hasVariants = nameVariants.length > 1;
   const searchDisplay = hasVariants
-    ? `${scientificName} (+ ${nameVariants.length - 1} name variant${nameVariants.length > 2 ? "s" : ""})`
+    ? `${scientificName} (+ ${nameVariants.length - 1} ${nameVariants.length > 2 ? t("lit.nameVariants") : t("lit.nameVariant")})`
     : scientificName;
 
   const openAlexUrl = isAllTime
@@ -224,7 +227,7 @@ export default function NewLiteratureSinceAssessment({
       <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            Literature
+            {t("lit.literature")}
           </h3>
           {!isAllTime && (
             <div className="flex items-center rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden text-xs">
@@ -236,7 +239,7 @@ export default function NewLiteratureSinceAssessment({
                 }`}
                 onClick={() => setMode("before")}
               >
-                Pre-assessment
+                {t("lit.preAssessment")}
               </button>
               <button
                 className={`px-2.5 py-1 transition-colors ${
@@ -246,7 +249,7 @@ export default function NewLiteratureSinceAssessment({
                 }`}
                 onClick={() => setMode("after")}
               >
-                Post-assessment
+                {t("lit.postAssessment")}
               </button>
             </div>
           )}
@@ -254,7 +257,7 @@ export default function NewLiteratureSinceAssessment({
         <div className="flex items-center gap-2">
           {!loading && data && (
             <span className="text-sm text-zinc-500">
-              {totalPapers.toLocaleString()} paper{totalPapers !== 1 ? "s" : ""}{isAllTime ? "" : mode === "after" ? ` since ${assessmentYear}` : ` up to ${assessmentYear}`}
+              {totalPapers.toLocaleString()} {totalPapers !== 1 ? t("lit.papersPlural") : t("lit.papers")}{isAllTime ? "" : mode === "after" ? ` ${t("lit.since")} ${assessmentYear}` : ` ${t("lit.upTo")} ${assessmentYear}`}
             </span>
           )}
           <a
@@ -263,7 +266,7 @@ export default function NewLiteratureSinceAssessment({
             rel="noopener noreferrer"
             className="text-xs text-blue-500 hover:underline"
           >
-            View on OpenAlex →
+            {t("lit.viewOnOpenAlex")}
           </a>
         </div>
       </div>
@@ -280,7 +283,7 @@ export default function NewLiteratureSinceAssessment({
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
           </svg>
-          Checking OpenAlex...
+          {t("lit.checkingOpenAlex")}
         </div>
       )}
 
@@ -293,10 +296,10 @@ export default function NewLiteratureSinceAssessment({
           <table className="w-full text-left">
             <thead className="bg-zinc-100 dark:bg-zinc-800">
               <tr className="text-xs text-zinc-500 uppercase tracking-wider">
-                <th className="py-2 px-3 font-medium">Title</th>
-                <th className="py-2 px-3 font-medium w-16">Year</th>
-                <th className="py-2 px-3 font-medium hidden md:table-cell">Journal</th>
-                <th className="py-2 px-3 font-medium text-right w-20">Citations</th>
+                <th className="py-2 px-3 font-medium">{t("lit.title")}</th>
+                <th className="py-2 px-3 font-medium w-16">{t("lit.year")}</th>
+                <th className="py-2 px-3 font-medium hidden md:table-cell">{t("lit.journalCol")}</th>
+                <th className="py-2 px-3 font-medium text-right w-20">{t("lit.citations")}</th>
               </tr>
             </thead>
             <tbody>
@@ -321,16 +324,16 @@ export default function NewLiteratureSinceAssessment({
             rel="noopener noreferrer"
             className="text-xs text-blue-500 hover:underline"
           >
-            + {(totalPapers - topPapers.length).toLocaleString()} more on OpenAlex
+            + {(totalPapers - topPapers.length).toLocaleString()} {t("lit.moreOnOpenAlex")}
           </a>
         </div>
       )}
 
       {!loading && data && topPapers.length === 0 && (
         <div className="text-sm text-zinc-500 py-2">
-          No papers found.{" "}
+          {t("lit.noPapers")}{" "}
           <a href={openAlexUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
-            Verify on OpenAlex
+            {t("lit.verifyOnOpenAlex")}
           </a>
         </div>
       )}
@@ -338,7 +341,7 @@ export default function NewLiteratureSinceAssessment({
       {/* Subtle note at bottom */}
       {!loading && data && (
         <p className="text-[10px] text-zinc-400 mt-2">
-          {mode === "before" ? "Sorted by most cited" : "Sorted by most recent"} — includes Latin gender variants of species name
+          {mode === "before" ? t("lit.sortedByCited") : t("lit.sortedByRecent")} {t("lit.includesVariants")}
         </p>
       )}
     </div>

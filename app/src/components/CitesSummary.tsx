@@ -1,8 +1,16 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useTranslation } from "@/i18n";
 import CitesTradeSummary from "./CitesTradeSummary";
 import type { CountryAnnotation } from "./TradeFlowMap";
+
+const LOCALE_MAP: Record<string, string> = {
+  en: "en-GB",
+  fr: "fr-FR",
+  pt: "pt-BR",
+  es: "es-ES",
+};
 
 interface CitesListing {
   appendix: string;
@@ -63,12 +71,12 @@ const APPENDIX_COLORS: Record<string, string> = {
   III: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
 };
 
-function AppendixBadge({ appendix }: { appendix: string }) {
+function AppendixBadge({ appendix, label }: { appendix: string; label: string }) {
   return (
     <span
       className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${APPENDIX_COLORS[appendix] || "bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200"}`}
     >
-      Appendix {appendix}
+      {label} {appendix}
     </span>
   );
 }
@@ -78,6 +86,8 @@ export default function CitesSummary({
 }: {
   scientificName: string;
 }) {
+  const { t, language } = useTranslation();
+  const locale = LOCALE_MAP[language] || "en-GB";
   const [data, setData] = useState<CitesData | null>(null);
   const [tradeData, setTradeData] = useState<Record<string, unknown> | null>(null);
   const [tradeLoading, setTradeLoading] = useState(false);
@@ -178,7 +188,7 @@ export default function CitesSummary({
             d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
           />
         </svg>
-        Loading CITES data...
+        {t("cites.loading")}
       </div>
     );
   }
@@ -186,7 +196,7 @@ export default function CitesSummary({
   if (error) {
     return (
       <div className="p-6 text-sm text-red-500 dark:text-red-400">
-        Failed to load CITES data: {error}
+        {t("cites.failedToLoad")} {error}
       </div>
     );
   }
@@ -194,8 +204,7 @@ export default function CitesSummary({
   if (!data || !data.found) {
     return (
       <div className="p-6 text-sm text-zinc-500 dark:text-zinc-400">
-        <span className="italic">{scientificName}</span> is not listed in the
-        CITES database.
+        {t("cites.notListed")}
       </div>
     );
   }
@@ -214,12 +223,12 @@ export default function CitesSummary({
         {data.citesListing ? (
           <div className="flex items-center gap-2">
             {data.citesListing.split("/").map((app) => (
-              <AppendixBadge key={app} appendix={app.trim()} />
+              <AppendixBadge key={app} appendix={app.trim()} label={t("cites.appendix")} />
             ))}
           </div>
         ) : (
           <span className="text-sm text-zinc-500 dark:text-zinc-400">
-            No current CITES listing
+            {t("cites.noCurrentListing")}
           </span>
         )}
         <div className="flex items-center gap-3 ml-auto">
@@ -229,7 +238,7 @@ export default function CitesSummary({
             rel="noopener noreferrer"
             className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
           >
-            Trade Database
+            {t("cites.tradeDatabase")}
           </a>
           <span className="text-zinc-300 dark:text-zinc-600">|</span>
           <a
@@ -247,7 +256,7 @@ export default function CitesSummary({
       {data.currentListings && data.currentListings.length > 0 && (
         <div>
           <h4 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
-            Current Listings
+            {t("cites.currentListings")}
           </h4>
           <div className="space-y-2">
             {data.currentListings.map((listing, i) => (
@@ -255,10 +264,10 @@ export default function CitesSummary({
                 key={i}
                 className="flex flex-wrap items-start gap-2 text-sm"
               >
-                <AppendixBadge appendix={listing.appendix} />
+                <AppendixBadge appendix={listing.appendix} label={t("cites.appendix")} />
                 <span className="text-zinc-500 dark:text-zinc-400 text-xs mt-0.5">
-                  since{" "}
-                  {new Date(listing.effectiveAt).toLocaleDateString("en-GB", {
+                  {t("cites.since")}{" "}
+                  {new Date(listing.effectiveAt).toLocaleDateString(locale, {
                     year: "numeric",
                     month: "short",
                     day: "numeric",
@@ -279,7 +288,7 @@ export default function CitesSummary({
       {data.citesId && (
         <div>
           <h4 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
-            International Trade
+            {t("cites.internationalTrade")}
           </h4>
           <CitesTradeSummary citesId={data.citesId} prefetchedData={tradeData} prefetchedLoading={tradeLoading} suspensionCountries={suspensionCountryCodes} countryAnnotations={countryAnnotations} />
         </div>
@@ -289,23 +298,23 @@ export default function CitesSummary({
       {data.suspensions && data.suspensions.length > 0 && (
         <div>
           <h4 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
-            Trade Suspensions ({data.suspensions.length})
+            {t("cites.tradeSuspensions")} ({data.suspensions.length})
           </h4>
           <div className="border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden">
             <table className="w-full text-xs">
               <thead>
                 <tr className="bg-zinc-50 dark:bg-zinc-800/50">
                   <th className="text-left px-3 py-1.5 font-medium text-zinc-500 dark:text-zinc-400">
-                    Country
+                    {t("cites.country")}
                   </th>
                   <th className="text-left px-3 py-1.5 font-medium text-zinc-500 dark:text-zinc-400">
-                    Type
+                    {t("cites.type")}
                   </th>
                   <th className="text-left px-3 py-1.5 font-medium text-zinc-500 dark:text-zinc-400">
-                    Since
+                    {t("cites.since")}
                   </th>
                   <th className="text-left px-3 py-1.5 font-medium text-zinc-500 dark:text-zinc-400 hidden md:table-cell">
-                    Notification
+                    {t("cites.notification")}
                   </th>
                 </tr>
               </thead>
@@ -322,7 +331,7 @@ export default function CitesSummary({
                       {s.appliesTo}
                     </td>
                     <td className="px-3 py-1.5 text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
-                      {new Date(s.startDate).toLocaleDateString("en-GB", {
+                      {new Date(s.startDate).toLocaleDateString(locale, {
                         year: "numeric",
                         month: "short",
                       })}
@@ -351,8 +360,8 @@ export default function CitesSummary({
                 onClick={() => setShowAllSuspensions(!showAllSuspensions)}
               >
                 {showAllSuspensions
-                  ? "Show fewer"
-                  : `Show all ${data.suspensions.length} suspensions`}
+                  ? t("cites.showFewer")
+                  : t("cites.showAllSuspensions", { count: data.suspensions.length })}
               </button>
             )}
           </div>
@@ -363,20 +372,20 @@ export default function CitesSummary({
       {data.quotas && data.quotas.length > 0 && (
         <div>
           <h4 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
-            Trade Quotas ({data.quotas.length})
+            {t("cites.tradeQuotas")} ({data.quotas.length})
           </h4>
           <div className="border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden">
             <table className="w-full text-xs">
               <thead>
                 <tr className="bg-zinc-50 dark:bg-zinc-800/50">
                   <th className="text-left px-3 py-1.5 font-medium text-zinc-500 dark:text-zinc-400">
-                    Country
+                    {t("cites.country")}
                   </th>
                   <th className="text-right px-3 py-1.5 font-medium text-zinc-500 dark:text-zinc-400">
-                    Quota
+                    {t("cites.quota")}
                   </th>
                   <th className="text-left px-3 py-1.5 font-medium text-zinc-500 dark:text-zinc-400 hidden md:table-cell">
-                    Notes
+                    {t("cites.notes")}
                   </th>
                 </tr>
               </thead>
@@ -406,8 +415,8 @@ export default function CitesSummary({
                 onClick={() => setShowAllQuotas(!showAllQuotas)}
               >
                 {showAllQuotas
-                  ? "Show fewer"
-                  : `Show all ${data.quotas.length} quotas`}
+                  ? t("cites.showFewer")
+                  : t("cites.showAllQuotas", { count: data.quotas.length })}
               </button>
             )}
           </div>
@@ -424,7 +433,7 @@ export default function CitesSummary({
             rel="noopener noreferrer"
             className="hover:underline"
           >
-            The Species+ Website
+            {t("cites.theSpeciesWebsite")}
           </a>
           . Nairobi, Kenya. Compiled by UNEP-WCMC, Cambridge, UK.
           Available at:{" "}
@@ -436,8 +445,8 @@ export default function CitesSummary({
           >
             www.speciesplus.net
           </a>
-          . [Accessed{" "}
-          {new Date().toLocaleDateString("en-GB", {
+          . [{t("cites.accessed")}{" "}
+          {new Date().toLocaleDateString(locale, {
             day: "2-digit",
             month: "2-digit",
             year: "numeric",
@@ -452,7 +461,7 @@ export default function CitesSummary({
             rel="noopener noreferrer"
             className="hover:underline"
           >
-            Terms of Use
+            {t("cites.termsOfUse")}
           </a>
           .
         </p>

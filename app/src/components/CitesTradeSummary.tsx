@@ -12,6 +12,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import { countryName, fmtQty } from "./cites-utils";
+import { useTranslation } from "@/i18n";
 import type { CountryAnnotation } from "./TradeFlowMap";
 
 const TradeFlowMap = dynamic(() => import("./TradeFlowMap"), { ssr: false });
@@ -87,6 +88,19 @@ interface TradeData {
 // Sources that indicate wild take — key concern for assessors
 const WILD_SOURCE_CODES = new Set(["W", "X", "R", "U"]);
 
+const SOURCE_LABEL_KEYS: Record<string, string> = {
+  A: "trade.artificiallyPropagated",
+  C: "trade.captiveBred",
+  D: "trade.appendixICaptiveBred",
+  F: "trade.f1CaptiveBorn",
+  I: "trade.confiscatedSeized",
+  O: "trade.preConvention",
+  R: "trade.ranched",
+  U: "trade.unknown",
+  W: "trade.wild",
+  X: "trade.marine",
+};
+
 const SOURCE_LABELS: Record<string, string> = {
   A: "Artificially propagated",
   C: "Captive-bred",
@@ -98,6 +112,21 @@ const SOURCE_LABELS: Record<string, string> = {
   U: "Unknown",
   W: "Wild",
   X: "Marine",
+};
+
+const PURPOSE_LABEL_KEYS: Record<string, string> = {
+  B: "trade.breedingCaptivity",
+  E: "trade.educational",
+  G: "trade.botanicalGarden",
+  H: "trade.huntingTrophy",
+  L: "trade.lawEnforcement",
+  M: "trade.medicalBiomedical",
+  N: "trade.reintroduction",
+  P: "trade.personal",
+  Q: "trade.circusExhibition",
+  S: "trade.scientific",
+  T: "trade.commercial",
+  Z: "trade.zoo",
 };
 
 const PURPOSE_LABELS: Record<string, string> = {
@@ -175,6 +204,7 @@ function TrendLineChart({
   data: YearData[];
   metric: "records" | "quantity";
 }) {
+  const { t } = useTranslation();
   if (data.length === 0) return null;
 
   return (
@@ -209,7 +239,7 @@ function TrendLineChart({
           labelStyle={{ color: "#a1a1aa" }}
           formatter={(value: number) => [
             value.toLocaleString(),
-            metric === "records" ? "Shipments" : "Items",
+            metric === "records" ? t("trade.shipmentsLabel") : t("trade.reportedItems"),
           ]}
         />
         <Line
@@ -230,6 +260,7 @@ function TrendLineChart({
 /* ------------------------------------------------------------------ */
 
 function TrendSummary({ data, metric }: { data: YearData[]; metric: "records" | "quantity" }) {
+  const { t } = useTranslation();
   if (data.length < 4) return null;
   const mid = Math.floor(data.length / 2);
   const firstHalf = data.slice(0, mid);
@@ -243,7 +274,7 @@ function TrendSummary({ data, metric }: { data: YearData[]; metric: "records" | 
   if (Math.abs(pctChange) < 15) {
     return (
       <span className="text-zinc-400 dark:text-zinc-500 text-[11px]" title="Stable trend">
-        Trend: stable
+        {t("trade.trendStable")}
       </span>
     );
   }
@@ -251,7 +282,7 @@ function TrendSummary({ data, metric }: { data: YearData[]; metric: "records" | 
     return (
       <span
         className="text-red-500 dark:text-red-400 text-[11px] font-medium"
-        title={`Increased ~${Math.round(pctChange)}% (comparing first/second half of period)`}
+        title={`${t("trade.increased")} ~${Math.round(pctChange)}% (comparing first/second half of period)`}
       >
         &#9650; +{Math.round(pctChange)}%
       </span>
@@ -260,7 +291,7 @@ function TrendSummary({ data, metric }: { data: YearData[]; metric: "records" | 
   return (
     <span
       className="text-emerald-500 dark:text-emerald-400 text-[11px] font-medium"
-      title={`Decreased ~${Math.round(Math.abs(pctChange))}% (comparing first/second half of period)`}
+      title={`${t("trade.decreased")} ~${Math.round(Math.abs(pctChange))}% (comparing first/second half of period)`}
     >
       &#9660; {Math.round(pctChange)}%
     </span>
@@ -272,6 +303,7 @@ function TrendSummary({ data, metric }: { data: YearData[]; metric: "records" | 
 /* ------------------------------------------------------------------ */
 
 function SourceBreakdown({ sources }: { sources: CodedData[] }) {
+  const { t } = useTranslation();
   const total = sources.reduce((s, d) => s + d.records, 0);
   if (total === 0) return null;
 
@@ -285,7 +317,7 @@ function SourceBreakdown({ sources }: { sources: CodedData[] }) {
   return (
     <div className="space-y-1.5">
       <div className="flex items-center gap-2 text-xs">
-        <span className="w-16 text-zinc-600 dark:text-zinc-300 shrink-0">Wild</span>
+        <span className="w-16 text-zinc-600 dark:text-zinc-300 shrink-0">{t("trade.wild")}</span>
         <div className="flex-1 h-4 bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
           <div
             className="h-full bg-amber-400 dark:bg-amber-500 rounded"
@@ -297,7 +329,7 @@ function SourceBreakdown({ sources }: { sources: CodedData[] }) {
         </span>
       </div>
       <div className="flex items-center gap-2 text-xs">
-        <span className="w-16 text-zinc-600 dark:text-zinc-300 shrink-0">Captive</span>
+        <span className="w-16 text-zinc-600 dark:text-zinc-300 shrink-0">{t("trade.captive")}</span>
         <div className="flex-1 h-4 bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
           <div
             className="h-full bg-emerald-300 dark:bg-emerald-600 rounded"
@@ -323,6 +355,7 @@ function CountryTable({
   data: CountryData[];
   label: string;
 }) {
+  const { t } = useTranslation();
   if (data.length === 0) return null;
   const top = [...data].sort((a, b) => b.quantity - a.quantity).slice(0, 5);
 
@@ -334,9 +367,9 @@ function CountryTable({
       <table className="w-full text-xs">
         <thead>
           <tr className="text-left text-zinc-400 dark:text-zinc-500">
-            <th className="font-medium pb-1 pr-2">Country</th>
-            <th className="font-medium pb-1 pr-2 text-right">Records</th>
-            <th className="font-medium pb-1 text-right">Quantity</th>
+            <th className="font-medium pb-1 pr-2">{t("trade.country")}</th>
+            <th className="font-medium pb-1 pr-2 text-right">{t("trade.records")}</th>
+            <th className="font-medium pb-1 text-right">{t("trade.quantity")}</th>
           </tr>
         </thead>
         <tbody>
@@ -382,6 +415,7 @@ export default function CitesTradeSummary({
   suspensionCountries?: Set<string>;
   countryAnnotations?: Record<string, CountryAnnotation>;
 }) {
+  const { t } = useTranslation();
   const [ownData, setOwnData] = useState<TradeData | null>(null);
   const [ownLoading, setOwnLoading] = useState(
     !prefetchedData && prefetchedLoading === undefined
@@ -444,7 +478,7 @@ export default function CitesTradeSummary({
     }
     if (data.allTerms) {
       const init: Record<string, boolean> = {};
-      for (const t of data.allTerms) init[t.term] = true;
+      for (const tm of data.allTerms) init[tm.term] = true;
       setCheckedTerms(init);
     }
     setFiltersInitialized(true);
@@ -551,7 +585,7 @@ export default function CitesTradeSummary({
       .sort(([, a], [, b]) => b - a)
       .map(([code, records]) => ({
         code,
-        label: SOURCE_LABELS[code] || code,
+        label: SOURCE_LABEL_KEYS[code] ? t(SOURCE_LABEL_KEYS[code] as Parameters<typeof t>[0]) : (SOURCE_LABELS[code] || code),
         records,
       }));
 
@@ -564,7 +598,7 @@ export default function CitesTradeSummary({
       .sort(([, a], [, b]) => b - a)
       .map(([code, records]) => ({
         code,
-        label: PURPOSE_LABELS[code] || code,
+        label: PURPOSE_LABEL_KEYS[code] ? t(PURPOSE_LABEL_KEYS[code] as Parameters<typeof t>[0]) : (PURPOSE_LABELS[code] || code),
         records,
       }));
 
@@ -625,7 +659,7 @@ export default function CitesTradeSummary({
       topImporters,
       topFlows,
     };
-  }, [data, checkedSources, checkedPurposes, checkedTerms]);
+  }, [data, checkedSources, checkedPurposes, checkedTerms, t]);
 
   /* ---------------------------------------------------------------- */
   /*  Render                                                           */
@@ -653,7 +687,7 @@ export default function CitesTradeSummary({
             d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
           />
         </svg>
-        Loading trade data...
+        {t("trade.loading")}
       </div>
     );
   }
@@ -672,12 +706,12 @@ export default function CitesTradeSummary({
           <span className="font-semibold tabular-nums">
             {filtered.totalRecords.toLocaleString()}
           </span>{" "}
-          shipments
+          {t("trade.shipments")}
           <span className="text-zinc-400 dark:text-zinc-500 mx-1">/</span>
           <span className="font-semibold tabular-nums">
             {fmtQty(filtered.totalQty)}
           </span>{" "}
-          reported items
+          {t("trade.reportedItems")}
           <span className="text-zinc-400 dark:text-zinc-500 ml-1">
             {data.yearRange[0]}–{data.yearRange[1]}
           </span>
@@ -688,7 +722,7 @@ export default function CitesTradeSummary({
             className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline ml-auto"
             onClick={clearFilters}
           >
-            Clear filters
+            {t("trade.clearFilters")}
           </button>
         )}
       </div>
@@ -702,13 +736,13 @@ export default function CitesTradeSummary({
             {data.allSources && data.allSources.length > 0 && (
               <div>
                 <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
-                  Source
+                  {t("trade.source")}
                 </h5>
                 <div className="space-y-1">
                   {data.allSources.map((s) => (
                     <FilterCheckbox
                       key={s.code}
-                      label={s.label}
+                      label={SOURCE_LABEL_KEYS[s.code] ? t(SOURCE_LABEL_KEYS[s.code] as Parameters<typeof t>[0]) : s.label}
                       sublabel={s.code}
                       count={s.records}
                       checked={checkedSources[s.code] ?? true}
@@ -724,13 +758,13 @@ export default function CitesTradeSummary({
             {data.allPurposes && data.allPurposes.length > 0 && (
               <div>
                 <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
-                  Purpose
+                  {t("trade.purpose")}
                 </h5>
                 <div className="space-y-1">
                   {data.allPurposes.map((p) => (
                     <FilterCheckbox
                       key={p.code}
-                      label={p.label}
+                      label={PURPOSE_LABEL_KEYS[p.code] ? t(PURPOSE_LABEL_KEYS[p.code] as Parameters<typeof t>[0]) : p.label}
                       sublabel={p.code}
                       count={p.records}
                       checked={checkedPurposes[p.code] ?? true}
@@ -746,16 +780,16 @@ export default function CitesTradeSummary({
             {data.allTerms && data.allTerms.length > 0 && (
               <div>
                 <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
-                  Commodity
+                  {t("trade.commodities")}
                 </h5>
                 <div className="space-y-1">
-                  {data.allTerms.slice(0, 10).map((t) => (
+                  {data.allTerms.slice(0, 10).map((term) => (
                     <FilterCheckbox
-                      key={t.term}
-                      label={t.term}
-                      count={t.records}
-                      checked={checkedTerms[t.term] ?? true}
-                      onChange={() => toggleTerm(t.term)}
+                      key={term.term}
+                      label={term.term}
+                      count={term.records}
+                      checked={checkedTerms[term.term] ?? true}
+                      onChange={() => toggleTerm(term.term)}
                       color="#8b5cf6"
                     />
                   ))}
@@ -776,7 +810,7 @@ export default function CitesTradeSummary({
           <div>
             <div className="flex items-center gap-2 mb-2">
               <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
-                Trade over time
+                {t("trade.tradeOverTime")}
               </span>
               <div className="flex items-center gap-1 ml-auto bg-zinc-100 dark:bg-zinc-800 rounded-md p-0.5">
                 <button
@@ -787,7 +821,7 @@ export default function CitesTradeSummary({
                   }`}
                   onClick={() => setMetric("records")}
                 >
-                  Shipments
+                  {t("trade.shipmentsLabel")}
                 </button>
                 <button
                   className={`px-2 py-0.5 text-[11px] rounded ${
@@ -797,7 +831,7 @@ export default function CitesTradeSummary({
                   }`}
                   onClick={() => setMetric("quantity")}
                 >
-                  Volume
+                  {t("trade.volume")}
                 </button>
               </div>
             </div>
@@ -808,7 +842,7 @@ export default function CitesTradeSummary({
           {filtered.topSources.length > 0 && (
             <div>
               <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
-                Wild vs. Captive
+                {t("trade.wildVsCaptive")}
               </h5>
               <SourceBreakdown sources={filtered.topSources} />
             </div>
@@ -818,32 +852,32 @@ export default function CitesTradeSummary({
           {filtered.topTerms.length > 0 && (
             <div>
               <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
-                Commodities
+                {t("trade.commodities")}
               </h5>
               <table className="w-full text-xs">
                 <thead>
                   <tr className="text-left text-zinc-400 dark:text-zinc-500">
-                    <th className="font-medium pb-1 pr-2">Term</th>
+                    <th className="font-medium pb-1 pr-2">{t("trade.term")}</th>
                     <th className="font-medium pb-1 pr-2 text-right">
-                      Records
+                      {t("trade.records")}
                     </th>
-                    <th className="font-medium pb-1 text-right">Quantity</th>
+                    <th className="font-medium pb-1 text-right">{t("trade.quantity")}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.topTerms.slice(0, 6).map((t) => (
+                  {filtered.topTerms.slice(0, 6).map((tm) => (
                     <tr
-                      key={t.term}
+                      key={tm.term}
                       className="border-t border-zinc-100 dark:border-zinc-800/50"
                     >
                       <td className="py-1 pr-2 text-zinc-700 dark:text-zinc-300 capitalize">
-                        {t.term}
+                        {tm.term}
                       </td>
                       <td className="py-1 pr-2 text-right text-zinc-500 dark:text-zinc-400 tabular-nums">
-                        {t.records.toLocaleString()}
+                        {tm.records.toLocaleString()}
                       </td>
                       <td className="py-1 text-right text-zinc-500 dark:text-zinc-400 tabular-nums">
-                        {fmtQty(t.quantity)}
+                        {fmtQty(tm.quantity)}
                       </td>
                     </tr>
                   ))}
@@ -856,7 +890,7 @@ export default function CitesTradeSummary({
           {filtered.topPurposes.length > 0 && (
             <div>
               <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
-                Purpose
+                {t("trade.purpose")}
               </h5>
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-600 dark:text-zinc-300">
                 {filtered.topPurposes.map((p) => (
@@ -888,8 +922,8 @@ export default function CitesTradeSummary({
 
       {/* Exporters & Importers */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <CountryTable data={filtered.topExporters} label="Top exporters" />
-        <CountryTable data={filtered.topImporters} label="Top importers" />
+        <CountryTable data={filtered.topExporters} label={t("trade.topExporters")} />
+        <CountryTable data={filtered.topImporters} label={t("trade.topImporters")} />
       </div>
     </div>
   );

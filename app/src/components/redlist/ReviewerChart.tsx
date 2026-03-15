@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import dynamic from "next/dynamic";
+import { useTranslation } from "@/i18n";
 
 const FilterBarChart = dynamic(
   () => import("./FilterBarChart"),
@@ -35,6 +36,7 @@ export default function AssessorChart({
   viewMode,
   onViewModeChange,
 }: AssessorChartProps) {
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
   const [searchPage, setSearchPage] = useState(0);
@@ -86,7 +88,7 @@ export default function AssessorChart({
                 : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
             }`}
           >
-            Assessors
+            {t("reviewer.assessors")}
           </button>
           <button
             onClick={() => handleViewModeChange("reviewers")}
@@ -96,10 +98,10 @@ export default function AssessorChart({
                 : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
             }`}
           >
-            Reviewers
+            {t("reviewer.reviewers")}
           </button>
         </div>
-        <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
+        <span className="text-[10px] text-zinc-400 hidden xl:inline">{t("reviewer.multiselect")}</span>
       </div>
 
       {/* Search input */}
@@ -108,7 +110,7 @@ export default function AssessorChart({
           type="text"
           value={search}
           onChange={(e) => handleSearchChange(e.target.value)}
-          placeholder={`Search ${activeLabel}...`}
+          placeholder={t("reviewer.search")}
           className="w-full px-2.5 py-1 pl-7 pr-14 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-red-500 text-xs"
         />
         <svg
@@ -121,7 +123,7 @@ export default function AssessorChart({
         </svg>
         {search && (
           <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[10px] text-zinc-400">
-            <span>{searchResults.length} result{searchResults.length !== 1 ? "s" : ""}</span>
+            <span>{searchResults.length} {t("reviewer.results")}</span>
             <button
               onClick={() => handleSearchChange("")}
               className="p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700"
@@ -170,7 +172,7 @@ export default function AssessorChart({
                 })}
               </div>
             ) : (
-              <span className="text-xs text-zinc-400">No matching {activeLabel}</span>
+              <span className="text-xs text-zinc-400">{t("reviewer.noMatching")}</span>
             )}
           </div>
         ) : paginated.length > 0 ? (
@@ -188,7 +190,7 @@ export default function AssessorChart({
             yAxisTickMaxLength={22}
           />
         ) : (
-          <span className="text-xs text-zinc-400">No {activeLabel} data</span>
+          <span className="text-xs text-zinc-400">{t("reviewer.noData")}</span>
         )}
       </div>
 
@@ -206,7 +208,7 @@ export default function AssessorChart({
               disabled={activePage === 0}
               className="px-1.5 py-0.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
             >
-              Prev
+              {t("prev")}
             </button>
             <span>
               {activePage * PAGE_SIZE + 1}-{Math.min((activePage + 1) * PAGE_SIZE, activeTotal)} of {activeTotal}
@@ -216,7 +218,7 @@ export default function AssessorChart({
               disabled={activePage >= activePages - 1}
               className="px-1.5 py-0.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
             >
-              Next
+              {t("next")}
             </button>
           </div>
         );

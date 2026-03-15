@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useTranslation } from "@/i18n";
 
 interface WikiSection {
   index: string;
@@ -13,12 +14,10 @@ interface SectionContent {
   loading: boolean;
 }
 
-const WIKI_API = "https://en.wikipedia.org/w/api.php";
-const WIKI_REST = "https://en.wikipedia.org/api/rest_v1";
 const HEADERS = { "Api-User-Agent": "RedListDashboard/1.0 (https://github.com/shaneweisz/red-list-dashboard)" };
 
 /** Strip Wikipedia chrome from parsed HTML */
-function sanitizeWikiHtml(html: string, { removeImages = false, removeFirstHeading = false } = {}): string {
+function sanitizeWikiHtml(html: string, { removeImages = false, removeFirstHeading = false, lang = "en" } = {}): string {
   const doc = new DOMParser().parseFromString(html, "text/html");
 
   // Remove unwanted elements
@@ -80,7 +79,7 @@ function sanitizeWikiHtml(html: string, { removeImages = false, removeFirstHeadi
   doc.querySelectorAll("a[href]").forEach((a) => {
     const href = a.getAttribute("href");
     if (href?.startsWith("/wiki/")) {
-      a.setAttribute("href", `https://en.wikipedia.org${href}`);
+      a.setAttribute("href", `https://${lang}.wikipedia.org${href}`);
       a.setAttribute("target", "_blank");
       a.setAttribute("rel", "noopener noreferrer");
     } else if (href?.startsWith("#")) {
@@ -111,6 +110,10 @@ function isContentSection(name: string): boolean {
 }
 
 export default function WikipediaSummary({ scientificName }: { scientificName: string }) {
+  const { t, language } = useTranslation();
+  const wikiApi = useMemo(() => `https://${language}.wikipedia.org/w/api.php`, [language]);
+  const wikiRest = useMemo(() => `https://${language}.wikipedia.org/api/rest_v1`, [language]);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pageTitle, setPageTitle] = useState<string | null>(null);
@@ -135,12 +138,12 @@ export default function WikipediaSummary({ scientificName }: { scientificName: s
       try {
         // Step 1: Get summary to resolve page title (handles redirects like Panthera_leo -> Lion)
         const summaryRes = await fetch(
-          `${WIKI_REST}/page/summary/${encodeURIComponent(scientificName)}`,
+          `${wikiRest}/page/summary/${encodeURIComponent(scientificName)}`,
           { headers: HEADERS }
         );
         if (!summaryRes.ok) {
           if (summaryRes.status === 404) {
-            setError("No Wikipedia article found");
+            setError(t("wiki.notFound"));
             setLoading(false);
             return;
           }
@@ -152,16 +155,16 @@ export default function WikipediaSummary({ scientificName }: { scientificName: s
         const resolvedTitle = summaryData.titles?.canonical || scientificName;
         resolvedTitleRef.current = resolvedTitle;
         setPageTitle(summaryData.title || resolvedTitle);
-        setPageUrl(summaryData.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encodeURIComponent(resolvedTitle)}`);
+        setPageUrl(summaryData.content_urls?.desktop?.page || `https://${language}.wikipedia.org/wiki/${encodeURIComponent(resolvedTitle)}`);
 
         // Step 2: Fetch lead section HTML and section list in parallel
         const [leadRes, sectionsRes] = await Promise.all([
           fetch(
-            `${WIKI_API}?action=parse&page=${encodeURIComponent(resolvedTitle)}&prop=text&section=0&format=json&origin=*`,
+            `${wikiApi}?action=parse&page=${encodeURIComponent(resolvedTitle)}&prop=text&section=0&format=json&origin=*`,
             { headers: HEADERS }
           ),
           fetch(
-            `${WIKI_API}?action=parse&page=${encodeURIComponent(resolvedTitle)}&prop=sections&format=json&origin=*`,
+            `${wikiApi}?action=parse&page=${encodeURIComponent(resolvedTitle)}&prop=sections&format=json&origin=*`,
             { headers: HEADERS }
           ),
         ]);
@@ -171,7 +174,7 @@ export default function WikipediaSummary({ scientificName }: { scientificName: s
         if (leadRes.ok) {
           const leadData = await leadRes.json();
           const rawHtml = leadData.parse?.text?.["*"] || "";
-          setSummaryHtml(sanitizeWikiHtml(rawHtml, { removeImages: true }));
+          setSummaryHtml(sanitizeWikiHtml(rawHtml, { removeImages: true, lang: language }));
         }
 
         if (sectionsRes.ok) {
@@ -191,7 +194,7 @@ export default function WikipediaSummary({ scientificName }: { scientificName: s
 
     fetchWikipedia();
     return () => { cancelled = true; };
-  }, [scientificName]);
+  }, [scientificName, wikiApi, wikiRest, language, t]);
 
   const toggleSection = useCallback(
     async (section: WikiSection) => {
@@ -211,31 +214,31 @@ export default function WikipediaSummary({ scientificName }: { scientificName: s
         setSectionContents((prev) => ({ ...prev, [key]: { html: "", loading: true } }));
         try {
           const res = await fetch(
-            `${WIKI_API}?action=parse&page=${encodeURIComponent(resolvedTitleRef.current)}&prop=text&section=${key}&format=json&origin=*`,
+            `${wikiApi}?action=parse&page=${encodeURIComponent(resolvedTitleRef.current)}&prop=text&section=${key}&format=json&origin=*`,
             { headers: HEADERS }
           );
           if (res.ok) {
             const data = await res.json();
-            const rawHtml = data.parse?.text?.["*"] || "<p>No content</p>";
+            const rawHtml = data.parse?.text?.["*"] || `<p>${t("wiki.noContent")}</p>`;
             setSectionContents((prev) => ({
               ...prev,
-              [key]: { html: sanitizeWikiHtml(rawHtml, { removeFirstHeading: true }), loading: false },
+              [key]: { html: sanitizeWikiHtml(rawHtml, { removeFirstHeading: true, lang: language }), loading: false },
             }));
           } else {
             setSectionContents((prev) => ({
               ...prev,
-              [key]: { html: "<p>Failed to load section</p>", loading: false },
+              [key]: { html: `<p>${t("wiki.failedToLoadSection")}</p>`, loading: false },
             }));
           }
         } catch {
           setSectionContents((prev) => ({
             ...prev,
-            [key]: { html: "<p>Failed to load section</p>", loading: false },
+            [key]: { html: `<p>${t("wiki.failedToLoadSection")}</p>`, loading: false },
           }));
         }
       }
     },
-    [sectionContents]
+    [sectionContents, wikiApi, t, language]
   );
 
   if (loading) {
@@ -245,7 +248,7 @@ export default function WikipediaSummary({ scientificName }: { scientificName: s
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
         </svg>
-        Loading Wikipedia article...
+        {t("wiki.loading")}
       </div>
     );
   }
@@ -272,7 +275,7 @@ export default function WikipediaSummary({ scientificName }: { scientificName: s
             rel="noopener noreferrer"
             className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
           >
-            {pageTitle} — Wikipedia
+            {pageTitle} — {t("wiki.wikipedia")}
           </a>
         ) : (
           <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{pageTitle}</span>
@@ -314,7 +317,7 @@ export default function WikipediaSummary({ scientificName }: { scientificName: s
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                         </svg>
-                        Loading...
+                        {t("wiki.loading_section")}
                       </div>
                     ) : content?.html ? (
                       <WikiHtml html={content.html} />

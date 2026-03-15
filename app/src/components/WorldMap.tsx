@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useMemo, memo, useCallback } from "react";
+import { useTranslation } from "@/i18n";
 import {
   ComposableMap,
   Geographies,
@@ -161,6 +162,7 @@ const MIN_ZOOM = 1.0;
 const MAX_ZOOM = 8.0;
 
 function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, selectedTaxon, precomputedStats, selectedTaxa }: WorldMapProps) {
+  const { t } = useTranslation();
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoveredCountryCode, setHoveredCountryCode] = useState<string | null>(null);
   const [speciesStats, setSpeciesStats] = useState<CountryStats>(precomputedStats || {});
@@ -362,7 +364,7 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
               <input
                 ref={searchInputRef}
                 type="text"
-                placeholder="Search country..."
+                placeholder={t("map.searchCountry")}
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
@@ -411,13 +413,13 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
               onClick={() => setColorMode("species")}
               className={`px-1.5 py-0.5 rounded transition-colors ${colorMode === "species" ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm font-medium" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
             >
-              Species
+              {t("table.species")}
             </button>
             <button
               onClick={() => setColorMode("occurrences")}
               className={`px-1.5 py-0.5 rounded transition-colors ${colorMode === "occurrences" ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm font-medium" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
             >
-              GBIF
+              {t("focus.gbif")}
             </button>
           </div>
         </div>
@@ -431,12 +433,12 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
             <div className="mt-1 space-y-0.5">
               {hoveredSpeciesStats && (
                 <div className="flex justify-between gap-4 text-xs">
-                  <span className="text-zinc-500"># Assessed</span>
+                  <span className="text-zinc-500">{t("map.assessed")}</span>
                   <span className="font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">{formatNumber(hoveredSpeciesStats.species)}</span>
                 </div>
               )}
               <div className="flex justify-between gap-4 text-xs">
-                <span className="text-zinc-500">GBIF Obs</span>
+                <span className="text-zinc-500">{t("map.gbifObs")}</span>
                 {occurrenceLoading ? (
                   <span className="text-zinc-400 tabular-nums">...</span>
                 ) : hoveredOccurrenceStats ? (
@@ -447,7 +449,7 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
               </div>
             </div>
           ) : (
-            <div className="text-xs text-zinc-400 mt-1">No data available</div>
+            <div className="text-xs text-zinc-400 mt-1">{t("map.noData")}</div>
           )}
         </div>
       )}
@@ -552,7 +554,7 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
             <button
               onClick={handleResetZoom}
               className="w-7 h-7 flex items-center justify-center rounded bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 shadow-sm hover:bg-zinc-50 dark:hover:bg-zinc-700 text-[10px] font-medium transition-colors"
-              title="Reset zoom"
+              title={t("map.resetZoom")}
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -563,7 +565,7 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
             onClick={handleZoomIn}
             disabled={zoom >= MAX_ZOOM}
             className="w-7 h-7 flex items-center justify-center rounded bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 shadow-sm hover:bg-zinc-50 dark:hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed text-sm font-medium transition-colors"
-            title="Zoom in"
+            title={t("map.zoomIn")}
           >
             +
           </button>
@@ -571,7 +573,7 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
             onClick={handleZoomOut}
             disabled={zoom <= MIN_ZOOM}
             className="w-7 h-7 flex items-center justify-center rounded bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 shadow-sm hover:bg-zinc-50 dark:hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed text-sm font-medium transition-colors"
-            title="Zoom out"
+            title={t("map.zoomOut")}
           >
             &minus;
           </button>

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import type L from "leaflet";
+import { useTranslation } from "@/i18n";
 
 // Fixed page size for iNat photo filmstrip (2 columns x 5 rows on desktop)
 const INAT_PAGE_SIZE = 10;
@@ -230,14 +231,14 @@ function yearToColor(year: number, minYear: number, maxYear: number): { stroke: 
   };
 }
 
-// Category labels for tooltip display
-const CATEGORY_LABELS: Record<string, string> = {
-  iNaturalist: "iNaturalist",
-  humanOther: "Other Human Obs.",
-  machineObservation: "Machine Obs.",
-  preservedSpecimen: "Specimens",
-  materialSample: "Material",
-  other: "Other",
+// Category label i18n keys for tooltip display
+const CATEGORY_LABEL_KEYS: Record<string, string> = {
+  iNaturalist: "map.iNaturalist",
+  humanOther: "map.otherHumanObs",
+  machineObservation: "map.machineObs",
+  preservedSpecimen: "map.specimens",
+  materialSample: "map.material",
+  other: "map.other",
 };
 
 // Classify an occurrence into one of the 6 checkbox categories (standalone for YearRangeTrimmer)
@@ -274,6 +275,7 @@ function YearRangeTrimmer({
   onAnimationScrub?: (year: number) => void;
   className?: string;
 }) {
+  const { t } = useTranslation();
   const svgRef = useRef<SVGSVGElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const dragging = useRef<"start" | "end" | "animation" | null>(null);
@@ -506,7 +508,7 @@ function YearRangeTrimmer({
               .sort(([, a], [, b]) => b - a)
               .map(([cat, count]) => (
                 <div key={cat} className="flex justify-between gap-3 text-zinc-300">
-                  <span>{CATEGORY_LABELS[cat] || cat}</span>
+                  <span>{CATEGORY_LABEL_KEYS[cat] ? t(CATEGORY_LABEL_KEYS[cat] as Parameters<typeof t>[0]) : cat}</span>
                   <span className="tabular-nums">{count}</span>
                 </div>
               ))}
@@ -558,6 +560,7 @@ function getThumbUrl(url: string): string {
 
 // Audio player card for sound-only observations
 function InatAudioCard({ obs, idx, onHover, onLeave }: { obs: InatObservation; idx: number; onHover?: () => void; onLeave?: () => void }) {
+  const { t } = useTranslation();
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
 
@@ -620,7 +623,7 @@ function InatAudioCard({ obs, idx, onHover, onLeave }: { obs: InatObservation; i
           <button
             onClick={togglePlay}
             className="absolute bottom-1.5 right-1.5 w-6 h-6 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center shadow-sm transition-colors"
-            title={playing ? "Pause" : "Play audio"}
+            title={playing ? t("map.pause") : t("map.play")}
           >
             {playing ? (
               <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
@@ -640,6 +643,7 @@ function InatAudioCard({ obs, idx, onHover, onLeave }: { obs: InatObservation; i
 
 // iNat photo thumbnail with hover preview using portal (desktop only)
 function InatPhotoWithPreview({ obs, idx, onHover, onLeave }: { obs: InatObservation; idx: number; onHover?: () => void; onLeave?: () => void }) {
+  const { t } = useTranslation();
   // If this is an audio-only observation (no image), render the audio card
   if (!obs.imageUrl && obs.audioUrl) {
     return <InatAudioCard obs={obs} idx={idx} onHover={onHover} onLeave={onLeave} />;
@@ -703,7 +707,7 @@ function InatPhotoWithPreview({ obs, idx, onHover, onLeave }: { obs: InatObserva
       </a>
       {/* Audio badge for observations that have both image and audio */}
       {hasAudio && obs.imageUrl && (
-        <div className="absolute bottom-1 right-1 bg-black/60 rounded-full p-1" title="Has audio">
+        <div className="absolute bottom-1 right-1 bg-black/60 rounded-full p-1" title={t("map.hasAudio")}>
           <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
           </svg>
@@ -772,6 +776,7 @@ export default function OccurrenceMapRow({
   assessmentYear,
   assessmentDate,
 }: OccurrenceMapRowProps) {
+  const { t } = useTranslation();
   const [occurrences, setOccurrences] = useState<OccurrenceFeature[]>([]);
   const [breakdown, setBreakdown] = useState<RecordTypeBreakdown | null>(null);
   const [loadingOccurrences, setLoadingOccurrences] = useState(true);
@@ -1154,14 +1159,14 @@ export default function OccurrenceMapRow({
     if (!breakdown) return [];
     const humanOtherCount = Math.max(0, breakdown.humanObservation - breakdown.iNaturalist);
     return [
-      { key: "iNaturalist" as const, label: "iNaturalist", count: breakdown.iNaturalist, tooltip: "iNaturalist: Community science observations with photos" },
-      { key: "humanOther" as const, label: "Other Human Obs.", count: humanOtherCount, tooltip: "Human Observations: Field surveys, citizen science (non-iNaturalist)" },
-      { key: "machineObservation" as const, label: "Machine Obs.", count: breakdown.machineObservation, tooltip: "Machine Observations: Camera traps, bioacoustics, remote sensing" },
-      { key: "preservedSpecimen" as const, label: "Specimens", count: breakdown.preservedSpecimen, tooltip: "Preserved Specimens: Museum and herbarium collections" },
-      { key: "materialSample" as const, label: "Material", count: breakdown.materialSample || 0, tooltip: "Material Samples: eDNA, tissue samples, blood, feathers" },
-      ...(breakdown.other > 0 ? [{ key: "other" as const, label: "Other", count: breakdown.other, tooltip: "Other: Fossils, living specimens, generic occurrences" }] : []),
+      { key: "iNaturalist" as const, label: t("map.iNaturalist"), count: breakdown.iNaturalist, tooltip: "iNaturalist: Community science observations with photos" },
+      { key: "humanOther" as const, label: t("map.otherHumanObs"), count: humanOtherCount, tooltip: "Human Observations: Field surveys, citizen science (non-iNaturalist)" },
+      { key: "machineObservation" as const, label: t("map.machineObs"), count: breakdown.machineObservation, tooltip: "Machine Observations: Camera traps, bioacoustics, remote sensing" },
+      { key: "preservedSpecimen" as const, label: t("map.specimens"), count: breakdown.preservedSpecimen, tooltip: "Preserved Specimens: Museum and herbarium collections" },
+      { key: "materialSample" as const, label: t("map.material"), count: breakdown.materialSample || 0, tooltip: "Material Samples: eDNA, tissue samples, blood, feathers" },
+      ...(breakdown.other > 0 ? [{ key: "other" as const, label: t("map.other"), count: breakdown.other, tooltip: "Other: Fossils, living specimens, generic occurrences" }] : []),
     ];
-  }, [breakdown]);
+  }, [breakdown, t]);
 
   // Cumulative counts per GPS uncertainty threshold (from type-filtered sample)
   const uncertaintyCounts = useMemo(() => {
@@ -1202,7 +1207,7 @@ export default function OccurrenceMapRow({
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
-                Loading occurrences...
+                {t("map.loadingOccurrences")}
               </div>
             </div>
           ) : mounted ? (
@@ -1459,7 +1464,7 @@ export default function OccurrenceMapRow({
                       : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
                   }`}
                 >
-                  {opt.label}
+                  {t(`map.${key}` as Parameters<typeof t>[0])}
                 </button>
               ))}
             </div>
@@ -1625,7 +1630,7 @@ export default function OccurrenceMapRow({
                     }
                   }}
                   className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                  title={isPlaying ? "Pause" : "Play timeline"}
+                  title={isPlaying ? t("map.pause") : t("map.play")}
                   disabled={animationDateRange.totalDays === 0}
                 >
                   {isPlaying ? (
@@ -1680,7 +1685,7 @@ export default function OccurrenceMapRow({
                     const count = uncertaintyCounts.get(opt.value ?? null);
                     return (
                       <option key={opt.label} value={opt.value ?? ""}>
-                        {opt.label}
+                        {opt.value === null ? t("map.uncertaintyAny") : opt.label}
                       </option>
                     );
                   })}
@@ -1793,7 +1798,7 @@ export default function OccurrenceMapRow({
               <div className="sm:w-[10.5rem] shrink-0 flex flex-col bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden relative z-10">
                 {/* Header with count */}
                 <div className="px-2 py-1.5 text-[10px] font-medium text-zinc-500 dark:text-zinc-400 text-center border-b border-zinc-100 dark:border-zinc-800">
-                  iNaturalist <span className="tabular-nums">({inatTotalCount.toLocaleString()})</span>
+                  {t("map.iNaturalist")} <span className="tabular-nums">({inatTotalCount.toLocaleString()})</span>
                 </div>
                 {/* Photos — horizontal scroll on mobile, 2-col grid on sm+ */}
                 <div className={`flex sm:grid sm:grid-cols-2 sm:content-start gap-1.5 p-1.5 overflow-x-auto sm:overflow-x-visible sm:overflow-y-visible flex-1 ${loadingInatPhotos ? "opacity-50" : ""}`}>

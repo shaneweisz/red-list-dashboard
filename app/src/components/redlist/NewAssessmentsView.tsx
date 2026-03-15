@@ -8,6 +8,7 @@ import TaxaIcon from "../TaxaIcon";
 import { TAXA_BY_ID } from "@/config/taxa";
 import { speciesMatchesSubgroup, getSubgroupDef } from "@/config/taxa-hierarchy";
 import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
+import { useTranslation } from "@/i18n";
 
 const OccurrenceMapRow = dynamic(
   () => import("../OccurrenceMapRow"),
@@ -140,6 +141,7 @@ interface NewAssessmentsViewProps {
 }
 
 export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxaChange, onSubgroupsChange }: NewAssessmentsViewProps = {}) {
+  const { t } = useTranslation();
   // Taxa selection — initialize from shared state
   const [selectedTaxa, setSelectedTaxaLocal] = useState<Set<string>>(sharedTaxa ?? new Set());
   const [selectedSubgroups, setSelectedSubgroupsLocal] = useState<Set<string>>(sharedSubgroups ?? new Set());
@@ -583,7 +585,7 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
 
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 px-6 py-4 rounded-lg">
-          <p className="font-medium">Failed to load data</p>
+          <p className="font-medium">{t("error.failedToLoadData")}</p>
           <p className="text-sm mt-1">{error}</p>
         </div>
       )}
@@ -595,7 +597,7 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">
-                  GBIF Observations <GbifInfoTooltip />
+                  {t("chart.gbifObservations")} <GbifInfoTooltip />
                 </span>
               </div>
               <div style={{ height: 180 }} className="flex items-center justify-center">
@@ -625,7 +627,7 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
                   <DebouncedSearchInput
                     onSearch={handleSearch}
                     initialValue={searchFilter}
-                    placeholder="Search species..."
+                    placeholder={t("searchSpecies")}
                     className="w-full px-3 md:px-4 py-2 pl-9 md:pl-10 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
                   />
                   <svg
@@ -649,7 +651,7 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
                     <svg className="w-4 h-4" fill={showOnlyStarred ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                     </svg>
-                    <span className="hidden sm:inline">Starred</span> ({pinnedSpecies.length})
+                    <span className="hidden sm:inline">{t("starred")}</span> ({pinnedSpecies.length})
                   </button>
                 )}
                 {Array.from(selectedTaxa).map(taxonId => (
@@ -659,7 +661,7 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
                     className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full flex items-center gap-1 hover:opacity-80"
                     style={{ backgroundColor: (TAXA_BY_ID[taxonId]?.color || "#666") + "20", color: TAXA_BY_ID[taxonId]?.color || "#666" }}
                   >
-                    {TAXA_BY_ID[taxonId]?.name || taxonId}
+                    {t(`taxa.${TAXA_BY_ID[taxonId]?.id || taxonId}` as any) !== `taxa.${TAXA_BY_ID[taxonId]?.id || taxonId}` ? t(`taxa.${TAXA_BY_ID[taxonId]?.id || taxonId}` as any) : (TAXA_BY_ID[taxonId]?.name || taxonId)}
                     <span className="text-xs">&times;</span>
                   </button>
                 ))}
@@ -682,7 +684,7 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
                     onClick={() => setSelectedObsRanges(prev => { const next = new Set(prev); next.delete(range); return next; })}
                     className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 flex items-center gap-1 hover:opacity-80"
                   >
-                    {range} obs
+                    {range} {t("obs")}
                     <span className="text-xs">&times;</span>
                   </button>
                 ))}
@@ -697,11 +699,11 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
                     }}
                     className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 underline"
                   >
-                    Clear all
+                    {t("clearAll")}
                   </button>
                 )}
                 <span className="ml-auto text-sm md:text-base font-semibold text-zinc-700 dark:text-zinc-300 tabular-nums">
-                  {totalFiltered.toLocaleString()} species
+                  {totalFiltered.toLocaleString()} {t("species")}
                 </span>
               </div>
             </div>
@@ -731,14 +733,14 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
                             </svg>
                           </th>
                           <th className="px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                            Species
+                            {t("table.species")}
                           </th>
                           <th
                             className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
                             onClick={handleSort}
                           >
                             <span className="flex items-center justify-end gap-1">
-                              GBIF Observations
+                              {t("table.gbifObservations")}
                               <GbifInfoTooltip />
                               {(sortField === "totalGbif" || sortField === null) && (
                                 <span className="text-emerald-500">{sortDirection === "desc" ? "\u2193" : "\u2191"}</span>
@@ -765,7 +767,7 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
                                       togglePinned(speciesKey);
                                     }}
                                     className={`p-1 rounded transition-colors ${isPinned ? "text-amber-500 hover:text-amber-600" : "text-zinc-300 hover:text-amber-400 dark:text-zinc-600 dark:hover:text-amber-400"}`}
-                                    title={isPinned ? "Unpin species" : "Pin species"}
+                                    title={isPinned ? t("unpinSpecies") : t("pinSpecies")}
                                   >
                                     <svg className="w-4 h-4" fill={isPinned ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
@@ -835,7 +837,7 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
                         {totalFiltered === 0 && !speciesLoading && (
                           <tr>
                             <td colSpan={3} className="px-4 py-8 text-center text-zinc-500">
-                              No species found
+                              {t("noSpeciesFound")}
                             </td>
                           </tr>
                         )}
@@ -856,7 +858,7 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
                         disabled={currentPage === 1}
                         className="px-3 py-1 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-zinc-50 dark:hover:bg-zinc-800"
                       >
-                        Prev
+                        {t("prev")}
                       </button>
                       <span className="text-xs md:text-sm text-zinc-600 dark:text-zinc-400">
                         {currentPage} / {totalPages}
@@ -866,7 +868,7 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
                         disabled={currentPage === totalPages}
                         className="px-3 py-1 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-zinc-50 dark:hover:bg-zinc-800"
                       >
-                        Next
+                        {t("next")}
                       </button>
                     </div>
                   </div>

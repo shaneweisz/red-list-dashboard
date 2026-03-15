@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState } from "react";
 import dynamic from "next/dynamic";
 import { ThemeToggle } from "../components/ThemeToggle";
+import { LanguageSwitcher } from "../components/LanguageSwitcher";
+import { useTranslation } from "../i18n";
 
 // Dynamically import view components
 const RedListView = dynamic(
@@ -37,6 +39,7 @@ type ViewMode = "reassessments" | "new-assessments";
 
 export default function RedListPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("reassessments");
+  const { t } = useTranslation();
 
   // Shared taxa/subgroup state that persists across view switches
   const [sharedTaxa, setSharedTaxa] = useState<Set<string>>(new Set());
@@ -49,10 +52,10 @@ export default function RedListPage() {
         <div className="mb-4 md:mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
           <div>
             <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-zinc-900 dark:text-zinc-100 mb-1 md:mb-2">
-              IUCN Red List Assessments Dashboard
+              {t("pageTitle")}
             </h1>
             <p className="text-sm md:text-base text-zinc-600 dark:text-zinc-400">
-              Click taxa rows to filter, use charts and search to explore species. Cmd/Ctrl+click to multiselect.
+              {t("pageSubtitle")}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -66,7 +69,7 @@ export default function RedListPage() {
                     : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
                 }`}
               >
-                Reassessments
+                {t("reassessments")}
               </button>
               <button
                 onClick={() => setViewMode("new-assessments")}
@@ -76,9 +79,10 @@ export default function RedListPage() {
                     : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
                 }`}
               >
-                New Assessments
+                {t("newAssessments")}
               </button>
             </div>
+            <LanguageSwitcher />
             <ThemeToggle />
           </div>
         </div>

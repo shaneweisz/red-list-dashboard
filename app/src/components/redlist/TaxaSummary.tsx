@@ -7,6 +7,7 @@ import { HiOutlineAdjustmentsHorizontal } from "react-icons/hi2";
 import TaxaIcon from "@/components/TaxaIcon";
 import { CATEGORY_COLORS, CATEGORY_NAMES, CATEGORY_ORDER } from "@/config/taxa";
 import { TAXA_SUBGROUPS, getSubgroupDef } from "@/config/taxa-hierarchy";
+import { useTranslation } from "@/i18n";
 
 const IUCN_SOURCE_URL = "https://nc.iucnredlist.org/redlist/content/attachment_files/2025-2_RL_Table1a.pdf";
 
@@ -72,18 +73,19 @@ const flexThClasses = `${cellPad} text-left text-xs font-medium text-zinc-500 up
 // Toggleable column IDs (Taxon is always visible)
 type ColumnId = "described" | "assessed" | "pctAssessed" | "outdated" | "pctOutdated" | "breakdown" | "gbifSpecies" | "totalGbifObs" | "meanGbifObs" | "medianGbifObs" | "gbifDistribution";
 
-const COLUMN_LABELS: Record<ColumnId, string> = {
-  described: "Est. # Described",
-  assessed: "# Assessed",
-  pctAssessed: "% Assessed",
-  outdated: "# Outdated (10+Y)",
-  pctOutdated: "% Outdated",
-  breakdown: "Risk Category Breakdown",
-  gbifSpecies: "# on GBIF",
-  totalGbifObs: "Total Obs",
-  meanGbifObs: "Mean Obs",
-  medianGbifObs: "Median Obs",
-  gbifDistribution: "Obs Distribution",
+// Column labels are resolved inside the component via useTranslation
+const COLUMN_LABEL_KEYS: Record<ColumnId, string> = {
+  described: "col.described",
+  assessed: "col.assessed",
+  pctAssessed: "col.pctAssessed",
+  outdated: "col.outdated",
+  pctOutdated: "col.pctOutdated",
+  breakdown: "col.breakdown",
+  gbifSpecies: "col.gbifSpecies",
+  totalGbifObs: "col.totalGbifObs",
+  meanGbifObs: "col.meanGbifObs",
+  medianGbifObs: "col.medianGbifObs",
+  gbifDistribution: "col.gbifDistribution",
 };
 
 const DISTRIBUTION_BIN_LABELS = ["1", "2–10", "11–100", "101–1K", "1K–10K", "10K–100K", "100K–1M", ">1M"];
@@ -98,6 +100,11 @@ const FOCUS_HIDDEN: Record<FocusMode, Set<ColumnId>> = {
 const DEFAULT_HIDDEN_COLUMNS = FOCUS_HIDDEN.redlist;
 
 export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup }: Props) {
+  const { t } = useTranslation();
+  // Translate column labels
+  const COLUMN_LABELS = Object.fromEntries(
+    Object.entries(COLUMN_LABEL_KEYS).map(([k, v]) => [k, t(v as Parameters<typeof t>[0])])
+  ) as Record<ColumnId, string>;
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [globalGbifMedian, setGlobalGbifMedian] = useState<number | undefined>();
   const [globalGbifDistribution, setGlobalGbifDistribution] = useState<Record<string, number> | undefined>();
@@ -767,7 +774,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 ${isSelected ? "bg-zinc-100 dark:bg-zinc-800" : "bg-white dark:bg-zinc-900"}`}>
             <div className="flex items-center gap-2">
               <TaxaIcon taxonId={taxon.id} size={22} className="flex-shrink-0" style={{ color: taxon.color }} />
-              <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{taxon.name}</span>
+              <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{t(`taxa.${taxon.id}` as Parameters<typeof t>[0]) !== `taxa.${taxon.id}` ? t(`taxa.${taxon.id}` as Parameters<typeof t>[0]) : taxon.name}</span>
               {hasSubgroups && (
                 <button
                   onClick={(e) => {
@@ -1083,13 +1090,13 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             onClick={() => switchFocus("redlist")}
             className={`flex-1 text-xs py-1 font-medium transition-colors ${focusMode === "redlist" ? "bg-zinc-800 text-white dark:bg-zinc-200 dark:text-zinc-900" : "bg-white text-zinc-500 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"}`}
           >
-            Red List
+            {t("focus.redlist")}
           </button>
           <button
             onClick={() => switchFocus("gbif")}
             className={`flex-1 text-xs py-1 font-medium transition-colors ${focusMode === "gbif" ? "bg-zinc-800 text-white dark:bg-zinc-200 dark:text-zinc-900" : "bg-white text-zinc-500 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"}`}
           >
-            GBIF
+            {t("focus.gbif")}
           </button>
         </div>
         <div className="border-t border-zinc-100 dark:border-zinc-700" />
@@ -1118,7 +1125,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           {/* All Species totals row (always visible) */}
           {renderRow(
             "all",
-            "All Species",
+            t("taxa.all"),
             "#22c55e",
             totalDescribed,
             totalAssessed,
