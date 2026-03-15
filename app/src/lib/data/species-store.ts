@@ -332,6 +332,151 @@ export function getTaxaSummary(): TaxaSummaryRow[] {
 }
 
 // =============================================================================
+// ASSESSOR CANDIDATES
+// =============================================================================
+
+export interface AssessorCandidate {
+  name: string;
+  assessmentCount: number;
+  recentYear: string;
+  matchedSpecies: { scientificName: string; category: string; year: string }[];
+}
+
+/**
+ * Find assessor candidates for an NE species by looking at assessed species
+ * in the same taxon group. Prioritises same-genus matches, then falls back
+ * to the broader taxon group. Returns top 3 candidates ranked by recency
+ * and assessment count.
+ */
+export function getAssessorCandidates(
+  scientificName: string,
+  taxonGroup: string,
+): AssessorCandidate[] {
+  const genus = scientificName.split(" ")[0]?.toLowerCase() ?? "";
+
+  const redlistRows = loadRedlistForGroup(taxonGroup);
+  const historyMap = loadHistoryForGroup(taxonGroup);
+
+  // Build a map of assessor -> stats, tracking genus vs non-genus matches
+  interface AssessorStats {
+    genusMatchCount: number;
+    totalCount: number;
+    recentYear: string;
+    species: Map<string, { scientificName: string; category: string; year: string }>;
+  }
+  const assessorMap = new Map<string, AssessorStats>();
+
+  for (const row of redlistRows) {
+    const rowGenus = row.scientific_name.split(" ")[0]?.toLowerCase() ?? "";
+    const isGenusMatch = genus !== "" && rowGenus === genus;
+
+    // Gather assessors from the latest assessment and from history
+    const assessments = historyMap[String(row.sis_taxon_id)] ?? [];
+    // Also include current assessment if it has an assessor in history
+    const allAssessments = assessments.length > 0 ? assessments : [{
+      id: row.assessment_id,
+      year: row.year_published,
+      category: row.category,
+      date: row.assessment_date,
+      assessors: null as string | null,
+      reviewers: null as string | null,
+    }];
+
+    for (const assessment of allAssessments) {
+      if (!assessment.assessors) continue;
+
+      // Parse assessor names - split on common separators
+      const names = parseAssessorNames(assessment.assessors);
+      for (const name of names) {
+        const normalizedName = name.trim();
+        if (!normalizedName || normalizedName.length < 3) continue;
+
+        let stats = assessorMap.get(normalizedName);
+        if (!stats) {
+          stats = { genusMatchCount: 0, totalCount: 0, recentYear: "0", species: new Map() };
+          assessorMap.set(normalizedName, stats);
+        }
+
+        if (isGenusMatch) stats.genusMatchCount++;
+        stats.totalCount++;
+        if (assessment.year > stats.recentYear) stats.recentYear = assessment.year;
+
+        if (!stats.species.has(row.scientific_name)) {
+          stats.species.set(row.scientific_name, {
+            scientificName: row.scientific_name,
+            category: row.category,
+            year: assessment.year,
+          });
+        }
+      }
+    }
+  }
+
+  // Rank: genus matches first, then by recency, then by count
+  const ranked = [...assessorMap.entries()]
+    .map(([name, stats]) => ({
+      name,
+      genusMatchCount: stats.genusMatchCount,
+      assessmentCount: stats.totalCount,
+      recentYear: stats.recentYear,
+      matchedSpecies: [...stats.species.values()]
+        .sort((a, b) => b.year.localeCompare(a.year))
+        .slice(0, 3),
+    }))
+    .sort((a, b) => {
+      // Genus matches first
+      if (a.genusMatchCount !== b.genusMatchCount) return b.genusMatchCount - a.genusMatchCount;
+      // Then by recency
+      if (a.recentYear !== b.recentYear) return b.recentYear.localeCompare(a.recentYear);
+      // Then by total count
+      return b.assessmentCount - a.assessmentCount;
+    });
+
+  return ranked.slice(0, 3).map(({ name, assessmentCount, recentYear, matchedSpecies }) => ({
+    name,
+    assessmentCount,
+    recentYear,
+    matchedSpecies,
+  }));
+}
+
+/**
+ * Parse assessor string into individual names.
+ * Handles formats like "Smith, J.A." and "IUCN SSC Amphibian Specialist Group"
+ */
+function parseAssessorNames(raw: string): string[] {
+  if (!raw || !raw.trim()) return [];
+
+  // Split on " & "
+  const ampersandParts = raw.split(" & ");
+  const names: string[] = [];
+
+  for (const part of ampersandParts) {
+    const segments = part.split(", ");
+    let current = segments[0];
+    for (let i = 1; i < segments.length; i++) {
+      const seg = segments[i];
+      const isInitialsOrAffiliation =
+        seg.startsWith("(") ||
+        /^[A-Z]\./.test(seg) ||
+        /^[A-Z]$/.test(seg);
+
+      if (isInitialsOrAffiliation) {
+        current += ", " + seg;
+      } else {
+        names.push(current.trim());
+        current = seg;
+      }
+    }
+    if (current.trim()) {
+      names.push(current.trim());
+    }
+  }
+
+  return names.filter(Boolean);
+}
+
+// =============================================================================
 // SUBGROUP SUMMARIES
 // =============================================================================
 

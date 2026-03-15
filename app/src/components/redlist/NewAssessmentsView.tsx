@@ -14,6 +14,11 @@ const OccurrenceMapRow = dynamic(
   { ssr: false }
 );
 
+const SuggestedAssessors = dynamic(
+  () => import("../SuggestedAssessors"),
+  { ssr: false }
+);
+
 const FilterBarChart = dynamic(
   () => import("./FilterBarChart"),
   { ssr: false, loading: () => <div className="h-full animate-pulse bg-zinc-200 dark:bg-zinc-800 rounded" /> }
@@ -826,6 +831,12 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
                                       assessmentYear={null}
                                       assessmentDate={null}
                                     />
+                                    <div className="px-4 pb-4">
+                                      <SuggestedAssessors
+                                        scientificName={s.scientific_name}
+                                        taxonGroup={s.taxon_group}
+                                      />
+                                    </div>
                                   </td>
                                 </tr>
                               )}
