@@ -106,7 +106,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
         if (currentLocaleRef.current !== localeAtStart) return; // Locale changed while translating
         const result = {} as Translations;
         keys.forEach((k, i) => {
-          (result as Record<string, string>)[k] = translated[i];
+          (result as unknown as Record<string, string>)[k] = translated[i];
         });
         uiTranslationCache.set(localeAtStart, result);
         setDynamicTranslations(result);
