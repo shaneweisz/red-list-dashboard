@@ -88,7 +88,7 @@ async function searchOpenAlexSinceYear(
   const nameVariants = generateNameVariants(scientificName);
   const searchTerms = nameVariants.map(v => `"${v}"`).join("|");
   const filter = encodeURIComponent(`default.search:${searchTerms},publication_year:>${sinceYear},type:!dataset`);
-  const url = `https://api.openalex.org/works?filter=${filter}&sort=publication_date:desc&per_page=${Math.max(1, limit)}&mailto=red-list-dashboard@example.com`;
+  const url = `https://api.openalex.org/works?filter=${filter}&sort=publication_date:desc&per_page=${Math.max(1, limit)}&mailto=redlist-dashboard@example.com`;
 
   const response = await fetch(url);
   if (!response.ok) {
@@ -127,7 +127,7 @@ async function searchOpenAlexUpToYear(
   const nameVariants = generateNameVariants(scientificName);
   const searchTerms = nameVariants.map(v => `"${v}"`).join("|");
   const filter = encodeURIComponent(`default.search:${searchTerms},publication_year:<${upToYear + 1},type:!dataset`);
-  const url = `https://api.openalex.org/works?filter=${filter}&sort=cited_by_count:desc&per_page=${Math.max(1, limit)}&mailto=red-list-dashboard@example.com`;
+  const url = `https://api.openalex.org/works?filter=${filter}&sort=cited_by_count:desc&per_page=${Math.max(1, limit)}&mailto=redlist-dashboard@example.com`;
 
   const response = await fetch(url);
   if (!response.ok) {

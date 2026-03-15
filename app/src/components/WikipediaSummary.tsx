@@ -15,7 +15,7 @@ interface SectionContent {
 
 const WIKI_API = "https://en.wikipedia.org/w/api.php";
 const WIKI_REST = "https://en.wikipedia.org/api/rest_v1";
-const HEADERS = { "Api-User-Agent": "RedListDashboard/1.0 (https://github.com/shaneweisz/red-list-dashboard)" };
+const HEADERS = { "Api-User-Agent": "RedListDashboard/1.0 (https://github.com/shaneweisz/redlist-dashboard)" };
 
 /** Strip Wikipedia chrome from parsed HTML */
 function sanitizeWikiHtml(html: string, { removeImages = false, removeFirstHeading = false } = {}): string {
