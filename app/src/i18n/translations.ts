@@ -1,11 +1,4 @@
-export type Locale = "en" | "fr" | "es" | "pt";
-
-export const LOCALE_NAMES: Record<Locale, string> = {
-  en: "English",
-  fr: "Français",
-  es: "Español",
-  pt: "Português",
-};
+export type Locale = string;
 
 export interface Translations {
   // Page header
@@ -93,6 +86,62 @@ export interface Translations {
   bonyFish: string;
   sharksAndRays: string;
   jawlessFish: string;
+
+  // Species list table columns
+  columnSpecies: string;
+  columnCategory: string;
+  columnAssessDate: string;
+  columnTotalGbif: string;
+  columnNewGbif: string;
+  columnPctNewGbif: string;
+
+  // Filter bar
+  clearAll: string;
+  speciesCount: string;
+  assessorFilter: string;
+  reviewerFilter: string;
+  failedToLoadData: string;
+
+  // Red List Assessments panel
+  redListAssessments: string;
+  compare: string;
+  exitComparison: string;
+  viewOnIUCN: string;
+  loadingAssessment: string;
+  loadingComparison: string;
+  failedToLoadAssessment: string;
+  retry: string;
+  noEarlierAssessment: string;
+  noNarrativeChanges: string;
+  statusImproved: string;
+  statusWorsened: string;
+  categoryChangedLabel: string;
+  categoryUnchanged: string;
+  changedLabel: string;
+  notAvailable: string;
+
+  // Assessment narrative section titles
+  narrativeRationale: string;
+  narrativePopulation: string;
+  narrativeHabitatEcology: string;
+  narrativeThreats: string;
+  narrativeConservationActions: string;
+  narrativeUseTrade: string;
+  narrativeGeographicRange: string;
+
+  // Assessment detail labels
+  assessedLabel: string;
+  publishedLabel: string;
+  systemsLabel: string;
+  assessorsLabel: string;
+  reviewersLabel: string;
+  habitatsLabel: string;
+  threatClassificationLabel: string;
+  possiblyExtinct: string;
+  possiblyExtinctInTheWild: string;
+  trendLabel: string;
+  criteriaLabel: string;
+  noNarrativeDataAvailable: string;
 }
 
 const en: Translations = {
@@ -167,6 +216,57 @@ const en: Translations = {
   bonyFish: "Bony Fish",
   sharksAndRays: "Sharks & Rays",
   jawlessFish: "Jawless Fish",
+
+  columnSpecies: "Species",
+  columnCategory: "Category",
+  columnAssessDate: "Assess. Date",
+  columnTotalGbif: "Total GBIF",
+  columnNewGbif: "New GBIF",
+  columnPctNewGbif: "% New GBIF",
+
+  clearAll: "Clear all",
+  speciesCount: "species",
+  assessorFilter: "assessor",
+  reviewerFilter: "reviewer",
+  failedToLoadData: "Failed to load Red List data",
+
+  redListAssessments: "Red List Assessments",
+  compare: "Compare",
+  exitComparison: "Exit comparison",
+  viewOnIUCN: "View on IUCN",
+  loadingAssessment: "Loading assessment...",
+  loadingComparison: "Loading comparison assessment...",
+  failedToLoadAssessment: "Failed to load assessment details.",
+  retry: "Retry",
+  noEarlierAssessment: "No previous assessment to compare with. This is the earliest assessment.",
+  noNarrativeChanges: "No changes in narrative text between these assessments.",
+  statusImproved: "Status improved",
+  statusWorsened: "Status worsened",
+  categoryChangedLabel: "Category changed",
+  categoryUnchanged: "Category unchanged between assessments",
+  changedLabel: "changed",
+  notAvailable: "Not available",
+
+  narrativeRationale: "Rationale",
+  narrativePopulation: "Population",
+  narrativeHabitatEcology: "Habitat & Ecology",
+  narrativeThreats: "Threats",
+  narrativeConservationActions: "Conservation Actions",
+  narrativeUseTrade: "Use & Trade",
+  narrativeGeographicRange: "Geographic Range",
+
+  assessedLabel: "Assessed",
+  publishedLabel: "Published",
+  systemsLabel: "Systems",
+  assessorsLabel: "Assessors",
+  reviewersLabel: "Reviewers",
+  habitatsLabel: "Habitats",
+  threatClassificationLabel: "Threat Classification",
+  possiblyExtinct: "Possibly Extinct",
+  possiblyExtinctInTheWild: "Possibly Extinct in the Wild",
+  trendLabel: "Trend",
+  criteriaLabel: "Criteria",
+  noNarrativeDataAvailable: "No detailed narrative data available for this assessment.",
 };
 
 const fr: Translations = {
@@ -241,6 +341,57 @@ const fr: Translations = {
   bonyFish: "Poissons osseux",
   sharksAndRays: "Requins et raies",
   jawlessFish: "Poissons sans mâchoire",
+
+  columnSpecies: "Espèces",
+  columnCategory: "Catégorie",
+  columnAssessDate: "Date d'éval.",
+  columnTotalGbif: "GBIF total",
+  columnNewGbif: "Nouveau GBIF",
+  columnPctNewGbif: "% Nouveau GBIF",
+
+  clearAll: "Tout effacer",
+  speciesCount: "espèces",
+  assessorFilter: "évaluateur",
+  reviewerFilter: "réviseur",
+  failedToLoadData: "Échec du chargement des données de la Liste rouge",
+
+  redListAssessments: "Évaluations de la Liste rouge",
+  compare: "Comparer",
+  exitComparison: "Quitter la comparaison",
+  viewOnIUCN: "Voir sur l'UICN",
+  loadingAssessment: "Chargement de l'évaluation...",
+  loadingComparison: "Chargement de l'évaluation de comparaison...",
+  failedToLoadAssessment: "Échec du chargement des détails de l'évaluation.",
+  retry: "Réessayer",
+  noEarlierAssessment: "Aucune évaluation antérieure à comparer. C'est la première évaluation.",
+  noNarrativeChanges: "Aucun changement dans le texte narratif entre ces évaluations.",
+  statusImproved: "Statut amélioré",
+  statusWorsened: "Statut aggravé",
+  categoryChangedLabel: "Catégorie changée",
+  categoryUnchanged: "Catégorie inchangée entre les évaluations",
+  changedLabel: "modifié",
+  notAvailable: "Non disponible",
+
+  narrativeRationale: "Justification",
+  narrativePopulation: "Population",
+  narrativeHabitatEcology: "Habitat et écologie",
+  narrativeThreats: "Menaces",
+  narrativeConservationActions: "Actions de conservation",
+  narrativeUseTrade: "Utilisation et commerce",
+  narrativeGeographicRange: "Aire de répartition",
+
+  assessedLabel: "Évalué",
+  publishedLabel: "Publié",
+  systemsLabel: "Systèmes",
+  assessorsLabel: "Évaluateurs",
+  reviewersLabel: "Réviseurs",
+  habitatsLabel: "Habitats",
+  threatClassificationLabel: "Classification des menaces",
+  possiblyExtinct: "Peut-être éteinte",
+  possiblyExtinctInTheWild: "Peut-être éteinte à l'état sauvage",
+  trendLabel: "Tendance",
+  criteriaLabel: "Critères",
+  noNarrativeDataAvailable: "Aucune donnée narrative détaillée disponible pour cette évaluation.",
 };
 
 const es: Translations = {
@@ -315,6 +466,57 @@ const es: Translations = {
   bonyFish: "Peces óseos",
   sharksAndRays: "Tiburones y rayas",
   jawlessFish: "Peces sin mandíbula",
+
+  columnSpecies: "Especies",
+  columnCategory: "Categoría",
+  columnAssessDate: "Fecha eval.",
+  columnTotalGbif: "GBIF total",
+  columnNewGbif: "Nuevo GBIF",
+  columnPctNewGbif: "% Nuevo GBIF",
+
+  clearAll: "Borrar todo",
+  speciesCount: "especies",
+  assessorFilter: "evaluador",
+  reviewerFilter: "revisor",
+  failedToLoadData: "Error al cargar los datos de la Lista Roja",
+
+  redListAssessments: "Evaluaciones de la Lista Roja",
+  compare: "Comparar",
+  exitComparison: "Salir de comparación",
+  viewOnIUCN: "Ver en la UICN",
+  loadingAssessment: "Cargando evaluación...",
+  loadingComparison: "Cargando evaluación de comparación...",
+  failedToLoadAssessment: "Error al cargar los detalles de la evaluación.",
+  retry: "Reintentar",
+  noEarlierAssessment: "No hay evaluación anterior para comparar. Esta es la evaluación más antigua.",
+  noNarrativeChanges: "No hay cambios en el texto narrativo entre estas evaluaciones.",
+  statusImproved: "Estado mejorado",
+  statusWorsened: "Estado empeorado",
+  categoryChangedLabel: "Categoría cambiada",
+  categoryUnchanged: "Categoría sin cambios entre evaluaciones",
+  changedLabel: "cambiado",
+  notAvailable: "No disponible",
+
+  narrativeRationale: "Justificación",
+  narrativePopulation: "Población",
+  narrativeHabitatEcology: "Hábitat y ecología",
+  narrativeThreats: "Amenazas",
+  narrativeConservationActions: "Acciones de conservación",
+  narrativeUseTrade: "Uso y comercio",
+  narrativeGeographicRange: "Área de distribución",
+
+  assessedLabel: "Evaluado",
+  publishedLabel: "Publicado",
+  systemsLabel: "Sistemas",
+  assessorsLabel: "Evaluadores",
+  reviewersLabel: "Revisores",
+  habitatsLabel: "Hábitats",
+  threatClassificationLabel: "Clasificación de amenazas",
+  possiblyExtinct: "Posiblemente extinta",
+  possiblyExtinctInTheWild: "Posiblemente extinta en estado silvestre",
+  trendLabel: "Tendencia",
+  criteriaLabel: "Criterios",
+  noNarrativeDataAvailable: "No hay datos narrativos detallados disponibles para esta evaluación.",
 };
 
 const pt: Translations = {
@@ -389,9 +591,76 @@ const pt: Translations = {
   bonyFish: "Peixes ósseos",
   sharksAndRays: "Tubarões e raias",
   jawlessFish: "Peixes sem mandíbula",
+
+  columnSpecies: "Espécies",
+  columnCategory: "Categoria",
+  columnAssessDate: "Data aval.",
+  columnTotalGbif: "GBIF total",
+  columnNewGbif: "Novo GBIF",
+  columnPctNewGbif: "% Novo GBIF",
+
+  clearAll: "Limpar tudo",
+  speciesCount: "espécies",
+  assessorFilter: "avaliador",
+  reviewerFilter: "revisor",
+  failedToLoadData: "Falha ao carregar os dados da Lista Vermelha",
+
+  redListAssessments: "Avaliações da Lista Vermelha",
+  compare: "Comparar",
+  exitComparison: "Sair da comparação",
+  viewOnIUCN: "Ver na UICN",
+  loadingAssessment: "Carregando avaliação...",
+  loadingComparison: "Carregando avaliação de comparação...",
+  failedToLoadAssessment: "Falha ao carregar os detalhes da avaliação.",
+  retry: "Tentar novamente",
+  noEarlierAssessment: "Nenhuma avaliação anterior para comparar. Esta é a avaliação mais antiga.",
+  noNarrativeChanges: "Nenhuma mudança no texto narrativo entre estas avaliações.",
+  statusImproved: "Status melhorado",
+  statusWorsened: "Status piorado",
+  categoryChangedLabel: "Categoria alterada",
+  categoryUnchanged: "Categoria inalterada entre avaliações",
+  changedLabel: "alterado",
+  notAvailable: "Não disponível",
+
+  narrativeRationale: "Justificativa",
+  narrativePopulation: "População",
+  narrativeHabitatEcology: "Habitat e ecologia",
+  narrativeThreats: "Ameaças",
+  narrativeConservationActions: "Ações de conservação",
+  narrativeUseTrade: "Uso e comércio",
+  narrativeGeographicRange: "Área de distribuição",
+
+  assessedLabel: "Avaliado",
+  publishedLabel: "Publicado",
+  systemsLabel: "Sistemas",
+  assessorsLabel: "Avaliadores",
+  reviewersLabel: "Revisores",
+  habitatsLabel: "Habitats",
+  threatClassificationLabel: "Classificação de ameaças",
+  possiblyExtinct: "Possivelmente extinta",
+  possiblyExtinctInTheWild: "Possivelmente extinta na natureza",
+  trendLabel: "Tendência",
+  criteriaLabel: "Critérios",
+  noNarrativeDataAvailable: "Nenhum dado narrativo detalhado disponível para esta avaliação.",
 };
 
-export const translations: Record<Locale, Translations> = { en, fr, es, pt };
+export const staticTranslations: Record<string, Translations> = { en, fr, es, pt };
+
+// Legacy export for compatibility
+export const translations = staticTranslations;
+
+// Legacy LOCALE_NAMES for compatibility (kept for any remaining usages)
+export const LOCALE_NAMES: Record<string, string> = {
+  en: "English",
+  fr: "Français",
+  es: "Español",
+  pt: "Português",
+};
+
+// Helper to get static translations for a locale (returns null if not a static locale)
+export function getStaticTranslations(locale: string): Translations | null {
+  return staticTranslations[locale] || null;
+}
 
 // Helper to get translated taxon name by taxon ID
 const TAXON_NAME_KEYS: Record<string, keyof Translations> = {
@@ -406,10 +675,11 @@ const TAXON_NAME_KEYS: Record<string, keyof Translations> = {
   fungi: "fungi",
 };
 
-export function getTranslatedTaxonName(locale: Locale, taxonId: string): string | null {
+export function getTranslatedTaxonName(locale: string, taxonId: string): string | null {
   const key = TAXON_NAME_KEYS[taxonId];
   if (!key) return null;
-  return translations[locale][key];
+  const t = staticTranslations[locale] || staticTranslations["en"];
+  return t[key] as string;
 }
 
 // Helper to get translated IUCN category name by code
@@ -425,8 +695,9 @@ const CATEGORY_NAME_KEYS: Record<string, keyof Translations> = {
   NE: "notEvaluated",
 };
 
-export function getTranslatedCategoryName(locale: Locale, code: string): string {
+export function getTranslatedCategoryName(locale: string, code: string): string {
   const key = CATEGORY_NAME_KEYS[code];
   if (!key) return code;
-  return translations[locale][key];
+  const t = staticTranslations[locale] || staticTranslations["en"];
+  return t[key] as string;
 }

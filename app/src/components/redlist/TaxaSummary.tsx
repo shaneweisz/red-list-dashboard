@@ -74,19 +74,21 @@ const flexThClasses = `${cellPad} text-left text-xs font-medium text-zinc-500 up
 // Toggleable column IDs (Taxon is always visible)
 type ColumnId = "described" | "assessed" | "pctAssessed" | "outdated" | "pctOutdated" | "breakdown" | "gbifSpecies" | "totalGbifObs" | "meanGbifObs" | "medianGbifObs" | "gbifDistribution";
 
-const COLUMN_LABELS: Record<ColumnId, string> = {
-  described: "Est. # Described",
-  assessed: "# Assessed",
-  pctAssessed: "% Assessed",
-  outdated: "# Outdated (10+Y)",
-  pctOutdated: "% Outdated",
-  breakdown: "Risk Category Breakdown",
-  gbifSpecies: "# on GBIF",
-  totalGbifObs: "Total Obs",
-  meanGbifObs: "Mean Obs",
-  medianGbifObs: "Median Obs",
-  gbifDistribution: "Obs Distribution",
-};
+function getColumnLabels(t: import("@/i18n/translations").Translations): Record<ColumnId, string> {
+  return {
+    described: t.estDescribed,
+    assessed: t.numAssessed,
+    pctAssessed: t.pctAssessed,
+    outdated: t.numOutdated,
+    pctOutdated: t.pctOutdated,
+    breakdown: t.riskCategoryBreakdown,
+    gbifSpecies: "# on GBIF",
+    totalGbifObs: "Total Obs",
+    meanGbifObs: "Mean Obs",
+    medianGbifObs: "Median Obs",
+    gbifDistribution: "Obs Distribution",
+  };
+}
 
 const DISTRIBUTION_BIN_LABELS = ["1", "2–10", "11–100", "101–1K", "1K–10K", "10K–100K", "100K–1M", ">1M"];
 
@@ -101,6 +103,7 @@ const DEFAULT_HIDDEN_COLUMNS = FOCUS_HIDDEN.redlist;
 
 export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup }: Props) {
   const { t, locale } = useLanguage();
+  const COLUMN_LABELS = getColumnLabels(t);
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [globalGbifMedian, setGlobalGbifMedian] = useState<number | undefined>();
   const [globalGbifDistribution, setGlobalGbifDistribution] = useState<Record<string, number> | undefined>();
@@ -339,17 +342,17 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           <thead>
             <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
               <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`}>Taxon</th>
-              {isVisible("described") && <th className={numericThClasses}>Est. # Described</th>}
-              {isVisible("assessed") && <th className={numericThClasses}># Assessed</th>}
-              {isVisible("pctAssessed") && <th className={flexThClasses}>% Assessed</th>}
-              {isVisible("outdated") && <th className={numericThClasses}># Outdated (10+Y)</th>}
-              {isVisible("pctOutdated") && <th className={flexThClasses}>% Outdated</th>}
-              {isVisible("gbifSpecies") && <th className={numericThClasses}># on GBIF</th>}
-              {isVisible("totalGbifObs") && <th className={numericThClasses}>Total Obs</th>}
-              {isVisible("gbifDistribution") && <th className={flexThClasses}>Obs Distribution</th>}
-              {isVisible("meanGbifObs") && <th className={numericThClasses}>Mean Obs</th>}
-              {isVisible("medianGbifObs") && <th className={numericThClasses}>Median Obs</th>}
-              {isVisible("breakdown") && <th className={flexThClasses}>Risk Category Breakdown</th>}
+              {isVisible("described") && <th className={numericThClasses}>{COLUMN_LABELS.described}</th>}
+              {isVisible("assessed") && <th className={numericThClasses}>{COLUMN_LABELS.assessed}</th>}
+              {isVisible("pctAssessed") && <th className={flexThClasses}>{COLUMN_LABELS.pctAssessed}</th>}
+              {isVisible("outdated") && <th className={numericThClasses}>{COLUMN_LABELS.outdated}</th>}
+              {isVisible("pctOutdated") && <th className={flexThClasses}>{COLUMN_LABELS.pctOutdated}</th>}
+              {isVisible("gbifSpecies") && <th className={numericThClasses}>{COLUMN_LABELS.gbifSpecies}</th>}
+              {isVisible("totalGbifObs") && <th className={numericThClasses}>{COLUMN_LABELS.totalGbifObs}</th>}
+              {isVisible("gbifDistribution") && <th className={flexThClasses}>{COLUMN_LABELS.gbifDistribution}</th>}
+              {isVisible("meanGbifObs") && <th className={numericThClasses}>{COLUMN_LABELS.meanGbifObs}</th>}
+              {isVisible("medianGbifObs") && <th className={numericThClasses}>{COLUMN_LABELS.medianGbifObs}</th>}
+              {isVisible("breakdown") && <th className={flexThClasses}>{COLUMN_LABELS.breakdown}</th>}
             </tr>
           </thead>
           <tbody>
@@ -1007,7 +1010,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         {isVisible("described") && (
           <th className={`${numericThClasses}`}>
             <span className="inline-flex items-center gap-1">
-              Est. # Described
+              {COLUMN_LABELS.described}
               <span className="relative group">
                 <a
                   href={IUCN_SOURCE_URL}
@@ -1026,35 +1029,35 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           </th>
         )}
         {isVisible("assessed") && (
-          <th className={numericThClasses}># Assessed</th>
+          <th className={numericThClasses}>{COLUMN_LABELS.assessed}</th>
         )}
         {isVisible("pctAssessed") && (
-          <th className={flexThClasses}>% Assessed</th>
+          <th className={flexThClasses}>{COLUMN_LABELS.pctAssessed}</th>
         )}
         {isVisible("outdated") && (
-          <th className={numericThClasses}># Outdated (10+Y)</th>
+          <th className={numericThClasses}>{COLUMN_LABELS.outdated}</th>
         )}
         {isVisible("pctOutdated") && (
-          <th className={flexThClasses}>% Outdated</th>
+          <th className={flexThClasses}>{COLUMN_LABELS.pctOutdated}</th>
         )}
         {isVisible("gbifSpecies") && (
-          <th className={numericThClasses}># on GBIF</th>
+          <th className={numericThClasses}>{COLUMN_LABELS.gbifSpecies}</th>
         )}
         {isVisible("totalGbifObs") && (
-          <th className={numericThClasses}>Total Obs</th>
+          <th className={numericThClasses}>{COLUMN_LABELS.totalGbifObs}</th>
         )}
         {isVisible("gbifDistribution") && (
-          <th className={flexThClasses}>Obs Distribution</th>
+          <th className={flexThClasses}>{COLUMN_LABELS.gbifDistribution}</th>
         )}
         {isVisible("meanGbifObs") && (
-          <th className={numericThClasses}>Mean Obs</th>
+          <th className={numericThClasses}>{COLUMN_LABELS.meanGbifObs}</th>
         )}
         {isVisible("medianGbifObs") && (
-          <th className={numericThClasses}>Median Obs</th>
+          <th className={numericThClasses}>{COLUMN_LABELS.medianGbifObs}</th>
         )}
         {isVisible("breakdown") && (
           <th className={flexThClasses}>
-            <span className="uppercase">Risk Category Breakdown</span>
+            <span className="uppercase">{COLUMN_LABELS.breakdown}</span>
             <div className="flex items-center gap-1.5 mt-1 font-normal normal-case">
               {BAR_CATEGORIES.map((cat) => (
                 <span key={cat} className="inline-flex items-center gap-0.5">
@@ -1121,7 +1124,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           {/* All Species totals row (always visible) */}
           {renderRow(
             "all",
-            "All Species",
+            t.allSpecies,
             "#22c55e",
             totalDescribed,
             totalAssessed,

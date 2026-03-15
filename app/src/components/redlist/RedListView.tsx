@@ -1231,7 +1231,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
       {/* Error state */}
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 px-6 py-4 rounded-lg">
-          <p className="font-medium">Failed to load Red List data</p>
+          <p className="font-medium">{t.failedToLoadData}</p>
           <p className="text-sm mt-1">{error}</p>
         </div>
       )}
@@ -1325,7 +1325,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                 <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 min-h-[320px] flex flex-col">
                   <div className="flex items-center justify-between mb-1">
                     <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                      Country
+                      {t.country}
                     </h2>
                   </div>
                   <div className="flex-1 flex items-center justify-center">
@@ -1457,7 +1457,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                 onClick={() => setSelectedAssessors(prev => { const next = new Set(prev); next.delete(name); return next; })}
                 className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
               >
-                {name} <span className="text-[10px] opacity-60">(assessor)</span>
+                {name} <span className="text-[10px] opacity-60">({t.assessorFilter})</span>
                 <span className="text-xs">×</span>
               </button>
             ))}
@@ -1467,7 +1467,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                 onClick={() => setSelectedReviewers(prev => { const next = new Set(prev); next.delete(name); return next; })}
                 className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-fuchsia-100 text-fuchsia-600 dark:bg-fuchsia-900/30 dark:text-fuchsia-400 flex items-center gap-1 hover:opacity-80"
               >
-                {name} <span className="text-[10px] opacity-60">(reviewer)</span>
+                {name} <span className="text-[10px] opacity-60">({t.reviewerFilter})</span>
                 <span className="text-xs">×</span>
               </button>
             ))}
@@ -1476,11 +1476,11 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                 onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setSelectedSubgroups(new Set()); setSelectedObsRanges(new Set()); setSelectedAssessors(new Set()); setSelectedReviewers(new Set()); setShowOnlyStarred(false); }}
                 className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 underline"
               >
-                Clear all
+                {t.clearAll}
               </button>
             )}
             <span className="ml-auto text-sm md:text-base font-semibold text-zinc-700 dark:text-zinc-300 tabular-nums">
-              {totalFiltered.toLocaleString()} species
+              {totalFiltered.toLocaleString()} {t.speciesCount}
             </span>
             {neCount > 0 && (
               <button
@@ -1537,14 +1537,14 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                   </svg>
                 </th>
                 <th className="sticky left-[40px] z-10 bg-zinc-50 dark:bg-zinc-800 px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                  Species
+                  {t.columnSpecies}
                 </th>
                 <th
                   className="px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
                   onClick={() => handleSort("category")}
                 >
                   <span className="flex items-center gap-1">
-                    Category
+                    {t.columnCategory}
                     {sortField === "category" && (
                       <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
                     )}
@@ -1555,7 +1555,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                   onClick={() => handleSort("year")}
                 >
                   <span className="flex items-center gap-1">
-                    Assess. Date
+                    {t.columnAssessDate}
                     {(sortField === "year" || sortField === null) && (
                       <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
                     )}
@@ -1566,7 +1566,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                   onClick={() => handleSort("totalGbif")}
                 >
                   <span className="flex items-center justify-end gap-1">
-                    Total GBIF
+                    {t.columnTotalGbif}
                     <GbifInfoTooltip />
                     {sortField === "totalGbif" && (
                       <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
@@ -1578,7 +1578,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                   onClick={() => handleSort("newGbif")}
                 >
                   <span className="flex items-center justify-end gap-1">
-                    New GBIF
+                    {t.columnNewGbif}
                     <HoverTooltip text="Records added after the assessment year (not the exact date). Uses the year following the assessment as the start of the range.">
                       <svg className="w-3 h-3 text-zinc-400 dark:text-zinc-500 cursor-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <circle cx="12" cy="12" r="10" />
@@ -1595,7 +1595,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                   onClick={() => handleSort("pctNewGbif")}
                 >
                   <span className="flex items-center justify-end gap-1">
-                    % New GBIF
+                    {t.columnPctNewGbif}
                     {sortField === "pctNewGbif" && (
                       <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
                     )}
