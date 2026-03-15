@@ -41,6 +41,7 @@ const INCLUDED_BASIS_OF_RECORD = [
   "OCCURRENCE",
   "MATERIAL_SAMPLE",
   "OBSERVATION",
+  "PRESERVED_SPECIMEN",
 ];
 
 // =============================================================================
