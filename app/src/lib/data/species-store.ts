@@ -51,6 +51,10 @@ interface GbifRow {
   taxon_group_table1a: string;
   total_count: number;
   count_after_assessment_year: number | null;
+  class_name: string;
+  order_name: string;
+  family: string;
+  countries: string[];
 }
 
 export interface PreviousAssessment {
@@ -161,6 +165,10 @@ function parseGbifRow(r: Record<string, string>): GbifRow {
     taxon_group_table1a: r.taxon_group_table1a,
     total_count: parseInt(r.total_count, 10) || 0,
     count_after_assessment_year: r.count_after_assessment_year ? parseInt(r.count_after_assessment_year, 10) : null,
+    class_name: r.class_name || "",
+    order_name: r.order_name || "",
+    family: r.family || "",
+    countries: r.countries ? r.countries.split(";").filter(Boolean) : [],
   };
 }
 
@@ -299,14 +307,14 @@ export function getSpecies(groups: string[], includeNE: boolean): SpeciesRow[] {
           assessment_id: null,
           scientific_name: gbif.scientific_name,
           common_name: gbif.common_name || null,
-          family: null,
+          family: gbif.family || null,
           category: "NE",
           assessment_date: null,
           year_published: null,
           population_trend: null,
-          countries: [],
-          class_name: null,
-          order_name: null,
+          countries: gbif.countries,
+          class_name: gbif.class_name || null,
+          order_name: gbif.order_name || null,
           taxon_group: gbif.taxon_group_table1a,
           taxon_id: mapTaxonId(gbif.taxon_group_table1a),
           gbif_species_key: gbif.gbif_species_key,
