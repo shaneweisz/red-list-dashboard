@@ -84,6 +84,7 @@ export async function fetchFacets(
   keyType: string,
   keyValue: number,
   yearRange?: string,
+  modifiedRange?: string,
 ): Promise<Array<{ speciesKey: number; count: number }>> {
   const allResults: Array<{ speciesKey: number; count: number }> = [];
   let offset = 0;
@@ -101,6 +102,7 @@ export async function fetchFacets(
     });
 
     if (yearRange) params.set("year", yearRange);
+    if (modifiedRange) params.set("modified", modifiedRange);
     INCLUDED_BASIS_OF_RECORD.forEach((bor) => params.append("basisOfRecord", bor));
 
     let response: Response | undefined;
