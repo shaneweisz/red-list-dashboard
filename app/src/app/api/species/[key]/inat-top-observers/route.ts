@@ -45,10 +45,10 @@ export async function GET(
     // Step 3: Fetch top observers and identifiers in parallel
     const [observersResp, identifiersResp] = await Promise.all([
       fetch(
-        `https://api.inaturalist.org/v1/observations/observers?taxon_id=${inatTaxonId}&per_page=20&order_by=observation_count`
+        `https://api.inaturalist.org/v1/observations/observers?taxon_id=${inatTaxonId}&per_page=500&order_by=observation_count`
       ),
       fetch(
-        `https://api.inaturalist.org/v1/observations/identifiers?taxon_id=${inatTaxonId}&per_page=20`
+        `https://api.inaturalist.org/v1/observations/identifiers?taxon_id=${inatTaxonId}&per_page=500`
       ),
     ]);
 
