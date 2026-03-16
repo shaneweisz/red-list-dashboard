@@ -123,6 +123,7 @@ function GbifInfoTooltip() {
             <li><code className="bg-zinc-800 dark:bg-zinc-700 px-0.5 rounded">MACHINE_OBSERVATION</code></li>
             <li><code className="bg-zinc-800 dark:bg-zinc-700 px-0.5 rounded">PRESERVED_SPECIMEN</code></li>
             <li><code className="bg-zinc-800 dark:bg-zinc-700 px-0.5 rounded">MATERIAL_SAMPLE</code></li>
+            <li><code className="bg-zinc-800 dark:bg-zinc-700 px-0.5 rounded">MATERIAL_CITATION</code></li>
             <li><code className="bg-zinc-800 dark:bg-zinc-700 px-0.5 rounded">OCCURRENCE</code></li>
             <li><code className="bg-zinc-800 dark:bg-zinc-700 px-0.5 rounded">OBSERVATION</code></li>
           </ul>
@@ -557,7 +558,7 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
     return () => controller.abort("cleanup");
   }, [paginatedSpecies, speciesDetails]);
 
-  const GBIF_FILTERS = "has_coordinate=true&has_geospatial_issue=false&basis_of_record=HUMAN_OBSERVATION&basis_of_record=MACHINE_OBSERVATION&basis_of_record=OCCURRENCE&basis_of_record=MATERIAL_SAMPLE&basis_of_record=OBSERVATION&basis_of_record=PRESERVED_SPECIMEN";
+  const GBIF_FILTERS = "has_coordinate=true&has_geospatial_issue=false&basis_of_record=HUMAN_OBSERVATION&basis_of_record=MACHINE_OBSERVATION&basis_of_record=OCCURRENCE&basis_of_record=MATERIAL_SAMPLE&basis_of_record=MATERIAL_CITATION&basis_of_record=OBSERVATION&basis_of_record=PRESERVED_SPECIMEN";
 
   return (
     <div className="space-y-4">
