@@ -601,6 +601,7 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
                   onClearSelection={handleClearCountry}
                   precomputedStats={countryStatsForMap}
                   selectedTaxa={selectedTaxa}
+                  speciesLabel="# Unassessed"
                 />
               ) : speciesLoading && allSpecies.length === 0 ? (
                 <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 min-h-[220px] flex flex-col">
