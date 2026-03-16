@@ -1,13 +1,8 @@
 /**
  * fetch-gbif-new-counts: GBIF occurrence counts since last Red List assessment
  *
- * For each linked species, fetches GBIF occurrence counts that were modified
- * (added or updated) since their last assessment date. This captures both new
- * observations and older records (e.g. preserved specimens) that were digitised
- * after the assessment.
- *
- * Uses the GBIF `modified` filter with class-level faceted queries, bucketed by
- * unique assessment dates for efficiency.
+ * For each linked species, fetches GBIF occurrence counts from the year
+ * after their last assessment to the current year, then updates per-taxon data/gbif/{taxonId}.csv.
  *
  * Prerequisites:
  *   1. Per-taxon redlist CSVs exist in data/redlist/ (from fetch-redlist, with GBIF keys from match)
@@ -39,25 +34,26 @@ import { readMappingCsv } from "./match-redlist-species-to-gbif";
 // CONFIGURATION
 // =============================================================================
 
-const TODAY = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-const BUCKET_CONCURRENCY = 30;
+const CURRENT_YEAR = new Date().getFullYear();
+const YEAR_BUCKET_CONCURRENCY = 30;
 
 // =============================================================================
 // HELPERS
 // =============================================================================
 
-function loadAssessmentDates(taxonId: string, taxonGbifKeys: Set<number>): Map<number, string> {
+function loadAssessmentYears(taxonId: string, taxonGbifKeys: Set<number>): Map<number, number> {
   const mapping = readMappingCsv();
-  const speciesAssessmentDate = new Map<number, string>();
+  const speciesAssessmentYear = new Map<number, number>();
   const redlistSpecies = readRedlistCsv(taxonId);
   for (const s of redlistSpecies) {
     const m = mapping.get(s.sis_taxon_id);
     const gbifKey = m?.gbif_species_key;
     if (gbifKey && taxonGbifKeys.has(gbifKey) && s.assessment_date) {
-      speciesAssessmentDate.set(gbifKey, s.assessment_date);
+      const year = parseInt(s.assessment_date.slice(0, 4), 10);
+      if (!isNaN(year)) speciesAssessmentYear.set(gbifKey, year);
     }
   }
-  return speciesAssessmentDate;
+  return speciesAssessmentYear;
 }
 
 // =============================================================================
@@ -70,35 +66,35 @@ export async function fetchCountsSinceAssessment(
 ): Promise<number> {
   const taxonGbifKeys = new Set(gbifSpeciesMap.keys());
 
-  const speciesAssessmentDate = loadAssessmentDates(taxon.id, taxonGbifKeys);
-  console.log(`  ${speciesAssessmentDate.size} linked species with assessment dates`);
+  const speciesAssessmentYear = loadAssessmentYears(taxon.id, taxonGbifKeys);
+  console.log(`  ${speciesAssessmentYear.size} linked species with assessment dates`);
 
-  if (speciesAssessmentDate.size === 0) return 0;
+  if (speciesAssessmentYear.size === 0) return 0;
 
-  // Group species by assessment date for efficient batched queries
-  const speciesByDate = new Map<string, Set<number>>();
-  speciesAssessmentDate.forEach((date, speciesKey) => {
-    if (!speciesByDate.has(date)) speciesByDate.set(date, new Set());
-    speciesByDate.get(date)!.add(speciesKey);
+  const uniqueYears = Array.from(new Set(Array.from(speciesAssessmentYear.values()))).sort((a, b) => a - b);
+  const yearBuckets = uniqueYears.filter((y) => y + 1 <= CURRENT_YEAR);
+
+  const speciesByYear = new Map<number, Set<number>>();
+  speciesAssessmentYear.forEach((year, speciesKey) => {
+    if (!speciesByYear.has(year)) speciesByYear.set(year, new Set());
+    speciesByYear.get(year)!.add(speciesKey);
   });
 
-  const uniqueDates = Array.from(speciesByDate.keys()).sort();
-
   const sinceAssessmentCounts = new Map<number, number>();
-  speciesAssessmentDate.forEach((_date, speciesKey) => {
+  speciesAssessmentYear.forEach((_year, speciesKey) => {
     sinceAssessmentCounts.set(speciesKey, 0);
   });
 
-  console.log(`  ${uniqueDates.length} date buckets x ${taxon.gbif.length} queries`);
+  console.log(`  ${yearBuckets.length} year buckets x ${taxon.gbif.length} queries`);
 
   for (let qi = 0; qi < taxon.gbif.length; qi++) {
     const q = taxon.gbif[qi];
     let completedBuckets = 0;
 
-    await mapConcurrent(uniqueDates, BUCKET_CONCURRENCY, async (assessmentDate) => {
-      const modifiedRange = `${assessmentDate},${TODAY}`;
-      const results = await fetchFacets(q.keyType, q.keyValue, undefined, modifiedRange);
-      const bucketSpecies = speciesByDate.get(assessmentDate);
+    await mapConcurrent(yearBuckets, YEAR_BUCKET_CONCURRENCY, async (assessmentYear) => {
+      const yearRange = `${assessmentYear + 1},${CURRENT_YEAR}`;
+      const results = await fetchFacets(q.keyType, q.keyValue, yearRange);
+      const bucketSpecies = speciesByYear.get(assessmentYear);
 
       if (bucketSpecies) {
         for (const r of results) {
@@ -109,10 +105,10 @@ export async function fetchCountsSinceAssessment(
       }
 
       completedBuckets++;
-      process.stdout.write(`\r  Query ${qi + 1}/${taxon.gbif.length}: ${completedBuckets}/${uniqueDates.length} date buckets`);
+      process.stdout.write(`\r  Query ${qi + 1}/${taxon.gbif.length}: ${completedBuckets}/${yearBuckets.length} year buckets`);
     });
   }
-  if (uniqueDates.length > 0) console.log("");
+  if (yearBuckets.length > 0) console.log("");
 
   sinceAssessmentCounts.forEach((count, key) => {
     const row = gbifSpeciesMap.get(key);
@@ -168,7 +164,7 @@ async function main() {
   const args = process.argv.slice(2);
   const taxonArg = args[0]?.toLowerCase();
 
-  console.log("fetch-gbif-new-counts: GBIF records modified since last assessment");
+  console.log("fetch-gbif-new-counts: GBIF counts since last assessment");
   console.log("=".repeat(50));
 
   const logger = new SyncLogger("fetch-gbif-new-counts");
