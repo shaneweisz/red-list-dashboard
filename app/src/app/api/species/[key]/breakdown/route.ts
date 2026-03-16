@@ -19,6 +19,7 @@ interface RecordTypeBreakdown {
   preservedSpecimen: number;
   materialSample: number;
   machineObservation: number;
+  materialCitation: number;
   other: number;
   iNaturalist: number;
   recentInatObservations: InatObservation[];
@@ -96,9 +97,8 @@ export async function GET(
     };
 
     // Fetch counts for each basisOfRecord type in parallel
-    const [humanResp, specimenResp, materialResp, machineResp, inatResp, inatRecentResp, totalResp] = await Promise.all([
+    const [humanResp, materialResp, machineResp, inatResp, inatRecentResp, totalResp] = await Promise.all([
       fetch(`https://api.gbif.org/v1/occurrence/search?${buildParams({ basisOfRecord: "HUMAN_OBSERVATION" })}`),
-      fetch(`https://api.gbif.org/v1/occurrence/search?${buildParams({ basisOfRecord: "PRESERVED_SPECIMEN" })}`),
       fetch(`https://api.gbif.org/v1/occurrence/search?${buildParams({ basisOfRecord: "MATERIAL_SAMPLE" })}`),
       fetch(`https://api.gbif.org/v1/occurrence/search?${buildParams({ basisOfRecord: "MACHINE_OBSERVATION" })}`),
       // iNaturalist count (with current filters)
@@ -115,9 +115,8 @@ export async function GET(
       fetch(`https://api.gbif.org/v1/occurrence/search?${buildParams()}`),
     ]);
 
-    const [humanData, specimenData, materialData, machineData, inatData, totalData] = await Promise.all([
+    const [humanData, materialData, machineData, inatData, totalData] = await Promise.all([
       humanResp.json(),
-      specimenResp.json(),
       materialResp.json(),
       machineResp.json(),
       inatResp.json(),
@@ -125,13 +124,12 @@ export async function GET(
     ]);
 
     const humanCount = humanData.count || 0;
-    const specimenCount = specimenData.count || 0;
     const materialCount = materialData.count || 0;
     const machineCount = machineData.count || 0;
     const inatCount = inatData.count || 0;
     const totalCount = totalData.count || 0;
 
-    const otherCount = Math.max(0, totalCount - humanCount - specimenCount - materialCount - machineCount);
+    const otherCount = Math.max(0, totalCount - humanCount - materialCount - machineCount);
 
     // Parse recent iNaturalist observations
     let recentInatObservations: InatObservation[] = [];
@@ -180,9 +178,10 @@ export async function GET(
 
     const breakdown: RecordTypeBreakdown = {
       humanObservation: humanCount,
-      preservedSpecimen: specimenCount,
+      preservedSpecimen: 0,
       materialSample: materialCount,
       machineObservation: machineCount,
+      materialCitation: 0,
       other: otherCount,
       iNaturalist: inatCount,
       recentInatObservations,

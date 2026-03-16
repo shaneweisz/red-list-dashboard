@@ -59,6 +59,7 @@ interface ValidatedSpecies {
   vernacularName: string;
   className: string;
   orderName: string;
+  familyName: string;
 }
 
 export interface GbifSpecies {
@@ -68,6 +69,10 @@ export interface GbifSpecies {
   taxon_group_table1a: string;
   total_count: number;
   count_after_assessment_year: number | null;
+  class_name: string;
+  order_name: string;
+  family: string;
+  countries: string;
 }
 
 // =============================================================================
@@ -78,6 +83,7 @@ export async function fetchFacets(
   keyType: string,
   keyValue: number,
   yearRange?: string,
+  modifiedRange?: string,
 ): Promise<Array<{ speciesKey: number; count: number }>> {
   const allResults: Array<{ speciesKey: number; count: number }> = [];
   let offset = 0;
@@ -95,6 +101,7 @@ export async function fetchFacets(
     });
 
     if (yearRange) params.set("year", yearRange);
+    if (modifiedRange) params.set("modified", modifiedRange);
     INCLUDED_BASIS_OF_RECORD.forEach((bor) => params.append("basisOfRecord", bor));
 
     let response: Response | undefined;
@@ -180,9 +187,9 @@ export async function validateSpeciesKeys(speciesKeys: number[]): Promise<Map<nu
                 await delay(Math.pow(2, attempt + 1) * 1000);
                 continue;
               }
-              return { key, rank: "UNKNOWN", status: "UNKNOWN", canonicalName: "", vernacularName: "", className: "", orderName: "" };
+              return { key, rank: "UNKNOWN", status: "UNKNOWN", canonicalName: "", vernacularName: "", className: "", orderName: "", familyName: "" };
             }
-            if (!res.ok) return { key, rank: "UNKNOWN", status: "UNKNOWN", canonicalName: "", vernacularName: "", className: "", orderName: "" };
+            if (!res.ok) return { key, rank: "UNKNOWN", status: "UNKNOWN", canonicalName: "", vernacularName: "", className: "", orderName: "", familyName: "" };
             const data = await res.json();
             return {
               key,
@@ -192,22 +199,23 @@ export async function validateSpeciesKeys(speciesKeys: number[]): Promise<Map<nu
               vernacularName: data.vernacularName || "",
               className: data.class || "",
               orderName: data.order || "",
+              familyName: data.family || "",
             };
           } catch {
             if (attempt < MAX_RETRIES) {
               await delay(Math.pow(2, attempt + 1) * 1000);
               continue;
             }
-            return { key, rank: "ERROR", status: "ERROR", canonicalName: "", vernacularName: "", className: "", orderName: "" };
+            return { key, rank: "ERROR", status: "ERROR", canonicalName: "", vernacularName: "", className: "", orderName: "", familyName: "" };
           }
         }
-        return { key, rank: "ERROR", status: "ERROR", canonicalName: "", vernacularName: "", className: "", orderName: "" };
+        return { key, rank: "ERROR", status: "ERROR", canonicalName: "", vernacularName: "", className: "", orderName: "", familyName: "" };
       })
     );
 
     for (const info of results) {
       if (info.rank === "SPECIES" && info.status === "ACCEPTED") {
-        valid.set(info.key, { key: info.key, canonicalName: info.canonicalName, vernacularName: info.vernacularName, className: info.className, orderName: info.orderName });
+        valid.set(info.key, { key: info.key, canonicalName: info.canonicalName, vernacularName: info.vernacularName, className: info.className, orderName: info.orderName, familyName: info.familyName });
       }
     }
 
@@ -224,8 +232,9 @@ export async function validateSpeciesKeys(speciesKeys: number[]): Promise<Map<nu
 // =============================================================================
 
 const GBIF_CSV_COLUMNS = [
-  "gbif_species_key", "scientific_name", "common_name", "taxon_group_table1a",
-  "total_count", "count_after_assessment_year",
+  "gbif_species_key", "scientific_name", "common_name",
+  "class_name", "order_name", "family", "taxon_group_table1a",
+  "total_count", "count_after_assessment_year", "countries",
 ];
 
 export function writeGbifCsv(speciesMap: Map<number, GbifSpecies>, outputPath: string): void {
@@ -237,6 +246,10 @@ export function writeGbifCsv(speciesMap: Map<number, GbifSpecies>, outputPath: s
       taxon_group_table1a: s.taxon_group_table1a,
       total_count: s.total_count,
       count_after_assessment_year: s.count_after_assessment_year,
+      class_name: s.class_name || null,
+      order_name: s.order_name || null,
+      family: s.family || null,
+      countries: s.countries || null,
     }));
 
   writeCsv(rows, GBIF_CSV_COLUMNS, outputPath);
@@ -251,6 +264,10 @@ export function readGbifCsv(taxonId: string): Map<number, GbifSpecies> {
     taxon_group_table1a: r.taxon_group_table1a,
     total_count: parseInt(r.total_count, 10) || 0,
     count_after_assessment_year: r.count_after_assessment_year ? parseInt(r.count_after_assessment_year, 10) : null,
+    class_name: r.class_name || "",
+    order_name: r.order_name || "",
+    family: r.family || "",
+    countries: r.countries || "",
   }));
   const map = new Map<number, GbifSpecies>();
   for (const row of rows) map.set(row.gbif_species_key, row);
@@ -301,6 +318,10 @@ export async function run(opts: {
         taxon_group_table1a: r.taxonGroup,
         total_count: r.count,
         count_after_assessment_year: null,
+        class_name: info.className.toLowerCase(),
+        order_name: info.orderName.toLowerCase(),
+        family: info.familyName.toLowerCase(),
+        countries: "",
       });
     }
 
