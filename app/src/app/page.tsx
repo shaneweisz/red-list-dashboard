@@ -69,7 +69,11 @@ export default function RedListPage() {
                 Reassessments
               </button>
               <button
-                onClick={() => setViewMode("new-assessments")}
+                onClick={() => {
+                  // Clear "all" selection — NE species must be loaded per-taxon
+                  if (sharedTaxa.has("all")) setSharedTaxa(new Set());
+                  setViewMode("new-assessments");
+                }}
                 className={`px-3 py-1.5 font-medium transition-colors ${
                   viewMode === "new-assessments"
                     ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"

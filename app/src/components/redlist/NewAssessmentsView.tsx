@@ -527,6 +527,7 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
         onToggleTaxon={handleToggleTaxon}
         selectedTaxa={selectedTaxa}
         selectedSubgroups={selectedSubgroups}
+        disableAllSpecies
         onToggleSubgroup={(sgId, parentTaxonId) => {
           const wasSelected = selectedSubgroups.has(sgId);
           setSelectedSubgroups(prev => {
