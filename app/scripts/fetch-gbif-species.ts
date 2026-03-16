@@ -232,9 +232,9 @@ export async function validateSpeciesKeys(speciesKeys: number[]): Promise<Map<nu
 // =============================================================================
 
 const GBIF_CSV_COLUMNS = [
-  "gbif_species_key", "scientific_name", "common_name", "taxon_group_table1a",
-  "total_count", "count_after_assessment_year",
-  "class_name", "order_name", "family", "countries",
+  "gbif_species_key", "scientific_name", "common_name",
+  "class_name", "order_name", "family", "taxon_group_table1a",
+  "total_count", "count_after_assessment_year", "countries",
 ];
 
 export function writeGbifCsv(speciesMap: Map<number, GbifSpecies>, outputPath: string): void {
