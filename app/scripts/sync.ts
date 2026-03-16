@@ -5,8 +5,8 @@
  *   Phase 1: fetch-redlist-species  (IUCN DB → per-taxon CSVs)
  *   Phase 2: fetch-gbif-species     (GBIF API → per-taxon CSVs)
  *   Phase 3: match-redlist-species-to-gbif (GBIF Match API → data/mapping.csv)
- *   Phase 4: fetch-gbif-new-counts  (GBIF API → updates GBIF CSVs)
- *   Phase 5: fetch-gbif-country-data (GBIF API → country occurrences per species)
+ *   Phase 4: fetch-gbif-country-data (GBIF API → country occurrences per species)
+ *   Phase 5: fetch-gbif-new-counts  (GBIF API → updates GBIF CSVs)
  *   Phase 6: build-taxa-summary     (per-taxon CSVs → taxa-summary.json)
  *
  * Prerequisites:
@@ -59,15 +59,15 @@ async function main() {
     console.log("═".repeat(60));
     await matchRedlistSpeciesToGbif({ logger });
 
-    // Phase 4: New GBIF counts
-    console.log("\nPhase 4: fetch-gbif-new-counts");
-    console.log("═".repeat(60));
-    await fetchGbifNewCounts({ taxa: taxaFilter, logger });
-
-    // Phase 5: GBIF country data
-    console.log("\nPhase 5: fetch-gbif-country-data");
+    // Phase 4: GBIF country data
+    console.log("\nPhase 4: fetch-gbif-country-data");
     console.log("═".repeat(60));
     await fetchGbifCountryData({ taxa: taxaFilter, logger });
+
+    // Phase 5: New GBIF counts
+    console.log("\nPhase 5: fetch-gbif-new-counts");
+    console.log("═".repeat(60));
+    await fetchGbifNewCounts({ taxa: taxaFilter, logger });
 
     // Phase 6: Build taxa summary
     console.log("\nPhase 6: build-taxa-summary");
