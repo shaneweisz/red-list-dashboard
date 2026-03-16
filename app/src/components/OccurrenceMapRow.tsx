@@ -786,7 +786,7 @@ export default function OccurrenceMapRow({
     machineObservation: true,
     preservedSpecimen: false,
     materialSample: true,
-    materialCitation: true,
+    materialCitation: false,
     other: false,
   });
 

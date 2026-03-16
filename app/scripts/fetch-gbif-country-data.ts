@@ -44,9 +44,7 @@ const INCLUDED_BASIS_OF_RECORD = [
   "MACHINE_OBSERVATION",
   "OCCURRENCE",
   "MATERIAL_SAMPLE",
-  "MATERIAL_CITATION",
   "OBSERVATION",
-  "PRESERVED_SPECIMEN",
 ];
 
 // GBIF kingdom keys covering all taxa in the dashboard
