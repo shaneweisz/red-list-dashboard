@@ -48,6 +48,7 @@ interface Props {
   selectedTaxa: Set<string>;
   selectedSubgroups: Set<string>;
   onToggleSubgroup: (subgroupId: string, parentTaxonId: string) => void;
+  disableAllSpecies?: boolean;
 }
 
 // Taxa IDs that have expandable subgroups
@@ -97,7 +98,7 @@ const FOCUS_HIDDEN: Record<FocusMode, Set<ColumnId>> = {
 
 const DEFAULT_HIDDEN_COLUMNS = FOCUS_HIDDEN.redlist;
 
-export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup }: Props) {
+export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, disableAllSpecies }: Props) {
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [globalGbifMedian, setGlobalGbifMedian] = useState<number | undefined>();
   const [globalGbifDistribution, setGlobalGbifDistribution] = useState<Record<string, number> | undefined>();
@@ -530,11 +531,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       : isSelected
         ? "bg-zinc-100 dark:bg-zinc-800"
         : "";
-    const hoverClass = isAllRow
-      ? "hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
-      : available
-        ? "hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer"
-        : "opacity-50 cursor-not-allowed";
+    const allDisabled = isAllRow && disableAllSpecies;
+    const hoverClass = allDisabled
+      ? "opacity-50 cursor-not-allowed"
+      : isAllRow
+        ? "hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+        : available
+          ? "hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer"
+          : "opacity-50 cursor-not-allowed";
 
     const stickyBg = isAllRow
       ? isAllSelected ? "bg-zinc-100 dark:bg-zinc-800" : "bg-zinc-50 dark:bg-zinc-800/60"
@@ -546,6 +550,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       <tr
         key={id}
         onClick={(e) => {
+          if (allDisabled) return;
           if (!isAllRow && !available) return;
           // Expand taxa table when Cmd/Ctrl+clicking a taxon row (not "all")
           if (!isAllRow && (e.metaKey || e.ctrlKey)) {

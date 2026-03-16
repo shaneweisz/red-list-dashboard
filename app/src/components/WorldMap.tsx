@@ -153,6 +153,8 @@ interface WorldMapProps {
   precomputedStats?: CountryStats;
   // Which taxa are selected (determines which GBIF occurrence stats to fetch)
   selectedTaxa?: Set<string>;
+  // Label for the species count in tooltips (default: "# Assessed")
+  speciesLabel?: string;
 }
 
 const DEFAULT_CENTER: [number, number] = [10, 10];
@@ -160,7 +162,7 @@ const DEFAULT_ZOOM = 1.0;
 const MIN_ZOOM = 1.0;
 const MAX_ZOOM = 8.0;
 
-function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, selectedTaxon, precomputedStats, selectedTaxa }: WorldMapProps) {
+function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, selectedTaxon, precomputedStats, selectedTaxa, speciesLabel = "# Assessed" }: WorldMapProps) {
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoveredCountryCode, setHoveredCountryCode] = useState<string | null>(null);
   const [speciesStats, setSpeciesStats] = useState<CountryStats>(precomputedStats || {});
@@ -431,7 +433,7 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
             <div className="mt-1 space-y-0.5">
               {hoveredSpeciesStats && (
                 <div className="flex justify-between gap-4 text-xs">
-                  <span className="text-zinc-500"># Assessed</span>
+                  <span className="text-zinc-500">{speciesLabel}</span>
                   <span className="font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">{formatNumber(hoveredSpeciesStats.species)}</span>
                 </div>
               )}

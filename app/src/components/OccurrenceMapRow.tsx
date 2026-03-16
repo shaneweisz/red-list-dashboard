@@ -253,6 +253,7 @@ function classifyOccurrence(o: OccurrenceFeature): string {
   if (basis === "MACHINE_OBSERVATION") return "machineObservation";
   if (basis === "PRESERVED_SPECIMEN") return "preservedSpecimen";
   if (basis === "MATERIAL_SAMPLE") return "materialSample";
+  if (basis === "MATERIAL_CITATION") return "materialCitation";
   return "other";
 }
 
@@ -539,6 +540,7 @@ interface RecordTypeBreakdown {
   preservedSpecimen: number;
   materialSample: number;
   machineObservation: number;
+  materialCitation: number;
   other: number;
   iNaturalist: number;
   recentInatObservations?: InatObservation[];
@@ -788,6 +790,7 @@ export default function OccurrenceMapRow({
     machineObservation: true,
     preservedSpecimen: false,
     materialSample: true,
+    materialCitation: false,
     other: false,
   });
 
@@ -989,6 +992,7 @@ export default function OccurrenceMapRow({
     if (basis === "MACHINE_OBSERVATION") return "machineObservation";
     if (basis === "PRESERVED_SPECIMEN") return "preservedSpecimen";
     if (basis === "MATERIAL_SAMPLE") return "materialSample";
+    if (basis === "MATERIAL_CITATION") return "materialCitation";
     return "other";
   };
 
@@ -1163,6 +1167,7 @@ export default function OccurrenceMapRow({
       { key: "machineObservation" as const, label: "Machine Obs.", count: breakdown.machineObservation, tooltip: "Machine Observations: Camera traps, bioacoustics, remote sensing" },
       { key: "preservedSpecimen" as const, label: "Specimens", count: breakdown.preservedSpecimen, tooltip: "Preserved Specimens: Museum and herbarium collections" },
       { key: "materialSample" as const, label: "Material", count: breakdown.materialSample || 0, tooltip: "Material Samples: eDNA, tissue samples, blood, feathers" },
+      ...(breakdown.materialCitation > 0 ? [{ key: "materialCitation" as const, label: "Citations", count: breakdown.materialCitation, tooltip: "Material Citations: Occurrence records from published literature" }] : []),
       ...(breakdown.other > 0 ? [{ key: "other" as const, label: "Other", count: breakdown.other, tooltip: "Other: Fossils, living specimens, generic occurrences" }] : []),
     ];
   }, [breakdown]);
@@ -1546,6 +1551,13 @@ export default function OccurrenceMapRow({
                       /* Test tube — eDNA / tissue sample */
                       <svg className={iconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M14.5 2v17.5c0 1.4-1.1 2.5-2.5 2.5s-2.5-1.1-2.5-2.5V2M8 2h8M9.5 16h5" />
+                      </svg>
+                    ),
+                    materialCitation: (
+                      /* Book — literature citation */
+                      <svg className={iconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M4 19.5A2.5 2.5 0 016.5 17H20" />
+                        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" />
                       </svg>
                     ),
                     other: (

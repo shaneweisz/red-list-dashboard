@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import TaxaSummary from "./TaxaSummary";
 import TaxaIcon from "../TaxaIcon";
+const WorldMap = dynamic(() => import("../WorldMap"), { ssr: false });
 import { TAXA_BY_ID } from "@/config/taxa";
 import { speciesMatchesSubgroup, getSubgroupDef } from "@/config/taxa-hierarchy";
 import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
@@ -144,22 +145,12 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
   const [selectedTaxa, setSelectedTaxaLocal] = useState<Set<string>>(sharedTaxa ?? new Set());
   const [selectedSubgroups, setSelectedSubgroupsLocal] = useState<Set<string>>(sharedSubgroups ?? new Set());
 
-  // Wrap setters to sync up to parent
-  const setSelectedTaxa = useCallback((updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
-    setSelectedTaxaLocal(prev => {
-      const next = typeof updater === "function" ? updater(prev) : updater;
-      onTaxaChange?.(next);
-      return next;
-    });
-  }, [onTaxaChange]);
+  // Sync local state up to parent via effects (not during render)
+  useEffect(() => { onTaxaChange?.(selectedTaxa); }, [selectedTaxa, onTaxaChange]);
+  useEffect(() => { onSubgroupsChange?.(selectedSubgroups); }, [selectedSubgroups, onSubgroupsChange]);
 
-  const setSelectedSubgroups = useCallback((updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
-    setSelectedSubgroupsLocal(prev => {
-      const next = typeof updater === "function" ? updater(prev) : updater;
-      onSubgroupsChange?.(next);
-      return next;
-    });
-  }, [onSubgroupsChange]);
+  const setSelectedTaxa = setSelectedTaxaLocal;
+  const setSelectedSubgroups = setSelectedSubgroupsLocal;
 
   // Search & sort
   const [searchFilter, setSearchFilter] = useState("");
@@ -173,6 +164,9 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 10;
 
+  // Country filter
+  const [selectedCountries, setSelectedCountries] = useState<Set<string>>(new Set());
+
   // Pinned species
   const [pinnedSpecies, setPinnedSpecies] = useState<number[]>([]);
   const pinnedSet = useMemo(() => new Set(pinnedSpecies), [pinnedSpecies]);
@@ -183,7 +177,6 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
   const [loadingTaxa, setLoadingTaxa] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const abortRefs = useRef<Record<string, AbortController>>({});
-  const prefetchPromiseRef = useRef<Promise<void> | null>(null);
 
   // Species details (images)
   const [speciesDetails, setSpeciesDetails] = useState<Record<number, SpeciesDetails>>({});
@@ -258,25 +251,11 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
   useEffect(() => {
     if (selectedTaxa.size === 0) return;
 
-    const taxaToFetch = [...selectedTaxa].filter(t => !speciesByTaxon[t] && !loadingTaxa.has(t));
-    if (speciesByTaxon["all"] && !selectedTaxa.has("all")) return;
+    // Skip "all" — too large for serverless; fetch per-taxon instead
+    const taxaToFetch = [...selectedTaxa].filter(t => t !== "all" && !speciesByTaxon[t] && !loadingTaxa.has(t));
     if (taxaToFetch.length === 0) return;
 
     for (const taxonId of taxaToFetch) {
-      if (taxonId === "all" && prefetchPromiseRef.current) {
-        setLoadingTaxa(prev => new Set(prev).add("all"));
-        prefetchPromiseRef.current.then(() => {
-          setLoadingTaxa(prev => { const next = new Set(prev); next.delete("all"); return next; });
-        });
-        continue;
-      }
-
-      if (taxonId === "all") {
-        Object.entries(abortRefs.current).forEach(([id, ctrl]) => {
-          if (id !== "all") ctrl.abort();
-        });
-      }
-
       const controller = new AbortController();
       abortRefs.current[taxonId] = controller;
       setLoadingTaxa(prev => new Set(prev).add(taxonId));
@@ -308,21 +287,8 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
     }
   }, [selectedTaxa, speciesByTaxon, loadingTaxa]);
 
-  // Prefetch all NE species on mount
-  useEffect(() => {
-    const controller = new AbortController();
-    const promise = fetch("/api/redlist/species?taxon=all&category=NE", { signal: controller.signal })
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        if (data && !controller.signal.aborted) {
-          setSpeciesByTaxon(prev => prev["all"] ? prev : { ...prev, all: data.species });
-        }
-      })
-      .catch(() => {})
-      .finally(() => { prefetchPromiseRef.current = null; });
-    prefetchPromiseRef.current = promise;
-    return () => { controller.abort(); prefetchPromiseRef.current = null; };
-  }, []);
+  // No prefetch of all NE species — too large for serverless memory limits.
+  // Species are fetched per-taxon when the user selects a taxon group.
 
   const speciesLoading = loadingTaxa.size > 0;
 
@@ -452,8 +418,9 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
         s.scientific_name.toLowerCase().includes(searchFilter) ||
         s.common_name?.toLowerCase().includes(searchFilter);
       const obs = matchesObsRangeFilter(s.gbif_occurrence_count);
+      const country = selectedCountries.size === 0 || s.countries.some(c => selectedCountries.has(c));
       const starred = !showOnlyStarred || (s.gbif_species_key != null && pinnedSet.has(Math.abs(s.id)));
-      return search && obs && starred;
+      return search && obs && country && starred;
     });
 
     const sorted = [...filtered].sort((a, b) => {
@@ -477,7 +444,39 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
     });
 
     return { filteredSpecies: filtered, sortedSpecies: sorted };
-  }, [taxaFilteredSpecies, searchFilter, selectedObsRanges, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection]);
+  }, [taxaFilteredSpecies, searchFilter, selectedObsRanges, selectedCountries, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection]);
+
+  // Country stats for the map (computed from species matching all filters EXCEPT country)
+  const countryStatsForMap = useMemo(() => {
+    const counts: Record<string, number> = {};
+    taxaFilteredSpecies.forEach(s => {
+      const search = !searchFilter ||
+        s.scientific_name.toLowerCase().includes(searchFilter) ||
+        s.common_name?.toLowerCase().includes(searchFilter);
+      const obs = matchesObsRangeFilter(s.gbif_occurrence_count);
+      const starred = !showOnlyStarred || (s.gbif_species_key != null && pinnedSet.has(Math.abs(s.id)));
+      if (!search || !obs || !starred) return;
+      s.countries.forEach(code => { counts[code] = (counts[code] || 0) + 1; });
+    });
+    return Object.fromEntries(
+      Object.entries(counts).map(([code, count]) => [code, { occurrences: 0, species: count }])
+    );
+  }, [taxaFilteredSpecies, searchFilter, selectedObsRanges, showOnlyStarred, pinnedSet]);
+
+  const handleCountrySelect = useCallback((countryCode: string, _countryName: string, event: React.MouseEvent) => {
+    setSelectedCountries(prev => {
+      const next = new Set(event.metaKey || event.ctrlKey ? prev : new Set<string>());
+      if (prev.has(countryCode) && !event.metaKey && !event.ctrlKey) return new Set();
+      if (next.has(countryCode)) next.delete(countryCode); else next.add(countryCode);
+      return next;
+    });
+    setCurrentPage(1);
+  }, []);
+
+  const handleClearCountry = useCallback(() => {
+    setSelectedCountries(new Set());
+    setCurrentPage(1);
+  }, []);
 
   // Pagination
   const totalFiltered = filteredSpecies.length;
@@ -564,6 +563,7 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
         onToggleTaxon={handleToggleTaxon}
         selectedTaxa={selectedTaxa}
         selectedSubgroups={selectedSubgroups}
+        disableAllSpecies
         onToggleSubgroup={(sgId, parentTaxonId) => {
           const wasSelected = selectedSubgroups.has(sgId);
           setSelectedSubgroups(prev => {
@@ -590,8 +590,30 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
 
       {selectedTaxa.size > 0 && (
         <div className="space-y-3">
-          {/* GBIF Observations chart */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Charts row */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Country Map */}
+            <div>
+              {Object.keys(countryStatsForMap).length > 0 ? (
+                <WorldMap
+                  selectedCountries={selectedCountries}
+                  onCountrySelect={handleCountrySelect}
+                  onClearSelection={handleClearCountry}
+                  precomputedStats={countryStatsForMap}
+                  selectedTaxa={selectedTaxa}
+                  speciesLabel="# Unassessed"
+                />
+              ) : speciesLoading && allSpecies.length === 0 ? (
+                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 min-h-[220px] flex flex-col">
+                  <div className="flex items-center justify-between mb-1">
+                    <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Country</h2>
+                  </div>
+                  <div className="flex-1 flex items-center justify-center"><Spinner /></div>
+                </div>
+              ) : null}
+            </div>
+
+            {/* GBIF Observations chart */}
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">

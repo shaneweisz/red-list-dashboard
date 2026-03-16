@@ -5,8 +5,9 @@
  *   Phase 1: fetch-redlist-species  (IUCN DB → per-taxon CSVs)
  *   Phase 2: fetch-gbif-species     (GBIF API → per-taxon CSVs)
  *   Phase 3: match-redlist-species-to-gbif (GBIF Match API → data/mapping.csv)
- *   Phase 4: fetch-gbif-new-counts  (GBIF API → updates GBIF CSVs)
- *   Phase 5: build-taxa-summary     (per-taxon CSVs → taxa-summary.json)
+ *   Phase 4: fetch-gbif-country-data (GBIF API → country occurrences per species)
+ *   Phase 5: fetch-gbif-new-counts  (GBIF API → updates GBIF CSVs)
+ *   Phase 6: build-taxa-summary     (per-taxon CSVs → taxa-summary.json)
  *
  * Prerequisites:
  *   1. SSH tunnel to IUCN DB (port 5433)
@@ -22,6 +23,7 @@ import { run as fetchRedlistSpecies } from "./fetch-redlist-species";
 import { run as fetchGbifSpecies } from "./fetch-gbif-species";
 import { run as matchRedlistSpeciesToGbif } from "./match-redlist-species-to-gbif";
 import { run as fetchGbifNewCounts } from "./fetch-gbif-new-counts";
+import { run as fetchGbifCountryData } from "./fetch-gbif-country-data";
 import { run as buildTaxaSummary } from "./build-taxa-summary";
 
 async function main() {
@@ -57,13 +59,18 @@ async function main() {
     console.log("═".repeat(60));
     await matchRedlistSpeciesToGbif({ logger });
 
-    // Phase 4: New GBIF counts
-    console.log("\nPhase 4: fetch-gbif-new-counts");
+    // Phase 4: GBIF country data
+    console.log("\nPhase 4: fetch-gbif-country-data");
+    console.log("═".repeat(60));
+    await fetchGbifCountryData({ taxa: taxaFilter, logger });
+
+    // Phase 5: New GBIF counts
+    console.log("\nPhase 5: fetch-gbif-new-counts");
     console.log("═".repeat(60));
     await fetchGbifNewCounts({ taxa: taxaFilter, logger });
 
-    // Phase 5: Build taxa summary
-    console.log("\nPhase 5: build-taxa-summary");
+    // Phase 6: Build taxa summary
+    console.log("\nPhase 6: build-taxa-summary");
     console.log("═".repeat(60));
     await buildTaxaSummary();
 
