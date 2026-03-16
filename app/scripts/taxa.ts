@@ -30,11 +30,53 @@ export interface Taxon {
 // FISH ORDER KEYS (GBIF)
 // =============================================================================
 
-const FISH_ORDER_KEYS = [
-  389, 391, 427, 428, 446, 494, 495, 496, 497, 498, 499,
-  537, 538, 547, 548, 549, 550, 587, 588, 589, 590, 696,
-  708, 742, 752, 753, 772, 773, 774, 781, 836, 848, 857,
-  860, 861, 888, 889, 890, 898, 929, 975, 976, 1067, 1153, 1313,
+// Bony fish (Actinopterygii) order keys — GBIF has no working class-level key for
+// ray-finned fishes, so we must query at order level. Shark/ray orders are covered
+// by classKey=121 (Elasmobranchii) and are NOT included here.
+const BONY_FISH_ORDER_KEYS = [
+  494,  // Amiiformes
+  495,  // Anguilliformes
+  496,  // Atheriniformes
+  497,  // Aulopiformes
+  498,  // Beloniformes
+  499,  // Beryciformes
+  537,  // Characiformes
+  538,  // Clupeiformes
+  547,  // Cyprinodontiformes
+  548,  // Esociformes
+  549,  // Gadiformes
+  550,  // Gasterosteiformes
+  587,  // Perciformes
+  588,  // Pleuronectiformes
+  589,  // Polymixiiformes
+  590,  // Scorpaeniformes
+  708,  // Siluriformes
+  772,  // Tetraodontiformes
+  773,  // Syngnathiformes
+  774,  // Stomiiformes
+  888,  // Zeiformes
+  889,  // Synbranchiformes
+  890,  // Stephanoberyciformes
+  1067, // Mugiliformes
+  1068, // Osmeriformes
+  1069, // Osteoglossiformes
+  1103, // Acipenseriformes
+  1104, // Albuliformes
+  1106, // Batrachoidiformes
+  1107, // Cetomimiformes
+  1153, // Cypriniformes
+  1163, // Gobiesociformes
+  1164, // Gonorynchiformes
+  1165, // Gymnotiformes
+  1167, // Lepisosteiformes
+  1305, // Lophiiformes
+  1306, // Myctophiformes
+  1307, // Notacanthiformes
+  1308, // Ophidiiformes
+  1310, // Percopsiformes
+  1311, // Polypteriformes
+  1312, // Saccopharyngiformes
+  1313, // Salmoniformes
 ];
 
 // =============================================================================
@@ -71,9 +113,11 @@ export const TAXA: Taxon[] = [
     id: "fishes", name: "Fishes",
     redlist: [{ filterColumn: "class_name", filterValues: ["ACTINOPTERYGII", "CHONDRICHTHYES", "MYXINI", "PETROMYZONTI", "SARCOPTERYGII"] }],
     gbif: [
-      ...FISH_ORDER_KEYS.map((k) => ({ keyType: "orderKey" as const, keyValue: k })),
-      { keyType: "classKey" as const, keyValue: 121 },
-      { keyType: "classKey" as const, keyValue: 120 },
+      ...BONY_FISH_ORDER_KEYS.map((k) => ({ keyType: "orderKey" as const, keyValue: k })),
+      { keyType: "classKey" as const, keyValue: 121 },  // Elasmobranchii (sharks, rays, skates)
+      { keyType: "classKey" as const, keyValue: 120 },  // Holocephali (chimaeras)
+      { keyType: "classKey" as const, keyValue: 119 },  // Myxini (hagfish)
+      { keyType: "orderKey" as const, keyValue: 771 },  // Petromyzontiformes (lampreys)
     ],
   },
 
