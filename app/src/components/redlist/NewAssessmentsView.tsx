@@ -857,6 +857,8 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
                                       <SuggestedAssessors
                                         scientificName={s.scientific_name}
                                         taxonGroup={s.taxon_group}
+                                        family={s.family}
+                                        orderName={s.order_name}
                                       />
                                     </div>
                                   </td>

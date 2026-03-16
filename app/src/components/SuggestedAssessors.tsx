@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 
+type MatchLevel = "genus" | "family" | "order" | "group";
+
 interface MatchedSpecies {
   scientificName: string;
   category: string;
@@ -12,15 +14,32 @@ interface AssessorCandidate {
   name: string;
   assessmentCount: number;
   recentYear: string;
+  bestMatchLevel: MatchLevel;
   matchedSpecies: MatchedSpecies[];
 }
 
 interface SuggestedAssessorsProps {
   scientificName: string;
   taxonGroup: string;
+  family?: string | null;
+  orderName?: string | null;
 }
 
-export default function SuggestedAssessors({ scientificName, taxonGroup }: SuggestedAssessorsProps) {
+const MATCH_LEVEL_LABELS: Record<MatchLevel, string> = {
+  genus: "Same genus",
+  family: "Same family",
+  order: "Same order",
+  group: "Same group",
+};
+
+const MATCH_LEVEL_COLORS: Record<MatchLevel, string> = {
+  genus: "text-emerald-600 dark:text-emerald-400",
+  family: "text-blue-600 dark:text-blue-400",
+  order: "text-violet-600 dark:text-violet-400",
+  group: "text-zinc-500 dark:text-zinc-400",
+};
+
+export default function SuggestedAssessors({ scientificName, taxonGroup, family, orderName }: SuggestedAssessorsProps) {
   const [candidates, setCandidates] = useState<AssessorCandidate[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -30,10 +49,11 @@ export default function SuggestedAssessors({ scientificName, taxonGroup }: Sugge
     setLoading(true);
     setError(null);
 
-    fetch(
-      `/api/redlist/assessor-candidates?scientificName=${encodeURIComponent(scientificName)}&taxonGroup=${encodeURIComponent(taxonGroup)}`,
-      { signal: controller.signal }
-    )
+    const params = new URLSearchParams({ scientificName, taxonGroup });
+    if (family) params.set("family", family);
+    if (orderName) params.set("order", orderName);
+
+    fetch(`/api/redlist/assessor-candidates?${params}`, { signal: controller.signal })
       .then(async (res) => {
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
@@ -58,7 +78,7 @@ export default function SuggestedAssessors({ scientificName, taxonGroup }: Sugge
       });
 
     return () => controller.abort();
-  }, [scientificName, taxonGroup]);
+  }, [scientificName, taxonGroup, family, orderName]);
 
   if (loading) {
     return (
@@ -113,6 +133,9 @@ export default function SuggestedAssessors({ scientificName, taxonGroup }: Sugge
                 <div className="text-[10px] text-zinc-400 mt-0.5">
                   {candidate.assessmentCount} assessment{candidate.assessmentCount !== 1 ? "s" : ""} in group
                   {" "}&middot;{" "}latest {candidate.recentYear}
+                </div>
+                <div className={`text-[10px] mt-0.5 font-medium ${MATCH_LEVEL_COLORS[candidate.bestMatchLevel]}`}>
+                  {MATCH_LEVEL_LABELS[candidate.bestMatchLevel]}
                 </div>
                 {candidate.matchedSpecies.length > 0 && (
                   <div className="mt-1.5 space-y-0.5">

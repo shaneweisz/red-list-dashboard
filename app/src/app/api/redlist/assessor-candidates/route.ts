@@ -6,6 +6,8 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const scientificName = searchParams.get("scientificName");
   const taxonGroup = searchParams.get("taxonGroup");
+  const family = searchParams.get("family");
+  const orderName = searchParams.get("order");
 
   if (!scientificName || !taxonGroup) {
     return NextResponse.json(
@@ -15,7 +17,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const candidates = getAssessorCandidates(scientificName, taxonGroup);
+    const candidates = getAssessorCandidates(scientificName, taxonGroup, family, orderName);
     return NextResponse.json({ candidates }, { headers: CACHE_5M });
   } catch (error) {
     console.error("Assessor candidates error:", error);
