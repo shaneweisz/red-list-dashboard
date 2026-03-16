@@ -11,9 +11,8 @@
  * a ~700x improvement.
  *
  * Usage:
- *   npx tsx scripts/fetch-gbif-country-data.ts [taxon]           # One taxon, skip already-fetched
- *   npx tsx scripts/fetch-gbif-country-data.ts                   # All taxa, skip already-fetched
- *   npx tsx scripts/fetch-gbif-country-data.ts --refresh [taxon] # Re-fetch all species
+ *   npx tsx scripts/fetch-gbif-country-data.ts [taxon]   # One taxon
+ *   npx tsx scripts/fetch-gbif-country-data.ts            # All taxa
  */
 
 import * as path from "path";
@@ -152,11 +151,9 @@ async function fetchSpeciesInKingdomCountry(
 
 export async function run(opts: {
   taxa?: string[];
-  refresh?: boolean;
   logger?: SyncLogger;
 } = {}): Promise<void> {
   const taxaToSync = getTaxa(opts.taxa);
-  const refresh = opts.refresh ?? false;
   const logger = opts.logger ?? SyncLogger.noop();
 
   const startTime = Date.now();
@@ -164,42 +161,27 @@ export async function run(opts: {
   logger.log("fetch_gbif_country_data_start", {
     taxa: taxaToSync.map((t) => t.id),
     taxa_count: taxaToSync.length,
-    refresh,
   });
 
   // ── Step 1: Load all GBIF CSVs and build a global speciesKey → taxon index ──
 
-  const taxonData = new Map<string, { map: Map<number, GbifSpecies>; needsUpdate: Set<number> }>();
+  const taxonData = new Map<string, Map<number, GbifSpecies>>();
   const globalSpeciesIndex = new Map<number, string[]>(); // speciesKey → taxonIds
 
   for (const taxon of taxaToSync) {
     const gbifMap = readGbifCsv(taxon.id);
-    const speciesList = Array.from(gbifMap.values());
-    const needsUpdate = refresh
-      ? new Set(speciesList.map((s) => s.gbif_species_key))
-      : new Set(speciesList.filter((s) => !s.countries).map((s) => s.gbif_species_key));
+    taxonData.set(taxon.id, gbifMap);
 
-    taxonData.set(taxon.id, { map: gbifMap, needsUpdate });
-
-    for (const species of speciesList) {
-      const key = species.gbif_species_key;
+    for (const [key] of gbifMap) {
       const taxonIds = globalSpeciesIndex.get(key);
       if (taxonIds) taxonIds.push(taxon.id);
       else globalSpeciesIndex.set(key, [taxon.id]);
     }
 
-    const total = speciesList.length;
-    const needs = needsUpdate.size;
-    console.log(`  ${taxon.id}: ${total} species, ${needs} need country data${refresh ? " (refresh)" : ""}`);
+    console.log(`  ${taxon.id}: ${gbifMap.size} species`);
   }
 
-  const totalNeedingData = Array.from(taxonData.values()).reduce((s, d) => s + d.needsUpdate.size, 0);
-  if (totalNeedingData === 0) {
-    console.log("\nAll species already have country data. Nothing to do.");
-    return;
-  }
-
-  console.log(`\nTotal: ${globalSpeciesIndex.size} unique species, ${totalNeedingData} need country data`);
+  console.log(`\nTotal: ${globalSpeciesIndex.size} unique species`);
 
   // ── Step 2: Query at kingdom level per country ──
   // Only query kingdoms that are relevant to the taxa being synced
@@ -250,16 +232,13 @@ export async function run(opts: {
   let totalUpdated = 0;
 
   for (const taxon of taxaToSync) {
-    const { map: gbifMap, needsUpdate } = taxonData.get(taxon.id)!;
+    const gbifMap = taxonData.get(taxon.id)!;
 
     let updated = 0;
     for (const [key, species] of gbifMap) {
-      if (!needsUpdate.has(key)) continue;
       const countries = speciesCountries.get(key);
-      if (countries) {
-        species.countries = Array.from(countries).sort().join(";");
-        updated++;
-      }
+      species.countries = countries ? Array.from(countries).sort().join(";") : "";
+      if (countries) updated++;
     }
 
     const outputPath = path.join(GBIF_DIR, `${taxon.id}.csv`);
@@ -303,17 +282,15 @@ async function main() {
   loadEnvFiles();
 
   const args = process.argv.slice(2);
-  const refresh = args.includes("--refresh");
-  const taxonArg = args.find((a: string) => a !== "--refresh")?.toLowerCase();
+  const taxonArg = args[0]?.toLowerCase();
 
   console.log("fetch-gbif-country-data: GBIF country occurrences per species");
   console.log("  Strategy: kingdom-level queries (~1,000 API calls for all species)");
-  if (refresh) console.log("  Mode: --refresh (re-fetching all species)");
   console.log("=".repeat(50));
 
   const logger = new SyncLogger("fetch-gbif-country-data");
   try {
-    await run({ taxa: taxonArg ? [taxonArg] : undefined, refresh, logger });
+    await run({ taxa: taxonArg ? [taxonArg] : undefined, logger });
   } finally {
     logger.close();
   }
