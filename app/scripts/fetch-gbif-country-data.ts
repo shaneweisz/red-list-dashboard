@@ -204,11 +204,15 @@ export async function run(opts: {
   console.log(`\nTotal: ${globalSpeciesIndex.size} unique species, ${totalNeedingData} need country data`);
 
   // ── Step 2: Query at kingdom level per country ──
+  // Only query kingdoms that are relevant to the taxa being synced
+
+  const neededKingdomKeys = new Set(taxaToSync.map((t) => t.kingdomKey));
+  const kingdomsToQuery = KINGDOM_KEYS.filter((k) => neededKingdomKeys.has(k.key));
 
   const speciesCountries = new Map<number, Set<string>>();
   let totalApiCalls = 0;
 
-  for (const kingdom of KINGDOM_KEYS) {
+  for (const kingdom of kingdomsToQuery) {
     console.log(`\n${kingdom.name} (kingdomKey=${kingdom.key}):`);
 
     // Get countries with occurrences for this kingdom

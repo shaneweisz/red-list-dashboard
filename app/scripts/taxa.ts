@@ -22,6 +22,7 @@ export interface GbifQuery {
 export interface Taxon {
   id: string;
   name: string;
+  kingdomKey: number; // GBIF kingdom: 1=Animalia, 4=Chromista, 5=Fungi, 6=Plantae
   redlist: RedlistQuery[];
   gbif: GbifQuery[];
 }
@@ -86,17 +87,17 @@ const BONY_FISH_ORDER_KEYS = [
 export const TAXA: Taxon[] = [
   // ── Vertebrates ──
   {
-    id: "mammalia", name: "Mammals",
+    id: "mammalia", name: "Mammals", kingdomKey: 1,
     redlist: [{ filterColumn: "class_name", filterValues: ["MAMMALIA"] }],
     gbif: [{ keyType: "classKey", keyValue: 359 }],
   },
   {
-    id: "aves", name: "Birds",
+    id: "aves", name: "Birds", kingdomKey: 1,
     redlist: [{ filterColumn: "class_name", filterValues: ["AVES"] }],
     gbif: [{ keyType: "classKey", keyValue: 212 }],
   },
   {
-    id: "reptilia", name: "Reptiles",
+    id: "reptilia", name: "Reptiles", kingdomKey: 1,
     redlist: [{ filterColumn: "class_name", filterValues: ["REPTILIA"] }],
     gbif: [
       { keyType: "classKey", keyValue: 11592253 },
@@ -105,12 +106,12 @@ export const TAXA: Taxon[] = [
     ],
   },
   {
-    id: "amphibia", name: "Amphibians",
+    id: "amphibia", name: "Amphibians", kingdomKey: 1,
     redlist: [{ filterColumn: "class_name", filterValues: ["AMPHIBIA"] }],
     gbif: [{ keyType: "classKey", keyValue: 131 }],
   },
   {
-    id: "fishes", name: "Fishes",
+    id: "fishes", name: "Fishes", kingdomKey: 1,
     redlist: [{ filterColumn: "class_name", filterValues: ["ACTINOPTERYGII", "CHONDRICHTHYES", "MYXINI", "PETROMYZONTI", "SARCOPTERYGII"] }],
     gbif: [
       ...BONY_FISH_ORDER_KEYS.map((k) => ({ keyType: "orderKey" as const, keyValue: k })),
@@ -123,12 +124,12 @@ export const TAXA: Taxon[] = [
 
   // ── Invertebrates ──
   {
-    id: "insecta", name: "Insects",
+    id: "insecta", name: "Insects", kingdomKey: 1,
     redlist: [{ filterColumn: "class_name", filterValues: ["INSECTA"] }],
     gbif: [{ keyType: "classKey", keyValue: 216 }],
   },
   {
-    id: "mollusca", name: "Molluscs",
+    id: "mollusca", name: "Molluscs", kingdomKey: 1,
     redlist: [{ filterColumn: "phylum_name", filterValues: ["MOLLUSCA"] }],
     gbif: [
       { keyType: "classKey", keyValue: 225 },
@@ -136,32 +137,32 @@ export const TAXA: Taxon[] = [
     ],
   },
   {
-    id: "crustacea", name: "Crustaceans",
+    id: "crustacea", name: "Crustaceans", kingdomKey: 1,
     redlist: [{ filterColumn: "class_name", filterValues: ["MALACOSTRACA", "MAXILLOPODA", "BRANCHIOPODA", "OSTRACODA", "HEXANAUPLIA"] }],
     gbif: [{ keyType: "classKey", keyValue: 229 }],
   },
   {
-    id: "arachnida", name: "Arachnids",
+    id: "arachnida", name: "Arachnids", kingdomKey: 1,
     redlist: [{ filterColumn: "class_name", filterValues: ["ARACHNIDA"] }],
     gbif: [{ keyType: "classKey", keyValue: 367 }],
   },
   {
-    id: "corals", name: "Corals",
+    id: "corals", name: "Corals", kingdomKey: 1,
     redlist: [{ filterColumn: "order_name", filterValues: ["SCLERACTINIA", "ALCYONACEA", "PENNATULACEA"] }],
     gbif: [{ keyType: "classKey", keyValue: 206 }],
   },
   {
-    id: "velvet_worms", name: "Velvet Worms",
+    id: "velvet_worms", name: "Velvet Worms", kingdomKey: 1,
     redlist: [{ filterColumn: "class_name", filterValues: ["UDEONYCHOPHORA"] }],
     gbif: [{ keyType: "classKey", keyValue: 62 }],
   },
   {
-    id: "horseshoe_crabs", name: "Horseshoe Crabs",
+    id: "horseshoe_crabs", name: "Horseshoe Crabs", kingdomKey: 1,
     redlist: [{ filterColumn: "class_name", filterValues: ["MEROSTOMATA"] }],
     gbif: [{ keyType: "classKey", keyValue: 351 }],
   },
   {
-    id: "other_invertebrates", name: "Other Invertebrates",
+    id: "other_invertebrates", name: "Other Invertebrates", kingdomKey: 1,
     redlist: [
       // Non-coral Anthozoa (filtered by order to separate from corals in class ANTHOZOA)
       { filterColumn: "order_name", filterValues: [
@@ -192,7 +193,7 @@ export const TAXA: Taxon[] = [
 
   // ── Plants ──
   {
-    id: "mosses", name: "Mosses",
+    id: "mosses", name: "Mosses", kingdomKey: 6,
     redlist: [{ filterColumn: "phylum_name", filterValues: ["BRYOPHYTA", "ANTHOCEROTOPHYTA", "MARCHANTIOPHYTA"] }],
     gbif: [
       { keyType: "phylumKey", keyValue: 35 },  // Bryophyta
@@ -201,7 +202,7 @@ export const TAXA: Taxon[] = [
     ],
   },
   {
-    id: "ferns_and_allies", name: "Ferns and Allies",
+    id: "ferns_and_allies", name: "Ferns and Allies", kingdomKey: 6,
     redlist: [{ filterColumn: "class_name", filterValues: ["LYCOPODIOPSIDA", "ISOETOPSIDA", "EQUISETOPSIDA", "MARATTIOPSIDA", "POLYPODIOPSIDA", "PSILOTOPSIDA"] }],
     gbif: [
       { keyType: "classKey", keyValue: 245 },     // Lycopodiopsida
@@ -209,7 +210,7 @@ export const TAXA: Taxon[] = [
     ],
   },
   {
-    id: "gymnosperms", name: "Gymnosperms",
+    id: "gymnosperms", name: "Gymnosperms", kingdomKey: 6,
     redlist: [{ filterColumn: "class_name", filterValues: ["PINOPSIDA", "CYCADOPSIDA", "GINKGOOPSIDA", "GNETOPSIDA"] }],
     gbif: [
       { keyType: "classKey", keyValue: 194 },  // Pinopsida
@@ -219,7 +220,7 @@ export const TAXA: Taxon[] = [
     ],
   },
   {
-    id: "flowering_plants", name: "Flowering Plants",
+    id: "flowering_plants", name: "Flowering Plants", kingdomKey: 6,
     redlist: [{ filterColumn: "class_name", filterValues: ["MAGNOLIOPSIDA", "LILIOPSIDA"] }],
     gbif: [
       { keyType: "classKey", keyValue: 220 },  // Magnoliopsida
@@ -227,7 +228,7 @@ export const TAXA: Taxon[] = [
     ],
   },
   {
-    id: "green_algae", name: "Green Algae",
+    id: "green_algae", name: "Green Algae", kingdomKey: 6,
     redlist: [{ filterColumn: "phylum_name", filterValues: ["CHLOROPHYTA", "CHAROPHYTA"] }],
     gbif: [
       { keyType: "phylumKey", keyValue: 36 },      // Chlorophyta
@@ -235,14 +236,14 @@ export const TAXA: Taxon[] = [
     ],
   },
   {
-    id: "red_algae", name: "Red Algae",
+    id: "red_algae", name: "Red Algae", kingdomKey: 6,
     redlist: [{ filterColumn: "phylum_name", filterValues: ["RHODOPHYTA"] }],
     gbif: [{ keyType: "phylumKey", keyValue: 106 }],
   },
 
   // ── Fungi & Protists ──
   {
-    id: "mushrooms", name: "Mushrooms, etc.",
+    id: "mushrooms", name: "Mushrooms, etc.", kingdomKey: 5,
     redlist: [{ filterColumn: "phylum_name", filterValues: ["ASCOMYCOTA", "BASIDIOMYCOTA"] }],
     gbif: [
       { keyType: "phylumKey", keyValue: 34 },  // Basidiomycota
@@ -250,7 +251,7 @@ export const TAXA: Taxon[] = [
     ],
   },
   {
-    id: "brown_algae", name: "Brown Algae",
+    id: "brown_algae", name: "Brown Algae", kingdomKey: 4,
     redlist: [{ filterColumn: "phylum_name", filterValues: ["OCHROPHYTA"] }],
     gbif: [{ keyType: "phylumKey", keyValue: 98 }],
   },
