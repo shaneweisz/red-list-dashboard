@@ -144,22 +144,12 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
   const [selectedTaxa, setSelectedTaxaLocal] = useState<Set<string>>(sharedTaxa ?? new Set());
   const [selectedSubgroups, setSelectedSubgroupsLocal] = useState<Set<string>>(sharedSubgroups ?? new Set());
 
-  // Wrap setters to sync up to parent
-  const setSelectedTaxa = useCallback((updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
-    setSelectedTaxaLocal(prev => {
-      const next = typeof updater === "function" ? updater(prev) : updater;
-      onTaxaChange?.(next);
-      return next;
-    });
-  }, [onTaxaChange]);
+  // Sync local state up to parent via effects (not during render)
+  useEffect(() => { onTaxaChange?.(selectedTaxa); }, [selectedTaxa, onTaxaChange]);
+  useEffect(() => { onSubgroupsChange?.(selectedSubgroups); }, [selectedSubgroups, onSubgroupsChange]);
 
-  const setSelectedSubgroups = useCallback((updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
-    setSelectedSubgroupsLocal(prev => {
-      const next = typeof updater === "function" ? updater(prev) : updater;
-      onSubgroupsChange?.(next);
-      return next;
-    });
-  }, [onSubgroupsChange]);
+  const setSelectedTaxa = setSelectedTaxaLocal;
+  const setSelectedSubgroups = setSelectedSubgroupsLocal;
 
   // Search & sort
   const [searchFilter, setSearchFilter] = useState("");
@@ -258,25 +248,11 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
   useEffect(() => {
     if (selectedTaxa.size === 0) return;
 
-    const taxaToFetch = [...selectedTaxa].filter(t => !speciesByTaxon[t] && !loadingTaxa.has(t));
-    if (speciesByTaxon["all"] && !selectedTaxa.has("all")) return;
+    // Skip "all" — too large for serverless; fetch per-taxon instead
+    const taxaToFetch = [...selectedTaxa].filter(t => t !== "all" && !speciesByTaxon[t] && !loadingTaxa.has(t));
     if (taxaToFetch.length === 0) return;
 
     for (const taxonId of taxaToFetch) {
-      if (taxonId === "all" && prefetchPromiseRef.current) {
-        setLoadingTaxa(prev => new Set(prev).add("all"));
-        prefetchPromiseRef.current.then(() => {
-          setLoadingTaxa(prev => { const next = new Set(prev); next.delete("all"); return next; });
-        });
-        continue;
-      }
-
-      if (taxonId === "all") {
-        Object.entries(abortRefs.current).forEach(([id, ctrl]) => {
-          if (id !== "all") ctrl.abort();
-        });
-      }
-
       const controller = new AbortController();
       abortRefs.current[taxonId] = controller;
       setLoadingTaxa(prev => new Set(prev).add(taxonId));
@@ -308,21 +284,8 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
     }
   }, [selectedTaxa, speciesByTaxon, loadingTaxa]);
 
-  // Prefetch all NE species on mount
-  useEffect(() => {
-    const controller = new AbortController();
-    const promise = fetch("/api/redlist/species?taxon=all&category=NE", { signal: controller.signal })
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        if (data && !controller.signal.aborted) {
-          setSpeciesByTaxon(prev => prev["all"] ? prev : { ...prev, all: data.species });
-        }
-      })
-      .catch(() => {})
-      .finally(() => { prefetchPromiseRef.current = null; });
-    prefetchPromiseRef.current = promise;
-    return () => { controller.abort(); prefetchPromiseRef.current = null; };
-  }, []);
+  // No prefetch of all NE species — too large for serverless memory limits.
+  // Species are fetched per-taxon when the user selects a taxon group.
 
   const speciesLoading = loadingTaxa.size > 0;
 
