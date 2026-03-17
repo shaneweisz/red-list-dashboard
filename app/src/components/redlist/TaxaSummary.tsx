@@ -98,6 +98,42 @@ const FOCUS_HIDDEN: Record<FocusMode, Set<ColumnId>> = {
 
 const DEFAULT_HIDDEN_COLUMNS = FOCUS_HIDDEN.redlist;
 
+function DisabledAllTooltip() {
+  const [hovered, setHovered] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+
+  useEffect(() => {
+    if (hovered && ref.current) {
+      const rect = ref.current.getBoundingClientRect();
+      setPos({ top: rect.top, left: rect.right + 8 });
+    }
+  }, [hovered]);
+
+  return (
+    <span
+      ref={ref}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="ml-1 text-zinc-400 dark:text-zinc-500 cursor-help"
+    >
+      <svg className="w-3.5 h-3.5 inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <path d="M12 16v-4M12 8h.01" />
+      </svg>
+      {hovered && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed z-[99999] px-2 py-1 text-xs bg-zinc-800 text-zinc-200 rounded shadow-lg whitespace-nowrap"
+          style={{ top: pos.top, left: pos.left, transform: 'translateY(-100%)' }}
+        >
+          Unassessed species must be loaded per taxon group. Loading all species at once would require very high memory usage and data transfer.
+        </div>,
+        document.body
+      )}
+    </span>
+  );
+}
+
 export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, disableAllSpecies }: Props) {
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [globalGbifMedian, setGlobalGbifMedian] = useState<number | undefined>();
@@ -533,7 +569,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         : "";
     const allDisabled = isAllRow && disableAllSpecies;
     const hoverClass = allDisabled
-      ? "opacity-50 cursor-not-allowed"
+      ? "cursor-not-allowed"
       : isAllRow
         ? "hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
         : available
@@ -564,6 +600,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           <div className="flex items-center gap-2">
             <TaxaIcon taxonId={id} size={22} className="flex-shrink-0" style={{ color }} />
             <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{name}</span>
+            {allDisabled && <DisabledAllTooltip />}
           </div>
         </td>
         {isVisible("described") && (

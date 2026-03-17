@@ -456,15 +456,20 @@ export function speciesMatchesSubgroup(
   }
 
   // Order include filter
+  // Fall back to class_name when order_name is empty — GBIF's backbone taxonomy
+  // sometimes places what IUCN considers an order (e.g. Squamata) at the class
+  // level, leaving order null in the species API response.
   if (f.orderNames && f.orderNames.length > 0) {
     const ord = (species.order_name ?? "").toLowerCase();
-    if (!f.orderNames.includes(ord)) return false;
+    const cls = (species.class_name ?? "").toLowerCase();
+    if (!f.orderNames.includes(ord) && !(ord === "" && f.orderNames.includes(cls))) return false;
   }
 
-  // Order exclude filter
+  // Order exclude filter (same class_name fallback as above)
   if (f.excludeOrders && f.excludeOrders.length > 0) {
     const ord = (species.order_name ?? "").toLowerCase();
-    if (f.excludeOrders.includes(ord)) return false;
+    const cls = (species.class_name ?? "").toLowerCase();
+    if (f.excludeOrders.includes(ord) || (ord === "" && f.excludeOrders.includes(cls))) return false;
   }
 
   return true;
