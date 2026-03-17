@@ -31,7 +31,7 @@ interface TaxonSummary {
   meanGbifObsPerSpecies?: number;
   medianGbifObsPerSpecies?: number;
   gbifSpeciesCount?: number;
-  neSpeciesCount?: number;
+  gbifNeSpeciesCount?: number;
   gbifObsDistribution?: Record<string, number>;
 }
 
@@ -444,7 +444,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   }
   const totalGbifObs = perTaxa.reduce((sum, t) => sum + (t.totalGbifObservations || 0), 0);
   const totalGbifSpecies = perTaxa.reduce((sum, t) => sum + (t.gbifSpeciesCount || 0), 0);
-  const totalNeSpecies = perTaxa.reduce((sum, t) => sum + (t.neSpeciesCount || 0), 0);
+  const totalGbifNeSpecies = perTaxa.reduce((sum, t) => sum + (t.gbifNeSpeciesCount || 0), 0);
   const totalMeanGbifObs = totalGbifSpecies > 0 ? Math.round(totalGbifObs / totalGbifSpecies) : 0;
 
 
@@ -578,7 +578,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     isSelected?: boolean,
     available = true,
     isAllRow = false,
-    gbifObs?: { total?: number; mean?: number; median?: number; speciesCount?: number; neCount?: number; distribution?: Record<string, number> }
+    gbifObs?: { total?: number; mean?: number; median?: number; speciesCount?: number; gbifNeCount?: number; distribution?: Record<string, number> }
   ) => {
     const isAllSelected = isAllRow && selectedTaxa.has("all");
     const rowBg = isAllRow
@@ -632,7 +632,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         {isNewAssessments && isVisible("gbifSpecies") && (
           <td className={numericTdClasses}>
             <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
-              {gbifObs?.neCount != null ? gbifObs.neCount.toLocaleString() : "—"}
+              {gbifObs?.gbifNeCount != null ? gbifObs.gbifNeCount.toLocaleString() : "—"}
             </span>
           </td>
         )}
@@ -872,7 +872,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           {isNewAssessments && isVisible("gbifSpecies") && (
             <td className={numericTdClasses}>
               <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
-                {taxon.neSpeciesCount != null ? taxon.neSpeciesCount.toLocaleString() : "—"}
+                {taxon.gbifNeSpeciesCount != null ? taxon.gbifNeSpeciesCount.toLocaleString() : "—"}
               </span>
             </td>
           )}
@@ -1217,7 +1217,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             false,
             true,
             true,
-            { total: totalGbifObs, mean: totalMeanGbifObs, median: globalGbifMedian, speciesCount: totalGbifSpecies, neCount: totalNeSpecies, distribution: globalGbifDistribution }
+            { total: totalGbifObs, mean: totalMeanGbifObs, median: globalGbifMedian, speciesCount: totalGbifSpecies, gbifNeCount: totalGbifNeSpecies, distribution: globalGbifDistribution }
           )}
 
           {/* Separator - hide when only "All Species" is selected */}

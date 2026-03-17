@@ -25,7 +25,7 @@ export interface TaxonSummaryRow {
   outdated: number;
   by_category: Record<string, number>;
   gbif_species_count: number;
-  ne_species_count: number;
+  gbif_ne_species_count: number;
   total_gbif_observations: number;
   mean_gbif_obs: number;
   median_gbif_obs: number | null;
@@ -84,7 +84,7 @@ export async function run(): Promise<void> {
 
     // GBIF stats
     let gbifSpeciesCount = 0;
-    let neSpeciesCount = 0;
+    let gbifNeSpeciesCount = 0;
     let totalGbifObservations = 0;
     const obsCounts: number[] = [];
 
@@ -95,7 +95,7 @@ export async function run(): Promise<void> {
         totalGbifObservations += g.total_count;
         obsCounts.push(g.total_count);
         // NE = GBIF species not linked to any redlist entry
-        if (!linkedGbifKeys.has(key)) neSpeciesCount++;
+        if (!linkedGbifKeys.has(key)) gbifNeSpeciesCount++;
       }
     }
 
@@ -109,13 +109,13 @@ export async function run(): Promise<void> {
       outdated,
       by_category: byCategory,
       gbif_species_count: gbifSpeciesCount,
-      ne_species_count: neSpeciesCount,
+      gbif_ne_species_count: gbifNeSpeciesCount,
       total_gbif_observations: totalGbifObservations,
       mean_gbif_obs: meanGbifObs,
       median_gbif_obs: median(obsCounts),
     });
 
-    console.log(`  ${taxon.id}: ${totalAssessed} assessed, ${neSpeciesCount} unassessed, ${outdated} outdated, ${gbifSpeciesCount} GBIF species`);
+    console.log(`  ${taxon.id}: ${totalAssessed} assessed, ${gbifNeSpeciesCount} unassessed, ${outdated} outdated, ${gbifSpeciesCount} GBIF species`);
   }
 
   const outputPath = path.join(DATA_DIR, "taxa-summary.json");
