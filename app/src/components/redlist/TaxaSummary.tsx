@@ -106,7 +106,7 @@ function DisabledAllTooltip() {
   useEffect(() => {
     if (hovered && ref.current) {
       const rect = ref.current.getBoundingClientRect();
-      setPos({ top: rect.top - 8, left: rect.left + rect.width / 2 });
+      setPos({ top: rect.top + rect.height / 2, left: rect.right + 8 });
     }
   }, [hovered]);
 
@@ -124,7 +124,7 @@ function DisabledAllTooltip() {
       {hovered && typeof document !== 'undefined' && createPortal(
         <div
           className="fixed z-[99999] px-2 py-1 text-xs bg-zinc-800 text-zinc-200 rounded shadow-lg whitespace-nowrap"
-          style={{ top: pos.top, left: pos.left, transform: 'translateX(-50%) translateY(-100%)' }}
+          style={{ top: pos.top, left: pos.left, transform: 'translateY(-50%)' }}
         >
           Unassessed species must be loaded per taxon group (loading all species at once requires too much data/memory)
         </div>,
