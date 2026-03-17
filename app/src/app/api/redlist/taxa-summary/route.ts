@@ -20,6 +20,7 @@ interface TaxonSummary {
   meanGbifObsPerSpecies?: number;
   medianGbifObsPerSpecies?: number;
   gbifSpeciesCount?: number;
+  neSpeciesCount?: number;
   gbifObsDistribution?: Record<string, number>;
 }
 
@@ -70,6 +71,10 @@ export async function GET() {
         (sum, r) => sum + Number(r.gbif_species_count ?? 0),
         0
       );
+      const neSpeciesCount = matchedRows.reduce(
+        (sum, r) => sum + Number(r.ne_species_count ?? 0),
+        0
+      );
       const meanGbifObsPerSpecies =
         gbifSpeciesCount > 0 ? totalGbifObservations / gbifSpeciesCount : undefined;
 
@@ -98,6 +103,7 @@ export async function GET() {
         meanGbifObsPerSpecies: available ? meanGbifObsPerSpecies : undefined,
         medianGbifObsPerSpecies: available ? medianGbifObsPerSpecies : undefined,
         gbifSpeciesCount: available ? gbifSpeciesCount : undefined,
+        neSpeciesCount: available ? neSpeciesCount : undefined,
       };
     });
 

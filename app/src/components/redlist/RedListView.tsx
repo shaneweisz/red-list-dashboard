@@ -1250,6 +1250,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         selectedTaxa={selectedTaxa}
         selectedSubgroups={selectedSubgroups}
         disableAllSpecies={isNewAssessments}
+        viewMode={viewMode}
         onToggleSubgroup={(sgId, parentTaxonId) => {
           const wasSelected = selectedSubgroups.has(sgId);
           setSelectedSubgroups(prev => {

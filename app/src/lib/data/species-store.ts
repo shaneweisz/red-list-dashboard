@@ -94,6 +94,7 @@ export interface TaxaSummaryRow {
   outdated: number;
   by_category: Record<string, number>;
   gbif_species_count: number;
+  ne_species_count: number;
   total_gbif_observations: number;
   mean_gbif_obs: number;
   median_gbif_obs: number | null;
