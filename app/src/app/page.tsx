@@ -1,26 +1,12 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState } from "react";
 import dynamic from "next/dynamic";
 import { ThemeToggle } from "../components/ThemeToggle";
 
-// Dynamically import view components
+// Dynamically import view component
 const RedListView = dynamic(
   () => import("../components/redlist/RedListView"),
-  {
-    loading: () => (
-      <div className="flex flex-col items-center justify-center py-20">
-        <div className="animate-spin h-10 w-10 border-4 border-zinc-400 border-t-transparent rounded-full" />
-        <p className="mt-4 text-zinc-500 dark:text-zinc-400">
-          Loading view...
-        </p>
-      </div>
-    ),
-  }
-);
-
-const NewAssessmentsView = dynamic(
-  () => import("../components/redlist/NewAssessmentsView"),
   {
     loading: () => (
       <div className="flex flex-col items-center justify-center py-20">
@@ -87,22 +73,14 @@ export default function RedListPage() {
           </div>
         </div>
 
-        {/* Content */}
-        {viewMode === "reassessments" ? (
-          <RedListView
-            sharedTaxa={sharedTaxa}
-            sharedSubgroups={sharedSubgroups}
-            onTaxaChange={setSharedTaxa}
-            onSubgroupsChange={setSharedSubgroups}
-          />
-        ) : (
-          <NewAssessmentsView
-            sharedTaxa={sharedTaxa}
-            sharedSubgroups={sharedSubgroups}
-            onTaxaChange={setSharedTaxa}
-            onSubgroupsChange={setSharedSubgroups}
-          />
-        )}
+        {/* Content — single component instance stays mounted on viewMode switch */}
+        <RedListView
+          viewMode={viewMode}
+          sharedTaxa={sharedTaxa}
+          sharedSubgroups={sharedSubgroups}
+          onTaxaChange={setSharedTaxa}
+          onSubgroupsChange={setSharedSubgroups}
+        />
       </main>
     </div>
   );
