@@ -8,6 +8,7 @@ import {
   YAxis,
   Tooltip,
   ResponsiveContainer,
+  LabelList,
 } from "recharts";
 
 interface AssessorCandidate {
@@ -32,9 +33,14 @@ const LEVEL_COLORS = {
   family: "#3b82f6",
   order: "#8b5cf6",
   class: "#f59e0b",
+  group: "#a1a1aa",
 };
 
 const PAGE_SIZE = 10;
+
+function formatGroupName(taxonGroup: string): string {
+  return taxonGroup.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 export default function AssessorCandidatesChart({
   scientificName,
@@ -57,8 +63,9 @@ export default function AssessorCandidatesChart({
     if (family) items.push({ key: "family", label: `Family: ${family}`, color: LEVEL_COLORS.family });
     if (orderName) items.push({ key: "order", label: `Order: ${orderName}`, color: LEVEL_COLORS.order });
     if (className) items.push({ key: "class", label: `Class: ${className}`, color: LEVEL_COLORS.class });
+    items.push({ key: "group", label: `Group: ${formatGroupName(taxonGroup)}`, color: LEVEL_COLORS.group });
     return items;
-  }, [genusName, family, orderName, className]);
+  }, [genusName, family, orderName, className, taxonGroup]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -116,6 +123,13 @@ export default function AssessorCandidatesChart({
   const paginated = chartData.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
   const globalMax = chartData.length > 0 ? chartData[0].total : 0;
 
+  const openAssessor = (barData: { payload?: { name?: string } }) => {
+    const name = barData?.payload?.name;
+    if (name) {
+      window.open(`/?assessors=${encodeURIComponent(name)}`, "_blank");
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -146,7 +160,7 @@ export default function AssessorCandidatesChart({
   return (
     <div className="p-4">
       {/* Legend */}
-      <div className="flex items-center gap-4 mb-3 text-xs">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-3 text-xs">
         {legendItems.map((item) => (
           <div key={item.key} className="flex items-center gap-1.5">
             <span
@@ -159,22 +173,22 @@ export default function AssessorCandidatesChart({
       </div>
 
       {/* Chart */}
-      <div style={{ height: paginated.length * 32 + 20, minHeight: 120 }}>
+      <div style={{ height: paginated.length * 32 + 40, minHeight: 140 }}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={paginated}
             layout="vertical"
-            margin={{ top: 5, right: 55, left: -30, bottom: 5 }}
+            margin={{ top: 5, right: 55, left: -30, bottom: 20 }}
             barCategoryGap={4}
-            onClick={(state: any) => {
-              const name = state?.activePayload?.[0]?.payload?.name;
-              if (name) {
-                window.open(`/?assessors=${encodeURIComponent(name)}`, "_blank");
-              }
-            }}
-            style={{ cursor: "pointer" }}
           >
-            <XAxis type="number" hide domain={[0, globalMax || 1]} />
+            <XAxis
+              type="number"
+              domain={[0, globalMax || 1]}
+              tick={{ fontSize: 10, fill: "#a1a1aa" }}
+              tickLine={false}
+              axisLine={{ stroke: "#3f3f46" }}
+              label={{ value: "Species assessed", position: "insideBottom", offset: -12, fontSize: 10, fill: "#71717a" }}
+            />
             <YAxis
               type="category"
               dataKey="name"
@@ -199,6 +213,7 @@ export default function AssessorCandidatesChart({
                   <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-white shadow-lg">
                     <div className="font-medium mb-1">{data.name}</div>
                     {legendItems.map((item) => {
+                      if (item.key === "group") return null;
                       const inclusive = item.key === "genus" ? data.genus
                         : item.key === "family" ? data.genus + data.familyOnly
                         : item.key === "order" ? data.genus + data.familyOnly + data.orderOnly
@@ -216,10 +231,16 @@ export default function AssessorCandidatesChart({
                 );
               }}
             />
-            <Bar dataKey="genus" stackId="a" fill={LEVEL_COLORS.genus} radius={0} />
-            <Bar dataKey="familyOnly" stackId="a" fill={LEVEL_COLORS.family} radius={0} />
-            <Bar dataKey="orderOnly" stackId="a" fill={LEVEL_COLORS.order} radius={0} />
-            <Bar dataKey="classOnly" stackId="a" fill={LEVEL_COLORS.class} radius={[0, 4, 4, 0]} />
+            <Bar dataKey="genus" stackId="a" fill={LEVEL_COLORS.genus} radius={0} cursor="pointer" onClick={openAssessor} />
+            <Bar dataKey="familyOnly" stackId="a" fill={LEVEL_COLORS.family} radius={0} cursor="pointer" onClick={openAssessor} />
+            <Bar dataKey="orderOnly" stackId="a" fill={LEVEL_COLORS.order} radius={0} cursor="pointer" onClick={openAssessor} />
+            <Bar dataKey="classOnly" stackId="a" fill={LEVEL_COLORS.class} radius={[0, 4, 4, 0]} cursor="pointer" onClick={openAssessor}>
+              <LabelList
+                dataKey="total"
+                position="right"
+                style={{ fontSize: 11, fill: "#a1a1aa" }}
+              />
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>
