@@ -847,13 +847,7 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
                               {selectedSpeciesKey === speciesKey && s.gbif_species_key && (
                                 <tr>
                                   <td colSpan={3} className="p-0 bg-zinc-50 dark:bg-zinc-800/30">
-                                    <OccurrenceMapRow
-                                      speciesKey={s.gbif_species_key}
-                                      mounted={mounted}
-                                      assessmentYear={null}
-                                      assessmentDate={null}
-                                    />
-                                    <div className="px-4 pb-4">
+                                    <div className="px-4 pt-4">
                                       <SuggestedAssessors
                                         scientificName={s.scientific_name}
                                         taxonGroup={s.taxon_group}
@@ -861,6 +855,12 @@ export default function NewAssessmentsView({ sharedTaxa, sharedSubgroups, onTaxa
                                         orderName={s.order_name}
                                       />
                                     </div>
+                                    <OccurrenceMapRow
+                                      speciesKey={s.gbif_species_key}
+                                      mounted={mounted}
+                                      assessmentYear={null}
+                                      assessmentDate={null}
+                                    />
                                   </td>
                                 </tr>
                               )}

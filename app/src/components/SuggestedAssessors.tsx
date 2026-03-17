@@ -118,9 +118,12 @@ export default function SuggestedAssessors({ scientificName, taxonGroup, family,
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         {candidates.map((candidate, idx) => (
-          <div
+          <a
             key={candidate.name}
-            className="border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 bg-white dark:bg-zinc-800/50"
+            href={`/?assessors=${encodeURIComponent(candidate.name)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 bg-white dark:bg-zinc-800/50 hover:border-amber-300 dark:hover:border-amber-600 hover:bg-amber-50/50 dark:hover:bg-amber-900/10 transition-colors cursor-pointer block"
           >
             <div className="flex items-start gap-2">
               <span className="flex-shrink-0 w-5 h-5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 text-[10px] font-bold flex items-center justify-center">
@@ -154,7 +157,7 @@ export default function SuggestedAssessors({ scientificName, taxonGroup, family,
                 )}
               </div>
             </div>
-          </div>
+          </a>
         ))}
       </div>
     </div>
