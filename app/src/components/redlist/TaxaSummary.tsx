@@ -73,7 +73,7 @@ const flexTdClasses = `${cellPad} whitespace-nowrap w-0`;
 const flexThClasses = `${cellPad} text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`;
 
 // Toggleable column IDs (Taxon is always visible)
-type ColumnId = "described" | "assessed" | "pctAssessed" | "outdated" | "pctOutdated" | "breakdown" | "gbifSpecies" | "totalGbifObs" | "meanGbifObs" | "medianGbifObs" | "gbifDistribution";
+type ColumnId = "described" | "assessed" | "pctAssessed" | "outdated" | "pctOutdated" | "breakdown" | "gbifSpecies" | "pctGbifUnassessed" | "totalGbifObs" | "meanGbifObs" | "medianGbifObs" | "gbifDistribution";
 
 const COLUMN_LABELS: Record<ColumnId, string> = {
   described: "Est. # Described",
@@ -83,6 +83,7 @@ const COLUMN_LABELS: Record<ColumnId, string> = {
   pctOutdated: "% Outdated",
   breakdown: "Risk Category Breakdown",
   gbifSpecies: "# on GBIF",
+  pctGbifUnassessed: "% Unassessed (1+ GBIF obs)",
   totalGbifObs: "Total Obs",
   meanGbifObs: "Mean Obs",
   medianGbifObs: "Median Obs",
@@ -94,8 +95,8 @@ const DISTRIBUTION_BIN_LABELS = ["1", "2–10", "11–100", "101–1K", "1K–10
 type FocusMode = "redlist" | "gbif" | "new-assessments";
 
 const FOCUS_HIDDEN: Record<FocusMode, Set<ColumnId>> = {
-  redlist: new Set(["gbifSpecies", "totalGbifObs", "meanGbifObs", "medianGbifObs", "gbifDistribution", "breakdown"]),
-  gbif: new Set(["pctAssessed", "outdated", "pctOutdated", "breakdown"]),
+  redlist: new Set(["gbifSpecies", "pctGbifUnassessed", "totalGbifObs", "meanGbifObs", "medianGbifObs", "gbifDistribution", "breakdown"]),
+  gbif: new Set(["pctAssessed", "outdated", "pctOutdated", "pctGbifUnassessed", "breakdown"]),
   "new-assessments": new Set(["outdated", "pctOutdated", "breakdown", "totalGbifObs", "meanGbifObs", "medianGbifObs", "gbifDistribution"]),
 };
 
@@ -308,11 +309,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             <div className="h-4 w-16 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
           </td>
         )}
-        {isNewAssessments && isVisible("gbifSpecies") && (
-          <td className={numericTdClasses}>
-            <div className="h-4 w-14 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
-          </td>
-        )}
         {isVisible("assessed") && (
           <td className={numericTdClasses}>
             <div className="h-4 w-14 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
@@ -339,8 +335,13 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             </div>
           </td>
         )}
-        {!isNewAssessments && isVisible("gbifSpecies") && (
+        {isVisible("gbifSpecies") && (
           <td className={numericTdClasses}>
+            <div className="h-4 w-14 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
+          </td>
+        )}
+        {isVisible("pctGbifUnassessed") && (
+          <td className={flexTdClasses}>
             <div className="h-4 w-14 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
           </td>
         )}
@@ -391,12 +392,12 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
               <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`}>Taxon</th>
               {isVisible("described") && <th className={numericThClasses}>Est. # Described</th>}
-              {isNewAssessments && isVisible("gbifSpecies") && <th className={numericThClasses}># Unassessed (1+ GBIF obs)</th>}
               {isVisible("assessed") && <th className={numericThClasses}># Assessed</th>}
               {isVisible("pctAssessed") && <th className={flexThClasses}>% Assessed</th>}
               {isVisible("outdated") && <th className={numericThClasses}># Outdated (10+Y)</th>}
               {isVisible("pctOutdated") && <th className={flexThClasses}>% Outdated</th>}
-              {!isNewAssessments && isVisible("gbifSpecies") && <th className={numericThClasses}># on GBIF</th>}
+              {isVisible("gbifSpecies") && <th className={numericThClasses}>{isNewAssessments ? "# Unassessed (1+ GBIF obs)" : "# on GBIF"}</th>}
+              {isVisible("pctGbifUnassessed") && <th className={flexThClasses}>% Unassessed (1+ GBIF obs)</th>}
               {isVisible("totalGbifObs") && <th className={numericThClasses}>Total Obs</th>}
               {isVisible("gbifDistribution") && <th className={flexThClasses}>Obs Distribution</th>}
               {isVisible("meanGbifObs") && <th className={numericThClasses}>Mean Obs</th>}
@@ -629,13 +630,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             </span>
           </td>
         )}
-        {isNewAssessments && isVisible("gbifSpecies") && (
-          <td className={numericTdClasses}>
-            <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
-              {gbifObs?.gbifNeCount != null ? gbifObs.gbifNeCount.toLocaleString() : "—"}
-            </span>
-          </td>
-        )}
         {isVisible("assessed") && (
           <td className={numericTdClasses}>
             <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
@@ -668,11 +662,23 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             )}
           </td>
         )}
-        {!isNewAssessments && isVisible("gbifSpecies") && (
+        {isVisible("gbifSpecies") && (
           <td className={numericTdClasses}>
             <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
-              {gbifObs?.speciesCount != null ? gbifObs.speciesCount.toLocaleString() : "—"}
+              {isNewAssessments
+                ? (gbifObs?.gbifNeCount != null ? gbifObs.gbifNeCount.toLocaleString() : "—")
+                : (gbifObs?.speciesCount != null ? gbifObs.speciesCount.toLocaleString() : "—")}
             </span>
+          </td>
+        )}
+        {isVisible("pctGbifUnassessed") && (
+          <td className={flexTdClasses}>
+            {(() => {
+              const ne = gbifObs?.gbifNeCount;
+              if (ne == null || estimatedDescribed <= 0) return <span className="text-sm md:text-base text-zinc-400">—</span>;
+              const pct = (ne / estimatedDescribed) * 100;
+              return renderBar(pct, "#3b82f6", isAllRow);
+            })()}
           </td>
         )}
         {isVisible("totalGbifObs") && (
@@ -763,9 +769,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             </span>
           </td>
         )}
-        {isNewAssessments && isVisible("gbifSpecies") && (
-          <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
-        )}
         {isVisible("assessed") && (
           <td className={numericTdClasses}>
             <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
@@ -792,8 +795,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               : <span className="text-sm text-zinc-400">—</span>}
           </td>
         )}
-        {!isNewAssessments && isVisible("gbifSpecies") && (
+        {isVisible("gbifSpecies") && (
           <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
+        )}
+        {isVisible("pctGbifUnassessed") && (
+          <td className={flexTdClasses}><span className="text-sm text-zinc-400">—</span></td>
         )}
         {isVisible("totalGbifObs") && (
           <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
@@ -869,13 +875,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               </span>
             </td>
           )}
-          {isNewAssessments && isVisible("gbifSpecies") && (
-            <td className={numericTdClasses}>
-              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
-                {taxon.gbifNeSpeciesCount != null ? taxon.gbifNeSpeciesCount.toLocaleString() : "—"}
-              </span>
-            </td>
-          )}
           {isVisible("assessed") && (
             <td className={numericTdClasses}>
               <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
@@ -904,11 +903,20 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                 : <span className="text-sm text-zinc-400">—</span>}
             </td>
           )}
-          {!isNewAssessments && isVisible("gbifSpecies") && (
+          {isVisible("gbifSpecies") && (
             <td className={numericTdClasses}>
               <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
-                {taxon.gbifSpeciesCount != null ? taxon.gbifSpeciesCount.toLocaleString() : "—"}
+                {isNewAssessments
+                  ? (taxon.gbifNeSpeciesCount != null ? taxon.gbifNeSpeciesCount.toLocaleString() : "—")
+                  : (taxon.gbifSpeciesCount != null ? taxon.gbifSpeciesCount.toLocaleString() : "—")}
               </span>
+            </td>
+          )}
+          {isVisible("pctGbifUnassessed") && (
+            <td className={flexTdClasses}>
+              {taxon.gbifNeSpeciesCount != null && taxon.estimatedDescribed > 0
+                ? renderBar((taxon.gbifNeSpeciesCount / taxon.estimatedDescribed) * 100, "#3b82f6", false)
+                : <span className="text-sm text-zinc-400">—</span>}
             </td>
           )}
           {isVisible("totalGbifObs") && (
@@ -1002,9 +1010,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                   </span>
                 </td>
               )}
-              {isNewAssessments && isVisible("gbifSpecies") && (
-                <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
-              )}
               {isVisible("assessed") && (
                 <td className={numericTdClasses}>
                   <span className="text-sm text-zinc-600 dark:text-zinc-400 tabular-nums">
@@ -1031,8 +1036,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                     : <span className="text-sm text-zinc-400">—</span>}
                 </td>
               )}
-              {!isNewAssessments && isVisible("gbifSpecies") && (
+              {isVisible("gbifSpecies") && (
                 <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
+              )}
+              {isVisible("pctGbifUnassessed") && (
+                <td className={flexTdClasses}><span className="text-sm text-zinc-400">—</span></td>
               )}
               {isVisible("totalGbifObs") && (
                 <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
@@ -1103,9 +1111,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             </span>
           </th>
         )}
-        {isNewAssessments && isVisible("gbifSpecies") && (
-          <th className={numericThClasses}># Unassessed (1+ GBIF obs)</th>
-        )}
         {isVisible("assessed") && (
           <th className={numericThClasses}># Assessed</th>
         )}
@@ -1118,8 +1123,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         {isVisible("pctOutdated") && (
           <th className={flexThClasses}>% Outdated</th>
         )}
-        {!isNewAssessments && isVisible("gbifSpecies") && (
-          <th className={numericThClasses}># on GBIF</th>
+        {isVisible("gbifSpecies") && (
+          <th className={numericThClasses}>{isNewAssessments ? "# Unassessed (1+ GBIF obs)" : "# on GBIF"}</th>
+        )}
+        {isVisible("pctGbifUnassessed") && (
+          <th className={flexThClasses}>% Unassessed (1+ GBIF obs)</th>
         )}
         {isVisible("totalGbifObs") && (
           <th className={numericThClasses}>Total Obs</th>
