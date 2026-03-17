@@ -14,6 +14,7 @@ import { loadEnvFiles, DATA_DIR, REDLIST_DIR, GBIF_DIR } from "./utils";
 import { TAXA } from "./taxa";
 import { readRedlistCsv } from "./fetch-redlist-species";
 import { readGbifCsv } from "./fetch-gbif-species";
+import { readMappingCsv } from "./match-redlist-species-to-gbif";
 
 const CURRENT_YEAR = new Date().getFullYear();
 const OUTDATED_THRESHOLD_YEARS = 10;
@@ -24,6 +25,7 @@ export interface TaxonSummaryRow {
   outdated: number;
   by_category: Record<string, number>;
   gbif_species_count: number;
+  gbif_ne_species_count: number;
   total_gbif_observations: number;
   mean_gbif_obs: number;
   median_gbif_obs: number | null;
@@ -40,6 +42,13 @@ function median(values: number[]): number | null {
 
 export async function run(): Promise<void> {
   const summaries: TaxonSummaryRow[] = [];
+
+  // Load mapping to determine which GBIF species are linked to redlist entries
+  const mapping = readMappingCsv();
+  const linkedGbifKeys = new Set<number>();
+  for (const entry of mapping.values()) {
+    if (entry.gbif_species_key != null) linkedGbifKeys.add(entry.gbif_species_key);
+  }
 
   for (const taxon of TAXA) {
     const redlistPath = path.join(REDLIST_DIR, `${taxon.id}.csv`);
@@ -75,15 +84,18 @@ export async function run(): Promise<void> {
 
     // GBIF stats
     let gbifSpeciesCount = 0;
+    let gbifNeSpeciesCount = 0;
     let totalGbifObservations = 0;
     const obsCounts: number[] = [];
 
     if (fs.existsSync(gbifPath)) {
       const gbifMap = readGbifCsv(taxon.id);
       gbifSpeciesCount = gbifMap.size;
-      for (const g of gbifMap.values()) {
+      for (const [key, g] of gbifMap) {
         totalGbifObservations += g.total_count;
         obsCounts.push(g.total_count);
+        // NE = GBIF species not linked to any redlist entry
+        if (!linkedGbifKeys.has(key)) gbifNeSpeciesCount++;
       }
     }
 
@@ -97,12 +109,13 @@ export async function run(): Promise<void> {
       outdated,
       by_category: byCategory,
       gbif_species_count: gbifSpeciesCount,
+      gbif_ne_species_count: gbifNeSpeciesCount,
       total_gbif_observations: totalGbifObservations,
       mean_gbif_obs: meanGbifObs,
       median_gbif_obs: median(obsCounts),
     });
 
-    console.log(`  ${taxon.id}: ${totalAssessed} assessed, ${outdated} outdated, ${gbifSpeciesCount} GBIF species`);
+    console.log(`  ${taxon.id}: ${totalAssessed} assessed, ${gbifNeSpeciesCount} unassessed, ${outdated} outdated, ${gbifSpeciesCount} GBIF species`);
   }
 
   const outputPath = path.join(DATA_DIR, "taxa-summary.json");
