@@ -308,6 +308,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             <div className="h-4 w-16 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
           </td>
         )}
+        {isNewAssessments && isVisible("gbifSpecies") && (
+          <td className={numericTdClasses}>
+            <div className="h-4 w-14 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
+          </td>
+        )}
         {isVisible("assessed") && (
           <td className={numericTdClasses}>
             <div className="h-4 w-14 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
@@ -334,7 +339,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             </div>
           </td>
         )}
-        {isVisible("gbifSpecies") && (
+        {!isNewAssessments && isVisible("gbifSpecies") && (
           <td className={numericTdClasses}>
             <div className="h-4 w-14 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
           </td>
@@ -386,11 +391,12 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
               <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`}>Taxon</th>
               {isVisible("described") && <th className={numericThClasses}>Est. # Described</th>}
+              {isNewAssessments && isVisible("gbifSpecies") && <th className={numericThClasses}># Unassessed (1+ GBIF obs)</th>}
               {isVisible("assessed") && <th className={numericThClasses}># Assessed</th>}
               {isVisible("pctAssessed") && <th className={flexThClasses}>% Assessed</th>}
               {isVisible("outdated") && <th className={numericThClasses}># Outdated (10+Y)</th>}
               {isVisible("pctOutdated") && <th className={flexThClasses}>% Outdated</th>}
-              {isVisible("gbifSpecies") && <th className={numericThClasses}>{isNewAssessments ? "# Unassessed (1+ GBIF obs)" : "# on GBIF"}</th>}
+              {!isNewAssessments && isVisible("gbifSpecies") && <th className={numericThClasses}># on GBIF</th>}
               {isVisible("totalGbifObs") && <th className={numericThClasses}>Total Obs</th>}
               {isVisible("gbifDistribution") && <th className={flexThClasses}>Obs Distribution</th>}
               {isVisible("meanGbifObs") && <th className={numericThClasses}>Mean Obs</th>}
@@ -623,6 +629,13 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             </span>
           </td>
         )}
+        {isNewAssessments && isVisible("gbifSpecies") && (
+          <td className={numericTdClasses}>
+            <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+              {gbifObs?.neCount != null ? gbifObs.neCount.toLocaleString() : "—"}
+            </span>
+          </td>
+        )}
         {isVisible("assessed") && (
           <td className={numericTdClasses}>
             <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
@@ -655,12 +668,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             )}
           </td>
         )}
-        {isVisible("gbifSpecies") && (
+        {!isNewAssessments && isVisible("gbifSpecies") && (
           <td className={numericTdClasses}>
             <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
-              {isNewAssessments
-                ? (gbifObs?.neCount != null ? gbifObs.neCount.toLocaleString() : "—")
-                : (gbifObs?.speciesCount != null ? gbifObs.speciesCount.toLocaleString() : "—")}
+              {gbifObs?.speciesCount != null ? gbifObs.speciesCount.toLocaleString() : "—"}
             </span>
           </td>
         )}
@@ -752,6 +763,9 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             </span>
           </td>
         )}
+        {isNewAssessments && isVisible("gbifSpecies") && (
+          <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
+        )}
         {isVisible("assessed") && (
           <td className={numericTdClasses}>
             <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
@@ -778,7 +792,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               : <span className="text-sm text-zinc-400">—</span>}
           </td>
         )}
-        {isVisible("gbifSpecies") && (
+        {!isNewAssessments && isVisible("gbifSpecies") && (
           <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
         )}
         {isVisible("totalGbifObs") && (
@@ -855,6 +869,13 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               </span>
             </td>
           )}
+          {isNewAssessments && isVisible("gbifSpecies") && (
+            <td className={numericTdClasses}>
+              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+                {taxon.neSpeciesCount != null ? taxon.neSpeciesCount.toLocaleString() : "—"}
+              </span>
+            </td>
+          )}
           {isVisible("assessed") && (
             <td className={numericTdClasses}>
               <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
@@ -883,12 +904,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                 : <span className="text-sm text-zinc-400">—</span>}
             </td>
           )}
-          {isVisible("gbifSpecies") && (
+          {!isNewAssessments && isVisible("gbifSpecies") && (
             <td className={numericTdClasses}>
               <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
-                {isNewAssessments
-                  ? (taxon.neSpeciesCount != null ? taxon.neSpeciesCount.toLocaleString() : "—")
-                  : (taxon.gbifSpeciesCount != null ? taxon.gbifSpeciesCount.toLocaleString() : "—")}
+                {taxon.gbifSpeciesCount != null ? taxon.gbifSpeciesCount.toLocaleString() : "—"}
               </span>
             </td>
           )}
@@ -983,6 +1002,9 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                   </span>
                 </td>
               )}
+              {isNewAssessments && isVisible("gbifSpecies") && (
+                <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
+              )}
               {isVisible("assessed") && (
                 <td className={numericTdClasses}>
                   <span className="text-sm text-zinc-600 dark:text-zinc-400 tabular-nums">
@@ -1009,7 +1031,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                     : <span className="text-sm text-zinc-400">—</span>}
                 </td>
               )}
-              {isVisible("gbifSpecies") && (
+              {!isNewAssessments && isVisible("gbifSpecies") && (
                 <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
               )}
               {isVisible("totalGbifObs") && (
@@ -1081,6 +1103,9 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             </span>
           </th>
         )}
+        {isNewAssessments && isVisible("gbifSpecies") && (
+          <th className={numericThClasses}># Unassessed (1+ GBIF obs)</th>
+        )}
         {isVisible("assessed") && (
           <th className={numericThClasses}># Assessed</th>
         )}
@@ -1093,7 +1118,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         {isVisible("pctOutdated") && (
           <th className={flexThClasses}>% Outdated</th>
         )}
-        {isVisible("gbifSpecies") && (
+        {!isNewAssessments && isVisible("gbifSpecies") && (
           <th className={numericThClasses}># on GBIF</th>
         )}
         {isVisible("totalGbifObs") && (
