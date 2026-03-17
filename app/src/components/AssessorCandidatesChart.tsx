@@ -8,7 +8,6 @@ import {
   YAxis,
   Tooltip,
   ResponsiveContainer,
-  Legend,
 } from "recharts";
 
 interface AssessorCandidate {
@@ -28,12 +27,12 @@ interface AssessorCandidatesChartProps {
   className?: string | null;
 }
 
-const LEVELS = [
-  { key: "genus", label: "Genus", color: "#10b981" },
-  { key: "family", label: "Family", color: "#3b82f6" },
-  { key: "order", label: "Order", color: "#8b5cf6" },
-  { key: "class", label: "Class", color: "#f59e0b" },
-] as const;
+const LEVEL_COLORS = {
+  genus: "#10b981",
+  family: "#3b82f6",
+  order: "#8b5cf6",
+  class: "#f59e0b",
+};
 
 const PAGE_SIZE = 10;
 
@@ -48,6 +47,18 @@ export default function AssessorCandidatesChart({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
+
+  const genusName = scientificName.split(" ")[0] || null;
+
+  // Build legend labels with actual taxonomy names
+  const legendItems = useMemo(() => {
+    const items: { key: string; label: string; color: string }[] = [];
+    if (genusName) items.push({ key: "genus", label: `Genus: ${genusName}`, color: LEVEL_COLORS.genus });
+    if (family) items.push({ key: "family", label: `Family: ${family}`, color: LEVEL_COLORS.family });
+    if (orderName) items.push({ key: "order", label: `Order: ${orderName}`, color: LEVEL_COLORS.order });
+    if (className) items.push({ key: "class", label: `Class: ${className}`, color: LEVEL_COLORS.class });
+    return items;
+  }, [genusName, family, orderName, className]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -136,13 +147,13 @@ export default function AssessorCandidatesChart({
     <div className="p-4">
       {/* Legend */}
       <div className="flex items-center gap-4 mb-3 text-xs">
-        {LEVELS.map((level) => (
-          <div key={level.key} className="flex items-center gap-1.5">
+        {legendItems.map((item) => (
+          <div key={item.key} className="flex items-center gap-1.5">
             <span
               className="w-3 h-3 rounded-sm inline-block"
-              style={{ backgroundColor: level.color }}
+              style={{ backgroundColor: item.color }}
             />
-            <span className="text-zinc-500 dark:text-zinc-400">{level.label}</span>
+            <span className="text-zinc-500 dark:text-zinc-400">{item.label}</span>
           </div>
         ))}
       </div>
@@ -155,6 +166,13 @@ export default function AssessorCandidatesChart({
             layout="vertical"
             margin={{ top: 5, right: 55, left: -30, bottom: 5 }}
             barCategoryGap={4}
+            onClick={(state: any) => {
+              const name = state?.activePayload?.[0]?.payload?.name;
+              if (name) {
+                window.open(`/?assessors=${encodeURIComponent(name)}`, "_blank");
+              }
+            }}
+            style={{ cursor: "pointer" }}
           >
             <XAxis type="number" hide domain={[0, globalMax || 1]} />
             <YAxis
@@ -180,22 +198,16 @@ export default function AssessorCandidatesChart({
                 return (
                   <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-white shadow-lg">
                     <div className="font-medium mb-1">{data.name}</div>
-                    {LEVELS.map((level) => {
-                      const key = level.key === "genus" ? "genus"
-                        : level.key === "family" ? "familyOnly"
-                        : level.key === "order" ? "orderOnly"
-                        : "classOnly";
-                      const exclusive = data[key] ?? 0;
-                      // Show inclusive count in tooltip
-                      const inclusive = level.key === "genus" ? data.genus
-                        : level.key === "family" ? data.genus + data.familyOnly
-                        : level.key === "order" ? data.genus + data.familyOnly + data.orderOnly
+                    {legendItems.map((item) => {
+                      const inclusive = item.key === "genus" ? data.genus
+                        : item.key === "family" ? data.genus + data.familyOnly
+                        : item.key === "order" ? data.genus + data.familyOnly + data.orderOnly
                         : data.total;
                       if (inclusive === 0) return null;
                       return (
-                        <div key={level.key} className="flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-sm" style={{ backgroundColor: level.color }} />
-                          <span>{level.label}: {inclusive} species</span>
+                        <div key={item.key} className="flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-sm" style={{ backgroundColor: item.color }} />
+                          <span>{item.label}: {inclusive} species</span>
                         </div>
                       );
                     })}
@@ -204,22 +216,10 @@ export default function AssessorCandidatesChart({
                 );
               }}
             />
-            <Bar dataKey="genus" stackId="a" fill={LEVELS[0].color} radius={0} />
-            <Bar dataKey="familyOnly" stackId="a" fill={LEVELS[1].color} radius={0} />
-            <Bar dataKey="orderOnly" stackId="a" fill={LEVELS[2].color} radius={0} />
-            <Bar
-              dataKey="classOnly"
-              stackId="a"
-              fill={LEVELS[3].color}
-              radius={[0, 4, 4, 0]}
-              cursor="pointer"
-              onClick={(barData) => {
-                const name = barData?.name;
-                if (name) {
-                  window.open(`/?assessors=${encodeURIComponent(name)}`, "_blank");
-                }
-              }}
-            />
+            <Bar dataKey="genus" stackId="a" fill={LEVEL_COLORS.genus} radius={0} />
+            <Bar dataKey="familyOnly" stackId="a" fill={LEVEL_COLORS.family} radius={0} />
+            <Bar dataKey="orderOnly" stackId="a" fill={LEVEL_COLORS.order} radius={0} />
+            <Bar dataKey="classOnly" stackId="a" fill={LEVEL_COLORS.class} radius={[0, 4, 4, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>

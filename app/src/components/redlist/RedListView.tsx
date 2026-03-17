@@ -1702,7 +1702,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   <React.Fragment key={s.id}>
                   <tr
                     className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer ${selectedSpeciesKey === speciesKey ? "bg-zinc-100 dark:bg-zinc-800" : ""} ${isDragging ? "opacity-50" : ""} ${isDragOver ? "border-t-2 border-amber-500" : ""}`}
-                    onClick={() => { setSelectedSpeciesKey(selectedSpeciesKey === speciesKey ? null : speciesKey); setActiveDetailTab("gbif"); }}
+                    onClick={() => { setSelectedSpeciesKey(selectedSpeciesKey === speciesKey ? null : speciesKey); setActiveDetailTab(s.category === "NE" ? "assessors" : "gbif"); }}
                     draggable={isPinned && showOnlyStarred}
                     onDragStart={(e) => handleDragStart(e, speciesKey)}
                     onDragOver={(e) => handleDragOver(e, speciesKey)}
@@ -1915,6 +1915,14 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                           <div className="flex items-center border-b border-zinc-200 dark:border-zinc-700" onClick={(e) => e.stopPropagation()}>
                             {!stackedDetailView && (
                               <>
+                                {s.category === "NE" && (
+                                  <button
+                                    className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "assessors" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                    onClick={() => setActiveDetailTab("assessors")}
+                                  >
+                                    Assessor Candidates
+                                  </button>
+                                )}
                                 <button
                                   className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "gbif" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"} ${!gbifSpeciesKey ? "opacity-50 cursor-default" : ""}`}
                                   onClick={() => gbifSpeciesKey && setActiveDetailTab("gbif")}
@@ -1935,14 +1943,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                     onClick={() => setActiveDetailTab("redlist")}
                                   >
                                     IUCN Red List Assessments
-                                  </button>
-                                )}
-                                {s.category === "NE" && (
-                                  <button
-                                    className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "assessors" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
-                                    onClick={() => setActiveDetailTab("assessors")}
-                                  >
-                                    Assessor Candidates
                                   </button>
                                 )}
                                 <button
@@ -1976,6 +1976,17 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                             </button>
                           </div>
                           {/* Content */}
+                          {s.category === "NE" && (
+                            <div style={{ display: stackedDetailView || activeDetailTab === "assessors" ? undefined : "none" }}>
+                              <AssessorCandidatesChart
+                                scientificName={s.scientific_name}
+                                taxonGroup={s.taxon_group}
+                                family={s.family}
+                                orderName={s.order_name}
+                                className={s.class_name}
+                              />
+                            </div>
+                          )}
                           {gbifSpeciesKey ? (
                             <div style={{ display: stackedDetailView || activeDetailTab === "gbif" ? undefined : "none" }}>
                               <OccurrenceMapRow
@@ -2007,17 +2018,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                 currentAssessmentDate={s.assessment_date}
                                 previousAssessments={(s.previous_assessments ?? []).map((a) => ({ year: a.year, assessment_id: a.id, category: a.category, assessors: a.assessors, reviewers: a.reviewers }))}
                                 speciesUrl={`https://www.iucnredlist.org/species/${s.sis_taxon_id}/${s.assessment_id}`}
-                              />
-                            </div>
-                          )}
-                          {s.category === "NE" && (
-                            <div style={{ display: stackedDetailView || activeDetailTab === "assessors" ? undefined : "none" }}>
-                              <AssessorCandidatesChart
-                                scientificName={s.scientific_name}
-                                taxonGroup={s.taxon_group}
-                                family={s.family}
-                                orderName={s.order_name}
-                                className={s.class_name}
                               />
                             </div>
                           )}
