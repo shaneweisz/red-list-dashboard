@@ -565,6 +565,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           <div className="flex items-center gap-2">
             <TaxaIcon taxonId={id} size={22} className="flex-shrink-0" style={{ color }} />
             <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{name}</span>
+            {allDisabled && <span className="text-[10px] text-zinc-400 dark:text-zinc-500 ml-1">(too many to load at once)</span>}
           </div>
         </td>
         {isVisible("described") && (
