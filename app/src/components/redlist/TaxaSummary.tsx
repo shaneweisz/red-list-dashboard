@@ -558,14 +558,17 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           }
           onToggleTaxon(id, e);
         }}
-        className={`transition-colors ${rowBg} ${hoverClass}`}
-        title={allDisabled ? "Too many unassessed species to load all at once — select a taxon group instead" : undefined}
+        className={`transition-colors ${rowBg} ${hoverClass} ${allDisabled ? "group/disabled" : ""}`}
       >
         <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 ${stickyBg}`}>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 relative">
             <TaxaIcon taxonId={id} size={22} className="flex-shrink-0" style={{ color }} />
             <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{name}</span>
-            {allDisabled && <span className="text-[10px] text-zinc-400 dark:text-zinc-500 ml-1">(too many to load at once)</span>}
+            {allDisabled && (
+              <span className="hidden group-hover/disabled:block absolute left-0 -bottom-7 z-50 px-2 py-1 text-xs bg-zinc-800 text-zinc-200 dark:bg-zinc-700 rounded shadow-lg whitespace-nowrap">
+                Too many unassessed species to load all at once
+              </span>
+            )}
           </div>
         </td>
         {isVisible("described") && (
