@@ -126,7 +126,7 @@ function DisabledAllTooltip() {
           className="fixed z-[99999] px-2 py-1 text-xs bg-zinc-800 text-zinc-200 rounded shadow-lg whitespace-nowrap"
           style={{ top: pos.top, left: pos.left, transform: 'translateX(-50%) translateY(-100%)' }}
         >
-          Too many unassessed species to load all at once — click a taxon group instead
+          Unassessed species must be loaded per taxon group (loading all species at once requires too much data/memory)
         </div>,
         document.body
       )}
