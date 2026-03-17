@@ -96,7 +96,7 @@ type FocusMode = "redlist" | "gbif" | "new-assessments";
 const FOCUS_HIDDEN: Record<FocusMode, Set<ColumnId>> = {
   redlist: new Set(["gbifSpecies", "totalGbifObs", "meanGbifObs", "medianGbifObs", "gbifDistribution", "breakdown"]),
   gbif: new Set(["pctAssessed", "outdated", "pctOutdated", "breakdown"]),
-  "new-assessments": new Set(["assessed", "pctAssessed", "outdated", "pctOutdated", "breakdown", "totalGbifObs", "meanGbifObs", "medianGbifObs", "gbifDistribution"]),
+  "new-assessments": new Set(["outdated", "pctOutdated", "breakdown", "totalGbifObs", "meanGbifObs", "medianGbifObs", "gbifDistribution"]),
 };
 
 const DEFAULT_HIDDEN_COLUMNS = FOCUS_HIDDEN.redlist;
@@ -390,7 +390,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               {isVisible("pctAssessed") && <th className={flexThClasses}>% Assessed</th>}
               {isVisible("outdated") && <th className={numericThClasses}># Outdated (10+Y)</th>}
               {isVisible("pctOutdated") && <th className={flexThClasses}>% Outdated</th>}
-              {isVisible("gbifSpecies") && <th className={numericThClasses}>{isNewAssessments ? "# Unassessed" : "# on GBIF"}</th>}
+              {isVisible("gbifSpecies") && <th className={numericThClasses}>{isNewAssessments ? "# Unassessed (1+ GBIF obs)" : "# on GBIF"}</th>}
               {isVisible("totalGbifObs") && <th className={numericThClasses}>Total Obs</th>}
               {isVisible("gbifDistribution") && <th className={flexThClasses}>Obs Distribution</th>}
               {isVisible("meanGbifObs") && <th className={numericThClasses}>Mean Obs</th>}
@@ -1168,7 +1168,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               onChange={() => toggleColumn(col)}
               className="rounded border-zinc-300 dark:border-zinc-600 text-green-600 focus:ring-green-500"
             />
-            {col === "gbifSpecies" && isNewAssessments ? "# Unassessed" : COLUMN_LABELS[col]}
+            {col === "gbifSpecies" && isNewAssessments ? "# Unassessed (1+ GBIF obs)" : COLUMN_LABELS[col]}
           </label>
         ))}
       </div>,
