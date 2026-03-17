@@ -559,6 +559,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           onToggleTaxon(id, e);
         }}
         className={`transition-colors ${rowBg} ${hoverClass}`}
+        title={allDisabled ? "Not Evaluated species must be loaded per taxon group" : undefined}
       >
         <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 ${stickyBg}`}>
           <div className="flex items-center gap-2">
