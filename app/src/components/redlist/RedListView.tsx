@@ -247,13 +247,15 @@ function GbifInfoTooltip() {
 }
 
 interface RedListViewProps {
+  viewMode?: "reassessments" | "new-assessments";
   sharedTaxa?: Set<string>;
   sharedSubgroups?: Set<string>;
   onTaxaChange?: (taxa: Set<string>) => void;
   onSubgroupsChange?: (subgroups: Set<string>) => void;
 }
 
-export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange, onSubgroupsChange }: RedListViewProps = {}) {
+export default function RedListView({ viewMode = "reassessments", sharedTaxa, sharedSubgroups, onTaxaChange, onSubgroupsChange }: RedListViewProps = {}) {
+  const isNewAssessments = viewMode === "new-assessments";
   // Filters synced with URL search params for shareable links
   const {
     selectedTaxa, setSelectedTaxa,
@@ -291,6 +293,24 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
     onSubgroupsChange?.(selectedSubgroups);
   }, [selectedSubgroups, onSubgroupsChange]);
 
+  // Clear mode-specific caches when switching between reassessments and new-assessments
+  const prevViewModeRef = useRef(viewMode);
+  useEffect(() => {
+    if (prevViewModeRef.current === viewMode) return;
+    prevViewModeRef.current = viewMode;
+    // Same taxon key maps to different data per mode — clear cache
+    setSpeciesByTaxon({});
+    setNeSpecies([]);
+    setNeSpeciesFetched(false);
+    // Clear assessment-specific filters
+    clearAllFilters();
+    setShowOnlyStarred(false);
+    // Clear "all" taxa selection when switching to new-assessments (NE dataset too large for "all")
+    if (viewMode === "new-assessments") {
+      setSelectedTaxa(prev => prev.has("all") ? new Set<string>() : prev);
+    }
+  }, [viewMode, clearAllFilters, setSelectedTaxa]);
+
   // Taxon toggle handler (used by TaxaSummary)
   // Regular click: select only that taxon (or deselect if already sole selection)
   // Cmd/Ctrl+Click on taxon row: multi-select toggle (expands taxa summary to show all rows)
@@ -298,7 +318,9 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
     const isMulti = event.metaKey || event.ctrlKey;
 
     // "all" row: always single-select (toggle on/off), no multi-select
+    // Disabled in new-assessments mode (NE dataset too large for "all")
     if (taxonId === "all") {
+      if (isNewAssessments) return;
       setSelectedTaxa(prev => {
         if (prev.has("all")) return new Set<string>();
         return new Set(["all"]);
@@ -368,7 +390,11 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
   useEffect(() => {
     if (selectedTaxa.size === 0) return;
 
-    const taxaToFetch = [...selectedTaxa].filter(t => !speciesByTaxon[t] && !loadingTaxa.has(t));
+    // In new-assessments mode, skip "all" — NE dataset too large for serverless
+    const taxaToFetch = [...selectedTaxa].filter(t => {
+      if (isNewAssessments && t === "all") return false;
+      return !speciesByTaxon[t] && !loadingTaxa.has(t);
+    });
     // If "all" is already cached, no individual fetches needed
     if (speciesByTaxon["all"] && !selectedTaxa.has("all")) {
       // "all" data covers everything — no new fetches needed
@@ -398,7 +424,8 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
 
       setLoadingTaxa(prev => new Set(prev).add(taxonId));
 
-      fetch(`/api/redlist/species?taxon=${encodeURIComponent(taxonId)}`, { signal: controller.signal })
+      const categoryParam = isNewAssessments ? "&category=NE" : "";
+      fetch(`/api/redlist/species?taxon=${encodeURIComponent(taxonId)}${categoryParam}`, { signal: controller.signal })
         .then(async res => {
           if (!res.ok) {
             const body = await res.json().catch(() => ({}));
@@ -423,10 +450,11 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
           delete abortRefs.current[taxonId];
         });
     }
-  }, [selectedTaxa, speciesByTaxon, loadingTaxa]);
+  }, [selectedTaxa, speciesByTaxon, loadingTaxa, isNewAssessments]);
 
-  // Prefetch all species on mount so taxa clicks feel instant
+  // Prefetch all species on mount so taxa clicks feel instant (skip for new-assessments — NE dataset too large)
   useEffect(() => {
+    if (isNewAssessments) return;
     const controller = new AbortController();
     const promise = fetch("/api/redlist/species?taxon=all", { signal: controller.signal })
       .then(res => res.ok ? res.json() : null)
@@ -439,7 +467,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
       .finally(() => { prefetchPromiseRef.current = null; });
     prefetchPromiseRef.current = promise;
     return () => { controller.abort(); prefetchPromiseRef.current = null; };
-  }, []);
+  }, [isNewAssessments]);
 
   const speciesLoading = loadingTaxa.size > 0;
 
@@ -468,6 +496,8 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
   }, [selectedTaxa]);
 
   useEffect(() => {
+    // Skip NE lazy-load in new-assessments mode — main path already fetches NE species
+    if (isNewAssessments) return;
     if (!selectedCategories.has("NE") || neSpeciesFetched || neFetchTaxon === null) return;
     fetch(`/api/redlist/species?taxon=${encodeURIComponent(neFetchTaxon)}&category=NE`)
       .then(res => res.ok ? res.json() : null)
@@ -478,8 +508,8 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
   // Reset NE fetch when taxon selection changes
   useEffect(() => { setNeSpecies([]); setNeSpeciesFetched(false); }, [neFetchTaxon]);
 
-  // All species = assessed + NE
-  const species = useMemo(() => [...assessedSpecies, ...neSpecies], [assessedSpecies, neSpecies]);
+  // All species = assessed + NE (in new-assessments mode, assessedSpecies already contains NE species)
+  const species = useMemo(() => isNewAssessments ? assessedSpecies : [...assessedSpecies, ...neSpecies], [assessedSpecies, neSpecies, isNewAssessments]);
   const neCount = neSpecies.length;
 
   // Filter by selected taxa + subgroup
@@ -579,24 +609,27 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
   const [draggedSpecies, setDraggedSpecies] = useState<number | null>(null);
   const [dragOverSpecies, setDragOverSpecies] = useState<number | null>(null);
 
+  const pinnedStorageKey = isNewAssessments ? "new-assessments-pinned-species" : "redlist-pinned-species";
+
   useEffect(() => {
     setMounted(true);
-    // Load pinned species from localStorage
-    try {
-      const stored = localStorage.getItem("redlist-pinned-species");
-      if (stored) {
-        setPinnedSpecies(JSON.parse(stored));
-      }
-    } catch {
-      // Ignore localStorage errors
-    }
   }, []);
+
+  // Load pinned species from localStorage (re-load when viewMode changes)
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(pinnedStorageKey);
+      setPinnedSpecies(stored ? JSON.parse(stored) : []);
+    } catch {
+      setPinnedSpecies([]);
+    }
+  }, [pinnedStorageKey]);
 
   // Save pinned species to localStorage
   const savePinnedSpecies = (newPinned: number[]) => {
     setPinnedSpecies(newPinned);
     try {
-      localStorage.setItem("redlist-pinned-species", JSON.stringify(newPinned));
+      localStorage.setItem(pinnedStorageKey, JSON.stringify(newPinned));
     } catch {
       // Ignore localStorage errors
     }
@@ -852,19 +885,27 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
         s.common_name?.toLowerCase().includes(searchFilter);
       const matchesAssessor = matchesAssessorsFilter(s);
       const matchesReviewer = matchesReviewersFilter(s);
-      const matchesStarred = !showOnlyStarred || (s.sis_taxon_id != null && pinnedSet.has(s.sis_taxon_id));
+      const pinnedKey = isNewAssessments ? Math.abs(s.id) : s.sis_taxon_id;
+      const matchesStarred = !showOnlyStarred || (pinnedKey != null && pinnedSet.has(pinnedKey));
       return matchesCategory && matchesYear && matchesObs && matchesCountry && matchesSearch && matchesAssessor && matchesReviewer && matchesStarred;
     });
 
     const sorted = [...filtered].sort((a, b) => {
-      if (showOnlyStarred && a.sis_taxon_id != null && b.sis_taxon_id != null) {
-        const aIdx = pinnedSpecies.indexOf(a.sis_taxon_id);
-        const bIdx = pinnedSpecies.indexOf(b.sis_taxon_id);
-        return aIdx - bIdx;
+      if (showOnlyStarred) {
+        const aKey = isNewAssessments ? Math.abs(a.id) : a.sis_taxon_id;
+        const bKey = isNewAssessments ? Math.abs(b.id) : b.sis_taxon_id;
+        if (aKey != null && bKey != null) {
+          const aIdx = pinnedSpecies.indexOf(aKey);
+          const bIdx = pinnedSpecies.indexOf(bKey);
+          if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
+        }
       }
 
       let comparison = 0;
-      if (!sortField || sortField === "year") {
+      if (isNewAssessments && !sortField) {
+        // Default sort for new-assessments: by total GBIF desc
+        comparison = (a.gbif_occurrence_count ?? -1) - (b.gbif_occurrence_count ?? -1);
+      } else if (!sortField || sortField === "year") {
         const dateA = a.assessment_date ? new Date(a.assessment_date).getTime() : 0;
         const dateB = b.assessment_date ? new Date(b.assessment_date).getTime() : 0;
         comparison = dateA - dateB;
@@ -895,7 +936,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
     });
 
     return { filteredSpecies: filtered, sortedSpecies: sorted };
-  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedCountries, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection, matchesAssessorsFilter, matchesReviewersFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedCountries, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection, matchesAssessorsFilter, matchesReviewersFilter, isNewAssessments]);
 
   // ── Client-side pagination ─────────────────────────────────────────
   const totalFiltered = filteredSpecies.length;
@@ -1208,6 +1249,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
         onToggleTaxon={handleToggleTaxon}
         selectedTaxa={selectedTaxa}
         selectedSubgroups={selectedSubgroups}
+        disableAllSpecies={isNewAssessments}
         onToggleSubgroup={(sgId, parentTaxonId) => {
           const wasSelected = selectedSubgroups.has(sgId);
           setSelectedSubgroups(prev => {
@@ -1229,7 +1271,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
       {/* Error state */}
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 px-6 py-4 rounded-lg">
-          <p className="font-medium">Failed to load Red List data</p>
+          <p className="font-medium">Failed to load {isNewAssessments ? "" : "Red List "}data</p>
           <p className="text-sm mt-1">{error}</p>
         </div>
       )}
@@ -1238,7 +1280,8 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
       {selectedTaxa.size > 0 && (
       <div className="space-y-3">
 
-          {/* Charts row 1: bar charts */}
+          {/* Charts row 1: bar charts (new-assessments mode only shows GBIF Observations) */}
+          {!isNewAssessments && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Risk Category */}
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
@@ -1315,8 +1358,9 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
               </div>
             </div>
           </div>
+          )}
 
-          {/* Charts row 2: Country map + Reviewers */}
+          {/* Charts row 2: Country map + (Reviewers or GBIF Observations for new-assessments) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Country Map */}
             <div>
@@ -1327,6 +1371,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                   onClearSelection={handleClearCountry}
                   precomputedStats={countryStatsForMap}
                   selectedTaxa={selectedTaxa}
+                  speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
                 />
               ) : speciesLoading && assessedSpecies.length === 0 ? (
                 <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 min-h-[320px] flex flex-col">
@@ -1342,17 +1387,40 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
               ) : null}
             </div>
 
-            {/* Reviewers */}
-            <ReviewerChart
-              allAssessors={assessorChartData}
-              allReviewers={reviewerChartData}
-              selectedItems={reviewerFilterMode === "assessors" ? selectedAssessors : selectedReviewers}
-              onBarClick={handleAssessorClick}
-              onItemToggle={handleAssessorToggle}
-              loading={speciesLoading && assessedSpecies.length === 0}
-              viewMode={reviewerFilterMode}
-              onViewModeChange={setReviewerFilterMode}
-            />
+            {/* Reviewers (reassessments) or GBIF Observations chart (new-assessments) */}
+            {isNewAssessments ? (
+              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">GBIF Observations <GbifInfoTooltip /></span>
+                </div>
+                <div style={{ height: 180 }} className="flex items-center justify-center">
+                  {speciesLoading && assessedSpecies.length === 0 ? (
+                    <Spinner />
+                  ) : (
+                    <FilterBarChart
+                      data={gbifObsData}
+                      dataKey="shortRange"
+                      selectedItems={selectedObsRanges}
+                      onBarClick={handleObsClick}
+                      barColor="#10b981"
+                      yAxisWidth={42}
+                      rightMargin={85}
+                    />
+                  )}
+                </div>
+              </div>
+            ) : (
+              <ReviewerChart
+                allAssessors={assessorChartData}
+                allReviewers={reviewerChartData}
+                selectedItems={reviewerFilterMode === "assessors" ? selectedAssessors : selectedReviewers}
+                onBarClick={handleAssessorClick}
+                onItemToggle={handleAssessorToggle}
+                loading={speciesLoading && assessedSpecies.length === 0}
+                viewMode={reviewerFilterMode}
+                onViewModeChange={setReviewerFilterMode}
+              />
+            )}
           </div>
 
       {/* Search and Species Table */}
@@ -1417,7 +1485,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                 </button>
               );
             })}
-            {Array.from(selectedCategories).filter(cat => cat !== "NE").map(cat => (
+            {!isNewAssessments && Array.from(selectedCategories).filter(cat => cat !== "NE").map(cat => (
               <button
                 key={cat}
                 onClick={() => setSelectedCategories(prev => { const next = new Set(prev); next.delete(cat); return next; })}
@@ -1428,7 +1496,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                 <span className="text-xs">×</span>
               </button>
             ))}
-            {Array.from(selectedYearRanges).map(range => (
+            {!isNewAssessments && Array.from(selectedYearRanges).map(range => (
               <button
                 key={range}
                 onClick={() => setSelectedYearRanges(prev => { const next = new Set(prev); next.delete(range); return next; })}
@@ -1458,7 +1526,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                 <span className="text-xs">×</span>
               </button>
             ))}
-            {Array.from(selectedAssessors).map(name => (
+            {!isNewAssessments && Array.from(selectedAssessors).map(name => (
               <button
                 key={`a-${name}`}
                 onClick={() => setSelectedAssessors(prev => { const next = new Set(prev); next.delete(name); return next; })}
@@ -1468,7 +1536,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                 <span className="text-xs">×</span>
               </button>
             ))}
-            {Array.from(selectedReviewers).map(name => (
+            {!isNewAssessments && Array.from(selectedReviewers).map(name => (
               <button
                 key={`r-${name}`}
                 onClick={() => setSelectedReviewers(prev => { const next = new Set(prev); next.delete(name); return next; })}
@@ -1489,7 +1557,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
             <span className="ml-auto text-sm md:text-base font-semibold text-zinc-700 dark:text-zinc-300 tabular-nums">
               {totalFiltered.toLocaleString()} species
             </span>
-            {neCount > 0 && (
+            {!isNewAssessments && neCount > 0 && (
               <button
                 onClick={() => {
                   setSelectedCategories(prev => {
@@ -1546,6 +1614,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                 <th className="sticky left-[40px] z-10 bg-zinc-50 dark:bg-zinc-800 px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
                   Species
                 </th>
+                {!isNewAssessments && (
                 <th
                   className="px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
                   onClick={() => handleSort("category")}
@@ -1557,6 +1626,8 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                     )}
                   </span>
                 </th>
+                )}
+                {!isNewAssessments && (
                 <th
                   className="px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
                   onClick={() => handleSort("year")}
@@ -1568,18 +1639,20 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                     )}
                   </span>
                 </th>
+                )}
                 <th
                   className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
                   onClick={() => handleSort("totalGbif")}
                 >
                   <span className="flex items-center justify-end gap-1">
-                    Total GBIF
+                    {isNewAssessments ? "GBIF Observations" : "Total GBIF"}
                     <GbifInfoTooltip />
-                    {sortField === "totalGbif" && (
-                      <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
+                    {(sortField === "totalGbif" || (isNewAssessments && sortField === null)) && (
+                      <span className={isNewAssessments ? "text-emerald-500" : "text-red-500"}>{sortDirection === "desc" ? "↓" : "↑"}</span>
                     )}
                   </span>
                 </th>
+                {!isNewAssessments && (
                 <th
                   className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
                   onClick={() => handleSort("newGbif")}
@@ -1597,6 +1670,8 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                     )}
                   </span>
                 </th>
+                )}
+                {!isNewAssessments && (
                 <th
                   className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
                   onClick={() => handleSort("pctNewGbif")}
@@ -1608,11 +1683,12 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                     )}
                   </span>
                 </th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
               {paginatedSpecies.map((s) => {
-                const speciesKey = s.sis_taxon_id ?? s.gbif_species_key ?? s.id;
+                const speciesKey = isNewAssessments ? Math.abs(s.id) : (s.sis_taxon_id ?? s.gbif_species_key ?? s.id);
                 const assessmentDateObj = s.assessment_date ? new Date(s.assessment_date) : null;
                 const assessmentYear = assessmentDateObj ? assessmentDateObj.getFullYear() : null;
                 const yearsSinceAssessment = assessmentYear ? currentYear - assessmentYear : null;
@@ -1705,6 +1781,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                         </div>
                       </div>
                     </td>
+                    {!isNewAssessments && (
                     <td className="px-2 md:px-4 py-3 whitespace-nowrap">
                       {details?.criteria && !["DD", "LC", "NT", "EX", "EW", "NE"].includes(s.category) ? (
                         <HoverTooltip text={`${details.criteria}${explainCriteria(details.criteria)}`}>
@@ -1731,6 +1808,8 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                         </span>
                       )}
                     </td>
+                    )}
+                    {!isNewAssessments && (
                     <td className="px-2 md:px-4 py-3 text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
                       {isNE(s) ? <span className="text-zinc-400">N/A</span> : (
                         <>
@@ -1755,6 +1834,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                         </>
                       )}
                     </td>
+                    )}
                     {/* Total GBIF */}
                     <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
                       {details?.gbifOccurrences != null && details?.gbifUrl ? (
@@ -1788,6 +1868,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                       ) : "—"}
                     </td>
                     {/* New GBIF */}
+                    {!isNewAssessments && (
                     <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
                       {isNE(s) ? (
                         <span className="text-zinc-400">N/A</span>
@@ -1811,7 +1892,9 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                         return newObs.toLocaleString();
                       })()}
                     </td>
+                    )}
                     {/* % New GBIF */}
+                    {!isNewAssessments && (
                     <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
                       {isNE(s) ? <span className="text-zinc-400">N/A</span> : (() => {
                         const total = details?.gbifOccurrences ?? s.gbif_occurrence_count;
@@ -1821,10 +1904,11 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
                         return `${pct < 1 && pct > 0 ? "<1" : Math.round(pct)}%`;
                       })()}
                     </td>
+                    )}
                   </tr>
                   {selectedSpeciesKey === speciesKey && (
                     <tr>
-                      <td colSpan={8} className="p-0 bg-zinc-50 dark:bg-zinc-800/30">
+                      <td colSpan={isNewAssessments ? 3 : 8} className="p-0 bg-zinc-50 dark:bg-zinc-800/30">
                         <div style={{ maxWidth: 'calc(100vw - 2rem)', transform: 'translateX(var(--scroll-left, 0px))' }}>
                           {/* Tab bar */}
                           <div className="flex items-center border-b border-zinc-200 dark:border-zinc-700" onClick={(e) => e.stopPropagation()}>
@@ -1940,7 +2024,7 @@ export default function RedListView({ sharedTaxa, sharedSubgroups, onTaxaChange,
               })}
               {totalFiltered === 0 && !speciesLoading && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-zinc-500">
+                  <td colSpan={isNewAssessments ? 3 : 8} className="px-4 py-8 text-center text-zinc-500">
                     No species found
                   </td>
                 </tr>
