@@ -345,12 +345,28 @@ export function getTaxaSummary(): TaxaSummaryRow[] {
 
 export type MatchLevel = "genus" | "family" | "order" | "group";
 
+const MATCH_LEVELS: MatchLevel[] = ["genus", "family", "order", "group"];
+const LEVEL_RANK: Record<MatchLevel, number> = { genus: 0, family: 1, order: 2, group: 3 };
+
 export interface AssessorCandidate {
   name: string;
   assessmentCount: number;
   recentYear: string;
   bestMatchLevel: MatchLevel;
   matchedSpecies: { scientificName: string; category: string; year: string }[];
+}
+
+/** Determine the best taxonomy match level between a target species and a row. */
+function getMatchLevel(
+  row: { scientific_name: string; family?: string | null; order_name?: string | null },
+  genus: string,
+  family: string,
+  order: string,
+): MatchLevel {
+  if (genus && row.scientific_name.split(" ")[0]?.toLowerCase() === genus) return "genus";
+  if (family && row.family?.toLowerCase() === family) return "family";
+  if (order && row.order_name?.toLowerCase() === order) return "order";
+  return "group";
 }
 
 /**
@@ -372,11 +388,8 @@ export function getAssessorCandidates(
   const redlistRows = loadRedlistForGroup(taxonGroup);
   const historyMap = loadHistoryForGroup(taxonGroup);
 
-  // Build a map of assessor -> stats, tracking match tiers
   interface AssessorStats {
-    genusCount: number;
-    familyCount: number;
-    orderCount: number;
+    counts: Record<MatchLevel, number>;
     totalCount: number;
     recentYear: string;
     species: Map<string, { scientificName: string; category: string; year: string }>;
@@ -384,14 +397,10 @@ export function getAssessorCandidates(
   const assessorMap = new Map<string, AssessorStats>();
 
   for (const row of redlistRows) {
-    const rowGenus = row.scientific_name.split(" ")[0]?.toLowerCase() ?? "";
-    const isGenusMatch = genus !== "" && rowGenus === genus;
-    const isFamilyMatch = !isGenusMatch && familyLc !== "" && row.family?.toLowerCase() === familyLc;
-    const isOrderMatch = !isGenusMatch && !isFamilyMatch && orderLc !== "" && row.order_name?.toLowerCase() === orderLc;
+    const level = getMatchLevel(row, genus, familyLc, orderLc);
 
     // Gather assessors from the latest assessment and from history
     const assessments = historyMap[String(row.sis_taxon_id)] ?? [];
-    // Also include current assessment if it has an assessor in history
     const allAssessments = assessments.length > 0 ? assessments : [{
       id: row.assessment_id,
       year: row.year_published,
@@ -411,13 +420,11 @@ export function getAssessorCandidates(
 
         let stats = assessorMap.get(normalizedName);
         if (!stats) {
-          stats = { genusCount: 0, familyCount: 0, orderCount: 0, totalCount: 0, recentYear: "0", species: new Map() };
+          stats = { counts: { genus: 0, family: 0, order: 0, group: 0 }, totalCount: 0, recentYear: "0", species: new Map() };
           assessorMap.set(normalizedName, stats);
         }
 
-        if (isGenusMatch) stats.genusCount++;
-        else if (isFamilyMatch) stats.familyCount++;
-        else if (isOrderMatch) stats.orderCount++;
+        stats.counts[level]++;
         stats.totalCount++;
         if (assessment.year > stats.recentYear) stats.recentYear = assessment.year;
 
@@ -432,27 +439,21 @@ export function getAssessorCandidates(
     }
   }
 
-  function bestLevel(s: AssessorStats): MatchLevel {
-    if (s.genusCount > 0) return "genus";
-    if (s.familyCount > 0) return "family";
-    if (s.orderCount > 0) return "order";
+  function bestLevel(counts: Record<MatchLevel, number>): MatchLevel {
+    for (const level of MATCH_LEVELS) {
+      if (counts[level] > 0) return level;
+    }
     return "group";
   }
 
-  const levelRank: Record<MatchLevel, number> = { genus: 0, family: 1, order: 2, group: 3 };
-
-  // Rank: best match level, then specificity count at that level, then recency, then total
+  // Rank: best match level, then count at that level, then recency, then total
   const ranked = [...assessorMap.entries()]
     .map(([name, stats]) => {
-      const level = bestLevel(stats);
-      const levelCount = level === "genus" ? stats.genusCount
-        : level === "family" ? stats.familyCount
-        : level === "order" ? stats.orderCount
-        : stats.totalCount;
+      const level = bestLevel(stats.counts);
       return {
         name,
         bestMatchLevel: level,
-        levelCount,
+        levelCount: stats.counts[level],
         assessmentCount: stats.totalCount,
         recentYear: stats.recentYear,
         matchedSpecies: [...stats.species.values()]
@@ -461,14 +462,10 @@ export function getAssessorCandidates(
       };
     })
     .sort((a, b) => {
-      // Best match level first
-      const lvl = levelRank[a.bestMatchLevel] - levelRank[b.bestMatchLevel];
+      const lvl = LEVEL_RANK[a.bestMatchLevel] - LEVEL_RANK[b.bestMatchLevel];
       if (lvl !== 0) return lvl;
-      // More matches at that level
       if (a.levelCount !== b.levelCount) return b.levelCount - a.levelCount;
-      // Then by recency
       if (a.recentYear !== b.recentYear) return b.recentYear.localeCompare(a.recentYear);
-      // Then by total count
       return b.assessmentCount - a.assessmentCount;
     });
 
