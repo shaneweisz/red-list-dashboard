@@ -279,6 +279,76 @@ describe("speciesMatchesSubgroup – edge cases", () => {
 });
 
 // =============================================================================
+// speciesMatchesSubgroup — class_name fallback for orderNames
+// =============================================================================
+// GBIF's backbone taxonomy sometimes places what IUCN considers an order
+// (e.g. Squamata) at the class rank, so the species API returns
+// class="Squamata", order=null. The matcher should fall back to class_name
+// when order_name is empty.
+
+describe("speciesMatchesSubgroup – class_name fallback when order_name is empty", () => {
+  it("matches reptile with class_name=squamata and empty order_name to lizards-snakes", () => {
+    const species = { taxon_group: "reptilia", class_name: "squamata", order_name: "" };
+    expect(speciesMatchesSubgroup(species, "lizards-snakes")).toBe(true);
+  });
+
+  it("matches reptile with class_name=testudines and empty order_name to turtles-tortoises", () => {
+    const species = { taxon_group: "reptilia", class_name: "testudines", order_name: "" };
+    expect(speciesMatchesSubgroup(species, "turtles-tortoises")).toBe(true);
+  });
+
+  it("matches reptile with class_name=crocodylia and empty order_name to crocodilians", () => {
+    const species = { taxon_group: "reptilia", class_name: "crocodylia", order_name: "" };
+    expect(speciesMatchesSubgroup(species, "crocodilians")).toBe(true);
+  });
+
+  it("rejects reptile with class_name=squamata from turtles-tortoises", () => {
+    const species = { taxon_group: "reptilia", class_name: "squamata", order_name: "" };
+    expect(speciesMatchesSubgroup(species, "turtles-tortoises")).toBe(false);
+  });
+
+  it("does not use fallback when order_name is populated", () => {
+    // order_name takes precedence — class_name should be ignored
+    const species = { taxon_group: "reptilia", class_name: "testudines", order_name: "squamata" };
+    expect(speciesMatchesSubgroup(species, "lizards-snakes")).toBe(true);
+    expect(speciesMatchesSubgroup(species, "turtles-tortoises")).toBe(false);
+  });
+
+  it("still rejects when both order_name and class_name are empty/null", () => {
+    const species = { taxon_group: "reptilia", class_name: null, order_name: null };
+    expect(speciesMatchesSubgroup(species, "lizards-snakes")).toBe(false);
+  });
+
+  it("case-insensitive fallback on class_name", () => {
+    const species = { taxon_group: "reptilia", class_name: "SQUAMATA", order_name: "" };
+    expect(speciesMatchesSubgroup(species, "lizards-snakes")).toBe(true);
+  });
+});
+
+// =============================================================================
+// speciesMatchesSubgroup — class_name fallback for excludeOrders
+// =============================================================================
+
+describe("speciesMatchesSubgroup – class_name fallback for excludeOrders", () => {
+  it("excludes species when class_name matches an excluded order and order_name is empty", () => {
+    // If a subgroup excludes "coleoptera" and GBIF puts it in class_name instead
+    const species = { taxon_group: "insecta", class_name: "coleoptera", order_name: "" };
+    expect(speciesMatchesSubgroup(species, "other-insects")).toBe(false);
+  });
+
+  it("does not exclude when class_name is not in the exclude list", () => {
+    const species = { taxon_group: "insecta", class_name: "some-class", order_name: "" };
+    expect(speciesMatchesSubgroup(species, "other-insects")).toBe(true);
+  });
+
+  it("does not use fallback when order_name is populated", () => {
+    // order_name takes precedence — class_name excluded value should be ignored
+    const species = { taxon_group: "insecta", class_name: "coleoptera", order_name: "neuroptera" };
+    expect(speciesMatchesSubgroup(species, "other-insects")).toBe(true);
+  });
+});
+
+// =============================================================================
 // speciesMatchesSubgroup — multi-group subgroups
 // =============================================================================
 
