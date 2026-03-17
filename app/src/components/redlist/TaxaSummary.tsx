@@ -533,7 +533,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         : "";
     const allDisabled = isAllRow && disableAllSpecies;
     const hoverClass = allDisabled
-      ? "opacity-50 cursor-not-allowed"
+      ? "cursor-not-allowed"
       : isAllRow
         ? "hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
         : available
