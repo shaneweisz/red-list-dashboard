@@ -8,6 +8,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { readCsv } from "./csv";
+import { countryToRegion } from "../regions";
 
 // =============================================================================
 // PATHS
@@ -445,6 +446,89 @@ export function getAssessorCandidates(
       if (a.family !== b.family) return b.family - a.family;
       if (a.order !== b.order) return b.order - a.order;
       if (a.class !== b.class) return b.class - a.class;
+      return b.latestDate.localeCompare(a.latestDate);
+    });
+}
+
+export interface AssessorCountryCandidate {
+  name: string;
+  /** Per-region species counts (aggregated from the target species' countries) */
+  regionCounts: Record<string, number>;
+  total: number;
+  latestDate: string;
+}
+
+/**
+ * Find assessor candidates for an NE species by looking at assessed species
+ * in the same taxon group that share at least one country with the target species.
+ * Aggregates counts by UN M49 sub-region for cleaner visualisation.
+ */
+export function getAssessorCandidatesByCountry(
+  taxonGroup: string,
+  countries: string[],
+): AssessorCountryCandidate[] {
+  if (countries.length === 0) return [];
+
+  const countrySet = new Set(countries.map((c) => c.toUpperCase()));
+
+  const redlistRows = loadRedlistForGroup(taxonGroup);
+  const historyMap = loadHistoryForGroup(taxonGroup);
+
+  const assessorMap = new Map<string, { regionCounts: Record<string, number>; latestDate: string }>();
+
+  for (const row of redlistRows) {
+    // Find which of the target countries this species occurs in
+    const overlapping = row.countries.filter((c) => countrySet.has(c.toUpperCase()));
+    if (overlapping.length === 0) continue;
+
+    // Map overlapping countries to their regions (deduplicate per-species)
+    const regions = new Set(overlapping.map((c) => countryToRegion(c)));
+
+    const assessments = historyMap[String(row.sis_taxon_id)] ?? [];
+    const allAssessments = assessments.length > 0 ? assessments : [{
+      id: row.assessment_id,
+      year: row.year_published,
+      category: row.category,
+      date: row.assessment_date,
+      assessors: null as string | null,
+      reviewers: null as string | null,
+    }];
+
+    for (const assessment of allAssessments) {
+      if (!assessment.assessors) continue;
+
+      const date = assessment.date ?? "";
+      const names = parseAssessorNames(assessment.assessors);
+      for (const name of names) {
+        const normalizedName = name.trim();
+        if (!normalizedName || normalizedName.length < 3) continue;
+
+        let stats = assessorMap.get(normalizedName);
+        if (!stats) {
+          stats = { regionCounts: {}, latestDate: "" };
+          assessorMap.set(normalizedName, stats);
+        }
+
+        for (const region of regions) {
+          stats.regionCounts[region] = (stats.regionCounts[region] ?? 0) + 1;
+        }
+        if (date > stats.latestDate) stats.latestDate = date;
+      }
+    }
+  }
+
+  return [...assessorMap.entries()]
+    .map(([name, stats]) => {
+      const total = Object.values(stats.regionCounts).reduce((a, b) => a + b, 0);
+      return {
+        name,
+        regionCounts: stats.regionCounts,
+        total,
+        latestDate: stats.latestDate,
+      };
+    })
+    .sort((a, b) => {
+      if (a.total !== b.total) return b.total - a.total;
       return b.latestDate.localeCompare(a.latestDate);
     });
 }

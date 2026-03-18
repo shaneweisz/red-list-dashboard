@@ -18,6 +18,7 @@ import { useFilterParams } from "@/hooks/useFilterParams";
 import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import AssessmentAssistant from "../AssessmentAssistant";
 import AssessorCandidatesChart from "../AssessorCandidatesChart";
+import AssessorCandidatesByCountryChart from "../AssessorCandidatesByCountryChart";
 
 // Dynamically import OccurrenceMapRow to avoid SSR issues with Leaflet
 const OccurrenceMapRow = dynamic(
@@ -1979,13 +1980,27 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                           {/* Content */}
                           {s.category === "NE" && (
                             <div style={{ display: stackedDetailView || activeDetailTab === "assessors" ? undefined : "none" }}>
-                              <AssessorCandidatesChart
-                                scientificName={s.scientific_name}
-                                taxonGroup={s.taxon_group}
-                                family={s.family}
-                                orderName={s.order_name}
-                                className={s.class_name}
-                              />
+                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 divide-y lg:divide-y-0 lg:divide-x divide-zinc-200 dark:divide-zinc-700">
+                                <div>
+                                  <h4 className="text-xs font-medium text-zinc-500 dark:text-zinc-400 px-4 pt-3">Taxonomic expertise</h4>
+                                  <p className="text-[10px] text-zinc-400 dark:text-zinc-500 px-4 mt-0.5">Assessors of related species in the same group</p>
+                                  <AssessorCandidatesChart
+                                    scientificName={s.scientific_name}
+                                    taxonGroup={s.taxon_group}
+                                    family={s.family}
+                                    orderName={s.order_name}
+                                    className={s.class_name}
+                                  />
+                                </div>
+                                <div>
+                                  <h4 className="text-xs font-medium text-zinc-500 dark:text-zinc-400 px-4 pt-3">Regional expertise</h4>
+                                  <p className="text-[10px] text-zinc-400 dark:text-zinc-500 px-4 mt-0.5">Assessors of species in the same countries</p>
+                                  <AssessorCandidatesByCountryChart
+                                    taxonGroup={s.taxon_group}
+                                    countries={s.countries}
+                                  />
+                                </div>
+                              </div>
                             </div>
                           )}
                           {gbifSpeciesKey ? (

@@ -10,75 +10,54 @@ import {
   ResponsiveContainer,
   LabelList,
 } from "recharts";
+import { countriesToRegions, regionColor } from "@/lib/regions";
 
-interface AssessorCandidate {
+interface AssessorCountryCandidate {
   name: string;
-  genus: number;
-  family: number;
-  order: number;
-  class: number;
+  regionCounts: Record<string, number>;
+  total: number;
   latestDate: string;
 }
 
-interface AssessorCandidatesChartProps {
-  scientificName: string;
+interface AssessorCandidatesByCountryChartProps {
   taxonGroup: string;
-  family?: string | null;
-  orderName?: string | null;
-  className?: string | null;
+  countries: string[];
 }
-
-const LEVEL_COLORS = {
-  genus: "#10b981",
-  family: "#3b82f6",
-  order: "#8b5cf6",
-  class: "#f59e0b",
-  group: "#a1a1aa",
-};
 
 const PAGE_SIZE = 10;
 
-function formatGroupName(taxonGroup: string): string {
-  return taxonGroup.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-export default function AssessorCandidatesChart({
-  scientificName,
+export default function AssessorCandidatesByCountryChart({
   taxonGroup,
-  family,
-  orderName,
-  className,
-}: AssessorCandidatesChartProps) {
-  const [candidates, setCandidates] = useState<AssessorCandidate[] | null>(null);
+  countries,
+}: AssessorCandidatesByCountryChartProps) {
+  const [candidates, setCandidates] = useState<AssessorCountryCandidate[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
 
-  const genusName = scientificName.split(" ")[0] || null;
+  const countriesKey = countries.join(";");
 
-  // Build legend labels with actual taxonomy names
-  const legendItems = useMemo(() => {
-    const items: { key: string; label: string; color: string }[] = [];
-    if (genusName) items.push({ key: "genus", label: `Genus: ${genusName}`, color: LEVEL_COLORS.genus });
-    if (family) items.push({ key: "family", label: `Family: ${family}`, color: LEVEL_COLORS.family });
-    if (orderName) items.push({ key: "order", label: `Order: ${orderName}`, color: LEVEL_COLORS.order });
-    if (className) items.push({ key: "class", label: `Class: ${className}`, color: LEVEL_COLORS.class });
-    items.push({ key: "group", label: `Group: ${formatGroupName(taxonGroup)}`, color: LEVEL_COLORS.group });
-    return items;
-  }, [genusName, family, orderName, className, taxonGroup]);
+  // Derive the regions for this species' countries (stable across renders)
+  const regions = useMemo(() => countriesToRegions(countries), [countriesKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    if (countries.length === 0) {
+      setCandidates([]);
+      setLoading(false);
+      return;
+    }
+
     const controller = new AbortController();
     setLoading(true);
     setError(null);
     setPage(0);
 
-    const params = new URLSearchParams({ scientificName, taxonGroup });
-    if (family) params.set("family", family);
-    if (orderName) params.set("order", orderName);
-    if (className) params.set("class", className);
+    const params = new URLSearchParams({
+      taxonGroup,
+      countries: countries.join(";"),
+    });
 
-    fetch(`/api/redlist/assessor-candidates?${params}`, { signal: controller.signal })
+    fetch(`/api/redlist/assessor-candidates-by-country?${params}`, { signal: controller.signal })
       .then(async (res) => {
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
@@ -103,25 +82,33 @@ export default function AssessorCandidatesChart({
       });
 
     return () => controller.abort();
-  }, [scientificName, taxonGroup, family, orderName, className]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taxonGroup, countriesKey]);
 
-  // For the stacked chart, we need exclusive counts (family-only, not including genus)
+  // Build chart data with per-region keys
   const chartData = useMemo(() => {
-    if (!candidates) return [];
-    return candidates.map((c) => ({
-      name: c.name,
-      genus: c.genus,
-      familyOnly: c.family - c.genus,
-      orderOnly: c.order - c.family,
-      classOnly: c.class - c.order,
-      total: c.class,
-      latestDate: c.latestDate,
-    }));
-  }, [candidates]);
+    if (!candidates || candidates.length === 0) return [];
+
+    return candidates.map((c) => {
+      const row: Record<string, string | number> = { name: c.name, total: c.total, latestDate: c.latestDate };
+      for (const region of regions) {
+        row[region] = c.regionCounts[region] ?? 0;
+      }
+      return row;
+    });
+  }, [candidates, regions]);
+
+  const legendItems = useMemo(
+    () => regions.map((r) => ({ key: r, label: r, color: regionColor(r) })),
+    [regions]
+  );
 
   const totalPages = Math.ceil(chartData.length / PAGE_SIZE);
-  const paginated = chartData.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
-  const globalMax = chartData.length > 0 ? chartData[0].total : 0;
+  const paginated = useMemo(
+    () => chartData.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE),
+    [chartData, page]
+  );
+  const globalMax = chartData.length > 0 ? (chartData[0].total as number) : 0;
 
   const openAssessor = (barData: { payload?: { name?: string } }) => {
     const name = barData?.payload?.name;
@@ -144,7 +131,7 @@ export default function AssessorCandidatesChart({
   if (error) {
     return (
       <div className="text-sm text-red-500 p-4">
-        Failed to load assessor candidates
+        Failed to load regional assessor candidates
       </div>
     );
   }
@@ -152,7 +139,7 @@ export default function AssessorCandidatesChart({
   if (!candidates || candidates.length === 0) {
     return (
       <div className="text-sm text-zinc-400 italic p-4">
-        No assessor candidates found
+        No regional assessor candidates found
       </div>
     );
   }
@@ -200,34 +187,45 @@ export default function AssessorCandidatesChart({
                   <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-white shadow-lg">
                     <div className="font-medium mb-1">{data.name}</div>
                     {legendItems.map((item) => {
-                      if (item.key === "group") return null;
-                      const inclusive = item.key === "genus" ? data.genus
-                        : item.key === "family" ? data.genus + data.familyOnly
-                        : item.key === "order" ? data.genus + data.familyOnly + data.orderOnly
-                        : data.total;
-                      if (inclusive === 0) return null;
+                      const count = data[item.key] as number;
+                      if (!count) return null;
                       return (
                         <div key={item.key} className="flex items-center gap-1.5">
                           <span className="w-2 h-2 rounded-sm" style={{ backgroundColor: item.color }} />
-                          <span>{item.label}: {inclusive} species</span>
+                          <span>{item.label}: {count} species</span>
                         </div>
                       );
                     })}
-                    <div className="mt-1 text-zinc-400">Latest assessment: {dateStr}</div>
+                    <div className="mt-1 text-zinc-400">
+                      {legendItems.filter((item) => (data[item.key] as number) > 0).length}/{regions.length} regions covered
+                    </div>
+                    <div className="text-zinc-400">Latest assessment: {dateStr}</div>
                   </div>
                 );
               }}
             />
-            <Bar dataKey="genus" stackId="a" fill={LEVEL_COLORS.genus} radius={0} cursor="pointer" onClick={openAssessor} />
-            <Bar dataKey="familyOnly" stackId="a" fill={LEVEL_COLORS.family} radius={0} cursor="pointer" onClick={openAssessor} />
-            <Bar dataKey="orderOnly" stackId="a" fill={LEVEL_COLORS.order} radius={0} cursor="pointer" onClick={openAssessor} />
-            <Bar dataKey="classOnly" stackId="a" fill={LEVEL_COLORS.class} radius={[0, 4, 4, 0]} cursor="pointer" onClick={openAssessor}>
-              <LabelList
-                dataKey="total"
-                position="right"
-                style={{ fontSize: 11, fill: "#a1a1aa" }}
-              />
-            </Bar>
+            {regions.map((region, i) => {
+              const isLast = i === regions.length - 1;
+              return (
+                <Bar
+                  key={region}
+                  dataKey={region}
+                  stackId="a"
+                  fill={regionColor(region)}
+                  radius={isLast ? [0, 4, 4, 0] : 0}
+                  cursor="pointer"
+                  onClick={openAssessor}
+                >
+                  {isLast && (
+                    <LabelList
+                      dataKey="total"
+                      position="right"
+                      style={{ fontSize: 11, fill: "#a1a1aa" }}
+                    />
+                  )}
+                </Bar>
+              );
+            })}
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -243,7 +241,7 @@ export default function AssessorCandidatesChart({
             Prev
           </button>
           <span>
-            {page * PAGE_SIZE + 1}-{Math.min((page + 1) * PAGE_SIZE, chartData.length)} of {chartData.length}
+            {page * PAGE_SIZE + 1}-{Math.min((page + 1) * PAGE_SIZE, candidates.length)} of {candidates.length}
           </span>
           <button
             onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
