@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getTaxaSummary } from "@/lib/data/species-store";
 import { TAXA } from "@/config/taxa";
 import { getTaxonGroups } from "@/lib/data/taxon-groups";
+import { TABLE_1A_SECTIONS } from "@/config/table1a";
 import { CACHE_1H } from "@/lib/cache-headers";
 
 interface TaxonSummary {
@@ -36,13 +37,45 @@ function mergeByCategory(
   return merged;
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const data = getTaxaSummary();
-
     const rowsByGroup = new Map(
       data.map((row) => [row.table1a_taxon_group, row])
     );
+
+    const isTable1a = request.nextUrl.searchParams.get("table1a") === "true";
+
+    if (isTable1a) {
+      // Return data structured by Table 1a sections
+      const sections = TABLE_1A_SECTIONS.map((section) => ({
+        title: section.title,
+        rows: section.rows.map((def) => {
+          const row = rowsByGroup.get(def.group);
+          const totalAssessed = Number(row?.total_assessed ?? 0);
+          const outdated = Number(row?.outdated ?? 0);
+          const gbifSpeciesCount = Number(row?.gbif_species_count ?? 0);
+          const gbifNeSpeciesCount = Number(row?.gbif_ne_species_count ?? 0);
+          const totalGbifObservations = Number(row?.total_gbif_observations ?? 0);
+          return {
+            group: def.group,
+            name: def.name,
+            estimatedDescribed: def.estimatedDescribed,
+            totalAssessed,
+            percentAssessed: def.estimatedDescribed > 0 ? (totalAssessed / def.estimatedDescribed) * 100 : 0,
+            outdated,
+            percentOutdated: totalAssessed > 0 ? (outdated / totalAssessed) * 100 : 0,
+            byCategory: row?.by_category ?? {},
+            gbifSpeciesCount,
+            gbifNeSpeciesCount,
+            totalGbifObservations,
+            meanGbifObsPerSpecies: gbifSpeciesCount > 0 ? totalGbifObservations / gbifSpeciesCount : undefined,
+            medianGbifObsPerSpecies: row?.median_gbif_obs != null ? Number(row.median_gbif_obs) : undefined,
+          };
+        }),
+      }));
+      return NextResponse.json({ sections }, { headers: CACHE_1H });
+    }
 
     const taxa: TaxonSummary[] = TAXA.map((taxon) => {
       const groups = getTaxonGroups(taxon.id);
