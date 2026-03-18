@@ -27,10 +27,10 @@ export function parseParams(search: string) {
       ? new Set(p.get("obsRanges")!.split(",").filter(Boolean))
       : new Set<string>(),
     assessors: p.get("assessors")
-      ? new Set(p.get("assessors")!.split(",").filter(Boolean))
+      ? new Set(p.get("assessors")!.split("|").filter(Boolean))
       : new Set<string>(),
     reviewers: p.get("reviewers")
-      ? new Set(p.get("reviewers")!.split(",").filter(Boolean))
+      ? new Set(p.get("reviewers")!.split("|").filter(Boolean))
       : new Set<string>(),
     search: p.get("search") || "",
     sortField: (
@@ -65,8 +65,8 @@ export function buildQs(state: {
   if (state.yearRanges.size > 0) p.set("years", [...state.yearRanges].join(","));
   if (state.countries.size > 0) p.set("countries", [...state.countries].join(","));
   if (state.obsRanges.size > 0) p.set("obsRanges", [...state.obsRanges].join(","));
-  if (state.assessors.size > 0) p.set("assessors", [...state.assessors].join(","));
-  if (state.reviewers.size > 0) p.set("reviewers", [...state.reviewers].join(","));
+  if (state.assessors.size > 0) p.set("assessors", [...state.assessors].join("|"));
+  if (state.reviewers.size > 0) p.set("reviewers", [...state.reviewers].join("|"));
   if (state.search) p.set("search", state.search);
   // null / "year" desc is the default — only write non-default sort to URL
   const isDefaultSort = state.sortField === null || state.sortField === "year";
