@@ -11,7 +11,7 @@ import WikipediaSummary from "../WikipediaSummary";
 import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
-import { speciesMatchesSubgroup, getSubgroupDef } from "@/config/taxa-hierarchy";
+import { speciesMatchesSubgroup, getSubgroupDef, speciesMatchesDrillPath, type DrillStep, RANK_LABELS, encodeDrillPath } from "@/config/taxa-hierarchy";
 import ReviewerChart from "./ReviewerChart";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { useFilterParams } from "@/hooks/useFilterParams";
@@ -260,6 +260,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const {
     selectedTaxa, setSelectedTaxa,
     selectedSubgroups, setSelectedSubgroups,
+    drillPath, setDrillPath,
     selectedCategories, setSelectedCategories,
     selectedYearRanges, setSelectedYearRanges,
     selectedCountries, setSelectedCountries,
@@ -512,7 +513,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const species = useMemo(() => isNewAssessments ? assessedSpecies : [...assessedSpecies, ...neSpecies], [assessedSpecies, neSpecies, isNewAssessments]);
   const neCount = neSpecies.length;
 
-  // Filter by selected taxa + subgroup
+  // Filter by selected taxa + subgroup + drill path
   const taxaFilteredSpecies = useMemo(() => {
     let filtered = species;
     if (selectedTaxa.size > 0 && !selectedTaxa.has("all")) {
@@ -523,8 +524,11 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         Array.from(selectedSubgroups).some(sg => speciesMatchesSubgroup(s, sg))
       );
     }
+    if (drillPath.length > 0) {
+      filtered = filtered.filter(s => speciesMatchesDrillPath(s, drillPath));
+    }
     return filtered;
-  }, [species, selectedTaxa, selectedSubgroups]);
+  }, [species, selectedTaxa, selectedSubgroups, drillPath]);
 
   // Helper to check if species matches year range filter
   const matchesYearRangeFilter = (assessmentDate: string | null, yearRanges: Set<string> = selectedYearRanges): boolean => {
@@ -1249,6 +1253,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         onToggleTaxon={handleToggleTaxon}
         selectedTaxa={selectedTaxa}
         selectedSubgroups={selectedSubgroups}
+        drillPath={drillPath}
+        onDrillPathChange={setDrillPath}
         disableAllSpecies={isNewAssessments}
         viewMode={viewMode}
         onToggleSubgroup={(sgId, parentTaxonId) => {
@@ -1486,6 +1492,17 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 </button>
               );
             })}
+            {drillPath.length > 0 && drillPath.map((step, i) => (
+              <button
+                key={`drill-${i}`}
+                onClick={() => setDrillPath(drillPath.slice(0, i))}
+                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400 flex items-center gap-1 hover:opacity-80 italic"
+              >
+                <span className="text-[10px] not-italic opacity-60 uppercase">{RANK_LABELS[step.rank]}</span>
+                {step.value}
+                <span className="text-xs">×</span>
+              </button>
+            ))}
             {!isNewAssessments && Array.from(selectedCategories).filter(cat => cat !== "NE").map(cat => (
               <button
                 key={cat}
@@ -1547,9 +1564,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 <span className="text-xs">×</span>
               </button>
             ))}
-            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred) && (
+            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || drillPath.length > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred) && (
               <button
-                onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setSelectedSubgroups(new Set()); setSelectedObsRanges(new Set()); setSelectedAssessors(new Set()); setSelectedReviewers(new Set()); setShowOnlyStarred(false); }}
+                onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setSelectedSubgroups(new Set()); setDrillPath([]); setSelectedObsRanges(new Set()); setSelectedAssessors(new Set()); setSelectedReviewers(new Set()); setShowOnlyStarred(false); }}
                 className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 underline"
               >
                 Clear all

@@ -415,6 +415,79 @@ export const TAXA_SUBGROUPS: Record<string, SubGroupDef[]> = {
   ],
 };
 
+// ── Dynamic drill-down helpers ───────────────────────────────────────
+
+export const TAXONOMY_RANKS = ["class", "order", "family", "genus"] as const;
+export type TaxonomyRank = (typeof TAXONOMY_RANKS)[number];
+
+export interface DrillStep {
+  rank: TaxonomyRank;
+  value: string;
+}
+
+export interface DrillChild {
+  value: string;
+  rank: TaxonomyRank;
+  totalAssessed: number;
+  outdated: number;
+  gbifNeSpeciesCount: number;
+  byCategory: Record<string, number>;
+  hasChildren: boolean;
+  representativeCommonName: string | null;
+}
+
+/** Rank display labels */
+export const RANK_LABELS: Record<TaxonomyRank, string> = {
+  class: "Class",
+  order: "Order",
+  family: "Family",
+  genus: "Genus",
+};
+
+function extractGenus(scientificName: string): string {
+  return scientificName.split(" ")[0] || "";
+}
+
+function getDrillRankValue(
+  species: { class_name: string | null; order_name: string | null; family: string | null; scientific_name: string },
+  rank: TaxonomyRank,
+): string {
+  switch (rank) {
+    case "class": return (species.class_name ?? "").toLowerCase();
+    case "order": return (species.order_name ?? "").toLowerCase();
+    case "family": return (species.family ?? "").toLowerCase();
+    case "genus": return extractGenus(species.scientific_name).toLowerCase();
+  }
+}
+
+/** Client-side: check if a species matches a drill path. */
+export function speciesMatchesDrillPath(
+  species: { class_name: string | null; order_name: string | null; family: string | null; scientific_name: string },
+  drillPath: DrillStep[],
+): boolean {
+  for (const step of drillPath) {
+    if (getDrillRankValue(species, step.rank) !== step.value.toLowerCase()) return false;
+  }
+  return true;
+}
+
+/** Encode a drill path to a URL-safe string: "class:mammalia/order:rodentia" */
+export function encodeDrillPath(path: DrillStep[]): string {
+  return path.map(s => `${s.rank}:${encodeURIComponent(s.value.toLowerCase())}`).join("/");
+}
+
+/** Decode a drill path string back to DrillStep[] */
+export function decodeDrillPath(encoded: string): DrillStep[] {
+  if (!encoded) return [];
+  return encoded.split("/").map(segment => {
+    const colonIdx = segment.indexOf(":");
+    return {
+      rank: segment.slice(0, colonIdx) as TaxonomyRank,
+      value: decodeURIComponent(segment.slice(colonIdx + 1)),
+    };
+  }).filter(s => TAXONOMY_RANKS.includes(s.rank));
+}
+
 // ── Client-side helpers ──────────────────────────────────────────────
 
 /** Flat lookup: subgroup ID → its definition + parent taxon ID */

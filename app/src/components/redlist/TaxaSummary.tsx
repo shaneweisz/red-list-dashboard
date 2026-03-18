@@ -6,7 +6,7 @@ import { FaInfoCircle, FaChevronRight, FaChevronDown } from "react-icons/fa";
 import { HiOutlineAdjustmentsHorizontal } from "react-icons/hi2";
 import TaxaIcon from "@/components/TaxaIcon";
 import { CATEGORY_COLORS, CATEGORY_NAMES, CATEGORY_ORDER } from "@/config/taxa";
-import { TAXA_SUBGROUPS, getSubgroupDef } from "@/config/taxa-hierarchy";
+import { TAXA_SUBGROUPS, getSubgroupDef, type DrillStep, type DrillChild, RANK_LABELS, TAXONOMY_RANKS, encodeDrillPath } from "@/config/taxa-hierarchy";
 
 const IUCN_SOURCE_URL = "https://nc.iucnredlist.org/redlist/content/attachment_files/2025-2_RL_Table1a.pdf";
 
@@ -50,12 +50,16 @@ interface Props {
   selectedTaxa: Set<string>;
   selectedSubgroups: Set<string>;
   onToggleSubgroup: (subgroupId: string, parentTaxonId: string) => void;
+  drillPath: DrillStep[];
+  onDrillPathChange: (path: DrillStep[]) => void;
   disableAllSpecies?: boolean;
   viewMode?: "reassessments" | "new-assessments";
 }
 
-// Taxa IDs that have expandable subgroups
-const EXPANDABLE_TAXA = new Set(Object.keys(TAXA_SUBGROUPS));
+// Taxa IDs that have curated subgroups
+const CURATED_SUBGROUP_TAXA = new Set(Object.keys(TAXA_SUBGROUPS));
+// All taxa except "all" are expandable (drill-down is always available)
+const EXPANDABLE_TAXA = new Set([...Object.keys(TAXA_SUBGROUPS), "mammalia", "aves"]);
 
 // Bar color helpers
 const getAssessedBarColor = (percent: number) =>
@@ -139,7 +143,7 @@ function DisabledAllTooltip() {
   );
 }
 
-export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, disableAllSpecies, viewMode = "reassessments" }: Props) {
+export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, drillPath, onDrillPathChange, disableAllSpecies, viewMode = "reassessments" }: Props) {
   const isNewAssessments = viewMode === "new-assessments";
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [globalGbifMedian, setGlobalGbifMedian] = useState<number | undefined>();
@@ -156,6 +160,13 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   // Fetched subgroup data keyed by taxonId
   const [subgroupData, setSubgroupData] = useState<Record<string, SubGroupSummary[]>>({});
   const [loadingSubgroups, setLoadingSubgroups] = useState<Set<string>>(new Set());
+
+  // Dynamic drill-down state
+  // Key: "taxonId" or "taxonId/class:mammalia/order:rodentia" — the drill key for that level
+  const [drillChildren, setDrillChildren] = useState<Record<string, DrillChild[]>>({});
+  const [loadingDrill, setLoadingDrill] = useState<Set<string>>(new Set());
+  // Tracks which drill nodes are expanded (by their drill key)
+  const [expandedDrillNodes, setExpandedDrillNodes] = useState<Set<string>>(new Set());
   const initialFocus: FocusMode = isNewAssessments ? "new-assessments" : "redlist";
   const [focusMode, setFocusMode] = useState<FocusMode>(initialFocus);
   const [hiddenColumns, setHiddenColumns] = useState<Set<ColumnId>>(new Set(FOCUS_HIDDEN[initialFocus]));
@@ -261,6 +272,53 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       }
     }
   }, [subgroupData, loadingSubgroups]);
+
+  // Fetch drill-down children for a given taxon and drill path
+  const fetchDrillChildren = useCallback(async (taxonId: string, path: DrillStep[]) => {
+    const drillKey = `${taxonId}/${encodeDrillPath(path)}`;
+    if (drillChildren[drillKey] || loadingDrill.has(drillKey)) return;
+
+    setLoadingDrill(prev => new Set(prev).add(drillKey));
+    try {
+      const drillParam = encodeDrillPath(path);
+      const url = `/api/redlist/taxa-drill?taxonId=${encodeURIComponent(taxonId)}${drillParam ? `&drill=${encodeURIComponent(drillParam)}` : ""}`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        setDrillChildren(prev => ({ ...prev, [drillKey]: data.children }));
+      }
+    } finally {
+      setLoadingDrill(prev => {
+        const next = new Set(prev);
+        next.delete(drillKey);
+        return next;
+      });
+    }
+  }, [drillChildren, loadingDrill]);
+
+  // Toggle a drill node expansion
+  const toggleDrillNode = useCallback((taxonId: string, path: DrillStep[]) => {
+    const drillKey = `${taxonId}/${encodeDrillPath(path)}`;
+    setExpandedDrillNodes(prev => {
+      const next = new Set(prev);
+      if (next.has(drillKey)) {
+        next.delete(drillKey);
+      } else {
+        next.add(drillKey);
+        fetchDrillChildren(taxonId, path);
+      }
+      return next;
+    });
+  }, [fetchDrillChildren]);
+
+  // Handle clicking a drill child to filter species
+  const handleDrillSelect = useCallback((taxonId: string, path: DrillStep[]) => {
+    // Ensure the parent taxon is selected
+    if (!selectedTaxa.has(taxonId) || selectedTaxa.size !== 1) {
+      onToggleTaxon(taxonId, { metaKey: false, ctrlKey: false } as React.MouseEvent);
+    }
+    onDrillPathChange(path);
+  }, [selectedTaxa, onToggleTaxon, onDrillPathChange]);
 
   // Auto-expand parent taxa when subgroups are selected (e.g. from URL)
   useEffect(() => {
@@ -831,9 +889,162 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     );
   };
 
+  // Render drill-down children recursively
+  const renderDrillRows = (taxon: TaxonSummary, parentPath: DrillStep[], depth: number): React.ReactNode[] => {
+    const drillKey = `${taxon.id}/${encodeDrillPath(parentPath)}`;
+    const children = drillChildren[drillKey];
+    const isLoading = loadingDrill.has(drillKey);
+
+    if (isLoading) {
+      return [
+        <tr key={`drill-loading-${drillKey}`}>
+          <td colSpan={visibleColCount} className={`${cellPad} text-center`}>
+            <svg className="animate-spin h-4 w-4 text-zinc-400 inline mr-2" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            <span className="text-xs text-zinc-500">Loading taxonomy...</span>
+          </td>
+        </tr>
+      ];
+    }
+
+    if (!children) return [];
+
+    const rows: React.ReactNode[] = [];
+    for (const child of children) {
+      const childPath = [...parentPath, { rank: child.rank, value: child.value }];
+      const childDrillKey = `${taxon.id}/${encodeDrillPath(childPath)}`;
+      const isChildExpanded = expandedDrillNodes.has(childDrillKey);
+      const isDrillSelected = drillPath.length === childPath.length &&
+        childPath.every((s, i) => drillPath[i]?.rank === s.rank && drillPath[i]?.value.toLowerCase() === s.value.toLowerCase());
+
+      const pctAssessed = child.totalAssessed > 0 ? 100 : 0; // no estimated described for dynamic nodes
+      const pctOutdated = child.totalAssessed > 0 ? (child.outdated / child.totalAssessed) * 100 : 0;
+      const indent = 12 + depth * 16; // px
+
+      // Format display name: scientific name (italic) with common name in brackets
+      const displayName = child.value;
+      const commonNameBracket = child.representativeCommonName
+        ? ` [${child.representativeCommonName}]`
+        : "";
+
+      rows.push(
+        <tr
+          key={`drill-${childDrillKey}`}
+          className={`transition-colors cursor-pointer ${
+            isDrillSelected
+              ? "bg-indigo-50 dark:bg-indigo-900/20"
+              : "hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30"
+          }`}
+          onClick={() => handleDrillSelect(taxon.id, childPath)}
+        >
+          <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 ${isDrillSelected ? "bg-indigo-50 dark:bg-indigo-900/20" : "bg-white dark:bg-zinc-900"}`}>
+            <div className="flex items-center gap-1.5" style={{ paddingLeft: `${indent}px` }}>
+              {child.hasChildren && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleDrillNode(taxon.id, childPath);
+                  }}
+                  className="p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors flex-shrink-0"
+                  title={isChildExpanded ? "Collapse" : "Expand"}
+                >
+                  {isChildExpanded ? <FaChevronDown size={8} /> : <FaChevronRight size={8} />}
+                </button>
+              )}
+              {!child.hasChildren && (
+                <span className="w-[14px] flex-shrink-0" />
+              )}
+              <span
+                className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                style={{ backgroundColor: taxon.color, opacity: isDrillSelected ? 1 : 0.4 }}
+              />
+              <span className={`text-xs ${isDrillSelected ? "font-medium text-indigo-700 dark:text-indigo-300" : "text-zinc-600 dark:text-zinc-400"}`}>
+                <span className="italic">{displayName}</span>
+                {commonNameBracket && (
+                  <span className="not-italic text-zinc-400 dark:text-zinc-500 ml-1 text-[11px]">{commonNameBracket}</span>
+                )}
+              </span>
+              <span className="text-[9px] text-zinc-400 dark:text-zinc-500 uppercase ml-1 flex-shrink-0">{child.rank}</span>
+            </div>
+          </td>
+          {isVisible("described") && (
+            <td className={numericTdClasses}>
+              <span className="text-xs text-zinc-400">—</span>
+            </td>
+          )}
+          {isVisible("assessed") && (
+            <td className={numericTdClasses}>
+              <span className="text-xs text-zinc-600 dark:text-zinc-400 tabular-nums">
+                {child.totalAssessed.toLocaleString()}
+              </span>
+            </td>
+          )}
+          {isVisible("pctAssessed") && (
+            <td className={flexTdClasses}>
+              <span className="text-xs text-zinc-400">—</span>
+            </td>
+          )}
+          {isVisible("outdated") && (
+            <td className={numericTdClasses}>
+              <span className="text-xs text-zinc-600 dark:text-zinc-400 tabular-nums">
+                {child.outdated.toLocaleString()}
+              </span>
+            </td>
+          )}
+          {isVisible("pctOutdated") && (
+            <td className={flexTdClasses}>
+              {child.totalAssessed > 0
+                ? renderBar(pctOutdated, getOutdatedBarColor(pctOutdated), false)
+                : <span className="text-xs text-zinc-400">—</span>}
+            </td>
+          )}
+          {isVisible("gbifSpecies") && (
+            <td className={numericTdClasses}>
+              <span className="text-xs text-zinc-600 dark:text-zinc-400 tabular-nums">
+                {isNewAssessments ? child.gbifNeSpeciesCount.toLocaleString() : "—"}
+              </span>
+            </td>
+          )}
+          {isVisible("pctGbifUnassessed") && (
+            <td className={flexTdClasses}>
+              <span className="text-xs text-zinc-400">—</span>
+            </td>
+          )}
+          {isVisible("totalGbifObs") && (
+            <td className={numericTdClasses}><span className="text-xs text-zinc-400">—</span></td>
+          )}
+          {isVisible("gbifDistribution") && (
+            <td className={flexTdClasses}><span className="text-xs text-zinc-400">—</span></td>
+          )}
+          {isVisible("meanGbifObs") && (
+            <td className={numericTdClasses}><span className="text-xs text-zinc-400">—</span></td>
+          )}
+          {isVisible("medianGbifObs") && (
+            <td className={numericTdClasses}><span className="text-xs text-zinc-400">—</span></td>
+          )}
+          {isVisible("breakdown") && (
+            <td className={flexTdClasses}>
+              {renderBreakdownBar(child.byCategory)}
+            </td>
+          )}
+        </tr>
+      );
+
+      // Recursively render children if expanded
+      if (isChildExpanded) {
+        rows.push(...renderDrillRows(taxon, childPath, depth + 1));
+      }
+    }
+
+    return rows;
+  };
+
   // Render a taxon row with optional expandable subgroups
   const renderTaxonWithSubgroups = (taxon: TaxonSummary, isSelected: boolean) => {
-    const hasSubgroups = EXPANDABLE_TAXA.has(taxon.id);
+    const hasSubgroups = CURATED_SUBGROUP_TAXA.has(taxon.id);
+    const isExpandable = EXPANDABLE_TAXA.has(taxon.id);
     const isExpanded = expandedTaxa.has(taxon.id);
     const subs = subgroupData[taxon.id] ?? [];
     const isLoadingSubs = loadingSubgroups.has(taxon.id);
@@ -854,14 +1065,18 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             <div className="flex items-center gap-2">
               <TaxaIcon taxonId={taxon.id} size={22} className="flex-shrink-0" style={{ color: taxon.color }} />
               <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{taxon.name}</span>
-              {hasSubgroups && (
+              {isExpandable && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     toggleExpand(taxon.id);
+                    // For taxa without curated subgroups, auto-fetch drill children
+                    if (!hasSubgroups && !expandedTaxa.has(taxon.id)) {
+                      fetchDrillChildren(taxon.id, []);
+                    }
                   }}
                   className="p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                  title={isExpanded ? "Collapse subgroups" : "Expand subgroups"}
+                  title={isExpanded ? "Collapse" : "Expand taxonomy"}
                 >
                   {isLoadingSubs ? (
                     <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
@@ -965,8 +1180,8 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           )}
         </tr>
 
-        {/* Expanded subgroup rows */}
-        {isExpanded && subs.map((sg) => {
+        {/* Expanded subgroup rows (curated) */}
+        {isExpanded && hasSubgroups && subs.map((sg) => {
           const sgPctAssessed = sg.estimatedDescribed > 0 ? (sg.totalAssessed / sg.estimatedDescribed) * 100 : 0;
           const sgPctOutdated = sg.totalAssessed > 0 ? (sg.outdated / sg.totalAssessed) * 100 : 0;
           const isSgSelected = selectedSubgroups.has(sg.id);
@@ -1079,6 +1294,31 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             </tr>
           );
         })}
+
+        {/* Dynamic drill-down rows (taxonomy hierarchy) */}
+        {isExpanded && !hasSubgroups && renderDrillRows(taxon, [], 0)}
+        {isExpanded && hasSubgroups && (
+          <>
+            {/* Drill-down section header after curated subgroups */}
+            <tr key={`drill-header-${taxon.id}`}>
+              <td colSpan={visibleColCount} className={`${cellPad} border-t border-zinc-100 dark:border-zinc-800`}>
+                <div className="flex items-center gap-2 pl-4">
+                  <span className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Taxonomy Drill-down</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleDrillNode(taxon.id, []);
+                    }}
+                    className="text-[10px] text-indigo-500 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 underline"
+                  >
+                    {expandedDrillNodes.has(`${taxon.id}/`) ? "Hide" : "Show classes"}
+                  </button>
+                </div>
+              </td>
+            </tr>
+            {expandedDrillNodes.has(`${taxon.id}/`) && renderDrillRows(taxon, [], 0)}
+          </>
+        )}
       </React.Fragment>
     );
   };

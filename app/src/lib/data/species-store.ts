@@ -341,6 +341,208 @@ export function getTaxaSummary(): TaxaSummaryRow[] {
 }
 
 // =============================================================================
+// DYNAMIC TAXONOMY DRILL-DOWN
+// =============================================================================
+
+/**
+ * Taxonomic ranks available for drill-down, in hierarchical order.
+ * Genus is derived from the first word of scientific_name.
+ */
+export const TAXONOMY_RANKS = ["class", "order", "family", "genus"] as const;
+export type TaxonomyRank = (typeof TAXONOMY_RANKS)[number];
+
+export interface DrillChild {
+  /** The rank value (e.g. "Rodentia") — as found in the data */
+  value: string;
+  /** The rank this child represents */
+  rank: TaxonomyRank;
+  /** Number of assessed species */
+  totalAssessed: number;
+  /** Number of outdated assessments */
+  outdated: number;
+  /** NE species on GBIF */
+  gbifNeSpeciesCount: number;
+  /** Breakdown by IUCN category */
+  byCategory: Record<string, number>;
+  /** Whether this node can be drilled further */
+  hasChildren: boolean;
+  /** A representative common name for display, if available */
+  representativeCommonName: string | null;
+}
+
+/**
+ * A step in the drill path, e.g. { rank: "order", value: "rodentia" }.
+ */
+export interface DrillStep {
+  rank: TaxonomyRank;
+  value: string;
+}
+
+function extractGenus(scientificName: string): string {
+  return scientificName.split(" ")[0] || "";
+}
+
+function getRankValue(
+  row: { class_name: string | null; order_name: string | null; family: string | null; scientific_name: string },
+  rank: TaxonomyRank,
+): string {
+  switch (rank) {
+    case "class": return (row.class_name ?? "").toLowerCase();
+    case "order": return (row.order_name ?? "").toLowerCase();
+    case "family": return (row.family ?? "").toLowerCase();
+    case "genus": return extractGenus(row.scientific_name).toLowerCase();
+  }
+}
+
+function getDisplayRankValue(
+  row: { class_name: string | null; order_name: string | null; family: string | null; scientific_name: string },
+  rank: TaxonomyRank,
+): string {
+  switch (rank) {
+    case "class": return row.class_name ?? "";
+    case "order": return row.order_name ?? "";
+    case "family": return row.family ?? "";
+    case "genus": return extractGenus(row.scientific_name);
+  }
+}
+
+/**
+ * Given a taxon's CSV groups and a drill path, return children at the next rank.
+ *
+ * Examples:
+ * - getDrillChildren(["mammalia"], []) → classes within Mammalia
+ * - getDrillChildren(["mammalia"], [{rank:"class", value:"mammalia"}]) → orders
+ * - getDrillChildren(["mammalia"], [{rank:"class", value:"mammalia"}, {rank:"order", value:"rodentia"}]) → families
+ */
+export function getDrillChildren(
+  groups: string[],
+  drillPath: DrillStep[],
+): DrillChild[] {
+  const lastRank = drillPath.length > 0 ? drillPath[drillPath.length - 1].rank : null;
+  const lastRankIdx = lastRank ? TAXONOMY_RANKS.indexOf(lastRank) : -1;
+  const nextRankIdx = lastRankIdx + 1;
+
+  if (nextRankIdx >= TAXONOMY_RANKS.length) {
+    return [];
+  }
+
+  const nextRank = TAXONOMY_RANKS[nextRankIdx];
+  const canDrillFurther = nextRankIdx + 1 < TAXONOMY_RANKS.length;
+
+  const allRows: RedlistRow[] = [];
+  for (const group of groups) {
+    allRows.push(...loadRedlistForGroup(group));
+  }
+
+  const mapping = loadMapping();
+  const linkedGbifKeys = new Set<number>();
+  for (const row of allRows) {
+    const entry = mapping.get(row.sis_taxon_id);
+    if (entry?.gbif_species_key != null) linkedGbifKeys.add(entry.gbif_species_key);
+  }
+
+  const filteredRows = allRows.filter(row => {
+    for (const step of drillPath) {
+      if (getRankValue(row, step.rank) !== step.value.toLowerCase()) return false;
+    }
+    return true;
+  });
+
+  const childMap = new Map<string, {
+    displayValue: string;
+    totalAssessed: number;
+    outdated: number;
+    byCategory: Record<string, number>;
+    commonNames: Map<string, number>;
+    subValues: Set<string>;
+  }>();
+
+  const belowRank = canDrillFurther ? TAXONOMY_RANKS[nextRankIdx + 1] : null;
+
+  for (const row of filteredRows) {
+    const val = getRankValue(row, nextRank);
+    if (!val) continue;
+
+    let entry = childMap.get(val);
+    if (!entry) {
+      entry = {
+        displayValue: getDisplayRankValue(row, nextRank),
+        totalAssessed: 0,
+        outdated: 0,
+        byCategory: {},
+        commonNames: new Map(),
+        subValues: new Set(),
+      };
+      childMap.set(val, entry);
+    }
+
+    entry.totalAssessed++;
+    if (isOutdated(row.assessment_date)) entry.outdated++;
+    const cat = row.category;
+    if (cat) entry.byCategory[cat] = (entry.byCategory[cat] ?? 0) + 1;
+
+    if (row.common_name) {
+      entry.commonNames.set(row.common_name, (entry.commonNames.get(row.common_name) ?? 0) + 1);
+    }
+
+    if (belowRank) {
+      const subVal = getRankValue(row, belowRank);
+      if (subVal) entry.subValues.add(subVal);
+    }
+  }
+
+  const gbifNeCounts = new Map<string, number>();
+  for (const group of groups) {
+    const gbifMap = loadGbifForGroup(group);
+    for (const [key, gbifRow] of gbifMap) {
+      if (linkedGbifKeys.has(key)) continue;
+
+      let matches = true;
+      for (const step of drillPath) {
+        if (getRankValue(gbifRow, step.rank) !== step.value.toLowerCase()) {
+          matches = false;
+          break;
+        }
+      }
+      if (!matches) continue;
+
+      const val = getRankValue(gbifRow, nextRank);
+      if (!val) continue;
+      gbifNeCounts.set(val, (gbifNeCounts.get(val) ?? 0) + 1);
+    }
+  }
+
+  const results: DrillChild[] = [];
+  for (const [val, entry] of childMap) {
+    let representativeCommonName: string | null = null;
+    if (entry.commonNames.size > 0) {
+      let maxCount = 0;
+      for (const [name, count] of entry.commonNames) {
+        if (count > maxCount) {
+          maxCount = count;
+          representativeCommonName = name;
+        }
+      }
+    }
+
+    results.push({
+      value: entry.displayValue || val,
+      rank: nextRank,
+      totalAssessed: entry.totalAssessed,
+      outdated: entry.outdated,
+      gbifNeSpeciesCount: gbifNeCounts.get(val) ?? 0,
+      byCategory: entry.byCategory,
+      hasChildren: canDrillFurther && entry.subValues.size > 1,
+      representativeCommonName,
+    });
+  }
+
+  results.sort((a, b) => b.totalAssessed - a.totalAssessed);
+
+  return results;
+}
+
+// =============================================================================
 // SUBGROUP SUMMARIES
 // =============================================================================
 
