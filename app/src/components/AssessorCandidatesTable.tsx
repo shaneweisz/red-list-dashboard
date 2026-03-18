@@ -15,7 +15,7 @@ interface AssessorCandidatesTableProps {
   countries: string[];
 }
 
-const PAGE_SIZE = 15;
+const PAGE_SIZE = 10;
 
 export default function AssessorCandidatesTable({
   taxonGroup,
@@ -131,7 +131,7 @@ export default function AssessorCandidatesTable({
                 className="border-b border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer transition-colors"
                 onClick={() =>
                   window.open(
-                    `/?taxa=${encodeURIComponent(taxonGroup)}&assessors=${encodeURIComponent(c.name)}`,
+                    `/?taxa=${encodeURIComponent(taxonGroup)}&assessors=${encodeURIComponent(c.name).replace(/%2C/g, ",")}`,
                     "_blank"
                   )
                 }
