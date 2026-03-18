@@ -2024,7 +2024,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                           {s.category === "NE" && (
                             <div style={{ display: stackedDetailView || activeDetailTab === "assessors" ? undefined : "none" }}>
                               <AssessorCandidatesTable
-                                taxonGroup={s.taxon_group}
+                                taxaId={[...selectedTaxa][0] ?? s.taxon_group}
                                 countries={s.countries}
                               />
                             </div>

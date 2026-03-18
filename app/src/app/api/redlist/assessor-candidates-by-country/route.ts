@@ -1,23 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAssessorCandidatesByCountry } from "@/lib/data/species-store";
+import { getGroupsForTaxa } from "@/config/taxa-hierarchy";
 import { CACHE_5M } from "@/lib/cache-headers";
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
-  const taxonGroup = searchParams.get("taxonGroup");
+  const taxaId = searchParams.get("taxaId");
   const countriesParam = searchParams.get("countries");
 
-  if (!taxonGroup || !countriesParam) {
+  if (!taxaId || !countriesParam) {
     return NextResponse.json(
-      { error: "taxonGroup and countries are required" },
+      { error: "taxaId and countries are required" },
       { status: 400 }
     );
   }
 
   const countries = countriesParam.split(";").filter(Boolean);
+  const groups = getGroupsForTaxa(taxaId);
 
   try {
-    const candidates = getAssessorCandidatesByCountry(taxonGroup, countries);
+    const candidates = getAssessorCandidatesByCountry(groups, countries);
     return NextResponse.json({ candidates }, { headers: CACHE_5M });
   } catch (error) {
     console.error("Assessor candidates by country error:", error);

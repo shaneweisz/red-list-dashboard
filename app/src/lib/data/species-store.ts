@@ -460,21 +460,23 @@ export interface AssessorCountryCandidate {
 
 /**
  * Find assessor candidates for an NE species by looking at assessed species
- * in the same taxon group that share at least one country with the target species.
+ * in the given taxon groups that share at least one country with the target species.
+ * Accepts multiple groups so a taxa like "plantae" can search across all plant groups.
  * Aggregates counts by UN M49 sub-region for cleaner visualisation.
  */
 export function getAssessorCandidatesByCountry(
-  taxonGroup: string,
+  taxonGroups: string[],
   countries: string[],
 ): AssessorCountryCandidate[] {
-  if (countries.length === 0) return [];
+  if (countries.length === 0 || taxonGroups.length === 0) return [];
 
   const countrySet = new Set(countries.map((c) => c.toUpperCase()));
 
+  const assessorMap = new Map<string, { regionCounts: Record<string, number>; total: number; latestDate: string }>();
+
+  for (const taxonGroup of taxonGroups) {
   const redlistRows = loadRedlistForGroup(taxonGroup);
   const historyMap = loadHistoryForGroup(taxonGroup);
-
-  const assessorMap = new Map<string, { regionCounts: Record<string, number>; total: number; latestDate: string }>();
 
   for (const row of redlistRows) {
     // Find which of the target countries this species occurs in
@@ -518,6 +520,7 @@ export function getAssessorCandidatesByCountry(
       }
     }
   }
+  } // end for taxonGroups
 
   return [...assessorMap.entries()]
     .map(([name, stats]) => ({

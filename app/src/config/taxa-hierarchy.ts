@@ -431,6 +431,23 @@ export function getSubgroupDef(subgroupId: string) {
 }
 
 /**
+ * Get all CSV-level group names for a taxa ID.
+ * e.g. "plantae" → ["flowering_plants", "ferns_and_allies", "mosses", "gymnosperms", ...]
+ * Falls back to [taxaId] if no subgroups are defined (e.g. "mammalia").
+ */
+export function getGroupsForTaxa(taxaId: string): string[] {
+  const subs = TAXA_SUBGROUPS[taxaId];
+  if (!subs || subs.length === 0) return [taxaId];
+  const groups = new Set<string>();
+  for (const sg of subs) {
+    for (const g of sg.filter.groups) {
+      groups.add(g);
+    }
+  }
+  return [...groups];
+}
+
+/**
  * Client-side filter: does a species row match a subgroup filter?
  *
  * Uses the same logic as the server-side `matchesFilter` but works with
