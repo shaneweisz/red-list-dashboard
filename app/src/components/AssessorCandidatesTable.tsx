@@ -1,0 +1,213 @@
+"use client";
+
+import { useState, useEffect, useMemo } from "react";
+import { countriesToRegions, regionColor } from "@/lib/regions";
+
+interface AssessorCountryCandidate {
+  name: string;
+  regionCounts: Record<string, number>;
+  total: number;
+  latestDate: string;
+}
+
+interface AssessorCandidatesTableProps {
+  taxonGroup: string;
+  countries: string[];
+}
+
+const PAGE_SIZE = 15;
+
+export default function AssessorCandidatesTable({
+  taxonGroup,
+  countries,
+}: AssessorCandidatesTableProps) {
+  const [candidates, setCandidates] = useState<AssessorCountryCandidate[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+
+  const countriesKey = countries.join(";");
+  const regions = useMemo(() => countriesToRegions(countries), [countriesKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (countries.length === 0) {
+      setCandidates([]);
+      setLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+    setPage(0);
+
+    const params = new URLSearchParams({
+      taxonGroup,
+      countries: countries.join(";"),
+    });
+
+    fetch(`/api/redlist/assessor-candidates-by-country?${params}`, { signal: controller.signal })
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error || `HTTP ${res.status}`);
+        }
+        return res.json();
+      })
+      .then((data) => {
+        if (!controller.signal.aborted) {
+          setCandidates(data.candidates);
+        }
+      })
+      .catch((err) => {
+        if (!controller.signal.aborted) {
+          setError(err instanceof Error ? err.message : "Unknown error");
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      });
+
+    return () => controller.abort();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taxonGroup, countriesKey]);
+
+  const totalPages = Math.ceil((candidates?.length ?? 0) / PAGE_SIZE);
+  const paginated = useMemo(
+    () => (candidates ?? []).slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE),
+    [candidates, page]
+  );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <svg className="w-5 h-5 animate-spin text-zinc-400" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+        </svg>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-sm text-red-500 p-4">
+        Failed to load assessor candidates
+      </div>
+    );
+  }
+
+  if (!candidates || candidates.length === 0) {
+    return (
+      <div className="text-sm text-zinc-400 italic p-4">
+        No assessor candidates found
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-4 pb-3 pt-1">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-left text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-700">
+            <th className="py-2 pr-3 font-medium">Assessor</th>
+            <th className="py-2 px-3 font-medium text-right">Species</th>
+            <th className="py-2 px-3 font-medium">Regions</th>
+            <th className="py-2 pl-3 font-medium text-right">Latest</th>
+          </tr>
+        </thead>
+        <tbody>
+          {paginated.map((c) => {
+            const coveredRegions = regions.filter((r) => (c.regionCounts[r] ?? 0) > 0);
+            const year = c.latestDate
+              ? new Date(c.latestDate).getFullYear().toString()
+              : "—";
+
+            return (
+              <tr
+                key={c.name}
+                className="border-b border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer transition-colors"
+                onClick={() =>
+                  window.open(
+                    `/?taxa=${encodeURIComponent(taxonGroup)}&assessors=${encodeURIComponent(c.name)}`,
+                    "_blank"
+                  )
+                }
+              >
+                <td className="py-2 pr-3 text-zinc-200 truncate max-w-[200px]" title={c.name}>
+                  {c.name}
+                </td>
+                <td className="py-2 px-3 text-right tabular-nums text-zinc-300">
+                  {c.total}
+                </td>
+                <td className="py-2 px-3">
+                  <div className="flex items-center gap-1" title={coveredRegions.join(", ")}>
+                    {regions.map((r) => {
+                      const active = (c.regionCounts[r] ?? 0) > 0;
+                      return (
+                        <span
+                          key={r}
+                          className="w-2.5 h-2.5 rounded-full inline-block"
+                          style={{
+                            backgroundColor: active ? regionColor(r) : undefined,
+                            opacity: active ? 1 : 0.15,
+                            border: active ? "none" : "1px solid #52525b",
+                          }}
+                          title={`${r}: ${active ? `${c.regionCounts[r]} species` : "none"}`}
+                        />
+                      );
+                    })}
+                    <span className="ml-1 text-zinc-500 text-[10px]">
+                      {coveredRegions.length}/{regions.length}
+                    </span>
+                  </div>
+                </td>
+                <td className="py-2 pl-3 text-right tabular-nums text-zinc-400">
+                  {year}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-2 text-[10px] text-zinc-400">
+          <button
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            disabled={page === 0}
+            className="px-1.5 py-0.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            Prev
+          </button>
+          <span>
+            {page * PAGE_SIZE + 1}-{Math.min((page + 1) * PAGE_SIZE, candidates.length)} of {candidates.length}
+          </span>
+          <button
+            onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+            disabled={page >= totalPages - 1}
+            className="px-1.5 py-0.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            Next
+          </button>
+        </div>
+      )}
+
+      {/* Region legend */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-3 pt-2 border-t border-zinc-200 dark:border-zinc-700 text-[10px]">
+        {regions.map((r) => (
+          <div key={r} className="flex items-center gap-1">
+            <span
+              className="w-2.5 h-2.5 rounded-full inline-block"
+              style={{ backgroundColor: regionColor(r) }}
+            />
+            <span className="text-zinc-500 dark:text-zinc-400">{r}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

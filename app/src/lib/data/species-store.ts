@@ -474,7 +474,7 @@ export function getAssessorCandidatesByCountry(
   const redlistRows = loadRedlistForGroup(taxonGroup);
   const historyMap = loadHistoryForGroup(taxonGroup);
 
-  const assessorMap = new Map<string, { regionCounts: Record<string, number>; latestDate: string }>();
+  const assessorMap = new Map<string, { regionCounts: Record<string, number>; total: number; latestDate: string }>();
 
   for (const row of redlistRows) {
     // Find which of the target countries this species occurs in
@@ -505,10 +505,12 @@ export function getAssessorCandidatesByCountry(
 
         let stats = assessorMap.get(normalizedName);
         if (!stats) {
-          stats = { regionCounts: {}, latestDate: "" };
+          stats = { regionCounts: {}, total: 0, latestDate: "" };
           assessorMap.set(normalizedName, stats);
         }
 
+        // Count once per assessment for total, but once per region for breakdown
+        stats.total++;
         for (const region of regions) {
           stats.regionCounts[region] = (stats.regionCounts[region] ?? 0) + 1;
         }
@@ -518,15 +520,12 @@ export function getAssessorCandidatesByCountry(
   }
 
   return [...assessorMap.entries()]
-    .map(([name, stats]) => {
-      const total = Object.values(stats.regionCounts).reduce((a, b) => a + b, 0);
-      return {
-        name,
-        regionCounts: stats.regionCounts,
-        total,
-        latestDate: stats.latestDate,
-      };
-    })
+    .map(([name, stats]) => ({
+      name,
+      regionCounts: stats.regionCounts,
+      total: stats.total,
+      latestDate: stats.latestDate,
+    }))
     .sort((a, b) => {
       if (a.total !== b.total) return b.total - a.total;
       return b.latestDate.localeCompare(a.latestDate);

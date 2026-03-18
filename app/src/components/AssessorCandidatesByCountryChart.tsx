@@ -90,7 +90,8 @@ export default function AssessorCandidatesByCountryChart({
     if (!candidates || candidates.length === 0) return [];
 
     return candidates.map((c) => {
-      const row: Record<string, string | number> = { name: c.name, total: c.total, latestDate: c.latestDate };
+      const regionSum = regions.reduce((sum, r) => sum + (c.regionCounts[r] ?? 0), 0);
+      const row: Record<string, string | number> = { name: c.name, total: c.total, regionSum, latestDate: c.latestDate };
       for (const region of regions) {
         row[region] = c.regionCounts[region] ?? 0;
       }
@@ -108,7 +109,7 @@ export default function AssessorCandidatesByCountryChart({
     () => chartData.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE),
     [chartData, page]
   );
-  const globalMax = chartData.length > 0 ? (chartData[0].total as number) : 0;
+  const globalMax = chartData.length > 0 ? (chartData[0].regionSum as number) : 0;
 
   const openAssessor = (barData: { payload?: { name?: string } }) => {
     const name = barData?.payload?.name;
@@ -161,7 +162,7 @@ export default function AssessorCandidatesByCountryChart({
               tick={{ fontSize: 10, fill: "#a1a1aa" }}
               tickLine={false}
               axisLine={{ stroke: "#3f3f46" }}
-              label={{ value: "Species assessed", position: "insideBottom", offset: -12, fontSize: 10, fill: "#71717a" }}
+              label={{ value: "Species assessed (per region)", position: "insideBottom", offset: -12, fontSize: 10, fill: "#71717a" }}
             />
             <YAxis
               type="category"
@@ -196,7 +197,8 @@ export default function AssessorCandidatesByCountryChart({
                         </div>
                       );
                     })}
-                    <div className="mt-1 text-zinc-400">
+                    <div className="mt-1 text-zinc-400">{data.total} species assessed</div>
+                    <div className="text-zinc-400">
                       {legendItems.filter((item) => (data[item.key] as number) > 0).length}/{regions.length} regions covered
                     </div>
                     <div className="text-zinc-400">Latest assessment: {dateStr}</div>
