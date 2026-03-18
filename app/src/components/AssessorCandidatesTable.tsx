@@ -143,25 +143,19 @@ export default function AssessorCandidatesTable({
                   {c.total}
                 </td>
                 <td className="py-2 px-3">
-                  <div className="flex items-center gap-1" title={coveredRegions.join(", ")}>
-                    {regions.map((r) => {
-                      const active = (c.regionCounts[r] ?? 0) > 0;
-                      return (
+                  <div className="flex flex-wrap items-center gap-1">
+                    {coveredRegions.map((r) => (
+                      <span
+                        key={r}
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-zinc-300 bg-zinc-800"
+                      >
                         <span
-                          key={r}
-                          className="w-2.5 h-2.5 rounded-full inline-block"
-                          style={{
-                            backgroundColor: active ? regionColor(r) : undefined,
-                            opacity: active ? 1 : 0.15,
-                            border: active ? "none" : "1px solid #52525b",
-                          }}
-                          title={`${r}: ${active ? `${c.regionCounts[r]} species` : "none"}`}
+                          className="w-2 h-2 rounded-full inline-block shrink-0"
+                          style={{ backgroundColor: regionColor(r) }}
                         />
-                      );
-                    })}
-                    <span className="ml-1 text-zinc-500 text-[10px]">
-                      {coveredRegions.length}/{regions.length}
-                    </span>
+                        {r}
+                      </span>
+                    ))}
                   </div>
                 </td>
                 <td className="py-2 pl-3 text-right tabular-nums text-zinc-400">
@@ -196,18 +190,6 @@ export default function AssessorCandidatesTable({
         </div>
       )}
 
-      {/* Region legend */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-3 pt-2 border-t border-zinc-200 dark:border-zinc-700 text-[10px]">
-        {regions.map((r) => (
-          <div key={r} className="flex items-center gap-1">
-            <span
-              className="w-2.5 h-2.5 rounded-full inline-block"
-              style={{ backgroundColor: regionColor(r) }}
-            />
-            <span className="text-zinc-500 dark:text-zinc-400">{r}</span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
