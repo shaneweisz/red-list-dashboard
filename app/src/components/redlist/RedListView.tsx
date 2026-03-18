@@ -362,6 +362,10 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       skipClearOnTaxaChangeRef.current = false;
       return;
     }
+    // Skip clearing when going from no taxa to some taxa — this happens during
+    // URL hydration (useFilterParams starts empty then populates from URL) and
+    // there are no taxa-specific filters to reset when nothing was selected before.
+    if (prev.size === 0) return;
     clearAllFilters();
     setShowOnlyStarred(false);
   }, [selectedTaxa, clearAllFilters]);
