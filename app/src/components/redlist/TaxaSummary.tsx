@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { FaInfoCircle, FaChevronRight, FaChevronDown } from "react-icons/fa";
+import { FaInfoCircle, FaChevronRight, FaExpandAlt, FaCompressAlt } from "react-icons/fa";
 import { HiOutlineAdjustmentsHorizontal } from "react-icons/hi2";
 import TaxaIcon from "@/components/TaxaIcon";
 import { CATEGORY_COLORS, CATEGORY_NAMES, CATEGORY_ORDER } from "@/config/taxa";
@@ -262,6 +262,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     }
   }, [subgroupData, loadingSubgroups]);
 
+  // Table 1a mode state
+  const [table1aMode, setTable1aMode] = useState(false);
+  const prevHiddenColumns = useRef<Set<ColumnId> | null>(null);
+
   // Auto-expand parent taxa when subgroups are selected (e.g. from URL)
   useEffect(() => {
     if (selectedSubgroups.size === 0) return;
@@ -431,6 +435,56 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   // Separate "all" row from per-taxon rows
   const allTaxon = taxa.find((t) => t.id === "all");
   const perTaxa = taxa.filter((t) => t.id !== "all");
+
+  // Expand all expandable taxa
+  const expandAll = useCallback(async () => {
+    const expandableTaxaIds = perTaxa.filter(t => EXPANDABLE_TAXA.has(t.id)).map(t => t.id);
+    setExpandedTaxa(new Set(expandableTaxaIds));
+    for (const taxonId of expandableTaxaIds) {
+      if (!subgroupData[taxonId] && !loadingSubgroups.has(taxonId)) {
+        setLoadingSubgroups((prev) => new Set(prev).add(taxonId));
+        fetch(`/api/redlist/taxa-subgroups?taxonId=${taxonId}`)
+          .then(res => res.ok ? res.json() : null)
+          .then(data => {
+            if (data) setSubgroupData((prev) => ({ ...prev, [taxonId]: data.subgroups }));
+          })
+          .finally(() => {
+            setLoadingSubgroups((prev) => {
+              const next = new Set(prev);
+              next.delete(taxonId);
+              return next;
+            });
+          });
+      }
+    }
+  }, [perTaxa, subgroupData, loadingSubgroups]);
+
+  const collapseAll = useCallback(() => {
+    setExpandedTaxa(new Set());
+  }, []);
+
+  const enterTable1a = useCallback(() => {
+    prevHiddenColumns.current = new Set(hiddenColumns);
+    const table1aHidden = new Set<ColumnId>(
+      (Object.keys(COLUMN_LABELS) as ColumnId[]).filter(
+        c => !["described", "assessed", "breakdown"].includes(c)
+      )
+    );
+    setHiddenColumns(table1aHidden);
+    setTable1aMode(true);
+    expandAll();
+  }, [hiddenColumns, expandAll]);
+
+  const exitTable1a = useCallback(() => {
+    if (prevHiddenColumns.current) {
+      setHiddenColumns(prevHiddenColumns.current);
+      prevHiddenColumns.current = null;
+    }
+    setTable1aMode(false);
+    collapseAll();
+  }, [collapseAll]);
+
+  const allExpanded = perTaxa.filter(t => EXPANDABLE_TAXA.has(t.id)).every(t => expandedTaxa.has(t.id));
 
   // Calculate totals
   const totalAssessed = perTaxa.reduce((sum, t) => sum + t.totalAssessed, 0);
@@ -846,8 +900,19 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           } ${taxon.available ? "hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer" : "opacity-50 cursor-not-allowed"}`}
           onClick={(e) => {
             if (!taxon.available) return;
-            if (e.metaKey || e.ctrlKey) setTaxaExpanded(true);
-            onToggleTaxon(taxon.id, e);
+            if (hasSubgroups) {
+              // For taxa with subgroups, clicking the row expands/collapses
+              // Cmd/Ctrl+click still selects for filtering
+              if (e.metaKey || e.ctrlKey) {
+                setTaxaExpanded(true);
+                onToggleTaxon(taxon.id, e);
+              } else {
+                toggleExpand(taxon.id);
+              }
+            } else {
+              if (e.metaKey || e.ctrlKey) setTaxaExpanded(true);
+              onToggleTaxon(taxon.id, e);
+            }
           }}
         >
           <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 ${isSelected ? "bg-zinc-100 dark:bg-zinc-800" : "bg-white dark:bg-zinc-900"}`}>
@@ -855,25 +920,16 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               <TaxaIcon taxonId={taxon.id} size={22} className="flex-shrink-0" style={{ color: taxon.color }} />
               <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{taxon.name}</span>
               {hasSubgroups && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleExpand(taxon.id);
-                  }}
-                  className="p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                  title={isExpanded ? "Collapse subgroups" : "Expand subgroups"}
-                >
+                <span className="text-zinc-300 dark:text-zinc-600 transition-transform" style={{ display: 'inline-flex', transform: isExpanded ? 'rotate(90deg)' : 'none' }}>
                   {isLoadingSubs ? (
                     <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
-                  ) : isExpanded ? (
-                    <FaChevronDown size={10} />
                   ) : (
                     <FaChevronRight size={10} />
                   )}
-                </button>
+                </span>
               )}
             </div>
           </td>
@@ -1223,6 +1279,36 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         ))}
       </div>,
       document.body
+    )}
+    {/* Subtle expand/table controls */}
+    {!loading && perTaxa.length > 0 && (
+      <div className="flex items-center justify-end gap-3 mb-1.5">
+        {table1aMode ? (
+          <button
+            onClick={exitTable1a}
+            className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+          >
+            Exit Table 1a
+          </button>
+        ) : (
+          <>
+            <button
+              onClick={allExpanded ? collapseAll : expandAll}
+              className="inline-flex items-center gap-1 text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+            >
+              {allExpanded ? <FaCompressAlt size={9} /> : <FaExpandAlt size={9} />}
+              {allExpanded ? "Collapse all" : "Expand all"}
+            </button>
+            <span className="text-zinc-300 dark:text-zinc-700">|</span>
+            <button
+              onClick={enterTable1a}
+              className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+            >
+              Table 1a
+            </button>
+          </>
+        )}
+      </div>
     )}
     <div ref={scrollRef} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto">
       <table className="w-full">
