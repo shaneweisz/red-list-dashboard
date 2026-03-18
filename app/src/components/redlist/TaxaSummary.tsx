@@ -266,6 +266,60 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   const [table1aMode, setTable1aMode] = useState(false);
   const prevHiddenColumns = useRef<Set<ColumnId> | null>(null);
 
+  // Separate "all" row from per-taxon rows (needed before early returns for hooks)
+  const allTaxon = taxa.find((t) => t.id === "all");
+  const perTaxa = taxa.filter((t) => t.id !== "all");
+
+  // Expand all expandable taxa
+  const expandAll = useCallback(async () => {
+    const expandableTaxaIds = perTaxa.filter(t => EXPANDABLE_TAXA.has(t.id)).map(t => t.id);
+    setExpandedTaxa(new Set(expandableTaxaIds));
+    for (const taxonId of expandableTaxaIds) {
+      if (!subgroupData[taxonId] && !loadingSubgroups.has(taxonId)) {
+        setLoadingSubgroups((prev) => new Set(prev).add(taxonId));
+        fetch(`/api/redlist/taxa-subgroups?taxonId=${taxonId}`)
+          .then(res => res.ok ? res.json() : null)
+          .then(data => {
+            if (data) setSubgroupData((prev) => ({ ...prev, [taxonId]: data.subgroups }));
+          })
+          .finally(() => {
+            setLoadingSubgroups((prev) => {
+              const next = new Set(prev);
+              next.delete(taxonId);
+              return next;
+            });
+          });
+      }
+    }
+  }, [perTaxa, subgroupData, loadingSubgroups]);
+
+  const collapseAll = useCallback(() => {
+    setExpandedTaxa(new Set());
+  }, []);
+
+  const enterTable1a = useCallback(() => {
+    prevHiddenColumns.current = new Set(hiddenColumns);
+    const table1aHidden = new Set<ColumnId>(
+      (Object.keys(COLUMN_LABELS) as ColumnId[]).filter(
+        c => !["described", "assessed", "breakdown"].includes(c)
+      )
+    );
+    setHiddenColumns(table1aHidden);
+    setTable1aMode(true);
+    expandAll();
+  }, [hiddenColumns, expandAll]);
+
+  const exitTable1a = useCallback(() => {
+    if (prevHiddenColumns.current) {
+      setHiddenColumns(prevHiddenColumns.current);
+      prevHiddenColumns.current = null;
+    }
+    setTable1aMode(false);
+    collapseAll();
+  }, [collapseAll]);
+
+  const allExpanded = perTaxa.filter(t => EXPANDABLE_TAXA.has(t.id)).every(t => expandedTaxa.has(t.id));
+
   // Auto-expand parent taxa when subgroups are selected (e.g. from URL)
   useEffect(() => {
     if (selectedSubgroups.size === 0) return;
@@ -431,60 +485,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       </div>
     );
   }
-
-  // Separate "all" row from per-taxon rows
-  const allTaxon = taxa.find((t) => t.id === "all");
-  const perTaxa = taxa.filter((t) => t.id !== "all");
-
-  // Expand all expandable taxa
-  const expandAll = useCallback(async () => {
-    const expandableTaxaIds = perTaxa.filter(t => EXPANDABLE_TAXA.has(t.id)).map(t => t.id);
-    setExpandedTaxa(new Set(expandableTaxaIds));
-    for (const taxonId of expandableTaxaIds) {
-      if (!subgroupData[taxonId] && !loadingSubgroups.has(taxonId)) {
-        setLoadingSubgroups((prev) => new Set(prev).add(taxonId));
-        fetch(`/api/redlist/taxa-subgroups?taxonId=${taxonId}`)
-          .then(res => res.ok ? res.json() : null)
-          .then(data => {
-            if (data) setSubgroupData((prev) => ({ ...prev, [taxonId]: data.subgroups }));
-          })
-          .finally(() => {
-            setLoadingSubgroups((prev) => {
-              const next = new Set(prev);
-              next.delete(taxonId);
-              return next;
-            });
-          });
-      }
-    }
-  }, [perTaxa, subgroupData, loadingSubgroups]);
-
-  const collapseAll = useCallback(() => {
-    setExpandedTaxa(new Set());
-  }, []);
-
-  const enterTable1a = useCallback(() => {
-    prevHiddenColumns.current = new Set(hiddenColumns);
-    const table1aHidden = new Set<ColumnId>(
-      (Object.keys(COLUMN_LABELS) as ColumnId[]).filter(
-        c => !["described", "assessed", "breakdown"].includes(c)
-      )
-    );
-    setHiddenColumns(table1aHidden);
-    setTable1aMode(true);
-    expandAll();
-  }, [hiddenColumns, expandAll]);
-
-  const exitTable1a = useCallback(() => {
-    if (prevHiddenColumns.current) {
-      setHiddenColumns(prevHiddenColumns.current);
-      prevHiddenColumns.current = null;
-    }
-    setTable1aMode(false);
-    collapseAll();
-  }, [collapseAll]);
-
-  const allExpanded = perTaxa.filter(t => EXPANDABLE_TAXA.has(t.id)).every(t => expandedTaxa.has(t.id));
 
   // Calculate totals
   const totalAssessed = perTaxa.reduce((sum, t) => sum + t.totalAssessed, 0);
