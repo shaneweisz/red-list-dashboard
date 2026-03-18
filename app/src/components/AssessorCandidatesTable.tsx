@@ -113,9 +113,9 @@ export default function AssessorCandidatesTable({
         <thead>
           <tr className="text-left text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-700">
             <th className="py-2 pr-3 font-medium">Assessor</th>
-            <th className="py-2 px-3 font-medium text-right">Species</th>
-            <th className="py-2 px-3 font-medium">Regions</th>
-            <th className="py-2 pl-3 font-medium text-right">Latest</th>
+            <th className="py-2 px-3 font-medium text-right">Species Assessed</th>
+            <th className="py-2 px-3 font-medium">Region Coverage</th>
+            <th className="py-2 pl-3 font-medium text-right">Latest Assessment</th>
           </tr>
         </thead>
         <tbody>
