@@ -1704,7 +1704,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   <React.Fragment key={s.id}>
                   <tr
                     className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer ${selectedSpeciesKey === speciesKey ? "bg-zinc-100 dark:bg-zinc-800" : ""} ${isDragging ? "opacity-50" : ""} ${isDragOver ? "border-t-2 border-amber-500" : ""}`}
-                    onClick={() => { setSelectedSpeciesKey(selectedSpeciesKey === speciesKey ? null : speciesKey); setActiveDetailTab(s.category === "NE" ? "assessors" : "gbif"); }}
+                    onClick={() => { setSelectedSpeciesKey(selectedSpeciesKey === speciesKey ? null : speciesKey); setActiveDetailTab("gbif"); }}
                     draggable={isPinned && showOnlyStarred}
                     onDragStart={(e) => handleDragStart(e, speciesKey)}
                     onDragOver={(e) => handleDragOver(e, speciesKey)}
@@ -1917,14 +1917,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                           <div className="flex items-center border-b border-zinc-200 dark:border-zinc-700" onClick={(e) => e.stopPropagation()}>
                             {!stackedDetailView && (
                               <>
-                                {s.category === "NE" && (
-                                  <button
-                                    className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "assessors" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
-                                    onClick={() => setActiveDetailTab("assessors")}
-                                  >
-                                    Assessor Candidates
-                                  </button>
-                                )}
                                 <button
                                   className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "gbif" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"} ${!gbifSpeciesKey ? "opacity-50 cursor-default" : ""}`}
                                   onClick={() => gbifSpeciesKey && setActiveDetailTab("gbif")}
@@ -1959,6 +1951,14 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                 >
                                   CITES
                                 </button>
+                                {s.category === "NE" && (
+                                  <button
+                                    className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "assessors" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                    onClick={() => setActiveDetailTab("assessors")}
+                                  >
+                                    Assessor Candidates
+                                  </button>
+                                )}
                               </>
                             )}
                             {stackedDetailView && (
@@ -1978,31 +1978,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                             </button>
                           </div>
                           {/* Content */}
-                          {s.category === "NE" && (
-                            <div style={{ display: stackedDetailView || activeDetailTab === "assessors" ? undefined : "none" }}>
-                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 divide-y lg:divide-y-0 lg:divide-x divide-zinc-200 dark:divide-zinc-700">
-                                <div>
-                                  <h4 className="text-xs font-medium text-zinc-500 dark:text-zinc-400 px-4 pt-3">Taxonomic expertise</h4>
-                                  <p className="text-[10px] text-zinc-400 dark:text-zinc-500 px-4 mt-0.5">Assessors of related species in the same group</p>
-                                  <AssessorCandidatesChart
-                                    scientificName={s.scientific_name}
-                                    taxonGroup={s.taxon_group}
-                                    family={s.family}
-                                    orderName={s.order_name}
-                                    className={s.class_name}
-                                  />
-                                </div>
-                                <div>
-                                  <h4 className="text-xs font-medium text-zinc-500 dark:text-zinc-400 px-4 pt-3">Regional expertise</h4>
-                                  <p className="text-[10px] text-zinc-400 dark:text-zinc-500 px-4 mt-0.5">Assessors of species in the same countries</p>
-                                  <AssessorCandidatesByCountryChart
-                                    taxonGroup={s.taxon_group}
-                                    countries={s.countries}
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                          )}
                           {gbifSpeciesKey ? (
                             <div style={{ display: stackedDetailView || activeDetailTab === "gbif" ? undefined : "none" }}>
                               <OccurrenceMapRow
@@ -2043,6 +2018,31 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                           <div style={{ display: stackedDetailView || activeDetailTab === "cites" ? undefined : "none" }}>
                             <CitesSummary scientificName={s.scientific_name} />
                           </div>
+                          {s.category === "NE" && (
+                            <div style={{ display: stackedDetailView || activeDetailTab === "assessors" ? undefined : "none" }}>
+                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 divide-y lg:divide-y-0 lg:divide-x divide-zinc-200 dark:divide-zinc-700">
+                                <div>
+                                  <h4 className="text-xs font-medium text-zinc-500 dark:text-zinc-400 px-4 pt-3">Taxonomic expertise</h4>
+                                  <p className="text-[10px] text-zinc-400 dark:text-zinc-500 px-4 mt-0.5">Assessors of related species in the same group</p>
+                                  <AssessorCandidatesChart
+                                    scientificName={s.scientific_name}
+                                    taxonGroup={s.taxon_group}
+                                    family={s.family}
+                                    orderName={s.order_name}
+                                    className={s.class_name}
+                                  />
+                                </div>
+                                <div>
+                                  <h4 className="text-xs font-medium text-zinc-500 dark:text-zinc-400 px-4 pt-3">Regional expertise</h4>
+                                  <p className="text-[10px] text-zinc-400 dark:text-zinc-500 px-4 mt-0.5">Assessors of species in the same countries</p>
+                                  <AssessorCandidatesByCountryChart
+                                    taxonGroup={s.taxon_group}
+                                    countries={s.countries}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
                           {gbifSpeciesKey && s.category !== "NE" && (
                             <div className="border-t border-zinc-200 dark:border-zinc-700">
