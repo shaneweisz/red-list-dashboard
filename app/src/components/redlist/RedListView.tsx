@@ -362,6 +362,10 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       skipClearOnTaxaChangeRef.current = false;
       return;
     }
+    // Skip clearing when going from no taxa to some taxa — this happens during
+    // URL hydration (useFilterParams starts empty then populates from URL) and
+    // there are no taxa-specific filters to reset when nothing was selected before.
+    if (prev.size === 0) return;
     clearAllFilters();
     setShowOnlyStarred(false);
   }, [selectedTaxa, clearAllFilters]);
@@ -1365,16 +1369,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Country Map */}
             <div>
-              {Object.keys(countryStatsForMap).length > 0 ? (
-                <WorldMap
-                  selectedCountries={selectedCountries}
-                  onCountrySelect={handleCountrySelect}
-                  onClearSelection={handleClearCountry}
-                  precomputedStats={countryStatsForMap}
-                  selectedTaxa={selectedTaxa}
-                  speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
-                />
-              ) : speciesLoading && assessedSpecies.length === 0 ? (
+              {speciesLoading && assessedSpecies.length === 0 ? (
                 <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 min-h-[320px] flex flex-col">
                   <div className="flex items-center justify-between mb-1">
                     <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
@@ -1385,7 +1380,16 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                     <Spinner />
                   </div>
                 </div>
-              ) : null}
+              ) : (
+                <WorldMap
+                  selectedCountries={selectedCountries}
+                  onCountrySelect={handleCountrySelect}
+                  onClearSelection={handleClearCountry}
+                  precomputedStats={countryStatsForMap}
+                  selectedTaxa={selectedTaxa}
+                  speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
+                />
+              )}
             </div>
 
             {/* Reviewers (reassessments) or GBIF Observations chart (new-assessments) */}
