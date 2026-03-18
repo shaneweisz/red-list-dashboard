@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import type L from "leaflet";
 
-// Fixed page size for iNat photo filmstrip (2 columns x 5 rows on desktop)
+// Fixed page size for iNat photo grid (5 columns x 2 rows)
 const INAT_PAGE_SIZE = 10;
 
 // Dynamically import Leaflet components
@@ -795,7 +795,7 @@ export default function OccurrenceMapRow({
   });
 
   // Advanced filter state
-  const [maxUncertainty, setMaxUncertainty] = useState<number | null>(50000);
+  const [maxUncertainty, setMaxUncertainty] = useState<number | null>(null);
   const [showUncertaintyCircles, setShowUncertaintyCircles] = useState(false);
   const [colorByYear, setColorByYear] = useState(false);
   const [dedupEnabled, setDedupEnabled] = useState(false);
@@ -805,12 +805,16 @@ export default function OccurrenceMapRow({
   const [splitDate, setSplitDate] = useState<string>(assessmentDate?.split("T")[0] || "");
   const mapSyncRef = useRef<{ center: [number, number]; zoom: number } | null>(null);
   const [dedupGrid, setDedupGrid] = useState(0.01); // ~1km
-  const [sampleSize, setSampleSize] = useState(1000);
+  const [sampleSize, setSampleSize] = useState(300);
   const [yearRange, setYearRange] = useState<[number, number]>([0, 9999]);
 
   // "More" popover state
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
+
+  // Filters dropdown state
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filtersRef = useRef<HTMLDivElement>(null);
 
   // Fixed page size for filmstrip
   const pageSize = INAT_PAGE_SIZE;
@@ -823,15 +827,18 @@ export default function OccurrenceMapRow({
 
   // Close "More" popover on outside click
   useEffect(() => {
-    if (!moreOpen) return;
+    if (!moreOpen && !filtersOpen) return;
     const handler = (e: MouseEvent) => {
-      if (moreRef.current && !moreRef.current.contains(e.target as Node)) {
+      if (moreOpen && moreRef.current && !moreRef.current.contains(e.target as Node)) {
         setMoreOpen(false);
+      }
+      if (filtersOpen && filtersRef.current && !filtersRef.current.contains(e.target as Node)) {
+        setFiltersOpen(false);
       }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [moreOpen]);
+  }, [moreOpen, filtersOpen]);
 
   // Hovered iNat observation (for map highlight)
   const [hoveredObs, setHoveredObs] = useState<InatObservation | null>(null);
@@ -1157,18 +1164,18 @@ export default function OccurrenceMapRow({
   const newRecords = filteredOccurrences.filter((o) => isNewRecord(o.properties.eventDate));
   const oldRecords = filteredOccurrences.filter((o) => !isNewRecord(o.properties.eventDate));
 
-  // Pill definitions for the filter bar
+  // Filter definitions — GBIF basis of record terminology with iNat kept separate
   const pillDefs = useMemo(() => {
     if (!breakdown) return [];
     const humanOtherCount = Math.max(0, breakdown.humanObservation - breakdown.iNaturalist);
     return [
-      { key: "iNaturalist" as const, label: "iNaturalist", count: breakdown.iNaturalist, tooltip: "iNaturalist: Community science observations with photos" },
-      { key: "humanOther" as const, label: "Other Human Obs.", count: humanOtherCount, tooltip: "Human Observations: Field surveys, citizen science (non-iNaturalist)" },
-      { key: "machineObservation" as const, label: "Machine Obs.", count: breakdown.machineObservation, tooltip: "Machine Observations: Camera traps, bioacoustics, remote sensing" },
-      { key: "preservedSpecimen" as const, label: "Specimens", count: breakdown.preservedSpecimen, tooltip: "Preserved Specimens: Museum and herbarium collections" },
-      { key: "materialSample" as const, label: "Material", count: breakdown.materialSample || 0, tooltip: "Material Samples: eDNA, tissue samples, blood, feathers" },
-      ...(breakdown.materialCitation > 0 ? [{ key: "materialCitation" as const, label: "Citations", count: breakdown.materialCitation, tooltip: "Material Citations: Occurrence records from published literature" }] : []),
-      ...(breakdown.other > 0 ? [{ key: "other" as const, label: "Other", count: breakdown.other, tooltip: "Other: Fossils, living specimens, generic occurrences" }] : []),
+      { key: "iNaturalist" as const, label: "iNaturalist (community science)", count: breakdown.iNaturalist },
+      { key: "humanOther" as const, label: "Human observation (e.g. eBird, field surveys)", count: humanOtherCount },
+      { key: "machineObservation" as const, label: "Machine observation (e.g. camera traps)", count: breakdown.machineObservation },
+      { key: "preservedSpecimen" as const, label: "Preserved specimen (e.g. herbaria, museums)", count: breakdown.preservedSpecimen },
+      { key: "materialSample" as const, label: "Material sample (e.g. eDNA)", count: breakdown.materialSample || 0 },
+      { key: "materialCitation" as const, label: "Material citation (literature records)", count: breakdown.materialCitation },
+      { key: "other" as const, label: "Other (fossils, living specimens)", count: breakdown.other },
     ];
   }, [breakdown]);
 
@@ -1307,7 +1314,7 @@ export default function OccurrenceMapRow({
                   <CircleMarker
                     key={feature.properties.gbifID || idx}
                     center={[lat, lon]}
-                    radius={isEmphasized ? 5 : (isBrushed ? 5 : (isDimmed ? 3 : 4))}
+                    radius={isEmphasized ? 7 : (isBrushed ? 6 : (isDimmed ? 4 : 5))}
                     pathOptions={{
                       color: strokeColor,
                       fillColor: fillColor,
@@ -1323,7 +1330,7 @@ export default function OccurrenceMapRow({
                 <>
                   <CircleMarker
                     center={[hoveredObs.decimalLatitude, hoveredObs.decimalLongitude]}
-                    radius={4}
+                    radius={5}
                     pathOptions={{
                       color: "#1d4ed8",
                       fillColor: "#3b82f6",
@@ -1503,10 +1510,61 @@ export default function OccurrenceMapRow({
       <div className="p-2">
         <div className="flex flex-col gap-2">
           {/* ── Filter Bar ── */}
-          <div className="p-2.5 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700">
+          <div className="p-2 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700">
             <div className="flex flex-wrap items-center gap-2">
-              {/* Observation type pills */}
-              {loadingBreakdown ? (
+              {/* Filter by basis of record — dropdown checklist */}
+              <div className="relative" ref={filtersRef}>
+                <button
+                  onClick={() => setFiltersOpen(!filtersOpen)}
+                  className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border text-xs transition-colors ${
+                    filtersOpen
+                      ? "bg-zinc-100 dark:bg-zinc-800 border-zinc-400 dark:border-zinc-500"
+                      : "border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                  } text-zinc-700 dark:text-zinc-300`}
+                >
+                  <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                  </svg>
+                  Filter by basis of record
+                  {!loadingBreakdown && (
+                    <span className="text-[10px] text-zinc-400 tabular-nums">
+                      {pillDefs.filter(p => checkedTypes[p.key]).length}/{pillDefs.length}
+                    </span>
+                  )}
+                  <svg className={`w-3 h-3 text-zinc-400 transition-transform ${filtersOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {filtersOpen && !loadingBreakdown && (
+                  <div className="absolute left-0 top-full mt-1 z-50 w-80 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
+                    {pillDefs.map((pill) => {
+                      const active = checkedTypes[pill.key];
+                      return (
+                        <label
+                          key={pill.key}
+                          className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
+                          onMouseEnter={() => setHoveredType(pill.key)}
+                          onMouseLeave={() => setHoveredType(null)}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={active}
+                            onChange={() => toggleType(pill.key)}
+                            className="w-3 h-3 rounded accent-emerald-500 shrink-0"
+                          />
+                          <span className={active ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-400 dark:text-zinc-500"}>
+                            {pill.label}
+                          </span>
+                          <span className={`ml-auto tabular-nums shrink-0 ${active ? "text-emerald-500 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"}`}>
+                            {pill.count.toLocaleString()}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              {loadingBreakdown && (
                 <div className="flex items-center gap-2 text-zinc-400 text-xs">
                   <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -1514,82 +1572,6 @@ export default function OccurrenceMapRow({
                   </svg>
                   Loading...
                 </div>
-              ) : (
-                pillDefs.map((pill) => {
-                  const active = checkedTypes[pill.key];
-                  const iconClass = `w-3.5 h-3.5 shrink-0 ${active ? "text-emerald-600 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"}`;
-                  const pillIcon = {
-                    iNaturalist: (
-                      /* Leaf — community/nature science */
-                      <svg className={iconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M17 8C8 10 5.9 16.17 3.82 21.34l1.89.66L7 19c4-4 7-4 12-3 0-5-2-9-7-11z" />
-                        <path d="M5 19c4-5 7-7 12-9" />
-                      </svg>
-                    ),
-                    humanOther: (
-                      /* Eye — field observation */
-                      <svg className={iconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                        <circle cx="12" cy="12" r="3" />
-                      </svg>
-                    ),
-                    machineObservation: (
-                      /* Camera — camera trap / sensor */
-                      <svg className={iconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
-                        <circle cx="12" cy="13" r="4" />
-                      </svg>
-                    ),
-                    preservedSpecimen: (
-                      /* Archive box — museum collection */
-                      <svg className={iconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="2" y="3" width="20" height="5" rx="1" />
-                        <path d="M4 8v11a2 2 0 002 2h12a2 2 0 002-2V8M10 12h4" />
-                      </svg>
-                    ),
-                    materialSample: (
-                      /* Test tube — eDNA / tissue sample */
-                      <svg className={iconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M14.5 2v17.5c0 1.4-1.1 2.5-2.5 2.5s-2.5-1.1-2.5-2.5V2M8 2h8M9.5 16h5" />
-                      </svg>
-                    ),
-                    materialCitation: (
-                      /* Book — literature citation */
-                      <svg className={iconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M4 19.5A2.5 2.5 0 016.5 17H20" />
-                        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" />
-                      </svg>
-                    ),
-                    other: (
-                      /* Dots — miscellaneous */
-                      <svg className={iconClass} viewBox="0 0 24 24" fill="currentColor">
-                        <circle cx="5" cy="12" r="2" />
-                        <circle cx="12" cy="12" r="2" />
-                        <circle cx="19" cy="12" r="2" />
-                      </svg>
-                    ),
-                  }[pill.key];
-                  return (
-                    <button
-                      key={pill.key}
-                      onClick={() => toggleType(pill.key)}
-                      onMouseEnter={() => setHoveredType(pill.key)}
-                      onMouseLeave={() => setHoveredType(null)}
-                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
-                        active
-                          ? "bg-emerald-50 dark:bg-emerald-900/30 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300"
-                          : "bg-transparent border-zinc-300 dark:border-zinc-600 text-zinc-400 dark:text-zinc-500"
-                      }`}
-                      title={pill.tooltip}
-                    >
-                      {pillIcon}
-                      {pill.label}
-                      <span className={`tabular-nums ${active ? "text-emerald-500 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"}`}>
-                        {pill.count.toLocaleString()}
-                      </span>
-                    </button>
-                  );
-                })
               )}
 
               {/* Separator */}
@@ -1597,6 +1579,7 @@ export default function OccurrenceMapRow({
 
               {/* Year range trimmer */}
               <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 whitespace-nowrap">Obs. by year</span>
                 <span className="text-[11px] text-zinc-500 dark:text-zinc-400 tabular-nums whitespace-nowrap">
                   {yearRange[0]}
                 </span>
@@ -1802,118 +1785,136 @@ export default function OccurrenceMapRow({
             </div>
           </div>
 
-          {/* ── iNat filmstrip (left) + Map (right) ── */}
-          <div className="flex flex-col sm:flex-row gap-2">
-            {/* iNat photo filmstrip — 2-col grid on sm+, horizontal row on mobile */}
-            {inatPhotos.length > 0 && (
-              <div className="sm:w-[10.5rem] shrink-0 flex flex-col bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden relative z-10">
-                {/* Header with count */}
-                <div className="px-2 py-1.5 text-[10px] font-medium text-zinc-500 dark:text-zinc-400 text-center border-b border-zinc-100 dark:border-zinc-800">
-                  iNaturalist <span className="tabular-nums">({inatTotalCount.toLocaleString()})</span>
-                </div>
-                {/* Photos — horizontal scroll on mobile, 2-col grid on sm+ */}
-                <div className={`flex sm:grid sm:grid-cols-2 sm:content-start gap-1.5 p-1.5 overflow-x-auto sm:overflow-x-visible sm:overflow-y-visible flex-1 ${loadingInatPhotos ? "opacity-50" : ""}`}>
-                  {inatPhotos.slice(0, pageSize).map((obs, idx) => (
-                    <div key={`${inatPage}-${idx}`} className="w-14 sm:w-full shrink-0">
-                      <InatPhotoWithPreview
-                        obs={obs}
-                        idx={idx}
-                        onHover={() => setHoveredObs(obs)}
-                        onLeave={() => setHoveredObs(null)}
-                      />
-                    </div>
-                  ))}
-                </div>
-                {/* Pagination arrows */}
-                {inatTotalCount > pageSize && (
-                  <div className="flex items-center justify-center gap-1 px-1.5 py-1 border-t border-zinc-100 dark:border-zinc-800">
-                    <button
-                      onClick={() => {
-                        const newPage = inatPage - 1;
-                        setInatPage(newPage);
-                        fetchInatPhotos(newPage, pageSize);
-                      }}
-                      disabled={inatPage === 0 || loadingInatPhotos}
-                      className="p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed"
-                      title="Previous page"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          {/* ── Left sidebar (iNat photos + contributors) + Map (right) ── */}
+          <div className="flex flex-col sm:flex-row sm:items-stretch gap-2">
+            {/* Left column — iNat photos on top, contributors below (hidden if no iNat data) */}
+            {(!breakdown || breakdown.iNaturalist > 0) && (
+            <div className="sm:w-1/3 shrink-0 flex flex-col gap-2">
+              {/* iNat photo grid — only shown when photos exist or loading */}
+              {(inatPhotos.length > 0 || loadingInatPhotos) && (
+                <div className="flex flex-col bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden relative z-10">
+                  {/* Header */}
+                  <div className="px-2 py-1.5 text-[10px] font-medium text-zinc-500 dark:text-zinc-400 text-center border-b border-zinc-100 dark:border-zinc-800">
+                    iNaturalist Photos {inatTotalCount > 0 && <span className="tabular-nums">— {inatTotalCount.toLocaleString()} observations</span>}
+                  </div>
+                  {inatPhotos.length > 0 ? (
+                    <>
+                      {/* Photos — 5-col grid */}
+                      <div className={`grid grid-cols-5 gap-1 p-1.5 ${loadingInatPhotos ? "opacity-50" : ""}`}>
+                        {inatPhotos.slice(0, pageSize).map((obs, idx) => (
+                          <div key={`${inatPage}-${idx}`} className="aspect-square">
+                            <InatPhotoWithPreview
+                              obs={obs}
+                              idx={idx}
+                              onHover={() => setHoveredObs(obs)}
+                              onLeave={() => setHoveredObs(null)}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      {/* Pagination */}
+                      {inatTotalCount > pageSize && (
+                        <div className="flex items-center justify-center gap-1 px-1.5 py-1 border-t border-zinc-100 dark:border-zinc-800">
+                          <button
+                            onClick={() => {
+                              const newPage = inatPage - 1;
+                              setInatPage(newPage);
+                              fetchInatPhotos(newPage, pageSize);
+                            }}
+                            disabled={inatPage === 0 || loadingInatPhotos}
+                            className="p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed"
+                            title="Previous page"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                            </svg>
+                          </button>
+                          <span className="text-[10px] text-zinc-400 tabular-nums">
+                            {inatPage + 1}/{Math.ceil(inatTotalCount / pageSize)}
+                          </span>
+                          <button
+                            onClick={() => {
+                              const newPage = inatPage + 1;
+                              setInatPage(newPage);
+                              fetchInatPhotos(newPage, pageSize);
+                            }}
+                            disabled={(inatPage + 1) * pageSize >= inatTotalCount || loadingInatPhotos}
+                            className="p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed"
+                            title="Next page"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                            </svg>
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="flex items-center justify-center py-6">
+                      <svg className="w-4 h-4 animate-spin text-zinc-400" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                       </svg>
-                    </button>
-                    <span className="text-[10px] text-zinc-400 tabular-nums">
-                      {inatPage + 1}/{Math.ceil(inatTotalCount / pageSize)}
-                    </span>
-                    <button
-                      onClick={() => {
-                        const newPage = inatPage + 1;
-                        setInatPage(newPage);
-                        fetchInatPhotos(newPage, pageSize);
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Observers / Identifiers chart */}
+              <InatContributorsChart speciesKey={speciesKey} />
+            </div>
+            )}
+
+            {/* Map(s) — takes remaining width, stretches to match left column */}
+            <div className="flex-1 min-w-0 flex flex-col">
+              {splitView && splitDate ? (
+                <div className="flex flex-col gap-2">
+                  {/* Split view control bar */}
+                  <div className="flex items-center gap-2 px-2 py-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-xs text-zinc-600 dark:text-zinc-300">
+                    <span className="font-medium">Split view</span>
+                    <span className="text-zinc-400">|</span>
+                    <span className="text-zinc-500 dark:text-zinc-400 whitespace-nowrap">Date: <span className="font-medium text-zinc-700 dark:text-zinc-200">{splitDate}</span></span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={Math.max(0, Math.round((new Date(sliderMaxDate).getTime() - new Date(sliderMinDate).getTime()) / 86400000))}
+                      value={Math.max(0, Math.round((new Date(splitDate).getTime() - new Date(sliderMinDate).getTime()) / 86400000))}
+                      onChange={(e) => {
+                        const days = parseInt(e.target.value, 10);
+                        const d = new Date(sliderMinDate);
+                        d.setDate(d.getDate() + days);
+                        setSplitDate(d.toISOString().slice(0, 10));
                       }}
-                      disabled={(inatPage + 1) * pageSize >= inatTotalCount || loadingInatPhotos}
-                      className="p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed"
-                      title="Next page"
+                      className="flex-1 min-w-[100px] h-1.5 accent-blue-500"
+                    />
+                    {assessmentDate && splitDate !== assessmentDate.split("T")[0] && (
+                      <button
+                        onClick={() => setSplitDate(assessmentDate.split("T")[0])}
+                        className="text-[10px] px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 hover:bg-white dark:hover:bg-zinc-700 transition-colors whitespace-nowrap"
+                      >
+                        Reset to assessment date
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setSplitView(false)}
+                      className="ml-auto p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                      title="Close split view"
                     >
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                       </svg>
                     </button>
                   </div>
-                )}
-              </div>
-            )}
-
-            {/* Map(s) */}
-            {splitView && splitDate ? (
-              <div className="flex-1 flex flex-col gap-2">
-                {/* Split view control bar */}
-                <div className="flex items-center gap-2 px-2 py-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-xs text-zinc-600 dark:text-zinc-300">
-                  <span className="font-medium">Split view</span>
-                  <span className="text-zinc-400">|</span>
-                  <span className="text-zinc-500 dark:text-zinc-400 whitespace-nowrap">Date: <span className="font-medium text-zinc-700 dark:text-zinc-200">{splitDate}</span></span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={Math.max(0, Math.round((new Date(sliderMaxDate).getTime() - new Date(sliderMinDate).getTime()) / 86400000))}
-                    value={Math.max(0, Math.round((new Date(splitDate).getTime() - new Date(sliderMinDate).getTime()) / 86400000))}
-                    onChange={(e) => {
-                      const days = parseInt(e.target.value, 10);
-                      const d = new Date(sliderMinDate);
-                      d.setDate(d.getDate() + days);
-                      setSplitDate(d.toISOString().slice(0, 10));
-                    }}
-                    className="flex-1 min-w-[100px] h-1.5 accent-blue-500"
-                  />
-                  {assessmentDate && splitDate !== assessmentDate.split("T")[0] && (
-                    <button
-                      onClick={() => setSplitDate(assessmentDate.split("T")[0])}
-                      className="text-[10px] px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 hover:bg-white dark:hover:bg-zinc-700 transition-colors whitespace-nowrap"
-                    >
-                      Reset to assessment date
-                    </button>
-                  )}
-                  <button
-                    onClick={() => setSplitView(false)}
-                    className="ml-auto p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                    title="Close split view"
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    {renderMapPanel(preAssessmentOccs, filteredBbox, `Before ${splitDate} (${preAssessmentOccs.length})`)}
+                    {renderMapPanel(postAssessmentOccs, filteredBbox, `After ${splitDate} (${postAssessmentOccs.length})`)}
+                  </div>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  {renderMapPanel(preAssessmentOccs, filteredBbox, `Before ${splitDate} (${preAssessmentOccs.length})`)}
-                  {renderMapPanel(postAssessmentOccs, filteredBbox, `After ${splitDate} (${postAssessmentOccs.length})`)}
-                </div>
-              </div>
-            ) : (
-              renderMapPanel(filteredOccurrences, filteredBbox, null)
-            )}
+              ) : (
+                renderMapPanel(filteredOccurrences, filteredBbox, null)
+              )}
+            </div>
           </div>
-
-          {/* ── Top iNaturalist Observers / Identifiers ── */}
-          <InatContributorsChart speciesKey={speciesKey} />
         </div>
       </div>
     </div>
