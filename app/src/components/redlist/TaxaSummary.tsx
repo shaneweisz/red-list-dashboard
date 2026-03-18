@@ -1577,7 +1577,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       </table>
     </div>
     {/* Subtle expand/table controls */}
-    {!loading && perTaxa.length > 0 && (
+    {!loading && perTaxa.length > 0 && selectedTaxa.size === 0 && (
       <div className="flex items-center justify-end gap-3 mt-1.5">
         {table1aMode ? (
           <button
