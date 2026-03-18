@@ -126,7 +126,7 @@ export default function AssessorCandidatesChart({
   const openAssessor = (barData: { payload?: { name?: string } }) => {
     const name = barData?.payload?.name;
     if (name) {
-      window.open(`/?assessors=${encodeURIComponent(name)}`, "_blank");
+      window.open(`/?taxa=${encodeURIComponent(taxonGroup)}&assessors=${encodeURIComponent(name)}`, "_blank");
     }
   };
 
