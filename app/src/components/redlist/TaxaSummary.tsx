@@ -2,11 +2,32 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { FaInfoCircle, FaChevronRight, FaExpandAlt, FaCompressAlt } from "react-icons/fa";
+import { FaInfoCircle, FaExpandAlt, FaCompressAlt } from "react-icons/fa";
+
 import { HiOutlineAdjustmentsHorizontal } from "react-icons/hi2";
 import TaxaIcon from "@/components/TaxaIcon";
 import { CATEGORY_COLORS, CATEGORY_NAMES, CATEGORY_ORDER } from "@/config/taxa";
 import { TAXA_SUBGROUPS, getSubgroupDef } from "@/config/taxa-hierarchy";
+interface Table1aRowData {
+  group: string;
+  name: string;
+  estimatedDescribed: number;
+  totalAssessed: number;
+  percentAssessed: number;
+  outdated: number;
+  percentOutdated: number;
+  byCategory: Record<string, number>;
+  gbifSpeciesCount?: number;
+  gbifNeSpeciesCount?: number;
+  totalGbifObservations?: number;
+  meanGbifObsPerSpecies?: number;
+  medianGbifObsPerSpecies?: number;
+}
+
+interface Table1aSectionData {
+  title: string;
+  rows: Table1aRowData[];
+}
 
 const IUCN_SOURCE_URL = "https://nc.iucnredlist.org/redlist/content/attachment_files/2025-2_RL_Table1a.pdf";
 
@@ -262,9 +283,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     }
   }, [subgroupData, loadingSubgroups]);
 
-  // Table 1a mode state
+  // Table 1a mode
   const [table1aMode, setTable1aMode] = useState(false);
-  const prevHiddenColumns = useRef<Set<ColumnId> | null>(null);
+  const [table1aData, setTable1aData] = useState<Table1aSectionData[] | null>(null);
+  const [table1aLoading, setTable1aLoading] = useState(false);
 
   // Separate "all" row from per-taxon rows (needed before early returns for hooks)
   const allTaxon = taxa.find((t) => t.id === "all");
@@ -297,26 +319,25 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     setExpandedTaxa(new Set());
   }, []);
 
-  const enterTable1a = useCallback(() => {
-    prevHiddenColumns.current = new Set(hiddenColumns);
-    const table1aHidden = new Set<ColumnId>(
-      (Object.keys(COLUMN_LABELS) as ColumnId[]).filter(
-        c => !["described", "assessed", "breakdown"].includes(c)
-      )
-    );
-    setHiddenColumns(table1aHidden);
+  const enterTable1a = useCallback(async () => {
     setTable1aMode(true);
-    expandAll();
-  }, [hiddenColumns, expandAll]);
+    if (!table1aData) {
+      setTable1aLoading(true);
+      try {
+        const res = await fetch("/api/redlist/taxa-summary?table1a=true");
+        if (res.ok) {
+          const data = await res.json();
+          setTable1aData(data.sections);
+        }
+      } finally {
+        setTable1aLoading(false);
+      }
+    }
+  }, [table1aData]);
 
   const exitTable1a = useCallback(() => {
-    if (prevHiddenColumns.current) {
-      setHiddenColumns(prevHiddenColumns.current);
-      prevHiddenColumns.current = null;
-    }
     setTable1aMode(false);
-    collapseAll();
-  }, [collapseAll]);
+  }, []);
 
   const allExpanded = perTaxa.filter(t => EXPANDABLE_TAXA.has(t.id)).every(t => expandedTaxa.has(t.id));
 
@@ -900,18 +921,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           } ${taxon.available ? "hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer" : "opacity-50 cursor-not-allowed"}`}
           onClick={(e) => {
             if (!taxon.available) return;
-            if (hasSubgroups) {
-              // For taxa with subgroups, clicking the row expands/collapses
-              // Cmd/Ctrl+click still selects for filtering
-              if (e.metaKey || e.ctrlKey) {
-                setTaxaExpanded(true);
-                onToggleTaxon(taxon.id, e);
-              } else {
-                toggleExpand(taxon.id);
-              }
-            } else {
-              if (e.metaKey || e.ctrlKey) setTaxaExpanded(true);
-              onToggleTaxon(taxon.id, e);
+            if (e.metaKey || e.ctrlKey) setTaxaExpanded(true);
+            onToggleTaxon(taxon.id, e);
+            // Auto-expand subgroups when selecting a taxon that has them
+            if (hasSubgroups && !expandedTaxa.has(taxon.id)) {
+              toggleExpand(taxon.id);
             }
           }}
         >
@@ -919,17 +933,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             <div className="flex items-center gap-2">
               <TaxaIcon taxonId={taxon.id} size={22} className="flex-shrink-0" style={{ color: taxon.color }} />
               <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{taxon.name}</span>
-              {hasSubgroups && (
-                <span className="text-zinc-300 dark:text-zinc-600 transition-transform" style={{ display: 'inline-flex', transform: isExpanded ? 'rotate(90deg)' : 'none' }}>
-                  {isLoadingSubs ? (
-                    <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                  ) : (
-                    <FaChevronRight size={10} />
-                  )}
-                </span>
+              {isLoadingSubs && (
+                <svg className="animate-spin h-3 w-3 text-zinc-400" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
               )}
             </div>
           </td>
@@ -1314,54 +1322,278 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       <table className="w-full">
         {renderHead()}
         <tbody>
-          {/* All Species totals row (always visible) */}
-          {renderRow(
-            "all",
-            "All Species",
-            "#22c55e",
-            totalDescribed,
-            totalAssessed,
-            totalPercentAssessed,
-            totalOutdated,
-            totalPercentOutdated,
-            totalByCategory,
-            false,
-            true,
-            true,
-            { total: totalGbifObs, mean: totalMeanGbifObs, median: globalGbifMedian, speciesCount: totalGbifSpecies, gbifNeCount: totalGbifNeSpecies, distribution: globalGbifDistribution }
-          )}
+          {table1aMode ? (
+            /* Table 1a view: sections with headers, individual rows, subtotals */
+            table1aLoading ? (
+              <tr>
+                <td colSpan={visibleColCount} className={`${cellPad} text-center text-sm text-zinc-400`}>
+                  <div className="flex items-center justify-center gap-2 py-4">
+                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Loading Table 1a data…
+                  </div>
+                </td>
+              </tr>
+            ) : table1aData ? (
+              <>
+                {table1aData.map((section, si) => {
+                  // Compute section subtotals
+                  const subDescribed = section.rows.reduce((s, r) => s + r.estimatedDescribed, 0);
+                  const subAssessed = section.rows.reduce((s, r) => s + r.totalAssessed, 0);
+                  const subOutdated = section.rows.reduce((s, r) => s + r.outdated, 0);
+                  const subPctAssessed = subDescribed > 0 ? (subAssessed / subDescribed) * 100 : 0;
+                  const subPctOutdated = subAssessed > 0 ? (subOutdated / subAssessed) * 100 : 0;
+                  const subByCategory: Record<string, number> = {};
+                  for (const r of section.rows) {
+                    for (const [cat, count] of Object.entries(r.byCategory || {})) {
+                      subByCategory[cat] = (subByCategory[cat] || 0) + count;
+                    }
+                  }
+                  const subGbifSpecies = section.rows.reduce((s, r) => s + (r.gbifSpeciesCount ?? 0), 0);
+                  const subGbifNe = section.rows.reduce((s, r) => s + (r.gbifNeSpeciesCount ?? 0), 0);
+                  const subGbifObs = section.rows.reduce((s, r) => s + (r.totalGbifObservations ?? 0), 0);
+                  const subMeanGbif = subGbifSpecies > 0 ? Math.round(subGbifObs / subGbifSpecies) : undefined;
 
-          {/* Separator - hide when only "All Species" is selected */}
-          {!selectedTaxa.has("all") && (
-            <tr>
-              <td colSpan={visibleColCount} className="p-0">
-                <div className="border-b-2 border-zinc-200 dark:border-zinc-700" />
-              </td>
-            </tr>
-          )}
+                  return (
+                    <React.Fragment key={section.title}>
+                      {/* Section header */}
+                      <tr className="bg-zinc-100 dark:bg-zinc-800/80">
+                        <td
+                          colSpan={visibleColCount}
+                          className={`${stickyClasses} bg-zinc-100 dark:bg-zinc-800/80 ${cellPad}`}
+                        >
+                          <span className="text-xs font-bold text-zinc-600 dark:text-zinc-300 uppercase tracking-wider">
+                            {section.title}
+                          </span>
+                        </td>
+                      </tr>
+                      {/* Section rows */}
+                      {section.rows.map((row) => (
+                        <tr key={row.group} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
+                          <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 bg-white dark:bg-zinc-900`}>
+                            <span className="text-sm md:text-base text-zinc-900 dark:text-zinc-100 pl-4">
+                              {row.name}
+                            </span>
+                          </td>
+                          {isVisible("described") && (
+                            <td className={numericTdClasses}>
+                              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+                                {row.estimatedDescribed.toLocaleString()}
+                              </span>
+                            </td>
+                          )}
+                          {isVisible("assessed") && (
+                            <td className={numericTdClasses}>
+                              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+                                {row.totalAssessed.toLocaleString()}
+                              </span>
+                            </td>
+                          )}
+                          {isVisible("pctAssessed") && (
+                            <td className={flexTdClasses}>
+                              {renderBar(row.percentAssessed, getAssessedBarColor(row.percentAssessed), false)}
+                            </td>
+                          )}
+                          {isVisible("outdated") && (
+                            <td className={numericTdClasses}>
+                              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+                                {row.outdated.toLocaleString()}
+                              </span>
+                            </td>
+                          )}
+                          {isVisible("pctOutdated") && (
+                            <td className={flexTdClasses}>
+                              {row.totalAssessed > 0
+                                ? renderBar(row.percentOutdated, getOutdatedBarColor(row.percentOutdated), false)
+                                : <span className="text-sm text-zinc-400">—</span>}
+                            </td>
+                          )}
+                          {isVisible("gbifSpecies") && (
+                            <td className={numericTdClasses}>
+                              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+                                {isNewAssessments
+                                  ? (row.gbifNeSpeciesCount != null ? row.gbifNeSpeciesCount.toLocaleString() : "—")
+                                  : (row.gbifSpeciesCount != null ? row.gbifSpeciesCount.toLocaleString() : "—")}
+                              </span>
+                            </td>
+                          )}
+                          {isVisible("pctGbifUnassessed") && (
+                            <td className={flexTdClasses}>
+                              {row.gbifNeSpeciesCount != null && row.estimatedDescribed > 0
+                                ? renderBar((row.gbifNeSpeciesCount / row.estimatedDescribed) * 100, "#3b82f6", false)
+                                : <span className="text-sm text-zinc-400">—</span>}
+                            </td>
+                          )}
+                          {isVisible("totalGbifObs") && (
+                            <td className={numericTdClasses}>
+                              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+                                {row.totalGbifObservations != null ? row.totalGbifObservations.toLocaleString() : "—"}
+                              </span>
+                            </td>
+                          )}
+                          {isVisible("gbifDistribution") && (
+                            <td className={flexTdClasses}><span className="text-sm text-zinc-400">—</span></td>
+                          )}
+                          {isVisible("meanGbifObs") && (
+                            <td className={numericTdClasses}>
+                              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+                                {row.meanGbifObsPerSpecies != null ? Math.round(row.meanGbifObsPerSpecies).toLocaleString() : "—"}
+                              </span>
+                            </td>
+                          )}
+                          {isVisible("medianGbifObs") && (
+                            <td className={numericTdClasses}>
+                              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+                                {row.medianGbifObsPerSpecies != null ? row.medianGbifObsPerSpecies.toLocaleString() : "—"}
+                              </span>
+                            </td>
+                          )}
+                          {isVisible("breakdown") && (
+                            <td className={flexTdClasses}>
+                              {renderBreakdownBar(row.byCategory || {})}
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                      {/* Subtotal row */}
+                      <tr className="border-t border-zinc-200 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-800/30">
+                        <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 bg-zinc-50/50 dark:bg-zinc-800/30`}>
+                          <span className="text-sm font-semibold text-zinc-600 dark:text-zinc-300 pl-6">Subtotal</span>
+                        </td>
+                        {isVisible("described") && (
+                          <td className={numericTdClasses}>
+                            <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 tabular-nums">{subDescribed.toLocaleString()}</span>
+                          </td>
+                        )}
+                        {isVisible("assessed") && (
+                          <td className={numericTdClasses}>
+                            <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 tabular-nums">{subAssessed.toLocaleString()}</span>
+                          </td>
+                        )}
+                        {isVisible("pctAssessed") && (
+                          <td className={flexTdClasses}>
+                            {renderBar(subPctAssessed, getAssessedBarColor(subPctAssessed), false)}
+                          </td>
+                        )}
+                        {isVisible("outdated") && (
+                          <td className={numericTdClasses}>
+                            <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 tabular-nums">{subOutdated.toLocaleString()}</span>
+                          </td>
+                        )}
+                        {isVisible("pctOutdated") && (
+                          <td className={flexTdClasses}>
+                            {subAssessed > 0 ? renderBar(subPctOutdated, getOutdatedBarColor(subPctOutdated), false) : <span className="text-sm text-zinc-400">—</span>}
+                          </td>
+                        )}
+                        {isVisible("gbifSpecies") && (
+                          <td className={numericTdClasses}>
+                            <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 tabular-nums">
+                              {isNewAssessments ? subGbifNe.toLocaleString() : subGbifSpecies.toLocaleString()}
+                            </span>
+                          </td>
+                        )}
+                        {isVisible("pctGbifUnassessed") && (
+                          <td className={flexTdClasses}>
+                            {subGbifNe > 0 && subDescribed > 0
+                              ? renderBar((subGbifNe / subDescribed) * 100, "#3b82f6", false)
+                              : <span className="text-sm text-zinc-400">—</span>}
+                          </td>
+                        )}
+                        {isVisible("totalGbifObs") && (
+                          <td className={numericTdClasses}>
+                            <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 tabular-nums">{subGbifObs.toLocaleString()}</span>
+                          </td>
+                        )}
+                        {isVisible("gbifDistribution") && <td className={flexTdClasses}><span className="text-sm text-zinc-400">—</span></td>}
+                        {isVisible("meanGbifObs") && (
+                          <td className={numericTdClasses}>
+                            <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 tabular-nums">{subMeanGbif != null ? subMeanGbif.toLocaleString() : "—"}</span>
+                          </td>
+                        )}
+                        {isVisible("medianGbifObs") && <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>}
+                        {isVisible("breakdown") && (
+                          <td className={flexTdClasses}>{renderBreakdownBar(subByCategory)}</td>
+                        )}
+                      </tr>
+                      {/* Gap between sections */}
+                      {si < table1aData.length - 1 && (
+                        <tr><td colSpan={visibleColCount} className="p-0"><div className="h-1" /></td></tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+                {/* Grand TOTAL row */}
+                {renderRow(
+                  "total",
+                  "TOTAL",
+                  "#22c55e",
+                  totalDescribed,
+                  totalAssessed,
+                  totalPercentAssessed,
+                  totalOutdated,
+                  totalPercentOutdated,
+                  totalByCategory,
+                  false,
+                  true,
+                  true,
+                  { total: totalGbifObs, mean: totalMeanGbifObs, median: globalGbifMedian, speciesCount: totalGbifSpecies, gbifNeCount: totalGbifNeSpecies, distribution: globalGbifDistribution }
+                )}
+              </>
+            ) : null
+          ) : (
+            <>
+              {/* All Species totals row (always visible) */}
+              {renderRow(
+                "all",
+                "All Species",
+                "#22c55e",
+                totalDescribed,
+                totalAssessed,
+                totalPercentAssessed,
+                totalOutdated,
+                totalPercentOutdated,
+                totalByCategory,
+                false,
+                true,
+                true,
+                { total: totalGbifObs, mean: totalMeanGbifObs, median: globalGbifMedian, speciesCount: totalGbifSpecies, gbifNeCount: totalGbifNeSpecies, distribution: globalGbifDistribution }
+              )}
 
-          {/* Per-taxon rows with expandable subgroups */}
-          {selectedTaxa.has("all")
-            ? null
-            : selectedSubgroups.size > 0 && selectedTaxa.size > 0 && !taxaExpanded
-              ? /* When subgroups are selected, collapse to show only those subgroup rows */
-                perTaxa
-                  .filter((taxon) => selectedTaxa.has(taxon.id))
-                  .flatMap((taxon) => {
-                    const subs = subgroupData[taxon.id] ?? [];
-                    return subs
-                      .filter((sg) => selectedSubgroups.has(sg.id))
-                      .map((sg) => renderCollapsedSubgroupRow(taxon, sg));
-                  })
-              : (selectedTaxa.size > 0 && !taxaExpanded
-                ? perTaxa
-                    .filter((taxon) => selectedTaxa.has(taxon.id))
-                    .map((taxon) => renderTaxonWithSubgroups(taxon, true))
-                : perTaxa.map((taxon) =>
-                    renderTaxonWithSubgroups(taxon, selectedTaxa.has(taxon.id))
+              {/* Separator - hide when only "All Species" is selected */}
+              {!selectedTaxa.has("all") && (
+                <tr>
+                  <td colSpan={visibleColCount} className="p-0">
+                    <div className="border-b-2 border-zinc-200 dark:border-zinc-700" />
+                  </td>
+                </tr>
+              )}
+
+              {/* Per-taxon rows with expandable subgroups */}
+              {selectedTaxa.has("all")
+                ? null
+                : selectedSubgroups.size > 0 && selectedTaxa.size > 0 && !taxaExpanded
+                  ? /* When subgroups are selected, collapse to show only those subgroup rows */
+                    perTaxa
+                      .filter((taxon) => selectedTaxa.has(taxon.id))
+                      .flatMap((taxon) => {
+                        const subs = subgroupData[taxon.id] ?? [];
+                        return subs
+                          .filter((sg) => selectedSubgroups.has(sg.id))
+                          .map((sg) => renderCollapsedSubgroupRow(taxon, sg));
+                      })
+                  : (selectedTaxa.size > 0 && !taxaExpanded
+                    ? perTaxa
+                        .filter((taxon) => selectedTaxa.has(taxon.id))
+                        .map((taxon) => renderTaxonWithSubgroups(taxon, true))
+                    : perTaxa.map((taxon) =>
+                        renderTaxonWithSubgroups(taxon, selectedTaxa.has(taxon.id))
+                      )
                   )
-              )
-          }
+              }
+            </>
+          )}
         </tbody>
       </table>
     </div>
