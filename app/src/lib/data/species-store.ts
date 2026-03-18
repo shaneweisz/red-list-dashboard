@@ -94,6 +94,7 @@ export interface TaxaSummaryRow {
   outdated: number;
   by_category: Record<string, number>;
   gbif_species_count: number;
+  gbif_ne_species_count: number;
   total_gbif_observations: number;
   mean_gbif_obs: number;
   median_gbif_obs: number | null;
@@ -494,6 +495,7 @@ export interface SubGroupSummary {
   estimatedDescribed: number;
   totalAssessed: number;
   outdated: number;
+  gbifNeSpeciesCount: number;
   byCategory: Record<string, number>;
 }
 
@@ -527,21 +529,24 @@ export function isOutdated(assessmentDate: string | null, currentYear = CURRENT_
   return currentYear - year > OUTDATED_THRESHOLD_YEARS;
 }
 
-function matchesFilter(row: RedlistRow, filter: SubGroupFilter): boolean {
+function matchesFilter(row: { class_name: string | null; order_name: string | null }, filter: SubGroupFilter): boolean {
   // Check class filter
   if (filter.classNames && filter.classNames.length > 0) {
     const cls = (row.class_name ?? "").toLowerCase();
     if (!filter.classNames.includes(cls)) return false;
   }
   // Check order include filter
+  // Fall back to class_name when order_name is empty (GBIF taxonomy quirk)
   if (filter.orderNames && filter.orderNames.length > 0) {
     const ord = (row.order_name ?? "").toLowerCase();
-    if (!filter.orderNames.includes(ord)) return false;
+    const cls = (row.class_name ?? "").toLowerCase();
+    if (!filter.orderNames.includes(ord) && !(ord === "" && filter.orderNames.includes(cls))) return false;
   }
-  // Check order exclude filter
+  // Check order exclude filter (same class_name fallback)
   if (filter.excludeOrders && filter.excludeOrders.length > 0) {
     const ord = (row.order_name ?? "").toLowerCase();
-    if (filter.excludeOrders.includes(ord)) return false;
+    const cls = (row.class_name ?? "").toLowerCase();
+    if (filter.excludeOrders.includes(ord) || (ord === "" && filter.excludeOrders.includes(cls))) return false;
   }
   return true;
 }
@@ -558,19 +563,30 @@ export function getSubgroupSummaries(subgroups: SubGroupDef[]): SubGroupSummary[
 
   // Load all needed CSV rows, grouped by their table1a group
   const rowsByGroup = new Map<string, RedlistRow[]>();
+  const gbifByGroup = new Map<string, Map<number, GbifRow>>();
   for (const group of allGroups) {
     rowsByGroup.set(group, loadRedlistForGroup(group));
+    gbifByGroup.set(group, loadGbifForGroup(group));
+  }
+
+  // Build set of linked GBIF keys (assessed species with GBIF matches)
+  const mapping = loadMapping();
+  const linkedGbifKeys = new Set<number>();
+  for (const entry of mapping.values()) {
+    if (entry.gbif_species_key != null) linkedGbifKeys.add(entry.gbif_species_key);
   }
 
   // Track which rows from "other_invertebrates" are claimed by specific subgroups
   // so the catch-all "Other Invertebrates" subgroup can exclude them
   const claimedRowIds = new Set<number>();
+  const claimedGbifKeys = new Set<number>();
 
   const results: SubGroupSummary[] = [];
 
   for (const sg of subgroups) {
     let totalAssessed = 0;
     let outdated = 0;
+    let gbifNeSpeciesCount = 0;
     const byCategory: Record<string, number> = {};
 
     const isOtherInvertsCatchAll =
@@ -593,6 +609,17 @@ export function getSubgroupSummaries(subgroups: SubGroupDef[]): SubGroupSummary[
         const cat = row.category;
         if (cat) byCategory[cat] = (byCategory[cat] ?? 0) + 1;
       }
+
+      // Count NE (unassessed) GBIF species
+      const gbifMap = gbifByGroup.get(group) ?? new Map();
+      for (const [key, gbifRow] of gbifMap) {
+        if (linkedGbifKeys.has(key)) continue;
+        if (!matchesFilter(gbifRow, sg.filter)) continue;
+        if (isOtherInvertsCatchAll && group === "other_invertebrates") {
+          if (claimedGbifKeys.has(key)) continue;
+        }
+        gbifNeSpeciesCount++;
+      }
     }
 
     // If this is echinoderms or worms, record which other_invertebrates rows
@@ -608,6 +635,12 @@ export function getSubgroupSummaries(subgroups: SubGroupDef[]): SubGroupSummary[
           claimedRowIds.add(row.sis_taxon_id);
         }
       }
+      const gbifMap = gbifByGroup.get("other_invertebrates") ?? new Map();
+      for (const [key, gbifRow] of gbifMap) {
+        if (!linkedGbifKeys.has(key) && matchesFilter(gbifRow, sg.filter)) {
+          claimedGbifKeys.add(key);
+        }
+      }
     }
 
     results.push({
@@ -616,6 +649,7 @@ export function getSubgroupSummaries(subgroups: SubGroupDef[]): SubGroupSummary[
       estimatedDescribed: sg.estimatedDescribed,
       totalAssessed,
       outdated,
+      gbifNeSpeciesCount,
       byCategory,
     });
   }

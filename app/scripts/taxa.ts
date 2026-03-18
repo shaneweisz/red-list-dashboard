@@ -170,7 +170,7 @@ export const TAXA: Taxon[] = [
       ] },
       { filterColumn: "class_name", filterValues: [
         "HOLOTHUROIDEA", "CLITELLATA", "DIPLOPODA", "COLLEMBOLA", "CHILOPODA",
-        "DEMOSPONGIAE", "HYDROZOA", "NEMERTEA",
+        "DEMOSPONGIAE", "HEXACTINELLIDA", "HYDROZOA", "NEMERTEA",
         "ASTEROIDEA", "CALCAREA", "POLYCHAETA", "TURBELLARIA", "ECHINOIDEA",
       ] },
     ],
@@ -252,7 +252,7 @@ export const TAXA: Taxon[] = [
   },
   {
     id: "brown_algae", name: "Brown Algae", kingdomKey: 4,
-    redlist: [{ filterColumn: "phylum_name", filterValues: ["OCHROPHYTA"] }],
+    redlist: [{ filterColumn: "phylum_name", filterValues: ["HETEROKONTOPHYTA"] }],
     gbif: [{ keyType: "phylumKey", keyValue: 98 }],
   },
 ];

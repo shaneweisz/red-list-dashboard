@@ -83,7 +83,15 @@ export async function fetchFromIucnDb(
     LEFT JOIN population_trend_lookup pt ON pt.id = a.population_trend_id
     WHERE t.${query.filterColumn} = ANY($1)
       AND t.latest = true
-      AND a.latest = true
+      AND (a.latest = true
+        -- Edge case: Mayaheros ericymba (sis_id 4840, assessment 288151174).
+        -- This species' only global assessment is an amendment (is_amendment=true)
+        -- to a 1996 assessment. Amendments have a.latest=false in the IUCN DB, so
+        -- our a.latest=true filter excludes it. However, the IUCN website and their
+        -- Table 1a count of 29,114 fishes includes this species. Without this
+        -- override, our total is 29,113.
+        -- Ref: https://www.iucnredlist.org/species/4840/288151174#amendment
+        OR a.id = 288151174)
       AND a.suppress = false
       AND ascope.scope_lookup_id = 15
       AND t.infra_name IS NULL
