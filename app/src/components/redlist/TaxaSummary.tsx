@@ -923,9 +923,18 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             if (!taxon.available) return;
             if (e.metaKey || e.ctrlKey) setTaxaExpanded(true);
             onToggleTaxon(taxon.id, e);
-            // Auto-expand subgroups when selecting a taxon that has them
-            if (hasSubgroups && !expandedTaxa.has(taxon.id)) {
-              toggleExpand(taxon.id);
+            if (hasSubgroups) {
+              if (isSelected) {
+                // Clicking again deselects → collapse
+                if (expandedTaxa.has(taxon.id)) toggleExpand(taxon.id);
+              } else {
+                // Selecting → collapse others, expand this one
+                setExpandedTaxa(new Set());
+                if (!expandedTaxa.has(taxon.id)) toggleExpand(taxon.id);
+              }
+            } else {
+              // Non-expandable taxon selected → collapse all expanded
+              setExpandedTaxa(new Set());
             }
           }}
         >
@@ -1288,36 +1297,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       </div>,
       document.body
     )}
-    {/* Subtle expand/table controls */}
-    {!loading && perTaxa.length > 0 && (
-      <div className="flex items-center justify-end gap-3 mb-1.5">
-        {table1aMode ? (
-          <button
-            onClick={exitTable1a}
-            className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-          >
-            Exit Table 1a
-          </button>
-        ) : (
-          <>
-            <button
-              onClick={allExpanded ? collapseAll : expandAll}
-              className="inline-flex items-center gap-1 text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-            >
-              {allExpanded ? <FaCompressAlt size={9} /> : <FaExpandAlt size={9} />}
-              {allExpanded ? "Collapse all" : "Expand all"}
-            </button>
-            <span className="text-zinc-300 dark:text-zinc-700">|</span>
-            <button
-              onClick={enterTable1a}
-              className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-            >
-              Table 1a
-            </button>
-          </>
-        )}
-      </div>
-    )}
     <div ref={scrollRef} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto">
       <table className="w-full">
         {renderHead()}
@@ -1597,6 +1576,36 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         </tbody>
       </table>
     </div>
+    {/* Subtle expand/table controls */}
+    {!loading && perTaxa.length > 0 && (
+      <div className="flex items-center justify-end gap-3 mt-1.5">
+        {table1aMode ? (
+          <button
+            onClick={exitTable1a}
+            className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+          >
+            Exit Table 1a
+          </button>
+        ) : (
+          <>
+            <button
+              onClick={allExpanded ? collapseAll : expandAll}
+              className="inline-flex items-center gap-1 text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+            >
+              {allExpanded ? <FaCompressAlt size={9} /> : <FaExpandAlt size={9} />}
+              {allExpanded ? "Collapse all" : "Expand all"}
+            </button>
+            <span className="text-zinc-300 dark:text-zinc-700">|</span>
+            <button
+              onClick={enterTable1a}
+              className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+            >
+              Table 1a
+            </button>
+          </>
+        )}
+      </div>
+    )}
     </>
   );
 }
