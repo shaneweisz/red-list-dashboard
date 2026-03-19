@@ -107,8 +107,3 @@ export default function RedListPage() {
     </div>
   );
 }
- </p>
-      </footer>
-    </div>
-  );
-}
