@@ -12,6 +12,29 @@ import { findNode, matchesFilter as treeMatchesFilter } from "@/lib/taxonomy-uti
 import type { TaxonomyNode, SpeciesFilter } from "@/config/taxonomy-tree";
 
 // =============================================================================
+// EXCLUDED DOMESTICATED SPECIES
+// =============================================================================
+
+/** GBIF species keys for domesticated species excluded from new assessments. */
+const EXCLUDED_DOMESTICATED_GBIF_KEYS = new Set([
+  2441022, // Bos taurus (Cow)
+  2435035, // Felis catus (Cat)
+  2441110, // Ovis aries (Domestic Sheep)
+  2441056, // Capra hircus (Domestic Goat)
+  2440886, // Equus caballus (Horse)
+  7422937, // Bubalus bubalis (Water Buffalo)
+  2440891, // Equus asinus (Donkey)
+  9055455, // Camelus dromedarius (Arabian Camel)
+  2441238, // Camelus bactrianus (Bactrian Camel)
+  5220190, // Lama glama (Llama)
+  7515593, // Vicugna pacos (Alpaca)
+  2441019, // Bos grunniens (Yak)
+  5219702, // Cavia porcellus (Guinea Pig)
+  10694102, // Columba domestica (Domestic Pigeon)
+  2436436, // Homo sapiens (Human)
+]);
+
+// =============================================================================
 // PATHS
 // =============================================================================
 
@@ -306,6 +329,7 @@ export function getSpecies(groups: string[], includeNE: boolean): SpeciesRow[] {
     if (includeNE) {
       for (const [key, gbif] of gbifMap) {
         if (linkedGbifKeys.has(key)) continue;
+        if (EXCLUDED_DOMESTICATED_GBIF_KEYS.has(key)) continue;
         results.push({
           id: -key, // Negated to avoid collision with sis_taxon_id
           sis_taxon_id: null,
@@ -413,6 +437,7 @@ function computeNodeSummary(node: TaxonomyNode): NodeSummary {
     const gbifMap = loadGbifForGroup(group);
     for (const [key, gbifRow] of gbifMap) {
       if (linkedGbifKeys.has(key)) continue;
+      if (EXCLUDED_DOMESTICATED_GBIF_KEYS.has(key)) continue;
       if (!treeMatchesFilter(gbifRow, filter)) continue;
       gbifNeSpeciesCount++;
     }
@@ -496,7 +521,7 @@ export function getChildrenSummaries(parentNodeId: string): NodeSummary[] {
         }
         const gbifMap = loadGbifForGroup(group);
         for (const [key, gbifRow] of gbifMap) {
-          if (!linkedGbifKeys.has(key) && treeMatchesFilter(gbifRow, child.filter)) {
+          if (!linkedGbifKeys.has(key) && !EXCLUDED_DOMESTICATED_GBIF_KEYS.has(key) && treeMatchesFilter(gbifRow, child.filter)) {
             claimedGbifKeys.add(key);
           }
         }
@@ -525,6 +550,7 @@ export function getChildrenSummaries(parentNodeId: string): NodeSummary[] {
       const gbifMap = loadGbifForGroup(group);
       for (const [key, gbifRow] of gbifMap) {
         if (linkedGbifKeys.has(key)) continue;
+        if (EXCLUDED_DOMESTICATED_GBIF_KEYS.has(key)) continue;
         if (!treeMatchesFilter(gbifRow, child.filter)) continue;
         if (claimedGbifKeys.has(key)) continue;
         gbifNeSpeciesCount++;
