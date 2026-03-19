@@ -136,10 +136,10 @@ export default function AssessorCandidatesTable({
                   )
                 }
               >
-                <td className="py-2 pr-3 text-zinc-200 truncate max-w-[200px]" title={c.name}>
+                <td className="py-2 pr-3 text-zinc-700 dark:text-zinc-200 truncate max-w-[200px]" title={c.name}>
                   {c.name}
                 </td>
-                <td className="py-2 px-3 text-right tabular-nums text-zinc-300">
+                <td className="py-2 px-3 text-right tabular-nums text-zinc-600 dark:text-zinc-300">
                   {c.total}
                 </td>
                 <td className="py-2 px-3">
@@ -147,7 +147,7 @@ export default function AssessorCandidatesTable({
                     {coveredRegions.map((r) => (
                       <span
                         key={r}
-                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-zinc-300 bg-zinc-800"
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-zinc-600 bg-zinc-100 dark:text-zinc-300 dark:bg-zinc-800"
                       >
                         <span
                           className="w-2 h-2 rounded-full inline-block shrink-0"

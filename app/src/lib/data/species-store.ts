@@ -475,52 +475,52 @@ export function getAssessorCandidatesByCountry(
   const assessorMap = new Map<string, { regionCounts: Record<string, number>; total: number; latestDate: string }>();
 
   for (const taxonGroup of taxonGroups) {
-  const redlistRows = loadRedlistForGroup(taxonGroup);
-  const historyMap = loadHistoryForGroup(taxonGroup);
+    const redlistRows = loadRedlistForGroup(taxonGroup);
+    const historyMap = loadHistoryForGroup(taxonGroup);
 
-  for (const row of redlistRows) {
-    // Find which of the target countries this species occurs in
-    const overlapping = row.countries.filter((c) => countrySet.has(c.toUpperCase()));
-    if (overlapping.length === 0) continue;
+    for (const row of redlistRows) {
+      // Find which of the target countries this species occurs in
+      const overlapping = row.countries.filter((c) => countrySet.has(c.toUpperCase()));
+      if (overlapping.length === 0) continue;
 
-    // Map overlapping countries to their regions (deduplicate per-species)
-    const regions = new Set(overlapping.map((c) => countryToRegion(c)));
+      // Map overlapping countries to their regions (deduplicate per-species)
+      const regions = new Set(overlapping.map((c) => countryToRegion(c)));
 
-    const assessments = historyMap[String(row.sis_taxon_id)] ?? [];
-    const allAssessments = assessments.length > 0 ? assessments : [{
-      id: row.assessment_id,
-      year: row.year_published,
-      category: row.category,
-      date: row.assessment_date,
-      assessors: null as string | null,
-      reviewers: null as string | null,
-    }];
+      const assessments = historyMap[String(row.sis_taxon_id)] ?? [];
+      const allAssessments = assessments.length > 0 ? assessments : [{
+        id: row.assessment_id,
+        year: row.year_published,
+        category: row.category,
+        date: row.assessment_date,
+        assessors: null as string | null,
+        reviewers: null as string | null,
+      }];
 
-    for (const assessment of allAssessments) {
-      if (!assessment.assessors) continue;
+      for (const assessment of allAssessments) {
+        if (!assessment.assessors) continue;
 
-      const date = assessment.date ?? "";
-      const names = parseAssessorNames(assessment.assessors);
-      for (const name of names) {
-        const normalizedName = name.trim();
-        if (!normalizedName || normalizedName.length < 3) continue;
+        const date = assessment.date ?? "";
+        const names = parseAssessorNames(assessment.assessors);
+        for (const name of names) {
+          const normalizedName = name.trim();
+          if (!normalizedName || normalizedName.length < 3) continue;
 
-        let stats = assessorMap.get(normalizedName);
-        if (!stats) {
-          stats = { regionCounts: {}, total: 0, latestDate: "" };
-          assessorMap.set(normalizedName, stats);
+          let stats = assessorMap.get(normalizedName);
+          if (!stats) {
+            stats = { regionCounts: {}, total: 0, latestDate: "" };
+            assessorMap.set(normalizedName, stats);
+          }
+
+          // Count once per assessment for total, but once per region for breakdown
+          stats.total++;
+          for (const region of regions) {
+            stats.regionCounts[region] = (stats.regionCounts[region] ?? 0) + 1;
+          }
+          if (date > stats.latestDate) stats.latestDate = date;
         }
-
-        // Count once per assessment for total, but once per region for breakdown
-        stats.total++;
-        for (const region of regions) {
-          stats.regionCounts[region] = (stats.regionCounts[region] ?? 0) + 1;
-        }
-        if (date > stats.latestDate) stats.latestDate = date;
       }
     }
   }
-  } // end for taxonGroups
 
   return [...assessorMap.entries()]
     .map(([name, stats]) => ({

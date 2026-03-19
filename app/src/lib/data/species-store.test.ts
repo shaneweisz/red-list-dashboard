@@ -12,7 +12,7 @@ vi.mock("./csv", () => ({
 
 import * as fs from "fs";
 import { readCsv } from "./csv";
-import { getAssessorCandidates } from "./species-store";
+import { getAssessorCandidates, getAssessorCandidatesByCountry } from "./species-store";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -405,5 +405,167 @@ describe("getAssessorCandidates", () => {
     expect(result[0].order).toBe(3);
     expect(result[0].class).toBe(3);
     expect(result[0].latestDate).toBe("2022-01-01");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getAssessorCandidatesByCountry
+// ---------------------------------------------------------------------------
+
+describe("getAssessorCandidatesByCountry", () => {
+  it("returns empty array when no countries provided", () => {
+    const group = uniqueGroup();
+    setup([]);
+    expect(getAssessorCandidatesByCountry([group], [])).toEqual([]);
+  });
+
+  it("returns empty array when no taxon groups provided", () => {
+    expect(getAssessorCandidatesByCountry([], ["ZA"])).toEqual([]);
+  });
+
+  it("returns empty array when no species share countries", () => {
+    const group = uniqueGroup();
+    const row = makeRow({ countries: ["GB"], scientific_name: "Testus one" });
+    setup([row], {
+      [String(row.sis_taxon_id)]: [
+        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "Dr. UK", reviewers: null },
+      ],
+    });
+    // Search for species in ZA — no overlap
+    expect(getAssessorCandidatesByCountry([group], ["ZA"])).toEqual([]);
+  });
+
+  it("finds assessors for species with overlapping countries", () => {
+    const group = uniqueGroup();
+    const row = makeRow({ countries: ["ZA", "MZ"], scientific_name: "Testus one" });
+    setup([row], {
+      [String(row.sis_taxon_id)]: [
+        { id: 1, year: "2020", category: "LC", date: "2020-06-15", assessors: "Dr. Africa", reviewers: null },
+      ],
+    });
+
+    const result = getAssessorCandidatesByCountry([group], ["ZA"]);
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("Dr. Africa");
+    expect(result[0].total).toBe(1);
+    expect(result[0].latestDate).toBe("2020-06-15");
+  });
+
+  it("aggregates region counts from overlapping countries", () => {
+    const group = uniqueGroup();
+    // Species occurs in both Southern Africa (ZA) and Eastern Africa (KE)
+    const row = makeRow({ countries: ["ZA", "KE"], scientific_name: "Testus wide" });
+    setup([row], {
+      [String(row.sis_taxon_id)]: [
+        { id: 1, year: "2021", category: "VU", date: "2021-01-01", assessors: "Dr. Wide", reviewers: null },
+      ],
+    });
+
+    // Target species occurs in both ZA and KE
+    const result = getAssessorCandidatesByCountry([group], ["ZA", "KE"]);
+    expect(result).toHaveLength(1);
+    expect(result[0].regionCounts["Southern Africa"]).toBe(1);
+    expect(result[0].regionCounts["Eastern Africa"]).toBe(1);
+  });
+
+  it("sorts by total count descending", () => {
+    const group = uniqueGroup();
+    const row1 = makeRow({ countries: ["ZA"], scientific_name: "Testus one" });
+    const row2 = makeRow({ countries: ["ZA"], scientific_name: "Testus two" });
+    const row3 = makeRow({ countries: ["ZA"], scientific_name: "Testus three" });
+
+    setup([row1, row2, row3], {
+      [String(row1.sis_taxon_id)]: [
+        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "Few Assessor", reviewers: null },
+      ],
+      [String(row2.sis_taxon_id)]: [
+        { id: 2, year: "2020", category: "LC", date: "2020-01-01", assessors: "Many Assessor", reviewers: null },
+      ],
+      [String(row3.sis_taxon_id)]: [
+        { id: 3, year: "2020", category: "LC", date: "2020-01-01", assessors: "Many Assessor", reviewers: null },
+      ],
+    });
+
+    const result = getAssessorCandidatesByCountry([group], ["ZA"]);
+    expect(result[0].name).toBe("Many Assessor");
+    expect(result[0].total).toBe(2);
+    expect(result[1].name).toBe("Few Assessor");
+    expect(result[1].total).toBe(1);
+  });
+
+  it("breaks total ties by latest date", () => {
+    const group = uniqueGroup();
+    const row1 = makeRow({ countries: ["ZA"], scientific_name: "Testus one" });
+    const row2 = makeRow({ countries: ["ZA"], scientific_name: "Testus two" });
+
+    setup([row1, row2], {
+      [String(row1.sis_taxon_id)]: [
+        { id: 1, year: "2018", category: "LC", date: "2018-01-01", assessors: "Old Assessor", reviewers: null },
+      ],
+      [String(row2.sis_taxon_id)]: [
+        { id: 2, year: "2023", category: "LC", date: "2023-01-01", assessors: "New Assessor", reviewers: null },
+      ],
+    });
+
+    const result = getAssessorCandidatesByCountry([group], ["ZA"]);
+    expect(result[0].name).toBe("New Assessor");
+    expect(result[1].name).toBe("Old Assessor");
+  });
+
+  it("searches across multiple taxon groups", () => {
+    const group1 = uniqueGroup();
+    const group2 = uniqueGroup();
+    const row1 = makeRow({ countries: ["ZA"], scientific_name: "Testus one" });
+    const row2 = makeRow({ countries: ["ZA"], scientific_name: "Testus two" });
+
+    // First setup loads for group1
+    setup([row1], {
+      [String(row1.sis_taxon_id)]: [
+        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "Group1 Expert", reviewers: null },
+      ],
+    });
+    // Call for group1 first to prime its cache
+    const partial = getAssessorCandidatesByCountry([group1], ["ZA"]);
+    expect(partial).toHaveLength(1);
+
+    // Now setup for group2
+    setup([row2], {
+      [String(row2.sis_taxon_id)]: [
+        { id: 2, year: "2021", category: "VU", date: "2021-01-01", assessors: "Group2 Expert", reviewers: null },
+      ],
+    });
+
+    const result = getAssessorCandidatesByCountry([group1, group2], ["ZA"]);
+    const names = result.map((c) => c.name);
+    expect(names).toContain("Group1 Expert");
+    expect(names).toContain("Group2 Expert");
+  });
+
+  it("handles case-insensitive country matching", () => {
+    const group = uniqueGroup();
+    const row = makeRow({ countries: ["za"], scientific_name: "Testus lower" });
+    setup([row], {
+      [String(row.sis_taxon_id)]: [
+        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "Dr. Case", reviewers: null },
+      ],
+    });
+
+    const result = getAssessorCandidatesByCountry([group], ["ZA"]);
+    expect(result).toHaveLength(1);
+  });
+
+  it("skips assessor names shorter than 3 characters", () => {
+    const group = uniqueGroup();
+    const row = makeRow({ countries: ["ZA"], scientific_name: "Testus one" });
+    setup([row], {
+      [String(row.sis_taxon_id)]: [
+        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "AB & Dr. Valid", reviewers: null },
+      ],
+    });
+
+    const result = getAssessorCandidatesByCountry([group], ["ZA"]);
+    const names = result.map((c) => c.name);
+    expect(names).not.toContain("AB");
+    expect(names).toContain("Dr. Valid");
   });
 });
