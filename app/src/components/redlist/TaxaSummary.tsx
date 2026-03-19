@@ -545,7 +545,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     const clampedPercent = Math.min(100, Math.max(0, percent));
     const fillColor = isAll ? "rgba(255,255,255,0.25)" : barColor;
     return (
-      <div className="flex items-center gap-2 min-w-[160px] md:min-w-[220px]">
+      <div className="flex items-center gap-2 min-w-[120px] md:min-w-[180px]">
         <div className="flex-1 h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
           <div
             className="h-full rounded-full transition-all"
@@ -1798,7 +1798,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             onClick={exitTable1a}
             className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
           >
-            Exit Table 1a
+            Exit Table 1a mode
           </button>
         ) : (
           <>
@@ -1814,7 +1814,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               onClick={enterTable1a}
               className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
             >
-              Table 1a
+              Table 1a mode
             </button>
           </>
         )}
