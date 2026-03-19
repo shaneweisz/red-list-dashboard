@@ -938,8 +938,8 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             onToggleSubgroup(sg.id, topTaxonId);
             if (sgHasChildren) {
               if (isSgSelected) {
-                // Clicking again → collapse
-                if (isSgExpanded) toggleExpand(sg.id);
+                // Already selected → toggle expand/collapse
+                toggleExpand(sg.id);
               } else {
                 // Selecting → expand to show children
                 if (!isSgExpanded) toggleExpand(sg.id);
@@ -1072,8 +1072,8 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             onToggleTaxon(taxon.id, e);
             if (hasSubgroups) {
               if (isSelected) {
-                // Clicking again deselects → collapse
-                if (expandedTaxa.has(taxon.id)) toggleExpand(taxon.id);
+                // Already selected → toggle expand/collapse
+                toggleExpand(taxon.id);
               } else {
                 // Selecting → collapse others, expand this one
                 setExpandedTaxa(new Set());

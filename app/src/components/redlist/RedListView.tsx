@@ -11,7 +11,7 @@ import WikipediaSummary from "../WikipediaSummary";
 import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
-import { speciesMatchesNode, getNodeDef, getViewRootForNode } from "@/lib/taxonomy-utils";
+import { speciesMatchesNode, getNodeDef, getViewRootForNode, hasChildren } from "@/lib/taxonomy-utils";
 import ReviewerChart from "./ReviewerChart";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { useFilterParams } from "@/hooks/useFilterParams";
@@ -349,13 +349,16 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         }
         return next;
       }
-      // Single click: select only this taxon, or deselect if it's the only one
+      // Single click on already-sole-selected taxon: keep selected (TaxaSummary
+      // handles expand/collapse toggle). Only "All Species" returns to landing.
       if (prev.size === 1 && prev.has(taxonId)) {
-        return new Set<string>();
+        return prev;
       }
+      // Switching to a different taxon — clear subgroups
+      setSelectedSubgroups(new Set());
       return new Set([taxonId]);
     });
-  }, [setSelectedTaxa]);
+  }, [setSelectedTaxa, setSelectedSubgroups, selectedTaxa, selectedSubgroups, isNewAssessments]);
 
   // Reset all other filters when taxa selection changes
   const prevTaxaRef = useRef(selectedTaxa);
@@ -1267,7 +1270,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         onToggleSubgroup={(sgId) => {
           const wasSelected = selectedSubgroups.has(sgId);
           if (wasSelected) {
-            // Deselecting: go back one level in the chain
+            // Parent nodes with children: keep selected, TaxaSummary toggles expand/collapse
+            if (hasChildren(sgId)) return;
+            // Leaf nodes: go back one level
             const parentInfo = getNodeDef(sgId);
             if (parentInfo && !selectedTaxa.has(parentInfo.parentId)) {
               // Parent is an intermediate node — select it as subgroup
@@ -1276,6 +1281,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
               // Parent is the view root — just clear subgroups
               setSelectedSubgroups(new Set());
             }
+            return;
           } else {
             // Selecting: set exactly this one subgroup
             setSelectedSubgroups(new Set([sgId]));
