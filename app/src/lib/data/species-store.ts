@@ -19,6 +19,7 @@ const DATA_DIR = path.join(process.cwd(), "data");
 const REDLIST_DIR = path.join(DATA_DIR, "redlist");
 const GBIF_DIR = path.join(DATA_DIR, "gbif");
 const TAXA_SUMMARY_PATH = path.join(DATA_DIR, "taxa-summary.json");
+const NODE_CHILDREN_SUMMARIES_PATH = path.join(DATA_DIR, "node-children-summaries.json");
 
 // =============================================================================
 // TYPES
@@ -186,6 +187,7 @@ const gbifCache = new Map<string, Map<number, GbifRow>>();
 const historyCache = new Map<string, HistoryMap>();
 let mappingCache: Map<number, { gbif_species_key: number | null; match_type: string }> | null = null;
 let taxaSummaryCache: TaxaSummaryRow[] | null = null;
+let nodeChildrenSummariesCache: Record<string, NodeSummary[]> | null = null;
 
 function loadMapping(): Map<number, { gbif_species_key: number | null; match_type: string }> {
   if (mappingCache) return mappingCache;
@@ -340,6 +342,18 @@ export function getTaxaSummary(): TaxaSummaryRow[] {
   const content = fs.readFileSync(TAXA_SUMMARY_PATH, "utf-8");
   taxaSummaryCache = JSON.parse(content) as TaxaSummaryRow[];
   return taxaSummaryCache;
+}
+
+/**
+ * Get precomputed children summaries for a parent node.
+ * Reads from data/node-children-summaries.json (cached in memory).
+ */
+export function getPrecomputedChildrenSummaries(parentNodeId: string): NodeSummary[] {
+  if (!nodeChildrenSummariesCache) {
+    const content = fs.readFileSync(NODE_CHILDREN_SUMMARIES_PATH, "utf-8");
+    nodeChildrenSummariesCache = JSON.parse(content) as Record<string, NodeSummary[]>;
+  }
+  return nodeChildrenSummariesCache[parentNodeId] ?? [];
 }
 
 // =============================================================================

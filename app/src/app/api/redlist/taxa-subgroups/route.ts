@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getChildrenSummaries } from "@/lib/data/species-store";
+import { getPrecomputedChildrenSummaries } from "@/lib/data/species-store";
 import { findNode, hasChildren } from "@/lib/taxonomy-utils";
 import { CACHE_1H } from "@/lib/cache-headers";
 
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const subgroups = getChildrenSummaries(nodeId);
+    const subgroups = getPrecomputedChildrenSummaries(nodeId);
     return NextResponse.json({ subgroups }, { headers: CACHE_1H });
   } catch (error) {
     console.error(`Node children summary error for ${nodeId}:`, error);
