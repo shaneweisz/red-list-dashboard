@@ -2025,6 +2025,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                             <div style={{ display: stackedDetailView || activeDetailTab === "assessors" ? undefined : "none" }}>
                               <AssessorCandidatesTable
                                 taxaId={[...selectedTaxa][0] ?? s.taxon_group}
+                                taxaName={TAXA_BY_ID[[...selectedTaxa][0] ?? s.taxon_group]?.name ?? "Species"}
                                 countries={s.countries}
                               />
                             </div>
