@@ -85,6 +85,16 @@ describe("parseAssessors", () => {
     ).toEqual(["IUCN SSC Amphibian Specialist Group"]);
   });
 
+  it("normalizes 'Cox, N.' to 'Cox, N.A.' (same person)", () => {
+    expect(parseAssessors("Cox, N.")).toEqual(["Cox, N.A."]);
+    // Already canonical form is unchanged
+    expect(parseAssessors("Cox, N.A.")).toEqual(["Cox, N.A."]);
+    // Works within a list of names
+    expect(
+      parseAssessors("Bowles, P., Cox, N. & Stuart, S.N.")
+    ).toEqual(["Bowles, P.", "Cox, N.A.", "Stuart, S.N."]);
+  });
+
   it("handles name with complex initials and paren after comma-separated list", () => {
     expect(
       parseAssessors(
