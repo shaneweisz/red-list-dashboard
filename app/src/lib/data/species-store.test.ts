@@ -466,6 +466,9 @@ describe("getAssessorCandidatesByCountry", () => {
     expect(result).toHaveLength(1);
     expect(result[0].regionCounts["Southern Africa"]).toBe(1);
     expect(result[0].regionCounts["Eastern Africa"]).toBe(1);
+    // Country-level counts should also be present
+    expect(result[0].countryCounts["ZA"]).toBe(1);
+    expect(result[0].countryCounts["KE"]).toBe(1);
   });
 
   it("sorts by total count descending", () => {

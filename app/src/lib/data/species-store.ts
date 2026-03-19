@@ -478,6 +478,8 @@ export interface AssessorCountryCandidate {
   name: string;
   /** Per-region species counts (aggregated from the target species' countries) */
   regionCounts: Record<string, number>;
+  /** Per-country species counts (country codes from the target species) */
+  countryCounts: Record<string, number>;
   total: number;
   latestDate: string;
 }
@@ -496,7 +498,7 @@ export function getAssessorCandidatesByCountry(
 
   const countrySet = new Set(countries.map((c) => c.toUpperCase()));
 
-  const assessorMap = new Map<string, { regionCounts: Record<string, number>; total: number; latestDate: string; seenSpecies: Set<number> }>();
+  const assessorMap = new Map<string, { regionCounts: Record<string, number>; countryCounts: Record<string, number>; total: number; latestDate: string; seenSpecies: Set<number> }>();
 
   for (const taxonGroup of taxonGroups) {
     const redlistRows = loadRedlistForGroup(taxonGroup);
@@ -539,7 +541,7 @@ export function getAssessorCandidatesByCountry(
       for (const normalizedName of speciesAssessors) {
         let stats = assessorMap.get(normalizedName);
         if (!stats) {
-          stats = { regionCounts: {}, total: 0, latestDate: "", seenSpecies: new Set() };
+          stats = { regionCounts: {}, countryCounts: {}, total: 0, latestDate: "", seenSpecies: new Set() };
           assessorMap.set(normalizedName, stats);
         }
 
@@ -548,6 +550,10 @@ export function getAssessorCandidatesByCountry(
           stats.total++;
           for (const region of regions) {
             stats.regionCounts[region] = (stats.regionCounts[region] ?? 0) + 1;
+          }
+          for (const c of overlapping) {
+            const code = c.toUpperCase();
+            stats.countryCounts[code] = (stats.countryCounts[code] ?? 0) + 1;
           }
         }
         if (latestDate > stats.latestDate) stats.latestDate = latestDate;
@@ -559,6 +565,7 @@ export function getAssessorCandidatesByCountry(
     .map(([name, stats]) => ({
       name,
       regionCounts: stats.regionCounts,
+      countryCounts: stats.countryCounts,
       total: stats.total,
       latestDate: stats.latestDate,
     }))

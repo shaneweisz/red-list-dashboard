@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { countriesToRegions, regionColor } from "@/lib/regions";
+import { countriesToRegions, regionColor, countryToRegion } from "@/lib/regions";
+import { ALPHA2_TO_NAME } from "@/components/WorldMap";
 
 interface AssessorCountryCandidate {
   name: string;
   regionCounts: Record<string, number>;
+  countryCounts: Record<string, number>;
   total: number;
   latestDate: string;
 }
@@ -123,6 +125,15 @@ export default function AssessorCandidatesTable({
         <tbody>
           {paginated.map((c) => {
             const coveredRegions = regions.filter((r) => (c.regionCounts[r] ?? 0) > 0);
+
+            // Group country counts by region for tooltips
+            const countriesByRegion: Record<string, string[]> = {};
+            for (const [code, count] of Object.entries(c.countryCounts)) {
+              const region = countryToRegion(code);
+              if (!countriesByRegion[region]) countriesByRegion[region] = [];
+              const name = ALPHA2_TO_NAME[code] ?? code;
+              countriesByRegion[region].push(`${name} (${count})`);
+            }
             const year = c.latestDate
               ? new Date(c.latestDate).getFullYear().toString()
               : "—";
@@ -149,6 +160,7 @@ export default function AssessorCandidatesTable({
                     {coveredRegions.map((r) => (
                       <span
                         key={r}
+                        title={countriesByRegion[r]?.join(", ") ?? r}
                         className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-zinc-600 bg-zinc-100 dark:text-zinc-300 dark:bg-zinc-800"
                       >
                         <span
