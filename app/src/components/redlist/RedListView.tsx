@@ -11,7 +11,7 @@ import WikipediaSummary from "../WikipediaSummary";
 import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
-import { speciesMatchesSubgroup, getSubgroupDef } from "@/config/taxa-hierarchy";
+import { speciesMatchesNode, getNodeDef } from "@/lib/taxonomy-utils";
 import ReviewerChart from "./ReviewerChart";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { useFilterParams } from "@/hooks/useFilterParams";
@@ -524,7 +524,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     }
     if (selectedSubgroups.size > 0) {
       filtered = filtered.filter(s =>
-        Array.from(selectedSubgroups).some(sg => speciesMatchesSubgroup(s, sg))
+        Array.from(selectedSubgroups).some(sg => speciesMatchesNode(s, sg))
       );
     }
     return filtered;
@@ -1478,14 +1478,14 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
               </button>
             ))}
             {Array.from(selectedSubgroups).map(sgId => {
-              const sgInfo = getSubgroupDef(sgId);
+              const sgInfo = getNodeDef(sgId);
               return (
                 <button
                   key={sgId}
                   onClick={() => setSelectedSubgroups(prev => { const next = new Set(prev); next.delete(sgId); return next; })}
                   className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
                 >
-                  {sgInfo?.def.name ?? sgId}
+                  {sgInfo?.node.name ?? sgId}
                   <span className="text-xs">×</span>
                 </button>
               );
