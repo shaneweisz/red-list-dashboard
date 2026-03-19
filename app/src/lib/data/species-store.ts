@@ -496,7 +496,7 @@ export function getAssessorCandidatesByCountry(
 
   const countrySet = new Set(countries.map((c) => c.toUpperCase()));
 
-  const assessorMap = new Map<string, { regionCounts: Record<string, number>; total: number; latestDate: string }>();
+  const assessorMap = new Map<string, { regionCounts: Record<string, number>; total: number; latestDate: string; seenSpecies: Set<number> }>();
 
   for (const taxonGroup of taxonGroups) {
     const redlistRows = loadRedlistForGroup(taxonGroup);
@@ -520,28 +520,37 @@ export function getAssessorCandidatesByCountry(
         reviewers: null as string | null,
       }];
 
+      // Collect unique assessor names across all assessments for this species
+      const speciesAssessors = new Set<string>();
+      let latestDate = "";
       for (const assessment of allAssessments) {
         if (!assessment.assessors) continue;
-
         const date = assessment.date ?? "";
-        const names = parseAssessorNames(assessment.assessors);
-        for (const name of names) {
+        if (date > latestDate) latestDate = date;
+        for (const name of parseAssessorNames(assessment.assessors)) {
           const normalizedName = name.trim();
-          if (!normalizedName || normalizedName.length < 3) continue;
-
-          let stats = assessorMap.get(normalizedName);
-          if (!stats) {
-            stats = { regionCounts: {}, total: 0, latestDate: "" };
-            assessorMap.set(normalizedName, stats);
+          if (normalizedName && normalizedName.length >= 3) {
+            speciesAssessors.add(normalizedName);
           }
+        }
+      }
 
-          // Count once per assessment for total, but once per region for breakdown
+      // Credit each assessor once per species
+      for (const normalizedName of speciesAssessors) {
+        let stats = assessorMap.get(normalizedName);
+        if (!stats) {
+          stats = { regionCounts: {}, total: 0, latestDate: "", seenSpecies: new Set() };
+          assessorMap.set(normalizedName, stats);
+        }
+
+        if (!stats.seenSpecies.has(row.sis_taxon_id)) {
+          stats.seenSpecies.add(row.sis_taxon_id);
           stats.total++;
           for (const region of regions) {
             stats.regionCounts[region] = (stats.regionCounts[region] ?? 0) + 1;
           }
-          if (date > stats.latestDate) stats.latestDate = date;
         }
+        if (latestDate > stats.latestDate) stats.latestDate = latestDate;
       }
     }
   }

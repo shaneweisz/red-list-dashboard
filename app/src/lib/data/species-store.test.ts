@@ -568,4 +568,25 @@ describe("getAssessorCandidatesByCountry", () => {
     expect(names).not.toContain("AB");
     expect(names).toContain("Dr. Valid");
   });
+
+  it("counts unique species, not multiple assessments of the same species", () => {
+    const group = uniqueGroup();
+    const row = makeRow({ countries: ["ZA"], scientific_name: "Testus one" });
+    setup([row], {
+      [String(row.sis_taxon_id)]: [
+        { id: 1, year: "2010", category: "LC", date: "2010-01-01", assessors: "Dr. Repeat", reviewers: null },
+        { id: 2, year: "2015", category: "VU", date: "2015-06-01", assessors: "Dr. Repeat", reviewers: null },
+        { id: 3, year: "2020", category: "EN", date: "2020-03-15", assessors: "Dr. Repeat", reviewers: null },
+      ],
+    });
+
+    const result = getAssessorCandidatesByCountry([group], ["ZA"]);
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("Dr. Repeat");
+    // Should count as 1 species, not 3 assessments
+    expect(result[0].total).toBe(1);
+    expect(result[0].regionCounts["Southern Africa"]).toBe(1);
+    // Latest date should still be tracked correctly
+    expect(result[0].latestDate).toBe("2020-03-15");
+  });
 });
