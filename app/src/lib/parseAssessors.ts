@@ -13,6 +13,14 @@
  * the preceding token looks like initials (ends with "." or ")"), it's a
  * new name. Otherwise it's initials belonging to the current name.
  */
+/**
+ * Known duplicate name mappings: variant → canonical form.
+ * "Cox, N." and "Cox, N.A." refer to the same person (Neil Cox).
+ */
+const CANONICAL_NAMES: Record<string, string> = {
+  "Cox, N.": "Cox, N.A.",
+};
+
 export function parseAssessors(raw: string | null | undefined): string[] {
   if (!raw || !raw.trim()) return [];
 
@@ -50,5 +58,5 @@ export function parseAssessors(raw: string | null | undefined): string[] {
     }
   }
 
-  return names.filter(Boolean);
+  return names.filter(Boolean).map(n => CANONICAL_NAMES[n] ?? n);
 }
