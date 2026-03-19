@@ -1289,6 +1289,12 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
             }
           }
         }}
+        onNavigateToSubgroup={(taxonId, subgroupId) => {
+          // Navigate directly to a taxon + subgroup atomically (avoids clearAllFilters race)
+          skipClearOnTaxaChangeRef.current = true;
+          setSelectedTaxa(new Set([taxonId]));
+          setSelectedSubgroups(new Set([subgroupId]));
+        }}
       />
 
       {/* Error state */}

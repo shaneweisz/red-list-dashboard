@@ -8,6 +8,7 @@ import { HiOutlineAdjustmentsHorizontal } from "react-icons/hi2";
 import TaxaIcon from "@/components/TaxaIcon";
 import { CATEGORY_COLORS, CATEGORY_NAMES, CATEGORY_ORDER } from "@/config/taxa";
 import { hasChildren, findNode, getNodeDef, getAncestors } from "@/lib/taxonomy-utils";
+import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
 interface Table1aRowData {
   group: string;
   name: string;
@@ -71,6 +72,8 @@ interface Props {
   selectedTaxa: Set<string>;
   selectedSubgroups: Set<string>;
   onToggleSubgroup: (subgroupId: string, parentTaxonId: string) => void;
+  /** Navigate directly to a taxon + subgroup (used by Table 1a click-through) */
+  onNavigateToSubgroup?: (taxonId: string, subgroupId: string) => void;
   disableAllSpecies?: boolean;
   viewMode?: "reassessments" | "new-assessments";
 }
@@ -160,7 +163,7 @@ function DisabledAllTooltip() {
   );
 }
 
-export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, disableAllSpecies, viewMode = "reassessments" }: Props) {
+export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments" }: Props) {
   const isNewAssessments = viewMode === "new-assessments";
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [globalGbifMedian, setGlobalGbifMedian] = useState<number | undefined>();
@@ -1480,8 +1483,28 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                           key={row.group}
                           className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer"
                           onClick={(e) => {
-                            onToggleTaxon(row.group, e);
                             setTable1aMode(false);
+                            const defaultRoots = new Set(TAXONOMY_VIEWS.default.roots);
+                            if (defaultRoots.has(row.group)) {
+                              // Direct view root (e.g. mammalia, aves) — select it
+                              onToggleTaxon(row.group, e);
+                            } else if (onNavigateToSubgroup) {
+                              // Table 1a group under a virtual root (e.g. insecta → invertebrates)
+                              // Find which view root has a child matching this group's CSV
+                              for (const rootId of defaultRoots) {
+                                const rootNode = findNode(rootId);
+                                // Prefer exact match (single CSV group), fall back to includes
+                                const matchingChild = rootNode?.children?.find(c =>
+                                  c.filter.csvGroups.length === 1 && c.filter.csvGroups[0] === row.group
+                                ) ?? rootNode?.children?.find(c =>
+                                  c.filter.csvGroups.includes(row.group)
+                                );
+                                if (matchingChild) {
+                                  onNavigateToSubgroup(rootId, matchingChild.id);
+                                  break;
+                                }
+                              }
+                            }
                           }}
                         >
                           <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 bg-white dark:bg-zinc-900`}>
