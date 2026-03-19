@@ -11,7 +11,7 @@ import WikipediaSummary from "../WikipediaSummary";
 import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
-import { speciesMatchesNode, getNodeDef, getViewRootForNode, hasChildren } from "@/lib/taxonomy-utils";
+import { speciesMatchesNode, getNodeDef, getViewRootForNode } from "@/lib/taxonomy-utils";
 import ReviewerChart from "./ReviewerChart";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { useFilterParams } from "@/hooks/useFilterParams";
@@ -1268,19 +1268,15 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         disableAllSpecies={isNewAssessments}
         viewMode={viewMode}
         onToggleSubgroup={(sgId) => {
+          // Clicking a view root ancestor → clear subgroups to show its children
+          if (selectedTaxa.has(sgId)) {
+            setSelectedSubgroups(new Set());
+            return;
+          }
           const wasSelected = selectedSubgroups.has(sgId);
           if (wasSelected) {
-            // Parent nodes with children: keep selected, TaxaSummary toggles expand/collapse
-            if (hasChildren(sgId)) return;
-            // Leaf nodes: go back one level
-            const parentInfo = getNodeDef(sgId);
-            if (parentInfo && !selectedTaxa.has(parentInfo.parentId)) {
-              // Parent is an intermediate node — select it as subgroup
-              setSelectedSubgroups(new Set([parentInfo.parentId]));
-            } else {
-              // Parent is the view root — just clear subgroups
-              setSelectedSubgroups(new Set());
-            }
+            // Already selected — no-op (TaxaSummary handles expand/collapse,
+            // ancestors handle navigation)
             return;
           } else {
             // Selecting: set exactly this one subgroup

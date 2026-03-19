@@ -806,6 +806,93 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     );
   };
 
+  // Render an ancestor context row with full data — clicking navigates to that level.
+  const renderAncestorRow = (sg: SubGroupSummary, color: string, depth: number, topTaxonId: string, isViewRoot: boolean) => {
+    const sgPctAssessed = sg.estimatedDescribed > 0 ? (sg.totalAssessed / sg.estimatedDescribed) * 100 : 0;
+    const sgPctOutdated = sg.totalAssessed > 0 ? (sg.outdated / sg.totalAssessed) * 100 : 0;
+    return (
+      <tr
+        key={`ancestor-${sg.id}`}
+        className="transition-colors cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+        onClick={() => {
+          onToggleSubgroup(sg.id, topTaxonId);
+        }}
+      >
+        <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 bg-white dark:bg-zinc-900`}>
+          <div className="flex items-center gap-2" style={{ paddingLeft: `${depth * 12}px` }}>
+            {isViewRoot ? (
+              <TaxaIcon taxonId={sg.id} size={18} className="flex-shrink-0" style={{ color }} />
+            ) : (
+              <span
+                className="w-2 h-2 rounded-full flex-shrink-0"
+                style={{ backgroundColor: color }}
+              />
+            )}
+            <span className="text-sm text-zinc-700 dark:text-zinc-300">{sg.name}</span>
+          </div>
+        </td>
+        {isVisible("described") && (
+          <td className={numericTdClasses}>
+            <span className="text-sm text-zinc-700 dark:text-zinc-300 tabular-nums">{sg.estimatedDescribed.toLocaleString()}</span>
+          </td>
+        )}
+        {isVisible("assessed") && (
+          <td className={numericTdClasses}>
+            <span className="text-sm text-zinc-700 dark:text-zinc-300 tabular-nums">{sg.totalAssessed.toLocaleString()}</span>
+          </td>
+        )}
+        {isVisible("pctAssessed") && (
+          <td className={flexTdClasses}>
+            {renderBar(sgPctAssessed, getAssessedBarColor(sgPctAssessed), false)}
+          </td>
+        )}
+        {isVisible("outdated") && (
+          <td className={numericTdClasses}>
+            <span className="text-sm text-zinc-700 dark:text-zinc-300 tabular-nums">{sg.outdated.toLocaleString()}</span>
+          </td>
+        )}
+        {isVisible("pctOutdated") && (
+          <td className={flexTdClasses}>
+            {sg.totalAssessed > 0
+              ? renderBar(sgPctOutdated, getOutdatedBarColor(sgPctOutdated), false)
+              : <span className="text-sm text-zinc-400">—</span>}
+          </td>
+        )}
+        {isVisible("gbifSpecies") && (
+          <td className={numericTdClasses}>
+            <span className="text-sm text-zinc-700 dark:text-zinc-300 tabular-nums">
+              {isNewAssessments ? sg.gbifNeSpeciesCount.toLocaleString() : "—"}
+            </span>
+          </td>
+        )}
+        {isVisible("pctGbifUnassessed") && (
+          <td className={flexTdClasses}>
+            {sg.gbifNeSpeciesCount > 0 && sg.estimatedDescribed > 0
+              ? renderBar((sg.gbifNeSpeciesCount / sg.estimatedDescribed) * 100, "#3b82f6", false)
+              : <span className="text-sm text-zinc-400">—</span>}
+          </td>
+        )}
+        {isVisible("totalGbifObs") && (
+          <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
+        )}
+        {isVisible("gbifDistribution") && (
+          <td className={flexTdClasses}><span className="text-sm text-zinc-400">—</span></td>
+        )}
+        {isVisible("meanGbifObs") && (
+          <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
+        )}
+        {isVisible("medianGbifObs") && (
+          <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
+        )}
+        {isVisible("breakdown") && (
+          <td className={flexTdClasses}>
+            {renderBreakdownBar(sg.byCategory)}
+          </td>
+        )}
+      </tr>
+    );
+  };
+
   // Render a standalone subgroup row (used when table is collapsed to a selected subgroup)
   const renderCollapsedSubgroupRow = (taxon: TaxonSummary, sg: SubGroupSummary) => {
     const sgPctAssessed = sg.estimatedDescribed > 0 ? (sg.totalAssessed / sg.estimatedDescribed) * 100 : 0;
@@ -815,7 +902,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         key={`collapsed-${sg.id}`}
         className="transition-colors cursor-pointer bg-zinc-100 dark:bg-zinc-800"
         onClick={() => {
-          onToggleSubgroup(sg.id, taxon.id);
+          if (isExpandable(sg.id)) {
+            // Parent subgroup → toggle expand/collapse of children
+            toggleExpand(sg.id);
+          }
+          // Leaf subgroups: no-op (ancestors handle navigation)
         }}
       >
         <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 bg-zinc-100 dark:bg-zinc-800`}>
@@ -935,14 +1026,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               : "hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30"
           }`}
           onClick={() => {
-            onToggleSubgroup(sg.id, topTaxonId);
-            if (sgHasChildren) {
-              if (isSgSelected) {
-                // Already selected → toggle expand/collapse
-                toggleExpand(sg.id);
-              } else {
+            if (sgHasChildren && isSgSelected) {
+              // Already selected parent → toggle expand/collapse
+              toggleExpand(sg.id);
+            } else {
+              onToggleSubgroup(sg.id, topTaxonId);
+              if (sgHasChildren && !isSgExpanded) {
                 // Selecting → expand to show children
-                if (!isSgExpanded) toggleExpand(sg.id);
+                toggleExpand(sg.id);
               }
             }
           }}
@@ -1595,12 +1686,48 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               {selectedTaxa.has("all")
                 ? null
                 : selectedSubgroups.size > 0 && selectedTaxa.size > 0 && !taxaExpanded
-                  ? /* When subgroups are selected, collapse to show only those subgroup rows */
+                  ? /* When subgroups are selected, show ancestor breadcrumbs + selected subgroup */
                     (() => {
                       const rows: React.ReactNode[] = [];
                       for (const sgId of selectedSubgroups) {
                         const parentTaxon = perTaxa.find(t => selectedTaxa.has(t.id));
                         if (!parentTaxon) continue;
+
+                        // Render ancestor context rows (view root → intermediate ancestors)
+                        // getAncestors returns [immediate parent, ..., root] so we reverse and
+                        // skip ancestors at or above the view root (which is in selectedTaxa)
+                        const ancestors = getAncestors(sgId);
+                        const intermediateAncestorIds: string[] = [];
+                        for (const aId of ancestors) {
+                          if (selectedTaxa.has(aId)) break; // Stop at view root
+                          intermediateAncestorIds.push(aId);
+                        }
+
+                        // View root data from perTaxa
+                        const viewRootSummary: SubGroupSummary = {
+                          id: parentTaxon.id, name: parentTaxon.name,
+                          estimatedDescribed: parentTaxon.estimatedDescribed,
+                          totalAssessed: parentTaxon.totalAssessed, outdated: parentTaxon.outdated,
+                          gbifNeSpeciesCount: parentTaxon.gbifNeSpeciesCount ?? 0,
+                          byCategory: parentTaxon.byCategory,
+                        };
+                        rows.push(renderAncestorRow(viewRootSummary, parentTaxon.color, 0, parentTaxon.id, true));
+
+                        // Intermediate ancestors from subgroupData
+                        intermediateAncestorIds.reverse().forEach((aId, i) => {
+                          let ancestorData: SubGroupSummary | undefined;
+                          for (const subs of Object.values(subgroupData)) {
+                            ancestorData = subs.find(s => s.id === aId);
+                            if (ancestorData) break;
+                          }
+                          if (!ancestorData) {
+                            const node = findNode(aId);
+                            if (!node) return;
+                            ancestorData = { id: node.id, name: node.name, estimatedDescribed: node.estimatedDescribed ?? 0,
+                                             totalAssessed: 0, outdated: 0, gbifNeSpeciesCount: 0, byCategory: {} };
+                          }
+                          rows.push(renderAncestorRow(ancestorData, parentTaxon.color, i + 1, parentTaxon.id, false));
+                        });
 
                         // Search ALL fetched subgroup data for this node (any depth)
                         let sgData: SubGroupSummary | undefined;
