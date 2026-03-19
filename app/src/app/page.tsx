@@ -82,6 +82,28 @@ export default function RedListPage() {
           onSubgroupsChange={setSharedSubgroups}
         />
       </main>
+
+      <footer className="max-w-6xl mx-auto mt-12 pb-6 pt-4 border-t border-zinc-200 dark:border-zinc-800">
+        <p className="text-center text-xs text-zinc-400 dark:text-zinc-500">
+          Developed by{" "}
+          <a
+            href="https://shaneweisz.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
+          >
+            Shane Weisz
+          </a>
+          , University of Cambridge. If you have any feedback, please do get in touch at{" "}
+          <a
+            href="mailto:sw984@cam.ac.uk"
+            className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
+          >
+            sw984@cam.ac.uk
+          </a>
+          .
+        </p>
+      </footer>
     </div>
   );
 }
