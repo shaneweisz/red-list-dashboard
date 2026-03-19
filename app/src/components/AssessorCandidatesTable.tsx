@@ -160,14 +160,16 @@ export default function AssessorCandidatesTable({
                     {coveredRegions.map((r) => (
                       <span
                         key={r}
-                        title={countriesByRegion[r]?.join(", ") ?? r}
-                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-zinc-600 bg-zinc-100 dark:text-zinc-300 dark:bg-zinc-800"
+                        className="group/tip relative inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-zinc-600 bg-zinc-100 dark:text-zinc-300 dark:bg-zinc-800"
                       >
                         <span
                           className="w-2 h-2 rounded-full inline-block shrink-0"
                           style={{ backgroundColor: regionColor(r) }}
                         />
                         {r}
+                        <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover/tip:block whitespace-nowrap rounded bg-zinc-900 px-2 py-1 text-[10px] text-zinc-200 shadow-lg z-50">
+                          {countriesByRegion[r]?.join(", ") ?? r}
+                        </span>
                       </span>
                     ))}
                   </div>
