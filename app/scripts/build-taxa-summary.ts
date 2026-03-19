@@ -142,6 +142,12 @@ export async function run(): Promise<void> {
     }
   }
 
+  // Must match EXCLUDED_DOMESTICATED_GBIF_KEYS in species-store.ts
+  const excludedDomesticatedGbifKeys = new Set([
+    2441022, 2435035, 2441110, 2441056, 2440886, 7422937, 2440891,
+    9055455, 2441238, 5220190, 7515593, 2441019, 5219702, 10694102, 2436436,
+  ]);
+
   function isOutdated(assessmentDate: string | null): boolean {
     if (!assessmentDate) return true;
     const year = parseInt(assessmentDate.slice(0, 4), 10);
@@ -170,6 +176,7 @@ export async function run(): Promise<void> {
       if (gbifMap) {
         for (const [key, gbifRow] of gbifMap) {
           if (linkedGbifKeys.has(key)) continue;
+          if (excludedDomesticatedGbifKeys.has(key)) continue;
           if (!matchesFilter(gbifRow, filter)) continue;
           gbifNeSpeciesCount++;
         }
@@ -226,7 +233,7 @@ export async function run(): Promise<void> {
           const gbifMap = gbifByGroup.get(group);
           if (gbifMap) {
             for (const [key, gbifRow] of gbifMap) {
-              if (!linkedGbifKeys.has(key) && matchesFilter(gbifRow, child.filter)) {
+              if (!linkedGbifKeys.has(key) && !excludedDomesticatedGbifKeys.has(key) && matchesFilter(gbifRow, child.filter)) {
                 claimedGbifKeys.add(key);
               }
             }
@@ -256,6 +263,7 @@ export async function run(): Promise<void> {
         if (gbifMap) {
           for (const [key, gbifRow] of gbifMap) {
             if (linkedGbifKeys.has(key)) continue;
+            if (excludedDomesticatedGbifKeys.has(key)) continue;
             if (!matchesFilter(gbifRow, child.filter)) continue;
             if (claimedGbifKeys.has(key)) continue;
             gbifNeSpeciesCount++;

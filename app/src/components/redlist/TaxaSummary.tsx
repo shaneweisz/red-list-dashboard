@@ -7,7 +7,7 @@ import { FaInfoCircle, FaExpandAlt, FaCompressAlt } from "react-icons/fa";
 import { HiOutlineAdjustmentsHorizontal } from "react-icons/hi2";
 import TaxaIcon from "@/components/TaxaIcon";
 import { CATEGORY_COLORS, CATEGORY_NAMES, CATEGORY_ORDER } from "@/config/taxa";
-import { hasChildren, findNode, getNodeDef, getAncestors } from "@/lib/taxonomy-utils";
+import { hasChildren, findNode, getAncestors } from "@/lib/taxonomy-utils";
 import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
 interface Table1aRowData {
   group: string;
@@ -166,8 +166,6 @@ function DisabledAllTooltip() {
 export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments" }: Props) {
   const isNewAssessments = viewMode === "new-assessments";
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
-  const [globalGbifMedian, setGlobalGbifMedian] = useState<number | undefined>();
-  const [globalGbifDistribution, setGlobalGbifDistribution] = useState<Record<string, number> | undefined>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -387,8 +385,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         if (!res.ok) throw new Error("Failed to load taxa");
         const data = await res.json();
         setTaxa(data.taxa);
-        setGlobalGbifMedian(data.globalGbifMedian);
-        setGlobalGbifDistribution(data.globalGbifDistribution);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load taxa");
       } finally {
@@ -914,13 +910,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     return (
       <tr
         key={`collapsed-${sg.id}`}
-        className="transition-colors cursor-pointer bg-zinc-100 dark:bg-zinc-800"
+        className={`transition-colors bg-zinc-100 dark:bg-zinc-800 ${isExpandable(sg.id) ? "cursor-pointer hover:bg-zinc-200 dark:hover:bg-zinc-700" : ""}`}
         onClick={() => {
           if (isExpandable(sg.id)) {
-            // Parent subgroup → toggle expand/collapse of children
             toggleExpand(sg.id);
           }
-          // Leaf subgroups: no-op (ancestors handle navigation)
         }}
       >
         <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 bg-zinc-100 dark:bg-zinc-800`}>
@@ -1182,7 +1176,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               } else {
                 // Selecting → collapse others, expand this one
                 setExpandedTaxa(new Set());
-                if (!expandedTaxa.has(taxon.id)) toggleExpand(taxon.id);
+                toggleExpand(taxon.id);
               }
             } else {
               // Non-expandable taxon selected → collapse all expanded
@@ -1684,7 +1678,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                   false,
                   true,
                   true,
-                  { total: totalGbifObs, mean: totalMeanGbifObs, median: globalGbifMedian, speciesCount: totalGbifSpecies, gbifNeCount: totalGbifNeSpecies, distribution: globalGbifDistribution }
+                  { total: totalGbifObs, mean: totalMeanGbifObs, speciesCount: totalGbifSpecies, gbifNeCount: totalGbifNeSpecies }
                 )}
               </>
             ) : null
@@ -1704,7 +1698,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                 false,
                 true,
                 true,
-                { total: totalGbifObs, mean: totalMeanGbifObs, median: globalGbifMedian, speciesCount: totalGbifSpecies, gbifNeCount: totalGbifNeSpecies, distribution: globalGbifDistribution }
+                { total: totalGbifObs, mean: totalMeanGbifObs, speciesCount: totalGbifSpecies, gbifNeCount: totalGbifNeSpecies }
               )}
 
               {/* Separator - hide when only "All Species" is selected */}
