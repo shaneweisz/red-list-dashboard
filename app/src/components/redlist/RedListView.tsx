@@ -322,14 +322,14 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     // - Only select "all" when clicking from the landing page itself (nothing selected)
     // Disabled in new-assessments mode (NE dataset too large for "all")
     if (taxonId === "all") {
-      if (isNewAssessments) return;
       if (selectedTaxa.size > 0 || selectedSubgroups.size > 0) {
         // Return to landing page
         setSelectedSubgroups(new Set());
         setSelectedTaxa(new Set());
         return;
       }
-      // On landing page: toggle "all" on/off
+      // On landing page: toggle "all" on/off (disabled in new-assessments — NE dataset too large)
+      if (isNewAssessments) return;
       setSelectedTaxa(prev => {
         if (prev.has("all")) return new Set<string>();
         return new Set(["all"]);
