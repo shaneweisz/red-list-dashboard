@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { FaInfoCircle, FaExpandAlt, FaCompressAlt } from "react-icons/fa";
 
@@ -71,7 +71,7 @@ interface Props {
   onToggleTaxon: (taxonId: string, event: React.MouseEvent) => void;
   selectedTaxa: Set<string>;
   selectedSubgroups: Set<string>;
-  onToggleSubgroup: (subgroupId: string, parentTaxonId: string) => void;
+  onToggleSubgroup: (subgroupId: string) => void;
   /** Navigate directly to a taxon + subgroup (used by Table 1a click-through) */
   onNavigateToSubgroup?: (taxonId: string, subgroupId: string) => void;
   disableAllSpecies?: boolean;
@@ -180,6 +180,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   // Fetched subgroup data keyed by taxonId
   const [subgroupData, setSubgroupData] = useState<Record<string, SubGroupSummary[]>>({});
   const [loadingSubgroups, setLoadingSubgroups] = useState<Set<string>>(new Set());
+  // Refs to avoid stale closures in toggleExpand
+  const subgroupDataRef = useRef(subgroupData);
+  subgroupDataRef.current = subgroupData;
+  const loadingSubgroupsRef = useRef(loadingSubgroups);
+  loadingSubgroupsRef.current = loadingSubgroups;
   const initialFocus: FocusMode = isNewAssessments ? "new-assessments" : "redlist";
   const [focusMode, setFocusMode] = useState<FocusMode>(initialFocus);
   const [hiddenColumns, setHiddenColumns] = useState<Set<ColumnId>>(new Set(FOCUS_HIDDEN[initialFocus]));
@@ -267,8 +272,8 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       return next;
     });
 
-    // Fetch subgroup data if not already loaded
-    if (!subgroupData[taxonId] && !loadingSubgroups.has(taxonId)) {
+    // Fetch subgroup data if not already loaded (read from refs to avoid stale closures)
+    if (!subgroupDataRef.current[taxonId] && !loadingSubgroupsRef.current.has(taxonId)) {
       setLoadingSubgroups((prev) => new Set(prev).add(taxonId));
       try {
         const res = await fetch(`/api/redlist/taxa-subgroups?taxonId=${taxonId}`);
@@ -284,7 +289,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         });
       }
     }
-  }, [subgroupData, loadingSubgroups]);
+  }, []);
 
   // Table 1a mode
   const [table1aMode, setTable1aMode] = useState(false);
@@ -293,14 +298,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
 
   // Separate "all" row from per-taxon rows (needed before early returns for hooks)
   const allTaxon = taxa.find((t) => t.id === "all");
-  const perTaxa = taxa.filter((t) => t.id !== "all");
+  const perTaxa = useMemo(() => taxa.filter((t) => t.id !== "all"), [taxa]);
 
   // Expand all expandable taxa
   const expandAll = useCallback(async () => {
     const expandableTaxaIds = perTaxa.filter(t => isExpandable(t.id)).map(t => t.id);
     setExpandedTaxa(new Set(expandableTaxaIds));
     for (const taxonId of expandableTaxaIds) {
-      if (!subgroupData[taxonId] && !loadingSubgroups.has(taxonId)) {
+      if (!subgroupDataRef.current[taxonId] && !loadingSubgroupsRef.current.has(taxonId)) {
         setLoadingSubgroups((prev) => new Set(prev).add(taxonId));
         fetch(`/api/redlist/taxa-subgroups?taxonId=${taxonId}`)
           .then(res => res.ok ? res.json() : null)
@@ -316,7 +321,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           });
       }
     }
-  }, [perTaxa, subgroupData, loadingSubgroups]);
+  }, [perTaxa]);
 
   const collapseAll = useCallback(() => {
     setExpandedTaxa(new Set());
@@ -342,7 +347,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     setTable1aMode(false);
   }, []);
 
-  const allExpanded = perTaxa.filter(t => isExpandable(t.id)).every(t => expandedTaxa.has(t.id));
+  const allExpanded = useMemo(() => perTaxa.filter(t => isExpandable(t.id)).every(t => expandedTaxa.has(t.id)), [perTaxa, expandedTaxa]);
 
   // Collapse all when returning to landing page (no taxa selected)
   useEffect(() => {
@@ -367,6 +372,12 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       }
     }
     for (const id of toExpand) toggleExpand(id);
+    // Deps intentionally limited to selectedSubgroups only:
+    // - toggleExpand: stable identity (useCallback with empty deps + refs)
+    // - selectedTaxa: would cause re-runs when taxa selection changes, but this
+    //   effect only needs to react to subgroup URL changes
+    // - expandedTaxa: including it would create an infinite loop since this effect
+    //   expands taxa (mutates expandedTaxa), which would re-trigger the effect
   }, [selectedSubgroups]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -818,7 +829,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         key={`ancestor-${sg.id}`}
         className="transition-colors cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
         onClick={() => {
-          onToggleSubgroup(sg.id, topTaxonId);
+          onToggleSubgroup(sg.id);
         }}
       >
         <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 bg-white dark:bg-zinc-900`}>
@@ -1033,7 +1044,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               // Already selected parent → toggle expand/collapse
               toggleExpand(sg.id);
             } else {
-              onToggleSubgroup(sg.id, topTaxonId);
+              onToggleSubgroup(sg.id);
               if (sgHasChildren && !isSgExpanded) {
                 // Selecting → expand to show children
                 toggleExpand(sg.id);

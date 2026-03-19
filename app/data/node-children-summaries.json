@@ -1505,25 +1505,25 @@
       }
     },
     {
-      "id": "inv-other-invertebrates",
+      "id": "inv-other_invertebrates",
       "name": "Other Invertebrates",
-      "estimatedDescribed": 230485,
-      "totalAssessed": 1139,
-      "outdated": 585,
-      "gbifNeSpeciesCount": 18928,
+      "estimatedDescribed": 230709,
+      "totalAssessed": 1154,
+      "outdated": 598,
+      "gbifNeSpeciesCount": 18998,
       "byCategory": {
-        "CR": 60,
-        "VU": 47,
+        "CR": 63,
+        "VU": 52,
         "LC": 295,
-        "DD": 555,
-        "EN": 76,
-        "LR/nt": 2,
+        "DD": 558,
+        "EN": 79,
+        "LR/nt": 3,
         "EX": 6,
         "NT": 98
       }
     },
     {
-      "id": "inv-velvet-worms",
+      "id": "inv-velvet_worms",
       "name": "Velvet Worms",
       "estimatedDescribed": 220,
       "totalAssessed": 11,
@@ -1538,7 +1538,7 @@
       }
     },
     {
-      "id": "inv-horseshoe-crabs",
+      "id": "inv-horseshoe_crabs",
       "name": "Horseshoe Crabs",
       "estimatedDescribed": 4,
       "totalAssessed": 4,
@@ -1643,7 +1643,7 @@
       }
     },
     {
-      "id": "inv-grasshoppers",
+      "id": "inv-grasshoppers-crickets",
       "name": "Grasshoppers, Crickets & Locusts",
       "estimatedDescribed": 26000,
       "totalAssessed": 1501,
@@ -1662,7 +1662,7 @@
       }
     },
     {
-      "id": "inv-dragonflies",
+      "id": "inv-dragonflies-damselflies",
       "name": "Dragonflies & Damselflies",
       "estimatedDescribed": 6400,
       "totalAssessed": 6229,
@@ -1696,9 +1696,63 @@
       }
     }
   ],
+  "inv-other_invertebrates": [
+    {
+      "id": "inv-echinoderms",
+      "name": "Echinoderms",
+      "estimatedDescribed": 7000,
+      "totalAssessed": 374,
+      "outdated": 372,
+      "gbifNeSpeciesCount": 2303,
+      "byCategory": {
+        "LR/nt": 1,
+        "DD": 244,
+        "VU": 9,
+        "LC": 111,
+        "EN": 7,
+        "CR": 2
+      }
+    },
+    {
+      "id": "inv-worms",
+      "name": "Worms",
+      "estimatedDescribed": 27800,
+      "totalAssessed": 367,
+      "outdated": 16,
+      "gbifNeSpeciesCount": 7167,
+      "byCategory": {
+        "EN": 17,
+        "LC": 109,
+        "DD": 195,
+        "VU": 13,
+        "EX": 3,
+        "NT": 20,
+        "LR/nt": 1,
+        "CR": 9
+      }
+    },
+    {
+      "id": "inv-other-invertebrates-catch-all",
+      "name": "Other Invertebrates",
+      "estimatedDescribed": 195909,
+      "totalAssessed": 413,
+      "outdated": 210,
+      "gbifNeSpeciesCount": 9528,
+      "byCategory": {
+        "CR": 52,
+        "VU": 30,
+        "LC": 75,
+        "DD": 119,
+        "EN": 55,
+        "NT": 78,
+        "EX": 3,
+        "LR/nt": 1
+      }
+    }
+  ],
   "plantae": [
     {
-      "id": "pl-flowering",
+      "id": "pl-flowering_plants",
       "name": "Flowering Plants",
       "estimatedDescribed": 369000,
       "totalAssessed": 74545,
@@ -1719,39 +1773,25 @@
       }
     },
     {
-      "id": "pl-mosses",
-      "name": "Mosses",
-      "estimatedDescribed": 21925,
-      "totalAssessed": 327,
-      "outdated": 86,
-      "gbifNeSpeciesCount": 7356,
+      "id": "pl-gymnosperms",
+      "name": "Conifers & Cycads",
+      "estimatedDescribed": 1113,
+      "totalAssessed": 1062,
+      "outdated": 626,
+      "gbifNeSpeciesCount": 82,
       "byCategory": {
-        "CR": 48,
-        "NT": 35,
-        "EX": 4,
-        "EN": 72,
-        "VU": 61,
-        "LC": 67,
-        "LR/lc": 3,
-        "DD": 37
+        "LC": 444,
+        "EN": 200,
+        "CR": 93,
+        "VU": 160,
+        "NT": 142,
+        "DD": 18,
+        "EW": 5
       }
     },
     {
-      "id": "pl-green-algae",
-      "name": "Green Algae",
-      "estimatedDescribed": 14550,
-      "totalAssessed": 18,
-      "outdated": 13,
-      "gbifNeSpeciesCount": 2751,
-      "byCategory": {
-        "DD": 6,
-        "LC": 11,
-        "NT": 1
-      }
-    },
-    {
-      "id": "pl-ferns",
-      "name": "Ferns & Allies",
+      "id": "pl-ferns_and_allies",
+      "name": "Ferns & Horsetails",
       "estimatedDescribed": 11800,
       "totalAssessed": 834,
       "outdated": 447,
@@ -1768,7 +1808,38 @@
       }
     },
     {
-      "id": "pl-red-algae",
+      "id": "pl-mosses",
+      "name": "Mosses, Liverworts & Hornworts",
+      "estimatedDescribed": 21925,
+      "totalAssessed": 327,
+      "outdated": 86,
+      "gbifNeSpeciesCount": 7356,
+      "byCategory": {
+        "CR": 48,
+        "NT": 35,
+        "EX": 4,
+        "EN": 72,
+        "VU": 61,
+        "LC": 67,
+        "LR/lc": 3,
+        "DD": 37
+      }
+    },
+    {
+      "id": "pl-green_algae",
+      "name": "Green Algae",
+      "estimatedDescribed": 14550,
+      "totalAssessed": 18,
+      "outdated": 13,
+      "gbifNeSpeciesCount": 2751,
+      "byCategory": {
+        "DD": 6,
+        "LC": 11,
+        "NT": 1
+      }
+    },
+    {
+      "id": "pl-red_algae",
       "name": "Red Algae",
       "estimatedDescribed": 7744,
       "totalAssessed": 78,
@@ -1781,28 +1852,11 @@
         "VU": 3,
         "CR": 6
       }
-    },
-    {
-      "id": "pl-gymnosperms",
-      "name": "Gymnosperms",
-      "estimatedDescribed": 1113,
-      "totalAssessed": 1062,
-      "outdated": 626,
-      "gbifNeSpeciesCount": 82,
-      "byCategory": {
-        "LC": 444,
-        "EN": 200,
-        "CR": 93,
-        "VU": 160,
-        "NT": 142,
-        "DD": 18,
-        "EW": 5
-      }
     }
   ],
-  "pl-flowering": [
+  "pl-flowering_plants": [
     {
-      "id": "pl-orchids",
+      "id": "pl-orchids-lilies-bulbs",
       "name": "Orchids, Lilies & Bulbs",
       "estimatedDescribed": 36000,
       "totalAssessed": 3736,
@@ -1821,7 +1875,7 @@
       }
     },
     {
-      "id": "pl-composites",
+      "id": "pl-composites-wildflowers",
       "name": "Composites & Wildflowers",
       "estimatedDescribed": 26900,
       "totalAssessed": 2776,
@@ -1862,7 +1916,7 @@
       }
     },
     {
-      "id": "pl-grasses",
+      "id": "pl-grasses-cereals",
       "name": "Grasses & Cereals",
       "estimatedDescribed": 18900,
       "totalAssessed": 2843,
@@ -1881,44 +1935,7 @@
       }
     },
     {
-      "id": "pl-broadleaf",
-      "name": "Broadleaf Trees & Shrubs",
-      "estimatedDescribed": 88600,
-      "totalAssessed": 39093,
-      "outdated": 5190,
-      "gbifNeSpeciesCount": 31901,
-      "byCategory": {
-        "LR/cd": 67,
-        "VU": 5446,
-        "LC": 18086,
-        "EN": 6427,
-        "NT": 2192,
-        "LR/nt": 179,
-        "CR": 3211,
-        "EX": 50,
-        "EW": 14,
-        "DD": 3321,
-        "LR/lc": 100
-      }
-    },
-    {
-      "id": "pl-aquatic",
-      "name": "Aquatic Flowering Plants",
-      "estimatedDescribed": 4600,
-      "totalAssessed": 710,
-      "outdated": 503,
-      "gbifNeSpeciesCount": 2007,
-      "byCategory": {
-        "VU": 93,
-        "DD": 116,
-        "NT": 48,
-        "EN": 74,
-        "CR": 38,
-        "LC": 341
-      }
-    },
-    {
-      "id": "pl-palms",
+      "id": "pl-palms-relatives",
       "name": "Palms & Relatives",
       "estimatedDescribed": 2600,
       "totalAssessed": 1301,
@@ -1939,7 +1956,44 @@
       }
     },
     {
-      "id": "pl-other-flowering",
+      "id": "pl-aquatic-flowering",
+      "name": "Aquatic Flowering Plants",
+      "estimatedDescribed": 4600,
+      "totalAssessed": 710,
+      "outdated": 503,
+      "gbifNeSpeciesCount": 2007,
+      "byCategory": {
+        "VU": 93,
+        "DD": 116,
+        "NT": 48,
+        "EN": 74,
+        "CR": 38,
+        "LC": 341
+      }
+    },
+    {
+      "id": "pl-broadleaf-trees-shrubs",
+      "name": "Broadleaf Trees & Shrubs",
+      "estimatedDescribed": 88600,
+      "totalAssessed": 39093,
+      "outdated": 5190,
+      "gbifNeSpeciesCount": 31901,
+      "byCategory": {
+        "LR/cd": 67,
+        "VU": 5446,
+        "LC": 18086,
+        "EN": 6427,
+        "NT": 2192,
+        "LR/nt": 179,
+        "CR": 3211,
+        "EX": 50,
+        "EW": 14,
+        "DD": 3321,
+        "LR/lc": 100
+      }
+    },
+    {
+      "id": "pl-other-flowering-plants",
       "name": "Other Flowering Plants",
       "estimatedDescribed": 170600,
       "totalAssessed": 17516,
@@ -1978,7 +2032,7 @@
       }
     },
     {
-      "id": "fu-brown-algae",
+      "id": "fu-brown_algae",
       "name": "Brown Algae",
       "estimatedDescribed": 5005,
       "totalAssessed": 18,
@@ -1989,6 +2043,40 @@
         "DD": 12,
         "EN": 1,
         "VU": 1
+      }
+    }
+  ],
+  "fu-mushrooms": [
+    {
+      "id": "fu-moulds-yeasts-cup",
+      "name": "Moulds, Yeasts & Cup Fungi",
+      "estimatedDescribed": 98000,
+      "totalAssessed": 179,
+      "outdated": 8,
+      "gbifNeSpeciesCount": 20413,
+      "byCategory": {
+        "EN": 34,
+        "CR": 25,
+        "VU": 31,
+        "NT": 10,
+        "LC": 54,
+        "DD": 25
+      }
+    },
+    {
+      "id": "fu-bracket-mushroom-fungi",
+      "name": "Bracket Fungi & Mushrooms",
+      "estimatedDescribed": 59648,
+      "totalAssessed": 1123,
+      "outdated": 37,
+      "gbifNeSpeciesCount": 30457,
+      "byCategory": {
+        "LC": 437,
+        "NT": 100,
+        "VU": 203,
+        "EN": 95,
+        "DD": 265,
+        "CR": 23
       }
     }
   ]

@@ -53,8 +53,6 @@ export async function GET(request: NextRequest) {
         rows: section.nodeIds.map((nodeId) => {
           const node = findNode(nodeId);
           const csvGroups = getCsvGroupsForNode(nodeId);
-          // For Table 1a, each node maps to one CSV group typically
-          const row = csvGroups.length === 1 ? rowsByGroup.get(csvGroups[0]) : undefined;
           // For multi-group nodes, merge
           const matchedRows = csvGroups
             .map((g) => rowsByGroup.get(g))
@@ -88,7 +86,9 @@ export async function GET(request: NextRequest) {
             gbifNeSpeciesCount,
             totalGbifObservations,
             meanGbifObsPerSpecies: gbifSpeciesCount > 0 ? totalGbifObservations / gbifSpeciesCount : undefined,
-            medianGbifObsPerSpecies: row?.median_gbif_obs != null ? Number(row.median_gbif_obs) : undefined,
+            medianGbifObsPerSpecies: matchedRows.length === 1 && matchedRows[0].median_gbif_obs != null
+              ? Number(matchedRows[0].median_gbif_obs)
+              : undefined,
           };
         }),
       }));
@@ -192,6 +192,30 @@ export async function GET(request: NextRequest) {
         };
       }),
     ];
+
+    // Populate the "all" row by summing per-taxon data
+    const allEntry = taxa.find((t) => t.id === "all");
+    if (allEntry) {
+      const perTaxonRows = taxa.filter((t) => t.id !== "all");
+      allEntry.totalAssessed = perTaxonRows.reduce((s, t) => s + t.totalAssessed, 0);
+      allEntry.outdated = perTaxonRows.reduce((s, t) => s + t.outdated, 0);
+      allEntry.percentAssessed = allEntry.estimatedDescribed > 0
+        ? (allEntry.totalAssessed / allEntry.estimatedDescribed) * 100
+        : 0;
+      allEntry.percentOutdated = allEntry.totalAssessed > 0
+        ? (allEntry.outdated / allEntry.totalAssessed) * 100
+        : 0;
+      allEntry.byCategory = mergeByCategory(
+        perTaxonRows.map((t) => ({ by_category: t.byCategory }))
+      );
+      const totalGbif = perTaxonRows.reduce((s, t) => s + (t.totalGbifObservations ?? 0), 0);
+      const gbifCount = perTaxonRows.reduce((s, t) => s + (t.gbifSpeciesCount ?? 0), 0);
+      const gbifNeCount = perTaxonRows.reduce((s, t) => s + (t.gbifNeSpeciesCount ?? 0), 0);
+      allEntry.totalGbifObservations = totalGbif;
+      allEntry.gbifSpeciesCount = gbifCount;
+      allEntry.gbifNeSpeciesCount = gbifNeCount;
+      allEntry.meanGbifObsPerSpecies = gbifCount > 0 ? totalGbif / gbifCount : undefined;
+    }
 
     return NextResponse.json({ taxa }, { headers: CACHE_1H });
   } catch (error) {

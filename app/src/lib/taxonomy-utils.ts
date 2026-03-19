@@ -58,11 +58,6 @@ export function getNodePath(id: string): string[] {
   return [...getAncestors(id).reverse(), id];
 }
 
-/** Get a view by ID. */
-export function getView(viewId: string) {
-  return TAXONOMY_VIEWS[viewId] ?? TAXONOMY_VIEWS.default;
-}
-
 // ─── View root resolution ────────────────────────────────────────────
 
 const DEFAULT_VIEW_ROOTS = new Set(TAXONOMY_VIEWS.default.roots);

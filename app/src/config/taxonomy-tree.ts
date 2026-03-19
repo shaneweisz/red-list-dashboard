@@ -139,6 +139,259 @@ const ALL_PLANT_GROUPS = [
   "green_algae", "red_algae",
 ];
 
+// ─── Helpers ─────────────────────────────────────────────────────────
+
+/** Deep-clone a TaxonomyNode, prefixing all IDs recursively. */
+function prefixTree(node: TaxonomyNode, prefix: string): TaxonomyNode {
+  return {
+    ...node,
+    id: prefix + node.id,
+    children: node.children?.map(c => prefixTree(c, prefix)),
+  };
+}
+
+// ─── Canonical Table 1a nodes (reused in virtual grouping nodes) ─────
+
+const INSECTA_NODE: TaxonomyNode = {
+  id: "insecta",
+  name: "Insects",
+  filter: { csvGroups: ["insecta"] },
+  estimatedDescribed: 1_003_469,
+  estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ")",
+  estimatedSourceUrl: IUCN_SOURCE_URL,
+  children: [
+    { id: "beetles", name: "Beetles", filter: { csvGroups: ["insecta"], orderNames: ["coleoptera"] }, estimatedDescribed: 392_000, estimatedSource: ZHANG_2011, estimatedSourceUrl: ZHANG_2011_URL },
+    { id: "butterflies-moths", name: "Butterflies & Moths", filter: { csvGroups: ["insecta"], orderNames: ["lepidoptera"] }, estimatedDescribed: 160_000, estimatedSource: ZHANG_2011, estimatedSourceUrl: ZHANG_2011_URL },
+    { id: "flies-mosquitoes", name: "Flies & Mosquitoes", filter: { csvGroups: ["insecta"], orderNames: ["diptera"] }, estimatedDescribed: 155_000, estimatedSource: ZHANG_2011, estimatedSourceUrl: ZHANG_2011_URL },
+    { id: "bees-wasps-ants", name: "Bees, Wasps & Ants", filter: { csvGroups: ["insecta"], orderNames: ["hymenoptera"] }, estimatedDescribed: 153_000, estimatedSource: ZHANG_2011, estimatedSourceUrl: ZHANG_2011_URL },
+    { id: "true-bugs", name: "True Bugs", filter: { csvGroups: ["insecta"], orderNames: ["hemiptera"] }, estimatedDescribed: 82_000, estimatedSource: ZHANG_2011, estimatedSourceUrl: ZHANG_2011_URL },
+    { id: "grasshoppers-crickets", name: "Grasshoppers, Crickets & Locusts", filter: { csvGroups: ["insecta"], orderNames: ["orthoptera"] }, estimatedDescribed: 26_000, estimatedSource: "Orthoptera Species File, 2025", estimatedSourceUrl: "https://orthoptera.speciesfile.org/" },
+    { id: "dragonflies-damselflies", name: "Dragonflies & Damselflies", filter: { csvGroups: ["insecta"], orderNames: ["odonata"] }, estimatedDescribed: 6_400, estimatedSource: "World Odonata List, 2025", estimatedSourceUrl: "https://www.pugetsound.edu/puget-sound-museum-natural-history/biodiversity-resources/insects/dragonflies/world-odonata-list" },
+    { id: "other-insects", name: "Other Insects", filter: { csvGroups: ["insecta"], excludeOrders: INSECT_NAMED_ORDERS }, estimatedDescribed: 29_069, estimatedSource: "Remainder from IUCN Table 1a total of 1,003,469 (" + COL_2025 + ")", estimatedSourceUrl: COL_2025_URL },
+  ],
+};
+
+const ARACHNIDA_NODE: TaxonomyNode = {
+  id: "arachnida",
+  name: "Arachnids",
+  filter: { csvGroups: ["arachnida"] },
+  estimatedDescribed: 97_085,
+  estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ")",
+  estimatedSourceUrl: COL_2025_URL,
+};
+
+const MOLLUSCA_NODE: TaxonomyNode = {
+  id: "mollusca",
+  name: "Molluscs",
+  filter: { csvGroups: ["mollusca"] },
+  estimatedDescribed: 88_244,
+  estimatedSource: IUCN_SOURCE + " (MolluscaBase 2025)",
+  estimatedSourceUrl: "http://www.molluscabase.org",
+};
+
+const CRUSTACEA_NODE: TaxonomyNode = {
+  id: "crustacea",
+  name: "Crustaceans",
+  filter: { csvGroups: ["crustacea"] },
+  estimatedDescribed: 83_263,
+  estimatedSource: IUCN_SOURCE + " (" + COL_2025 + "; World Ostracoda Database)",
+  estimatedSourceUrl: COL_2025_URL,
+};
+
+const CORALS_NODE: TaxonomyNode = {
+  id: "corals",
+  name: "Corals & Cnidarians",
+  filter: { csvGroups: ["corals"] },
+  estimatedDescribed: 5_672,
+  estimatedSource: IUCN_SOURCE + " (WoRMS 2025)",
+  estimatedSourceUrl: "https://www.marinespecies.org",
+};
+
+const OTHER_INVERTEBRATES_NODE: TaxonomyNode = {
+  id: "other_invertebrates",
+  name: "Other Invertebrates",
+  filter: { csvGroups: ["other_invertebrates", "velvet_worms", "horseshoe_crabs"] },
+  estimatedDescribed: 230_709,
+  estimatedSource: IUCN_SOURCE + " (Others 230,485 + Velvet Worms 220 + Horseshoe Crabs 4)",
+  estimatedSourceUrl: COL_2025_URL,
+  children: [
+    {
+      id: "echinoderms",
+      name: "Echinoderms",
+      filter: {
+        csvGroups: ["other_invertebrates"],
+        classNames: ["asteroidea", "echinoidea", "holothuroidea"],
+      },
+      estimatedDescribed: 7_000,
+      estimatedSource: "~7,000 extant spp. (WoRMS; Animal Diversity Web)",
+      estimatedSourceUrl: "https://www.marinespecies.org/aphia.php?p=taxdetails&id=1806",
+    },
+    {
+      id: "worms",
+      name: "Worms",
+      filter: {
+        csvGroups: ["other_invertebrates"],
+        classNames: ["clitellata", "polychaeta", "nemertea", "turbellaria"],
+      },
+      estimatedDescribed: 27_800,
+      estimatedSource: "~22K Annelida + ~1.3K Nemertea + ~4.5K Turbellaria (WoRMS; various)",
+      estimatedSourceUrl: "https://www.marinespecies.org/aphia.php?p=taxdetails&id=882",
+    },
+    {
+      id: "other-invertebrates-catch-all",
+      name: "Other Invertebrates",
+      filter: {
+        csvGroups: ["other_invertebrates", "velvet_worms", "horseshoe_crabs"],
+        excludeClasses: ["asteroidea", "echinoidea", "holothuroidea", "clitellata", "polychaeta", "nemertea", "turbellaria"],
+      },
+      estimatedDescribed: 195_909,
+      estimatedSource: "Remainder from IUCN Table 1a 'Others' + Velvet Worms + Horseshoe Crabs, minus Echinoderms & Worms",
+      estimatedSourceUrl: COL_2025_URL,
+    },
+  ],
+};
+
+const VELVET_WORMS_NODE: TaxonomyNode = {
+  id: "velvet_worms",
+  name: "Velvet Worms",
+  filter: { csvGroups: ["velvet_worms"] },
+  estimatedDescribed: 220,
+  estimatedSource: IUCN_SOURCE,
+  estimatedSourceUrl: IUCN_SOURCE_URL,
+};
+
+const HORSESHOE_CRABS_NODE: TaxonomyNode = {
+  id: "horseshoe_crabs",
+  name: "Horseshoe Crabs",
+  filter: { csvGroups: ["horseshoe_crabs"] },
+  estimatedDescribed: 4,
+  estimatedSource: IUCN_SOURCE,
+  estimatedSourceUrl: IUCN_SOURCE_URL,
+};
+
+const FLOWERING_PLANTS_NODE: TaxonomyNode = {
+  id: "flowering_plants",
+  name: "Flowering Plants",
+  filter: { csvGroups: ["flowering_plants"] },
+  estimatedDescribed: 369_000,
+  estimatedSource: IUCN_SOURCE + " (State of the World's Plants 2017)",
+  estimatedSourceUrl: IUCN_SOURCE_URL,
+  children: [
+    { id: "orchids-lilies-bulbs", name: "Orchids, Lilies & Bulbs", filter: { csvGroups: ["flowering_plants"], orderNames: ["asparagales"] }, estimatedDescribed: 36_000, estimatedSource: CHRISTENHUSZ, estimatedSourceUrl: CHRISTENHUSZ_URL },
+    { id: "composites-wildflowers", name: "Composites & Wildflowers", filter: { csvGroups: ["flowering_plants"], orderNames: ["asterales"] }, estimatedDescribed: 26_900, estimatedSource: CHRISTENHUSZ, estimatedSourceUrl: CHRISTENHUSZ_URL },
+    { id: "legumes", name: "Legumes", filter: { csvGroups: ["flowering_plants"], orderNames: ["fabales"] }, estimatedDescribed: 20_800, estimatedSource: CHRISTENHUSZ, estimatedSourceUrl: CHRISTENHUSZ_URL },
+    { id: "grasses-cereals", name: "Grasses & Cereals", filter: { csvGroups: ["flowering_plants"], orderNames: ["poales"] }, estimatedDescribed: 18_900, estimatedSource: CHRISTENHUSZ, estimatedSourceUrl: CHRISTENHUSZ_URL },
+    { id: "palms-relatives", name: "Palms & Relatives", filter: { csvGroups: ["flowering_plants"], orderNames: ["arecales"] }, estimatedDescribed: 2_600, estimatedSource: CHRISTENHUSZ, estimatedSourceUrl: CHRISTENHUSZ_URL },
+    { id: "aquatic-flowering", name: "Aquatic Flowering Plants", filter: { csvGroups: ["flowering_plants"], orderNames: ["alismatales", "ceratophyllales", "nymphaeales"] }, estimatedDescribed: 4_600, estimatedSource: CHRISTENHUSZ, estimatedSourceUrl: CHRISTENHUSZ_URL },
+    {
+      id: "broadleaf-trees-shrubs",
+      name: "Broadleaf Trees & Shrubs",
+      filter: {
+        csvGroups: ["flowering_plants"],
+        orderNames: [
+          "fagales", "rosales", "malpighiales", "sapindales", "myrtales",
+          "laurales", "magnoliales", "malvales", "ericales", "gentianales",
+        ],
+      },
+      estimatedDescribed: 88_600,
+      estimatedSource: CHRISTENHUSZ + " — sum of 10 orders",
+      estimatedSourceUrl: CHRISTENHUSZ_URL,
+    },
+    {
+      id: "other-flowering-plants",
+      name: "Other Flowering Plants",
+      filter: {
+        csvGroups: ["flowering_plants"],
+        excludeOrders: FLOWERING_NAMED_ORDERS,
+      },
+      estimatedDescribed: 170_600,
+      estimatedSource: "Remainder from IUCN Table 1a total of 369,000 (State of the World's Plants 2017)",
+      estimatedSourceUrl: COL_2025_URL,
+    },
+  ],
+};
+
+const GYMNOSPERMS_NODE: TaxonomyNode = {
+  id: "gymnosperms",
+  name: "Conifers & Cycads",
+  filter: { csvGroups: ["gymnosperms"] },
+  estimatedDescribed: 1_113,
+  estimatedSource: IUCN_SOURCE + " (Christenhusz et al. 2011)",
+  estimatedSourceUrl: "https://stateoftheworldsplants.org/2017/report/SOTWP_2017.pdf",
+};
+
+const FERNS_AND_ALLIES_NODE: TaxonomyNode = {
+  id: "ferns_and_allies",
+  name: "Ferns & Horsetails",
+  filter: { csvGroups: ["ferns_and_allies"] },
+  estimatedDescribed: 11_800,
+  estimatedSource: IUCN_SOURCE + " (State of the World's Plants 2017)",
+  estimatedSourceUrl: "https://stateoftheworldsplants.org/2017/report/SOTWP_2017.pdf",
+};
+
+const MOSSES_NODE: TaxonomyNode = {
+  id: "mosses",
+  name: "Mosses, Liverworts & Hornworts",
+  filter: { csvGroups: ["mosses"] },
+  estimatedDescribed: 21_925,
+  estimatedSource: IUCN_SOURCE + " (" + CHRISTENHUSZ + ")",
+  estimatedSourceUrl: CHRISTENHUSZ_URL,
+};
+
+const GREEN_ALGAE_NODE: TaxonomyNode = {
+  id: "green_algae",
+  name: "Green Algae",
+  filter: { csvGroups: ["green_algae"] },
+  estimatedDescribed: 14_550,
+  estimatedSource: IUCN_SOURCE,
+  estimatedSourceUrl: IUCN_SOURCE_URL,
+};
+
+const RED_ALGAE_NODE: TaxonomyNode = {
+  id: "red_algae",
+  name: "Red Algae",
+  filter: { csvGroups: ["red_algae"] },
+  estimatedDescribed: 7_744,
+  estimatedSource: IUCN_SOURCE,
+  estimatedSourceUrl: IUCN_SOURCE_URL,
+};
+
+const MUSHROOMS_NODE: TaxonomyNode = {
+  id: "mushrooms",
+  name: "Mushrooms, etc.",
+  filter: { csvGroups: ["mushrooms"] },
+  estimatedDescribed: 157_648,
+  estimatedSource: IUCN_SOURCE + " (" + SPECIES_FUNGORUM + ")",
+  estimatedSourceUrl: SPECIES_FUNGORUM_URL,
+  children: [
+    {
+      id: "moulds-yeasts-cup",
+      name: "Moulds, Yeasts & Cup Fungi",
+      filter: { csvGroups: ["mushrooms"], orderNames: ASCOMYCOTA_ORDERS },
+      estimatedDescribed: 98_000,
+      estimatedSource: "~98K Ascomycota spp. (" + SPECIES_FUNGORUM + "; He et al. 2019)",
+      estimatedSourceUrl: SPECIES_FUNGORUM_URL,
+    },
+    {
+      id: "bracket-mushroom-fungi",
+      name: "Bracket Fungi & Mushrooms",
+      filter: { csvGroups: ["mushrooms"], excludeOrders: ASCOMYCOTA_ORDERS },
+      estimatedDescribed: 59_648,
+      estimatedSource: "Remainder of 157,648 total fungi (" + SPECIES_FUNGORUM + ")",
+      estimatedSourceUrl: SPECIES_FUNGORUM_URL,
+    },
+  ],
+};
+
+const BROWN_ALGAE_NODE: TaxonomyNode = {
+  id: "brown_algae",
+  name: "Brown Algae",
+  filter: { csvGroups: ["brown_algae"] },
+  estimatedDescribed: 5_005,
+  estimatedSource: IUCN_SOURCE,
+  estimatedSourceUrl: IUCN_SOURCE_URL,
+};
+
 // ─── The Tree ────────────────────────────────────────────────────────
 
 export const TAXONOMY_TREE: TaxonomyNode = {
@@ -240,6 +493,10 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           filter: {
             csvGroups: ["mammalia"],
             orderNames: ["artiodactyla", "sirenia"],
+            // Families filter separates cetaceans from other artiodactyls and
+            // covers all extant/known sirenians (Trichechidae = manatees,
+            // Dugongidae = dugong + Steller's sea cow). If a newly-described
+            // sirenian family is added to IUCN data, it must be listed here.
             families: [...CETACEAN_FAMILIES, "trichechidae", "dugongidae"],
           },
           estimatedDescribed: 96,
@@ -514,358 +771,52 @@ export const TAXONOMY_TREE: TaxonomyNode = {
     },
 
     // ─── INSECTA ───────────────────────────────────────────────────────
-    {
-      id: "insecta",
-      name: "Insects",
-      filter: { csvGroups: ["insecta"] },
-      estimatedDescribed: 1_003_469,
-      estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ")",
-      estimatedSourceUrl: IUCN_SOURCE_URL,
-      children: [
-        {
-          id: "beetles",
-          name: "Beetles",
-          filter: { csvGroups: ["insecta"], orderNames: ["coleoptera"] },
-          estimatedDescribed: 392_000,
-          estimatedSource: ZHANG_2011,
-          estimatedSourceUrl: ZHANG_2011_URL,
-        },
-        {
-          id: "butterflies-moths",
-          name: "Butterflies & Moths",
-          filter: { csvGroups: ["insecta"], orderNames: ["lepidoptera"] },
-          estimatedDescribed: 160_000,
-          estimatedSource: ZHANG_2011,
-          estimatedSourceUrl: ZHANG_2011_URL,
-        },
-        {
-          id: "flies-mosquitoes",
-          name: "Flies & Mosquitoes",
-          filter: { csvGroups: ["insecta"], orderNames: ["diptera"] },
-          estimatedDescribed: 155_000,
-          estimatedSource: ZHANG_2011,
-          estimatedSourceUrl: ZHANG_2011_URL,
-        },
-        {
-          id: "bees-wasps-ants",
-          name: "Bees, Wasps & Ants",
-          filter: { csvGroups: ["insecta"], orderNames: ["hymenoptera"] },
-          estimatedDescribed: 153_000,
-          estimatedSource: ZHANG_2011,
-          estimatedSourceUrl: ZHANG_2011_URL,
-        },
-        {
-          id: "true-bugs",
-          name: "True Bugs",
-          filter: { csvGroups: ["insecta"], orderNames: ["hemiptera"] },
-          estimatedDescribed: 82_000,
-          estimatedSource: ZHANG_2011,
-          estimatedSourceUrl: ZHANG_2011_URL,
-        },
-        {
-          id: "grasshoppers-crickets",
-          name: "Grasshoppers, Crickets & Locusts",
-          filter: { csvGroups: ["insecta"], orderNames: ["orthoptera"] },
-          estimatedDescribed: 26_000,
-          estimatedSource: "Orthoptera Species File, 2025",
-          estimatedSourceUrl: "https://orthoptera.speciesfile.org/",
-        },
-        {
-          id: "dragonflies-damselflies",
-          name: "Dragonflies & Damselflies",
-          filter: { csvGroups: ["insecta"], orderNames: ["odonata"] },
-          estimatedDescribed: 6_400,
-          estimatedSource: "World Odonata List, 2025",
-          estimatedSourceUrl: "https://www.pugetsound.edu/puget-sound-museum-natural-history/biodiversity-resources/insects/dragonflies/world-odonata-list",
-        },
-        {
-          id: "other-insects",
-          name: "Other Insects",
-          filter: { csvGroups: ["insecta"], excludeOrders: INSECT_NAMED_ORDERS },
-          estimatedDescribed: 29_069,
-          estimatedSource: "Remainder from IUCN Table 1a total of 1,003,469 (" + COL_2025 + ")",
-          estimatedSourceUrl: COL_2025_URL,
-        },
-      ],
-    },
+    INSECTA_NODE,
 
     // ─── ARACHNIDA (leaf) ──────────────────────────────────────────────
-    {
-      id: "arachnida",
-      name: "Arachnids",
-      filter: { csvGroups: ["arachnida"] },
-      estimatedDescribed: 97_085,
-      estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ")",
-      estimatedSourceUrl: COL_2025_URL,
-    },
+    ARACHNIDA_NODE,
 
     // ─── MOLLUSCA (leaf) ───────────────────────────────────────────────
-    {
-      id: "mollusca",
-      name: "Molluscs",
-      filter: { csvGroups: ["mollusca"] },
-      estimatedDescribed: 88_244,
-      estimatedSource: IUCN_SOURCE + " (MolluscaBase 2025)",
-      estimatedSourceUrl: "http://www.molluscabase.org",
-    },
+    MOLLUSCA_NODE,
 
     // ─── CRUSTACEA (leaf) ──────────────────────────────────────────────
-    {
-      id: "crustacea",
-      name: "Crustaceans",
-      filter: { csvGroups: ["crustacea"] },
-      estimatedDescribed: 83_263,
-      estimatedSource: IUCN_SOURCE + " (" + COL_2025 + "; World Ostracoda Database)",
-      estimatedSourceUrl: COL_2025_URL,
-    },
+    CRUSTACEA_NODE,
 
     // ─── CORALS (leaf) ─────────────────────────────────────────────────
-    {
-      id: "corals",
-      name: "Corals & Cnidarians",
-      filter: { csvGroups: ["corals"] },
-      estimatedDescribed: 5_672,
-      estimatedSource: IUCN_SOURCE + " (WoRMS 2025)",
-      estimatedSourceUrl: "https://www.marinespecies.org",
-    },
+    CORALS_NODE,
 
     // ─── OTHER INVERTEBRATES ───────────────────────────────────────────
-    {
-      id: "other_invertebrates",
-      name: "Other Invertebrates",
-      filter: { csvGroups: ["other_invertebrates", "velvet_worms", "horseshoe_crabs"] },
-      estimatedDescribed: 230_709,
-      estimatedSource: IUCN_SOURCE + " (Others 230,485 + Velvet Worms 220 + Horseshoe Crabs 4)",
-      estimatedSourceUrl: COL_2025_URL,
-      children: [
-        {
-          id: "echinoderms",
-          name: "Echinoderms",
-          filter: {
-            csvGroups: ["other_invertebrates"],
-            classNames: ["asteroidea", "echinoidea", "holothuroidea"],
-          },
-          estimatedDescribed: 7_000,
-          estimatedSource: "~7,000 extant spp. (WoRMS; Animal Diversity Web)",
-          estimatedSourceUrl: "https://www.marinespecies.org/aphia.php?p=taxdetails&id=1806",
-        },
-        {
-          id: "worms",
-          name: "Worms",
-          filter: {
-            csvGroups: ["other_invertebrates"],
-            classNames: ["clitellata", "polychaeta", "nemertea", "turbellaria"],
-          },
-          estimatedDescribed: 27_800,
-          estimatedSource: "~22K Annelida + ~1.3K Nemertea + ~4.5K Turbellaria (WoRMS; various)",
-          estimatedSourceUrl: "https://www.marinespecies.org/aphia.php?p=taxdetails&id=882",
-        },
-        {
-          id: "other-invertebrates-catch-all",
-          name: "Other Invertebrates",
-          filter: {
-            csvGroups: ["other_invertebrates", "velvet_worms", "horseshoe_crabs"],
-            excludeClasses: ["asteroidea", "echinoidea", "holothuroidea", "clitellata", "polychaeta", "nemertea", "turbellaria"],
-          },
-          estimatedDescribed: 195_909,
-          estimatedSource: "Remainder from IUCN Table 1a 'Others' + Velvet Worms + Horseshoe Crabs, minus Echinoderms & Worms",
-          estimatedSourceUrl: COL_2025_URL,
-        },
-      ],
-    },
+    OTHER_INVERTEBRATES_NODE,
 
     // ─── VELVET WORMS (leaf) ───────────────────────────────────────────
-    {
-      id: "velvet_worms",
-      name: "Velvet Worms",
-      filter: { csvGroups: ["velvet_worms"] },
-      estimatedDescribed: 220,
-      estimatedSource: IUCN_SOURCE,
-      estimatedSourceUrl: IUCN_SOURCE_URL,
-    },
+    VELVET_WORMS_NODE,
 
     // ─── HORSESHOE CRABS (leaf) ────────────────────────────────────────
-    {
-      id: "horseshoe_crabs",
-      name: "Horseshoe Crabs",
-      filter: { csvGroups: ["horseshoe_crabs"] },
-      estimatedDescribed: 4,
-      estimatedSource: IUCN_SOURCE,
-      estimatedSourceUrl: IUCN_SOURCE_URL,
-    },
+    HORSESHOE_CRABS_NODE,
 
     // ─── FLOWERING PLANTS ──────────────────────────────────────────────
-    {
-      id: "flowering_plants",
-      name: "Flowering Plants",
-      filter: { csvGroups: ["flowering_plants"] },
-      estimatedDescribed: 369_000,
-      estimatedSource: IUCN_SOURCE + " (State of the World's Plants 2017)",
-      estimatedSourceUrl: IUCN_SOURCE_URL,
-      children: [
-        {
-          id: "orchids-lilies-bulbs",
-          name: "Orchids, Lilies & Bulbs",
-          filter: { csvGroups: ["flowering_plants"], orderNames: ["asparagales"] },
-          estimatedDescribed: 36_000,
-          estimatedSource: CHRISTENHUSZ,
-          estimatedSourceUrl: CHRISTENHUSZ_URL,
-        },
-        {
-          id: "composites-wildflowers",
-          name: "Composites & Wildflowers",
-          filter: { csvGroups: ["flowering_plants"], orderNames: ["asterales"] },
-          estimatedDescribed: 26_900,
-          estimatedSource: CHRISTENHUSZ,
-          estimatedSourceUrl: CHRISTENHUSZ_URL,
-        },
-        {
-          id: "legumes",
-          name: "Legumes",
-          filter: { csvGroups: ["flowering_plants"], orderNames: ["fabales"] },
-          estimatedDescribed: 20_800,
-          estimatedSource: CHRISTENHUSZ,
-          estimatedSourceUrl: CHRISTENHUSZ_URL,
-        },
-        {
-          id: "grasses-cereals",
-          name: "Grasses & Cereals",
-          filter: { csvGroups: ["flowering_plants"], orderNames: ["poales"] },
-          estimatedDescribed: 18_900,
-          estimatedSource: CHRISTENHUSZ,
-          estimatedSourceUrl: CHRISTENHUSZ_URL,
-        },
-        {
-          id: "palms-relatives",
-          name: "Palms & Relatives",
-          filter: { csvGroups: ["flowering_plants"], orderNames: ["arecales"] },
-          estimatedDescribed: 2_600,
-          estimatedSource: CHRISTENHUSZ,
-          estimatedSourceUrl: CHRISTENHUSZ_URL,
-        },
-        {
-          id: "aquatic-flowering",
-          name: "Aquatic Flowering Plants",
-          filter: { csvGroups: ["flowering_plants"], orderNames: ["alismatales", "ceratophyllales", "nymphaeales"] },
-          estimatedDescribed: 4_600,
-          estimatedSource: CHRISTENHUSZ,
-          estimatedSourceUrl: CHRISTENHUSZ_URL,
-        },
-        {
-          id: "broadleaf-trees-shrubs",
-          name: "Broadleaf Trees & Shrubs",
-          filter: {
-            csvGroups: ["flowering_plants"],
-            orderNames: [
-              "fagales", "rosales", "malpighiales", "sapindales", "myrtales",
-              "laurales", "magnoliales", "malvales", "ericales", "gentianales",
-            ],
-          },
-          estimatedDescribed: 88_600,
-          estimatedSource: CHRISTENHUSZ + " — sum of 10 orders",
-          estimatedSourceUrl: CHRISTENHUSZ_URL,
-        },
-        {
-          id: "other-flowering-plants",
-          name: "Other Flowering Plants",
-          filter: {
-            csvGroups: ["flowering_plants"],
-            excludeOrders: FLOWERING_NAMED_ORDERS,
-          },
-          estimatedDescribed: 170_600,
-          estimatedSource: "Remainder from IUCN Table 1a total of 369,000 (State of the World's Plants 2017)",
-          estimatedSourceUrl: COL_2025_URL,
-        },
-      ],
-    },
+    FLOWERING_PLANTS_NODE,
 
     // ─── GYMNOSPERMS (leaf) ────────────────────────────────────────────
-    {
-      id: "gymnosperms",
-      name: "Conifers & Cycads",
-      filter: { csvGroups: ["gymnosperms"] },
-      estimatedDescribed: 1_113,
-      estimatedSource: IUCN_SOURCE + " (Christenhusz et al. 2011)",
-      estimatedSourceUrl: "https://stateoftheworldsplants.org/2017/report/SOTWP_2017.pdf",
-    },
+    GYMNOSPERMS_NODE,
 
     // ─── FERNS & ALLIES (leaf) ─────────────────────────────────────────
-    {
-      id: "ferns_and_allies",
-      name: "Ferns & Horsetails",
-      filter: { csvGroups: ["ferns_and_allies"] },
-      estimatedDescribed: 11_800,
-      estimatedSource: IUCN_SOURCE + " (State of the World's Plants 2017)",
-      estimatedSourceUrl: "https://stateoftheworldsplants.org/2017/report/SOTWP_2017.pdf",
-    },
+    FERNS_AND_ALLIES_NODE,
 
     // ─── MOSSES (leaf) ─────────────────────────────────────────────────
-    {
-      id: "mosses",
-      name: "Mosses, Liverworts & Hornworts",
-      filter: { csvGroups: ["mosses"] },
-      estimatedDescribed: 21_925,
-      estimatedSource: IUCN_SOURCE + " (" + CHRISTENHUSZ + ")",
-      estimatedSourceUrl: CHRISTENHUSZ_URL,
-    },
+    MOSSES_NODE,
 
     // ─── GREEN ALGAE (leaf) ────────────────────────────────────────────
-    {
-      id: "green_algae",
-      name: "Green Algae",
-      filter: { csvGroups: ["green_algae"] },
-      estimatedDescribed: 14_550,
-      estimatedSource: IUCN_SOURCE,
-      estimatedSourceUrl: IUCN_SOURCE_URL,
-    },
+    GREEN_ALGAE_NODE,
 
     // ─── RED ALGAE (leaf) ──────────────────────────────────────────────
-    {
-      id: "red_algae",
-      name: "Red Algae",
-      filter: { csvGroups: ["red_algae"] },
-      estimatedDescribed: 7_744,
-      estimatedSource: IUCN_SOURCE,
-      estimatedSourceUrl: IUCN_SOURCE_URL,
-    },
+    RED_ALGAE_NODE,
 
     // ─── BROWN ALGAE (leaf) ────────────────────────────────────────────
-    {
-      id: "brown_algae",
-      name: "Brown Algae",
-      filter: { csvGroups: ["brown_algae"] },
-      estimatedDescribed: 5_005,
-      estimatedSource: IUCN_SOURCE,
-      estimatedSourceUrl: IUCN_SOURCE_URL,
-    },
+    BROWN_ALGAE_NODE,
 
     // ─── MUSHROOMS ─────────────────────────────────────────────────────
-    {
-      id: "mushrooms",
-      name: "Mushrooms, etc.",
-      filter: { csvGroups: ["mushrooms"] },
-      estimatedDescribed: 157_648,
-      estimatedSource: IUCN_SOURCE + " (" + SPECIES_FUNGORUM + ")",
-      estimatedSourceUrl: SPECIES_FUNGORUM_URL,
-      children: [
-        {
-          id: "moulds-yeasts-cup",
-          name: "Moulds, Yeasts & Cup Fungi",
-          filter: { csvGroups: ["mushrooms"], orderNames: ASCOMYCOTA_ORDERS },
-          estimatedDescribed: 98_000,
-          estimatedSource: "~98K Ascomycota spp. (" + SPECIES_FUNGORUM + "; He et al. 2019)",
-          estimatedSourceUrl: SPECIES_FUNGORUM_URL,
-        },
-        {
-          id: "bracket-mushroom-fungi",
-          name: "Bracket Fungi & Mushrooms",
-          filter: { csvGroups: ["mushrooms"], excludeOrders: ASCOMYCOTA_ORDERS },
-          estimatedDescribed: 59_648,
-          estimatedSource: "Remainder of 157,648 total fungi (" + SPECIES_FUNGORUM + ")",
-          estimatedSourceUrl: SPECIES_FUNGORUM_URL,
-        },
-      ],
-    },
+    MUSHROOMS_NODE,
 
     // ─── VIRTUAL GROUPING NODES ────────────────────────────────────────
     // These aggregate Table 1a groups for the default view
@@ -879,28 +830,14 @@ export const TAXONOMY_TREE: TaxonomyNode = {
       estimatedSourceUrl: IUCN_SOURCE_URL,
       color: "#78716c",
       children: [
-        // Children reference the Table 1a group nodes above by structure
-        // but we need inline definitions for the tree to be self-contained
-        {
-          id: "inv-insecta", name: "Insects", filter: { csvGroups: ["insecta"] }, estimatedDescribed: 1_003_469, estimatedSource: IUCN_SOURCE, estimatedSourceUrl: IUCN_SOURCE_URL,
-          children: [
-            { id: "inv-beetles", name: "Beetles", filter: { csvGroups: ["insecta"], orderNames: ["coleoptera"] }, estimatedDescribed: 392_000, estimatedSource: ZHANG_2011, estimatedSourceUrl: ZHANG_2011_URL },
-            { id: "inv-butterflies-moths", name: "Butterflies & Moths", filter: { csvGroups: ["insecta"], orderNames: ["lepidoptera"] }, estimatedDescribed: 160_000, estimatedSource: ZHANG_2011, estimatedSourceUrl: ZHANG_2011_URL },
-            { id: "inv-flies-mosquitoes", name: "Flies & Mosquitoes", filter: { csvGroups: ["insecta"], orderNames: ["diptera"] }, estimatedDescribed: 155_000, estimatedSource: ZHANG_2011, estimatedSourceUrl: ZHANG_2011_URL },
-            { id: "inv-bees-wasps-ants", name: "Bees, Wasps & Ants", filter: { csvGroups: ["insecta"], orderNames: ["hymenoptera"] }, estimatedDescribed: 153_000, estimatedSource: ZHANG_2011, estimatedSourceUrl: ZHANG_2011_URL },
-            { id: "inv-true-bugs", name: "True Bugs", filter: { csvGroups: ["insecta"], orderNames: ["hemiptera"] }, estimatedDescribed: 82_000, estimatedSource: ZHANG_2011, estimatedSourceUrl: ZHANG_2011_URL },
-            { id: "inv-grasshoppers", name: "Grasshoppers, Crickets & Locusts", filter: { csvGroups: ["insecta"], orderNames: ["orthoptera"] }, estimatedDescribed: 26_000, estimatedSource: "Orthoptera Species File, 2025", estimatedSourceUrl: "https://orthoptera.speciesfile.org/" },
-            { id: "inv-dragonflies", name: "Dragonflies & Damselflies", filter: { csvGroups: ["insecta"], orderNames: ["odonata"] }, estimatedDescribed: 6_400, estimatedSource: "World Odonata List, 2025", estimatedSourceUrl: "https://www.pugetsound.edu/puget-sound-museum-natural-history/biodiversity-resources/insects/dragonflies/world-odonata-list" },
-            { id: "inv-other-insects", name: "Other Insects", filter: { csvGroups: ["insecta"], excludeOrders: INSECT_NAMED_ORDERS }, estimatedDescribed: 29_069, estimatedSource: "Remainder from IUCN Table 1a (" + COL_2025 + ")", estimatedSourceUrl: COL_2025_URL },
-          ],
-        },
-        { id: "inv-arachnida", name: "Arachnids", filter: { csvGroups: ["arachnida"] }, estimatedDescribed: 97_085, estimatedSource: IUCN_SOURCE, estimatedSourceUrl: IUCN_SOURCE_URL },
-        { id: "inv-mollusca", name: "Molluscs", filter: { csvGroups: ["mollusca"] }, estimatedDescribed: 88_244, estimatedSource: IUCN_SOURCE, estimatedSourceUrl: IUCN_SOURCE_URL },
-        { id: "inv-crustacea", name: "Crustaceans", filter: { csvGroups: ["crustacea"] }, estimatedDescribed: 83_263, estimatedSource: IUCN_SOURCE, estimatedSourceUrl: IUCN_SOURCE_URL },
-        { id: "inv-corals", name: "Corals & Cnidarians", filter: { csvGroups: ["corals"] }, estimatedDescribed: 5_672, estimatedSource: IUCN_SOURCE, estimatedSourceUrl: IUCN_SOURCE_URL },
-        { id: "inv-other-invertebrates", name: "Other Invertebrates", filter: { csvGroups: ["other_invertebrates"] }, estimatedDescribed: 230_485, estimatedSource: IUCN_SOURCE + " (Others)", estimatedSourceUrl: COL_2025_URL },
-        { id: "inv-velvet-worms", name: "Velvet Worms", filter: { csvGroups: ["velvet_worms"] }, estimatedDescribed: 220, estimatedSource: IUCN_SOURCE, estimatedSourceUrl: IUCN_SOURCE_URL },
-        { id: "inv-horseshoe-crabs", name: "Horseshoe Crabs", filter: { csvGroups: ["horseshoe_crabs"] }, estimatedDescribed: 4, estimatedSource: IUCN_SOURCE, estimatedSourceUrl: IUCN_SOURCE_URL },
+        prefixTree(INSECTA_NODE, "inv-"),
+        prefixTree(ARACHNIDA_NODE, "inv-"),
+        prefixTree(MOLLUSCA_NODE, "inv-"),
+        prefixTree(CRUSTACEA_NODE, "inv-"),
+        prefixTree(CORALS_NODE, "inv-"),
+        prefixTree(OTHER_INVERTEBRATES_NODE, "inv-"),
+        prefixTree(VELVET_WORMS_NODE, "inv-"),
+        prefixTree(HORSESHOE_CRABS_NODE, "inv-"),
       ],
     },
 
@@ -913,24 +850,12 @@ export const TAXONOMY_TREE: TaxonomyNode = {
       estimatedSourceUrl: IUCN_SOURCE_URL,
       color: "#22c55e",
       children: [
-        {
-          id: "pl-flowering", name: "Flowering Plants", filter: { csvGroups: ["flowering_plants"] }, estimatedDescribed: 369_000, estimatedSource: IUCN_SOURCE, estimatedSourceUrl: IUCN_SOURCE_URL,
-          children: [
-            { id: "pl-orchids", name: "Orchids, Lilies & Bulbs", filter: { csvGroups: ["flowering_plants"], orderNames: ["asparagales"] }, estimatedDescribed: 36_000, estimatedSource: CHRISTENHUSZ, estimatedSourceUrl: CHRISTENHUSZ_URL },
-            { id: "pl-composites", name: "Composites & Wildflowers", filter: { csvGroups: ["flowering_plants"], orderNames: ["asterales"] }, estimatedDescribed: 26_900, estimatedSource: CHRISTENHUSZ, estimatedSourceUrl: CHRISTENHUSZ_URL },
-            { id: "pl-legumes", name: "Legumes", filter: { csvGroups: ["flowering_plants"], orderNames: ["fabales"] }, estimatedDescribed: 20_800, estimatedSource: CHRISTENHUSZ, estimatedSourceUrl: CHRISTENHUSZ_URL },
-            { id: "pl-grasses", name: "Grasses & Cereals", filter: { csvGroups: ["flowering_plants"], orderNames: ["poales"] }, estimatedDescribed: 18_900, estimatedSource: CHRISTENHUSZ, estimatedSourceUrl: CHRISTENHUSZ_URL },
-            { id: "pl-broadleaf", name: "Broadleaf Trees & Shrubs", filter: { csvGroups: ["flowering_plants"], orderNames: ["fagales", "rosales", "malpighiales", "sapindales", "myrtales", "laurales", "magnoliales", "malvales", "ericales", "gentianales"] }, estimatedDescribed: 88_600, estimatedSource: CHRISTENHUSZ + " — sum of 10 orders", estimatedSourceUrl: CHRISTENHUSZ_URL },
-            { id: "pl-aquatic", name: "Aquatic Flowering Plants", filter: { csvGroups: ["flowering_plants"], orderNames: ["alismatales", "ceratophyllales", "nymphaeales"] }, estimatedDescribed: 4_600, estimatedSource: CHRISTENHUSZ, estimatedSourceUrl: CHRISTENHUSZ_URL },
-            { id: "pl-palms", name: "Palms & Relatives", filter: { csvGroups: ["flowering_plants"], orderNames: ["arecales"] }, estimatedDescribed: 2_600, estimatedSource: CHRISTENHUSZ, estimatedSourceUrl: CHRISTENHUSZ_URL },
-            { id: "pl-other-flowering", name: "Other Flowering Plants", filter: { csvGroups: ["flowering_plants"], excludeOrders: FLOWERING_NAMED_ORDERS }, estimatedDescribed: 170_600, estimatedSource: "Remainder from IUCN Table 1a (State of the World's Plants 2017)", estimatedSourceUrl: COL_2025_URL },
-          ],
-        },
-        { id: "pl-mosses", name: "Mosses", filter: { csvGroups: ["mosses"] }, estimatedDescribed: 21_925, estimatedSource: IUCN_SOURCE, estimatedSourceUrl: IUCN_SOURCE_URL },
-        { id: "pl-green-algae", name: "Green Algae", filter: { csvGroups: ["green_algae"] }, estimatedDescribed: 14_550, estimatedSource: IUCN_SOURCE, estimatedSourceUrl: IUCN_SOURCE_URL },
-        { id: "pl-ferns", name: "Ferns & Allies", filter: { csvGroups: ["ferns_and_allies"] }, estimatedDescribed: 11_800, estimatedSource: IUCN_SOURCE, estimatedSourceUrl: IUCN_SOURCE_URL },
-        { id: "pl-red-algae", name: "Red Algae", filter: { csvGroups: ["red_algae"] }, estimatedDescribed: 7_744, estimatedSource: IUCN_SOURCE, estimatedSourceUrl: IUCN_SOURCE_URL },
-        { id: "pl-gymnosperms", name: "Gymnosperms", filter: { csvGroups: ["gymnosperms"] }, estimatedDescribed: 1_113, estimatedSource: IUCN_SOURCE, estimatedSourceUrl: IUCN_SOURCE_URL },
+        prefixTree(FLOWERING_PLANTS_NODE, "pl-"),
+        prefixTree(GYMNOSPERMS_NODE, "pl-"),
+        prefixTree(FERNS_AND_ALLIES_NODE, "pl-"),
+        prefixTree(MOSSES_NODE, "pl-"),
+        prefixTree(GREEN_ALGAE_NODE, "pl-"),
+        prefixTree(RED_ALGAE_NODE, "pl-"),
       ],
     },
 
@@ -943,8 +868,8 @@ export const TAXONOMY_TREE: TaxonomyNode = {
       estimatedSourceUrl: IUCN_SOURCE_URL,
       color: "#d97706",
       children: [
-        { id: "fu-mushrooms", name: "Mushrooms, etc.", filter: { csvGroups: ["mushrooms"] }, estimatedDescribed: 157_648, estimatedSource: IUCN_SOURCE, estimatedSourceUrl: IUCN_SOURCE_URL },
-        { id: "fu-brown-algae", name: "Brown Algae", filter: { csvGroups: ["brown_algae"] }, estimatedDescribed: 5_005, estimatedSource: IUCN_SOURCE, estimatedSourceUrl: IUCN_SOURCE_URL },
+        prefixTree(MUSHROOMS_NODE, "fu-"),
+        prefixTree(BROWN_ALGAE_NODE, "fu-"),
       ],
     },
   ],
