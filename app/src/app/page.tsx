@@ -94,7 +94,7 @@ export default function RedListPage() {
           >
             Shane Weisz
           </a>
-          , University of Cambridge. If you have any feedback, please do get in touch at{" "}
+          , University of Cambridge. If you have any thoughts or feedback, please do get in touch at{" "}
           <a
             href="mailto:sw984@cam.ac.uk"
             className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
