@@ -11,7 +11,9 @@ import {
   speciesMatchesNode,
   getNodeDef,
   getCsvGroupsForNode,
+  getViewRootForNode,
 } from "@/lib/taxonomy-utils";
+import { TAXONOMY_VIEWS } from "../taxonomy-views";
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -630,5 +632,138 @@ describe("Subgroup partition coverage", () => {
       .filter(sg => sg.id !== "other-birds")
       .flatMap(sg => sg.filter.orderNames ?? []);
     expect([...new Set(namedOrders)].sort()).toEqual([...otherBirds.filter.excludeOrders!].sort());
+  });
+});
+
+// ─── Default view: no double counting ────────────────────────────────
+
+describe("default view CSV group coverage", () => {
+  const defaultRoots = TAXONOMY_VIEWS.default.roots;
+
+  it("no CSV group appears in multiple default view roots", () => {
+    const seen = new Map<string, string>(); // csvGroup → rootId
+    for (const rootId of defaultRoots) {
+      const node = findNode(rootId)!;
+      for (const csv of node.filter.csvGroups) {
+        expect(seen.has(csv), `"${csv}" is in both "${seen.get(csv)}" and "${rootId}"`).toBe(false);
+        seen.set(csv, rootId);
+      }
+    }
+  });
+
+  it("all 21 Table 1a CSV groups are covered by exactly one default view root", () => {
+    const allCsvGroups = new Set<string>();
+    for (const rootId of defaultRoots) {
+      for (const csv of findNode(rootId)!.filter.csvGroups) {
+        allCsvGroups.add(csv);
+      }
+    }
+    expect(allCsvGroups.size).toBe(21);
+  });
+
+  it("brown_algae is in fungi, not plantae", () => {
+    expect(findNode("fungi")!.filter.csvGroups).toContain("brown_algae");
+    expect(findNode("plantae")!.filter.csvGroups).not.toContain("brown_algae");
+  });
+});
+
+// ─── prefixTree: virtual nodes mirror canonical nodes ─────────────────
+
+describe("prefixTree virtual nodes", () => {
+  const prefixPairs: [string, string][] = [
+    ["insecta", "inv-insecta"],
+    ["mollusca", "inv-mollusca"],
+    ["flowering_plants", "pl-flowering_plants"],
+    ["mushrooms", "fu-mushrooms"],
+    ["brown_algae", "fu-brown_algae"],
+  ];
+
+  for (const [canonicalId, prefixedId] of prefixPairs) {
+    it(`${prefixedId} mirrors ${canonicalId}`, () => {
+      const canonical = findNode(canonicalId)!;
+      const prefixed = findNode(prefixedId)!;
+      expect(prefixed.name).toBe(canonical.name);
+      expect(prefixed.filter).toEqual(canonical.filter);
+      expect(prefixed.estimatedDescribed).toBe(canonical.estimatedDescribed);
+    });
+  }
+
+  it("prefixed children have prefixed IDs recursively", () => {
+    const invInsecta = findNode("inv-insecta")!;
+    expect(invInsecta.children).toBeDefined();
+    for (const child of invInsecta.children!) {
+      expect(child.id).toMatch(/^inv-/);
+    }
+  });
+
+  it("prefixed nodes are in NODE_INDEX", () => {
+    expect(NODE_INDEX.has("inv-beetles")).toBe(true);
+    expect(NODE_INDEX.has("pl-orchids-lilies-bulbs")).toBe(true);
+    expect(NODE_INDEX.has("fu-moulds-yeasts-cup")).toBe(true);
+  });
+});
+
+// ─── Table 1a click-through: every group maps to a view root child ────
+
+describe("Table 1a → default view mapping", () => {
+  const defaultRoots = new Set(TAXONOMY_VIEWS.default.roots);
+  const table1aGroups = TAXONOMY_VIEWS.table1a.roots;
+
+  for (const group of table1aGroups) {
+    it(`${group} maps to a default view root or its child`, () => {
+      if (defaultRoots.has(group)) return; // direct root, fine
+
+      let found = false;
+      for (const rootId of defaultRoots) {
+        const rootNode = findNode(rootId)!;
+        const match = rootNode.children?.find(c =>
+          c.filter.csvGroups.length === 1 && c.filter.csvGroups[0] === group
+        ) ?? rootNode.children?.find(c =>
+          c.filter.csvGroups.includes(group)
+        );
+        if (match) { found = true; break; }
+      }
+      expect(found, `${group} has no matching child under any default view root`).toBe(true);
+    });
+  }
+});
+
+// ─── Precomputed summaries structure ──────────────────────────────────
+
+describe("node-children-summaries.json", () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const data = JSON.parse(
+    require("fs").readFileSync(
+      require("path").join(process.cwd(), "data/node-children-summaries.json"),
+      "utf-8"
+    )
+  );
+
+  it("has entries for all parent nodes in the tree", () => {
+    for (const [id] of NODE_INDEX) {
+      if (!hasChildren(id)) continue;
+      expect(data[id], `missing precomputed entry for parent "${id}"`).toBeDefined();
+    }
+  });
+
+  it("child IDs match the tree structure", () => {
+    for (const [id, node] of NODE_INDEX) {
+      if (!node.children) continue;
+      const treeChildIds = node.children.map(c => c.id);
+      const dataChildIds = (data[id] ?? []).map((c: { id: string }) => c.id);
+      expect(dataChildIds).toEqual(treeChildIds);
+    }
+  });
+
+  it("summaries have valid shapes", () => {
+    for (const children of Object.values(data) as Array<Array<Record<string, unknown>>>) {
+      for (const child of children) {
+        expect(typeof child.id).toBe("string");
+        expect(typeof child.totalAssessed).toBe("number");
+        expect(typeof child.outdated).toBe("number");
+        expect(typeof child.gbifNeSpeciesCount).toBe("number");
+        expect((child.totalAssessed as number)).toBeGreaterThanOrEqual(0);
+      }
+    }
   });
 });
