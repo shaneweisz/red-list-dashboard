@@ -341,6 +341,13 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
 
   const allExpanded = perTaxa.filter(t => isExpandable(t.id)).every(t => expandedTaxa.has(t.id));
 
+  // Collapse all when returning to landing page (no taxa selected)
+  useEffect(() => {
+    if (selectedTaxa.size === 0 && selectedSubgroups.size === 0) {
+      setExpandedTaxa(new Set());
+    }
+  }, [selectedTaxa, selectedSubgroups]);
+
   // Auto-expand ancestor chain when subgroups are selected (e.g. from URL)
   useEffect(() => {
     if (selectedSubgroups.size === 0) return;

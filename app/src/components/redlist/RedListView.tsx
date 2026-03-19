@@ -317,10 +317,19 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const handleToggleTaxon = useCallback((taxonId: string, event: React.MouseEvent) => {
     const isMulti = event.metaKey || event.ctrlKey;
 
-    // "all" row: always single-select (toggle on/off), no multi-select
+    // "all" row behavior:
+    // - If anything is selected (nested view), return to landing page
+    // - Only select "all" when clicking from the landing page itself (nothing selected)
     // Disabled in new-assessments mode (NE dataset too large for "all")
     if (taxonId === "all") {
       if (isNewAssessments) return;
+      if (selectedTaxa.size > 0 || selectedSubgroups.size > 0) {
+        // Return to landing page
+        setSelectedSubgroups(new Set());
+        setSelectedTaxa(new Set());
+        return;
+      }
+      // On landing page: toggle "all" on/off
       setSelectedTaxa(prev => {
         if (prev.has("all")) return new Set<string>();
         return new Set(["all"]);
