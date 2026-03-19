@@ -136,7 +136,7 @@ const ALL_INVERTEBRATE_GROUPS = [
 
 const ALL_PLANT_GROUPS = [
   "flowering_plants", "gymnosperms", "ferns_and_allies", "mosses",
-  "green_algae", "red_algae", "brown_algae",
+  "green_algae", "red_algae",
 ];
 
 // ─── The Tree ────────────────────────────────────────────────────────
