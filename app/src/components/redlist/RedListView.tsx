@@ -11,7 +11,7 @@ import WikipediaSummary from "../WikipediaSummary";
 import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
-import { speciesMatchesNode, getNodeDef } from "@/lib/taxonomy-utils";
+import { speciesMatchesNode, getNodeDef, getViewRootForNode } from "@/lib/taxonomy-utils";
 import ReviewerChart from "./ReviewerChart";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { useFilterParams } from "@/hooks/useFilterParams";
@@ -1255,19 +1255,19 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         selectedSubgroups={selectedSubgroups}
         disableAllSpecies={isNewAssessments}
         viewMode={viewMode}
-        onToggleSubgroup={(sgId, parentTaxonId) => {
+        onToggleSubgroup={(sgId) => {
           const wasSelected = selectedSubgroups.has(sgId);
-          setSelectedSubgroups(prev => {
-            const next = new Set(prev);
-            if (next.has(sgId)) next.delete(sgId);
-            else next.add(sgId);
-            return next;
-          });
-          // When selecting a subgroup, ensure parent taxon is selected (collapse to it)
-          if (!wasSelected && parentTaxonId) {
-            if (!selectedTaxa.has(parentTaxonId) || selectedTaxa.size !== 1) {
+          if (wasSelected) {
+            // Deselecting: clear subgroup, keep view root selected
+            setSelectedSubgroups(new Set());
+          } else {
+            // Selecting: set exactly this one subgroup
+            setSelectedSubgroups(new Set([sgId]));
+            // Ensure the correct view root is selected for species fetching
+            const viewRoot = getViewRootForNode(sgId);
+            if (viewRoot && (!selectedTaxa.has(viewRoot) || selectedTaxa.size !== 1)) {
               skipClearOnTaxaChangeRef.current = true;
-              setSelectedTaxa(new Set([parentTaxonId]));
+              setSelectedTaxa(new Set([viewRoot]));
             }
           }
         }}

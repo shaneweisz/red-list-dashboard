@@ -63,6 +63,19 @@ export function getView(viewId: string) {
   return TAXONOMY_VIEWS[viewId] ?? TAXONOMY_VIEWS.default;
 }
 
+// ─── View root resolution ────────────────────────────────────────────
+
+const DEFAULT_VIEW_ROOTS = new Set(TAXONOMY_VIEWS.default.roots);
+
+/** Find the default-view ancestor for a node (one of the 8 display roots). */
+export function getViewRootForNode(nodeId: string): string | null {
+  if (DEFAULT_VIEW_ROOTS.has(nodeId)) return nodeId;
+  for (const a of getAncestors(nodeId)) {
+    if (DEFAULT_VIEW_ROOTS.has(a)) return a;
+  }
+  return null;
+}
+
 // ─── CSV group resolution ────────────────────────────────────────────
 
 /** Get the CSV groups needed to load data for a node. */
