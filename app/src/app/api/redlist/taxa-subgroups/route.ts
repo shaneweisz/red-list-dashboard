@@ -4,10 +4,7 @@ import { findNode, hasChildren } from "@/lib/taxonomy-utils";
 import { CACHE_1H } from "@/lib/cache-headers";
 
 export async function GET(request: NextRequest) {
-  // Accept both ?nodeId=X (new) and ?taxonId=X (backward compat)
-  const nodeId =
-    request.nextUrl.searchParams.get("nodeId") ??
-    request.nextUrl.searchParams.get("taxonId");
+  const nodeId = request.nextUrl.searchParams.get("nodeId");
 
   if (!nodeId) {
     return NextResponse.json(
