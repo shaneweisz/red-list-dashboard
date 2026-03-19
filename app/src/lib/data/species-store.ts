@@ -29,6 +29,7 @@ const EXCLUDED_DOMESTICATED_GBIF_KEYS = new Set([
   2441019, // Bos grunniens (Yak)
   5219702, // Cavia porcellus (Guinea Pig)
   10694102, // Columba domestica (Domestic Pigeon)
+  2436436, // Homo sapiens (Human)
 ]);
 
 // =============================================================================
