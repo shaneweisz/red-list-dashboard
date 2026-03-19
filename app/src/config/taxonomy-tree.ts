@@ -898,7 +898,9 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         { id: "inv-mollusca", name: "Molluscs", filter: { csvGroups: ["mollusca"] }, estimatedDescribed: 88_244, estimatedSource: IUCN_SOURCE, estimatedSourceUrl: IUCN_SOURCE_URL },
         { id: "inv-crustacea", name: "Crustaceans", filter: { csvGroups: ["crustacea"] }, estimatedDescribed: 83_263, estimatedSource: IUCN_SOURCE, estimatedSourceUrl: IUCN_SOURCE_URL },
         { id: "inv-corals", name: "Corals & Cnidarians", filter: { csvGroups: ["corals"] }, estimatedDescribed: 5_672, estimatedSource: IUCN_SOURCE, estimatedSourceUrl: IUCN_SOURCE_URL },
-        { id: "inv-other", name: "Other Invertebrates", filter: { csvGroups: ["other_invertebrates", "velvet_worms", "horseshoe_crabs"] }, estimatedDescribed: 230_709, estimatedSource: IUCN_SOURCE, estimatedSourceUrl: IUCN_SOURCE_URL },
+        { id: "inv-other-invertebrates", name: "Other Invertebrates", filter: { csvGroups: ["other_invertebrates"] }, estimatedDescribed: 230_485, estimatedSource: IUCN_SOURCE + " (Others)", estimatedSourceUrl: COL_2025_URL },
+        { id: "inv-velvet-worms", name: "Velvet Worms", filter: { csvGroups: ["velvet_worms"] }, estimatedDescribed: 220, estimatedSource: IUCN_SOURCE, estimatedSourceUrl: IUCN_SOURCE_URL },
+        { id: "inv-horseshoe-crabs", name: "Horseshoe Crabs", filter: { csvGroups: ["horseshoe_crabs"] }, estimatedDescribed: 4, estimatedSource: IUCN_SOURCE, estimatedSourceUrl: IUCN_SOURCE_URL },
       ],
     },
 

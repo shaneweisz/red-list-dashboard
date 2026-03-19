@@ -1505,21 +1505,49 @@
       }
     },
     {
-      "id": "inv-other",
+      "id": "inv-other-invertebrates",
       "name": "Other Invertebrates",
-      "estimatedDescribed": 230709,
-      "totalAssessed": 1154,
-      "outdated": 598,
-      "gbifNeSpeciesCount": 18998,
+      "estimatedDescribed": 230485,
+      "totalAssessed": 1139,
+      "outdated": 585,
+      "gbifNeSpeciesCount": 18928,
       "byCategory": {
-        "CR": 63,
-        "VU": 52,
+        "CR": 60,
+        "VU": 47,
         "LC": 295,
-        "DD": 558,
-        "EN": 79,
-        "LR/nt": 3,
+        "DD": 555,
+        "EN": 76,
+        "LR/nt": 2,
         "EX": 6,
         "NT": 98
+      }
+    },
+    {
+      "id": "inv-velvet-worms",
+      "name": "Velvet Worms",
+      "estimatedDescribed": 220,
+      "totalAssessed": 11,
+      "outdated": 11,
+      "gbifNeSpeciesCount": 70,
+      "byCategory": {
+        "EN": 2,
+        "DD": 1,
+        "CR": 3,
+        "VU": 4,
+        "LR/nt": 1
+      }
+    },
+    {
+      "id": "inv-horseshoe-crabs",
+      "name": "Horseshoe Crabs",
+      "estimatedDescribed": 4,
+      "totalAssessed": 4,
+      "outdated": 2,
+      "gbifNeSpeciesCount": 0,
+      "byCategory": {
+        "DD": 2,
+        "VU": 1,
+        "EN": 1
       }
     }
   ],
