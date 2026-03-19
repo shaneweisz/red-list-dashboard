@@ -1258,8 +1258,15 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         onToggleSubgroup={(sgId) => {
           const wasSelected = selectedSubgroups.has(sgId);
           if (wasSelected) {
-            // Deselecting: clear subgroup, keep view root selected
-            setSelectedSubgroups(new Set());
+            // Deselecting: go back one level in the chain
+            const parentInfo = getNodeDef(sgId);
+            if (parentInfo && !selectedTaxa.has(parentInfo.parentId)) {
+              // Parent is an intermediate node — select it as subgroup
+              setSelectedSubgroups(new Set([parentInfo.parentId]));
+            } else {
+              // Parent is the view root — just clear subgroups
+              setSelectedSubgroups(new Set());
+            }
           } else {
             // Selecting: set exactly this one subgroup
             setSelectedSubgroups(new Set([sgId]));
