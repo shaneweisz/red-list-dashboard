@@ -1278,8 +1278,8 @@ export default function OccurrenceMapRow({
                   strokeColor = colors.stroke;
                   fillColor = colors.fill;
                 } else {
-                  strokeColor = "#15803d";
-                  fillColor = "#22c55e";
+                  strokeColor = (isNew || !assessmentYear) ? "#15803d" : "#6b7280";
+                  fillColor = (isNew || !assessmentYear) ? "#22c55e" : "#9ca3af";
                 }
                 const inatMatch = inatPhotosByGbifId.get(feature.properties.gbifID);
                 const isFeatureHovered = hoveredFeature?.properties.gbifID === feature.properties.gbifID;
@@ -1388,8 +1388,12 @@ export default function OccurrenceMapRow({
               ) : assessmentYear && !splitView ? (
                 <>
                   <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded-full bg-gray-400 border-2 border-gray-500" />
+                    <span>≤{assessmentYear} ({panelOldRecords.length})</span>
+                  </div>
+                  <div className="flex items-center gap-1">
                     <div className="w-3 h-3 rounded-full bg-green-500 border-2 border-green-700" />
-                    <span>Occurrences ({panelOccurrences.length})</span>
+                    <span>New since {assessmentYear} ({panelNewRecords.length})</span>
                   </div>
                   <span className="text-zinc-400">|</span>
                   <button
