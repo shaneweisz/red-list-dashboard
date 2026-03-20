@@ -270,6 +270,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     searchFilter, setSearchFilter,
     sortField, sortDirection, setSort,
     clearAllFilters,
+    setViewMode: setUrlViewMode,
   } = useFilterParams();
 
   // Initialize from shared state on mount (when switching from another view)
@@ -293,6 +294,16 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   useEffect(() => {
     onSubgroupsChange?.(selectedSubgroups);
   }, [selectedSubgroups, onSubgroupsChange]);
+
+  // Sync viewMode prop to URL params (skip initial mount to avoid overwriting URL before page hydrates)
+  const viewModeInitializedRef = useRef(false);
+  useEffect(() => {
+    if (!viewModeInitializedRef.current) {
+      viewModeInitializedRef.current = true;
+      return;
+    }
+    setUrlViewMode(viewMode);
+  }, [viewMode, setUrlViewMode]);
 
   // Clear mode-specific caches when switching between reassessments and new-assessments
   const prevViewModeRef = useRef(viewMode);
