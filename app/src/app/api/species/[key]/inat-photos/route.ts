@@ -12,6 +12,8 @@ interface InatObservation {
   gbifID: number | null;
   decimalLatitude: number | null;
   decimalLongitude: number | null;
+  license: string | null;
+  rightsHolder: string | null;
 }
 
 const INAT_DATASET_KEY = "50c9509d-22c7-4a22-a47d-8c48425ef4a7";
@@ -65,6 +67,8 @@ export async function GET(
           stateProvince?: string;
           country?: string;
           recordedBy?: string;
+          license?: string;
+          rightsHolder?: string;
         }) => {
           const media = obs.media || [];
           const imageMedia = media.find((m) => m.type === "StillImage");
@@ -92,6 +96,8 @@ export async function GET(
             gbifID: obs.key ?? null,
             decimalLatitude: obs.decimalLatitude ?? null,
             decimalLongitude: obs.decimalLongitude ?? null,
+            license: obs.license ?? null,
+            rightsHolder: obs.rightsHolder ?? null,
           };
         }
       );

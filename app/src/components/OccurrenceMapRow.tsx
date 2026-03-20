@@ -541,6 +541,16 @@ interface InatObservation {
   gbifID?: number | null;
   decimalLatitude?: number | null;
   decimalLongitude?: number | null;
+  license?: string | null;
+  rightsHolder?: string | null;
+}
+
+/** Format GBIF license code to human-readable, e.g. CC_BY_NC_4_0 -> CC BY-NC 4.0 */
+function formatLicense(code: string): string {
+  return code
+    .replace(/_(\d+)_(\d+)$/, " $1.$2")
+    .replace(/_/g, "-")
+    .replace(/^CC-/, "CC ");
 }
 
 interface RecordTypeBreakdown {
@@ -772,6 +782,9 @@ function InatPhotoWithPreview({ obs, idx, onHover, onLeave }: { obs: InatObserva
                 <div className="text-zinc-600 dark:text-zinc-400 truncate" title={obs.location}>
                   {obs.location}
                 </div>
+              )}
+              {obs.license && (
+                <div className="text-[9px] text-zinc-400">{formatLicense(obs.license)}</div>
               )}
             </div>
           </div>
@@ -1871,6 +1884,9 @@ export default function OccurrenceMapRow({
                           </button>
                         </div>
                       )}
+                      <p className="text-[10px] text-zinc-400 dark:text-zinc-500 text-center py-1 border-t border-zinc-100 dark:border-zinc-800">
+                        Photos from iNaturalist observers, used under individual CC licenses.
+                      </p>
                     </>
                   ) : (
                     <div className="flex items-center justify-center py-6">
@@ -1938,6 +1954,9 @@ export default function OccurrenceMapRow({
               )}
             </div>
           </div>
+          <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-2 px-1">
+            Occurrence data from <a href="https://www.gbif.org" target="_blank" rel="noopener noreferrer" className="hover:underline">GBIF.org</a>. Subject to <a href="https://www.gbif.org/terms/data-user" target="_blank" rel="noopener noreferrer" className="hover:underline">GBIF Data User Agreement</a>.
+          </p>
         </div>
       </div>
     </div>

@@ -326,6 +326,11 @@ export default function WikipediaSummary({ scientificName }: { scientificName: s
           })}
         </div>
       )}
+      {pageUrl && (
+        <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-3">
+          Text from <a href={pageUrl} target="_blank" rel="noopener noreferrer" className="hover:underline">Wikipedia</a>, available under <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer" className="hover:underline">CC BY-SA 4.0</a>.
+        </p>
+      )}
     </div>
   );
 }
