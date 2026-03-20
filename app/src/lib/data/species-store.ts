@@ -8,6 +8,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { readCsv } from "./csv";
+import { countryToRegion } from "../regions";
 
 
 // =============================================================================
@@ -377,6 +378,315 @@ export function getPrecomputedChildrenSummaries(parentNodeId: string): NodeSumma
     nodeChildrenSummariesCache = JSON.parse(content) as Record<string, NodeSummary[]>;
   }
   return nodeChildrenSummariesCache[parentNodeId] ?? [];
+}
+
+// =============================================================================
+// ASSESSOR CANDIDATES
+// =============================================================================
+
+export type TaxonomyLevel = "genus" | "family" | "order" | "class";
+
+export interface AssessorCandidate {
+  name: string;
+  genus: number;
+  family: number;
+  order: number;
+  class: number;
+  latestDate: string;
+}
+
+/**
+ * Find assessor candidates for an NE species by looking at assessed species
+ * in the same taxon group. Counts how many species each assessor has assessed
+ * at each taxonomy level (genus/family/order/class). A genus match also counts
+ * as family, order, and class. Returns all assessors sorted by genus count,
+ * then family, order, class.
+ */
+export function getAssessorCandidates(
+  scientificName: string,
+  taxonGroup: string,
+  family?: string | null,
+  orderName?: string | null,
+  className?: string | null,
+): AssessorCandidate[] {
+  const genus = scientificName.split(" ")[0]?.toLowerCase() ?? "";
+  const familyLc = family?.toLowerCase() ?? "";
+  const orderLc = orderName?.toLowerCase() ?? "";
+  const classLc = className?.toLowerCase() ?? "";
+
+  const redlistRows = loadRedlistForGroup(taxonGroup);
+  const historyMap = loadHistoryForGroup(taxonGroup);
+
+  interface AssessorStats {
+    genus: number;
+    family: number;
+    order: number;
+    class: number;
+    latestDate: string;
+  }
+  const assessorMap = new Map<string, AssessorStats>();
+
+  for (const row of redlistRows) {
+    const rowGenus = row.scientific_name.split(" ")[0]?.toLowerCase() ?? "";
+    const isGenus = genus !== "" && rowGenus === genus;
+    const isFamily = familyLc !== "" && row.family?.toLowerCase() === familyLc;
+    const isOrder = orderLc !== "" && row.order_name?.toLowerCase() === orderLc;
+    const isClass = classLc !== "" && row.class_name?.toLowerCase() === classLc;
+
+    // Skip rows with no taxonomy overlap at all
+    if (!isGenus && !isFamily && !isOrder && !isClass) continue;
+
+    const assessments = historyMap[String(row.sis_taxon_id)] ?? [];
+    const allAssessments = assessments.length > 0 ? assessments : [{
+      id: row.assessment_id,
+      year: row.year_published,
+      category: row.category,
+      date: row.assessment_date,
+      assessors: null as string | null,
+      reviewers: null as string | null,
+    }];
+
+    for (const assessment of allAssessments) {
+      if (!assessment.assessors) continue;
+
+      const date = assessment.date ?? "";
+      const names = parseAssessorNames(assessment.assessors);
+      for (const name of names) {
+        const normalizedName = name.trim();
+        if (!normalizedName || normalizedName.length < 3) continue;
+
+        let stats = assessorMap.get(normalizedName);
+        if (!stats) {
+          stats = { genus: 0, family: 0, order: 0, class: 0, latestDate: "" };
+          assessorMap.set(normalizedName, stats);
+        }
+
+        // Count inclusively: a genus match also counts as family/order/class
+        if (isGenus) stats.genus++;
+        if (isFamily || isGenus) stats.family++;
+        if (isOrder || isFamily || isGenus) stats.order++;
+        if (isClass || isOrder || isFamily || isGenus) stats.class++;
+        if (date > stats.latestDate) stats.latestDate = date;
+      }
+    }
+  }
+
+  return [...assessorMap.entries()]
+    .map(([name, stats]) => ({
+      name,
+      genus: stats.genus,
+      family: stats.family,
+      order: stats.order,
+      class: stats.class,
+      latestDate: stats.latestDate,
+    }))
+    .sort((a, b) => {
+      if (a.genus !== b.genus) return b.genus - a.genus;
+      if (a.family !== b.family) return b.family - a.family;
+      if (a.order !== b.order) return b.order - a.order;
+      if (a.class !== b.class) return b.class - a.class;
+      return b.latestDate.localeCompare(a.latestDate);
+    });
+}
+
+export interface AssessorCountryCandidate {
+  name: string;
+  /** Per-region species counts (aggregated from the target species' countries) */
+  regionCounts: Record<string, number>;
+  /** Per-country species counts (country codes from the target species) */
+  countryCounts: Record<string, number>;
+  /** Species assessed in this taxonomy scope with country overlap */
+  totalInRegion: number;
+  /** Total species assessed in this taxonomy scope (regardless of country) */
+  totalAll: number;
+  latestDate: string;
+}
+
+/** Optional taxonomy filter (orderNames, classNames, etc.) applied on top of csvGroups */
+interface TaxonomyFilter {
+  classNames?: string[];
+  orderNames?: string[];
+  families?: string[];
+  excludeClasses?: string[];
+  excludeOrders?: string[];
+  excludeFamilies?: string[];
+}
+
+/** Check if a redlist row passes the taxonomy filter */
+function matchesTaxonomyFilter(
+  row: { class_name: string | null; order_name: string | null; family: string | null },
+  filter: TaxonomyFilter,
+): boolean {
+  if (filter.classNames && filter.classNames.length > 0) {
+    const cls = (row.class_name ?? "").toLowerCase();
+    if (!filter.classNames.includes(cls)) return false;
+  }
+  if (filter.excludeClasses && filter.excludeClasses.length > 0) {
+    const cls = (row.class_name ?? "").toLowerCase();
+    if (cls && filter.excludeClasses.includes(cls)) return false;
+  }
+  if (filter.orderNames && filter.orderNames.length > 0) {
+    const ord = (row.order_name ?? "").toLowerCase();
+    const cls = (row.class_name ?? "").toLowerCase();
+    if (!filter.orderNames.includes(ord) && !(ord === "" && filter.orderNames.includes(cls))) return false;
+  }
+  if (filter.excludeOrders && filter.excludeOrders.length > 0) {
+    const ord = (row.order_name ?? "").toLowerCase();
+    const cls = (row.class_name ?? "").toLowerCase();
+    if (filter.excludeOrders.includes(ord) || (ord === "" && filter.excludeOrders.includes(cls))) return false;
+  }
+  if (filter.families && filter.families.length > 0) {
+    const fam = (row.family ?? "").toLowerCase();
+    if (!filter.families.includes(fam)) return false;
+  }
+  if (filter.excludeFamilies && filter.excludeFamilies.length > 0) {
+    const fam = (row.family ?? "").toLowerCase();
+    if (fam && filter.excludeFamilies.includes(fam)) return false;
+  }
+  return true;
+}
+
+/**
+ * Find assessor candidates for an NE species by looking at assessed species
+ * in the given taxon groups that share at least one country with the target species.
+ * Accepts multiple groups so a taxa like "plantae" can search across all plant groups.
+ * Applies an optional taxonomy filter (e.g. orderNames for beetles) to narrow scope.
+ * Aggregates counts by UN M49 sub-region for cleaner visualisation.
+ */
+export function getAssessorCandidatesByCountry(
+  taxonGroups: string[],
+  countries: string[],
+  taxonomyFilter?: TaxonomyFilter,
+): AssessorCountryCandidate[] {
+  if (countries.length === 0 || taxonGroups.length === 0) return [];
+
+  const countrySet = new Set(countries.map((c) => c.toUpperCase()));
+
+  const assessorMap = new Map<string, { regionCounts: Record<string, number>; countryCounts: Record<string, number>; totalInRegion: number; totalAll: number; latestDate: string; seenSpeciesRegion: Set<number>; seenSpeciesAll: Set<number> }>();
+
+  for (const taxonGroup of taxonGroups) {
+    const redlistRows = loadRedlistForGroup(taxonGroup);
+    const historyMap = loadHistoryForGroup(taxonGroup);
+
+    for (const row of redlistRows) {
+      // Apply taxonomy filter (e.g. only coleoptera for beetles)
+      if (taxonomyFilter && !matchesTaxonomyFilter(row, taxonomyFilter)) continue;
+
+      // Find which of the target countries this species occurs in
+      const overlapping = row.countries.filter((c) => countrySet.has(c.toUpperCase()));
+      const hasCountryOverlap = overlapping.length > 0;
+
+      // Map overlapping countries to their regions (deduplicate per-species)
+      const regions = hasCountryOverlap
+        ? new Set(overlapping.map((c) => countryToRegion(c)))
+        : new Set<string>();
+
+      const assessments = historyMap[String(row.sis_taxon_id)] ?? [];
+      const allAssessments = assessments.length > 0 ? assessments : [{
+        id: row.assessment_id,
+        year: row.year_published,
+        category: row.category,
+        date: row.assessment_date,
+        assessors: null as string | null,
+        reviewers: null as string | null,
+      }];
+
+      // Collect unique assessor names across all assessments for this species
+      const speciesAssessors = new Set<string>();
+      let latestDate = "";
+      for (const assessment of allAssessments) {
+        if (!assessment.assessors) continue;
+        const date = assessment.date ?? "";
+        if (date > latestDate) latestDate = date;
+        for (const name of parseAssessorNames(assessment.assessors)) {
+          const normalizedName = name.trim();
+          if (normalizedName && normalizedName.length >= 3) {
+            speciesAssessors.add(normalizedName);
+          }
+        }
+      }
+
+      // Credit each assessor once per species
+      for (const normalizedName of speciesAssessors) {
+        let stats = assessorMap.get(normalizedName);
+        if (!stats) {
+          stats = { regionCounts: {}, countryCounts: {}, totalInRegion: 0, totalAll: 0, latestDate: "", seenSpeciesRegion: new Set(), seenSpeciesAll: new Set() };
+          assessorMap.set(normalizedName, stats);
+        }
+
+        // Always count for totalAll
+        if (!stats.seenSpeciesAll.has(row.sis_taxon_id)) {
+          stats.seenSpeciesAll.add(row.sis_taxon_id);
+          stats.totalAll++;
+        }
+
+        // Count for region overlap
+        if (hasCountryOverlap && !stats.seenSpeciesRegion.has(row.sis_taxon_id)) {
+          stats.seenSpeciesRegion.add(row.sis_taxon_id);
+          stats.totalInRegion++;
+          for (const region of regions) {
+            stats.regionCounts[region] = (stats.regionCounts[region] ?? 0) + 1;
+          }
+          for (const c of overlapping) {
+            const code = c.toUpperCase();
+            stats.countryCounts[code] = (stats.countryCounts[code] ?? 0) + 1;
+          }
+        }
+        if (latestDate > stats.latestDate) stats.latestDate = latestDate;
+      }
+    }
+  }
+
+  return [...assessorMap.entries()]
+    .filter(([, stats]) => stats.totalInRegion > 0)
+    .map(([name, stats]) => ({
+      name,
+      regionCounts: stats.regionCounts,
+      countryCounts: stats.countryCounts,
+      totalInRegion: stats.totalInRegion,
+      totalAll: stats.totalAll,
+      latestDate: stats.latestDate,
+    }))
+    .sort((a, b) => {
+      if (a.totalInRegion !== b.totalInRegion) return b.totalInRegion - a.totalInRegion;
+      return b.latestDate.localeCompare(a.latestDate);
+    });
+}
+
+/**
+ * Parse assessor string into individual names.
+ * Handles formats like "Smith, J.A." and "IUCN SSC Amphibian Specialist Group"
+ */
+function parseAssessorNames(raw: string): string[] {
+  if (!raw || !raw.trim()) return [];
+
+  // Split on " & "
+  const ampersandParts = raw.split(" & ");
+  const names: string[] = [];
+
+  for (const part of ampersandParts) {
+    const segments = part.split(", ");
+    let current = segments[0];
+    for (let i = 1; i < segments.length; i++) {
+      const seg = segments[i];
+      const isInitialsOrAffiliation =
+        seg.startsWith("(") ||
+        /^[A-Z]\./.test(seg) ||
+        /^[A-Z]$/.test(seg);
+
+      if (isInitialsOrAffiliation) {
+        current += ", " + seg;
+      } else {
+        names.push(current.trim());
+        current = seg;
+      }
+    }
+    if (current.trim()) {
+      names.push(current.trim());
+    }
+  }
+
+  return names.filter(Boolean);
 }
 
 // =============================================================================

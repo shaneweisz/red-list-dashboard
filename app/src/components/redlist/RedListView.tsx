@@ -11,12 +11,13 @@ import WikipediaSummary from "../WikipediaSummary";
 import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
-import { speciesMatchesNode, getNodeDef, getViewRootForNode } from "@/lib/taxonomy-utils";
+import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode } from "@/lib/taxonomy-utils";
 import ReviewerChart from "./ReviewerChart";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { useFilterParams } from "@/hooks/useFilterParams";
 import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import AssessmentAssistant from "../AssessmentAssistant";
+import AssessorCandidatesTable from "../AssessorCandidatesTable";
 
 // Dynamically import OccurrenceMapRow to avoid SSR issues with Leaflet
 const OccurrenceMapRow = dynamic(
@@ -623,7 +624,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
 
   // Row expansion state
   const [selectedSpeciesKey, setSelectedSpeciesKey] = useState<number | null>(null);
-  const [activeDetailTab, setActiveDetailTab] = useState<"gbif" | "literature" | "redlist" | "wikipedia" | "cites">("gbif");
+  const [activeDetailTab, setActiveDetailTab] = useState<"gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors">("gbif");
   const [stackedDetailView, setStackedDetailView] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -1988,6 +1989,14 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                 >
                                   CITES
                                 </button>
+                                {s.category === "NE" && (
+                                  <button
+                                    className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "assessors" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                    onClick={() => setActiveDetailTab("assessors")}
+                                  >
+                                    Suggested Assessors
+                                  </button>
+                                )}
                               </>
                             )}
                             {stackedDetailView && (
@@ -2047,6 +2056,15 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                           <div style={{ display: stackedDetailView || activeDetailTab === "cites" ? undefined : "none" }}>
                             <CitesSummary scientificName={s.scientific_name} />
                           </div>
+                          {s.category === "NE" && (
+                            <div style={{ display: stackedDetailView || activeDetailTab === "assessors" ? undefined : "none" }}>
+                              <AssessorCandidatesTable
+                                taxaId={[...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group}
+                                taxaName={findNode([...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group)?.name ?? TAXA_BY_ID[[...selectedTaxa][0] ?? s.taxon_group]?.name ?? "Species"}
+                                countries={s.countries}
+                              />
+                            </div>
+                          )}
                         </div>
                           {gbifSpeciesKey && (
                             <div className="border-t border-zinc-200 dark:border-zinc-700">
