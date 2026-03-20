@@ -4,10 +4,14 @@ import { useState, useCallback, useEffect } from "react";
 
 // --- URL parsing helpers ---
 
+export type ViewMode = "reassessments" | "new-assessments";
+
 export function parseParams(search: string) {
   const p = new URLSearchParams(search);
   const sortParam = p.get("sort");
+  const viewParam = p.get("view");
   return {
+    viewMode: (viewParam === "new-assessments" ? "new-assessments" : "reassessments") as ViewMode,
     taxa: p.get("taxa")
       ? new Set(p.get("taxa")!.split(",").filter(Boolean))
       : new Set<string>(),
@@ -46,6 +50,7 @@ export function parseParams(search: string) {
 }
 
 export function buildQs(state: {
+  viewMode: ViewMode;
   taxa: Set<string>;
   subgroups: Set<string>;
   categories: Set<string>;
@@ -59,6 +64,7 @@ export function buildQs(state: {
   sortDirection: "asc" | "desc";
 }): string {
   const p = new URLSearchParams();
+  if (state.viewMode === "new-assessments") p.set("view", "new-assessments");
   if (state.taxa.size > 0) p.set("taxa", [...state.taxa].join(","));
   if (state.subgroups.size > 0) p.set("subgroups", [...state.subgroups].join(","));
   if (state.categories.size > 0) p.set("categories", [...state.categories].join(","));
@@ -223,6 +229,17 @@ export function useFilterParams() {
     [syncUrl]
   );
 
+  const setViewMode = useCallback(
+    (mode: ViewMode) => {
+      setState(prev => {
+        const next = { ...prev, viewMode: mode };
+        queueMicrotask(() => syncUrl(next, true));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
   const setSort = useCallback(
     (field: "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null, direction: "asc" | "desc") => {
       setState(prev => {
@@ -276,6 +293,7 @@ export function useFilterParams() {
   }, [syncUrl]);
 
   return {
+    viewMode: state.viewMode,
     selectedTaxa: state.taxa,
     selectedSubgroups: state.subgroups,
     selectedCategories: state.categories,
@@ -288,6 +306,7 @@ export function useFilterParams() {
     sortField: state.sortField,
     sortDirection: state.sortDirection,
 
+    setViewMode,
     setSelectedTaxa,
     setSelectedSubgroups,
     setSelectedCategories,
