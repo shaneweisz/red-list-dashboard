@@ -545,12 +545,11 @@ interface InatObservation {
   rightsHolder?: string | null;
 }
 
-/** Format GBIF license code to human-readable, e.g. CC_BY_NC_4_0 -> CC BY-NC 4.0 */
-function formatLicense(code: string): string {
-  return code
-    .replace(/_(\d+)_(\d+)$/, " $1.$2")
-    .replace(/_/g, "-")
-    .replace(/^CC-/, "CC ");
+/** Format CC license URL to short label, e.g. ".../by-nc/4.0/legalcode" -> "CC BY-NC 4.0" */
+function formatLicense(url: string): string {
+  const match = url.match(/creativecommons\.org\/licenses\/([^/]+)\/([^/]+)/);
+  if (!match) return url;
+  return `CC ${match[1].toUpperCase()} ${match[2]}`;
 }
 
 interface RecordTypeBreakdown {
@@ -1884,9 +1883,6 @@ export default function OccurrenceMapRow({
                           </button>
                         </div>
                       )}
-                      <p className="text-[10px] text-zinc-400 dark:text-zinc-500 text-center py-1 border-t border-zinc-100 dark:border-zinc-800">
-                        Photos from iNaturalist observers, used under individual CC licenses.
-                      </p>
                     </>
                   ) : (
                     <div className="flex items-center justify-center py-6">
@@ -1954,9 +1950,6 @@ export default function OccurrenceMapRow({
               )}
             </div>
           </div>
-          <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-2 px-1">
-            Occurrence data from <a href="https://www.gbif.org" target="_blank" rel="noopener noreferrer" className="hover:underline">GBIF.org</a>. Subject to <a href="https://www.gbif.org/terms/data-user" target="_blank" rel="noopener noreferrer" className="hover:underline">GBIF Data User Agreement</a>.
-          </p>
         </div>
       </div>
     </div>
