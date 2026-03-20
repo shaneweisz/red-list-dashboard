@@ -271,6 +271,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     sortField, sortDirection, setSort,
     clearAllFilters,
     setViewMode: setUrlViewMode,
+    species: urlSpecies, tab: urlTab,
+    setSpeciesParam, setTabParam,
   } = useFilterParams();
 
   // Initialize from shared state on mount (when switching from another view)
@@ -622,9 +624,23 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // Species details cache (images, criteria, common names)
   const [speciesDetails, setSpeciesDetails] = useState<Record<number, SpeciesDetails>>({});
 
-  // Row expansion state
-  const [selectedSpeciesKey, setSelectedSpeciesKey] = useState<number | null>(null);
-  const [activeDetailTab, setActiveDetailTab] = useState<"gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors">("gbif");
+  // Row expansion state (initialized from URL params if present)
+  const [selectedSpeciesKey, setSelectedSpeciesKeyRaw] = useState<number | null>(urlSpecies);
+  const [activeDetailTab, setActiveDetailTabRaw] = useState<"gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors">(urlTab ?? "gbif");
+
+  // Wrap setters to sync with URL
+  const setSelectedSpeciesKey = useCallback((key: number | null) => {
+    setSelectedSpeciesKeyRaw(key);
+    setSpeciesParam(key, key != null ? "gbif" : "gbif");
+    if (key != null) {
+      setActiveDetailTabRaw("gbif");
+    }
+  }, [setSpeciesParam]);
+
+  const setActiveDetailTab = useCallback((tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors") => {
+    setActiveDetailTabRaw(tab);
+    setTabParam(tab);
+  }, [setTabParam]);
   const [stackedDetailView, setStackedDetailView] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -1016,6 +1032,21 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   useEffect(() => {
     setCurrentPage(1);
   }, [selectedTaxa, selectedCategories, selectedYearRanges, selectedObsRanges, selectedAssessors, selectedReviewers, searchFilter, selectedCountries, showOnlyStarred]);
+
+  // Auto-navigate to the page containing the URL-selected species
+  const urlSpeciesHandledRef = useRef(false);
+  useEffect(() => {
+    if (urlSpeciesHandledRef.current || selectedSpeciesKey == null || sortedSpecies.length === 0) return;
+    const idx = sortedSpecies.findIndex(s => {
+      const key = isNewAssessments ? Math.abs(s.id) : (s.sis_taxon_id ?? s.gbif_species_key ?? s.id);
+      return key === selectedSpeciesKey;
+    });
+    if (idx >= 0) {
+      const page = Math.floor(idx / PAGE_SIZE) + 1;
+      setCurrentPage(page);
+      urlSpeciesHandledRef.current = true;
+    }
+  }, [sortedSpecies, selectedSpeciesKey, isNewAssessments, PAGE_SIZE]);
 
   // Populate basic speciesDetails from DB data (GBIF counts instant, no API calls)
   // inatDefaultImage / openAlexPaperCount / papersAtAssessment are left as undefined → spinner
@@ -1742,7 +1773,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   <React.Fragment key={s.id}>
                   <tr
                     className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer ${selectedSpeciesKey === speciesKey ? "bg-zinc-100 dark:bg-zinc-800" : ""} ${isDragging ? "opacity-50" : ""} ${isDragOver ? "border-t-2 border-amber-500" : ""}`}
-                    onClick={() => { setSelectedSpeciesKey(selectedSpeciesKey === speciesKey ? null : speciesKey); setActiveDetailTab("gbif"); }}
+                    onClick={() => { setSelectedSpeciesKey(selectedSpeciesKey === speciesKey ? null : speciesKey); }}
                     draggable={isPinned && showOnlyStarred}
                     onDragStart={(e) => handleDragStart(e, speciesKey)}
                     onDragOver={(e) => handleDragOver(e, speciesKey)}

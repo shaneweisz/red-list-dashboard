@@ -126,6 +126,26 @@ describe("parseParams", () => {
     expect(result.subgroups).toEqual(new Set(["bony-fish"]));
     expect(result.categories).toEqual(new Set(["CR"]));
   });
+
+  it("parses species param", () => {
+    const result = parseParams("?species=176168");
+    expect(result.species).toBe(176168);
+  });
+
+  it("defaults species to null when absent", () => {
+    const result = parseParams("");
+    expect(result.species).toBe(null);
+  });
+
+  it("parses tab param", () => {
+    const result = parseParams("?species=176168&tab=assessors");
+    expect(result.tab).toBe("assessors");
+  });
+
+  it("defaults tab to null when absent", () => {
+    const result = parseParams("");
+    expect(result.tab).toBe(null);
+  });
 });
 
 describe("buildQs", () => {
@@ -142,6 +162,8 @@ describe("buildQs", () => {
     subgroups: new Set<string>(),
     sortField: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
     sortDirection: "desc" as const,
+    species: null as number | null,
+    tab: null as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | null,
   };
 
   it("omits view param for reassessments (default)", () => {
@@ -247,6 +269,29 @@ describe("buildQs", () => {
     expect(params.get("sort")).toBe("category");
     expect(params.has("dir")).toBe(false);
   });
+
+  it("includes species when set", () => {
+    const qs = buildQs({ ...emptyState, species: 176168, tab: "gbif" });
+    const params = new URLSearchParams(qs);
+    expect(params.get("species")).toBe("176168");
+  });
+
+  it("omits species when null", () => {
+    const qs = buildQs({ ...emptyState, species: null, tab: null });
+    expect(qs).toBe("");
+  });
+
+  it("includes tab when species set and tab is non-default", () => {
+    const qs = buildQs({ ...emptyState, species: 176168, tab: "assessors" });
+    const params = new URLSearchParams(qs);
+    expect(params.get("tab")).toBe("assessors");
+  });
+
+  it("omits tab when it is gbif (default)", () => {
+    const qs = buildQs({ ...emptyState, species: 176168, tab: "gbif" });
+    const params = new URLSearchParams(qs);
+    expect(params.has("tab")).toBe(false);
+  });
 });
 
 describe("parseParams ↔ buildQs round-trip", () => {
@@ -264,6 +309,8 @@ describe("parseParams ↔ buildQs round-trip", () => {
       search: "shrew",
       sortField: "category" as const,
       sortDirection: "asc" as const,
+      species: null,
+      tab: null,
     };
 
     const qs = buildQs(original);
@@ -292,6 +339,8 @@ describe("parseParams ↔ buildQs round-trip", () => {
       search: "",
       sortField: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
       sortDirection: "desc" as const,
+      species: null as number | null,
+      tab: null as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | null,
     };
 
     const qs = buildQs(original);
@@ -318,6 +367,8 @@ describe("parseParams ↔ buildQs round-trip", () => {
       search: "",
       sortField: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
       sortDirection: "desc" as const,
+      species: null as number | null,
+      tab: null as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | null,
     };
 
     const qs = buildQs(original);
@@ -340,6 +391,8 @@ describe("parseParams ↔ buildQs round-trip", () => {
       search: "",
       sortField: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
       sortDirection: "desc" as const,
+      species: null as number | null,
+      tab: null as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | null,
     };
 
     const qs = buildQs(original);
@@ -361,6 +414,8 @@ describe("parseParams ↔ buildQs round-trip", () => {
       search: "",
       sortField: "newGbif" as const,
       sortDirection: "desc" as const,
+      species: null as number | null,
+      tab: null as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | null,
     };
 
     const qs = buildQs(original);

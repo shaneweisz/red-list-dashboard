@@ -46,6 +46,8 @@ export function parseParams(search: string) {
       null
     ) as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
     sortDirection: (p.get("dir") === "asc" ? "asc" : "desc") as "asc" | "desc",
+    species: p.get("species") ? Number(p.get("species")) : null,
+    tab: (p.get("tab") || null) as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | null,
   };
 }
 
@@ -62,6 +64,8 @@ export function buildQs(state: {
   search: string;
   sortField: "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null;
   sortDirection: "asc" | "desc";
+  species: number | null;
+  tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | null;
 }): string {
   const p = new URLSearchParams();
   if (state.viewMode === "new-assessments") p.set("view", "new-assessments");
@@ -74,6 +78,8 @@ export function buildQs(state: {
   if (state.assessors.size > 0) p.set("assessors", [...state.assessors].join("|"));
   if (state.reviewers.size > 0) p.set("reviewers", [...state.reviewers].join("|"));
   if (state.search) p.set("search", state.search);
+  if (state.species != null) p.set("species", String(state.species));
+  if (state.species != null && state.tab && state.tab !== "gbif") p.set("tab", state.tab);
   // null / "year" desc is the default — only write non-default sort to URL
   const isDefaultSort = state.sortField === null || state.sortField === "year";
   if (!isDefaultSort) {
@@ -251,6 +257,29 @@ export function useFilterParams() {
     [syncUrl]
   );
 
+  const setSpeciesParam = useCallback(
+    (species: number | null, tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" = "gbif") => {
+      setState(prev => {
+        const next = { ...prev, species, tab: species != null ? tab : null };
+        queueMicrotask(() => syncUrl(next, true));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
+  const setTabParam = useCallback(
+    (tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors") => {
+      setState(prev => {
+        if (prev.species == null) return prev; // no species selected, nothing to update
+        const next = { ...prev, tab };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
   const clearAllFilters = useCallback(() => {
     setState(prev => {
       const next = {
@@ -319,5 +348,9 @@ export function useFilterParams() {
     setSort,
     clearAllFilters,
     clearAllFiltersAndTaxa,
+    species: state.species,
+    tab: state.tab,
+    setSpeciesParam,
+    setTabParam,
   };
 }
