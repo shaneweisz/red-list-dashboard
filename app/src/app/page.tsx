@@ -83,7 +83,7 @@ export default function RedListPage() {
         />
       </main>
 
-      <footer className="max-w-6xl mx-auto mt-10 pb-6 pt-4 border-t border-zinc-200 dark:border-zinc-800">
+      <footer className="max-w-xl mx-auto mt-10 pb-6 pt-4 border-t border-zinc-200 dark:border-zinc-800">
         <p className="text-center text-xs text-zinc-400 dark:text-zinc-500">
           Questions or feedback? Contact{" "}
           <a
@@ -114,7 +114,7 @@ export default function RedListPage() {
             PhD research project
           </a>
           {" "}at the University of Cambridge.
-          Based on public IUCN Red List and GBIF data. Verify against primary sources before citing.
+          Based on public IUCN Red List and GBIF data. Any errors in aggregation are the author&apos;s own. Please verify against primary sources before use.
         </p>
       </footer>
     </div>
