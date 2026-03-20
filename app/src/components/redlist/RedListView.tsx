@@ -2066,14 +2066,12 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                             </div>
                           )}
                         </div>
-                          {gbifSpeciesKey && (
-                            <div className="border-t border-zinc-200 dark:border-zinc-700">
-                              <AssessmentAssistant
-                                speciesKey={gbifSpeciesKey}
-                                assessmentYear={assessmentYear}
-                              />
-                            </div>
-                          )}
+                          <div className="border-t border-zinc-200 dark:border-zinc-700">
+                            <AssessmentAssistant
+                              speciesKey={gbifSpeciesKey ?? 0}
+                              assessmentYear={assessmentYear}
+                            />
+                          </div>
                       </td>
                     </tr>
                   )}
