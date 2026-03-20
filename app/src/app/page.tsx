@@ -93,7 +93,7 @@ export default function RedListPage() {
         />
       </main>
 
-      <footer className="max-w-xl mx-auto mt-8 pb-6 pt-4 border-t border-zinc-200 dark:border-zinc-800">
+      <footer className="max-w-xl mx-auto mt-5 pb-6 pt-4 border-t border-zinc-200 dark:border-zinc-800">
         <p className="text-center text-xs text-zinc-400 dark:text-zinc-500">
           Questions or feedback? Contact{" "}
           <a
