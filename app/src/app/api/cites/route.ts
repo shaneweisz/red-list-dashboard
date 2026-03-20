@@ -32,8 +32,9 @@ interface CitesTaxonConcept {
     order?: string;
     family?: string;
   };
-  common_names: { name: string; language: string }[];
-  cites_listings: {
+  accepted_names?: { id: number; full_name: string; author_year: string; rank: string }[];
+  common_names?: { name: string; language: string }[];
+  cites_listings?: {
     id: number;
     is_current: boolean;
     appendix: string;
@@ -128,13 +129,36 @@ export async function GET(request: NextRequest) {
     const concepts: CitesTaxonConcept[] = searchData.taxon_concepts || [];
 
     // Find the best match: prefer accepted (A), active, species-rank
-    const match =
+    let match =
       concepts.find(
         (c) =>
           c.name_status === "A" && c.active && c.rank === "SPECIES"
       ) ||
       concepts.find((c) => c.name_status === "A" && c.active) ||
       concepts[0];
+
+    // If we only found synonyms, follow the accepted_names reference
+    if (match && match.name_status === "S" && match.accepted_names?.length) {
+      const acceptedName = match.accepted_names[0].full_name;
+      const acceptedResp = await fetchCites(
+        `/taxon_concepts?name=${encodeURIComponent(acceptedName)}`,
+        apiKey
+      );
+      if (acceptedResp.ok) {
+        const acceptedData = await acceptedResp.json();
+        const acceptedConcepts: CitesTaxonConcept[] =
+          acceptedData.taxon_concepts || [];
+        const acceptedMatch =
+          acceptedConcepts.find(
+            (c) =>
+              c.name_status === "A" && c.active && c.rank === "SPECIES"
+          ) ||
+          acceptedConcepts.find((c) => c.name_status === "A" && c.active);
+        if (acceptedMatch) {
+          match = acceptedMatch;
+        }
+      }
+    }
 
     if (!match) {
       const result = { found: false, scientificName: name };
@@ -160,7 +184,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get English common name
-    const englishName = match.common_names.find(
+    const englishName = (match.common_names || []).find(
       (n) => n.language === "EN"
     )?.name;
 
