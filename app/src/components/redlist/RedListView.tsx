@@ -1808,21 +1808,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                               {s.common_name}
                             </div>
                           )}
-                          {s.category === "NE" && (
-                            <button
-                              className="flex items-center gap-1 text-[10px] text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 mt-0.5"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedSpeciesKey(s.id);
-                                setActiveDetailTab("assessors");
-                              }}
-                            >
-                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                              </svg>
-                              Suggested assessors
-                            </button>
-                          )}
                         </div>
                       </div>
                     </td>
