@@ -123,7 +123,7 @@ export default function RedListPage() {
           >
             PhD research project
           </a>
-          {" "}at the University of Cambridge. The dashboard is based on publicly available IUCN Red List and GBIF data. Any errors in aggregation are the author&apos;s own. Please verify against primary sources before use.
+          {" "}at the University of Cambridge. The dashboard is based on publicly available IUCN Red List and GBIF data. Any errors in aggregation or presentation are the author&apos;s own. Please verify against primary sources before use.
         </p>
       </footer>
     </div>
