@@ -1162,9 +1162,8 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                 // Already selected → toggle expand/collapse
                 toggleExpand(taxon.id);
               } else {
-                // Selecting → collapse others, expand this one
+                // First click selects in collapsed state — collapse all
                 setExpandedTaxa(new Set());
-                toggleExpand(taxon.id);
               }
             } else {
               // Non-expandable taxon selected → collapse all expanded
