@@ -1815,12 +1815,28 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               {allExpanded ? "Collapse all" : "Expand all"}
             </button>
             <span className="text-zinc-300 dark:text-zinc-700">|</span>
-            <button
-              onClick={enterTable1a}
-              className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-            >
-              Table 1a mode
-            </button>
+            <span className="inline-flex items-center gap-1">
+              <button
+                onClick={enterTable1a}
+                className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+              >
+                Table 1a mode
+              </button>
+              <span className="relative group/t1a">
+                <a
+                  href={IUCN_SOURCE_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <FaInfoCircle size={10} />
+                </a>
+                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover/t1a:opacity-100 group-hover/t1a:visible z-50 shadow-lg pointer-events-none">
+                  View IUCN Red List Table 1a (PDF)
+                </span>
+              </span>
+            </span>
           </>
         )}
       </div>
