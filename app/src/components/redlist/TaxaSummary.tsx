@@ -1162,9 +1162,8 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                 // Already selected → toggle expand/collapse
                 toggleExpand(taxon.id);
               } else {
-                // Selecting → collapse others, expand this one
+                // Selecting → show collapsed table view first (don't auto-expand)
                 setExpandedTaxa(new Set());
-                toggleExpand(taxon.id);
               }
             } else {
               // Non-expandable taxon selected → collapse all expanded
