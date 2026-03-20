@@ -7,7 +7,7 @@ import {
   Geography,
   ZoomableGroup,
 } from "react-simple-maps";
-import { geoCentroid, geoNaturalEarth1 } from "d3-geo";
+import { geoCentroid, geoBounds, geoNaturalEarth1 } from "d3-geo";
 
 // Using the recommended TopoJSON from react-simple-maps
 const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json";
@@ -285,19 +285,24 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, onDrag
         return;
       }
 
-      // Drag selection — find all centroids within the rectangle
+      // Drag selection — find all countries whose bounding box intersects the rectangle
       const selLeft = Math.min(start.x, endX);
       const selRight = Math.max(start.x, endX);
       const selTop = Math.min(start.y, endY);
       const selBottom = Math.max(start.y, endY);
 
       const codes: string[] = [];
-      for (const [name, coords] of Object.entries(centroidsRef.current)) {
-        const pt = proj(coords as [number, number]);
-        if (!pt) continue;
-        const sx = w / 2 + z * (pt[0] - projCenter[0]);
-        const sy = h / 2 + z * (pt[1] - projCenter[1]);
-        if (sx >= selLeft && sx <= selRight && sy >= selTop && sy <= selBottom) {
+      for (const [name, bounds] of Object.entries(boundsRef.current) as [string, [[number, number], [number, number]]][]) {
+        // Project the geographic bounding box corners to screen coordinates
+        const sw = proj(bounds[0]);
+        const ne = proj(bounds[1]);
+        if (!sw || !ne) continue;
+        const bLeft = w / 2 + z * (Math.min(sw[0], ne[0]) - projCenter[0]);
+        const bRight = w / 2 + z * (Math.max(sw[0], ne[0]) - projCenter[0]);
+        const bTop = h / 2 + z * (Math.min(sw[1], ne[1]) - projCenter[1]);
+        const bBottom = h / 2 + z * (Math.max(sw[1], ne[1]) - projCenter[1]);
+        // Check AABB intersection between selection rect and country bounding box
+        if (bRight >= selLeft && bLeft <= selRight && bBottom >= selTop && bTop <= selBottom) {
           const alpha2 = NAME_TO_ALPHA2[name];
           if (alpha2) codes.push(alpha2);
         }
@@ -374,8 +379,9 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, onDrag
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  // Centroids computed from TopoJSON geometries (computed once on first render)
+  // Centroids and bounding boxes computed from TopoJSON geometries (computed once on first render)
   const centroidsRef = useRef<Record<string, [number, number]>>({});
+  const boundsRef = useRef<Record<string, [[number, number], [number, number]]>>({});
 
   // Cache occurrence results by taxa key to avoid refetching on toggle
   const occurrenceCacheRef = useRef<Record<string, CountryStats>>({});
@@ -624,6 +630,7 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, onDrag
                     if (name && name !== "Antarctica") {
                       const [lng, lat] = geoCentroid(geo);
                       centroidsRef.current[name] = [lng, lat];
+                      boundsRef.current[name] = geoBounds(geo) as [[number, number], [number, number]];
                     }
                   }
                 }
@@ -692,6 +699,19 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, onDrag
               height: dragRect.height,
             }}
           />
+        )}
+        {/* Clear selection */}
+        {selectedCountries.size > 0 && (
+          <button
+            onClick={onClearSelection}
+            className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 shadow-sm hover:bg-zinc-50 dark:hover:bg-zinc-700 text-xs font-medium transition-colors z-10"
+            title="Clear selection"
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            Clear selection
+          </button>
         )}
         {/* Zoom controls */}
         <div className="absolute bottom-2 right-2 flex flex-col gap-1 z-10">
