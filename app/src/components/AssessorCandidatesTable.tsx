@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { countriesToRegions, regionColor, countryToRegion } from "@/lib/regions";
 import { ALPHA2_TO_NAME } from "@/components/WorldMap";
+import { getViewRootForNode } from "@/lib/taxonomy-utils";
 
 interface AssessorCountryCandidate {
   name: string;
@@ -173,12 +174,15 @@ export default function AssessorCandidatesTable({
               <tr
                 key={c.name}
                 className="border-b border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer transition-colors"
-                onClick={() =>
+                onClick={() => {
+                  const viewRoot = getViewRootForNode(taxaId);
+                  const taxaParam = viewRoot ?? taxaId;
+                  const subgroupParam = viewRoot && viewRoot !== taxaId ? `&subgroups=${encodeURIComponent(taxaId)}` : "";
                   window.open(
-                    `/?taxa=${encodeURIComponent(taxaId)}&assessors=${encodeURIComponent(c.name).replace(/%2C/g, ",")}`,
+                    `/?taxa=${encodeURIComponent(taxaParam)}${subgroupParam}&assessors=${encodeURIComponent(c.name).replace(/%2C/g, ",")}`,
                     "_blank"
-                  )
-                }
+                  );
+                }}
               >
                 <td className="py-2 pr-3 text-zinc-700 dark:text-zinc-200 truncate max-w-[200px]" title={c.name}>
                   {c.name}
