@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAssessorCandidatesByCountry } from "@/lib/data/species-store";
-import { getGroupsForTaxa } from "@/config/taxa-hierarchy";
+import { getCsvGroupsForNode } from "@/lib/taxonomy-utils";
 import { CACHE_5M } from "@/lib/cache-headers";
 
 export async function GET(request: NextRequest) {
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
   }
 
   const countries = countriesParam.split(";").filter(Boolean);
-  const groups = getGroupsForTaxa(taxaId);
+  const groups = getCsvGroupsForNode(taxaId);
 
   try {
     const candidates = getAssessorCandidatesByCountry(groups, countries);

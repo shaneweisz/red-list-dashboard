@@ -1,8 +1,9 @@
 /**
  * build-taxa-summary: Compute per-taxon summary stats → taxa-summary.json
+ *                     + node-children-summaries.json for instant drill-down
  *
  * Reads per-taxon redlist and GBIF CSVs, computes summary statistics,
- * and writes to data/taxa-summary.json.
+ * and writes to data/taxa-summary.json and data/node-children-summaries.json.
  *
  * Usage:
  *   npx tsx scripts/build-taxa-summary.ts
@@ -15,6 +16,9 @@ import { TAXA } from "./taxa";
 import { readRedlistCsv } from "./fetch-redlist-species";
 import { readGbifCsv } from "./fetch-gbif-species";
 import { readMappingCsv } from "./match-redlist-species-to-gbif";
+import { NODE_INDEX, hasChildren, matchesFilter } from "../src/lib/taxonomy-utils";
+import type { TaxonomyNode } from "../src/config/taxonomy-tree";
+import type { NodeSummary } from "../src/lib/data/species-store";
 
 const CURRENT_YEAR = new Date().getFullYear();
 const OUTDATED_THRESHOLD_YEARS = 10;
@@ -122,6 +126,181 @@ export async function run(): Promise<void> {
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
   fs.writeFileSync(outputPath, JSON.stringify(summaries, null, 2) + "\n");
   console.log(`\nWrote ${summaries.length} taxa → ${outputPath}`);
+
+  // ─── Second pass: precompute node children summaries ──────────────
+  console.log("\nComputing node children summaries...");
+
+  // Build caches for CSV data (reusing what readRedlistCsv/readGbifCsv load)
+  const redlistByGroup = new Map<string, ReturnType<typeof readRedlistCsv>>();
+  const gbifByGroup = new Map<string, ReturnType<typeof readGbifCsv>>();
+  for (const taxon of TAXA) {
+    if (fs.existsSync(path.join(REDLIST_DIR, `${taxon.id}.csv`))) {
+      redlistByGroup.set(taxon.id, readRedlistCsv(taxon.id));
+    }
+    if (fs.existsSync(path.join(GBIF_DIR, `${taxon.id}.csv`))) {
+      gbifByGroup.set(taxon.id, readGbifCsv(taxon.id));
+    }
+  }
+
+  // Must match EXCLUDED_DOMESTICATED_GBIF_KEYS in species-store.ts
+  const excludedDomesticatedGbifKeys = new Set([
+    2441022, 2435035, 2441110, 2441056, 2440886, 7422937, 2440891,
+    9055455, 2441238, 5220190, 7515593, 2441019, 5219702, 10694102, 2436436,
+  ]);
+
+  function isOutdated(assessmentDate: string | null): boolean {
+    if (!assessmentDate) return true;
+    const year = parseInt(assessmentDate.slice(0, 4), 10);
+    if (isNaN(year)) return true;
+    return CURRENT_YEAR - year > OUTDATED_THRESHOLD_YEARS;
+  }
+
+  function computeNodeSummary(node: TaxonomyNode): NodeSummary {
+    const filter = node.filter;
+    let totalAssessed = 0;
+    let outdatedCount = 0;
+    let gbifNeSpeciesCount = 0;
+    const byCategory: Record<string, number> = {};
+
+    for (const group of filter.csvGroups) {
+      const rows = redlistByGroup.get(group) ?? [];
+      for (const row of rows) {
+        if (!matchesFilter(row, filter)) continue;
+        totalAssessed++;
+        if (isOutdated(row.assessment_date)) outdatedCount++;
+        const cat = row.category;
+        if (cat) byCategory[cat] = (byCategory[cat] ?? 0) + 1;
+      }
+
+      const gbifMap = gbifByGroup.get(group);
+      if (gbifMap) {
+        for (const [key, gbifRow] of gbifMap) {
+          if (linkedGbifKeys.has(key)) continue;
+          if (excludedDomesticatedGbifKeys.has(key)) continue;
+          if (!matchesFilter(gbifRow, filter)) continue;
+          gbifNeSpeciesCount++;
+        }
+      }
+    }
+
+    return {
+      id: node.id,
+      name: node.name,
+      estimatedDescribed: node.estimatedDescribed ?? 0,
+      totalAssessed,
+      outdated: outdatedCount,
+      gbifNeSpeciesCount,
+      byCategory,
+    };
+  }
+
+  function computeChildrenSummaries(parentNode: TaxonomyNode): NodeSummary[] {
+    const children = parentNode.children!;
+
+    // Check if we need claim tracking (for catch-all nodes with excludeClasses)
+    const needsClaimTracking = children.some(c =>
+      c.filter.excludeClasses && c.filter.excludeClasses.length > 0
+    );
+
+    if (!needsClaimTracking) {
+      return children.map(child => computeNodeSummary(child));
+    }
+
+    // Complex case: track claimed rows for catch-all nodes
+    const claimedRowIds = new Set<number>();
+    const claimedGbifKeys = new Set<number>();
+    const results: NodeSummary[] = [];
+
+    const nonCatchAll = children.filter(c =>
+      !c.filter.excludeClasses || c.filter.excludeClasses.length === 0
+    );
+    const catchAll = children.filter(c =>
+      c.filter.excludeClasses && c.filter.excludeClasses.length > 0
+    );
+
+    for (const child of nonCatchAll) {
+      const summary = computeNodeSummary(child);
+      results.push(summary);
+
+      if (child.filter.classNames || child.filter.orderNames) {
+        for (const group of child.filter.csvGroups) {
+          const rows = redlistByGroup.get(group) ?? [];
+          for (const row of rows) {
+            if (matchesFilter(row, child.filter)) {
+              claimedRowIds.add(row.sis_taxon_id);
+            }
+          }
+          const gbifMap = gbifByGroup.get(group);
+          if (gbifMap) {
+            for (const [key, gbifRow] of gbifMap) {
+              if (!linkedGbifKeys.has(key) && !excludedDomesticatedGbifKeys.has(key) && matchesFilter(gbifRow, child.filter)) {
+                claimedGbifKeys.add(key);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    for (const child of catchAll) {
+      let totalAssessed = 0;
+      let outdatedCount = 0;
+      let gbifNeSpeciesCount = 0;
+      const byCategory: Record<string, number> = {};
+
+      for (const group of child.filter.csvGroups) {
+        const rows = redlistByGroup.get(group) ?? [];
+        for (const row of rows) {
+          if (!matchesFilter(row, child.filter)) continue;
+          if (claimedRowIds.has(row.sis_taxon_id)) continue;
+          totalAssessed++;
+          if (isOutdated(row.assessment_date)) outdatedCount++;
+          const cat = row.category;
+          if (cat) byCategory[cat] = (byCategory[cat] ?? 0) + 1;
+        }
+
+        const gbifMap = gbifByGroup.get(group);
+        if (gbifMap) {
+          for (const [key, gbifRow] of gbifMap) {
+            if (linkedGbifKeys.has(key)) continue;
+            if (excludedDomesticatedGbifKeys.has(key)) continue;
+            if (!matchesFilter(gbifRow, child.filter)) continue;
+            if (claimedGbifKeys.has(key)) continue;
+            gbifNeSpeciesCount++;
+          }
+        }
+      }
+
+      results.push({
+        id: child.id,
+        name: child.name,
+        estimatedDescribed: child.estimatedDescribed ?? 0,
+        totalAssessed,
+        outdated: outdatedCount,
+        gbifNeSpeciesCount,
+        byCategory,
+      });
+    }
+
+    return results;
+  }
+
+  const nodeChildrenSummaries: Record<string, NodeSummary[]> = {};
+  let parentCount = 0;
+  let childCount = 0;
+
+  for (const [nodeId, node] of NODE_INDEX) {
+    if (!hasChildren(nodeId)) continue;
+    const childSummaries = computeChildrenSummaries(node);
+    nodeChildrenSummaries[nodeId] = childSummaries;
+    parentCount++;
+    childCount += childSummaries.length;
+    console.log(`  ${nodeId}: ${childSummaries.length} children`);
+  }
+
+  const childrenOutputPath = path.join(DATA_DIR, "node-children-summaries.json");
+  fs.writeFileSync(childrenOutputPath, JSON.stringify(nodeChildrenSummaries, null, 2) + "\n");
+  console.log(`\nWrote ${parentCount} parents (${childCount} children) → ${childrenOutputPath}`);
 }
 
 async function main() {

@@ -1,13 +1,14 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { FaInfoCircle, FaExpandAlt, FaCompressAlt } from "react-icons/fa";
 
 import { HiOutlineAdjustmentsHorizontal } from "react-icons/hi2";
 import TaxaIcon from "@/components/TaxaIcon";
 import { CATEGORY_COLORS, CATEGORY_NAMES, CATEGORY_ORDER } from "@/config/taxa";
-import { TAXA_SUBGROUPS, getSubgroupDef } from "@/config/taxa-hierarchy";
+import { hasChildren, findNode, getAncestors } from "@/lib/taxonomy-utils";
+import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
 interface Table1aRowData {
   group: string;
   name: string;
@@ -70,13 +71,15 @@ interface Props {
   onToggleTaxon: (taxonId: string, event: React.MouseEvent) => void;
   selectedTaxa: Set<string>;
   selectedSubgroups: Set<string>;
-  onToggleSubgroup: (subgroupId: string, parentTaxonId: string) => void;
+  onToggleSubgroup: (subgroupId: string) => void;
+  /** Navigate directly to a taxon + subgroup (used by Table 1a click-through) */
+  onNavigateToSubgroup?: (taxonId: string, subgroupId: string) => void;
   disableAllSpecies?: boolean;
   viewMode?: "reassessments" | "new-assessments";
 }
 
-// Taxa IDs that have expandable subgroups
-const EXPANDABLE_TAXA = new Set(Object.keys(TAXA_SUBGROUPS));
+// Dynamic: any tree node with children is expandable
+const isExpandable = (id: string) => hasChildren(id);
 
 // Bar color helpers
 const getAssessedBarColor = (percent: number) =>
@@ -160,11 +163,9 @@ function DisabledAllTooltip() {
   );
 }
 
-export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, disableAllSpecies, viewMode = "reassessments" }: Props) {
+export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments" }: Props) {
   const isNewAssessments = viewMode === "new-assessments";
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
-  const [globalGbifMedian, setGlobalGbifMedian] = useState<number | undefined>();
-  const [globalGbifDistribution, setGlobalGbifDistribution] = useState<Record<string, number> | undefined>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -177,6 +178,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   // Fetched subgroup data keyed by taxonId
   const [subgroupData, setSubgroupData] = useState<Record<string, SubGroupSummary[]>>({});
   const [loadingSubgroups, setLoadingSubgroups] = useState<Set<string>>(new Set());
+  // Refs to avoid stale closures in toggleExpand
+  const subgroupDataRef = useRef(subgroupData);
+  subgroupDataRef.current = subgroupData;
+  const loadingSubgroupsRef = useRef(loadingSubgroups);
+  loadingSubgroupsRef.current = loadingSubgroups;
   const initialFocus: FocusMode = isNewAssessments ? "new-assessments" : "redlist";
   const [focusMode, setFocusMode] = useState<FocusMode>(initialFocus);
   const [hiddenColumns, setHiddenColumns] = useState<Set<ColumnId>>(new Set(FOCUS_HIDDEN[initialFocus]));
@@ -264,11 +270,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       return next;
     });
 
-    // Fetch subgroup data if not already loaded
-    if (!subgroupData[taxonId] && !loadingSubgroups.has(taxonId)) {
+    // Fetch subgroup data if not already loaded (read from refs to avoid stale closures)
+    if (!subgroupDataRef.current[taxonId] && !loadingSubgroupsRef.current.has(taxonId)) {
       setLoadingSubgroups((prev) => new Set(prev).add(taxonId));
       try {
-        const res = await fetch(`/api/redlist/taxa-subgroups?taxonId=${taxonId}`);
+        const res = await fetch(`/api/redlist/taxa-subgroups?nodeId=${taxonId}`);
         if (res.ok) {
           const data = await res.json();
           setSubgroupData((prev) => ({ ...prev, [taxonId]: data.subgroups }));
@@ -281,7 +287,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         });
       }
     }
-  }, [subgroupData, loadingSubgroups]);
+  }, []);
 
   // Table 1a mode
   const [table1aMode, setTable1aMode] = useState(false);
@@ -290,16 +296,16 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
 
   // Separate "all" row from per-taxon rows (needed before early returns for hooks)
   const allTaxon = taxa.find((t) => t.id === "all");
-  const perTaxa = taxa.filter((t) => t.id !== "all");
+  const perTaxa = useMemo(() => taxa.filter((t) => t.id !== "all"), [taxa]);
 
   // Expand all expandable taxa
   const expandAll = useCallback(async () => {
-    const expandableTaxaIds = perTaxa.filter(t => EXPANDABLE_TAXA.has(t.id)).map(t => t.id);
+    const expandableTaxaIds = perTaxa.filter(t => isExpandable(t.id)).map(t => t.id);
     setExpandedTaxa(new Set(expandableTaxaIds));
     for (const taxonId of expandableTaxaIds) {
-      if (!subgroupData[taxonId] && !loadingSubgroups.has(taxonId)) {
+      if (!subgroupDataRef.current[taxonId] && !loadingSubgroupsRef.current.has(taxonId)) {
         setLoadingSubgroups((prev) => new Set(prev).add(taxonId));
-        fetch(`/api/redlist/taxa-subgroups?taxonId=${taxonId}`)
+        fetch(`/api/redlist/taxa-subgroups?nodeId=${taxonId}`)
           .then(res => res.ok ? res.json() : null)
           .then(data => {
             if (data) setSubgroupData((prev) => ({ ...prev, [taxonId]: data.subgroups }));
@@ -313,7 +319,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           });
       }
     }
-  }, [perTaxa, subgroupData, loadingSubgroups]);
+  }, [perTaxa]);
 
   const collapseAll = useCallback(() => {
     setExpandedTaxa(new Set());
@@ -339,21 +345,37 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     setTable1aMode(false);
   }, []);
 
-  const allExpanded = perTaxa.filter(t => EXPANDABLE_TAXA.has(t.id)).every(t => expandedTaxa.has(t.id));
+  const allExpanded = useMemo(() => perTaxa.filter(t => isExpandable(t.id)).every(t => expandedTaxa.has(t.id)), [perTaxa, expandedTaxa]);
 
-  // Auto-expand parent taxa when subgroups are selected (e.g. from URL)
+  // Collapse all when returning to landing page (no taxa selected)
+  useEffect(() => {
+    if (selectedTaxa.size === 0 && selectedSubgroups.size === 0) {
+      setExpandedTaxa(new Set());
+    }
+  }, [selectedTaxa, selectedSubgroups]);
+
+  // Auto-expand ancestor chain when subgroups are selected (e.g. from URL)
   useEffect(() => {
     if (selectedSubgroups.size === 0) return;
-    const parentsToExpand = new Set<string>();
+    const toExpand = new Set<string>();
     for (const sgId of selectedSubgroups) {
-      const info = getSubgroupDef(sgId);
-      if (info && !expandedTaxa.has(info.taxonId)) {
-        parentsToExpand.add(info.taxonId);
+      // Expand all ancestors up to the view root (which is in selectedTaxa)
+      for (const ancestorId of getAncestors(sgId)) {
+        if (selectedTaxa.has(ancestorId)) break; // Stop at the view root
+        if (!expandedTaxa.has(ancestorId)) toExpand.add(ancestorId);
+      }
+      // Expand the node itself if it has children
+      if (hasChildren(sgId) && !expandedTaxa.has(sgId)) {
+        toExpand.add(sgId);
       }
     }
-    for (const taxonId of parentsToExpand) {
-      toggleExpand(taxonId);
-    }
+    for (const id of toExpand) toggleExpand(id);
+    // Deps intentionally limited to selectedSubgroups only:
+    // - toggleExpand: stable identity (useCallback with empty deps + refs)
+    // - selectedTaxa: would cause re-runs when taxa selection changes, but this
+    //   effect only needs to react to subgroup URL changes
+    // - expandedTaxa: including it would create an infinite loop since this effect
+    //   expands taxa (mutates expandedTaxa), which would re-trigger the effect
   }, [selectedSubgroups]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -363,8 +385,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         if (!res.ok) throw new Error("Failed to load taxa");
         const data = await res.json();
         setTaxa(data.taxa);
-        setGlobalGbifMedian(data.globalGbifMedian);
-        setGlobalGbifDistribution(data.globalGbifDistribution);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load taxa");
       } finally {
@@ -532,7 +552,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     const clampedPercent = Math.min(100, Math.max(0, percent));
     const fillColor = isAll ? "rgba(255,255,255,0.25)" : barColor;
     return (
-      <div className="flex items-center gap-2 min-w-[160px] md:min-w-[220px]">
+      <div className="flex items-center gap-2 min-w-[120px] md:min-w-[180px]">
         <div className="flex-1 h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
           <div
             className="h-full rounded-full transition-all"
@@ -796,6 +816,86 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     );
   };
 
+  // Render an ancestor context row with full data — clicking navigates to that level.
+  const renderAncestorRow = (sg: SubGroupSummary, color: string, depth: number, topTaxonId: string, isViewRoot: boolean) => {
+    const sgPctAssessed = sg.estimatedDescribed > 0 ? (sg.totalAssessed / sg.estimatedDescribed) * 100 : 0;
+    const sgPctOutdated = sg.totalAssessed > 0 ? (sg.outdated / sg.totalAssessed) * 100 : 0;
+    return (
+      <tr
+        key={`ancestor-${sg.id}`}
+        className="transition-colors cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+        onClick={() => {
+          onToggleSubgroup(sg.id);
+        }}
+      >
+        <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 bg-white dark:bg-zinc-900`}>
+          <div className="flex items-center gap-2" style={{ paddingLeft: `${depth * 12}px` }}>
+            <TaxaIcon taxonId={sg.id} size={isViewRoot ? 18 : 16} className="flex-shrink-0" style={{ color }} />
+            <span className="text-sm text-zinc-700 dark:text-zinc-300">{sg.name}</span>
+          </div>
+        </td>
+        {isVisible("described") && (
+          <td className={numericTdClasses}>
+            <span className="text-sm text-zinc-700 dark:text-zinc-300 tabular-nums">{sg.estimatedDescribed.toLocaleString()}</span>
+          </td>
+        )}
+        {isVisible("assessed") && (
+          <td className={numericTdClasses}>
+            <span className="text-sm text-zinc-700 dark:text-zinc-300 tabular-nums">{sg.totalAssessed.toLocaleString()}</span>
+          </td>
+        )}
+        {isVisible("pctAssessed") && (
+          <td className={flexTdClasses}>
+            {renderBar(sgPctAssessed, getAssessedBarColor(sgPctAssessed), false)}
+          </td>
+        )}
+        {isVisible("outdated") && (
+          <td className={numericTdClasses}>
+            <span className="text-sm text-zinc-700 dark:text-zinc-300 tabular-nums">{sg.outdated.toLocaleString()}</span>
+          </td>
+        )}
+        {isVisible("pctOutdated") && (
+          <td className={flexTdClasses}>
+            {sg.totalAssessed > 0
+              ? renderBar(sgPctOutdated, getOutdatedBarColor(sgPctOutdated), false)
+              : <span className="text-sm text-zinc-400">—</span>}
+          </td>
+        )}
+        {isVisible("gbifSpecies") && (
+          <td className={numericTdClasses}>
+            <span className="text-sm text-zinc-700 dark:text-zinc-300 tabular-nums">
+              {isNewAssessments ? sg.gbifNeSpeciesCount.toLocaleString() : "—"}
+            </span>
+          </td>
+        )}
+        {isVisible("pctGbifUnassessed") && (
+          <td className={flexTdClasses}>
+            {sg.gbifNeSpeciesCount > 0 && sg.estimatedDescribed > 0
+              ? renderBar((sg.gbifNeSpeciesCount / sg.estimatedDescribed) * 100, "#3b82f6", false)
+              : <span className="text-sm text-zinc-400">—</span>}
+          </td>
+        )}
+        {isVisible("totalGbifObs") && (
+          <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
+        )}
+        {isVisible("gbifDistribution") && (
+          <td className={flexTdClasses}><span className="text-sm text-zinc-400">—</span></td>
+        )}
+        {isVisible("meanGbifObs") && (
+          <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
+        )}
+        {isVisible("medianGbifObs") && (
+          <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
+        )}
+        {isVisible("breakdown") && (
+          <td className={flexTdClasses}>
+            {renderBreakdownBar(sg.byCategory)}
+          </td>
+        )}
+      </tr>
+    );
+  };
+
   // Render a standalone subgroup row (used when table is collapsed to a selected subgroup)
   const renderCollapsedSubgroupRow = (taxon: TaxonSummary, sg: SubGroupSummary) => {
     const sgPctAssessed = sg.estimatedDescribed > 0 ? (sg.totalAssessed / sg.estimatedDescribed) * 100 : 0;
@@ -803,17 +903,16 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     return (
       <tr
         key={`collapsed-${sg.id}`}
-        className="transition-colors cursor-pointer bg-zinc-100 dark:bg-zinc-800"
+        className={`transition-colors bg-zinc-100 dark:bg-zinc-800 ${isExpandable(sg.id) ? "cursor-pointer hover:bg-zinc-200 dark:hover:bg-zinc-700" : ""}`}
         onClick={() => {
-          onToggleSubgroup(sg.id, taxon.id);
+          if (isExpandable(sg.id)) {
+            toggleExpand(sg.id);
+          }
         }}
       >
         <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 bg-zinc-100 dark:bg-zinc-800`}>
           <div className="flex items-center gap-2">
-            <span
-              className="w-3 h-3 rounded-full flex-shrink-0"
-              style={{ backgroundColor: taxon.color }}
-            />
+            <TaxaIcon taxonId={sg.id} size={18} className="flex-shrink-0" style={{ color: taxon.color }} />
             <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{sg.name}</span>
           </div>
         </td>
@@ -822,13 +921,12 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums inline-flex items-center gap-1">
               {sg.estimatedDescribed.toLocaleString()}
               {(() => {
-                const sgDefs = TAXA_SUBGROUPS[taxon.id];
-                const sgDef = sgDefs?.find(d => d.id === sg.id);
-                if (!sgDef?.source) return null;
+                const sgNode = findNode(sg.id);
+                if (!sgNode?.estimatedSource) return null;
                 return (
                   <span className="relative group/src">
                     <a
-                      href={sgDef.sourceUrl}
+                      href={sgNode.estimatedSourceUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
@@ -837,7 +935,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                       <FaInfoCircle size={10} />
                     </a>
                     <span className="absolute right-0 top-1/2 -translate-y-1/2 mr-5 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover/src:opacity-100 group-hover/src:visible z-50 shadow-lg normal-case max-w-[300px] whitespace-normal text-left">
-                      {sgDef.source}
+                      {sgNode.estimatedSource}
                     </span>
                   </span>
                 );
@@ -906,9 +1004,144 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     );
   };
 
+  // Render a subgroup row, recursively expandable if it has children
+  const renderSubgroupRow = (sg: SubGroupSummary, parentColor: string, depth: number, topTaxonId: string): React.ReactNode => {
+    const sgPctAssessed = sg.estimatedDescribed > 0 ? (sg.totalAssessed / sg.estimatedDescribed) * 100 : 0;
+    const sgPctOutdated = sg.totalAssessed > 0 ? (sg.outdated / sg.totalAssessed) * 100 : 0;
+    const isSgSelected = selectedSubgroups.has(sg.id);
+    const sgHasChildren = isExpandable(sg.id);
+    const isSgExpanded = expandedTaxa.has(sg.id);
+    const sgSubs = subgroupData[sg.id] ?? [];
+    const isLoadingSgSubs = loadingSubgroups.has(sg.id);
+    const dotSize = depth === 1 ? "w-2 h-2" : "w-1.5 h-1.5";
+
+    return (
+      <React.Fragment key={sg.id}>
+        <tr
+          className={`transition-colors cursor-pointer ${
+            isSgSelected
+              ? "bg-violet-50 dark:bg-violet-900/20"
+              : "hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30"
+          }`}
+          onClick={() => {
+            if (sgHasChildren && isSgSelected) {
+              // Already selected parent → toggle expand/collapse
+              toggleExpand(sg.id);
+            } else {
+              onToggleSubgroup(sg.id);
+              if (sgHasChildren && !isSgExpanded) {
+                // Selecting → expand to show children
+                toggleExpand(sg.id);
+              }
+            }
+          }}
+        >
+          <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 ${isSgSelected ? "bg-violet-50 dark:bg-violet-900/20" : "bg-white dark:bg-zinc-900"}`}>
+            <div className="flex items-center gap-2" style={{ paddingLeft: `${(depth - 1) * 12}px` }}>
+              <TaxaIcon taxonId={sg.id} size={depth === 1 ? 16 : 14} className="flex-shrink-0" style={{ color: parentColor, opacity: isSgSelected ? 1 : 0.6 }} />
+              <span className={`text-sm ${isSgSelected ? "font-medium text-violet-700 dark:text-violet-300" : "text-zinc-700 dark:text-zinc-300"}`}>{sg.name}</span>
+              {isLoadingSgSubs && (
+                <svg className="animate-spin h-3 w-3 text-zinc-400" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              )}
+            </div>
+          </td>
+          {isVisible("described") && (
+            <td className={numericTdClasses}>
+              <span className="text-sm text-zinc-600 dark:text-zinc-400 tabular-nums inline-flex items-center gap-1">
+                {sg.estimatedDescribed.toLocaleString()}
+                {(() => {
+                  const sgNode = findNode(sg.id);
+                  if (!sgNode?.estimatedSource) return null;
+                  return (
+                    <span className="relative group/src">
+                      <a
+                        href={sgNode.estimatedSourceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                      >
+                        <FaInfoCircle size={10} />
+                      </a>
+                      <span className="absolute right-0 top-1/2 -translate-y-1/2 mr-5 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover/src:opacity-100 group-hover/src:visible z-50 shadow-lg normal-case max-w-[300px] whitespace-normal text-left">
+                        {sgNode.estimatedSource}
+                      </span>
+                    </span>
+                  );
+                })()}
+              </span>
+            </td>
+          )}
+          {isVisible("assessed") && (
+            <td className={numericTdClasses}>
+              <span className="text-sm text-zinc-600 dark:text-zinc-400 tabular-nums">
+                {sg.totalAssessed.toLocaleString()}
+              </span>
+            </td>
+          )}
+          {isVisible("pctAssessed") && (
+            <td className={flexTdClasses}>
+              {renderBar(sgPctAssessed, getAssessedBarColor(sgPctAssessed), false)}
+            </td>
+          )}
+          {isVisible("outdated") && (
+            <td className={numericTdClasses}>
+              <span className="text-sm text-zinc-600 dark:text-zinc-400 tabular-nums">
+                {sg.outdated.toLocaleString()}
+              </span>
+            </td>
+          )}
+          {isVisible("pctOutdated") && (
+            <td className={flexTdClasses}>
+              {sg.totalAssessed > 0
+                ? renderBar(sgPctOutdated, getOutdatedBarColor(sgPctOutdated), false)
+                : <span className="text-sm text-zinc-400">—</span>}
+            </td>
+          )}
+          {isVisible("gbifSpecies") && (
+            <td className={numericTdClasses}>
+              <span className="text-sm text-zinc-600 dark:text-zinc-400 tabular-nums">
+                {isNewAssessments ? sg.gbifNeSpeciesCount.toLocaleString() : "—"}
+              </span>
+            </td>
+          )}
+          {isVisible("pctGbifUnassessed") && (
+            <td className={flexTdClasses}>
+              {sg.gbifNeSpeciesCount > 0 && sg.estimatedDescribed > 0
+                ? renderBar((sg.gbifNeSpeciesCount / sg.estimatedDescribed) * 100, "#3b82f6", false)
+                : <span className="text-sm text-zinc-400">—</span>}
+            </td>
+          )}
+          {isVisible("totalGbifObs") && (
+            <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
+          )}
+          {isVisible("gbifDistribution") && (
+            <td className={flexTdClasses}><span className="text-sm text-zinc-400">—</span></td>
+          )}
+          {isVisible("meanGbifObs") && (
+            <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
+          )}
+          {isVisible("medianGbifObs") && (
+            <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
+          )}
+          {isVisible("breakdown") && (
+            <td className={flexTdClasses}>
+              {renderBreakdownBar(sg.byCategory)}
+            </td>
+          )}
+        </tr>
+        {/* Recursively render children if expanded */}
+        {isSgExpanded && sgSubs.map((child) => renderSubgroupRow(child, parentColor, depth + 1, topTaxonId))}
+      </React.Fragment>
+    );
+  };
+
   // Render a taxon row with optional expandable subgroups
   const renderTaxonWithSubgroups = (taxon: TaxonSummary, isSelected: boolean) => {
-    const hasSubgroups = EXPANDABLE_TAXA.has(taxon.id);
+    const hasSubgroups = isExpandable(taxon.id);
     const isExpanded = expandedTaxa.has(taxon.id);
     const subs = subgroupData[taxon.id] ?? [];
     const isLoadingSubs = loadingSubgroups.has(taxon.id);
@@ -925,12 +1158,12 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             onToggleTaxon(taxon.id, e);
             if (hasSubgroups) {
               if (isSelected) {
-                // Clicking again deselects → collapse
-                if (expandedTaxa.has(taxon.id)) toggleExpand(taxon.id);
+                // Already selected → toggle expand/collapse
+                toggleExpand(taxon.id);
               } else {
                 // Selecting → collapse others, expand this one
                 setExpandedTaxa(new Set());
-                if (!expandedTaxa.has(taxon.id)) toggleExpand(taxon.id);
+                toggleExpand(taxon.id);
               }
             } else {
               // Non-expandable taxon selected → collapse all expanded
@@ -1038,120 +1271,8 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           )}
         </tr>
 
-        {/* Expanded subgroup rows */}
-        {isExpanded && subs.map((sg) => {
-          const sgPctAssessed = sg.estimatedDescribed > 0 ? (sg.totalAssessed / sg.estimatedDescribed) * 100 : 0;
-          const sgPctOutdated = sg.totalAssessed > 0 ? (sg.outdated / sg.totalAssessed) * 100 : 0;
-          const isSgSelected = selectedSubgroups.has(sg.id);
-          return (
-            <tr
-              key={`${taxon.id}-${sg.id}`}
-              className={`transition-colors cursor-pointer ${
-                isSgSelected
-                  ? "bg-violet-50 dark:bg-violet-900/20"
-                  : "hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30"
-              }`}
-              onClick={() => {
-                onToggleSubgroup(sg.id, taxon.id);
-              }}
-            >
-              <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 ${isSgSelected ? "bg-violet-50 dark:bg-violet-900/20" : "bg-white dark:bg-zinc-900"}`}>
-                <div className="flex items-center gap-2">
-                  <span
-                    className="w-2 h-2 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: taxon.color, opacity: isSgSelected ? 1 : 0.6 }}
-                  />
-                  <span className={`text-sm ${isSgSelected ? "font-medium text-violet-700 dark:text-violet-300" : "text-zinc-700 dark:text-zinc-300"}`}>{sg.name}</span>
-                </div>
-              </td>
-              {isVisible("described") && (
-                <td className={numericTdClasses}>
-                  <span className="text-sm text-zinc-600 dark:text-zinc-400 tabular-nums inline-flex items-center gap-1">
-                    {sg.estimatedDescribed.toLocaleString()}
-                    {(() => {
-                      const sgDefs = TAXA_SUBGROUPS[taxon.id];
-                      const sgDef = sgDefs?.find(d => d.id === sg.id);
-                      if (!sgDef?.source) return null;
-                      return (
-                        <span className="relative group/src">
-                          <a
-                            href={sgDef.sourceUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-                          >
-                            <FaInfoCircle size={10} />
-                          </a>
-                          <span className="absolute right-0 top-1/2 -translate-y-1/2 mr-5 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover/src:opacity-100 group-hover/src:visible z-50 shadow-lg normal-case max-w-[300px] whitespace-normal text-left">
-                            {sgDef.source}
-                          </span>
-                        </span>
-                      );
-                    })()}
-                  </span>
-                </td>
-              )}
-              {isVisible("assessed") && (
-                <td className={numericTdClasses}>
-                  <span className="text-sm text-zinc-600 dark:text-zinc-400 tabular-nums">
-                    {sg.totalAssessed.toLocaleString()}
-                  </span>
-                </td>
-              )}
-              {isVisible("pctAssessed") && (
-                <td className={flexTdClasses}>
-                  {renderBar(sgPctAssessed, getAssessedBarColor(sgPctAssessed), false)}
-                </td>
-              )}
-              {isVisible("outdated") && (
-                <td className={numericTdClasses}>
-                  <span className="text-sm text-zinc-600 dark:text-zinc-400 tabular-nums">
-                    {sg.outdated.toLocaleString()}
-                  </span>
-                </td>
-              )}
-              {isVisible("pctOutdated") && (
-                <td className={flexTdClasses}>
-                  {sg.totalAssessed > 0
-                    ? renderBar(sgPctOutdated, getOutdatedBarColor(sgPctOutdated), false)
-                    : <span className="text-sm text-zinc-400">—</span>}
-                </td>
-              )}
-              {isVisible("gbifSpecies") && (
-                <td className={numericTdClasses}>
-                  <span className="text-sm text-zinc-600 dark:text-zinc-400 tabular-nums">
-                    {isNewAssessments ? sg.gbifNeSpeciesCount.toLocaleString() : "—"}
-                  </span>
-                </td>
-              )}
-              {isVisible("pctGbifUnassessed") && (
-                <td className={flexTdClasses}>
-                  {sg.gbifNeSpeciesCount > 0 && sg.estimatedDescribed > 0
-                    ? renderBar((sg.gbifNeSpeciesCount / sg.estimatedDescribed) * 100, "#3b82f6", false)
-                    : <span className="text-sm text-zinc-400">—</span>}
-                </td>
-              )}
-              {isVisible("totalGbifObs") && (
-                <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
-              )}
-              {isVisible("gbifDistribution") && (
-                <td className={flexTdClasses}><span className="text-sm text-zinc-400">—</span></td>
-              )}
-              {isVisible("meanGbifObs") && (
-                <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
-              )}
-              {isVisible("medianGbifObs") && (
-                <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
-              )}
-              {isVisible("breakdown") && (
-                <td className={flexTdClasses}>
-                  {renderBreakdownBar(sg.byCategory)}
-                </td>
-              )}
-            </tr>
-          );
-        })}
+        {/* Expanded subgroup rows (recursive) */}
+        {isExpanded && subs.map((sg) => renderSubgroupRow(sg, taxon.color, 1, taxon.id))}
       </React.Fragment>
     );
   };
@@ -1350,7 +1471,34 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                       </tr>
                       {/* Section rows */}
                       {section.rows.map((row) => (
-                        <tr key={row.group} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
+                        <tr
+                          key={row.group}
+                          className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer"
+                          onClick={(e) => {
+                            setTable1aMode(false);
+                            const defaultRoots = new Set(TAXONOMY_VIEWS.default.roots);
+                            if (defaultRoots.has(row.group)) {
+                              // Direct view root (e.g. mammalia, aves) — select it
+                              onToggleTaxon(row.group, e);
+                            } else if (onNavigateToSubgroup) {
+                              // Table 1a group under a virtual root (e.g. insecta → invertebrates)
+                              // Find which view root has a child matching this group's CSV
+                              for (const rootId of defaultRoots) {
+                                const rootNode = findNode(rootId);
+                                // Prefer exact match (single CSV group), fall back to includes
+                                const matchingChild = rootNode?.children?.find(c =>
+                                  c.filter.csvGroups.length === 1 && c.filter.csvGroups[0] === row.group
+                                ) ?? rootNode?.children?.find(c =>
+                                  c.filter.csvGroups.includes(row.group)
+                                );
+                                if (matchingChild) {
+                                  onNavigateToSubgroup(rootId, matchingChild.id);
+                                  break;
+                                }
+                              }
+                            }
+                          }}
+                        >
                           <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 bg-white dark:bg-zinc-900`}>
                             <span className="text-sm md:text-base text-zinc-900 dark:text-zinc-100 pl-4">
                               {row.name}
@@ -1517,7 +1665,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                   false,
                   true,
                   true,
-                  { total: totalGbifObs, mean: totalMeanGbifObs, median: globalGbifMedian, speciesCount: totalGbifSpecies, gbifNeCount: totalGbifNeSpecies, distribution: globalGbifDistribution }
+                  { total: totalGbifObs, mean: totalMeanGbifObs, speciesCount: totalGbifSpecies, gbifNeCount: totalGbifNeSpecies }
                 )}
               </>
             ) : null
@@ -1537,7 +1685,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                 false,
                 true,
                 true,
-                { total: totalGbifObs, mean: totalMeanGbifObs, median: globalGbifMedian, speciesCount: totalGbifSpecies, gbifNeCount: totalGbifNeSpecies, distribution: globalGbifDistribution }
+                { total: totalGbifObs, mean: totalMeanGbifObs, speciesCount: totalGbifSpecies, gbifNeCount: totalGbifNeSpecies }
               )}
 
               {/* Separator - hide when only "All Species" is selected */}
@@ -1553,15 +1701,73 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               {selectedTaxa.has("all")
                 ? null
                 : selectedSubgroups.size > 0 && selectedTaxa.size > 0 && !taxaExpanded
-                  ? /* When subgroups are selected, collapse to show only those subgroup rows */
-                    perTaxa
-                      .filter((taxon) => selectedTaxa.has(taxon.id))
-                      .flatMap((taxon) => {
-                        const subs = subgroupData[taxon.id] ?? [];
-                        return subs
-                          .filter((sg) => selectedSubgroups.has(sg.id))
-                          .map((sg) => renderCollapsedSubgroupRow(taxon, sg));
-                      })
+                  ? /* When subgroups are selected, show ancestor breadcrumbs + selected subgroup */
+                    (() => {
+                      const rows: React.ReactNode[] = [];
+                      for (const sgId of selectedSubgroups) {
+                        const parentTaxon = perTaxa.find(t => selectedTaxa.has(t.id));
+                        if (!parentTaxon) continue;
+
+                        // Render ancestor context rows (view root → intermediate ancestors)
+                        // getAncestors returns [immediate parent, ..., root] so we reverse and
+                        // skip ancestors at or above the view root (which is in selectedTaxa)
+                        const ancestors = getAncestors(sgId);
+                        const intermediateAncestorIds: string[] = [];
+                        for (const aId of ancestors) {
+                          if (selectedTaxa.has(aId)) break; // Stop at view root
+                          intermediateAncestorIds.push(aId);
+                        }
+
+                        // View root data from perTaxa
+                        const viewRootSummary: SubGroupSummary = {
+                          id: parentTaxon.id, name: parentTaxon.name,
+                          estimatedDescribed: parentTaxon.estimatedDescribed,
+                          totalAssessed: parentTaxon.totalAssessed, outdated: parentTaxon.outdated,
+                          gbifNeSpeciesCount: parentTaxon.gbifNeSpeciesCount ?? 0,
+                          byCategory: parentTaxon.byCategory,
+                        };
+                        rows.push(renderAncestorRow(viewRootSummary, parentTaxon.color, 0, parentTaxon.id, true));
+
+                        // Intermediate ancestors from subgroupData
+                        intermediateAncestorIds.reverse().forEach((aId, i) => {
+                          let ancestorData: SubGroupSummary | undefined;
+                          for (const subs of Object.values(subgroupData)) {
+                            ancestorData = subs.find(s => s.id === aId);
+                            if (ancestorData) break;
+                          }
+                          if (!ancestorData) {
+                            const node = findNode(aId);
+                            if (!node) return;
+                            ancestorData = { id: node.id, name: node.name, estimatedDescribed: node.estimatedDescribed ?? 0,
+                                             totalAssessed: 0, outdated: 0, gbifNeSpeciesCount: 0, byCategory: {} };
+                          }
+                          rows.push(renderAncestorRow(ancestorData, parentTaxon.color, i + 1, parentTaxon.id, false));
+                        });
+
+                        // Search ALL fetched subgroup data for this node (any depth)
+                        let sgData: SubGroupSummary | undefined;
+                        for (const subs of Object.values(subgroupData)) {
+                          sgData = subs.find(s => s.id === sgId);
+                          if (sgData) break;
+                        }
+                        // Fallback: construct from taxonomy node while data loads
+                        if (!sgData) {
+                          const node = findNode(sgId);
+                          if (!node) continue;
+                          sgData = { id: node.id, name: node.name, estimatedDescribed: node.estimatedDescribed ?? 0,
+                                     totalAssessed: 0, outdated: 0, gbifNeSpeciesCount: 0, byCategory: {} };
+                        }
+
+                        rows.push(renderCollapsedSubgroupRow(parentTaxon, sgData));
+                        // Render children if expanded
+                        const sgChildren = subgroupData[sgId] ?? [];
+                        if (expandedTaxa.has(sgId)) {
+                          rows.push(...sgChildren.map(child =>
+                            renderSubgroupRow(child, parentTaxon.color, 1, parentTaxon.id)));
+                        }
+                      }
+                      return rows;
+                    })()
                   : (selectedTaxa.size > 0 && !taxaExpanded
                     ? perTaxa
                         .filter((taxon) => selectedTaxa.has(taxon.id))
@@ -1584,7 +1790,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             onClick={exitTable1a}
             className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
           >
-            Exit Table 1a
+            Exit Table 1a mode
           </button>
         ) : (
           <>
@@ -1596,12 +1802,28 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               {allExpanded ? "Collapse all" : "Expand all"}
             </button>
             <span className="text-zinc-300 dark:text-zinc-700">|</span>
-            <button
-              onClick={enterTable1a}
-              className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-            >
-              Table 1a
-            </button>
+            <span className="inline-flex items-center gap-1">
+              <button
+                onClick={enterTable1a}
+                className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+              >
+                Table 1a mode
+              </button>
+              <span className="relative group/t1a">
+                <a
+                  href={IUCN_SOURCE_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <FaInfoCircle size={10} />
+                </a>
+                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover/t1a:opacity-100 group-hover/t1a:visible z-50 shadow-lg pointer-events-none">
+                  View IUCN Red List Table 1a (PDF)
+                </span>
+              </span>
+            </span>
           </>
         )}
       </div>

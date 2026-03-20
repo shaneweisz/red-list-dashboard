@@ -11,7 +11,7 @@ import WikipediaSummary from "../WikipediaSummary";
 import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
-import { speciesMatchesSubgroup, getSubgroupDef } from "@/config/taxa-hierarchy";
+import { speciesMatchesNode, getNodeDef, getViewRootForNode } from "@/lib/taxonomy-utils";
 import ReviewerChart from "./ReviewerChart";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { useFilterParams } from "@/hooks/useFilterParams";
@@ -318,9 +318,18 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const handleToggleTaxon = useCallback((taxonId: string, event: React.MouseEvent) => {
     const isMulti = event.metaKey || event.ctrlKey;
 
-    // "all" row: always single-select (toggle on/off), no multi-select
+    // "all" row behavior:
+    // - If anything is selected (nested view), return to landing page
+    // - Only select "all" when clicking from the landing page itself (nothing selected)
     // Disabled in new-assessments mode (NE dataset too large for "all")
     if (taxonId === "all") {
+      if (selectedTaxa.size > 0 || selectedSubgroups.size > 0) {
+        // Return to landing page
+        setSelectedSubgroups(new Set());
+        setSelectedTaxa(new Set());
+        return;
+      }
+      // On landing page: toggle "all" on/off (disabled in new-assessments — NE dataset too large)
       if (isNewAssessments) return;
       setSelectedTaxa(prev => {
         if (prev.has("all")) return new Set<string>();
@@ -341,13 +350,16 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         }
         return next;
       }
-      // Single click: select only this taxon, or deselect if it's the only one
+      // Single click on already-sole-selected taxon: keep selected (TaxaSummary
+      // handles expand/collapse toggle). Only "All Species" returns to landing.
       if (prev.size === 1 && prev.has(taxonId)) {
-        return new Set<string>();
+        return prev;
       }
+      // Switching to a different taxon — clear subgroups
+      setSelectedSubgroups(new Set());
       return new Set([taxonId]);
     });
-  }, [setSelectedTaxa]);
+  }, [setSelectedTaxa, setSelectedSubgroups, selectedTaxa, selectedSubgroups, isNewAssessments]);
 
   // Reset all other filters when taxa selection changes
   const prevTaxaRef = useRef(selectedTaxa);
@@ -525,7 +537,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     }
     if (selectedSubgroups.size > 0) {
       filtered = filtered.filter(s =>
-        Array.from(selectedSubgroups).some(sg => speciesMatchesSubgroup(s, sg))
+        Array.from(selectedSubgroups).some(sg => speciesMatchesNode(s, sg))
       );
     }
     return filtered;
@@ -1256,21 +1268,33 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         selectedSubgroups={selectedSubgroups}
         disableAllSpecies={isNewAssessments}
         viewMode={viewMode}
-        onToggleSubgroup={(sgId, parentTaxonId) => {
+        onToggleSubgroup={(sgId) => {
+          // Clicking a view root ancestor → clear subgroups to show its children
+          if (selectedTaxa.has(sgId)) {
+            setSelectedSubgroups(new Set());
+            return;
+          }
           const wasSelected = selectedSubgroups.has(sgId);
-          setSelectedSubgroups(prev => {
-            const next = new Set(prev);
-            if (next.has(sgId)) next.delete(sgId);
-            else next.add(sgId);
-            return next;
-          });
-          // When selecting a subgroup, ensure parent taxon is selected (collapse to it)
-          if (!wasSelected && parentTaxonId) {
-            if (!selectedTaxa.has(parentTaxonId) || selectedTaxa.size !== 1) {
+          if (wasSelected) {
+            // Already selected — no-op (TaxaSummary handles expand/collapse,
+            // ancestors handle navigation)
+            return;
+          } else {
+            // Selecting: set exactly this one subgroup
+            setSelectedSubgroups(new Set([sgId]));
+            // Ensure the correct view root is selected for species fetching
+            const viewRoot = getViewRootForNode(sgId);
+            if (viewRoot && (!selectedTaxa.has(viewRoot) || selectedTaxa.size !== 1)) {
               skipClearOnTaxaChangeRef.current = true;
-              setSelectedTaxa(new Set([parentTaxonId]));
+              setSelectedTaxa(new Set([viewRoot]));
             }
           }
+        }}
+        onNavigateToSubgroup={(taxonId, subgroupId) => {
+          // Navigate directly to a taxon + subgroup atomically (avoids clearAllFilters race)
+          skipClearOnTaxaChangeRef.current = true;
+          setSelectedTaxa(new Set([taxonId]));
+          setSelectedSubgroups(new Set([subgroupId]));
         }}
       />
 
@@ -1479,14 +1503,14 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
               </button>
             ))}
             {Array.from(selectedSubgroups).map(sgId => {
-              const sgInfo = getSubgroupDef(sgId);
+              const sgInfo = getNodeDef(sgId);
               return (
                 <button
                   key={sgId}
                   onClick={() => setSelectedSubgroups(prev => { const next = new Set(prev); next.delete(sgId); return next; })}
                   className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
                 >
-                  {sgInfo?.def.name ?? sgId}
+                  {sgInfo?.node.name ?? sgId}
                   <span className="text-xs">×</span>
                 </button>
               );
