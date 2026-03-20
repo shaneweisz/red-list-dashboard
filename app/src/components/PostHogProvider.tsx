@@ -9,8 +9,7 @@ if (
 ) {
   posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY, {
     api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST,
-    opt_out_capturing_by_default: true,
-    cookieless_mode: "on_reject",
+    cookieless_mode: "always",
     disable_session_recording: true,
   });
 }

@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { ThemeToggle } from "../components/ThemeToggle";
-import { CookieConsentReset } from "../components/CookieConsentBanner";
 import { parseParams, type ViewMode } from "../hooks/useFilterParams";
 
 // Dynamically import view component
@@ -126,16 +125,6 @@ export default function RedListPage() {
           </a>
           {" "}at the University of Cambridge.
           Based on public IUCN Red List and GBIF data. Any errors in aggregation are the author&apos;s own. Please verify against primary sources before use.
-        </p>
-        <p className="text-center text-xs text-zinc-400 dark:text-zinc-500 mt-3">
-          <a
-            href="/privacy"
-            className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
-          >
-            Privacy policy
-          </a>
-          {" · "}
-          <CookieConsentReset />
         </p>
       </footer>
     </div>
