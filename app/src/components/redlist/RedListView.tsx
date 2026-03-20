@@ -16,7 +16,7 @@ import ReviewerChart from "./ReviewerChart";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { useFilterParams } from "@/hooks/useFilterParams";
 import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
-import AssessmentAssistant from "../AssessmentAssistant";
+
 
 // Dynamically import OccurrenceMapRow to avoid SSR issues with Leaflet
 const OccurrenceMapRow = dynamic(
@@ -2038,11 +2038,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                           </div>
                         </div>
                           {gbifSpeciesKey && s.category !== "NE" && (
-                            <div className="border-t border-zinc-200 dark:border-zinc-700">
-                              <AssessmentAssistant
-                                speciesKey={gbifSpeciesKey}
-                                assessmentYear={assessmentYear}
-                              />
+                            <div className="border-t border-zinc-200 dark:border-zinc-700 p-6 text-center">
+                              <h3 className="text-lg font-semibold text-zinc-800 dark:text-zinc-200">AI Assessment Assistant</h3>
+                              <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">Coming soon</p>
                             </div>
                           )}
                       </td>
