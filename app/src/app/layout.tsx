@@ -4,6 +4,7 @@ import "./globals.css";
 import "leaflet/dist/leaflet.css";
 import { ThemeProvider } from "../components/ThemeProvider";
 import { PostHogProvider } from "../components/PostHogProvider";
+import { CookieConsentBanner } from "../components/CookieConsentBanner";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
@@ -34,6 +35,7 @@ export default function RootLayout({
       >
         <PostHogProvider>
           <ThemeProvider>{children}</ThemeProvider>
+          <CookieConsentBanner />
         </PostHogProvider>
         <Analytics />
         <SpeedInsights />
