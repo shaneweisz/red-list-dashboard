@@ -122,27 +122,9 @@ const CATEGORY_STYLE: Record<string, { color: string; bg: string }> = {
   VU: { color: "#ca8a04", bg: "#fefce8" },
 };
 
-// ── Year-based point coloring ────────────────────────────────────────────
+// ── Point coloring ───────────────────────────────────────────────────────
 
-/** Color occurrence points by recency: older=cool/blue, recent=warm/red */
-function yearColor(year: number | null, minYear: number, maxYear: number): string {
-  if (year == null) return "#94a3b8"; // grey for unknown year
-  const range = maxYear - minYear || 1;
-  const t = Math.max(0, Math.min(1, (year - minYear) / range));
-  // Blue (old) → Yellow → Red (recent)
-  if (t < 0.5) {
-    const s = t * 2;
-    const r = Math.round(59 + s * (234 - 59));
-    const g = Math.round(130 + s * (179 - 130));
-    const b = Math.round(246 - s * 246);
-    return `rgb(${r},${g},${b})`;
-  }
-  const s = (t - 0.5) * 2;
-  const r = Math.round(234 + s * (220 - 234));
-  const g = Math.round(179 - s * 141);
-  const b = Math.round(0 + s * 38);
-  return `rgb(${r},${g},${b})`;
-}
+const POINT_COLOR = "#22c55e"; // green
 
 /** Flag suspicious points: Null Island, extreme coordinates */
 function isSuspicious(p: MapPoint): string | null {
@@ -305,9 +287,9 @@ function CriterionBMap({
                 center={[p.lat, p.lng]}
                 radius={suspicious ? 5 : 3}
                 pathOptions={{
-                  color: suspicious ? "#ef4444" : yearColor(p.year, minYear, maxYear),
+                  color: suspicious ? "#ef4444" : POINT_COLOR,
                   weight: suspicious ? 2 : 1,
-                  fillColor: suspicious ? "#ef4444" : yearColor(p.year, minYear, maxYear),
+                  fillColor: suspicious ? "#ef4444" : POINT_COLOR,
                   fillOpacity: 0.7,
                 }}
               >
@@ -333,16 +315,13 @@ function CriterionBMap({
         </MapContainer>
       </div>
 
-      {/* Year color legend */}
+      {/* Point color legend */}
       <div className="flex items-center gap-2 text-[10px] text-zinc-500 dark:text-zinc-400 px-1">
-        <span>Older ({minYear})</span>
-        <div className="flex-1 h-2 rounded-full" style={{
-          background: `linear-gradient(to right, rgb(59,130,246), rgb(234,179,0), rgb(220,38,38))`,
-        }} />
-        <span>Recent ({maxYear})</span>
+        <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: POINT_COLOR }} />
+        <span>Occurrence</span>
         <span className="ml-2 flex items-center gap-1">
-          <span className="inline-block w-2 h-2 rounded-full bg-slate-400" />
-          No year
+          <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
+          Suspicious
         </span>
       </div>
 
@@ -372,7 +351,7 @@ function LayerToggles({
   clusterCount: number;
 }) {
   const toggles: { key: keyof MapLayers; label: string; color: string; detail: string }[] = [
-    { key: "points", label: "Occurrences", color: "#6366f1", detail: "colored by year" },
+    { key: "points", label: "Occurrences", color: "#22c55e", detail: "observation points" },
     { key: "hull", label: "EOO Hull", color: "#3b82f6", detail: `${hullVertexCount} vertices` },
     { key: "aooCells", label: "GBIF Cells", color: "#f59e0b", detail: `${cellCount} cells` },
     { key: "clusters", label: "Locations", color: "#8b5cf6", detail: `${clusterCount} clusters` },
