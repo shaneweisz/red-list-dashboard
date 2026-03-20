@@ -432,7 +432,7 @@
     {
       "id": "rodents",
       "name": "Rodents",
-      "estimatedDescribed": 2386,
+      "estimatedDescribed": 2747,
       "totalAssessed": 2386,
       "outdated": 32,
       "gbifNeSpeciesCount": 111,
@@ -449,7 +449,7 @@
     {
       "id": "bats",
       "name": "Bats",
-      "estimatedDescribed": 1336,
+      "estimatedDescribed": 1485,
       "totalAssessed": 1336,
       "outdated": 203,
       "gbifNeSpeciesCount": 123,
@@ -467,7 +467,7 @@
     {
       "id": "insectivores",
       "name": "Insectivores",
-      "estimatedDescribed": 591,
+      "estimatedDescribed": 674,
       "totalAssessed": 591,
       "outdated": 102,
       "gbifNeSpeciesCount": 3,
@@ -484,7 +484,7 @@
     {
       "id": "primates",
       "name": "Primates",
-      "estimatedDescribed": 527,
+      "estimatedDescribed": 522,
       "totalAssessed": 527,
       "outdated": 208,
       "gbifNeSpeciesCount": 15,
@@ -501,7 +501,7 @@
     {
       "id": "marsupials",
       "name": "Marsupials",
-      "estimatedDescribed": 361,
+      "estimatedDescribed": 416,
       "totalAssessed": 361,
       "outdated": 222,
       "gbifNeSpeciesCount": 40,
@@ -518,7 +518,7 @@
     {
       "id": "carnivores",
       "name": "Carnivores",
-      "estimatedDescribed": 297,
+      "estimatedDescribed": 319,
       "totalAssessed": 297,
       "outdated": 219,
       "gbifNeSpeciesCount": 37,
@@ -535,7 +535,7 @@
     {
       "id": "even-toed-ungulates",
       "name": "Even-toed Ungulates",
-      "estimatedDescribed": 245,
+      "estimatedDescribed": 278,
       "totalAssessed": 243,
       "outdated": 81,
       "gbifNeSpeciesCount": 35,
@@ -553,7 +553,7 @@
     {
       "id": "rabbits-hares",
       "name": "Rabbits & Hares",
-      "estimatedDescribed": 96,
+      "estimatedDescribed": 112,
       "totalAssessed": 96,
       "outdated": 0,
       "gbifNeSpeciesCount": 7,
@@ -570,7 +570,7 @@
     {
       "id": "whales-dolphins",
       "name": "Whales & Dolphins",
-      "estimatedDescribed": 96,
+      "estimatedDescribed": 98,
       "totalAssessed": 98,
       "outdated": 5,
       "gbifNeSpeciesCount": 0,
@@ -587,7 +587,7 @@
     {
       "id": "odd-toed-ungulates",
       "name": "Odd-toed Ungulates",
-      "estimatedDescribed": 16,
+      "estimatedDescribed": 18,
       "totalAssessed": 16,
       "outdated": 6,
       "gbifNeSpeciesCount": 10,
@@ -615,7 +615,7 @@
     {
       "id": "other-mammals",
       "name": "Other Mammals",
-      "estimatedDescribed": 50,
+      "estimatedDescribed": 142,
       "totalAssessed": 77,
       "outdated": 21,
       "gbifNeSpeciesCount": 27,
@@ -837,7 +837,7 @@
     {
       "id": "other-birds",
       "name": "Other Birds",
-      "estimatedDescribed": 280,
+      "estimatedDescribed": 598,
       "totalAssessed": 598,
       "outdated": 0,
       "gbifNeSpeciesCount": 51,

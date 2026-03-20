@@ -683,7 +683,8 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       : isSelected
         ? "bg-zinc-100 dark:bg-zinc-800"
         : "";
-    const allDisabled = isAllRow && disableAllSpecies;
+    const isOnLandingPage = selectedTaxa.size === 0 && selectedSubgroups.size === 0;
+    const allDisabled = isAllRow && disableAllSpecies && isOnLandingPage;
     const hoverClass = allDisabled
       ? "cursor-not-allowed"
       : isAllRow
