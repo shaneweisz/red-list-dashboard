@@ -2048,7 +2048,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                             <CitesSummary scientificName={s.scientific_name} />
                           </div>
                         </div>
-                          {gbifSpeciesKey && s.category !== "NE" && (
+                          {gbifSpeciesKey && (
                             <div className="border-t border-zinc-200 dark:border-zinc-700">
                               <AssessmentAssistant
                                 speciesKey={gbifSpeciesKey}

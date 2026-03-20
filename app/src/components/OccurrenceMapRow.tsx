@@ -1084,7 +1084,9 @@ export default function OccurrenceMapRow({
 
   // Helper to check if an occurrence is after the assessment year
   const isNewRecord = (eventDate?: string): boolean => {
-    if (!assessmentYear || !eventDate) return false;
+    // In new-assessments mode (no assessment year), all records are "new" (green)
+    if (!assessmentYear) return true;
+    if (!eventDate) return false;
     const recordYear = new Date(eventDate).getFullYear();
     return recordYear > assessmentYear;
   };
