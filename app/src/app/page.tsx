@@ -93,7 +93,7 @@ export default function RedListPage() {
         />
       </main>
 
-      <footer className="max-w-xl mx-auto mt-10 pb-6 pt-4 border-t border-zinc-200 dark:border-zinc-800">
+      <footer className="max-w-xl mx-auto mt-6 pb-6 pt-4 border-t border-zinc-200 dark:border-zinc-800">
         <p className="text-center text-xs text-zinc-400 dark:text-zinc-500">
           Questions or feedback? Contact{" "}
           <a
@@ -114,7 +114,7 @@ export default function RedListPage() {
           .
         </p>
         <p className="text-center text-xs text-zinc-400 dark:text-zinc-500 mt-3">
-          Part of a{" "}
+          This work forms part of a{" "}
           <a
             href="https://anil.recoil.org/ideas/living-iucn-redlist"
             target="_blank"
@@ -123,8 +123,7 @@ export default function RedListPage() {
           >
             PhD research project
           </a>
-          {" "}at the University of Cambridge.
-          Based on public IUCN Red List and GBIF data. Any errors in aggregation are the author&apos;s own. Please verify against primary sources before use.
+          {" "}at the University of Cambridge. The dashboard is based on publicly available IUCN Red List and GBIF data. Any errors in aggregation are the author&apos;s own. Please verify against primary sources before use.
         </p>
       </footer>
     </div>
