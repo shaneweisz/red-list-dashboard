@@ -7,7 +7,7 @@ import {
   Geography,
   ZoomableGroup,
 } from "react-simple-maps";
-import { geoCentroid } from "d3-geo";
+import { geoCentroid, geoNaturalEarth1 } from "d3-geo";
 
 // Using the recommended TopoJSON from react-simple-maps
 const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json";
@@ -148,6 +148,7 @@ interface WorldMapProps {
   selectedCountries: Set<string>;
   onCountrySelect: (countryCode: string, countryName: string, event: React.MouseEvent) => void;
   onClearSelection: () => void;
+  onDragSelect?: (countryCodes: string[]) => void;
   selectedTaxon?: string | null;
   // Optional pre-computed stats (for Red List species counts - avoids API call)
   precomputedStats?: CountryStats;
@@ -162,7 +163,7 @@ const DEFAULT_ZOOM = 1.0;
 const MIN_ZOOM = 1.0;
 const MAX_ZOOM = 8.0;
 
-function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, selectedTaxon, precomputedStats, selectedTaxa, speciesLabel = "# Assessed" }: WorldMapProps) {
+function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, onDragSelect, selectedTaxon, precomputedStats, selectedTaxa, speciesLabel = "# Assessed" }: WorldMapProps) {
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoveredCountryCode, setHoveredCountryCode] = useState<string | null>(null);
   const [speciesStats, setSpeciesStats] = useState<CountryStats>(precomputedStats || {});
@@ -182,6 +183,138 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
+
+  // Drag-to-select state
+  const [isDragSelecting, setIsDragSelecting] = useState(false);
+  const [dragRect, setDragRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
+  const wasDragRef = useRef(false);
+
+  // Refs for values accessed in drag effect callbacks
+  const centerRef = useRef(center);
+  centerRef.current = center;
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+  const onDragSelectRef = useRef(onDragSelect);
+  onDragSelectRef.current = onDragSelect;
+  const onCountrySelectRef = useRef(onCountrySelect);
+  onCountrySelectRef.current = onCountrySelect;
+
+  // Intercept Cmd/Ctrl+pointerdown to start drag-select (capture phase prevents ZoomableGroup panning)
+  const handleDragPointerDown = useCallback((e: React.PointerEvent) => {
+    if (!(e.metaKey || e.ctrlKey)) return;
+    const el = mapContainerRef.current;
+    if (!el) return;
+
+    e.stopPropagation();
+    e.preventDefault();
+
+    const rect = el.getBoundingClientRect();
+    dragStartRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    wasDragRef.current = false;
+    setIsDragSelecting(true);
+  }, []);
+
+  // Drag-to-select: track movement and finalize on pointer up
+  useEffect(() => {
+    if (!isDragSelecting) return;
+
+    const handleMove = (e: PointerEvent) => {
+      const el = mapContainerRef.current;
+      const start = dragStartRef.current;
+      if (!el || !start) return;
+      const rect = el.getBoundingClientRect();
+      const curX = e.clientX - rect.left;
+      const curY = e.clientY - rect.top;
+
+      // Only show rectangle after minimum movement
+      if (!wasDragRef.current && Math.abs(curX - start.x) < 5 && Math.abs(curY - start.y) < 5) return;
+      wasDragRef.current = true;
+
+      setDragRect({
+        left: Math.min(start.x, curX),
+        top: Math.min(start.y, curY),
+        width: Math.abs(curX - start.x),
+        height: Math.abs(curY - start.y),
+      });
+    };
+
+    const handleUp = (e: PointerEvent) => {
+      const el = mapContainerRef.current;
+      const start = dragStartRef.current;
+
+      setIsDragSelecting(false);
+      setDragRect(null);
+      dragStartRef.current = null;
+
+      if (!el || !start) return;
+
+      const containerRect = el.getBoundingClientRect();
+      const endX = e.clientX - containerRect.left;
+      const endY = e.clientY - containerRect.top;
+      const w = containerRect.width;
+      const h = containerRect.height;
+
+      const proj = geoNaturalEarth1().scale(210).translate([w / 2, h / 2]);
+      const projCenter = proj(centerRef.current);
+      if (!projCenter) return;
+      const z = zoomRef.current;
+
+      if (!wasDragRef.current || (Math.abs(endX - start.x) < 5 && Math.abs(endY - start.y) < 5)) {
+        // Small movement — treat as Cmd/Ctrl+click on nearest country
+        const clickScreenX = start.x;
+        const clickScreenY = start.y;
+        let bestDist = Infinity;
+        let bestAlpha2 = "";
+        let bestName = "";
+        for (const [name, coords] of Object.entries(centroidsRef.current)) {
+          const pt = proj(coords as [number, number]);
+          if (!pt) continue;
+          const sx = w / 2 + z * (pt[0] - projCenter[0]);
+          const sy = h / 2 + z * (pt[1] - projCenter[1]);
+          const dist = Math.hypot(sx - clickScreenX, sy - clickScreenY);
+          if (dist < bestDist) {
+            bestDist = dist;
+            const a2 = NAME_TO_ALPHA2[name];
+            if (a2) { bestDist = dist; bestAlpha2 = a2; bestName = name; }
+          }
+        }
+        if (bestAlpha2 && bestDist < 30) {
+          onCountrySelectRef.current(bestAlpha2, bestName, { metaKey: true, ctrlKey: false } as unknown as React.MouseEvent);
+        }
+        return;
+      }
+
+      // Drag selection — find all centroids within the rectangle
+      const selLeft = Math.min(start.x, endX);
+      const selRight = Math.max(start.x, endX);
+      const selTop = Math.min(start.y, endY);
+      const selBottom = Math.max(start.y, endY);
+
+      const codes: string[] = [];
+      for (const [name, coords] of Object.entries(centroidsRef.current)) {
+        const pt = proj(coords as [number, number]);
+        if (!pt) continue;
+        const sx = w / 2 + z * (pt[0] - projCenter[0]);
+        const sy = h / 2 + z * (pt[1] - projCenter[1]);
+        if (sx >= selLeft && sx <= selRight && sy >= selTop && sy <= selBottom) {
+          const alpha2 = NAME_TO_ALPHA2[name];
+          if (alpha2) codes.push(alpha2);
+        }
+      }
+
+      if (codes.length > 0 && onDragSelectRef.current) {
+        onDragSelectRef.current(codes);
+      }
+    };
+
+    document.addEventListener("pointermove", handleMove);
+    document.addEventListener("pointerup", handleUp);
+    return () => {
+      document.removeEventListener("pointermove", handleMove);
+      document.removeEventListener("pointerup", handleUp);
+    };
+  }, [isDragSelecting]);
 
   const filteredCountries = useMemo(() => {
     if (!searchQuery.trim()) return [];
@@ -455,7 +588,7 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
       )}
 
       {/* Map */}
-      <div ref={mapContainerRef} className="flex-1 rounded-lg overflow-hidden relative" style={{ minHeight: "200px", touchAction: "none" }}>
+      <div ref={mapContainerRef} onPointerDownCapture={handleDragPointerDown} className="flex-1 rounded-lg overflow-hidden relative" style={{ minHeight: "200px", touchAction: "none", cursor: isDragSelecting ? "crosshair" : undefined }}>
         {(loading || (colorMode === "occurrences" && !occurrenceStats)) && (
           <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-zinc-900/50 z-10">
             <svg className="animate-spin h-5 w-5 text-zinc-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -548,6 +681,18 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
             </Geographies>
           </ZoomableGroup>
         </ComposableMap>
+        {/* Drag-select rectangle overlay */}
+        {dragRect && (
+          <div
+            className="absolute border-2 border-blue-500 bg-blue-500/10 pointer-events-none z-20 rounded-sm"
+            style={{
+              left: dragRect.left,
+              top: dragRect.top,
+              width: dragRect.width,
+              height: dragRect.height,
+            }}
+          />
+        )}
         {/* Zoom controls */}
         <div className="absolute bottom-2 right-2 flex flex-col gap-1 z-10">
           {zoom > MIN_ZOOM && (

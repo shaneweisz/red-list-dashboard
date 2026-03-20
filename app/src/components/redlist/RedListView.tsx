@@ -1020,6 +1020,14 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     });
   };
 
+  const handleCountryDragSelect = (countryCodes: string[]) => {
+    setSelectedCountries(prev => {
+      const next = new Set(prev);
+      for (const code of countryCodes) next.add(code);
+      return next;
+    });
+  };
+
   const handleClearCountry = () => {
     setSelectedCountries(new Set());
   };
@@ -1462,6 +1470,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 <WorldMap
                   selectedCountries={selectedCountries}
                   onCountrySelect={handleCountrySelect}
+                  onDragSelect={handleCountryDragSelect}
                   onClearSelection={handleClearCountry}
                   precomputedStats={countryStatsForMap}
                   selectedTaxa={selectedTaxa}
