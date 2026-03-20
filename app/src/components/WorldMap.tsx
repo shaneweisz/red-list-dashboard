@@ -7,7 +7,7 @@ import {
   Geography,
   ZoomableGroup,
 } from "react-simple-maps";
-import { geoCentroid, geoBounds, geoNaturalEarth1 } from "d3-geo";
+import { geoCentroid, geoNaturalEarth1 } from "d3-geo";
 
 // Using the recommended TopoJSON from react-simple-maps
 const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json";
@@ -285,24 +285,26 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, onDrag
         return;
       }
 
-      // Drag selection — find all countries whose bounding box intersects the rectangle
+      // Drag selection — find countries with any geometry point inside the rectangle
       const selLeft = Math.min(start.x, endX);
       const selRight = Math.max(start.x, endX);
       const selTop = Math.min(start.y, endY);
       const selBottom = Math.max(start.y, endY);
 
       const codes: string[] = [];
-      for (const [name, bounds] of Object.entries(boundsRef.current) as [string, [[number, number], [number, number]]][]) {
-        // Project the geographic bounding box corners to screen coordinates
-        const sw = proj(bounds[0]);
-        const ne = proj(bounds[1]);
-        if (!sw || !ne) continue;
-        const bLeft = w / 2 + z * (Math.min(sw[0], ne[0]) - projCenter[0]);
-        const bRight = w / 2 + z * (Math.max(sw[0], ne[0]) - projCenter[0]);
-        const bTop = h / 2 + z * (Math.min(sw[1], ne[1]) - projCenter[1]);
-        const bBottom = h / 2 + z * (Math.max(sw[1], ne[1]) - projCenter[1]);
-        // Check AABB intersection between selection rect and country bounding box
-        if (bRight >= selLeft && bLeft <= selRight && bBottom >= selTop && bTop <= selBottom) {
+      for (const [name, points] of Object.entries(geoPointsRef.current) as [string, [number, number][]][]) {
+        let hit = false;
+        for (const coord of points) {
+          const pt = proj(coord);
+          if (!pt) continue;
+          const sx = w / 2 + z * (pt[0] - projCenter[0]);
+          const sy = h / 2 + z * (pt[1] - projCenter[1]);
+          if (sx >= selLeft && sx <= selRight && sy >= selTop && sy <= selBottom) {
+            hit = true;
+            break;
+          }
+        }
+        if (hit) {
           const alpha2 = NAME_TO_ALPHA2[name];
           if (alpha2) codes.push(alpha2);
         }
@@ -379,9 +381,9 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, onDrag
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  // Centroids and bounding boxes computed from TopoJSON geometries (computed once on first render)
+  // Centroids and sampled boundary points from TopoJSON geometries (computed once on first render)
   const centroidsRef = useRef<Record<string, [number, number]>>({});
-  const boundsRef = useRef<Record<string, [[number, number], [number, number]]>>({});
+  const geoPointsRef = useRef<Record<string, [number, number][]>>({});
 
   // Cache occurrence results by taxa key to avoid refetching on toggle
   const occurrenceCacheRef = useRef<Record<string, CountryStats>>({});
@@ -630,7 +632,24 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, onDrag
                     if (name && name !== "Antarctica") {
                       const [lng, lat] = geoCentroid(geo);
                       centroidsRef.current[name] = [lng, lat];
-                      boundsRef.current[name] = geoBounds(geo) as [[number, number], [number, number]];
+                      // Sample boundary points from geometry for drag selection
+                      const coords: [number, number][] = [];
+                      const geom = geo.geometry;
+                      const rings: number[][][] =
+                        geom.type === "Polygon"
+                          ? geom.coordinates
+                          : geom.type === "MultiPolygon"
+                            ? geom.coordinates.flat()
+                            : [];
+                      for (const ring of rings) {
+                        // Sample every Nth point to keep it fast
+                        const step = Math.max(1, Math.floor(ring.length / 20));
+                        for (let i = 0; i < ring.length; i += step) {
+                          coords.push(ring[i] as [number, number]);
+                        }
+                      }
+                      coords.push([lng, lat]); // include centroid too
+                      geoPointsRef.current[name] = coords;
                     }
                   }
                 }
