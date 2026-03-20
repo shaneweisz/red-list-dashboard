@@ -11,18 +11,17 @@ export function CookieConsentBanner() {
 
   function handleAccept() {
     posthog.opt_in_capturing();
-    posthog.startSessionRecording();
-    setConsentGiven("granted");
-  }
-
-  function handleAnalyticsOnly() {
-    posthog.opt_in_capturing();
     setConsentGiven("granted");
   }
 
   function handleDecline() {
     posthog.opt_out_capturing();
     setConsentGiven("denied");
+  }
+
+  function reset() {
+    posthog.clear_opt_in_out_capturing();
+    setConsentGiven("pending");
   }
 
   if (consentGiven !== "pending") return null;
@@ -39,19 +38,13 @@ export function CookieConsentBanner() {
       }}
     >
       <div className="mx-auto flex max-w-4xl items-center justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-xs font-medium" style={{ color: "var(--foreground)" }}>
-            We use cookies to improve this dashboard
-          </p>
-          <p className="text-[11px] mt-0.5" style={{ color: muted }}>
-            We use PostHog to collect anonymous usage analytics and session
-            recordings. Session recordings capture your clicks, scrolls, and
-            navigation — not keystrokes, passwords, or personal data.{" "}
-            <a href="/privacy" className="underline hover:opacity-70">
-              Privacy policy
-            </a>
-          </p>
-        </div>
+        <p className="text-xs" style={{ color: muted }}>
+          We use tracking cookies to understand how you use the product and help
+          us improve it. Please accept cookies to help us improve.{" "}
+          <a href="/privacy" className="underline hover:opacity-70">
+            Privacy policy
+          </a>
+        </p>
         <div className="flex shrink-0 gap-2">
           <button
             onClick={handleDecline}
@@ -59,13 +52,6 @@ export function CookieConsentBanner() {
             style={{ borderColor: border, color: muted }}
           >
             Decline
-          </button>
-          <button
-            onClick={handleAnalyticsOnly}
-            className="cursor-pointer rounded-md border px-3 py-1 text-xs transition-opacity hover:opacity-80"
-            style={{ borderColor: border, color: "var(--foreground)" }}
-          >
-            Analytics only
           </button>
           <button
             onClick={handleAccept}
@@ -76,10 +62,28 @@ export function CookieConsentBanner() {
               color: "var(--foreground)",
             }}
           >
-            Accept all
+            Accept cookies
           </button>
         </div>
       </div>
     </div>
+  );
+}
+
+/** Re-open the consent banner by clearing the stored choice. */
+export function CookieConsentReset() {
+  const posthog = usePostHog();
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        posthog.clear_opt_in_out_capturing();
+        window.location.reload();
+      }}
+      className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
+    >
+      Cookie settings
+    </button>
   );
 }
