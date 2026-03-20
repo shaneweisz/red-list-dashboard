@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAssessorCandidatesByCountry } from "@/lib/data/species-store";
-import { getCsvGroupsForNode } from "@/lib/taxonomy-utils";
+import { findNode, getCsvGroupsForNode } from "@/lib/taxonomy-utils";
 import { CACHE_5M } from "@/lib/cache-headers";
 
 export async function GET(request: NextRequest) {
@@ -18,8 +18,20 @@ export async function GET(request: NextRequest) {
   const countries = countriesParam.split(";").filter(Boolean);
   const groups = getCsvGroupsForNode(taxaId);
 
+  // Extract taxonomy filter from the node (orderNames, classNames, etc.)
+  const node = findNode(taxaId);
+  const filter = node?.filter;
+  const taxonomyFilter = filter ? {
+    classNames: filter.classNames,
+    orderNames: filter.orderNames,
+    families: filter.families,
+    excludeClasses: filter.excludeClasses,
+    excludeOrders: filter.excludeOrders,
+    excludeFamilies: filter.excludeFamilies,
+  } : undefined;
+
   try {
-    const candidates = getAssessorCandidatesByCountry(groups, countries);
+    const candidates = getAssessorCandidatesByCountry(groups, countries, taxonomyFilter);
     return NextResponse.json({ candidates }, { headers: CACHE_5M });
   } catch (error) {
     console.error("Assessor candidates by country error:", error);

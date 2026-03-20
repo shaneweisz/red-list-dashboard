@@ -495,37 +495,91 @@ export interface AssessorCountryCandidate {
   regionCounts: Record<string, number>;
   /** Per-country species counts (country codes from the target species) */
   countryCounts: Record<string, number>;
-  total: number;
+  /** Species assessed in this taxonomy scope with country overlap */
+  totalInRegion: number;
+  /** Total species assessed in this taxonomy scope (regardless of country) */
+  totalAll: number;
   latestDate: string;
+}
+
+/** Optional taxonomy filter (orderNames, classNames, etc.) applied on top of csvGroups */
+interface TaxonomyFilter {
+  classNames?: string[];
+  orderNames?: string[];
+  families?: string[];
+  excludeClasses?: string[];
+  excludeOrders?: string[];
+  excludeFamilies?: string[];
+}
+
+/** Check if a redlist row passes the taxonomy filter */
+function matchesTaxonomyFilter(
+  row: { class_name: string | null; order_name: string | null; family: string | null },
+  filter: TaxonomyFilter,
+): boolean {
+  if (filter.classNames && filter.classNames.length > 0) {
+    const cls = (row.class_name ?? "").toLowerCase();
+    if (!filter.classNames.includes(cls)) return false;
+  }
+  if (filter.excludeClasses && filter.excludeClasses.length > 0) {
+    const cls = (row.class_name ?? "").toLowerCase();
+    if (cls && filter.excludeClasses.includes(cls)) return false;
+  }
+  if (filter.orderNames && filter.orderNames.length > 0) {
+    const ord = (row.order_name ?? "").toLowerCase();
+    const cls = (row.class_name ?? "").toLowerCase();
+    if (!filter.orderNames.includes(ord) && !(ord === "" && filter.orderNames.includes(cls))) return false;
+  }
+  if (filter.excludeOrders && filter.excludeOrders.length > 0) {
+    const ord = (row.order_name ?? "").toLowerCase();
+    const cls = (row.class_name ?? "").toLowerCase();
+    if (filter.excludeOrders.includes(ord) || (ord === "" && filter.excludeOrders.includes(cls))) return false;
+  }
+  if (filter.families && filter.families.length > 0) {
+    const fam = (row.family ?? "").toLowerCase();
+    if (!filter.families.includes(fam)) return false;
+  }
+  if (filter.excludeFamilies && filter.excludeFamilies.length > 0) {
+    const fam = (row.family ?? "").toLowerCase();
+    if (fam && filter.excludeFamilies.includes(fam)) return false;
+  }
+  return true;
 }
 
 /**
  * Find assessor candidates for an NE species by looking at assessed species
  * in the given taxon groups that share at least one country with the target species.
  * Accepts multiple groups so a taxa like "plantae" can search across all plant groups.
+ * Applies an optional taxonomy filter (e.g. orderNames for beetles) to narrow scope.
  * Aggregates counts by UN M49 sub-region for cleaner visualisation.
  */
 export function getAssessorCandidatesByCountry(
   taxonGroups: string[],
   countries: string[],
+  taxonomyFilter?: TaxonomyFilter,
 ): AssessorCountryCandidate[] {
   if (countries.length === 0 || taxonGroups.length === 0) return [];
 
   const countrySet = new Set(countries.map((c) => c.toUpperCase()));
 
-  const assessorMap = new Map<string, { regionCounts: Record<string, number>; countryCounts: Record<string, number>; total: number; latestDate: string; seenSpecies: Set<number> }>();
+  const assessorMap = new Map<string, { regionCounts: Record<string, number>; countryCounts: Record<string, number>; totalInRegion: number; totalAll: number; latestDate: string; seenSpeciesRegion: Set<number>; seenSpeciesAll: Set<number> }>();
 
   for (const taxonGroup of taxonGroups) {
     const redlistRows = loadRedlistForGroup(taxonGroup);
     const historyMap = loadHistoryForGroup(taxonGroup);
 
     for (const row of redlistRows) {
+      // Apply taxonomy filter (e.g. only coleoptera for beetles)
+      if (taxonomyFilter && !matchesTaxonomyFilter(row, taxonomyFilter)) continue;
+
       // Find which of the target countries this species occurs in
       const overlapping = row.countries.filter((c) => countrySet.has(c.toUpperCase()));
-      if (overlapping.length === 0) continue;
+      const hasCountryOverlap = overlapping.length > 0;
 
       // Map overlapping countries to their regions (deduplicate per-species)
-      const regions = new Set(overlapping.map((c) => countryToRegion(c)));
+      const regions = hasCountryOverlap
+        ? new Set(overlapping.map((c) => countryToRegion(c)))
+        : new Set<string>();
 
       const assessments = historyMap[String(row.sis_taxon_id)] ?? [];
       const allAssessments = assessments.length > 0 ? assessments : [{
@@ -556,13 +610,20 @@ export function getAssessorCandidatesByCountry(
       for (const normalizedName of speciesAssessors) {
         let stats = assessorMap.get(normalizedName);
         if (!stats) {
-          stats = { regionCounts: {}, countryCounts: {}, total: 0, latestDate: "", seenSpecies: new Set() };
+          stats = { regionCounts: {}, countryCounts: {}, totalInRegion: 0, totalAll: 0, latestDate: "", seenSpeciesRegion: new Set(), seenSpeciesAll: new Set() };
           assessorMap.set(normalizedName, stats);
         }
 
-        if (!stats.seenSpecies.has(row.sis_taxon_id)) {
-          stats.seenSpecies.add(row.sis_taxon_id);
-          stats.total++;
+        // Always count for totalAll
+        if (!stats.seenSpeciesAll.has(row.sis_taxon_id)) {
+          stats.seenSpeciesAll.add(row.sis_taxon_id);
+          stats.totalAll++;
+        }
+
+        // Count for region overlap
+        if (hasCountryOverlap && !stats.seenSpeciesRegion.has(row.sis_taxon_id)) {
+          stats.seenSpeciesRegion.add(row.sis_taxon_id);
+          stats.totalInRegion++;
           for (const region of regions) {
             stats.regionCounts[region] = (stats.regionCounts[region] ?? 0) + 1;
           }
@@ -577,15 +638,17 @@ export function getAssessorCandidatesByCountry(
   }
 
   return [...assessorMap.entries()]
+    .filter(([, stats]) => stats.totalInRegion > 0)
     .map(([name, stats]) => ({
       name,
       regionCounts: stats.regionCounts,
       countryCounts: stats.countryCounts,
-      total: stats.total,
+      totalInRegion: stats.totalInRegion,
+      totalAll: stats.totalAll,
       latestDate: stats.latestDate,
     }))
     .sort((a, b) => {
-      if (a.total !== b.total) return b.total - a.total;
+      if (a.totalInRegion !== b.totalInRegion) return b.totalInRegion - a.totalInRegion;
       return b.latestDate.localeCompare(a.latestDate);
     });
 }

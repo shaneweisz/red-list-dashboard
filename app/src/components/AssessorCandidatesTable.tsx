@@ -8,7 +8,8 @@ interface AssessorCountryCandidate {
   name: string;
   regionCounts: Record<string, number>;
   countryCounts: Record<string, number>;
-  total: number;
+  totalInRegion: number;
+  totalAll: number;
   latestDate: string;
 }
 
@@ -17,6 +18,8 @@ interface AssessorCandidatesTableProps {
   taxaName: string;
   countries: string[];
 }
+
+type SortField = "totalInRegion" | "totalAll";
 
 const PAGE_SIZE = 10;
 
@@ -29,6 +32,7 @@ export default function AssessorCandidatesTable({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
+  const [sortBy, setSortBy] = useState<SortField>("totalInRegion");
 
   const countriesKey = countries.join(";");
   const regions = useMemo(() => countriesToRegions(countries), [countriesKey]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -78,11 +82,27 @@ export default function AssessorCandidatesTable({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taxaId, countriesKey]);
 
-  const totalPages = Math.ceil((candidates?.length ?? 0) / PAGE_SIZE);
+  const sorted = useMemo(() => {
+    if (!candidates) return [];
+    return [...candidates].sort((a, b) => {
+      const diff = b[sortBy] - a[sortBy];
+      if (diff !== 0) return diff;
+      return b.latestDate.localeCompare(a.latestDate);
+    });
+  }, [candidates, sortBy]);
+
+  const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
   const paginated = useMemo(
-    () => (candidates ?? []).slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE),
-    [candidates, page]
+    () => sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE),
+    [sorted, page]
   );
+
+  const handleSort = (field: SortField) => {
+    setSortBy(field);
+    setPage(0);
+  };
+
+  const sortIndicator = (field: SortField) => sortBy === field ? " ▼" : "";
 
   if (loading) {
     return (
@@ -117,7 +137,18 @@ export default function AssessorCandidatesTable({
         <thead>
           <tr className="text-left text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-700">
             <th className="py-2 pr-3 font-medium">Assessor</th>
-            <th className="py-2 px-3 font-medium text-right">{taxaName} Assessments in Region</th>
+            <th
+              className="py-2 px-3 font-medium text-right cursor-pointer select-none hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors"
+              onClick={() => handleSort("totalAll")}
+            >
+              Total {taxaName} Assessed{sortIndicator("totalAll")}
+            </th>
+            <th
+              className="py-2 px-3 font-medium text-right cursor-pointer select-none hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors"
+              onClick={() => handleSort("totalInRegion")}
+            >
+              {taxaName} Assessments in Region{sortIndicator("totalInRegion")}
+            </th>
             <th className="py-2 px-3 font-medium">Regions</th>
             <th className="py-2 pl-3 font-medium text-right">Last Active</th>
           </tr>
@@ -153,7 +184,10 @@ export default function AssessorCandidatesTable({
                   {c.name}
                 </td>
                 <td className="py-2 px-3 text-right tabular-nums text-zinc-600 dark:text-zinc-300">
-                  {c.total}
+                  {c.totalAll}
+                </td>
+                <td className="py-2 px-3 text-right tabular-nums text-zinc-600 dark:text-zinc-300">
+                  {c.totalInRegion}
                 </td>
                 <td className="py-2 px-3">
                   <div className="flex flex-wrap items-center gap-1">
@@ -194,7 +228,7 @@ export default function AssessorCandidatesTable({
             Prev
           </button>
           <span>
-            {page * PAGE_SIZE + 1}-{Math.min((page + 1) * PAGE_SIZE, candidates.length)} of {candidates.length}
+            {page * PAGE_SIZE + 1}-{Math.min((page + 1) * PAGE_SIZE, sorted.length)} of {sorted.length}
           </span>
           <button
             onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}

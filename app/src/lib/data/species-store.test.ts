@@ -447,7 +447,7 @@ describe("getAssessorCandidatesByCountry", () => {
     const result = getAssessorCandidatesByCountry([group], ["ZA"]);
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe("Dr. Africa");
-    expect(result[0].total).toBe(1);
+    expect(result[0].totalInRegion).toBe(1);
     expect(result[0].latestDate).toBe("2020-06-15");
   });
 
@@ -491,9 +491,9 @@ describe("getAssessorCandidatesByCountry", () => {
 
     const result = getAssessorCandidatesByCountry([group], ["ZA"]);
     expect(result[0].name).toBe("Many Assessor");
-    expect(result[0].total).toBe(2);
+    expect(result[0].totalInRegion).toBe(2);
     expect(result[1].name).toBe("Few Assessor");
-    expect(result[1].total).toBe(1);
+    expect(result[1].totalInRegion).toBe(1);
   });
 
   it("breaks total ties by latest date", () => {
@@ -587,9 +587,54 @@ describe("getAssessorCandidatesByCountry", () => {
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe("Dr. Repeat");
     // Should count as 1 species, not 3 assessments
-    expect(result[0].total).toBe(1);
+    expect(result[0].totalInRegion).toBe(1);
     expect(result[0].regionCounts["Southern Africa"]).toBe(1);
     // Latest date should still be tracked correctly
     expect(result[0].latestDate).toBe("2020-03-15");
+  });
+
+  it("tracks totalAll separately from totalInRegion", () => {
+    const group = uniqueGroup();
+    const rowInRegion = makeRow({ countries: ["ZA"], scientific_name: "Testus local" });
+    const rowOutside = makeRow({ countries: ["GB"], scientific_name: "Testus remote" });
+
+    setup([rowInRegion, rowOutside], {
+      [String(rowInRegion.sis_taxon_id)]: [
+        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "Dr. Both", reviewers: null },
+      ],
+      [String(rowOutside.sis_taxon_id)]: [
+        { id: 2, year: "2021", category: "VU", date: "2021-01-01", assessors: "Dr. Both", reviewers: null },
+      ],
+    });
+
+    const result = getAssessorCandidatesByCountry([group], ["ZA"]);
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("Dr. Both");
+    expect(result[0].totalInRegion).toBe(1);  // Only the ZA species
+    expect(result[0].totalAll).toBe(2);        // Both species
+  });
+
+  it("applies taxonomy filter to narrow scope", () => {
+    const group = uniqueGroup();
+    const beetleRow = makeRow({ countries: ["ZA"], scientific_name: "Beetlus one", order_name: "Coleoptera", class_name: "Insecta" });
+    const mothRow = makeRow({ countries: ["ZA"], scientific_name: "Mothus one", order_name: "Lepidoptera", class_name: "Insecta" });
+
+    setup([beetleRow, mothRow], {
+      [String(beetleRow.sis_taxon_id)]: [
+        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "Beetle Expert", reviewers: null },
+      ],
+      [String(mothRow.sis_taxon_id)]: [
+        { id: 2, year: "2021", category: "LC", date: "2021-01-01", assessors: "Moth Expert", reviewers: null },
+      ],
+    });
+
+    // Without filter: both assessors appear
+    const allResult = getAssessorCandidatesByCountry([group], ["ZA"]);
+    expect(allResult).toHaveLength(2);
+
+    // With orderNames filter: only beetle assessor
+    const beetleResult = getAssessorCandidatesByCountry([group], ["ZA"], { orderNames: ["coleoptera"] });
+    expect(beetleResult).toHaveLength(1);
+    expect(beetleResult[0].name).toBe("Beetle Expert");
   });
 });

@@ -11,7 +11,7 @@ import WikipediaSummary from "../WikipediaSummary";
 import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
-import { speciesMatchesNode, getNodeDef, getViewRootForNode } from "@/lib/taxonomy-utils";
+import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode } from "@/lib/taxonomy-utils";
 import ReviewerChart from "./ReviewerChart";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { useFilterParams } from "@/hooks/useFilterParams";
@@ -2049,7 +2049,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                             <div style={{ display: stackedDetailView || activeDetailTab === "assessors" ? undefined : "none" }}>
                               <AssessorCandidatesTable
                                 taxaId={[...selectedTaxa][0] ?? s.taxon_group}
-                                taxaName={TAXA_BY_ID[[...selectedTaxa][0] ?? s.taxon_group]?.name ?? "Species"}
+                                taxaName={findNode([...selectedTaxa][0] ?? s.taxon_group)?.name ?? TAXA_BY_ID[[...selectedTaxa][0] ?? s.taxon_group]?.name ?? "Species"}
                                 countries={s.countries}
                               />
                             </div>
