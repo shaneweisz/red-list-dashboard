@@ -641,6 +641,17 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     setActiveDetailTabRaw(tab);
     setTabParam(tab);
   }, [setTabParam]);
+  // Hydrate species/tab from URL after useFilterParams reads the URL in its effect
+  const hydratedUrlSpeciesRef = useRef(false);
+  useEffect(() => {
+    if (hydratedUrlSpeciesRef.current) return;
+    if (urlSpecies != null) {
+      hydratedUrlSpeciesRef.current = true;
+      setSelectedSpeciesKeyRaw(urlSpecies);
+      setActiveDetailTabRaw(urlTab ?? "gbif");
+    }
+  }, [urlSpecies, urlTab]);
+
   const [stackedDetailView, setStackedDetailView] = useState(false);
   const [mounted, setMounted] = useState(false);
 
