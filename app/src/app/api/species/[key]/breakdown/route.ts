@@ -16,11 +16,14 @@ interface InatObservation {
 
 interface RecordTypeBreakdown {
   humanObservation: number;
-  preservedSpecimen: number;
-  materialSample: number;
   machineObservation: number;
+  observation: number;
+  preservedSpecimen: number;
+  fossilSpecimen: number;
+  livingSpecimen: number;
+  materialSample: number;
   materialCitation: number;
-  other: number;
+  occurrence: number;
   iNaturalist: number;
   recentInatObservations: InatObservation[];
   inatTotalCount: number;
@@ -96,11 +99,22 @@ export async function GET(
       return params;
     };
 
-    // Fetch counts for each basisOfRecord type in parallel
-    const [humanResp, materialResp, machineResp, inatResp, inatRecentResp, totalResp] = await Promise.all([
+    // Fetch counts for each GBIF basisOfRecord type in parallel
+    const [
+      humanResp, machineResp, observationResp,
+      preservedResp, fossilResp, livingResp,
+      materialSampleResp, materialCitationResp, occurrenceResp,
+      inatResp, inatRecentResp, totalResp,
+    ] = await Promise.all([
       fetch(`https://api.gbif.org/v1/occurrence/search?${buildParams({ basisOfRecord: "HUMAN_OBSERVATION" })}`),
-      fetch(`https://api.gbif.org/v1/occurrence/search?${buildParams({ basisOfRecord: "MATERIAL_SAMPLE" })}`),
       fetch(`https://api.gbif.org/v1/occurrence/search?${buildParams({ basisOfRecord: "MACHINE_OBSERVATION" })}`),
+      fetch(`https://api.gbif.org/v1/occurrence/search?${buildParams({ basisOfRecord: "OBSERVATION" })}`),
+      fetch(`https://api.gbif.org/v1/occurrence/search?${buildParams({ basisOfRecord: "PRESERVED_SPECIMEN" })}`),
+      fetch(`https://api.gbif.org/v1/occurrence/search?${buildParams({ basisOfRecord: "FOSSIL_SPECIMEN" })}`),
+      fetch(`https://api.gbif.org/v1/occurrence/search?${buildParams({ basisOfRecord: "LIVING_SPECIMEN" })}`),
+      fetch(`https://api.gbif.org/v1/occurrence/search?${buildParams({ basisOfRecord: "MATERIAL_SAMPLE" })}`),
+      fetch(`https://api.gbif.org/v1/occurrence/search?${buildParams({ basisOfRecord: "MATERIAL_CITATION" })}`),
+      fetch(`https://api.gbif.org/v1/occurrence/search?${buildParams({ basisOfRecord: "OCCURRENCE" })}`),
       // iNaturalist count (with current filters)
       fetch(`https://api.gbif.org/v1/occurrence/search?${buildParams({ datasetKey: INAT_DATASET_KEY })}`),
       // Recent iNaturalist observations (up to 10 for preview)
@@ -115,21 +129,29 @@ export async function GET(
       fetch(`https://api.gbif.org/v1/occurrence/search?${buildParams()}`),
     ]);
 
-    const [humanData, materialData, machineData, inatData, totalData] = await Promise.all([
-      humanResp.json(),
-      materialResp.json(),
-      machineResp.json(),
-      inatResp.json(),
-      totalResp.json(),
+    const [
+      humanData, machineData, observationData,
+      preservedData, fossilData, livingData,
+      materialSampleData, materialCitationData, occurrenceData,
+      inatData, totalData,
+    ] = await Promise.all([
+      humanResp.json(), machineResp.json(), observationResp.json(),
+      preservedResp.json(), fossilResp.json(), livingResp.json(),
+      materialSampleResp.json(), materialCitationResp.json(), occurrenceResp.json(),
+      inatResp.json(), totalResp.json(),
     ]);
 
     const humanCount = humanData.count || 0;
-    const materialCount = materialData.count || 0;
     const machineCount = machineData.count || 0;
+    const observationCount = observationData.count || 0;
+    const preservedCount = preservedData.count || 0;
+    const fossilCount = fossilData.count || 0;
+    const livingCount = livingData.count || 0;
+    const materialSampleCount = materialSampleData.count || 0;
+    const materialCitationCount = materialCitationData.count || 0;
+    const occurrenceCount = occurrenceData.count || 0;
     const inatCount = inatData.count || 0;
     const totalCount = totalData.count || 0;
-
-    const otherCount = Math.max(0, totalCount - humanCount - materialCount - machineCount);
 
     // Parse recent iNaturalist observations
     let recentInatObservations: InatObservation[] = [];
@@ -178,11 +200,14 @@ export async function GET(
 
     const breakdown: RecordTypeBreakdown = {
       humanObservation: humanCount,
-      preservedSpecimen: 0,
-      materialSample: materialCount,
       machineObservation: machineCount,
-      materialCitation: 0,
-      other: otherCount,
+      observation: observationCount,
+      preservedSpecimen: preservedCount,
+      fossilSpecimen: fossilCount,
+      livingSpecimen: livingCount,
+      materialSample: materialSampleCount,
+      materialCitation: materialCitationCount,
+      occurrence: occurrenceCount,
       iNaturalist: inatCount,
       recentInatObservations,
       inatTotalCount: inatCount,

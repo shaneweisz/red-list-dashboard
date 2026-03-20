@@ -239,22 +239,30 @@ const CATEGORY_LABELS: Record<string, string> = {
   iNaturalist: "iNaturalist",
   humanOther: "Other Human Obs.",
   machineObservation: "Machine Obs.",
-  preservedSpecimen: "Specimens",
+  observation: "Observation",
+  preservedSpecimen: "Preserved",
+  fossilSpecimen: "Fossil",
+  livingSpecimen: "Living",
   materialSample: "Material",
-  other: "Other",
+  materialCitation: "Citation",
+  occurrence: "Occurrence",
 };
 
-// Classify an occurrence into one of the 6 checkbox categories (standalone for YearRangeTrimmer)
+// Classify an occurrence into one of the checkbox categories (standalone for YearRangeTrimmer)
 function classifyOccurrence(o: OccurrenceFeature): string {
   const basis = o.properties.basisOfRecord;
   if (basis === "HUMAN_OBSERVATION") {
     return o.properties.datasetKey === INAT_DATASET_KEY ? "iNaturalist" : "humanOther";
   }
   if (basis === "MACHINE_OBSERVATION") return "machineObservation";
+  if (basis === "OBSERVATION") return "observation";
   if (basis === "PRESERVED_SPECIMEN") return "preservedSpecimen";
+  if (basis === "FOSSIL_SPECIMEN") return "fossilSpecimen";
+  if (basis === "LIVING_SPECIMEN") return "livingSpecimen";
   if (basis === "MATERIAL_SAMPLE") return "materialSample";
   if (basis === "MATERIAL_CITATION") return "materialCitation";
-  return "other";
+  if (basis === "OCCURRENCE") return "occurrence";
+  return "observation"; // fallback
 }
 
 // Inline year range bar chart with draggable trim handles (like editing a video clip)
@@ -537,11 +545,14 @@ interface InatObservation {
 
 interface RecordTypeBreakdown {
   humanObservation: number;
-  preservedSpecimen: number;
-  materialSample: number;
   machineObservation: number;
+  observation: number;
+  preservedSpecimen: number;
+  fossilSpecimen: number;
+  livingSpecimen: number;
+  materialSample: number;
   materialCitation: number;
-  other: number;
+  occurrence: number;
   iNaturalist: number;
   recentInatObservations?: InatObservation[];
   inatTotalCount?: number;
@@ -783,15 +794,18 @@ export default function OccurrenceMapRow({
   const [loadingOccurrences, setLoadingOccurrences] = useState(true);
   const [loadingBreakdown, setLoadingBreakdown] = useState(true);
 
-  // Checkbox state for each observation type category (default: all checked except preserved, material & other)
+  // Checkbox state for each observation type category (default: all checked except specimens, citations & occurrence)
   const [checkedTypes, setCheckedTypes] = useState({
     iNaturalist: true,
     humanOther: true,
     machineObservation: true,
+    observation: false,
     preservedSpecimen: false,
+    fossilSpecimen: false,
+    livingSpecimen: false,
     materialSample: true,
     materialCitation: false,
-    other: false,
+    occurrence: false,
   });
 
   // Advanced filter state
@@ -990,17 +1004,21 @@ export default function OccurrenceMapRow({
     }
   }, [isPlaying]);
 
-  // Classify an occurrence into one of the 6 checkbox categories
+  // Classify an occurrence into one of the checkbox categories
   const getCategory = (o: OccurrenceFeature): keyof typeof checkedTypes => {
     const basis = o.properties.basisOfRecord;
     if (basis === "HUMAN_OBSERVATION") {
       return o.properties.datasetKey === INAT_DATASET_KEY ? "iNaturalist" : "humanOther";
     }
     if (basis === "MACHINE_OBSERVATION") return "machineObservation";
+    if (basis === "OBSERVATION") return "observation";
     if (basis === "PRESERVED_SPECIMEN") return "preservedSpecimen";
+    if (basis === "FOSSIL_SPECIMEN") return "fossilSpecimen";
+    if (basis === "LIVING_SPECIMEN") return "livingSpecimen";
     if (basis === "MATERIAL_SAMPLE") return "materialSample";
     if (basis === "MATERIAL_CITATION") return "materialCitation";
-    return "other";
+    if (basis === "OCCURRENCE") return "occurrence";
+    return "observation"; // fallback
   };
 
   // Multi-stage filtering pipeline (before animation)
@@ -1174,10 +1192,13 @@ export default function OccurrenceMapRow({
       { key: "iNaturalist" as const, label: "iNaturalist (community science)", count: breakdown.iNaturalist },
       { key: "humanOther" as const, label: "Human observation (e.g. eBird, field surveys)", count: humanOtherCount },
       { key: "machineObservation" as const, label: "Machine observation (e.g. camera traps)", count: breakdown.machineObservation },
+      { key: "observation" as const, label: "Observation", count: breakdown.observation },
       { key: "preservedSpecimen" as const, label: "Preserved specimen (e.g. herbaria, museums)", count: breakdown.preservedSpecimen },
-      { key: "materialSample" as const, label: "Material sample (e.g. eDNA)", count: breakdown.materialSample || 0 },
+      { key: "fossilSpecimen" as const, label: "Fossil specimen", count: breakdown.fossilSpecimen },
+      { key: "livingSpecimen" as const, label: "Living specimen (e.g. zoos, botanical gardens)", count: breakdown.livingSpecimen },
+      { key: "materialSample" as const, label: "Material sample (e.g. eDNA)", count: breakdown.materialSample },
       { key: "materialCitation" as const, label: "Material citation (literature records)", count: breakdown.materialCitation },
-      { key: "other" as const, label: "Other (fossils, living specimens)", count: breakdown.other },
+      { key: "occurrence" as const, label: "Occurrence", count: breakdown.occurrence },
     ];
   }, [breakdown]);
 
