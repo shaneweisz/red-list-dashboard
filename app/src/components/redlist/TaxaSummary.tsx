@@ -91,21 +91,20 @@ const getOutdatedBarColor = (percent: number) =>
 // Sticky cell classes for the pinned taxon column
 const stickyClasses = "sticky left-0 z-10";
 // Compact cell classes for tighter table spacing
-const cellPad = "px-3 md:px-4 py-2 md:py-2.5";
+const cellPad = "px-4 md:px-5 py-2 md:py-2.5";
 const numericTdClasses = `${cellPad} text-right whitespace-nowrap w-0`;
 const numericThClasses = `${cellPad} text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`;
 const flexTdClasses = `${cellPad} whitespace-nowrap w-0`;
 const flexThClasses = `${cellPad} text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`;
+const centeredThClasses = `${cellPad} text-center text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`;
 
 // Toggleable column IDs (Taxon is always visible)
-type ColumnId = "described" | "assessed" | "pctAssessed" | "outdated" | "pctOutdated" | "breakdown" | "gbifSpecies" | "pctGbifUnassessed" | "totalGbifObs" | "meanGbifObs" | "medianGbifObs" | "gbifDistribution";
+type ColumnId = "described" | "assessed" | "outdated" | "breakdown" | "gbifSpecies" | "pctGbifUnassessed" | "totalGbifObs" | "meanGbifObs" | "medianGbifObs" | "gbifDistribution";
 
 const COLUMN_LABELS: Record<ColumnId, string> = {
   described: "Est. # Described",
   assessed: "# Assessed",
-  pctAssessed: "% Assessed",
   outdated: "# Outdated (10+Y)",
-  pctOutdated: "% Outdated",
   breakdown: "Risk Category Breakdown",
   gbifSpecies: "# on GBIF",
   pctGbifUnassessed: "% Unassessed, On GBIF",
@@ -121,8 +120,8 @@ type FocusMode = "redlist" | "gbif" | "new-assessments";
 
 const FOCUS_HIDDEN: Record<FocusMode, Set<ColumnId>> = {
   redlist: new Set(["gbifSpecies", "pctGbifUnassessed", "totalGbifObs", "meanGbifObs", "medianGbifObs", "gbifDistribution", "breakdown"]),
-  gbif: new Set(["pctAssessed", "outdated", "pctOutdated", "pctGbifUnassessed", "breakdown"]),
-  "new-assessments": new Set(["outdated", "pctOutdated", "breakdown", "totalGbifObs", "meanGbifObs", "medianGbifObs", "gbifDistribution"]),
+  gbif: new Set(["outdated", "pctGbifUnassessed", "breakdown"]),
+  "new-assessments": new Set(["outdated", "breakdown", "totalGbifObs", "meanGbifObs", "medianGbifObs", "gbifDistribution"]),
 };
 
 const DEFAULT_HIDDEN_COLUMNS = FOCUS_HIDDEN.redlist;
@@ -410,28 +409,24 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           </td>
         )}
         {isVisible("assessed") && (
-          <td className={numericTdClasses}>
-            <div className="h-4 w-14 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
-          </td>
-        )}
-        {isVisible("pctAssessed") && (
           <td className={flexTdClasses}>
-            <div className="flex items-center gap-2 min-w-[80px] md:min-w-[100px]">
-              <div className="flex-1 h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
-              <div className="h-4 w-12 bg-zinc-200 dark:bg-zinc-700 rounded" />
+            <div className="min-w-[120px] md:min-w-[180px]">
+              <div className="h-4 w-14 bg-zinc-200 dark:bg-zinc-700 rounded mb-1" />
+              <div className="flex items-center gap-2">
+                <div className="flex-1 h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
+                <div className="h-3 w-12 bg-zinc-200 dark:bg-zinc-700 rounded" />
+              </div>
             </div>
           </td>
         )}
         {isVisible("outdated") && (
-          <td className={numericTdClasses}>
-            <div className="h-4 w-12 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
-          </td>
-        )}
-        {isVisible("pctOutdated") && (
           <td className={flexTdClasses}>
-            <div className="flex items-center gap-2 min-w-[80px] md:min-w-[100px]">
-              <div className="flex-1 h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
-              <div className="h-4 w-12 bg-zinc-200 dark:bg-zinc-700 rounded" />
+            <div className="min-w-[120px] md:min-w-[180px]">
+              <div className="h-4 w-12 bg-zinc-200 dark:bg-zinc-700 rounded mb-1" />
+              <div className="flex items-center gap-2">
+                <div className="flex-1 h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
+                <div className="h-3 w-12 bg-zinc-200 dark:bg-zinc-700 rounded" />
+              </div>
             </div>
           </td>
         )}
@@ -492,10 +487,8 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
               <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`}>Taxon</th>
               {isVisible("described") && <th className={numericThClasses}>Est. # Described</th>}
-              {isVisible("assessed") && <th className={numericThClasses}># Assessed</th>}
-              {isVisible("pctAssessed") && <th className={flexThClasses}>% Assessed</th>}
-              {isVisible("outdated") && <th className={numericThClasses}># Outdated (10+Y)</th>}
-              {isVisible("pctOutdated") && <th className={flexThClasses}>% Outdated</th>}
+              {isVisible("assessed") && <th className={centeredThClasses}># Assessed</th>}
+              {isVisible("outdated") && <th className={centeredThClasses}># Outdated (10+Y)</th>}
               {isVisible("gbifSpecies") && <th className={numericThClasses}>{isNewAssessments ? "# Unassessed, On GBIF" : "# on GBIF"}</th>}
               {isVisible("pctGbifUnassessed") && <th className={flexThClasses}>% Unassessed, On GBIF</th>}
               {isVisible("totalGbifObs") && <th className={numericThClasses}>Total Obs</th>}
@@ -545,21 +538,27 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   const totalMeanGbifObs = totalGbifSpecies > 0 ? Math.round(totalGbifObs / totalGbifSpecies) : 0;
 
 
-  // Column order: Taxon (sticky) | Est. Described | Assessed | % Assessed | Outdated | % Outdated | Category Breakdown
+  // Column order: Taxon (sticky) | Est. Described | Assessed | Outdated | Category Breakdown
 
-  // Render a percentage bar
-  const renderBar = (percent: number, barColor: string, isAll: boolean) => {
+  // Render a percentage bar (optionally with a count label above)
+  const renderBar = (percent: number, barColor: string, isAll: boolean, count?: number, fontWeight?: string) => {
     const clampedPercent = Math.min(100, Math.max(0, percent));
     const fillColor = isAll ? "rgba(255,255,255,0.25)" : barColor;
+    const fw = fontWeight || "font-medium";
     return (
-      <div className="flex items-center gap-2 min-w-[120px] md:min-w-[180px]">
+      <div className="flex items-center gap-3 min-w-[140px] md:min-w-[200px]">
+        {count != null && (
+          <span className={`text-sm md:text-base ${fw} tabular-nums text-zinc-700 dark:text-zinc-300 w-[60px] text-right flex-shrink-0`}>
+            {count.toLocaleString()}
+          </span>
+        )}
         <div className="flex-1 h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
           <div
             className="h-full rounded-full transition-all"
             style={{ width: `${clampedPercent}%`, backgroundColor: fillColor }}
           />
         </div>
-        <span className="text-sm md:text-base font-medium tabular-nums text-zinc-700 dark:text-zinc-300 w-[52px] text-right">
+        <span className="text-xs md:text-sm tabular-nums text-zinc-500 dark:text-zinc-400 w-[52px] text-right flex-shrink-0">
           {percent.toFixed(1)}%
         </span>
       </div>
@@ -728,32 +727,18 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           </td>
         )}
         {isVisible("assessed") && (
-          <td className={numericTdClasses}>
-            <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
-              {available ? assessed.toLocaleString() : "—"}
-            </span>
-          </td>
-        )}
-        {isVisible("pctAssessed") && (
           <td className={flexTdClasses}>
             {available ? (
-              renderBar(percentAssessed, getAssessedBarColor(percentAssessed), isAllRow)
+              renderBar(percentAssessed, getAssessedBarColor(percentAssessed), isAllRow, assessed)
             ) : (
               <span className="text-sm md:text-base text-zinc-400">—</span>
             )}
           </td>
         )}
         {isVisible("outdated") && (
-          <td className={numericTdClasses}>
-            <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
-              {available ? outdated.toLocaleString() : "—"}
-            </span>
-          </td>
-        )}
-        {isVisible("pctOutdated") && (
           <td className={flexTdClasses}>
             {available ? (
-              renderBar(percentOutdated, getOutdatedBarColor(percentOutdated), isAllRow)
+              renderBar(percentOutdated, getOutdatedBarColor(percentOutdated), isAllRow, outdated)
             ) : (
               <span className="text-sm md:text-base text-zinc-400">—</span>
             )}
@@ -841,24 +826,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           </td>
         )}
         {isVisible("assessed") && (
-          <td className={numericTdClasses}>
-            <span className="text-sm text-zinc-700 dark:text-zinc-300 tabular-nums">{sg.totalAssessed.toLocaleString()}</span>
-          </td>
-        )}
-        {isVisible("pctAssessed") && (
           <td className={flexTdClasses}>
-            {renderBar(sgPctAssessed, getAssessedBarColor(sgPctAssessed), false)}
+            {renderBar(sgPctAssessed, getAssessedBarColor(sgPctAssessed), false, sg.totalAssessed)}
           </td>
         )}
         {isVisible("outdated") && (
-          <td className={numericTdClasses}>
-            <span className="text-sm text-zinc-700 dark:text-zinc-300 tabular-nums">{sg.outdated.toLocaleString()}</span>
-          </td>
-        )}
-        {isVisible("pctOutdated") && (
           <td className={flexTdClasses}>
             {sg.totalAssessed > 0
-              ? renderBar(sgPctOutdated, getOutdatedBarColor(sgPctOutdated), false)
+              ? renderBar(sgPctOutdated, getOutdatedBarColor(sgPctOutdated), false, sg.outdated)
               : <span className="text-sm text-zinc-400">—</span>}
           </td>
         )}
@@ -945,28 +920,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           </td>
         )}
         {isVisible("assessed") && (
-          <td className={numericTdClasses}>
-            <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
-              {sg.totalAssessed.toLocaleString()}
-            </span>
-          </td>
-        )}
-        {isVisible("pctAssessed") && (
           <td className={flexTdClasses}>
-            {renderBar(sgPctAssessed, getAssessedBarColor(sgPctAssessed), false)}
+            {renderBar(sgPctAssessed, getAssessedBarColor(sgPctAssessed), false, sg.totalAssessed)}
           </td>
         )}
         {isVisible("outdated") && (
-          <td className={numericTdClasses}>
-            <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
-              {sg.outdated.toLocaleString()}
-            </span>
-          </td>
-        )}
-        {isVisible("pctOutdated") && (
           <td className={flexTdClasses}>
             {sg.totalAssessed > 0
-              ? renderBar(sgPctOutdated, getOutdatedBarColor(sgPctOutdated), false)
+              ? renderBar(sgPctOutdated, getOutdatedBarColor(sgPctOutdated), false, sg.outdated)
               : <span className="text-sm text-zinc-400">—</span>}
           </td>
         )}
@@ -1077,28 +1038,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             </td>
           )}
           {isVisible("assessed") && (
-            <td className={numericTdClasses}>
-              <span className="text-sm text-zinc-600 dark:text-zinc-400 tabular-nums">
-                {sg.totalAssessed.toLocaleString()}
-              </span>
-            </td>
-          )}
-          {isVisible("pctAssessed") && (
             <td className={flexTdClasses}>
-              {renderBar(sgPctAssessed, getAssessedBarColor(sgPctAssessed), false)}
+              {renderBar(sgPctAssessed, getAssessedBarColor(sgPctAssessed), false, sg.totalAssessed)}
             </td>
           )}
           {isVisible("outdated") && (
-            <td className={numericTdClasses}>
-              <span className="text-sm text-zinc-600 dark:text-zinc-400 tabular-nums">
-                {sg.outdated.toLocaleString()}
-              </span>
-            </td>
-          )}
-          {isVisible("pctOutdated") && (
             <td className={flexTdClasses}>
               {sg.totalAssessed > 0
-                ? renderBar(sgPctOutdated, getOutdatedBarColor(sgPctOutdated), false)
+                ? renderBar(sgPctOutdated, getOutdatedBarColor(sgPctOutdated), false, sg.outdated)
                 : <span className="text-sm text-zinc-400">—</span>}
             </td>
           )}
@@ -1191,30 +1138,16 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             </td>
           )}
           {isVisible("assessed") && (
-            <td className={numericTdClasses}>
-              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
-                {taxon.available ? taxon.totalAssessed.toLocaleString() : "—"}
-              </span>
-            </td>
-          )}
-          {isVisible("pctAssessed") && (
             <td className={flexTdClasses}>
               {taxon.available
-                ? renderBar(taxon.percentAssessed, getAssessedBarColor(taxon.percentAssessed), false)
+                ? renderBar(taxon.percentAssessed, getAssessedBarColor(taxon.percentAssessed), false, taxon.totalAssessed)
                 : <span className="text-sm text-zinc-400">—</span>}
             </td>
           )}
           {isVisible("outdated") && (
-            <td className={numericTdClasses}>
-              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
-                {taxon.available ? taxon.outdated.toLocaleString() : "—"}
-              </span>
-            </td>
-          )}
-          {isVisible("pctOutdated") && (
             <td className={flexTdClasses}>
               {taxon.available
-                ? renderBar(taxon.percentOutdated, getOutdatedBarColor(taxon.percentOutdated), false)
+                ? renderBar(taxon.percentOutdated, getOutdatedBarColor(taxon.percentOutdated), false, taxon.outdated)
                 : <span className="text-sm text-zinc-400">—</span>}
             </td>
           )}
@@ -1323,16 +1256,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           </th>
         )}
         {isVisible("assessed") && (
-          <th className={numericThClasses}># Assessed</th>
-        )}
-        {isVisible("pctAssessed") && (
-          <th className={flexThClasses}>% Assessed</th>
+          <th className={centeredThClasses}># Assessed</th>
         )}
         {isVisible("outdated") && (
-          <th className={numericThClasses}># Outdated (10+Y)</th>
-        )}
-        {isVisible("pctOutdated") && (
-          <th className={flexThClasses}>% Outdated</th>
+          <th className={centeredThClasses}># Outdated (10+Y)</th>
         )}
         {isVisible("gbifSpecies") && (
           <th className={numericThClasses}>{isNewAssessments ? "# Unassessed, On GBIF" : "# on GBIF"}</th>
@@ -1512,28 +1439,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                             </td>
                           )}
                           {isVisible("assessed") && (
-                            <td className={numericTdClasses}>
-                              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
-                                {row.totalAssessed.toLocaleString()}
-                              </span>
-                            </td>
-                          )}
-                          {isVisible("pctAssessed") && (
                             <td className={flexTdClasses}>
-                              {renderBar(row.percentAssessed, getAssessedBarColor(row.percentAssessed), false)}
+                              {renderBar(row.percentAssessed, getAssessedBarColor(row.percentAssessed), false, row.totalAssessed)}
                             </td>
                           )}
                           {isVisible("outdated") && (
-                            <td className={numericTdClasses}>
-                              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
-                                {row.outdated.toLocaleString()}
-                              </span>
-                            </td>
-                          )}
-                          {isVisible("pctOutdated") && (
                             <td className={flexTdClasses}>
                               {row.totalAssessed > 0
-                                ? renderBar(row.percentOutdated, getOutdatedBarColor(row.percentOutdated), false)
+                                ? renderBar(row.percentOutdated, getOutdatedBarColor(row.percentOutdated), false, row.outdated)
                                 : <span className="text-sm text-zinc-400">—</span>}
                             </td>
                           )}
@@ -1595,23 +1508,13 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                           </td>
                         )}
                         {isVisible("assessed") && (
-                          <td className={numericTdClasses}>
-                            <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 tabular-nums">{subAssessed.toLocaleString()}</span>
-                          </td>
-                        )}
-                        {isVisible("pctAssessed") && (
                           <td className={flexTdClasses}>
-                            {renderBar(subPctAssessed, getAssessedBarColor(subPctAssessed), false)}
+                            {renderBar(subPctAssessed, getAssessedBarColor(subPctAssessed), false, subAssessed, "font-semibold")}
                           </td>
                         )}
                         {isVisible("outdated") && (
-                          <td className={numericTdClasses}>
-                            <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 tabular-nums">{subOutdated.toLocaleString()}</span>
-                          </td>
-                        )}
-                        {isVisible("pctOutdated") && (
                           <td className={flexTdClasses}>
-                            {subAssessed > 0 ? renderBar(subPctOutdated, getOutdatedBarColor(subPctOutdated), false) : <span className="text-sm text-zinc-400">—</span>}
+                            {subAssessed > 0 ? renderBar(subPctOutdated, getOutdatedBarColor(subPctOutdated), false, subOutdated, "font-semibold") : <span className="text-sm text-zinc-400">—</span>}
                           </td>
                         )}
                         {isVisible("gbifSpecies") && (
