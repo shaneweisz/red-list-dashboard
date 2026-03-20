@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { ThemeToggle } from "../components/ThemeToggle";
+import { parseParams, type ViewMode } from "../hooks/useFilterParams";
 
 // Dynamically import view component
 const RedListView = dynamic(
@@ -19,10 +20,19 @@ const RedListView = dynamic(
   }
 );
 
-type ViewMode = "reassessments" | "new-assessments";
-
 export default function RedListPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("reassessments");
+
+  // Hydrate viewMode from URL on mount + sync on popstate (back/forward)
+  useEffect(() => {
+    const syncFromUrl = () => {
+      const parsed = parseParams(window.location.search);
+      setViewMode(parsed.viewMode);
+    };
+    syncFromUrl();
+    window.addEventListener("popstate", syncFromUrl);
+    return () => window.removeEventListener("popstate", syncFromUrl);
+  }, []);
 
   // Shared taxa/subgroup state that persists across view switches
   const [sharedTaxa, setSharedTaxa] = useState<Set<string>>(new Set());

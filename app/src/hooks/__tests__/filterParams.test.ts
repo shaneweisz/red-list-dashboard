@@ -2,6 +2,21 @@ import { describe, it, expect } from "vitest";
 import { parseParams, buildQs } from "../useFilterParams";
 
 describe("parseParams", () => {
+  it("defaults viewMode to reassessments", () => {
+    const result = parseParams("");
+    expect(result.viewMode).toBe("reassessments");
+  });
+
+  it("parses view=new-assessments", () => {
+    const result = parseParams("?view=new-assessments");
+    expect(result.viewMode).toBe("new-assessments");
+  });
+
+  it("defaults unknown view values to reassessments", () => {
+    const result = parseParams("?view=unknown");
+    expect(result.viewMode).toBe("reassessments");
+  });
+
   it("returns empty sets for empty search string", () => {
     const result = parseParams("");
     expect(result.taxa.size).toBe(0);
@@ -115,6 +130,7 @@ describe("parseParams", () => {
 
 describe("buildQs", () => {
   const emptyState = {
+    viewMode: "reassessments" as const,
     taxa: new Set<string>(),
     categories: new Set<string>(),
     yearRanges: new Set<string>(),
@@ -127,6 +143,16 @@ describe("buildQs", () => {
     sortField: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
     sortDirection: "desc" as const,
   };
+
+  it("omits view param for reassessments (default)", () => {
+    expect(buildQs(emptyState)).toBe("");
+  });
+
+  it("includes view=new-assessments", () => {
+    const qs = buildQs({ ...emptyState, viewMode: "new-assessments" });
+    const params = new URLSearchParams(qs);
+    expect(params.get("view")).toBe("new-assessments");
+  });
 
   it("returns empty string for default state", () => {
     expect(buildQs(emptyState)).toBe("");
@@ -226,6 +252,7 @@ describe("buildQs", () => {
 describe("parseParams ↔ buildQs round-trip", () => {
   it("round-trips a complex state", () => {
     const original = {
+      viewMode: "reassessments" as const,
       taxa: new Set(["mammalia"]),
       subgroups: new Set<string>(),
       categories: new Set(["CR", "EN"]),
@@ -253,6 +280,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
 
   it("round-trips empty/default state", () => {
     const original = {
+      viewMode: "reassessments" as const,
       taxa: new Set<string>(),
       subgroups: new Set<string>(),
       categories: new Set<string>(),
@@ -278,6 +306,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
 
   it("round-trips subgroups", () => {
     const original = {
+      viewMode: "reassessments" as const,
       taxa: new Set(["fishes"]),
       subgroups: new Set(["sharks-rays", "bony-fish"]),
       categories: new Set<string>(),
@@ -299,6 +328,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
 
   it("round-trips empty subgroups", () => {
     const original = {
+      viewMode: "reassessments" as const,
       taxa: new Set<string>(),
       subgroups: new Set<string>(),
       categories: new Set<string>(),
@@ -319,6 +349,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
 
   it("round-trips sort=newGbif", () => {
     const original = {
+      viewMode: "reassessments" as const,
       taxa: new Set<string>(),
       subgroups: new Set<string>(),
       categories: new Set<string>(),
