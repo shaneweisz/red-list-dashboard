@@ -338,7 +338,7 @@ export default function NewLiteratureSinceAssessment({
       {/* Subtle note at bottom */}
       {!loading && data && (
         <p className="text-[10px] text-zinc-400 mt-2">
-          {mode === "before" ? "Sorted by most cited" : "Sorted by most recent"} — includes Latin gender variants of species name
+          {mode === "before" ? "Sorted by most cited" : "Sorted by most recent"} — includes Latin gender variants of species name · Data from OpenAlex (CC0)
         </p>
       )}
     </div>

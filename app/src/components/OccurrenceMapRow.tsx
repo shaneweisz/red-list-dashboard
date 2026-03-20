@@ -541,6 +541,15 @@ interface InatObservation {
   gbifID?: number | null;
   decimalLatitude?: number | null;
   decimalLongitude?: number | null;
+  license?: string | null;
+  rightsHolder?: string | null;
+}
+
+/** Format CC license URL to short label, e.g. ".../by-nc/4.0/legalcode" -> "CC BY-NC 4.0" */
+function formatLicense(url: string): string {
+  const match = url.match(/creativecommons\.org\/licenses\/([^/]+)\/([^/]+)/);
+  if (!match) return url;
+  return `CC ${match[1].toUpperCase()} ${match[2]}`;
 }
 
 interface RecordTypeBreakdown {
@@ -772,6 +781,9 @@ function InatPhotoWithPreview({ obs, idx, onHover, onLeave }: { obs: InatObserva
                 <div className="text-zinc-600 dark:text-zinc-400 truncate" title={obs.location}>
                   {obs.location}
                 </div>
+              )}
+              {obs.license && (
+                <div className="text-[9px] text-zinc-400">{formatLicense(obs.license)}</div>
               )}
             </div>
           </div>
