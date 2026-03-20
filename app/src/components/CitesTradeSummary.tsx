@@ -693,6 +693,25 @@ export default function CitesTradeSummary({
         )}
       </div>
 
+      {/* Trade flow map */}
+      {filtered.topFlows && filtered.topFlows.length > 0 && (
+        <div>
+          <div className="border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden bg-zinc-50 dark:bg-zinc-800/30">
+            <TradeFlowMap
+              flows={filtered.topFlows}
+              suspensionCountries={suspensionCountries}
+              countryAnnotations={countryAnnotations}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Exporters & Importers */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <CountryTable data={filtered.topExporters} label="Top exporters" />
+        <CountryTable data={filtered.topImporters} label="Top importers" />
+      </div>
+
       {/* Filters + Chart side by side */}
       <div className={`grid grid-cols-1 gap-4 ${hasShipments ? "md:grid-cols-[220px_1fr]" : ""}`}>
         {/* Filter panel */}
@@ -873,24 +892,6 @@ export default function CitesTradeSummary({
         </div>
       </div>
 
-      {/* Trade flow map */}
-      {filtered.topFlows && filtered.topFlows.length > 0 && (
-        <div>
-          <div className="border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden bg-zinc-50 dark:bg-zinc-800/30">
-            <TradeFlowMap
-              flows={filtered.topFlows}
-              suspensionCountries={suspensionCountries}
-              countryAnnotations={countryAnnotations}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Exporters & Importers */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <CountryTable data={filtered.topExporters} label="Top exporters" />
-        <CountryTable data={filtered.topImporters} label="Top importers" />
-      </div>
     </div>
   );
 }
