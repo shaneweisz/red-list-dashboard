@@ -274,7 +274,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     if (!subgroupDataRef.current[taxonId] && !loadingSubgroupsRef.current.has(taxonId)) {
       setLoadingSubgroups((prev) => new Set(prev).add(taxonId));
       try {
-        const res = await fetch(`/api/redlist/taxa-subgroups?taxonId=${taxonId}`);
+        const res = await fetch(`/api/redlist/taxa-subgroups?nodeId=${taxonId}`);
         if (res.ok) {
           const data = await res.json();
           setSubgroupData((prev) => ({ ...prev, [taxonId]: data.subgroups }));
@@ -305,7 +305,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     for (const taxonId of expandableTaxaIds) {
       if (!subgroupDataRef.current[taxonId] && !loadingSubgroupsRef.current.has(taxonId)) {
         setLoadingSubgroups((prev) => new Set(prev).add(taxonId));
-        fetch(`/api/redlist/taxa-subgroups?taxonId=${taxonId}`)
+        fetch(`/api/redlist/taxa-subgroups?nodeId=${taxonId}`)
           .then(res => res.ok ? res.json() : null)
           .then(data => {
             if (data) setSubgroupData((prev) => ({ ...prev, [taxonId]: data.subgroups }));
