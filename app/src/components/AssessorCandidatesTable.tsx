@@ -147,10 +147,10 @@ export default function AssessorCandidatesTable({
               className="py-2 px-3 font-medium text-right cursor-pointer select-none hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors"
               onClick={() => handleSort("totalInRegion")}
             >
-              {taxaName} Assessments in Region{sortIndicator("totalInRegion")}
+              {taxaName} Assessed in Region{sortIndicator("totalInRegion")}
             </th>
             <th className="py-2 px-3 font-medium">Regions</th>
-            <th className="py-2 pl-3 font-medium text-right">Last Active</th>
+            <th className="py-2 pl-3 font-medium text-right">Last Assessment</th>
           </tr>
         </thead>
         <tbody>
