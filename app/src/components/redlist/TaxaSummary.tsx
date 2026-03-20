@@ -830,14 +830,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       >
         <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 bg-white dark:bg-zinc-900`}>
           <div className="flex items-center gap-2" style={{ paddingLeft: `${depth * 12}px` }}>
-            {isViewRoot ? (
-              <TaxaIcon taxonId={sg.id} size={18} className="flex-shrink-0" style={{ color }} />
-            ) : (
-              <span
-                className="w-2 h-2 rounded-full flex-shrink-0"
-                style={{ backgroundColor: color }}
-              />
-            )}
+            <TaxaIcon taxonId={sg.id} size={isViewRoot ? 18 : 16} className="flex-shrink-0" style={{ color }} />
             <span className="text-sm text-zinc-700 dark:text-zinc-300">{sg.name}</span>
           </div>
         </td>
@@ -919,10 +912,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       >
         <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 bg-zinc-100 dark:bg-zinc-800`}>
           <div className="flex items-center gap-2">
-            <span
-              className="w-3 h-3 rounded-full flex-shrink-0"
-              style={{ backgroundColor: taxon.color }}
-            />
+            <TaxaIcon taxonId={sg.id} size={18} className="flex-shrink-0" style={{ color: taxon.color }} />
             <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{sg.name}</span>
           </div>
         </td>
@@ -1048,10 +1038,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         >
           <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 ${isSgSelected ? "bg-violet-50 dark:bg-violet-900/20" : "bg-white dark:bg-zinc-900"}`}>
             <div className="flex items-center gap-2" style={{ paddingLeft: `${(depth - 1) * 12}px` }}>
-              <span
-                className={`${dotSize} rounded-full flex-shrink-0`}
-                style={{ backgroundColor: parentColor, opacity: isSgSelected ? 1 : 0.6 }}
-              />
+              <TaxaIcon taxonId={sg.id} size={depth === 1 ? 16 : 14} className="flex-shrink-0" style={{ color: parentColor, opacity: isSgSelected ? 1 : 0.6 }} />
               <span className={`text-sm ${isSgSelected ? "font-medium text-violet-700 dark:text-violet-300" : "text-zinc-700 dark:text-zinc-300"}`}>{sg.name}</span>
               {isLoadingSgSubs && (
                 <svg className="animate-spin h-3 w-3 text-zinc-400" viewBox="0 0 24 24" fill="none">
