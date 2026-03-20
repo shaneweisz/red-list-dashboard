@@ -2038,9 +2038,16 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                           </div>
                         </div>
                           {gbifSpeciesKey && s.category !== "NE" && (
-                            <div className="border-t border-zinc-200 dark:border-zinc-700 p-6 text-center">
-                              <h3 className="text-lg font-semibold text-zinc-800 dark:text-zinc-200">AI Assessment Assistant</h3>
-                              <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">Coming soon</p>
+                            <div className="border-t border-zinc-200 dark:border-zinc-700 p-5">
+                              <div className="flex items-center gap-3 rounded-lg border border-dashed border-zinc-300 dark:border-zinc-600 bg-zinc-50 dark:bg-zinc-800/50 px-4 py-3">
+                                <div className="flex items-center justify-center w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex-shrink-0">
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/></svg>
+                                </div>
+                                <div>
+                                  <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">AI Assessment Assistant</p>
+                                  <p className="text-xs text-zinc-500 dark:text-zinc-400">Coming soon — AI-powered assessment drafts and suggestions</p>
+                                </div>
+                              </div>
                             </div>
                           )}
                       </td>
