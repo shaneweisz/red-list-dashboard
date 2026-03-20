@@ -1991,8 +1991,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   </tr>
                   {selectedSpeciesKey === speciesKey && (
                     <tr>
-                      <td colSpan={isNewAssessments ? 3 : 8} className="p-0 bg-zinc-50 dark:bg-zinc-800/30">
-                        <div style={{ width: '100%', maxWidth: 'calc(100vw - 2rem)', transform: 'translateX(var(--scroll-left, 0px))' }}>
+                      <td colSpan={isNewAssessments ? 3 : 8} className="p-0 bg-zinc-50 dark:bg-zinc-800/30" style={{ width: 0 }}>
+                        <div style={{ minWidth: '100%', maxWidth: 'calc(100vw - 2rem)', overflow: 'hidden', transform: 'translateX(var(--scroll-left, 0px))' }}>
                           {/* Tab bar */}
                           <div className="flex items-center border-b border-zinc-200 dark:border-zinc-700 overflow-x-auto flex-nowrap" onClick={(e) => e.stopPropagation()}>
                             {!stackedDetailView && (
