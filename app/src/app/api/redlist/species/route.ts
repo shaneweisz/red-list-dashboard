@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSpecies } from "@/lib/data/species-store";
-import { getTaxonGroups } from "@/lib/data/taxon-groups";
+import { getCsvGroupsForNode } from "@/lib/taxonomy-utils";
 import { CACHE_5M } from "@/lib/cache-headers";
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const taxonId = searchParams.get("taxon") || "all";
   const category = searchParams.get("category");
-  const groups = getTaxonGroups(taxonId);
+  const groups = getCsvGroupsForNode(taxonId);
 
   try {
     const includeNE = category === "NE";

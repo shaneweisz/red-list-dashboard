@@ -9,6 +9,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { readCsv } from "./csv";
 
+
 // =============================================================================
 // EXCLUDED DOMESTICATED SPECIES
 // =============================================================================
@@ -40,6 +41,7 @@ const DATA_DIR = path.join(process.cwd(), "data");
 const REDLIST_DIR = path.join(DATA_DIR, "redlist");
 const GBIF_DIR = path.join(DATA_DIR, "gbif");
 const TAXA_SUMMARY_PATH = path.join(DATA_DIR, "taxa-summary.json");
+const NODE_CHILDREN_SUMMARIES_PATH = path.join(DATA_DIR, "node-children-summaries.json");
 
 // =============================================================================
 // TYPES
@@ -124,7 +126,7 @@ export interface TaxaSummaryRow {
 }
 
 // =============================================================================
-// DB_GROUP → DISPLAY TAXON ID
+// DB_GROUP → DISPLAY TAXON ID (for the default 8-taxa view)
 // =============================================================================
 
 const DB_GROUP_TO_TAXON_ID: Record<string, string> = {
@@ -143,7 +145,7 @@ const DB_GROUP_TO_TAXON_ID: Record<string, string> = {
   mosses: "plantae",
   green_algae: "plantae",
   red_algae: "plantae",
-  brown_algae: "plantae",
+  brown_algae: "fungi",
   mushrooms: "fungi",
 };
 
@@ -207,6 +209,7 @@ const gbifCache = new Map<string, Map<number, GbifRow>>();
 const historyCache = new Map<string, HistoryMap>();
 let mappingCache: Map<number, { gbif_species_key: number | null; match_type: string }> | null = null;
 let taxaSummaryCache: TaxaSummaryRow[] | null = null;
+let nodeChildrenSummariesCache: Record<string, NodeSummary[]> | null = null;
 
 function loadMapping(): Map<number, { gbif_species_key: number | null; match_type: string }> {
   if (mappingCache) return mappingCache;
@@ -364,11 +367,23 @@ export function getTaxaSummary(): TaxaSummaryRow[] {
   return taxaSummaryCache;
 }
 
+/**
+ * Get precomputed children summaries for a parent node.
+ * Reads from data/node-children-summaries.json (cached in memory).
+ */
+export function getPrecomputedChildrenSummaries(parentNodeId: string): NodeSummary[] {
+  if (!nodeChildrenSummariesCache) {
+    const content = fs.readFileSync(NODE_CHILDREN_SUMMARIES_PATH, "utf-8");
+    nodeChildrenSummariesCache = JSON.parse(content) as Record<string, NodeSummary[]>;
+  }
+  return nodeChildrenSummariesCache[parentNodeId] ?? [];
+}
+
 // =============================================================================
-// SUBGROUP SUMMARIES
+// NODE SUMMARIES (replaces old getSubgroupSummaries)
 // =============================================================================
 
-export interface SubGroupSummary {
+export interface NodeSummary {
   id: string;
   name: string;
   estimatedDescribed: number;
@@ -376,22 +391,6 @@ export interface SubGroupSummary {
   outdated: number;
   gbifNeSpeciesCount: number;
   byCategory: Record<string, number>;
-}
-
-interface SubGroupFilter {
-  groups: string[];
-  classNames?: string[];
-  orderNames?: string[];
-  excludeOrders?: string[];
-}
-
-interface SubGroupDef {
-  id: string;
-  name: string;
-  estimatedDescribed: number;
-  source: string;
-  sourceUrl: string;
-  filter: SubGroupFilter;
 }
 
 const CURRENT_YEAR = new Date().getFullYear();
@@ -406,137 +405,4 @@ export function isOutdated(assessmentDate: string | null, currentYear = CURRENT_
   const year = parseInt(assessmentDate.slice(0, 4), 10);
   if (isNaN(year)) return true;
   return currentYear - year > OUTDATED_THRESHOLD_YEARS;
-}
-
-function matchesFilter(row: { class_name: string | null; order_name: string | null }, filter: SubGroupFilter): boolean {
-  // Check class filter
-  if (filter.classNames && filter.classNames.length > 0) {
-    const cls = (row.class_name ?? "").toLowerCase();
-    if (!filter.classNames.includes(cls)) return false;
-  }
-  // Check order include filter
-  // Fall back to class_name when order_name is empty (GBIF taxonomy quirk)
-  if (filter.orderNames && filter.orderNames.length > 0) {
-    const ord = (row.order_name ?? "").toLowerCase();
-    const cls = (row.class_name ?? "").toLowerCase();
-    if (!filter.orderNames.includes(ord) && !(ord === "" && filter.orderNames.includes(cls))) return false;
-  }
-  // Check order exclude filter (same class_name fallback)
-  if (filter.excludeOrders && filter.excludeOrders.length > 0) {
-    const ord = (row.order_name ?? "").toLowerCase();
-    const cls = (row.class_name ?? "").toLowerCase();
-    if (filter.excludeOrders.includes(ord) || (ord === "" && filter.excludeOrders.includes(cls))) return false;
-  }
-  return true;
-}
-
-/**
- * Compute summary stats for each subgroup by filtering the actual CSV data.
- */
-export function getSubgroupSummaries(subgroups: SubGroupDef[]): SubGroupSummary[] {
-  // Deduplicate: figure out which CSV groups we need to load
-  const allGroups = new Set<string>();
-  for (const sg of subgroups) {
-    for (const g of sg.filter.groups) allGroups.add(g);
-  }
-
-  // Load all needed CSV rows, grouped by their table1a group
-  const rowsByGroup = new Map<string, RedlistRow[]>();
-  const gbifByGroup = new Map<string, Map<number, GbifRow>>();
-  for (const group of allGroups) {
-    rowsByGroup.set(group, loadRedlistForGroup(group));
-    gbifByGroup.set(group, loadGbifForGroup(group));
-  }
-
-  // Build set of linked GBIF keys (assessed species with GBIF matches)
-  const mapping = loadMapping();
-  const linkedGbifKeys = new Set<number>();
-  for (const entry of mapping.values()) {
-    if (entry.gbif_species_key != null) linkedGbifKeys.add(entry.gbif_species_key);
-  }
-
-  // Track which rows from "other_invertebrates" are claimed by specific subgroups
-  // so the catch-all "Other Invertebrates" subgroup can exclude them
-  const claimedRowIds = new Set<number>();
-  const claimedGbifKeys = new Set<number>();
-
-  const results: SubGroupSummary[] = [];
-
-  for (const sg of subgroups) {
-    let totalAssessed = 0;
-    let outdated = 0;
-    let gbifNeSpeciesCount = 0;
-    const byCategory: Record<string, number> = {};
-
-    const isOtherInvertsCatchAll =
-      sg.id === "other-invertebrates" &&
-      sg.filter.groups.includes("other_invertebrates");
-
-    for (const group of sg.filter.groups) {
-      const rows = rowsByGroup.get(group) ?? [];
-      for (const row of rows) {
-        if (!matchesFilter(row, sg.filter)) continue;
-
-        // For the "Other Invertebrates" catch-all, skip rows claimed by
-        // echinoderms/worms subgroups
-        if (isOtherInvertsCatchAll && group === "other_invertebrates") {
-          if (claimedRowIds.has(row.sis_taxon_id)) continue;
-        }
-
-        totalAssessed++;
-        if (isOutdated(row.assessment_date)) outdated++;
-        const cat = row.category;
-        if (cat) byCategory[cat] = (byCategory[cat] ?? 0) + 1;
-      }
-
-      // Count NE (unassessed) GBIF species
-      const gbifMap = gbifByGroup.get(group) ?? new Map();
-      for (const [key, gbifRow] of gbifMap) {
-        if (linkedGbifKeys.has(key)) continue;
-        if (EXCLUDED_DOMESTICATED_GBIF_KEYS.has(key)) continue;
-        if (!matchesFilter(gbifRow, sg.filter)) continue;
-        if (isOtherInvertsCatchAll && group === "other_invertebrates") {
-          if (claimedGbifKeys.has(key)) continue;
-        }
-        gbifNeSpeciesCount++;
-      }
-    }
-
-    // If this is echinoderms or worms, record which other_invertebrates rows
-    // were claimed so the catch-all can skip them
-    if (
-      sg.id !== "other-invertebrates" &&
-      sg.filter.groups.includes("other_invertebrates") &&
-      (sg.filter.classNames || sg.filter.orderNames)
-    ) {
-      const rows = rowsByGroup.get("other_invertebrates") ?? [];
-      for (const row of rows) {
-        if (matchesFilter(row, sg.filter)) {
-          claimedRowIds.add(row.sis_taxon_id);
-        }
-      }
-      const gbifMap = gbifByGroup.get("other_invertebrates") ?? new Map();
-      for (const [key, gbifRow] of gbifMap) {
-        if (
-          !linkedGbifKeys.has(key) &&
-          !EXCLUDED_DOMESTICATED_GBIF_KEYS.has(key) &&
-          matchesFilter(gbifRow, sg.filter)
-        ) {
-          claimedGbifKeys.add(key);
-        }
-      }
-    }
-
-    results.push({
-      id: sg.id,
-      name: sg.name,
-      estimatedDescribed: sg.estimatedDescribed,
-      totalAssessed,
-      outdated,
-      gbifNeSpeciesCount,
-      byCategory,
-    });
-  }
-
-  return results;
 }

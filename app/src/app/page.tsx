@@ -83,18 +83,18 @@ export default function RedListPage() {
         />
       </main>
 
-      <footer className="max-w-6xl mx-auto mt-12 pb-6 pt-4 border-t border-zinc-200 dark:border-zinc-800">
+      <footer className="max-w-xl mx-auto mt-10 pb-6 pt-4 border-t border-zinc-200 dark:border-zinc-800">
         <p className="text-center text-xs text-zinc-400 dark:text-zinc-500">
-          Developed by{" "}
+          Questions or feedback? Contact{" "}
           <a
-            href="https://shaneweisz.com"
+            href="https://www.shaneweisz.com/"
             target="_blank"
             rel="noopener noreferrer"
             className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
           >
-            Shane Weisz
+            Shane
           </a>
-          , University of Cambridge. If you have any thoughts or feedback, please do get in touch at{" "}
+          {" "}at{" "}
           <a
             href="mailto:sw984@cam.ac.uk"
             className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
@@ -102,6 +102,19 @@ export default function RedListPage() {
             sw984@cam.ac.uk
           </a>
           .
+        </p>
+        <p className="text-center text-xs text-zinc-400 dark:text-zinc-500 mt-3">
+          Part of a{" "}
+          <a
+            href="https://anil.recoil.org/ideas/living-iucn-redlist"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
+          >
+            PhD research project
+          </a>
+          {" "}at the University of Cambridge.
+          Based on public IUCN Red List and GBIF data. Any errors in aggregation are the author&apos;s own. Please verify against primary sources before use.
         </p>
       </footer>
     </div>
