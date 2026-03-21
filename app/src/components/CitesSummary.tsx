@@ -390,7 +390,7 @@ export default function CitesSummary({
                       {q.country}
                     </td>
                     <td className="px-3 py-1.5 text-right text-zinc-700 dark:text-zinc-300 tabular-nums">
-                      {q.quota.toLocaleString()}
+                      {q.quota != null ? q.quota.toLocaleString() : "—"}
                       {q.unit ? ` ${q.unit}` : ""}
                     </td>
                     <td className="px-3 py-1.5 text-zinc-400 max-w-[250px] truncate hidden md:table-cell">
