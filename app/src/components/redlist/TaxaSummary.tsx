@@ -90,8 +90,10 @@ const getOutdatedBarColor = (percent: number) =>
 
 // Sticky cell classes for the pinned taxon column
 const stickyClasses = "sticky left-0 z-10";
+// Constrain the pinned taxon column width on mobile so the rest of the table scrolls
+const stickyTaxonClasses = `${stickyClasses} max-w-[160px] md:max-w-none`;
 // Compact cell classes for tighter table spacing
-const cellPad = "px-4 md:px-5 py-2 md:py-2.5";
+const cellPad = "px-3 md:px-5 py-2 md:py-2.5";
 const numericTdClasses = `${cellPad} text-right whitespace-nowrap w-0`;
 const numericThClasses = `${cellPad} text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`;
 const flexTdClasses = `${cellPad} whitespace-nowrap w-0`;
@@ -396,9 +398,9 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     // Skeleton rows matching actual table structure
     const skeletonRows = Array.from({ length: 9 }, (_, i) => (
       <tr key={i} className={i === 0 ? "bg-zinc-50/80 dark:bg-zinc-800/60" : ""}>
-        <td className={`${stickyClasses} bg-white dark:bg-zinc-900 ${cellPad} w-0`}>
+        <td className={`${stickyTaxonClasses} bg-white dark:bg-zinc-900 ${cellPad} w-0`}>
           <div className="flex items-center gap-2">
-            <div className="w-[22px] h-[22px] rounded-full bg-zinc-200 dark:bg-zinc-700" />
+            <div className="w-[22px] h-[22px] rounded-full bg-zinc-200 dark:bg-zinc-700 flex-shrink-0" />
             <div className="h-4 w-20 bg-zinc-200 dark:bg-zinc-700 rounded" />
           </div>
         </td>
@@ -485,7 +487,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         <table className="w-full">
           <thead>
             <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
-              <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`}>Taxon</th>
+              <th className={`${stickyTaxonClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`}>Taxon</th>
               {isVisible("described") && <th className={numericThClasses}>Est. # Described</th>}
               {isVisible("assessed") && <th className={centeredThClasses}># Assessed</th>}
               {isVisible("outdated") && <th className={centeredThClasses}># Outdated (10+Y)</th>}
@@ -711,10 +713,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         }}
         className={`transition-colors ${rowBg} ${hoverClass}`}
       >
-        <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 ${stickyBg}`}>
-          <div className="flex items-center gap-2">
+        <td className={`${stickyTaxonClasses} ${cellPad} whitespace-nowrap w-0 ${stickyBg}`}>
+          <div className="flex items-center gap-2 min-w-0">
             <TaxaIcon taxonId={id} size={22} className="flex-shrink-0" style={{ color }} />
-            <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{name}</span>
+            <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100 truncate">{name}</span>
             {allDisabled && <DisabledAllTooltip />}
           </div>
         </td>
@@ -804,10 +806,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           onToggleSubgroup(sg.id);
         }}
       >
-        <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 bg-white dark:bg-zinc-900`}>
-          <div className="flex items-center gap-2" style={{ paddingLeft: `${depth * 12}px` }}>
+        <td className={`${stickyTaxonClasses} ${cellPad} whitespace-nowrap w-0 bg-white dark:bg-zinc-900`}>
+          <div className="flex items-center gap-2 min-w-0" style={{ paddingLeft: `${depth * 12}px` }}>
             <TaxaIcon taxonId={sg.id} size={isViewRoot ? 18 : 16} className="flex-shrink-0" style={{ color }} />
-            <span className="text-sm text-zinc-700 dark:text-zinc-300">{sg.name}</span>
+            <span className="text-sm text-zinc-700 dark:text-zinc-300 truncate">{sg.name}</span>
           </div>
         </td>
         {isVisible("described") && (
@@ -869,10 +871,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           }
         }}
       >
-        <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 bg-zinc-100 dark:bg-zinc-800`}>
-          <div className="flex items-center gap-2">
+        <td className={`${stickyTaxonClasses} ${cellPad} whitespace-nowrap w-0 bg-zinc-100 dark:bg-zinc-800`}>
+          <div className="flex items-center gap-2 min-w-0">
             <TaxaIcon taxonId={sg.id} size={18} className="flex-shrink-0" style={{ color: taxon.color }} />
-            <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{sg.name}</span>
+            <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100 truncate">{sg.name}</span>
           </div>
         </td>
         {isVisible("described") && (
@@ -974,10 +976,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             }
           }}
         >
-          <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 ${isSgSelected ? "bg-violet-50 dark:bg-violet-900/20" : "bg-white dark:bg-zinc-900"}`}>
-            <div className="flex items-center gap-2" style={{ paddingLeft: `${(depth - 1) * 12}px` }}>
+          <td className={`${stickyTaxonClasses} ${cellPad} whitespace-nowrap w-0 ${isSgSelected ? "bg-violet-50 dark:bg-violet-900/20" : "bg-white dark:bg-zinc-900"}`}>
+            <div className="flex items-center gap-2 min-w-0" style={{ paddingLeft: `${(depth - 1) * 12}px` }}>
               <TaxaIcon taxonId={sg.id} size={depth === 1 ? 16 : 14} className="flex-shrink-0" style={{ color: parentColor, opacity: isSgSelected ? 1 : 0.6 }} />
-              <span className={`text-sm ${isSgSelected ? "font-medium text-violet-700 dark:text-violet-300" : "text-zinc-700 dark:text-zinc-300"}`}>{sg.name}</span>
+              <span className={`text-sm truncate ${isSgSelected ? "font-medium text-violet-700 dark:text-violet-300" : "text-zinc-700 dark:text-zinc-300"}`}>{sg.name}</span>
               {isLoadingSgSubs && (
                 <svg className="animate-spin h-3 w-3 text-zinc-400" viewBox="0 0 24 24" fill="none">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -1087,10 +1089,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             }
           }}
         >
-          <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 ${isSelected ? "bg-zinc-100 dark:bg-zinc-800" : "bg-white dark:bg-zinc-900"}`}>
-            <div className="flex items-center gap-2">
+          <td className={`${stickyTaxonClasses} ${cellPad} whitespace-nowrap w-0 ${isSelected ? "bg-zinc-100 dark:bg-zinc-800" : "bg-white dark:bg-zinc-900"}`}>
+            <div className="flex items-center gap-2 min-w-0">
               <TaxaIcon taxonId={taxon.id} size={22} className="flex-shrink-0" style={{ color: taxon.color }} />
-              <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{taxon.name}</span>
+              <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100 truncate">{taxon.name}</span>
               {isLoadingSubs && (
                 <svg className="animate-spin h-3 w-3 text-zinc-400" viewBox="0 0 24 24" fill="none">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -1174,7 +1176,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   const renderHead = () => (
     <thead>
       <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
-        <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`}>
+        <th className={`${stickyTaxonClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`}>
           <div className="flex items-center gap-1.5">
             Taxon
             <button
@@ -1346,7 +1348,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                       <tr className="bg-zinc-100 dark:bg-zinc-800/80">
                         <td
                           colSpan={visibleColCount}
-                          className={`${stickyClasses} bg-zinc-100 dark:bg-zinc-800/80 ${cellPad}`}
+                          className={`${stickyTaxonClasses} bg-zinc-100 dark:bg-zinc-800/80 ${cellPad}`}
                         >
                           <span className="text-xs font-bold text-zinc-600 dark:text-zinc-300 uppercase tracking-wider">
                             {section.title}
@@ -1383,8 +1385,8 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                             }
                           }}
                         >
-                          <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 bg-white dark:bg-zinc-900`}>
-                            <span className="text-sm md:text-base text-zinc-900 dark:text-zinc-100 pl-4">
+                          <td className={`${stickyTaxonClasses} ${cellPad} whitespace-nowrap w-0 bg-white dark:bg-zinc-900`}>
+                            <span className="text-sm md:text-base text-zinc-900 dark:text-zinc-100 pl-4 block truncate">
                               {row.name}
                             </span>
                           </td>
@@ -1447,7 +1449,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                       ))}
                       {/* Subtotal row */}
                       <tr className="border-t border-zinc-200 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-800/30">
-                        <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 bg-zinc-50/50 dark:bg-zinc-800/30`}>
+                        <td className={`${stickyTaxonClasses} ${cellPad} whitespace-nowrap w-0 bg-zinc-50/50 dark:bg-zinc-800/30`}>
                           <span className="text-sm font-semibold text-zinc-600 dark:text-zinc-300 pl-6">Subtotal</span>
                         </td>
                         {isVisible("described") && (

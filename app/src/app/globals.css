@@ -45,6 +45,18 @@ th.sticky {
   box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.3);
 }
 
+/* Stronger shadow on mobile to emphasize pinned column edge */
+@media (max-width: 767px) {
+  td.sticky,
+  th.sticky {
+    box-shadow: 3px 0 6px -2px rgba(0, 0, 0, 0.12);
+  }
+  .dark td.sticky,
+  .dark th.sticky {
+    box-shadow: 3px 0 6px -2px rgba(0, 0, 0, 0.4);
+  }
+}
+
 /* Shape marker icons: strip default leaflet-div-icon styles */
 .shape-marker-icon {
   background: none !important;
