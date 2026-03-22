@@ -1209,7 +1209,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                   <FaInfoCircle size={12} />
                 </a>
                 <span className="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible z-50 shadow-lg normal-case">
-                  Estimates from IUCN 2025-2 Table 1
+                  Estimates from IUCN Red List Table 1a (2025-2)
                 </span>
               </span>
             </span>
