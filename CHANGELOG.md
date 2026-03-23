@@ -2,6 +2,18 @@
 
 All notable changes to the IUCN Red List Assessments Dashboard.
 
+## [v2.3.0] — 2026-03-18 – 2026-03-23 — Taxonomy Tree & Suggested Assessors
+
+- Redesigned taxonomy system: unified tree with recursive drill-down, icons, and precomputed summaries
+- Added Suggested Assessors tab with ranked table filtered by selected taxa
+- Redesigned species detail panel layout and combined assessed/outdated/unassessed columns
+- Persisted view mode, species selection, and detail tab in URL params
+- Added legal attribution notices and switched PostHog to cookieless tracking
+- Scaled down desktop layout on mobile with single-column charts
+- Fixed CITES errors for synonym species and null quotas, detail row width issues
+- Excluded domesticated species from new assessments
+- Added column dividers, footer with attribution, and Vercel Speed Insights
+
 ## [v2.2.0] — 2026-03-15 – 2026-03-18 — CI, Monitoring & Data Updates
 
 - Added CI workflows: TypeScript type checking and test runner
