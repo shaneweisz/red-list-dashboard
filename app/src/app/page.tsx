@@ -123,7 +123,7 @@ export default function RedListPage() {
           >
             PhD research project
           </a>
-          {" "}at the University of Cambridge. The dashboard is based on publicly available{" "}
+          {" "}at the University of Cambridge. The dashboard uses publicly available{" "}
           <a
             href="https://www.iucnredlist.org"
             target="_blank"
