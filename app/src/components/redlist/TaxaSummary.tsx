@@ -89,7 +89,7 @@ const getOutdatedBarColor = (percent: number) =>
   percent < 10 ? "#22c55e" : percent < 50 ? "#eab308" : "#ef4444";
 
 // Sticky cell classes for the pinned taxon column
-const stickyClasses = "sticky left-0 z-10";
+const stickyClasses = "sticky left-0 z-10 border-r border-zinc-200 dark:border-zinc-700";
 // Compact cell classes for tighter table spacing
 const cellPad = "px-4 md:px-5 py-2 md:py-2.5";
 const colDivider = "border-l border-zinc-200 dark:border-zinc-700";
