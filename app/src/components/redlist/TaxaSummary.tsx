@@ -102,7 +102,7 @@ const centeredThClasses = `${cellPad} text-center text-xs font-medium text-zinc-
 type ColumnId = "described" | "assessed" | "outdated" | "breakdown" | "gbifUnassessed" | "totalGbifObs" | "meanGbifObs" | "medianGbifObs" | "gbifDistribution";
 
 const COLUMN_LABELS: Record<ColumnId, string> = {
-  described: "Est. # Described",
+  described: "# Described",
   assessed: "# Assessed",
   outdated: "# Outdated (10+Y)",
   breakdown: "Risk Category Breakdown",
@@ -240,7 +240,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     };
   }, [taxaExpanded]);
 
-  // Auto-scroll to show Assessed column on mobile (skip past Est. Described)
+  // Auto-scroll to show Assessed column on mobile (skip past # Described)
   const autoScroll = useCallback((el: HTMLDivElement) => {
     if (window.innerWidth < 768) {
       const firstDataTh = el.querySelector('thead th:nth-child(2)') as HTMLElement;
@@ -486,7 +486,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           <thead>
             <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
               <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`}>Taxon</th>
-              {isVisible("described") && <th className={numericThClasses}>Est. # Described</th>}
+              {isVisible("described") && <th className={numericThClasses}># Described</th>}
               {isVisible("assessed") && <th className={centeredThClasses}># Assessed</th>}
               {isVisible("outdated") && <th className={centeredThClasses}># Outdated (10+Y)</th>}
               {isVisible("gbifUnassessed") && <th className={centeredThClasses}># Unassessed, 1+ GBIF Obs</th>}
@@ -537,7 +537,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   const totalMeanGbifObs = totalGbifSpecies > 0 ? Math.round(totalGbifObs / totalGbifSpecies) : 0;
 
 
-  // Column order: Taxon (sticky) | Est. Described | Assessed | Outdated | Category Breakdown
+  // Column order: Taxon (sticky) | # Described | Assessed | Outdated | Category Breakdown
 
   // Render a percentage bar (optionally with a count label above)
   const renderBar = (percent: number, barColor: string, isAll: boolean, count?: number, fontWeight?: string) => {
@@ -1197,7 +1197,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         {isVisible("described") && (
           <th className={`${numericThClasses}`}>
             <span className="inline-flex items-center gap-1">
-              Est. # Described
+              # Described
               <span className="relative group">
                 <a
                   href={IUCN_SOURCE_URL}
@@ -1209,7 +1209,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                   <FaInfoCircle size={12} />
                 </a>
                 <span className="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible z-50 shadow-lg normal-case">
-                  Source: IUCN Red List Table 1a (2025-2)
+                  Estimates from IUCN Red List Table 1a (2025-2)
                 </span>
               </span>
             </span>
