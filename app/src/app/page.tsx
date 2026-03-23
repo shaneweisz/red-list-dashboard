@@ -141,7 +141,7 @@ export default function RedListPage() {
           >
             GBIF
           </a>
-          {" "}data. However, any errors in aggregation or presentation are the author&apos;s own. Please verify against primary sources before use, and get in touch if you notice any issues.
+          {" "}data. Any errors in aggregation or presentation are the author&apos;s own. Please verify against primary sources before use, and get in touch if you notice any issues.
         </p>
       </footer>
     </div>
