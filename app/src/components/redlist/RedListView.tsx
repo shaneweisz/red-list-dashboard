@@ -1413,7 +1413,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                     onBarClick={handleObsClick}
                     barColor="#10b981"
                     yAxisWidth={42}
-                    rightMargin={85}
+                    rightMargin={70}
                   />
                 ) : null}
               </div>
@@ -1435,7 +1435,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                     onBarClick={handleYearClick}
                     barColor="#3b82f6"
                     yAxisWidth={36}
-                    rightMargin={85}
+                    rightMargin={70}
                   />
                 ) : null}
               </div>
@@ -1476,7 +1476,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs sm:text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">GBIF Obs<span className="hidden sm:inline">ervations</span> <GbifInfoTooltip /></span>
                 </div>
-                <div style={{ height: 180 }} className="flex items-center justify-center">
+                <div className="h-[140px] sm:h-[180px] flex items-center justify-center">
                   {speciesLoading && assessedSpecies.length === 0 ? (
                     <Spinner />
                   ) : (
@@ -1716,7 +1716,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   onClick={() => handleSort("year")}
                 >
                   <span className="flex items-center gap-1">
-                    Assess. Date
+                    <span className="hidden sm:inline">Assess. Date</span><span className="sm:hidden">Date</span>
                     {(sortField === "year" || sortField === null) && (
                       <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
                     )}
@@ -1728,7 +1728,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   onClick={() => handleSort("totalGbif")}
                 >
                   <span className="flex items-center justify-end gap-1">
-                    {isNewAssessments ? "GBIF Observations" : "Total GBIF"}
+                    {isNewAssessments ? <><span className="hidden sm:inline">GBIF Observations</span><span className="sm:hidden">GBIF</span></> : <><span className="hidden sm:inline">Total GBIF</span><span className="sm:hidden">GBIF</span></>}
                     <GbifInfoTooltip />
                     {(sortField === "totalGbif" || (isNewAssessments && sortField === null)) && (
                       <span className={isNewAssessments ? "text-emerald-500" : "text-red-500"}>{sortDirection === "desc" ? "↓" : "↑"}</span>

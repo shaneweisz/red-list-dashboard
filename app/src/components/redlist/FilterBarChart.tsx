@@ -52,20 +52,29 @@ export default function FilterBarChart({
   yAxisTickMaxLength,
 }: FilterBarChartProps) {
   // Use smaller margins on narrow screens
-  const [isSmall, setIsSmall] = useState(false);
+  const [screenSize, setScreenSize] = useState<"xs" | "sm" | "md">("md");
   useEffect(() => {
-    const mq = window.matchMedia("(max-width: 640px)");
-    setIsSmall(mq.matches);
-    const handler = (e: MediaQueryListEvent) => setIsSmall(e.matches);
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
+    const mqSm = window.matchMedia("(max-width: 640px)");
+    const mqXs = window.matchMedia("(max-width: 480px)");
+    const update = () => {
+      setScreenSize(mqXs.matches ? "xs" : mqSm.matches ? "sm" : "md");
+    };
+    update();
+    mqSm.addEventListener("change", update);
+    mqXs.addEventListener("change", update);
+    return () => {
+      mqSm.removeEventListener("change", update);
+      mqXs.removeEventListener("change", update);
+    };
   }, []);
 
-  const effectiveRightMargin = isSmall ? Math.min(rightMargin, 55) : rightMargin;
+  const isSmall = screenSize !== "md";
+  const isXs = screenSize === "xs";
+  const effectiveRightMargin = isXs ? Math.min(rightMargin, 40) : isSmall ? Math.min(rightMargin, 55) : rightMargin;
   const effectiveLeftMargin = isSmall ? 0 : leftMargin;
-  const effectiveYAxisWidth = isSmall ? Math.min(yAxisWidth, 28) : yAxisWidth;
-  const labelFontSize = isSmall ? 9 : 11;
-  const yAxisFontSize = isSmall ? 9 : 11;
+  const effectiveYAxisWidth = isXs ? Math.min(yAxisWidth, 22) : isSmall ? Math.min(yAxisWidth, 28) : yAxisWidth;
+  const labelFontSize = isXs ? 8 : isSmall ? 9 : 11;
+  const yAxisFontSize = isXs ? 8 : isSmall ? 9 : 11;
 
   return (
     <ResponsiveContainer width="100%" height="100%">
