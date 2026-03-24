@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import {
   BarChart,
   Bar,
@@ -50,22 +51,38 @@ export default function FilterBarChart({
   highlightedItems,
   yAxisTickMaxLength,
 }: FilterBarChartProps) {
+  // Use smaller margins on narrow screens
+  const [isSmall, setIsSmall] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 640px)");
+    setIsSmall(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsSmall(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+
+  const effectiveRightMargin = isSmall ? Math.min(rightMargin, 55) : rightMargin;
+  const effectiveLeftMargin = isSmall ? 0 : leftMargin;
+  const effectiveYAxisWidth = isSmall ? Math.min(yAxisWidth, 28) : yAxisWidth;
+  const labelFontSize = isSmall ? 9 : 11;
+  const yAxisFontSize = isSmall ? 9 : 11;
+
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart
         data={data}
         layout="vertical"
-        margin={{ top: 5, right: rightMargin, left: leftMargin, bottom: 5 }}
-        barCategoryGap={4}
+        margin={{ top: 5, right: effectiveRightMargin, left: effectiveLeftMargin, bottom: 5 }}
+        barCategoryGap={isSmall ? 2 : 4}
       >
         <XAxis type="number" hide domain={xAxisMax ? [0, xAxisMax] : undefined} />
         <YAxis
           type="category"
           dataKey={dataKey}
-          tick={{ fontSize: 11, fill: "#a1a1aa" }}
+          tick={{ fontSize: yAxisFontSize, fill: "#a1a1aa" }}
           tickLine={false}
           axisLine={false}
-          width={yAxisWidth}
+          width={effectiveYAxisWidth}
           interval={0}
           tickFormatter={yAxisTickMaxLength ? (value: string) =>
             value.length > yAxisTickMaxLength ? value.slice(0, yAxisTickMaxLength) + "…" : value
@@ -105,7 +122,7 @@ export default function FilterBarChart({
           <LabelList
             dataKey="label"
             position="right"
-            style={{ fontSize: 11, fill: "#a1a1aa" }}
+            style={{ fontSize: labelFontSize, fill: "#a1a1aa" }}
           />
         </Bar>
       </BarChart>

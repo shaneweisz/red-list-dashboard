@@ -1365,13 +1365,13 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
 
           {/* Charts row 1: bar charts (new-assessments mode only shows GBIF Observations) */}
           {!isNewAssessments && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-4">
             {/* Risk Category */}
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-2 sm:p-3 flex flex-col">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Risk Category</span>
+                <span className="text-xs sm:text-sm font-semibold text-zinc-900 dark:text-zinc-100">Risk Category</span>
                               </div>
-              <div className="flex-1 min-h-[150px] flex items-center justify-center">
+              <div className="flex-1 min-h-[120px] sm:min-h-[150px] flex items-center justify-center">
                 {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
                 ) : categoryDataWithPercent.length > 0 ? (
@@ -1398,11 +1398,11 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
             </div>
 
             {/* GBIF Observations */}
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-2 sm:p-3 flex flex-col">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">GBIF Observations <GbifInfoTooltip /></span>
+                <span className="text-xs sm:text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">GBIF Obs <span className="hidden sm:inline">ervations</span> <GbifInfoTooltip /></span>
                               </div>
-              <div className="flex-1 min-h-[150px] flex items-center justify-center">
+              <div className="flex-1 min-h-[120px] sm:min-h-[150px] flex items-center justify-center">
                 {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
                 ) : gbifObsData.length > 0 ? (
@@ -1420,11 +1420,11 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
             </div>
 
             {/* Years Since Assessed */}
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-2 sm:p-3 flex flex-col col-span-2 md:col-span-1">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Years Since Assessed</span>
+                <span className="text-xs sm:text-sm font-semibold text-zinc-900 dark:text-zinc-100">Years Since Assessed</span>
                               </div>
-              <div className="flex-1 min-h-[150px] flex items-center justify-center">
+              <div className="flex-1 min-h-[120px] sm:min-h-[150px] flex items-center justify-center">
                 {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
                 ) : assessmentYearData.length > 0 ? (
@@ -1444,13 +1444,13 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
           )}
 
           {/* Charts row 2: Country map + (Reviewers or GBIF Observations for new-assessments) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
             {/* Country Map */}
             <div>
               {speciesLoading && assessedSpecies.length === 0 ? (
-                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 min-h-[320px] flex flex-col">
+                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-2 sm:p-3 min-h-[200px] sm:min-h-[320px] flex flex-col">
                   <div className="flex items-center justify-between mb-1">
-                    <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                    <h2 className="text-xs sm:text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                       Country
                     </h2>
                   </div>
@@ -1472,9 +1472,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
 
             {/* Reviewers (reassessments) or GBIF Observations chart (new-assessments) */}
             {isNewAssessments ? (
-              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-2 sm:p-3 flex flex-col">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">GBIF Observations <GbifInfoTooltip /></span>
+                  <span className="text-xs sm:text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">GBIF Obs<span className="hidden sm:inline">ervations</span> <GbifInfoTooltip /></span>
                 </div>
                 <div style={{ height: 180 }} className="flex items-center justify-center">
                   {speciesLoading && assessedSpecies.length === 0 ? (
@@ -1737,7 +1737,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 </th>
                 {!isNewAssessments && (
                 <th
-                  className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
+                  className="hidden sm:table-cell px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
                   onClick={() => handleSort("newGbif")}
                 >
                   <span className="flex items-center justify-end gap-1">
@@ -1756,7 +1756,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 )}
                 {!isNewAssessments && (
                 <th
-                  className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
+                  className="hidden sm:table-cell px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
                   onClick={() => handleSort("pctNewGbif")}
                 >
                   <span className="flex items-center justify-end gap-1">
@@ -1950,9 +1950,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                         </HoverTooltip>
                       ) : "—"}
                     </td>
-                    {/* New GBIF */}
+                    {/* New GBIF (hidden on mobile) */}
                     {!isNewAssessments && (
-                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-right text-zinc-600 dark:text-zinc-400 text-xs sm:text-sm tabular-nums whitespace-nowrap">
+                    <td className="hidden sm:table-cell px-2 sm:px-4 py-2 sm:py-3 text-right text-zinc-600 dark:text-zinc-400 text-xs sm:text-sm tabular-nums whitespace-nowrap">
                       {isNE(s) ? (
                         <span className="text-zinc-400">N/A</span>
                       ) : (() => {
@@ -1976,9 +1976,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                       })()}
                     </td>
                     )}
-                    {/* % New GBIF */}
+                    {/* % New GBIF (hidden on mobile) */}
                     {!isNewAssessments && (
-                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-right text-zinc-600 dark:text-zinc-400 text-xs sm:text-sm tabular-nums whitespace-nowrap">
+                    <td className="hidden sm:table-cell px-2 sm:px-4 py-2 sm:py-3 text-right text-zinc-600 dark:text-zinc-400 text-xs sm:text-sm tabular-nums whitespace-nowrap">
                       {isNE(s) ? <span className="text-zinc-400">N/A</span> : (() => {
                         const total = details?.gbifOccurrences ?? s.gbif_occurrence_count;
                         const newObs = details?.gbifOccurrencesSinceAssessment ?? s.gbif_observations_after_assessment_year;
