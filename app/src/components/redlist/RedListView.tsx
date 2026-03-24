@@ -1689,12 +1689,12 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
           <table className="w-full text-sm">
             <thead className="bg-zinc-50 dark:bg-zinc-800">
               <tr>
-                <th className="sticky left-0 z-10 bg-zinc-50 dark:bg-zinc-800 px-2 py-3 text-center text-xs font-medium text-zinc-500 uppercase tracking-wider w-10">
-                  <svg className="w-4 h-4 mx-auto text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <th className="sticky left-0 z-10 bg-zinc-50 dark:bg-zinc-800 px-1 sm:px-2 py-2 sm:py-3 text-center text-xs font-medium text-zinc-500 uppercase tracking-wider w-8 sm:w-10">
+                  <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 mx-auto text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                   </svg>
                 </th>
-                <th className="sticky left-[40px] z-10 bg-zinc-50 dark:bg-zinc-800 px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                <th className="sticky left-[32px] sm:left-[40px] z-10 bg-zinc-50 dark:bg-zinc-800 px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
                   Species
                 </th>
                 {!isNewAssessments && (
@@ -1792,7 +1792,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                     onDrop={(e) => handleDrop(e, speciesKey)}
                     onDragEnd={handleDragEnd}
                   >
-                    <td className={`sticky left-0 z-10 px-2 py-2 text-center ${selectedSpeciesKey === speciesKey ? "bg-zinc-100 dark:bg-zinc-800" : "bg-white dark:bg-zinc-900"}`}>
+                    <td className={`sticky left-0 z-10 px-1 sm:px-2 py-1.5 sm:py-2 text-center w-8 sm:w-10 ${selectedSpeciesKey === speciesKey ? "bg-zinc-100 dark:bg-zinc-800" : "bg-white dark:bg-zinc-900"}`}>
                       <div className="flex items-center justify-center gap-1">
                         {isPinned && showOnlyStarred && (
                           <span className="cursor-grab text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300" title="Drag to reorder">
@@ -1815,7 +1815,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                         </button>
                       </div>
                     </td>
-                    <td className={`sticky left-[40px] z-10 px-2 md:px-4 py-2 ${selectedSpeciesKey === speciesKey ? "bg-zinc-100 dark:bg-zinc-800" : "bg-white dark:bg-zinc-900"}`}>
+                    <td className={`sticky left-[32px] sm:left-[40px] z-10 px-2 sm:px-4 py-1.5 sm:py-2 ${selectedSpeciesKey === speciesKey ? "bg-zinc-100 dark:bg-zinc-800" : "bg-white dark:bg-zinc-900"}`}>
                       <div className="flex items-center gap-2">
                         {/* iNat profile pic */}
                         {details?.inatDefaultImage === undefined ? (
@@ -1865,7 +1865,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                       </div>
                     </td>
                     {!isNewAssessments && (
-                    <td className="px-2 md:px-4 py-3 whitespace-nowrap">
+                    <td className="px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap">
                       {details?.criteria && !["DD", "LC", "NT", "EX", "EW", "NE"].includes(s.category) ? (
                         <HoverTooltip text={`${details.criteria}${explainCriteria(details.criteria)}`}>
                           <span
@@ -1893,7 +1893,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                     </td>
                     )}
                     {!isNewAssessments && (
-                    <td className="px-2 md:px-4 py-3 text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
+                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-zinc-600 dark:text-zinc-400 whitespace-nowrap text-xs sm:text-sm">
                       {isNE(s) ? <span className="text-zinc-400">N/A</span> : (
                         <>
                           <HoverTooltip
@@ -1919,7 +1919,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                     </td>
                     )}
                     {/* Total GBIF */}
-                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
+                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-right text-zinc-600 dark:text-zinc-400 text-xs sm:text-sm tabular-nums whitespace-nowrap">
                       {details?.gbifOccurrences != null && details?.gbifUrl ? (
                         <a
                           href={`https://www.gbif.org/occurrence/search?taxon_key=${details.gbifUrl.split('/').pop()}&${GBIF_FILTERS}`}
@@ -1952,7 +1952,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                     </td>
                     {/* New GBIF */}
                     {!isNewAssessments && (
-                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
+                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-right text-zinc-600 dark:text-zinc-400 text-xs sm:text-sm tabular-nums whitespace-nowrap">
                       {isNE(s) ? (
                         <span className="text-zinc-400">N/A</span>
                       ) : (() => {
@@ -1978,7 +1978,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                     )}
                     {/* % New GBIF */}
                     {!isNewAssessments && (
-                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
+                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-right text-zinc-600 dark:text-zinc-400 text-xs sm:text-sm tabular-nums whitespace-nowrap">
                       {isNE(s) ? <span className="text-zinc-400">N/A</span> : (() => {
                         const total = details?.gbifOccurrences ?? s.gbif_occurrence_count;
                         const newObs = details?.gbifOccurrencesSinceAssessment ?? s.gbif_observations_after_assessment_year;
@@ -1998,14 +1998,14 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                             {!stackedDetailView && (
                               <>
                                 <button
-                                  className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "gbif" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"} ${!gbifSpeciesKey ? "opacity-50 cursor-default" : ""}`}
+                                  className={`px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium transition-colors ${activeDetailTab === "gbif" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"} ${!gbifSpeciesKey ? "opacity-50 cursor-default" : ""}`}
                                   onClick={() => gbifSpeciesKey && setActiveDetailTab("gbif")}
                                 >
                                   GBIF + iNaturalist{!gbifSpeciesKey && <span className="ml-1 text-xs text-zinc-400">(no match)</span>}
                                 </button>
                                 {(assessmentYear || s.category === "NE") && (
                                   <button
-                                    className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "literature" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                    className={`px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium transition-colors ${activeDetailTab === "literature" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                     onClick={() => setActiveDetailTab("literature")}
                                   >
                                     OpenAlex Papers
@@ -2013,27 +2013,27 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                 )}
                                 {s.category !== "NE" && (
                                   <button
-                                    className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "redlist" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                    className={`px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium transition-colors ${activeDetailTab === "redlist" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                     onClick={() => setActiveDetailTab("redlist")}
                                   >
                                     IUCN Red List Assessments
                                   </button>
                                 )}
                                 <button
-                                  className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "wikipedia" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                  className={`px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium transition-colors ${activeDetailTab === "wikipedia" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                   onClick={() => setActiveDetailTab("wikipedia")}
                                 >
                                   Wikipedia
                                 </button>
                                 <button
-                                  className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "cites" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                  className={`px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium transition-colors ${activeDetailTab === "cites" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                   onClick={() => setActiveDetailTab("cites")}
                                 >
                                   CITES
                                 </button>
                                 {s.category === "NE" && (
                                   <button
-                                    className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "assessors" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                    className={`px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium transition-colors ${activeDetailTab === "assessors" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                     onClick={() => setActiveDetailTab("assessors")}
                                   >
                                     Suggested Assessors
@@ -2042,7 +2042,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                               </>
                             )}
                             {stackedDetailView && (
-                              <span className="px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">All Sections</span>
+                              <span className="px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-zinc-700 dark:text-zinc-300">All Sections</span>
                             )}
                             <button
                               className="ml-auto px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 flex items-center gap-1"

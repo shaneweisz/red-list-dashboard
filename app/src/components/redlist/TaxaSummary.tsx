@@ -91,7 +91,7 @@ const getOutdatedBarColor = (percent: number) =>
 // Sticky cell classes for the pinned taxon column
 const stickyClasses = "sticky left-0 z-10";
 // Compact cell classes for tighter table spacing
-const cellPad = "px-4 md:px-5 py-2 md:py-2.5";
+const cellPad = "px-2 sm:px-4 md:px-5 py-1.5 sm:py-2 md:py-2.5";
 const colDivider = "border-l border-zinc-200 dark:border-zinc-700";
 const numericTdNoDividerClasses = `${cellPad} text-right whitespace-nowrap w-0`;
 const numericThNoDividerClasses = `${cellPad} text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`;
@@ -548,19 +548,19 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     const fillColor = isAll ? "rgba(255,255,255,0.25)" : barColor;
     const fw = fontWeight || "font-medium";
     return (
-      <div className="flex items-center gap-3 min-w-[140px] md:min-w-[200px]">
+      <div className="flex items-center gap-1.5 sm:gap-3 min-w-[120px] sm:min-w-[140px] md:min-w-[200px]">
         {count != null && (
-          <span className={`text-sm md:text-base ${fw} tabular-nums text-zinc-700 dark:text-zinc-300 w-[60px] text-right flex-shrink-0`}>
+          <span className={`text-xs sm:text-sm md:text-base ${fw} tabular-nums text-zinc-700 dark:text-zinc-300 w-[48px] sm:w-[60px] text-right flex-shrink-0`}>
             {count.toLocaleString()}
           </span>
         )}
-        <div className="flex-1 h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
+        <div className="flex-1 h-2 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
           <div
             className="h-full rounded-full transition-all"
             style={{ width: `${clampedPercent}%`, backgroundColor: fillColor }}
           />
         </div>
-        <span className="text-xs md:text-sm tabular-nums text-zinc-500 dark:text-zinc-400 w-[52px] text-right flex-shrink-0">
+        <span className="text-[10px] sm:text-xs md:text-sm tabular-nums text-zinc-500 dark:text-zinc-400 w-[40px] sm:w-[52px] text-right flex-shrink-0">
           {percent.toFixed(1)}%
         </span>
       </div>
@@ -583,7 +583,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       }));
 
     return (
-      <div className="min-w-[80px] md:min-w-[100px] relative">
+      <div className="min-w-[60px] sm:min-w-[80px] md:min-w-[100px] relative">
         {/* Visible bar (clipped for rounded corners) */}
         <div className="flex h-3 rounded-full overflow-hidden bg-zinc-200 dark:bg-zinc-700">
           {segments.map((seg) => (
@@ -640,7 +640,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     if (max === 0) return <span className="text-sm text-zinc-400">—</span>;
 
     return (
-      <div className="min-w-[100px] md:min-w-[120px] relative">
+      <div className="min-w-[80px] sm:min-w-[100px] md:min-w-[120px] relative">
         <div className="flex items-end h-5">
           {entries.map(({ label, count }, i) => {
             const heightPct = (count / max) * 100;
@@ -715,15 +715,15 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         className={`transition-colors ${rowBg} ${hoverClass}`}
       >
         <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 ${stickyBg}`}>
-          <div className="flex items-center gap-2">
-            <TaxaIcon taxonId={id} size={22} className="flex-shrink-0" style={{ color }} />
-            <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{name}</span>
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <TaxaIcon taxonId={id} size={18} className="flex-shrink-0" style={{ color }} />
+            <span className="font-medium text-xs sm:text-sm md:text-base text-zinc-900 dark:text-zinc-100">{name}</span>
             {allDisabled && <DisabledAllTooltip />}
           </div>
         </td>
         {isVisible("described") && (
           <td className={numericTdNoDividerClasses}>
-            <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+            <span className="text-xs sm:text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
               {estimatedDescribed.toLocaleString()}
             </span>
           </td>
@@ -758,7 +758,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         )}
         {isVisible("totalGbifObs") && (
           <td className={numericTdClasses}>
-            <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+            <span className="text-xs sm:text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
               {gbifObs?.total != null ? gbifObs.total.toLocaleString() : "—"}
             </span>
           </td>
@@ -770,14 +770,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         )}
         {isVisible("meanGbifObs") && (
           <td className={numericTdClasses}>
-            <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+            <span className="text-xs sm:text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
               {gbifObs?.mean != null ? gbifObs.mean.toLocaleString() : "—"}
             </span>
           </td>
         )}
         {isVisible("medianGbifObs") && (
           <td className={numericTdClasses}>
-            <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+            <span className="text-xs sm:text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
               {gbifObs?.median != null ? gbifObs.median.toLocaleString() : "—"}
             </span>
           </td>
@@ -880,7 +880,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         </td>
         {isVisible("described") && (
           <td className={numericTdNoDividerClasses}>
-            <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums inline-flex items-center gap-1">
+            <span className="text-xs sm:text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums inline-flex items-center gap-1">
               {sg.estimatedDescribed.toLocaleString()}
               {(() => {
                 const sgNode = findNode(sg.id);
@@ -1104,7 +1104,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           </td>
           {isVisible("described") && (
             <td className={numericTdNoDividerClasses}>
-              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+              <span className="text-xs sm:text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
                 {taxon.estimatedDescribed.toLocaleString()}
               </span>
             </td>
@@ -1132,7 +1132,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           )}
           {isVisible("totalGbifObs") && (
             <td className={numericTdClasses}>
-              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+              <span className="text-xs sm:text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
                 {taxon.totalGbifObservations != null ? taxon.totalGbifObservations.toLocaleString() : "—"}
               </span>
             </td>
@@ -1146,14 +1146,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           )}
           {isVisible("meanGbifObs") && (
             <td className={numericTdClasses}>
-              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+              <span className="text-xs sm:text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
                 {taxon.meanGbifObsPerSpecies != null ? taxon.meanGbifObsPerSpecies.toLocaleString() : "—"}
               </span>
             </td>
           )}
           {isVisible("medianGbifObs") && (
             <td className={numericTdClasses}>
-              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+              <span className="text-xs sm:text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
                 {taxon.medianGbifObsPerSpecies != null ? taxon.medianGbifObsPerSpecies.toLocaleString() : "—"}
               </span>
             </td>
@@ -1393,7 +1393,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                           </td>
                           {isVisible("described") && (
                             <td className={numericTdNoDividerClasses}>
-                              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+                              <span className="text-xs sm:text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
                                 {row.estimatedDescribed.toLocaleString()}
                               </span>
                             </td>
@@ -1419,7 +1419,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                           )}
                           {isVisible("totalGbifObs") && (
                             <td className={numericTdClasses}>
-                              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+                              <span className="text-xs sm:text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
                                 {row.totalGbifObservations != null ? row.totalGbifObservations.toLocaleString() : "—"}
                               </span>
                             </td>
@@ -1429,14 +1429,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                           )}
                           {isVisible("meanGbifObs") && (
                             <td className={numericTdClasses}>
-                              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+                              <span className="text-xs sm:text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
                                 {row.meanGbifObsPerSpecies != null ? Math.round(row.meanGbifObsPerSpecies).toLocaleString() : "—"}
                               </span>
                             </td>
                           )}
                           {isVisible("medianGbifObs") && (
                             <td className={numericTdClasses}>
-                              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+                              <span className="text-xs sm:text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
                                 {row.medianGbifObsPerSpecies != null ? row.medianGbifObsPerSpecies.toLocaleString() : "—"}
                               </span>
                             </td>

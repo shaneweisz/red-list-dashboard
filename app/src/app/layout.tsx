@@ -18,7 +18,8 @@ const geistMono = Geist_Mono({
 });
 
 export const viewport: Viewport = {
-  width: 767,
+  width: "device-width",
+  initialScale: 1,
 };
 
 export const metadata: Metadata = {

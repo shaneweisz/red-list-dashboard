@@ -39,24 +39,24 @@ export default function RedListPage() {
   const [sharedSubgroups, setSharedSubgroups] = useState<Set<string>>(new Set());
 
   return (
-    <div className="min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950 px-6 py-4 md:px-16 md:py-8">
+    <div className="min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950 px-3 py-3 sm:px-6 sm:py-4 md:px-16 md:py-8">
       <main className="max-w-6xl mx-auto flex-1">
         {/* Header */}
-        <div className="mb-4 md:mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div className="mb-3 md:mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-3">
           <div>
-            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-zinc-900 dark:text-zinc-100 mb-1 md:mb-2">
+            <h1 className="text-lg sm:text-2xl md:text-3xl font-bold text-zinc-900 dark:text-zinc-100 mb-0.5 md:mb-2">
               IUCN Red List Assessments Dashboard
             </h1>
-            <p className="text-sm md:text-base text-zinc-600 dark:text-zinc-400">
+            <p className="text-xs sm:text-sm md:text-base text-zinc-600 dark:text-zinc-400">
               Click taxa rows to filter, use charts and search to explore species. Cmd/Ctrl+click to multiselect.
             </p>
           </div>
           <div className="flex items-center gap-2">
             {/* View mode toggle */}
-            <div className="flex rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden text-sm">
+            <div className="flex rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden text-xs sm:text-sm">
               <button
                 onClick={() => setViewMode("reassessments")}
-                className={`px-3 py-1.5 font-medium transition-colors ${
+                className={`px-2 sm:px-3 py-1 sm:py-1.5 font-medium transition-colors ${
                   viewMode === "reassessments"
                     ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
                     : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
@@ -70,7 +70,7 @@ export default function RedListPage() {
                   if (sharedTaxa.has("all")) setSharedTaxa(new Set());
                   setViewMode("new-assessments");
                 }}
-                className={`px-3 py-1.5 font-medium transition-colors ${
+                className={`px-2 sm:px-3 py-1 sm:py-1.5 font-medium transition-colors ${
                   viewMode === "new-assessments"
                     ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
                     : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
