@@ -114,7 +114,7 @@ export default function RedListPage() {
           .
         </p>
         <p className="text-center text-xs text-zinc-400 dark:text-zinc-500 mt-3">
-          This work is part of a{" "}
+          This dashboard is part of a{" "}
           <a
             href="https://anil.recoil.org/ideas/living-iucn-redlist"
             target="_blank"
@@ -123,7 +123,7 @@ export default function RedListPage() {
           >
             PhD research project
           </a>
-          {" "}at the University of Cambridge. The dashboard is based on publicly available{" "}
+          {" "}at the University of Cambridge. The data is sourced from publicly available{" "}
           <a
             href="https://www.iucnredlist.org"
             target="_blank"
@@ -141,7 +141,7 @@ export default function RedListPage() {
           >
             GBIF
           </a>
-          {" "}data. However, any errors in aggregation or presentation are the author&apos;s own. Please verify against primary sources before use, and{" "}do get in touch if you notice any issues.
+          {" "}data. Any errors in aggregation or presentation are my own. Please verify against the primary sources before use, and do get in touch if you notice any issues.
         </p>
       </footer>
     </div>
