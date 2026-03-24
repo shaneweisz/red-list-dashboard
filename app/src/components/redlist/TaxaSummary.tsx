@@ -95,6 +95,9 @@ const cellPad = "px-2 sm:px-4 md:px-5 py-1.5 sm:py-2 md:py-2.5";
 const colDivider = "border-l border-zinc-200 dark:border-zinc-700";
 const numericTdNoDividerClasses = `${cellPad} text-right whitespace-nowrap w-0`;
 const numericThNoDividerClasses = `${cellPad} text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`;
+// Described column is hidden on small screens to fit the table on mobile
+const describedTdClasses = `${numericTdNoDividerClasses} hidden sm:table-cell`;
+const describedThClasses = `${numericThNoDividerClasses} hidden sm:table-cell`;
 const numericTdClasses = `${numericTdNoDividerClasses} ${colDivider}`;
 const numericThClasses = `${numericThNoDividerClasses} ${colDivider}`;
 const flexTdClasses = `${cellPad} ${colDivider} whitespace-nowrap w-0`;
@@ -406,7 +409,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           </div>
         </td>
         {isVisible("described") && (
-          <td className={numericTdNoDividerClasses}>
+          <td className={describedTdClasses}>
             <div className="h-4 w-16 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
           </td>
         )}
@@ -489,7 +492,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           <thead>
             <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
               <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`}>Taxon</th>
-              {isVisible("described") && <th className={numericThNoDividerClasses}># Described</th>}
+              {isVisible("described") && <th className={describedThClasses}># Described</th>}
               {isVisible("assessed") && <th className={centeredThClasses}># Assessed</th>}
               {isVisible("outdated") && <th className={centeredThClasses}># Outdated (10+Y)</th>}
               {isVisible("gbifUnassessed") && <th className={centeredThClasses}># Unassessed, 1+ GBIF Obs</th>}
@@ -548,19 +551,19 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     const fillColor = isAll ? "rgba(255,255,255,0.25)" : barColor;
     const fw = fontWeight || "font-medium";
     return (
-      <div className="flex items-center gap-1.5 sm:gap-3 min-w-[120px] sm:min-w-[140px] md:min-w-[200px]">
+      <div className="flex items-center gap-1 sm:gap-3 min-w-[100px] sm:min-w-[140px] md:min-w-[200px]">
         {count != null && (
-          <span className={`text-xs sm:text-sm md:text-base ${fw} tabular-nums text-zinc-700 dark:text-zinc-300 w-[48px] sm:w-[60px] text-right flex-shrink-0`}>
+          <span className={`text-[11px] sm:text-sm md:text-base ${fw} tabular-nums text-zinc-700 dark:text-zinc-300 w-[42px] sm:w-[60px] text-right flex-shrink-0`}>
             {count.toLocaleString()}
           </span>
         )}
-        <div className="flex-1 h-2 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
+        <div className="flex-1 h-1.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
           <div
             className="h-full rounded-full transition-all"
             style={{ width: `${clampedPercent}%`, backgroundColor: fillColor }}
           />
         </div>
-        <span className="text-[10px] sm:text-xs md:text-sm tabular-nums text-zinc-500 dark:text-zinc-400 w-[40px] sm:w-[52px] text-right flex-shrink-0">
+        <span className="text-[10px] sm:text-xs md:text-sm tabular-nums text-zinc-500 dark:text-zinc-400 w-[36px] sm:w-[52px] text-right flex-shrink-0">
           {percent.toFixed(1)}%
         </span>
       </div>
@@ -722,7 +725,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           </div>
         </td>
         {isVisible("described") && (
-          <td className={numericTdNoDividerClasses}>
+          <td className={describedTdClasses}>
             <span className="text-xs sm:text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
               {estimatedDescribed.toLocaleString()}
             </span>
@@ -814,7 +817,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           </div>
         </td>
         {isVisible("described") && (
-          <td className={numericTdNoDividerClasses}>
+          <td className={describedTdClasses}>
             <span className="text-sm text-zinc-700 dark:text-zinc-300 tabular-nums">{sg.estimatedDescribed.toLocaleString()}</span>
           </td>
         )}
@@ -879,7 +882,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           </div>
         </td>
         {isVisible("described") && (
-          <td className={numericTdNoDividerClasses}>
+          <td className={describedTdClasses}>
             <span className="text-xs sm:text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums inline-flex items-center gap-1">
               {sg.estimatedDescribed.toLocaleString()}
               {(() => {
@@ -990,7 +993,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             </div>
           </td>
           {isVisible("described") && (
-            <td className={numericTdNoDividerClasses}>
+            <td className={describedTdClasses}>
               <span className="text-sm text-zinc-600 dark:text-zinc-400 tabular-nums inline-flex items-center gap-1">
                 {sg.estimatedDescribed.toLocaleString()}
                 {(() => {
@@ -1103,7 +1106,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             </div>
           </td>
           {isVisible("described") && (
-            <td className={numericTdNoDividerClasses}>
+            <td className={describedTdClasses}>
               <span className="text-xs sm:text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
                 {taxon.estimatedDescribed.toLocaleString()}
               </span>
@@ -1198,7 +1201,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           </div>
         </th>
         {isVisible("described") && (
-          <th className={`${numericThNoDividerClasses}`}>
+          <th className={describedThClasses}>
             <span className="inline-flex items-center gap-1">
               # Described
               <span className="relative group">
@@ -1392,7 +1395,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                             </span>
                           </td>
                           {isVisible("described") && (
-                            <td className={numericTdNoDividerClasses}>
+                            <td className={describedTdClasses}>
                               <span className="text-xs sm:text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
                                 {row.estimatedDescribed.toLocaleString()}
                               </span>
@@ -1454,7 +1457,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                           <span className="text-sm font-semibold text-zinc-600 dark:text-zinc-300 pl-6">Subtotal</span>
                         </td>
                         {isVisible("described") && (
-                          <td className={numericTdNoDividerClasses}>
+                          <td className={describedTdClasses}>
                             <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 tabular-nums">{subDescribed.toLocaleString()}</span>
                           </td>
                         )}
