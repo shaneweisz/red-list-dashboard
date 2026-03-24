@@ -135,7 +135,7 @@ export default function AssessorChart({
         )}
       </div>
 
-      <div className="flex-1 min-h-[225px] flex items-center justify-center">
+      <div className="flex-1 min-h-[160px] sm:min-h-[225px] flex items-center justify-center">
         {loading ? (
           <svg
             className="animate-spin h-5 w-5 text-zinc-400"

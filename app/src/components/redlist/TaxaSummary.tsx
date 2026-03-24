@@ -170,6 +170,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollRight, setCanScrollRight] = useState(true);
   // Tracks whether the taxa table is expanded for multi-select.
   // Set to true only when the user Cmd/Ctrl+clicks a taxon row;
   // cleared when the modifier key is released.
@@ -1306,7 +1307,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       document.body
     )}
     <div className="relative">
-      <div ref={scrollRef} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto scroll-smooth">
+      <div ref={scrollRef} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto scroll-smooth"
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+        }}>
       <table className="w-full">
         {renderHead()}
         <tbody>
@@ -1630,8 +1635,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         </tbody>
       </table>
     </div>
-    {/* Scroll hint fade on right edge (mobile only) */}
-    <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-white/80 dark:from-zinc-900/80 to-transparent rounded-r-xl md:hidden" aria-hidden="true" />
+    {/* Scroll hint fade on right edge (mobile/tablet, hidden when fully scrolled) */}
+    {canScrollRight && (
+      <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-white/80 dark:from-zinc-900/80 to-transparent rounded-r-xl lg:hidden" aria-hidden="true" />
+    )}
     </div>
     {/* Subtle expand/table controls */}
     {!loading && perTaxa.length > 0 && selectedTaxa.size === 0 && (
