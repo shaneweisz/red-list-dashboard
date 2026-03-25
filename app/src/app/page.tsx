@@ -40,7 +40,7 @@ export default function RedListPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950 px-4 sm:px-6 py-4 md:px-16 md:py-8">
-      <main className="max-w-6xl mx-auto flex-1">
+      <main className="max-w-6xl w-full min-w-0 mx-auto flex-1">
         {/* Header */}
         <div className="mb-4 md:mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
           <div>

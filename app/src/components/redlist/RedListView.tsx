@@ -1313,7 +1313,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const isNE = (s: Species) => s.category === "NE";
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 min-w-0">
       {/* Always show Taxa Summary table */}
       <TaxaSummary
         onToggleTaxon={handleToggleTaxon}
