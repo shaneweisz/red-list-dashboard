@@ -548,19 +548,19 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     const fillColor = isAll ? "rgba(255,255,255,0.25)" : barColor;
     const fw = fontWeight || "font-medium";
     return (
-      <div className="flex items-center gap-3 min-w-[140px] md:min-w-[200px]">
+      <div className="flex items-center gap-1.5 sm:gap-3 min-w-[140px] md:min-w-[200px]">
         {count != null && (
-          <span className={`text-sm md:text-base ${fw} tabular-nums text-zinc-700 dark:text-zinc-300 w-[60px] text-right flex-shrink-0`}>
+          <span className={`text-sm md:text-base ${fw} tabular-nums text-zinc-700 dark:text-zinc-300 text-right flex-shrink-0`}>
             {count.toLocaleString()}
           </span>
         )}
-        <div className="flex-1 h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
+        <div className="flex-1 min-w-[40px] h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
           <div
             className="h-full rounded-full transition-all"
             style={{ width: `${clampedPercent}%`, backgroundColor: fillColor }}
           />
         </div>
-        <span className="text-xs md:text-sm tabular-nums text-zinc-500 dark:text-zinc-400 w-[52px] text-right flex-shrink-0">
+        <span className="text-xs md:text-sm tabular-nums text-zinc-500 dark:text-zinc-400 text-right flex-shrink-0">
           {percent.toFixed(1)}%
         </span>
       </div>
