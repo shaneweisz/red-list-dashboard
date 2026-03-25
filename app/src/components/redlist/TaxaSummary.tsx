@@ -550,7 +550,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     return (
       <div className="flex items-center gap-1.5 sm:gap-3 min-w-[140px] md:min-w-[200px]">
         {count != null && (
-          <span className={`text-sm md:text-base ${fw} tabular-nums text-zinc-700 dark:text-zinc-300 text-right flex-shrink-0`}>
+          <span className={`text-sm md:text-base ${fw} tabular-nums text-zinc-700 dark:text-zinc-300 w-[48px] sm:w-[60px] text-right flex-shrink-0`}>
             {count.toLocaleString()}
           </span>
         )}
@@ -560,7 +560,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             style={{ width: `${clampedPercent}%`, backgroundColor: fillColor }}
           />
         </div>
-        <span className="text-xs md:text-sm tabular-nums text-zinc-500 dark:text-zinc-400 text-right flex-shrink-0">
+        <span className="text-xs md:text-sm tabular-nums text-zinc-500 dark:text-zinc-400 w-[44px] sm:w-[52px] text-right flex-shrink-0">
           {percent.toFixed(1)}%
         </span>
       </div>
