@@ -671,7 +671,7 @@ function SupplementaryMetrics({
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-2 py-2 px-3 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg border border-zinc-100 dark:border-zinc-800">
       {metrics.map((m, i) => (
         <div key={i} className="min-w-0">
-          <div className="text-[10px] uppercase tracking-wider text-zinc-400 truncate">
+          <div className="text-xs sm:text-[10px] uppercase tracking-wider text-zinc-400 truncate">
             {m.label}
           </div>
           <div className="text-sm font-medium text-zinc-700 dark:text-zinc-300 truncate flex items-center gap-1">

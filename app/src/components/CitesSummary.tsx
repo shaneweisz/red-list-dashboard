@@ -415,7 +415,7 @@ export default function CitesSummary({
       )}
 
       {/* Footer attribution — required by Species+ Terms of Use */}
-      <div className="text-[10px] text-zinc-400 dark:text-zinc-500 pt-2 space-y-1">
+      <div className="text-xs sm:text-[10px] text-zinc-400 dark:text-zinc-500 pt-2 space-y-1">
         <p>
           UNEP ({new Date().getFullYear()}).{" "}
           <a

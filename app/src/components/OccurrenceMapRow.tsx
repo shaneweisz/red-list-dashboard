@@ -1829,13 +1829,13 @@ export default function OccurrenceMapRow({
               {(inatPhotos.length > 0 || loadingInatPhotos) && (
                 <div className="flex flex-col bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden relative z-10">
                   {/* Header */}
-                  <div className="px-2 py-1.5 text-[10px] font-medium text-zinc-500 dark:text-zinc-400 text-center border-b border-zinc-100 dark:border-zinc-800">
+                  <div className="px-2 py-1.5 text-xs sm:text-[10px] font-medium text-zinc-500 dark:text-zinc-400 text-center border-b border-zinc-100 dark:border-zinc-800">
                     iNaturalist Photos {inatTotalCount > 0 && <span className="tabular-nums">— {inatTotalCount.toLocaleString()} observations</span>}
                   </div>
                   {inatPhotos.length > 0 ? (
                     <>
                       {/* Photos — 5-col grid */}
-                      <div className={`grid grid-cols-5 gap-1 p-1.5 ${loadingInatPhotos ? "opacity-50" : ""}`}>
+                      <div className={`grid grid-cols-3 sm:grid-cols-5 gap-1 p-1.5 ${loadingInatPhotos ? "opacity-50" : ""}`}>
                         {inatPhotos.slice(0, pageSize).map((obs, idx) => (
                           <div key={`${inatPage}-${idx}`} className="aspect-square">
                             <InatPhotoWithPreview
@@ -1857,14 +1857,14 @@ export default function OccurrenceMapRow({
                               fetchInatPhotos(newPage, pageSize);
                             }}
                             disabled={inatPage === 0 || loadingInatPhotos}
-                            className="p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed"
+                            className="p-1.5 sm:p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed"
                             title="Previous page"
                           >
                             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
                             </svg>
                           </button>
-                          <span className="text-[10px] text-zinc-400 tabular-nums">
+                          <span className="text-xs sm:text-[10px] text-zinc-400 tabular-nums">
                             {inatPage + 1}/{Math.ceil(inatTotalCount / pageSize)}
                           </span>
                           <button
@@ -1874,7 +1874,7 @@ export default function OccurrenceMapRow({
                               fetchInatPhotos(newPage, pageSize);
                             }}
                             disabled={(inatPage + 1) * pageSize >= inatTotalCount || loadingInatPhotos}
-                            className="p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed"
+                            className="p-1.5 sm:p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed"
                             title="Next page"
                           >
                             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -1905,7 +1905,7 @@ export default function OccurrenceMapRow({
               {splitView && splitDate ? (
                 <div className="flex flex-col gap-2">
                   {/* Split view control bar */}
-                  <div className="flex items-center gap-2 px-2 py-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-xs text-zinc-600 dark:text-zinc-300">
+                  <div className="flex flex-wrap items-center gap-2 px-2 py-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-xs text-zinc-600 dark:text-zinc-300">
                     <span className="font-medium">Split view</span>
                     <span className="text-zinc-400">|</span>
                     <span className="text-zinc-500 dark:text-zinc-400 whitespace-nowrap">Date: <span className="font-medium text-zinc-700 dark:text-zinc-200">{splitDate}</span></span>
@@ -1920,19 +1920,19 @@ export default function OccurrenceMapRow({
                         d.setDate(d.getDate() + days);
                         setSplitDate(d.toISOString().slice(0, 10));
                       }}
-                      className="flex-1 min-w-[100px] h-1.5 accent-blue-500"
+                      className="flex-1 min-w-[100px] h-2.5 sm:h-1.5 accent-blue-500"
                     />
                     {assessmentDate && splitDate !== assessmentDate.split("T")[0] && (
                       <button
                         onClick={() => setSplitDate(assessmentDate.split("T")[0])}
-                        className="text-[10px] px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 hover:bg-white dark:hover:bg-zinc-700 transition-colors whitespace-nowrap"
+                        className="text-xs sm:text-[10px] px-2 py-1 sm:px-1.5 sm:py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 hover:bg-white dark:hover:bg-zinc-700 transition-colors whitespace-nowrap"
                       >
                         Reset to assessment date
                       </button>
                     )}
                     <button
                       onClick={() => setSplitView(false)}
-                      className="ml-auto p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                      className="ml-auto p-1.5 sm:p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
                       title="Close split view"
                     >
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

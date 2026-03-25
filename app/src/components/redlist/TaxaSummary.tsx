@@ -91,7 +91,7 @@ const getOutdatedBarColor = (percent: number) =>
 // Sticky cell classes for the pinned taxon column
 const stickyClasses = "sticky left-0 z-10";
 // Compact cell classes for tighter table spacing
-const cellPad = "px-4 md:px-5 py-2 md:py-2.5";
+const cellPad = "px-2 sm:px-4 md:px-5 py-1.5 sm:py-2 md:py-2.5";
 const colDivider = "border-l border-zinc-200 dark:border-zinc-700";
 const numericTdNoDividerClasses = `${cellPad} text-right whitespace-nowrap w-0`;
 const numericThNoDividerClasses = `${cellPad} text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`;
@@ -412,7 +412,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         )}
         {isVisible("assessed") && (
           <td className={flexTdClasses}>
-            <div className="min-w-[120px] md:min-w-[180px]">
+            <div className="min-w-[80px] sm:min-w-[120px] md:min-w-[180px]">
               <div className="h-4 w-14 bg-zinc-200 dark:bg-zinc-700 rounded mb-1" />
               <div className="flex items-center gap-2">
                 <div className="flex-1 h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
@@ -423,7 +423,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         )}
         {isVisible("outdated") && (
           <td className={flexTdClasses}>
-            <div className="min-w-[120px] md:min-w-[180px]">
+            <div className="min-w-[80px] sm:min-w-[120px] md:min-w-[180px]">
               <div className="h-4 w-12 bg-zinc-200 dark:bg-zinc-700 rounded mb-1" />
               <div className="flex items-center gap-2">
                 <div className="flex-1 h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
@@ -640,7 +640,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     if (max === 0) return <span className="text-sm text-zinc-400">—</span>;
 
     return (
-      <div className="min-w-[100px] md:min-w-[120px] relative">
+      <div className="min-w-[70px] sm:min-w-[100px] md:min-w-[120px] relative">
         <div className="flex items-end h-5">
           {entries.map(({ label, count }, i) => {
             const heightPct = (count / max) * 100;
