@@ -1365,7 +1365,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
 
           {/* Charts row 1: bar charts (new-assessments mode only shows GBIF Observations) */}
           {!isNewAssessments && (
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {/* Risk Category */}
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
               <div className="flex items-center justify-between mb-1">
@@ -1444,7 +1444,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
           )}
 
           {/* Charts row 2: Country map + (Reviewers or GBIF Observations for new-assessments) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Country Map */}
             <div>
               {speciesLoading && assessedSpecies.length === 0 ? (
