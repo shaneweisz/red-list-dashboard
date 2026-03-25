@@ -2057,8 +2057,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                               {stackedDetailView ? "Tabbed" : "Stacked"}
                             </button>
                           </div>
-                          {/* Content */}
-                          <div className="overflow-x-hidden">
+                          {/* Content — overflow-hidden so child components don't extend past viewport */}
+                          <div style={{ overflow: 'hidden', width: '100%' }}>
                           {gbifSpeciesKey ? (
                             <div style={{ display: stackedDetailView || activeDetailTab === "gbif" ? undefined : "none" }}>
                               <OccurrenceMapRow
