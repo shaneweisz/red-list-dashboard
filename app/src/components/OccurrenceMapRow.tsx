@@ -1835,7 +1835,7 @@ export default function OccurrenceMapRow({
                   {inatPhotos.length > 0 ? (
                     <>
                       {/* Photos — 5-col grid */}
-                      <div className={`grid grid-cols-3 sm:grid-cols-5 gap-1 p-1.5 ${loadingInatPhotos ? "opacity-50" : ""}`}>
+                      <div className={`grid grid-cols-5 gap-1 p-1.5 ${loadingInatPhotos ? "opacity-50" : ""}`}>
                         {inatPhotos.slice(0, pageSize).map((obs, idx) => (
                           <div key={`${inatPage}-${idx}`} className="aspect-square">
                             <InatPhotoWithPreview

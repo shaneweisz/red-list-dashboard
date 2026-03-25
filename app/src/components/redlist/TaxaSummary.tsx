@@ -415,7 +415,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             <div className="min-w-[120px] md:min-w-[180px]">
               <div className="h-4 w-14 bg-zinc-200 dark:bg-zinc-700 rounded mb-1" />
               <div className="flex items-center gap-2">
-                <div className="flex-1 h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
+                <div className="flex-1 h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
                 <div className="h-3 w-12 bg-zinc-200 dark:bg-zinc-700 rounded" />
               </div>
             </div>
@@ -426,7 +426,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             <div className="min-w-[120px] md:min-w-[180px]">
               <div className="h-4 w-12 bg-zinc-200 dark:bg-zinc-700 rounded mb-1" />
               <div className="flex items-center gap-2">
-                <div className="flex-1 h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
+                <div className="flex-1 h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
                 <div className="h-3 w-12 bg-zinc-200 dark:bg-zinc-700 rounded" />
               </div>
             </div>
@@ -437,7 +437,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             <div className="min-w-[140px] md:min-w-[200px]">
               <div className="flex items-center gap-3">
                 <div className="h-4 w-14 bg-zinc-200 dark:bg-zinc-700 rounded" />
-                <div className="flex-1 h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
+                <div className="flex-1 h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
                 <div className="h-3 w-12 bg-zinc-200 dark:bg-zinc-700 rounded" />
               </div>
             </div>
@@ -554,7 +554,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             {count.toLocaleString()}
           </span>
         )}
-        <div className="flex-1 h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
+        <div className="flex-1 h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
           <div
             className="h-full rounded-full transition-all"
             style={{ width: `${clampedPercent}%`, backgroundColor: fillColor }}
@@ -585,7 +585,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     return (
       <div className="min-w-[80px] md:min-w-[100px] relative">
         {/* Visible bar (clipped for rounded corners) */}
-        <div className="flex h-3 rounded-full overflow-hidden bg-zinc-200 dark:bg-zinc-700">
+        <div className="flex h-4 sm:h-3 rounded-full overflow-hidden bg-zinc-200 dark:bg-zinc-700">
           {segments.map((seg) => (
             <div
               key={seg.cat}
