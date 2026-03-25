@@ -39,8 +39,8 @@ export default function RedListPage() {
   const [sharedSubgroups, setSharedSubgroups] = useState<Set<string>>(new Set());
 
   return (
-    <div className="min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950 px-6 py-4 md:px-16 md:py-8">
-      <main className="max-w-6xl mx-auto flex-1">
+    <div className="min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950 px-4 sm:px-6 py-4 md:px-16 md:py-8">
+      <main className="max-w-6xl w-full min-w-0 mx-auto flex-1">
         {/* Header */}
         <div className="mb-4 md:mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
           <div>
@@ -48,7 +48,7 @@ export default function RedListPage() {
               IUCN Red List Assessments Dashboard
             </h1>
             <p className="text-sm md:text-base text-zinc-600 dark:text-zinc-400">
-              Click taxa rows to filter, use charts and search to explore species. Cmd/Ctrl+click to multiselect.
+              Click taxa rows to filter, use charts and search to explore species.<span className="hidden sm:inline"> Cmd/Ctrl+click to multiselect.</span>
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -56,7 +56,7 @@ export default function RedListPage() {
             <div className="flex rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden text-sm">
               <button
                 onClick={() => setViewMode("reassessments")}
-                className={`px-3 py-1.5 font-medium transition-colors ${
+                className={`px-3 py-2 sm:py-1.5 font-medium transition-colors ${
                   viewMode === "reassessments"
                     ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
                     : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
@@ -70,7 +70,7 @@ export default function RedListPage() {
                   if (sharedTaxa.has("all")) setSharedTaxa(new Set());
                   setViewMode("new-assessments");
                 }}
-                className={`px-3 py-1.5 font-medium transition-colors ${
+                className={`px-3 py-2 sm:py-1.5 font-medium transition-colors ${
                   viewMode === "new-assessments"
                     ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
                     : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"

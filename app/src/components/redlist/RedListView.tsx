@@ -1313,7 +1313,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const isNE = (s: Species) => s.category === "NE";
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 min-w-0">
       {/* Always show Taxa Summary table */}
       <TaxaSummary
         onToggleTaxon={handleToggleTaxon}
@@ -1365,7 +1365,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
 
           {/* Charts row 1: bar charts (new-assessments mode only shows GBIF Observations) */}
           {!isNewAssessments && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {/* Risk Category */}
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
               <div className="flex items-center justify-between mb-1">
@@ -1992,51 +1992,51 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   {selectedSpeciesKey === speciesKey && (
                     <tr>
                       <td colSpan={isNewAssessments ? 3 : 8} className="p-0 bg-zinc-50 dark:bg-zinc-800/30" style={{ width: 0 }}>
-                        <div style={{ minWidth: '100%', maxWidth: 'calc(100vw - 2rem)', overflow: 'hidden', transform: 'translateX(var(--scroll-left, 0px))' }}>
+                        <div style={{ minWidth: '100%', maxWidth: 'calc(100vw - 2rem)', transform: 'translateX(var(--scroll-left, 0px))' }}>
                           {/* Tab bar */}
                           <div className="flex items-center border-b border-zinc-200 dark:border-zinc-700 overflow-x-auto flex-nowrap" onClick={(e) => e.stopPropagation()}>
                             {!stackedDetailView && (
                               <>
                                 <button
-                                  className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "gbif" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"} ${!gbifSpeciesKey ? "opacity-50 cursor-default" : ""}`}
+                                  className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "gbif" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"} ${!gbifSpeciesKey ? "opacity-50 cursor-default" : ""}`}
                                   onClick={() => gbifSpeciesKey && setActiveDetailTab("gbif")}
                                 >
-                                  GBIF + iNaturalist{!gbifSpeciesKey && <span className="ml-1 text-xs text-zinc-400">(no match)</span>}
+                                  GBIF + iNat{!gbifSpeciesKey && <span className="ml-1 text-xs text-zinc-400">(no match)</span>}
                                 </button>
                                 {(assessmentYear || s.category === "NE") && (
                                   <button
-                                    className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "literature" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                    className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "literature" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                     onClick={() => setActiveDetailTab("literature")}
                                   >
-                                    OpenAlex Papers
+                                    Papers
                                   </button>
                                 )}
                                 {s.category !== "NE" && (
                                   <button
-                                    className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "redlist" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                    className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "redlist" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                     onClick={() => setActiveDetailTab("redlist")}
                                   >
-                                    IUCN Red List Assessments
+                                    Red List
                                   </button>
                                 )}
                                 <button
-                                  className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "wikipedia" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                  className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "wikipedia" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                   onClick={() => setActiveDetailTab("wikipedia")}
                                 >
                                   Wikipedia
                                 </button>
                                 <button
-                                  className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "cites" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                  className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "cites" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                   onClick={() => setActiveDetailTab("cites")}
                                 >
                                   CITES
                                 </button>
                                 {s.category === "NE" && (
                                   <button
-                                    className={`px-4 py-2 text-sm font-medium transition-colors ${activeDetailTab === "assessors" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                    className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "assessors" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                     onClick={() => setActiveDetailTab("assessors")}
                                   >
-                                    Suggested Assessors
+                                    Assessors
                                   </button>
                                 )}
                               </>
@@ -2057,7 +2057,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                               {stackedDetailView ? "Tabbed" : "Stacked"}
                             </button>
                           </div>
-                          {/* Content */}
+                          {/* Content — overflow-hidden so child components don't extend past viewport */}
+                          <div style={{ overflow: 'hidden', width: '100%' }}>
                           {gbifSpeciesKey ? (
                             <div style={{ display: stackedDetailView || activeDetailTab === "gbif" ? undefined : "none" }}>
                               <OccurrenceMapRow
@@ -2107,6 +2108,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                               />
                             </div>
                           )}
+                          </div>
                         </div>
                           <div className="border-t border-zinc-200 dark:border-zinc-700">
                             <AssessmentAssistant

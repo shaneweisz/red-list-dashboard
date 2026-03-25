@@ -91,7 +91,7 @@ const getOutdatedBarColor = (percent: number) =>
 // Sticky cell classes for the pinned taxon column
 const stickyClasses = "sticky left-0 z-10";
 // Compact cell classes for tighter table spacing
-const cellPad = "px-4 md:px-5 py-2 md:py-2.5";
+const cellPad = "px-3 py-2 md:px-5 md:py-2.5";
 const colDivider = "border-l border-zinc-200 dark:border-zinc-700";
 const numericTdNoDividerClasses = `${cellPad} text-right whitespace-nowrap w-0`;
 const numericThNoDividerClasses = `${cellPad} text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`;
@@ -415,7 +415,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             <div className="min-w-[120px] md:min-w-[180px]">
               <div className="h-4 w-14 bg-zinc-200 dark:bg-zinc-700 rounded mb-1" />
               <div className="flex items-center gap-2">
-                <div className="flex-1 h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
+                <div className="flex-1 h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
                 <div className="h-3 w-12 bg-zinc-200 dark:bg-zinc-700 rounded" />
               </div>
             </div>
@@ -426,7 +426,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             <div className="min-w-[120px] md:min-w-[180px]">
               <div className="h-4 w-12 bg-zinc-200 dark:bg-zinc-700 rounded mb-1" />
               <div className="flex items-center gap-2">
-                <div className="flex-1 h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
+                <div className="flex-1 h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
                 <div className="h-3 w-12 bg-zinc-200 dark:bg-zinc-700 rounded" />
               </div>
             </div>
@@ -437,7 +437,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             <div className="min-w-[140px] md:min-w-[200px]">
               <div className="flex items-center gap-3">
                 <div className="h-4 w-14 bg-zinc-200 dark:bg-zinc-700 rounded" />
-                <div className="flex-1 h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
+                <div className="flex-1 h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
                 <div className="h-3 w-12 bg-zinc-200 dark:bg-zinc-700 rounded" />
               </div>
             </div>
@@ -548,19 +548,19 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     const fillColor = isAll ? "rgba(255,255,255,0.25)" : barColor;
     const fw = fontWeight || "font-medium";
     return (
-      <div className="flex items-center gap-3 min-w-[140px] md:min-w-[200px]">
+      <div className="flex items-center gap-1.5 sm:gap-3 min-w-[140px] md:min-w-[200px]">
         {count != null && (
-          <span className={`text-sm md:text-base ${fw} tabular-nums text-zinc-700 dark:text-zinc-300 w-[60px] text-right flex-shrink-0`}>
+          <span className={`text-sm md:text-base ${fw} tabular-nums text-zinc-700 dark:text-zinc-300 w-[48px] sm:w-[60px] text-right flex-shrink-0`}>
             {count.toLocaleString()}
           </span>
         )}
-        <div className="flex-1 h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
+        <div className="flex-1 min-w-[40px] h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
           <div
             className="h-full rounded-full transition-all"
             style={{ width: `${clampedPercent}%`, backgroundColor: fillColor }}
           />
         </div>
-        <span className="text-xs md:text-sm tabular-nums text-zinc-500 dark:text-zinc-400 w-[52px] text-right flex-shrink-0">
+        <span className="text-xs md:text-sm tabular-nums text-zinc-500 dark:text-zinc-400 w-[44px] sm:w-[52px] text-right flex-shrink-0">
           {percent.toFixed(1)}%
         </span>
       </div>
@@ -585,7 +585,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     return (
       <div className="min-w-[80px] md:min-w-[100px] relative">
         {/* Visible bar (clipped for rounded corners) */}
-        <div className="flex h-3 rounded-full overflow-hidden bg-zinc-200 dark:bg-zinc-700">
+        <div className="flex h-4 sm:h-3 rounded-full overflow-hidden bg-zinc-200 dark:bg-zinc-700">
           {segments.map((seg) => (
             <div
               key={seg.cat}
