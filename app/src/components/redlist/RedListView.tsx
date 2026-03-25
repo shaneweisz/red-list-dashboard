@@ -2058,6 +2058,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                             </button>
                           </div>
                           {/* Content */}
+                          <div className="overflow-x-hidden">
                           {gbifSpeciesKey ? (
                             <div style={{ display: stackedDetailView || activeDetailTab === "gbif" ? undefined : "none" }}>
                               <OccurrenceMapRow
@@ -2107,6 +2108,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                               />
                             </div>
                           )}
+                          </div>
                         </div>
                           <div className="border-t border-zinc-200 dark:border-zinc-700">
                             <AssessmentAssistant
