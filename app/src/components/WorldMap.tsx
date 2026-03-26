@@ -155,6 +155,8 @@ interface WorldMapProps {
   selectedTaxa?: Set<string>;
   // Label for the species count in tooltips (default: "# Assessed")
   speciesLabel?: string;
+  // Optional extra element to render in the header (e.g. a toggle button)
+  headerExtra?: React.ReactNode;
 }
 
 const DEFAULT_CENTER: [number, number] = [10, 10];
@@ -162,7 +164,7 @@ const DEFAULT_ZOOM = 1.0;
 const MIN_ZOOM = 1.0;
 const MAX_ZOOM = 8.0;
 
-function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, selectedTaxon, precomputedStats, selectedTaxa, speciesLabel = "# Assessed" }: WorldMapProps) {
+function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, selectedTaxon, precomputedStats, selectedTaxa, speciesLabel = "# Assessed", headerExtra }: WorldMapProps) {
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoveredCountryCode, setHoveredCountryCode] = useState<string | null>(null);
   const [speciesStats, setSpeciesStats] = useState<CountryStats>(precomputedStats || {});
@@ -422,6 +424,7 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
               GBIF
             </button>
           </div>
+          {headerExtra}
         </div>
       </div>
 

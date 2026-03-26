@@ -187,3 +187,159 @@ const REGION_COLORS: Record<string, string> = {
 export function regionColor(region: string): string {
   return REGION_COLORS[region] ?? "#a1a1aa";
 }
+
+// ── IUCN Land Regions ──────────────────────────────────────────────
+// Maps ISO 3166-1 alpha-2 country codes to IUCN land regions.
+
+const COUNTRY_TO_IUCN_REGION: Record<string, string> = {
+  // Antarctic
+  AQ: "Antarctic", BV: "Antarctic", GS: "Antarctic", HM: "Antarctic", TF: "Antarctic",
+
+  // Caribbean Islands
+  AG: "Caribbean Islands", AI: "Caribbean Islands", AW: "Caribbean Islands",
+  BB: "Caribbean Islands", BL: "Caribbean Islands", BQ: "Caribbean Islands",
+  BS: "Caribbean Islands", CU: "Caribbean Islands", CW: "Caribbean Islands",
+  DM: "Caribbean Islands", DO: "Caribbean Islands", GD: "Caribbean Islands",
+  GP: "Caribbean Islands", HT: "Caribbean Islands", JM: "Caribbean Islands",
+  KN: "Caribbean Islands", KY: "Caribbean Islands", LC: "Caribbean Islands",
+  MF: "Caribbean Islands", MQ: "Caribbean Islands", MS: "Caribbean Islands",
+  PR: "Caribbean Islands", SX: "Caribbean Islands", TC: "Caribbean Islands",
+  TT: "Caribbean Islands", VC: "Caribbean Islands", VG: "Caribbean Islands",
+  VI: "Caribbean Islands",
+
+  // East Asia
+  CN: "East Asia", HK: "East Asia", JP: "East Asia", KP: "East Asia",
+  KR: "East Asia", MN: "East Asia", MO: "East Asia", TW: "East Asia",
+
+  // Europe
+  AD: "Europe", AL: "Europe", AT: "Europe", AX: "Europe", BA: "Europe",
+  BE: "Europe", BG: "Europe", BY: "Europe", CH: "Europe", CZ: "Europe",
+  DE: "Europe", DK: "Europe", EE: "Europe", ES: "Europe", FI: "Europe",
+  FO: "Europe", FR: "Europe", GB: "Europe", GG: "Europe", GI: "Europe",
+  GR: "Europe", HR: "Europe", HU: "Europe", IE: "Europe", IM: "Europe",
+  IS: "Europe", IT: "Europe", JE: "Europe", LI: "Europe", LT: "Europe",
+  LU: "Europe", LV: "Europe", MC: "Europe", MD: "Europe", ME: "Europe",
+  MK: "Europe", MT: "Europe", NL: "Europe", NO: "Europe", PL: "Europe",
+  PT: "Europe", RO: "Europe", RS: "Europe", SE: "Europe", SI: "Europe",
+  SJ: "Europe", SK: "Europe", SM: "Europe", UA: "Europe", VA: "Europe",
+  XK: "Europe",
+
+  // Mesoamerica
+  BZ: "Mesoamerica", CR: "Mesoamerica", GT: "Mesoamerica", HN: "Mesoamerica",
+  MX: "Mesoamerica", NI: "Mesoamerica", PA: "Mesoamerica", SV: "Mesoamerica",
+
+  // North Africa
+  DZ: "North Africa", EG: "North Africa", EH: "North Africa", LY: "North Africa",
+  MA: "North Africa", SD: "North Africa", TN: "North Africa",
+
+  // North America
+  BM: "North America", CA: "North America", GL: "North America",
+  PM: "North America", US: "North America",
+
+  // North Asia
+  RU: "North Asia",
+
+  // Oceania
+  AS: "Oceania", AU: "Oceania", CK: "Oceania", FJ: "Oceania", FM: "Oceania",
+  GU: "Oceania", KI: "Oceania", MH: "Oceania", MP: "Oceania", NC: "Oceania",
+  NF: "Oceania", NR: "Oceania", NU: "Oceania", NZ: "Oceania", PF: "Oceania",
+  PG: "Oceania", PN: "Oceania", PW: "Oceania", SB: "Oceania", TK: "Oceania",
+  TO: "Oceania", TV: "Oceania", VU: "Oceania", WF: "Oceania", WS: "Oceania",
+
+  // South America
+  AR: "South America", BO: "South America", BR: "South America", CL: "South America",
+  CO: "South America", EC: "South America", FK: "South America", GF: "South America",
+  GY: "South America", PE: "South America", PY: "South America", SR: "South America",
+  UY: "South America", VE: "South America",
+
+  // South and Southeast Asia
+  AF: "South and Southeast Asia", BD: "South and Southeast Asia",
+  BN: "South and Southeast Asia", BT: "South and Southeast Asia",
+  ID: "South and Southeast Asia", IN: "South and Southeast Asia",
+  KH: "South and Southeast Asia", LA: "South and Southeast Asia",
+  LK: "South and Southeast Asia", MM: "South and Southeast Asia",
+  MV: "South and Southeast Asia", MY: "South and Southeast Asia",
+  NP: "South and Southeast Asia", PH: "South and Southeast Asia",
+  PK: "South and Southeast Asia", SG: "South and Southeast Asia",
+  TH: "South and Southeast Asia", TL: "South and Southeast Asia",
+  VN: "South and Southeast Asia",
+
+  // Sub-Saharan Africa
+  AO: "Sub-Saharan Africa", BF: "Sub-Saharan Africa", BI: "Sub-Saharan Africa",
+  BJ: "Sub-Saharan Africa", BW: "Sub-Saharan Africa", CD: "Sub-Saharan Africa",
+  CF: "Sub-Saharan Africa", CG: "Sub-Saharan Africa", CI: "Sub-Saharan Africa",
+  CM: "Sub-Saharan Africa", CV: "Sub-Saharan Africa", DJ: "Sub-Saharan Africa",
+  ER: "Sub-Saharan Africa", ET: "Sub-Saharan Africa", GA: "Sub-Saharan Africa",
+  GH: "Sub-Saharan Africa", GM: "Sub-Saharan Africa", GN: "Sub-Saharan Africa",
+  GQ: "Sub-Saharan Africa", GW: "Sub-Saharan Africa", KE: "Sub-Saharan Africa",
+  KM: "Sub-Saharan Africa", LR: "Sub-Saharan Africa", LS: "Sub-Saharan Africa",
+  MG: "Sub-Saharan Africa", ML: "Sub-Saharan Africa", MR: "Sub-Saharan Africa",
+  MU: "Sub-Saharan Africa", MW: "Sub-Saharan Africa", MZ: "Sub-Saharan Africa",
+  NA: "Sub-Saharan Africa", NE: "Sub-Saharan Africa", NG: "Sub-Saharan Africa",
+  RE: "Sub-Saharan Africa", RW: "Sub-Saharan Africa", SC: "Sub-Saharan Africa",
+  SH: "Sub-Saharan Africa", SL: "Sub-Saharan Africa", SN: "Sub-Saharan Africa",
+  SO: "Sub-Saharan Africa", SS: "Sub-Saharan Africa", ST: "Sub-Saharan Africa",
+  SZ: "Sub-Saharan Africa", TD: "Sub-Saharan Africa", TG: "Sub-Saharan Africa",
+  TZ: "Sub-Saharan Africa", UG: "Sub-Saharan Africa", YT: "Sub-Saharan Africa",
+  ZA: "Sub-Saharan Africa", ZM: "Sub-Saharan Africa", ZW: "Sub-Saharan Africa",
+
+  // West and Central Asia
+  AE: "West and Central Asia", AM: "West and Central Asia", AZ: "West and Central Asia",
+  BH: "West and Central Asia", CY: "West and Central Asia", GE: "West and Central Asia",
+  IL: "West and Central Asia", IQ: "West and Central Asia", IR: "West and Central Asia",
+  JO: "West and Central Asia", KG: "West and Central Asia", KW: "West and Central Asia",
+  KZ: "West and Central Asia", LB: "West and Central Asia", OM: "West and Central Asia",
+  PS: "West and Central Asia", QA: "West and Central Asia", SA: "West and Central Asia",
+  SY: "West and Central Asia", TJ: "West and Central Asia", TM: "West and Central Asia",
+  TR: "West and Central Asia", UZ: "West and Central Asia", YE: "West and Central Asia",
+};
+
+/** IUCN land regions in canonical display order */
+export const IUCN_REGION_ORDER: string[] = [
+  "Antarctic",
+  "Caribbean Islands",
+  "East Asia",
+  "Europe",
+  "Mesoamerica",
+  "North Africa",
+  "North America",
+  "North Asia",
+  "Oceania",
+  "South America",
+  "South and Southeast Asia",
+  "Sub-Saharan Africa",
+  "West and Central Asia",
+];
+
+/** Map a country code to its IUCN land region. Returns "Other" for unrecognised codes. */
+export function countryToIucnRegion(code: string): string {
+  return COUNTRY_TO_IUCN_REGION[code.toUpperCase()] ?? "Other";
+}
+
+/** Get all country codes belonging to a given IUCN region */
+export function iucnRegionCountries(region: string): string[] {
+  return Object.entries(COUNTRY_TO_IUCN_REGION)
+    .filter(([, r]) => r === region)
+    .map(([code]) => code);
+}
+
+/** Colors for IUCN land regions */
+const IUCN_REGION_COLORS: Record<string, string> = {
+  "Antarctic": "#94a3b8",
+  "Caribbean Islands": "#f87171",
+  "East Asia": "#16a34a",
+  "Europe": "#3b82f6",
+  "Mesoamerica": "#ef4444",
+  "North Africa": "#facc15",
+  "North America": "#fca5a5",
+  "North Asia": "#7c3aed",
+  "Oceania": "#14b8a6",
+  "South America": "#dc2626",
+  "South and Southeast Asia": "#22c55e",
+  "Sub-Saharan Africa": "#eab308",
+  "West and Central Asia": "#86efac",
+};
+
+export function iucnRegionColor(region: string): string {
+  return IUCN_REGION_COLORS[region] ?? "#a1a1aa";
+}
