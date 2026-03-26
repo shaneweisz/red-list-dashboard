@@ -1643,43 +1643,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   selectedTaxa={selectedTaxa}
                   speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
                   onRegionFilter={handleRegionFilter}
-                  footer={
-                    <div className="flex items-center gap-2 mt-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
-                      <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Realm</span>
-                      {(["Terrestrial", "Freshwater", "Marine"] as const).map(system => {
-                        const isSelected = selectedSystems.has(system);
-                        const count = realmCounts[system] ?? 0;
-                        return (
-                          <button
-                            key={system}
-                            title={`${count.toLocaleString()} species`}
-                            onClick={(e) => {
-                              const isMulti = e.metaKey || e.ctrlKey;
-                              setSelectedSystems(prev => {
-                                if (isMulti) {
-                                  const next = new Set(prev);
-                                  if (next.has(system)) next.delete(system);
-                                  else next.add(system);
-                                  return next;
-                                }
-                                if (prev.size === 1 && prev.has(system)) return new Set();
-                                return new Set([system]);
-                              });
-                            }}
-                            className={`px-2.5 py-1 text-xs rounded-full font-medium transition-colors ${
-                              isSelected
-                                ? system === "Terrestrial" ? "bg-amber-500 text-white"
-                                : system === "Freshwater" ? "bg-cyan-500 text-white"
-                                : "bg-blue-600 text-white"
-                                : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
-                            }`}
-                          >
-                            {system} ({count.toLocaleString()})
-                          </button>
-                        );
-                      })}
-                    </div>
-                  }
                 />
               )}
             </div>
@@ -1730,19 +1693,52 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
               More Filters
-              {(selectedPopulationTrends.size + selectedMovementPatterns.size + selectedThreats.size > 0) && (
+              {(selectedSystems.size + selectedPopulationTrends.size + selectedMovementPatterns.size + selectedThreats.size > 0) && (
                 <span className="ml-1 px-1.5 py-0.5 text-[10px] rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">
-                  {selectedPopulationTrends.size + selectedMovementPatterns.size + selectedThreats.size} active
+                  {selectedSystems.size + selectedPopulationTrends.size + selectedMovementPatterns.size + selectedThreats.size} active
                 </span>
               )}
             </button>
             {moreFiltersOpen && (
               <div className="mt-3 flex flex-col gap-3">
-                {/* Row 1: Population Trend + Movement Patterns */}
+                {/* Realm */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 shrink-0 w-16">Realm</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(["Terrestrial", "Freshwater", "Marine"] as const).map(system => {
+                      const isSelected = selectedSystems.has(system);
+                      const count = realmCounts[system] ?? 0;
+                      return (
+                        <button
+                          key={system}
+                          onClick={(e) => {
+                            const isMulti = e.metaKey || e.ctrlKey;
+                            setSelectedSystems(prev => {
+                              if (isMulti) { const next = new Set(prev); if (next.has(system)) next.delete(system); else next.add(system); return next; }
+                              if (prev.size === 1 && prev.has(system)) return new Set();
+                              return new Set([system]);
+                            });
+                          }}
+                          className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
+                            isSelected
+                              ? system === "Terrestrial" ? "bg-amber-500 text-white"
+                              : system === "Freshwater" ? "bg-cyan-500 text-white"
+                              : "bg-blue-600 text-white"
+                              : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                          }`}
+                        >
+                          {system} ({count.toLocaleString()})
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Trend + Movement */}
                 <div className="flex flex-wrap gap-x-6 gap-y-2">
                   {/* Population Trend */}
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 shrink-0">Trend</span>
+                    <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 shrink-0 w-16">Trend</span>
                     <div className="flex flex-wrap gap-1.5">
                       {(["Increasing", "Stable", "Decreasing", "Unknown"] as const).map(trend => {
                         const isSelected = selectedPopulationTrends.has(trend);
@@ -1774,7 +1770,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   {/* Movement Patterns */}
                   {!isNewAssessments && (
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 shrink-0">Movement</span>
+                      <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 shrink-0 w-16">Movement</span>
                       <div className="flex flex-wrap gap-1.5">
                         {(["Full Migrant", "Altitudinal Migrant", "Nomadic", "Not a Migrant", "Unknown"] as const).map(pattern => {
                           const isSelected = selectedMovementPatterns.has(pattern);
@@ -1806,83 +1802,80 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   )}
                 </div>
 
-                {/* Row 2: Threats (expandable, 2-column grid) */}
-                {!isNewAssessments && (
-                  <div>
-                    <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1.5 block">Threats</span>
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-0.5">
-                      {THREAT_CATEGORIES.map(({ code, label, children }) => {
-                        const isTopSelected = selectedThreats.has(code);
-                        const hasChildSelected = children.some(c => selectedThreats.has(c.code));
-                        const isExpanded = expandedThreat === code;
-                        const count = threatCounts[code] ?? 0;
-                        if (count === 0) return null;
-                        return (
-                          <div key={code} className={isExpanded ? "col-span-2 md:col-span-3 lg:col-span-4" : ""}>
-                            <div className="flex items-center gap-1">
-                              <button
-                                onClick={() => setExpandedThreat(prev => prev === code ? null : code)}
-                                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 p-0.5"
-                              >
-                                <svg className={`w-3 h-3 transition-transform ${isExpanded ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                </svg>
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  const isMulti = e.metaKey || e.ctrlKey;
-                                  setSelectedThreats(prev => {
-                                    if (isMulti) { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; }
-                                    if (prev.size === 1 && prev.has(code)) return new Set();
-                                    return new Set([code]);
-                                  });
-                                }}
-                                className={`px-2 py-0.5 text-xs rounded-md transition-colors cursor-pointer text-left ${
-                                  isTopSelected
-                                    ? "bg-rose-500 text-white"
-                                    : hasChildSelected
-                                    ? "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300"
-                                    : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                                }`}
-                              >
-                                {label} <span className={isTopSelected ? "text-rose-200" : "text-zinc-400 dark:text-zinc-500"}>({count.toLocaleString()})</span>
-                              </button>
-                            </div>
-                            {isExpanded && (
-                              <div className="ml-5 mt-0.5 mb-1 flex flex-wrap gap-1">
-                                {children.map(child => {
-                                  const childSelected = selectedThreats.has(child.code);
-                                  const childCount = threatCounts[child.code] ?? 0;
-                                  if (childCount === 0) return null;
-                                  return (
-                                    <button
-                                      key={child.code}
-                                      onClick={(e) => {
-                                        const isMulti = e.metaKey || e.ctrlKey;
-                                        setSelectedThreats(prev => {
-                                          if (isMulti) { const next = new Set(prev); if (next.has(child.code)) next.delete(child.code); else next.add(child.code); return next; }
-                                          if (prev.size === 1 && prev.has(child.code)) return new Set();
-                                          return new Set([child.code]);
-                                        });
-                                      }}
-                                      className={`px-1.5 py-0.5 text-[11px] rounded-full transition-colors cursor-pointer ${
-                                        childSelected
-                                          ? "bg-rose-500 text-white"
-                                          : "bg-zinc-100 dark:bg-zinc-800/50 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
-                                      }`}
-                                    >
-                                      {child.label} ({childCount.toLocaleString()})
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            )}
+                {/* Threats: bar chart + expandable sub-categories */}
+                {!isNewAssessments && (() => {
+                  const threatBarData = THREAT_CATEGORIES
+                    .map(({ code, label }) => ({ code, count: threatCounts[code] ?? 0, label: `${label}` }))
+                    .filter(d => d.count > 0);
+                  const expandedCat = expandedThreat ? THREAT_CATEGORIES.find(c => c.code === expandedThreat) : null;
+                  return (
+                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Threats</span>
+                      </div>
+                      <div style={{ height: 200 }} className="flex items-center justify-center">
+                        {threatBarData.length > 0 ? (
+                          <FilterBarChart
+                            data={threatBarData.map(d => ({ ...d, label: `${d.count.toLocaleString()}` }))}
+                            dataKey="code"
+                            selectedItems={selectedThreats}
+                            onBarClick={(data: { payload?: { code?: string } }, event: React.MouseEvent) => {
+                              const code = data.payload?.code;
+                              if (!code) return;
+                              const isMulti = event.metaKey || event.ctrlKey;
+                              // Toggle expand on click
+                              setExpandedThreat(prev => prev === code ? null : code);
+                              setSelectedThreats(prev => {
+                                if (isMulti) { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; }
+                                if (prev.size === 1 && prev.has(code)) return new Set();
+                                return new Set([code]);
+                              });
+                            }}
+                            barColor="#f43f5e"
+                            yAxisWidth={80}
+                            rightMargin={50}
+                            labelFormatter={(code) => THREAT_CATEGORIES.find(c => c.code === code)?.label || code}
+                          />
+                        ) : null}
+                      </div>
+                      {/* Sub-category pills when a threat is expanded */}
+                      {expandedCat && (
+                        <div className="mt-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                          <div className="flex items-center gap-1.5 mb-1.5">
+                            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{expandedCat.label} sub-categories:</span>
                           </div>
-                        );
-                      })}
+                          <div className="flex flex-wrap gap-1.5">
+                            {expandedCat.children.map(child => {
+                              const childSelected = selectedThreats.has(child.code);
+                              const childCount = threatCounts[child.code] ?? 0;
+                              if (childCount === 0) return null;
+                              return (
+                                <button
+                                  key={child.code}
+                                  onClick={(e) => {
+                                    const isMulti = e.metaKey || e.ctrlKey;
+                                    setSelectedThreats(prev => {
+                                      if (isMulti) { const next = new Set(prev); if (next.has(child.code)) next.delete(child.code); else next.add(child.code); return next; }
+                                      if (prev.size === 1 && prev.has(child.code)) return new Set();
+                                      return new Set([child.code]);
+                                    });
+                                  }}
+                                  className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
+                                    childSelected
+                                      ? "bg-rose-500 text-white"
+                                      : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                                  }`}
+                                >
+                                  {child.label} ({childCount.toLocaleString()})
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             )}
           </div>
