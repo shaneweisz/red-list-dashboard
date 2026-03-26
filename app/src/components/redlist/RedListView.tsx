@@ -14,7 +14,7 @@ import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
 import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode } from "@/lib/taxonomy-utils";
 import ReviewerChart from "./ReviewerChart";
 import { parseAssessors } from "@/lib/parseAssessors";
-import { countryToIucnRegion, iucnRegionCountries, iucnRegionColor, IUCN_REGION_ORDER } from "@/lib/regions";
+import { iucnRegionCountries, IUCN_REGION_ORDER } from "@/lib/regions";
 import { useFilterParams } from "@/hooks/useFilterParams";
 import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import AssessmentAssistant from "../AssessmentAssistant";
@@ -609,7 +609,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
 
   // Track which tab is active in the assessors/reviewers chart
   const [reviewerFilterMode, setReviewerFilterMode] = useState<"assessors" | "reviewers">("assessors");
-  const [countryViewMode, setCountryViewMode] = useState<"map" | "region">("map");
 
   // Helper to check if species matches the assessors filter
   const matchesAssessorsFilter = useCallback((s: Species): boolean => {
@@ -877,45 +876,13 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     return { countryCounts: counts, uniqueCountries: sorted, countryStatsForMap: statsForMap };
   }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
 
-  // Region chart: aggregate country counts by IUCN land region
-  const regionChartData = useMemo(() => {
-    const regionCounts: Record<string, number> = {};
-    for (const [code, count] of Object.entries(countryCounts)) {
-      const region = countryToIucnRegion(code);
-      if (region === "Other") continue;
-      regionCounts[region] = (regionCounts[region] || 0) + count;
+  // Handle region filter — select all countries in the chosen region
+  const handleRegionFilter = useCallback((region: string) => {
+    if (!region) {
+      setSelectedCountries(new Set());
+      return;
     }
-    return IUCN_REGION_ORDER
-      .filter(r => regionCounts[r])
-      .map(region => ({
-        code: region,
-        count: regionCounts[region],
-        label: regionCounts[region].toLocaleString(),
-        color: iucnRegionColor(region),
-      }));
-  }, [countryCounts]);
-
-  // Handle region bar click — select/deselect all countries in that region
-  const handleRegionClick = useCallback((data: { payload?: { code?: string } }, event: React.MouseEvent) => {
-    const region = data.payload?.code;
-    if (!region) return;
-    const regionCountryCodes = iucnRegionCountries(region);
-    const isMultiSelect = event.metaKey || event.ctrlKey;
-    setSelectedCountries(prev => {
-      const allSelected = regionCountryCodes.every(c => prev.has(c));
-      if (isMultiSelect) {
-        const next = new Set(prev);
-        if (allSelected) {
-          regionCountryCodes.forEach(c => next.delete(c));
-        } else {
-          regionCountryCodes.forEach(c => next.add(c));
-        }
-        return next;
-      } else {
-        if (allSelected && prev.size === regionCountryCodes.length) return new Set();
-        return new Set(regionCountryCodes);
-      }
-    });
+    setSelectedCountries(new Set(iucnRegionCountries(region)));
   }, [setSelectedCountries]);
 
   // Assessor chart: apply all filters EXCEPT assessors (include reviewers)
@@ -1488,7 +1455,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
 
           {/* Charts row 2: Country map + (Reviewers or GBIF Observations for new-assessments) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Country Map / Region Chart */}
+            {/* Country Map */}
             <div>
               {speciesLoading && assessedSpecies.length === 0 ? (
                 <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 min-h-[320px] flex flex-col">
@@ -1501,41 +1468,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                     <Spinner />
                   </div>
                 </div>
-              ) : countryViewMode === "region" ? (
-                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 min-h-[320px] flex flex-col">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Region</span>
-                    <button
-                      onClick={() => setCountryViewMode("map")}
-                      className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
-                    >
-                      Show Map
-                    </button>
-                  </div>
-                  <div className="flex-1 min-h-[280px]">
-                    {regionChartData.length > 0 ? (
-                      <FilterBarChart
-                        data={regionChartData}
-                        dataKey="code"
-                        selectedItems={selectedCountries.size > 0
-                          ? new Set(
-                              regionChartData
-                                .filter(r => {
-                                  const codes = iucnRegionCountries(r.code);
-                                  return codes.some(c => selectedCountries.has(c));
-                                })
-                                .map(r => r.code)
-                            )
-                          : new Set<string>()
-                        }
-                        onBarClick={handleRegionClick}
-                        yAxisWidth={120}
-                        leftMargin={5}
-                        rightMargin={65}
-                      />
-                    ) : null}
-                  </div>
-                </div>
               ) : (
                 <WorldMap
                   selectedCountries={selectedCountries}
@@ -1544,14 +1476,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   precomputedStats={countryStatsForMap}
                   selectedTaxa={selectedTaxa}
                   speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
-                  headerExtra={
-                    <button
-                      onClick={() => setCountryViewMode("region")}
-                      className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
-                    >
-                      Show Regions
-                    </button>
-                  }
+                  onRegionFilter={handleRegionFilter}
                 />
               )}
             </div>

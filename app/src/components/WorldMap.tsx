@@ -8,6 +8,7 @@ import {
   ZoomableGroup,
 } from "react-simple-maps";
 import { geoCentroid } from "d3-geo";
+import { IUCN_REGION_ORDER, countryToIucnRegion } from "@/lib/regions";
 
 // Using the recommended TopoJSON from react-simple-maps
 const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json";
@@ -155,8 +156,8 @@ interface WorldMapProps {
   selectedTaxa?: Set<string>;
   // Label for the species count in tooltips (default: "# Assessed")
   speciesLabel?: string;
-  // Optional extra element to render in the header (e.g. a toggle button)
-  headerExtra?: React.ReactNode;
+  // Callback when a region is selected from the dropdown (sets country filter)
+  onRegionFilter?: (region: string) => void;
 }
 
 const DEFAULT_CENTER: [number, number] = [10, 10];
@@ -164,7 +165,7 @@ const DEFAULT_ZOOM = 1.0;
 const MIN_ZOOM = 1.0;
 const MAX_ZOOM = 8.0;
 
-function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, selectedTaxon, precomputedStats, selectedTaxa, speciesLabel = "# Assessed", headerExtra }: WorldMapProps) {
+function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, selectedTaxon, precomputedStats, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter }: WorldMapProps) {
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoveredCountryCode, setHoveredCountryCode] = useState<string | null>(null);
   const [speciesStats, setSpeciesStats] = useState<CountryStats>(precomputedStats || {});
@@ -424,7 +425,27 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
               GBIF
             </button>
           </div>
-          {headerExtra}
+          {onRegionFilter && (
+            <select
+              value={(() => {
+                if (selectedCountries.size === 0) return "";
+                const regions = new Set<string>();
+                selectedCountries.forEach(c => regions.add(countryToIucnRegion(c)));
+                if (regions.size === 1) {
+                  const region = [...regions][0];
+                  if (region !== "Other") return region;
+                }
+                return "";
+              })()}
+              onChange={(e) => onRegionFilter(e.target.value)}
+              className="text-xs bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="">All Regions</option>
+              {IUCN_REGION_ORDER.map(region => (
+                <option key={region} value={region}>{region}</option>
+              ))}
+            </select>
+          )}
         </div>
       </div>
 
