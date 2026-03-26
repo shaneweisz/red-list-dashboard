@@ -1802,77 +1802,91 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   )}
                 </div>
 
-                {/* Threats: bar chart + expandable sub-categories */}
+                {/* Threats: bar chart + side-by-side sub-category chart */}
                 {!isNewAssessments && (() => {
+                  // Map label→code for reverse lookup from chart clicks
+                  const threatLabelToCode = new Map(THREAT_CATEGORIES.map(c => [c.label, c.code]));
+                  // Use label as `code` field so it displays on y-axis, sorted by count desc
                   const threatBarData = THREAT_CATEGORIES
-                    .map(({ code, label }) => ({ code, count: threatCounts[code] ?? 0, label: `${label}` }))
-                    .filter(d => d.count > 0);
+                    .map(({ code, label }) => ({ code: label, threatCode: code, count: threatCounts[code] ?? 0, label: `${(threatCounts[code] ?? 0).toLocaleString()}` }))
+                    .filter(d => d.count > 0)
+                    .sort((a, b) => b.count - a.count);
+                  // selectedItems needs to use labels too for dimming
+                  const selectedThreatLabels = new Set(
+                    Array.from(selectedThreats).map(code => THREAT_CATEGORIES.find(c => c.code === code)?.label).filter(Boolean) as string[]
+                  );
                   const expandedCat = expandedThreat ? THREAT_CATEGORIES.find(c => c.code === expandedThreat) : null;
+                  // Sub-category bar data, sorted by count desc
+                  const subBarData = expandedCat
+                    ? expandedCat.children
+                        .map(child => ({ code: child.label, threatCode: child.code, count: threatCounts[child.code] ?? 0, label: `${(threatCounts[child.code] ?? 0).toLocaleString()}` }))
+                        .filter(d => d.count > 0)
+                        .sort((a, b) => b.count - a.count)
+                    : [];
+                  const selectedSubLabels = new Set(
+                    Array.from(selectedThreats).map(code => expandedCat?.children.find(c => c.code === code)?.label).filter(Boolean) as string[]
+                  );
+                  const chartHeight = Math.max(200, threatBarData.length * 22 + 30);
+                  const subChartHeight = Math.max(120, subBarData.length * 22 + 30);
                   return (
                     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Threats</span>
                       </div>
-                      <div style={{ height: 200 }} className="flex items-center justify-center">
-                        {threatBarData.length > 0 ? (
-                          <FilterBarChart
-                            data={threatBarData.map(d => ({ ...d, label: `${d.count.toLocaleString()}` }))}
-                            dataKey="code"
-                            selectedItems={selectedThreats}
-                            onBarClick={(data: { payload?: { code?: string } }, event: React.MouseEvent) => {
-                              const code = data.payload?.code;
-                              if (!code) return;
-                              const isMulti = event.metaKey || event.ctrlKey;
-                              // Toggle expand on click
-                              setExpandedThreat(prev => prev === code ? null : code);
-                              setSelectedThreats(prev => {
-                                if (isMulti) { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; }
-                                if (prev.size === 1 && prev.has(code)) return new Set();
-                                return new Set([code]);
-                              });
-                            }}
-                            barColor="#f43f5e"
-                            yAxisWidth={80}
-                            rightMargin={50}
-                            labelFormatter={(code) => THREAT_CATEGORIES.find(c => c.code === code)?.label || code}
-                          />
-                        ) : null}
-                      </div>
-                      {/* Sub-category pills when a threat is expanded */}
-                      {expandedCat && (
-                        <div className="mt-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
-                          <div className="flex items-center gap-1.5 mb-1.5">
-                            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{expandedCat.label} sub-categories:</span>
-                          </div>
-                          <div className="flex flex-wrap gap-1.5">
-                            {expandedCat.children.map(child => {
-                              const childSelected = selectedThreats.has(child.code);
-                              const childCount = threatCounts[child.code] ?? 0;
-                              if (childCount === 0) return null;
-                              return (
-                                <button
-                                  key={child.code}
-                                  onClick={(e) => {
-                                    const isMulti = e.metaKey || e.ctrlKey;
-                                    setSelectedThreats(prev => {
-                                      if (isMulti) { const next = new Set(prev); if (next.has(child.code)) next.delete(child.code); else next.add(child.code); return next; }
-                                      if (prev.size === 1 && prev.has(child.code)) return new Set();
-                                      return new Set([child.code]);
-                                    });
-                                  }}
-                                  className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
-                                    childSelected
-                                      ? "bg-rose-500 text-white"
-                                      : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
-                                  }`}
-                                >
-                                  {child.label} ({childCount.toLocaleString()})
-                                </button>
-                              );
-                            })}
-                          </div>
+                      <div className={`grid gap-4 ${expandedCat ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1"}`}>
+                        {/* Main threat categories chart */}
+                        <div style={{ height: chartHeight }} className="flex items-center justify-center">
+                          {threatBarData.length > 0 ? (
+                            <FilterBarChart
+                              data={threatBarData}
+                              dataKey="code"
+                              selectedItems={selectedThreatLabels}
+                              onBarClick={(data: { payload?: { code?: string; threatCode?: string } }, event: React.MouseEvent) => {
+                                const label = data.payload?.code;
+                                const code = label ? threatLabelToCode.get(label) : undefined;
+                                if (!code) return;
+                                const isMulti = event.metaKey || event.ctrlKey;
+                                setExpandedThreat(prev => prev === code ? null : code);
+                                if (isMulti) {
+                                  setSelectedThreats(prev => { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; });
+                                }
+                              }}
+                              barColor="#f43f5e"
+                              yAxisWidth={130}
+                              rightMargin={55}
+                              yAxisTickMaxLength={18}
+                            />
+                          ) : null}
                         </div>
-                      )}
+                        {/* Sub-category chart (side by side) */}
+                        {expandedCat && subBarData.length > 0 && (
+                          <div>
+                            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1 block">{expandedCat.label}</span>
+                            <div style={{ height: subChartHeight }} className="flex items-center justify-center">
+                              <FilterBarChart
+                                data={subBarData}
+                                dataKey="code"
+                                selectedItems={selectedSubLabels}
+                                onBarClick={(data: { payload?: { code?: string } }, event: React.MouseEvent) => {
+                                  const label = data.payload?.code;
+                                  const child = expandedCat.children.find(c => c.label === label);
+                                  if (!child) return;
+                                  const isMulti = event.metaKey || event.ctrlKey;
+                                  setSelectedThreats(prev => {
+                                    if (isMulti) { const next = new Set(prev); if (next.has(child.code)) next.delete(child.code); else next.add(child.code); return next; }
+                                    if (prev.size === 1 && prev.has(child.code)) return new Set();
+                                    return new Set([child.code]);
+                                  });
+                                }}
+                                barColor="#fb923c"
+                                yAxisWidth={160}
+                                rightMargin={55}
+                                yAxisTickMaxLength={22}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   );
                 })()}
