@@ -33,6 +33,15 @@ export function parseParams(search: string) {
     systems: p.get("systems")
       ? new Set(p.get("systems")!.split(",").filter(Boolean))
       : new Set<string>(),
+    populationTrends: p.get("trends")
+      ? new Set(p.get("trends")!.split(",").filter(Boolean))
+      : new Set<string>(),
+    movementPatterns: p.get("movement")
+      ? new Set(p.get("movement")!.split(",").filter(Boolean))
+      : new Set<string>(),
+    threats: p.get("threats")
+      ? new Set(p.get("threats")!.split(",").filter(Boolean))
+      : new Set<string>(),
     assessors: p.get("assessors")
       ? new Set(p.get("assessors")!.split("|").filter(Boolean))
       : new Set<string>(),
@@ -63,6 +72,9 @@ export function buildQs(state: {
   countries: Set<string>;
   obsRanges: Set<string>;
   systems: Set<string>;
+  populationTrends: Set<string>;
+  movementPatterns: Set<string>;
+  threats: Set<string>;
   assessors: Set<string>;
   reviewers: Set<string>;
   search: string;
@@ -80,6 +92,9 @@ export function buildQs(state: {
   if (state.countries.size > 0) p.set("countries", [...state.countries].join(","));
   if (state.obsRanges.size > 0) p.set("obsRanges", [...state.obsRanges].join(","));
   if (state.systems.size > 0) p.set("systems", [...state.systems].join(","));
+  if (state.populationTrends.size > 0) p.set("trends", [...state.populationTrends].join(","));
+  if (state.movementPatterns.size > 0) p.set("movement", [...state.movementPatterns].join(","));
+  if (state.threats.size > 0) p.set("threats", [...state.threats].join(","));
   if (state.assessors.size > 0) p.set("assessors", [...state.assessors].join("|"));
   if (state.reviewers.size > 0) p.set("reviewers", [...state.reviewers].join("|"));
   if (state.search) p.set("search", state.search);
@@ -217,6 +232,42 @@ export function useFilterParams() {
     [syncUrl]
   );
 
+  const setSelectedPopulationTrends = useCallback(
+    (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+      setState(prev => {
+        const nextVal = typeof updater === "function" ? updater(prev.populationTrends) : updater;
+        const next = { ...prev, populationTrends: nextVal };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
+  const setSelectedMovementPatterns = useCallback(
+    (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+      setState(prev => {
+        const nextVal = typeof updater === "function" ? updater(prev.movementPatterns) : updater;
+        const next = { ...prev, movementPatterns: nextVal };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
+  const setSelectedThreats = useCallback(
+    (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+      setState(prev => {
+        const nextVal = typeof updater === "function" ? updater(prev.threats) : updater;
+        const next = { ...prev, threats: nextVal };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
   const setSelectedAssessors = useCallback(
     (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
       setState(prev => {
@@ -307,6 +358,9 @@ export function useFilterParams() {
         countries: new Set<string>(),
         obsRanges: new Set<string>(),
         systems: new Set<string>(),
+        populationTrends: new Set<string>(),
+        movementPatterns: new Set<string>(),
+        threats: new Set<string>(),
         assessors: new Set<string>(),
         reviewers: new Set<string>(),
         search: "",
@@ -329,6 +383,9 @@ export function useFilterParams() {
         countries: new Set<string>(),
         obsRanges: new Set<string>(),
         systems: new Set<string>(),
+        populationTrends: new Set<string>(),
+        movementPatterns: new Set<string>(),
+        threats: new Set<string>(),
         assessors: new Set<string>(),
         reviewers: new Set<string>(),
         search: "",
@@ -349,6 +406,9 @@ export function useFilterParams() {
     selectedCountries: state.countries,
     selectedObsRanges: state.obsRanges,
     selectedSystems: state.systems,
+    selectedPopulationTrends: state.populationTrends,
+    selectedMovementPatterns: state.movementPatterns,
+    selectedThreats: state.threats,
     selectedAssessors: state.assessors,
     selectedReviewers: state.reviewers,
     searchFilter: state.search,
@@ -363,6 +423,9 @@ export function useFilterParams() {
     setSelectedCountries,
     setSelectedObsRanges,
     setSelectedSystems,
+    setSelectedPopulationTrends,
+    setSelectedMovementPatterns,
+    setSelectedThreats,
     setSelectedAssessors,
     setSelectedReviewers,
     setSearchFilter,
