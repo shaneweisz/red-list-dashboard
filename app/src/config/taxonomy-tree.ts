@@ -400,7 +400,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
   id: "all",
   name: "All Species",
   filter: { csvGroups: ALL_CSV_GROUPS },
-  estimatedDescribed: 2_174_939,
+  estimatedDescribed: 2_173_939,
   estimatedSource: IUCN_SOURCE,
   estimatedSourceUrl: IUCN_SOURCE_URL,
   color: "#dc2626",
