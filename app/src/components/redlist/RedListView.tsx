@@ -17,6 +17,7 @@ import { parseAssessors } from "@/lib/parseAssessors";
 import { iucnRegionCountries, countryToIucnRegion } from "@/lib/regions";
 import { useFilterParams } from "@/hooks/useFilterParams";
 import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
+import { downloadSpeciesCsv } from "@/lib/exportCsv";
 import AssessmentAssistant from "../AssessmentAssistant";
 import AssessorCandidatesTable from "../AssessorCandidatesTable";
 
@@ -1672,8 +1673,21 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 Clear all
               </button>
             )}
-            <span className="ml-auto text-sm md:text-base font-semibold text-zinc-700 dark:text-zinc-300 tabular-nums">
+            <span className="ml-auto text-sm md:text-base font-semibold text-zinc-700 dark:text-zinc-300 tabular-nums flex items-center gap-2">
               {totalFiltered.toLocaleString()} species
+              <button
+                onClick={() => downloadSpeciesCsv(sortedSpecies)}
+                disabled={sortedSpecies.length === 0}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Download filtered species as CSV"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                CSV
+              </button>
             </span>
             {!isNewAssessments && neCount > 0 && (
               <button
