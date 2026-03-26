@@ -43,6 +43,9 @@ export function parseParams(search: string) {
       ? new Set(p.get("threats")!.split(",").filter(Boolean))
       : new Set<string>(),
     hasMap: p.get("hasMap") as "yes" | "no" | null,
+    growthForms: p.get("growthForms")
+      ? new Set(p.get("growthForms")!.split(",").filter(Boolean))
+      : new Set<string>(),
     assessors: p.get("assessors")
       ? new Set(p.get("assessors")!.split("|").filter(Boolean))
       : new Set<string>(),
@@ -77,6 +80,7 @@ export function buildQs(state: {
   movementPatterns: Set<string>;
   threats: Set<string>;
   hasMap: "yes" | "no" | null;
+  growthForms: Set<string>;
   assessors: Set<string>;
   reviewers: Set<string>;
   search: string;
@@ -98,6 +102,7 @@ export function buildQs(state: {
   if (state.movementPatterns.size > 0) p.set("movement", [...state.movementPatterns].join(","));
   if (state.threats.size > 0) p.set("threats", [...state.threats].join(","));
   if (state.hasMap) p.set("hasMap", state.hasMap);
+  if (state.growthForms.size > 0) p.set("growthForms", [...state.growthForms].join(","));
   if (state.assessors.size > 0) p.set("assessors", [...state.assessors].join("|"));
   if (state.reviewers.size > 0) p.set("reviewers", [...state.reviewers].join("|"));
   if (state.search) p.set("search", state.search);
@@ -271,6 +276,18 @@ export function useFilterParams() {
     [syncUrl]
   );
 
+  const setSelectedGrowthForms = useCallback(
+    (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+      setState(prev => {
+        const nextVal = typeof updater === "function" ? updater(prev.growthForms) : updater;
+        const next = { ...prev, growthForms: nextVal };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
   const setHasMapFilter = useCallback(
     (value: "yes" | "no" | null) => {
       setState(prev => {
@@ -376,6 +393,7 @@ export function useFilterParams() {
         movementPatterns: new Set<string>(),
         threats: new Set<string>(),
         hasMap: null,
+        growthForms: new Set<string>(),
         assessors: new Set<string>(),
         reviewers: new Set<string>(),
         search: "",
@@ -402,6 +420,7 @@ export function useFilterParams() {
         movementPatterns: new Set<string>(),
         threats: new Set<string>(),
         hasMap: null,
+        growthForms: new Set<string>(),
         assessors: new Set<string>(),
         reviewers: new Set<string>(),
         search: "",
@@ -426,6 +445,7 @@ export function useFilterParams() {
     selectedMovementPatterns: state.movementPatterns,
     selectedThreats: state.threats,
     hasMapFilter: state.hasMap,
+    selectedGrowthForms: state.growthForms,
     selectedAssessors: state.assessors,
     selectedReviewers: state.reviewers,
     searchFilter: state.search,
@@ -444,6 +464,7 @@ export function useFilterParams() {
     setSelectedMovementPatterns,
     setSelectedThreats,
     setHasMapFilter,
+    setSelectedGrowthForms,
     setSelectedAssessors,
     setSelectedReviewers,
     setSearchFilter,
