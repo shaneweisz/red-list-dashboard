@@ -944,6 +944,27 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     return { countryCounts: counts, uniqueCountries: sorted, countryStatsForMap: statsForMap };
   }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
 
+  // Realm counts: apply all filters EXCEPT systems (for realm button tooltips)
+  const realmCounts = useMemo(() => {
+    const counts: Record<string, number> = { Terrestrial: 0, Freshwater: 0, Marine: 0 };
+    taxaFilteredSpecies.forEach(s => {
+      if (!matchesSearch(s)) return;
+      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
+      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
+      if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
+      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
+      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
+      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
+      if (!matchesAssessorsFilter(s)) return;
+      if (!matchesReviewersFilter(s)) return;
+      for (const sys of s.systems ?? []) {
+        if (sys in counts) counts[sys]++;
+      }
+    });
+    return counts;
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
+
   // Handle region filter — select all countries in the chosen region
   const handleRegionFilter = useCallback((region: string) => {
     if (!region) {
@@ -1556,9 +1577,11 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                       <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Realm</span>
                       {(["Terrestrial", "Freshwater", "Marine"] as const).map(system => {
                         const isSelected = selectedSystems.has(system);
+                        const count = realmCounts[system] ?? 0;
                         return (
                           <button
                             key={system}
+                            title={`${count.toLocaleString()} species`}
                             onClick={(e) => {
                               const isMulti = e.metaKey || e.ctrlKey;
                               setSelectedSystems(prev => {
