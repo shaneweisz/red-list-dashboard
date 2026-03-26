@@ -266,6 +266,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     selectedYearRanges, setSelectedYearRanges,
     selectedCountries, setSelectedCountries,
     selectedObsRanges, setSelectedObsRanges,
+    selectedSystems, setSelectedSystems,
     selectedAssessors, setSelectedAssessors,
     selectedReviewers, setSelectedReviewers,
     searchFilter, setSearchFilter,
@@ -398,6 +399,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   }, [selectedTaxa, clearAllFilters]);
 
   const [showOnlyStarred, setShowOnlyStarred] = useState(false);
+  const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
 
   // Stable callback for debounced search input
   const handleSearch = useCallback((value: string) => {
@@ -766,6 +768,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
       if (selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
       if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
       if (!matchesAssessorsFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       counts[s.category] = (counts[s.category] || 0) + 1;
@@ -780,7 +783,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       percent: total > 0 ? (((counts[code] || 0) / total) * 100).toFixed(1) : "0",
       label: `${(counts[code] || 0).toLocaleString()} (${total > 0 ? (((counts[code] || 0) / total) * 100).toFixed(1) : 0}%)`,
     }));
-  }, [taxaFilteredSpecies, selectedCountries, selectedYearRanges, selectedObsRanges, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
+  }, [taxaFilteredSpecies, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
 
   // Year chart: apply all filters EXCEPT year range
   const assessmentYearData = useMemo(() => {
@@ -798,6 +801,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
       if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
       if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
       if (!matchesAssessorsFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       const diff = currentYr - new Date(s.assessment_date).getFullYear();
@@ -812,7 +816,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       ...r,
       label: `${r.count.toLocaleString()} (${total > 0 ? ((r.count / total) * 100).toFixed(1) : 0}%)`,
     }));
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedObsRanges, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedObsRanges, selectedSystems, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
 
   // GBIF observations chart: apply all filters EXCEPT obs range
   const gbifObsData = useMemo(() => {
@@ -829,6 +833,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
       if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
       if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
+      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
       if (!matchesAssessorsFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       const obs = s.gbif_occurrence_count ?? 0;
@@ -844,7 +849,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       ...r,
       label: `${r.count.toLocaleString()} (${total > 0 ? ((r.count / total) * 100).toFixed(1) : 0}%)`,
     }));
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedSystems, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
 
   // Country chart: apply all filters EXCEPT country
   const { countryCounts, uniqueCountries, countryStatsForMap } = useMemo(() => {
@@ -854,6 +859,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
       if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
       if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
       if (!matchesAssessorsFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       s.countries.forEach(code => {
@@ -874,7 +880,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       ])
     );
     return { countryCounts: counts, uniqueCountries: sorted, countryStatsForMap: statsForMap };
-  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedSystems, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
 
   // Handle region filter — select all countries in the chosen region
   const handleRegionFilter = useCallback((region: string) => {
@@ -894,6 +900,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
       if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
       if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
       if (!matchesReviewersFilter(s)) return;
       const assessors = getSpeciesAssessors(s);
       for (const a of assessors) {
@@ -907,7 +914,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         count,
         label: count.toLocaleString(),
       }));
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, matchesSearch, matchesReviewersFilter, getSpeciesAssessors]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, matchesSearch, matchesReviewersFilter, getSpeciesAssessors]);
 
   // Reviewer chart: apply all filters EXCEPT reviewers (include assessors)
   const reviewerChartData = useMemo(() => {
@@ -918,6 +925,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
       if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
       if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
       if (!matchesAssessorsFilter(s)) return;
       const reviewers = getSpeciesReviewers(s);
       for (const r of reviewers) {
@@ -931,7 +939,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         count,
         label: count.toLocaleString(),
       }));
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, matchesSearch, matchesAssessorsFilter, getSpeciesReviewers]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, matchesSearch, matchesAssessorsFilter, getSpeciesReviewers]);
 
   // ── Client-side filtering and sorting ──────────────────────────────
   const CATEGORY_ORDER: Record<string, number> = {
@@ -944,6 +952,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       const matchesYear = s.category === "NE" || matchesYearRangeFilter(s.assessment_date);
       const matchesObs = matchesObsRangeFilter(s.gbif_occurrence_count);
       const matchesCountry = selectedCountries.size === 0 || s.countries.some(c => selectedCountries.has(c));
+      const matchesSystem = selectedSystems.size === 0 || s.systems?.some(sys => selectedSystems.has(sys));
       const matchesSearch =
         !searchFilter ||
         s.scientific_name.toLowerCase().includes(searchFilter) ||
@@ -952,7 +961,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       const matchesReviewer = matchesReviewersFilter(s);
       const pinnedKey = isNewAssessments ? Math.abs(s.id) : s.sis_taxon_id;
       const matchesStarred = !showOnlyStarred || (pinnedKey != null && pinnedSet.has(pinnedKey));
-      return matchesCategory && matchesYear && matchesObs && matchesCountry && matchesSearch && matchesAssessor && matchesReviewer && matchesStarred;
+      return matchesCategory && matchesYear && matchesObs && matchesCountry && matchesSystem && matchesSearch && matchesAssessor && matchesReviewer && matchesStarred;
     });
 
     const sorted = [...filtered].sort((a, b) => {
@@ -1001,7 +1010,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     });
 
     return { filteredSpecies: filtered, sortedSpecies: sorted };
-  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedCountries, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection, matchesAssessorsFilter, matchesReviewersFilter, isNewAssessments]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedCountries, selectedSystems, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection, matchesAssessorsFilter, matchesReviewersFilter, isNewAssessments]);
 
   // ── Client-side pagination ─────────────────────────────────────────
   const totalFiltered = filteredSpecies.length;
@@ -1456,7 +1465,41 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
           {/* Charts row 2: Country map + (Reviewers or GBIF Observations for new-assessments) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Country Map */}
-            <div>
+            <div className="flex flex-col gap-2">
+              {/* Realm filter */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Realm</span>
+                {(["Terrestrial", "Freshwater", "Marine"] as const).map(system => {
+                  const isSelected = selectedSystems.has(system);
+                  return (
+                    <button
+                      key={system}
+                      onClick={(e) => {
+                        const isMulti = e.metaKey || e.ctrlKey;
+                        setSelectedSystems(prev => {
+                          if (isMulti) {
+                            const next = new Set(prev);
+                            if (next.has(system)) next.delete(system);
+                            else next.add(system);
+                            return next;
+                          }
+                          if (prev.size === 1 && prev.has(system)) return new Set();
+                          return new Set([system]);
+                        });
+                      }}
+                      className={`px-2.5 py-1 text-xs rounded-full font-medium transition-colors ${
+                        isSelected
+                          ? system === "Terrestrial" ? "bg-amber-500 text-white"
+                          : system === "Freshwater" ? "bg-cyan-500 text-white"
+                          : "bg-blue-600 text-white"
+                          : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                      }`}
+                    >
+                      {system === "Freshwater" ? "Freshwater" : system}
+                    </button>
+                  );
+                })}
+              </div>
               {speciesLoading && assessedSpecies.length === 0 ? (
                 <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 min-h-[320px] flex flex-col">
                   <div className="flex items-center justify-between mb-1">
@@ -1514,6 +1557,85 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 viewMode={reviewerFilterMode}
                 onViewModeChange={setReviewerFilterMode}
               />
+            )}
+          </div>
+
+          {/* More Filters (collapsible) */}
+          <div>
+            <button
+              onClick={() => setMoreFiltersOpen(prev => !prev)}
+              className="flex items-center gap-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
+            >
+              <svg className={`w-3.5 h-3.5 transition-transform ${moreFiltersOpen ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+              More Filters
+              {(selectedSystems.size > 0) && (
+                <span className="ml-1 px-1.5 py-0.5 text-[10px] rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">
+                  {selectedSystems.size} active
+                </span>
+              )}
+            </button>
+            {moreFiltersOpen && (
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* Population Trend */}
+                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+                  <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Population Trend</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(["Increasing", "Stable", "Decreasing", "Unknown"] as const).map(trend => {
+                      const isSelected = selectedSystems.size === 0; // placeholder — we show counts
+                      const count = taxaFilteredSpecies.filter(s => s.population_trend === trend).length;
+                      return (
+                        <span key={trend} className="px-2 py-1 text-xs rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                          {trend === "Increasing" ? "↑" : trend === "Decreasing" ? "↓" : trend === "Stable" ? "→" : "?"} {trend} <span className="text-zinc-400">({count.toLocaleString()})</span>
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Movement Patterns */}
+                {!isNewAssessments && (
+                  <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+                    <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Movement Patterns</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(["Full Migrant", "Altitudinal Migrant", "Nomadic", "Not a Migrant", "Unknown"] as const).map(pattern => {
+                        const count = taxaFilteredSpecies.filter(s => s.movement_pattern === pattern).length;
+                        if (count === 0) return null;
+                        return (
+                          <span key={pattern} className="px-2 py-1 text-xs rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                            {pattern} <span className="text-zinc-400">({count.toLocaleString()})</span>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Threat Categories */}
+                {!isNewAssessments && (
+                  <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+                    <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Threats</span>
+                    <div className="flex flex-wrap gap-1.5 max-h-[140px] overflow-y-auto">
+                      {([
+                        ["1", "Development"], ["2", "Agriculture"], ["3", "Energy & Mining"],
+                        ["4", "Transport"], ["5", "Harvesting"], ["6", "Disturbance"],
+                        ["7", "System modifications"], ["8", "Invasive species"],
+                        ["9", "Pollution"], ["10", "Geological events"],
+                        ["11", "Climate change"], ["12", "Other"],
+                      ] as const).map(([code, label]) => {
+                        const count = taxaFilteredSpecies.filter(s => s.threat_codes?.includes(code)).length;
+                        if (count === 0) return null;
+                        return (
+                          <span key={code} className="px-2 py-1 text-xs rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                            {label} <span className="text-zinc-400">({count.toLocaleString()})</span>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
@@ -1644,6 +1766,20 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 </button>
               ));
             })()}
+            {Array.from(selectedSystems).map(system => (
+              <button
+                key={system}
+                onClick={() => setSelectedSystems(prev => { const next = new Set(prev); next.delete(system); return next; })}
+                className={`px-2 md:px-3 py-1 text-xs md:text-sm rounded-full flex items-center gap-1 hover:opacity-80 ${
+                  system === "Terrestrial" ? "bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400"
+                  : system === "Freshwater" ? "bg-cyan-100 text-cyan-600 dark:bg-cyan-900/30 dark:text-cyan-400"
+                  : "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
+                }`}
+              >
+                {system}
+                <span className="text-xs">×</span>
+              </button>
+            ))}
             {!isNewAssessments && Array.from(selectedAssessors).map(name => (
               <button
                 key={`a-${name}`}
@@ -1664,9 +1800,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 <span className="text-xs">×</span>
               </button>
             ))}
-            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred) && (
+            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred) && (
               <button
-                onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setSelectedSubgroups(new Set()); setSelectedObsRanges(new Set()); setSelectedAssessors(new Set()); setSelectedReviewers(new Set()); setShowOnlyStarred(false); }}
+                onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setSelectedSubgroups(new Set()); setSelectedObsRanges(new Set()); setSelectedSystems(new Set()); setSelectedAssessors(new Set()); setSelectedReviewers(new Set()); setShowOnlyStarred(false); }}
                 className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 underline"
               >
                 Clear all
