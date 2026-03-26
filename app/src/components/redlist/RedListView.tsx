@@ -1674,7 +1674,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                 : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
                             }`}
                           >
-                            {system}
+                            {system} ({count.toLocaleString()})
                           </button>
                         );
                       })}
@@ -1737,77 +1737,80 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
               )}
             </button>
             {moreFiltersOpen && (
-              <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {/* Population Trend */}
-                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
-                  <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Population Trend</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {(["Increasing", "Stable", "Decreasing", "Unknown"] as const).map(trend => {
-                      const isSelected = selectedPopulationTrends.has(trend);
-                      const count = populationTrendCounts[trend] ?? 0;
-                      return (
-                        <button
-                          key={trend}
-                          onClick={(e) => {
-                            const isMulti = e.metaKey || e.ctrlKey;
-                            setSelectedPopulationTrends(prev => {
-                              if (isMulti) { const next = new Set(prev); if (next.has(trend)) next.delete(trend); else next.add(trend); return next; }
-                              if (prev.size === 1 && prev.has(trend)) return new Set();
-                              return new Set([trend]);
-                            });
-                          }}
-                          className={`px-2 py-1 text-xs rounded-md transition-colors cursor-pointer ${
-                            isSelected
-                              ? "bg-orange-500 text-white"
-                              : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
-                          }`}
-                        >
-                          {trend === "Increasing" ? "↑" : trend === "Decreasing" ? "↓" : trend === "Stable" ? "→" : "?"} {trend} ({count.toLocaleString()})
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Movement Patterns */}
-                {!isNewAssessments && (
-                  <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
-                    <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Movement Patterns</span>
+              <div className="mt-3 flex flex-col gap-3">
+                {/* Row 1: Population Trend + Movement Patterns */}
+                <div className="flex flex-wrap gap-x-6 gap-y-2">
+                  {/* Population Trend */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 shrink-0">Trend</span>
                     <div className="flex flex-wrap gap-1.5">
-                      {(["Full Migrant", "Altitudinal Migrant", "Nomadic", "Not a Migrant", "Unknown"] as const).map(pattern => {
-                        const isSelected = selectedMovementPatterns.has(pattern);
-                        const count = movementPatternCounts[pattern] ?? 0;
-                        if (count === 0) return null;
+                      {(["Increasing", "Stable", "Decreasing", "Unknown"] as const).map(trend => {
+                        const isSelected = selectedPopulationTrends.has(trend);
+                        const count = populationTrendCounts[trend] ?? 0;
                         return (
                           <button
-                            key={pattern}
+                            key={trend}
                             onClick={(e) => {
                               const isMulti = e.metaKey || e.ctrlKey;
-                              setSelectedMovementPatterns(prev => {
-                                if (isMulti) { const next = new Set(prev); if (next.has(pattern)) next.delete(pattern); else next.add(pattern); return next; }
-                                if (prev.size === 1 && prev.has(pattern)) return new Set();
-                                return new Set([pattern]);
+                              setSelectedPopulationTrends(prev => {
+                                if (isMulti) { const next = new Set(prev); if (next.has(trend)) next.delete(trend); else next.add(trend); return next; }
+                                if (prev.size === 1 && prev.has(trend)) return new Set();
+                                return new Set([trend]);
                               });
                             }}
-                            className={`px-2 py-1 text-xs rounded-md transition-colors cursor-pointer ${
+                            className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
                               isSelected
-                                ? "bg-teal-500 text-white"
+                                ? "bg-orange-500 text-white"
                                 : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
                             }`}
                           >
-                            {pattern} ({count.toLocaleString()})
+                            {trend === "Increasing" ? "↑" : trend === "Decreasing" ? "↓" : trend === "Stable" ? "→" : "?"} {trend} ({count.toLocaleString()})
                           </button>
                         );
                       })}
                     </div>
                   </div>
-                )}
 
-                {/* Threat Categories (expandable) */}
+                  {/* Movement Patterns */}
+                  {!isNewAssessments && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 shrink-0">Movement</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(["Full Migrant", "Altitudinal Migrant", "Nomadic", "Not a Migrant", "Unknown"] as const).map(pattern => {
+                          const isSelected = selectedMovementPatterns.has(pattern);
+                          const count = movementPatternCounts[pattern] ?? 0;
+                          if (count === 0) return null;
+                          return (
+                            <button
+                              key={pattern}
+                              onClick={(e) => {
+                                const isMulti = e.metaKey || e.ctrlKey;
+                                setSelectedMovementPatterns(prev => {
+                                  if (isMulti) { const next = new Set(prev); if (next.has(pattern)) next.delete(pattern); else next.add(pattern); return next; }
+                                  if (prev.size === 1 && prev.has(pattern)) return new Set();
+                                  return new Set([pattern]);
+                                });
+                              }}
+                              className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
+                                isSelected
+                                  ? "bg-teal-500 text-white"
+                                  : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                              }`}
+                            >
+                              {pattern} ({count.toLocaleString()})
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Row 2: Threats (expandable, 2-column grid) */}
                 {!isNewAssessments && (
-                  <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
-                    <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Threats</span>
-                    <div className="flex flex-col gap-1 max-h-[180px] overflow-y-auto">
+                  <div>
+                    <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1.5 block">Threats</span>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-0.5">
                       {THREAT_CATEGORIES.map(({ code, label, children }) => {
                         const isTopSelected = selectedThreats.has(code);
                         const hasChildSelected = children.some(c => selectedThreats.has(c.code));
@@ -1815,7 +1818,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                         const count = threatCounts[code] ?? 0;
                         if (count === 0) return null;
                         return (
-                          <div key={code}>
+                          <div key={code} className={isExpanded ? "col-span-2 md:col-span-3 lg:col-span-4" : ""}>
                             <div className="flex items-center gap-1">
                               <button
                                 onClick={() => setExpandedThreat(prev => prev === code ? null : code)}
@@ -1834,19 +1837,19 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                     return new Set([code]);
                                   });
                                 }}
-                                className={`px-2 py-0.5 text-xs rounded-md transition-colors cursor-pointer flex-1 text-left ${
+                                className={`px-2 py-0.5 text-xs rounded-md transition-colors cursor-pointer text-left ${
                                   isTopSelected
                                     ? "bg-rose-500 text-white"
                                     : hasChildSelected
                                     ? "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300"
-                                    : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                                    : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
                                 }`}
                               >
-                                {label} ({count.toLocaleString()})
+                                {label} <span className={isTopSelected ? "text-rose-200" : "text-zinc-400 dark:text-zinc-500"}>({count.toLocaleString()})</span>
                               </button>
                             </div>
                             {isExpanded && (
-                              <div className="ml-5 mt-0.5 flex flex-wrap gap-1">
+                              <div className="ml-5 mt-0.5 mb-1 flex flex-wrap gap-1">
                                 {children.map(child => {
                                   const childSelected = selectedThreats.has(child.code);
                                   const childCount = threatCounts[child.code] ?? 0;
@@ -1862,10 +1865,10 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                           return new Set([child.code]);
                                         });
                                       }}
-                                      className={`px-1.5 py-0.5 text-[11px] rounded transition-colors cursor-pointer ${
+                                      className={`px-1.5 py-0.5 text-[11px] rounded-full transition-colors cursor-pointer ${
                                         childSelected
                                           ? "bg-rose-500 text-white"
-                                          : "bg-zinc-50 dark:bg-zinc-800/50 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                                          : "bg-zinc-100 dark:bg-zinc-800/50 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
                                       }`}
                                     >
                                       {child.label} ({childCount.toLocaleString()})
