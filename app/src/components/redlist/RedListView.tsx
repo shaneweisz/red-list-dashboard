@@ -1815,12 +1815,12 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   const selectedThreatLabels = new Set(
                     Array.from(selectedThreats).map(code => THREAT_CATEGORIES.find(c => c.code === code)?.label).filter(Boolean) as string[]
                   );
-                  // Collect all expanded categories (the explicitly expanded one + any selected top-level)
+                  // Collect all expanded categories (only selected top-level threats, or the last-clicked one if nothing selected)
                   const expandedCodes = new Set<string>();
-                  if (expandedThreat) expandedCodes.add(expandedThreat);
                   for (const code of selectedThreats) {
                     if (THREAT_CATEGORIES.some(c => c.code === code)) expandedCodes.add(code);
                   }
+                  if (expandedCodes.size === 0 && expandedThreat) expandedCodes.add(expandedThreat);
                   const expandedCats = THREAT_CATEGORIES.filter(c => expandedCodes.has(c.code));
                   const hasSubChart = expandedCats.length > 0;
                   // Sub-category bar data from all expanded categories, sorted by count desc
