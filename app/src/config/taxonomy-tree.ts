@@ -863,7 +863,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
 
     {
       id: "fungi",
-      name: "Fungi",
+      name: "Fungi & Protists",
       filter: { csvGroups: ["mushrooms", "brown_algae"] },
       estimatedDescribed: 162_653,
       estimatedSource: IUCN_SOURCE,

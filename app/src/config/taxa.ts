@@ -126,7 +126,7 @@ export const TAXA: TaxonConfig[] = [
   },
   {
     id: "fungi",
-    name: "Fungi",
+    name: "Fungi & Protists",
     apiEndpoint: "phylum/Ascomycota",
     apiEndpoints: ["phylum/Ascomycota", "phylum/Basidiomycota"],
     estimatedDescribed: 162653, // IUCN fungi & protists subtotal
