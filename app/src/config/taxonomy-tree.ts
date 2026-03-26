@@ -212,9 +212,9 @@ const CORALS_NODE: TaxonomyNode = {
 const OTHER_INVERTEBRATES_NODE: TaxonomyNode = {
   id: "other_invertebrates",
   name: "Other Invertebrates",
-  filter: { csvGroups: ["other_invertebrates", "velvet_worms", "horseshoe_crabs"] },
-  estimatedDescribed: 230_709,
-  estimatedSource: IUCN_SOURCE + " (Others 230,485 + Velvet Worms 220 + Horseshoe Crabs 4)",
+  filter: { csvGroups: ["other_invertebrates"] },
+  estimatedDescribed: 230_485,
+  estimatedSource: IUCN_SOURCE,
   estimatedSourceUrl: COL_2025_URL,
   children: [
     {
@@ -243,11 +243,11 @@ const OTHER_INVERTEBRATES_NODE: TaxonomyNode = {
       id: "other-invertebrates-catch-all",
       name: "Other Invertebrates",
       filter: {
-        csvGroups: ["other_invertebrates", "velvet_worms", "horseshoe_crabs"],
+        csvGroups: ["other_invertebrates"],
         excludeClasses: ["asteroidea", "echinoidea", "holothuroidea", "clitellata", "polychaeta", "nemertea", "turbellaria"],
       },
-      estimatedDescribed: 195_909,
-      estimatedSource: "Remainder from IUCN Table 1a 'Others' + Velvet Worms + Horseshoe Crabs, minus Echinoderms & Worms",
+      estimatedDescribed: 195_685,
+      estimatedSource: "Remainder from IUCN Table 1a 'Others', minus Echinoderms & Worms",
       estimatedSourceUrl: COL_2025_URL,
     },
   ],
@@ -400,7 +400,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
   id: "all",
   name: "All Species",
   filter: { csvGroups: ALL_CSV_GROUPS },
-  estimatedDescribed: 2_174_939,
+  estimatedDescribed: 2_173_939,
   estimatedSource: IUCN_SOURCE,
   estimatedSourceUrl: IUCN_SOURCE_URL,
   color: "#dc2626",
