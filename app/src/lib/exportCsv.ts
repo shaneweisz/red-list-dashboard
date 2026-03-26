@@ -16,6 +16,13 @@ const CSV_COLUMNS: { header: string; getValue: (s: RedListSpecies) => string }[]
   { header: "SIS Taxon ID", getValue: (s) => s.sis_taxon_id?.toString() ?? "" },
   { header: "Assessment ID", getValue: (s) => s.assessment_id?.toString() ?? "" },
   { header: "GBIF Species Key", getValue: (s) => s.gbif_species_key?.toString() ?? "" },
+  { header: "Systems", getValue: (s) => s.systems.join("; ") },
+  { header: "Growth Forms", getValue: (s) => s.growth_forms.join("; ") },
+  { header: "Movement Pattern", getValue: (s) => s.movement_pattern ?? "" },
+  { header: "Possibly Extinct", getValue: (s) => s.possibly_extinct ? "Yes" : "" },
+  { header: "Possibly Extinct in Wild", getValue: (s) => s.possibly_extinct_in_the_wild ? "Yes" : "" },
+  { header: "Criteria", getValue: (s) => s.criteria ?? "" },
+  { header: "Threat Codes", getValue: (s) => s.threat_codes.join("; ") },
 ];
 
 function escapeCsvField(value: string): string {
