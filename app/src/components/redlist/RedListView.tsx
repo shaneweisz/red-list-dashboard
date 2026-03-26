@@ -965,6 +965,77 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     return counts;
   }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
 
+  // Population trend counts: apply all filters EXCEPT population trend
+  const populationTrendCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    taxaFilteredSpecies.forEach(s => {
+      if (!s.population_trend) return;
+      if (!matchesSearch(s)) return;
+      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
+      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
+      if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
+      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
+      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
+      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
+      if (!matchesAssessorsFilter(s)) return;
+      if (!matchesReviewersFilter(s)) return;
+      counts[s.population_trend] = (counts[s.population_trend] || 0) + 1;
+    });
+    return counts;
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedMovementPatterns, selectedThreats, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
+
+  // Movement pattern counts: apply all filters EXCEPT movement pattern
+  const movementPatternCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    taxaFilteredSpecies.forEach(s => {
+      if (!s.movement_pattern) return;
+      if (!matchesSearch(s)) return;
+      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
+      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
+      if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
+      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
+      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
+      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
+      if (!matchesAssessorsFilter(s)) return;
+      if (!matchesReviewersFilter(s)) return;
+      counts[s.movement_pattern] = (counts[s.movement_pattern] || 0) + 1;
+    });
+    return counts;
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedThreats, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
+
+  // Threat counts: apply all filters EXCEPT threats (count species per prefix, deduplicated)
+  const threatCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    taxaFilteredSpecies.forEach(s => {
+      if (!s.threat_codes?.length) return;
+      if (!matchesSearch(s)) return;
+      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
+      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
+      if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
+      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
+      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
+      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
+      if (!matchesAssessorsFilter(s)) return;
+      if (!matchesReviewersFilter(s)) return;
+      // Deduplicate: count each prefix at most once per species
+      const counted = new Set<string>();
+      for (const tc of s.threat_codes) {
+        const parts = tc.split(".");
+        for (let i = 1; i <= parts.length; i++) {
+          const prefix = parts.slice(0, i).join(".");
+          if (!counted.has(prefix)) {
+            counted.add(prefix);
+            counts[prefix] = (counts[prefix] || 0) + 1;
+          }
+        }
+      }
+    });
+    return counts;
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
+
   // Handle region filter — select all countries in the chosen region
   const handleRegionFilter = useCallback((region: string) => {
     if (!region) {
@@ -1673,7 +1744,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   <div className="flex flex-wrap gap-1.5">
                     {(["Increasing", "Stable", "Decreasing", "Unknown"] as const).map(trend => {
                       const isSelected = selectedPopulationTrends.has(trend);
-                      const count = taxaFilteredSpecies.filter(s => s.population_trend === trend).length;
+                      const count = populationTrendCounts[trend] ?? 0;
                       return (
                         <button
                           key={trend}
@@ -1705,7 +1776,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                     <div className="flex flex-wrap gap-1.5">
                       {(["Full Migrant", "Altitudinal Migrant", "Nomadic", "Not a Migrant", "Unknown"] as const).map(pattern => {
                         const isSelected = selectedMovementPatterns.has(pattern);
-                        const count = taxaFilteredSpecies.filter(s => s.movement_pattern === pattern).length;
+                        const count = movementPatternCounts[pattern] ?? 0;
                         if (count === 0) return null;
                         return (
                           <button
@@ -1741,7 +1812,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                         const isTopSelected = selectedThreats.has(code);
                         const hasChildSelected = children.some(c => selectedThreats.has(c.code));
                         const isExpanded = expandedThreat === code;
-                        const count = taxaFilteredSpecies.filter(s => speciesMatchesThreat(s, code)).length;
+                        const count = threatCounts[code] ?? 0;
                         if (count === 0) return null;
                         return (
                           <div key={code}>
@@ -1778,7 +1849,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                               <div className="ml-5 mt-0.5 flex flex-wrap gap-1">
                                 {children.map(child => {
                                   const childSelected = selectedThreats.has(child.code);
-                                  const childCount = taxaFilteredSpecies.filter(s => speciesMatchesThreat(s, child.code)).length;
+                                  const childCount = threatCounts[child.code] ?? 0;
                                   if (childCount === 0) return null;
                                   return (
                                     <button
