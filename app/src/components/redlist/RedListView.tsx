@@ -1845,7 +1845,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Threats</span>
                       </div>
-                      <div className={`grid gap-4 items-start ${hasSubChart ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1"}`}>
+                      <div>
                         {/* Main threat categories chart */}
                         <div style={{ height: chartHeight }}>
                           {threatBarData.length > 0 ? (
@@ -1870,10 +1870,10 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                             />
                           ) : null}
                         </div>
-                        {/* Sub-category chart (side by side) */}
+                        {/* Sub-category chart (inline below, indented) */}
                         {hasSubChart && subBarData.length > 0 && (
-                          <div>
-                            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1 block">{subTitle}</span>
+                          <div className="ml-8 mt-1 pl-4 border-l-2 border-rose-200 dark:border-rose-800">
+                            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1 block">{subTitle} — sub-categories</span>
                             <div style={{ height: subChartHeight }}>
                               <FilterBarChart
                                 data={subBarData}
