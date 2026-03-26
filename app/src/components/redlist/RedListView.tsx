@@ -1483,7 +1483,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
           {/* Charts row 2: Country map + (Reviewers or GBIF Observations for new-assessments) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Country Map */}
-            <div className="flex flex-col">
+            <div>
               {speciesLoading && assessedSpecies.length === 0 ? (
                 <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 min-h-[320px] flex flex-col">
                   <div className="flex items-center justify-between mb-1">
@@ -1504,42 +1504,43 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   selectedTaxa={selectedTaxa}
                   speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
                   onRegionFilter={handleRegionFilter}
+                  footer={
+                    <div className="flex items-center gap-2 mt-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                      <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Realm</span>
+                      {(["Terrestrial", "Freshwater", "Marine"] as const).map(system => {
+                        const isSelected = selectedSystems.has(system);
+                        return (
+                          <button
+                            key={system}
+                            onClick={(e) => {
+                              const isMulti = e.metaKey || e.ctrlKey;
+                              setSelectedSystems(prev => {
+                                if (isMulti) {
+                                  const next = new Set(prev);
+                                  if (next.has(system)) next.delete(system);
+                                  else next.add(system);
+                                  return next;
+                                }
+                                if (prev.size === 1 && prev.has(system)) return new Set();
+                                return new Set([system]);
+                              });
+                            }}
+                            className={`px-2.5 py-1 text-xs rounded-full font-medium transition-colors ${
+                              isSelected
+                                ? system === "Terrestrial" ? "bg-amber-500 text-white"
+                                : system === "Freshwater" ? "bg-cyan-500 text-white"
+                                : "bg-blue-600 text-white"
+                                : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                            }`}
+                          >
+                            {system}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  }
                 />
               )}
-              {/* Realm filter */}
-              <div className="flex items-center gap-2 mt-2">
-                <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Realm</span>
-                {(["Terrestrial", "Freshwater", "Marine"] as const).map(system => {
-                  const isSelected = selectedSystems.has(system);
-                  return (
-                    <button
-                      key={system}
-                      onClick={(e) => {
-                        const isMulti = e.metaKey || e.ctrlKey;
-                        setSelectedSystems(prev => {
-                          if (isMulti) {
-                            const next = new Set(prev);
-                            if (next.has(system)) next.delete(system);
-                            else next.add(system);
-                            return next;
-                          }
-                          if (prev.size === 1 && prev.has(system)) return new Set();
-                          return new Set([system]);
-                        });
-                      }}
-                      className={`px-2.5 py-1 text-xs rounded-full font-medium transition-colors ${
-                        isSelected
-                          ? system === "Terrestrial" ? "bg-amber-500 text-white"
-                          : system === "Freshwater" ? "bg-cyan-500 text-white"
-                          : "bg-blue-600 text-white"
-                          : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
-                      }`}
-                    >
-                      {system}
-                    </button>
-                  );
-                })}
-              </div>
             </div>
 
             {/* Reviewers (reassessments) or GBIF Observations chart (new-assessments) */}
