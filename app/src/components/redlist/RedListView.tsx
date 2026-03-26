@@ -56,6 +56,52 @@ function Spinner({ className = "" }: { className?: string }) {
 // Use RedListSpecies from the hook; alias for convenience
 type Species = RedListSpecies;
 
+/** IUCN threat classification hierarchy */
+const THREAT_CATEGORIES: { code: string; label: string; children: { code: string; label: string }[] }[] = [
+  { code: "1", label: "Development", children: [
+    { code: "1.1", label: "Housing & urban areas" }, { code: "1.2", label: "Commercial & industrial areas" }, { code: "1.3", label: "Tourism & recreation areas" },
+  ]},
+  { code: "2", label: "Agriculture", children: [
+    { code: "2.1", label: "Crops" }, { code: "2.2", label: "Wood & pulp plantations" }, { code: "2.3", label: "Livestock farming & ranching" }, { code: "2.4", label: "Aquaculture" },
+  ]},
+  { code: "3", label: "Energy & Mining", children: [
+    { code: "3.1", label: "Oil & gas drilling" }, { code: "3.2", label: "Mining & quarrying" }, { code: "3.3", label: "Renewable energy" },
+  ]},
+  { code: "4", label: "Transport", children: [
+    { code: "4.1", label: "Roads & railroads" }, { code: "4.2", label: "Utility & service lines" }, { code: "4.3", label: "Shipping lanes" }, { code: "4.4", label: "Flight paths" },
+  ]},
+  { code: "5", label: "Harvesting", children: [
+    { code: "5.1", label: "Hunting & trapping" }, { code: "5.2", label: "Gathering plants" }, { code: "5.3", label: "Logging & wood harvesting" }, { code: "5.4", label: "Fishing & harvesting" },
+  ]},
+  { code: "6", label: "Disturbance", children: [
+    { code: "6.1", label: "Recreational activities" }, { code: "6.2", label: "War & military" }, { code: "6.3", label: "Work & other activities" },
+  ]},
+  { code: "7", label: "System modifications", children: [
+    { code: "7.1", label: "Fire & fire suppression" }, { code: "7.2", label: "Dams & water management" }, { code: "7.3", label: "Other modifications" },
+  ]},
+  { code: "8", label: "Invasive species", children: [
+    { code: "8.1", label: "Invasive non-native species" }, { code: "8.2", label: "Problematic native species" }, { code: "8.3", label: "Introduced genetic material" }, { code: "8.4", label: "Unknown origin species" }, { code: "8.5", label: "Viral/prion diseases" }, { code: "8.6", label: "Diseases of unknown cause" },
+  ]},
+  { code: "9", label: "Pollution", children: [
+    { code: "9.1", label: "Domestic & urban waste water" }, { code: "9.2", label: "Industrial & military effluents" }, { code: "9.3", label: "Agricultural & forestry effluents" },
+    { code: "9.4", label: "Garbage & solid waste" }, { code: "9.5", label: "Air-borne pollutants" }, { code: "9.6", label: "Excess energy (light, thermal, noise)" },
+  ]},
+  { code: "10", label: "Geological events", children: [
+    { code: "10.1", label: "Volcanoes" }, { code: "10.2", label: "Earthquakes/tsunamis" }, { code: "10.3", label: "Avalanches/landslides" },
+  ]},
+  { code: "11", label: "Climate change", children: [
+    { code: "11.1", label: "Habitat shifting & alteration" }, { code: "11.2", label: "Droughts" }, { code: "11.3", label: "Temperature extremes" }, { code: "11.4", label: "Storms & flooding" }, { code: "11.5", label: "Other impacts" },
+  ]},
+  { code: "12", label: "Other", children: [
+    { code: "12.1", label: "Other threat" },
+  ]},
+];
+
+/** Check if a species has any threat code matching a prefix */
+function speciesMatchesThreat(s: Species, prefix: string): boolean {
+  return !!s.threat_codes?.some(tc => tc === prefix || tc.startsWith(prefix + "."));
+}
+
 interface InatDefaultImage {
   squareUrl: string | null;
   mediumUrl: string | null;
@@ -403,6 +449,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
 
   const [showOnlyStarred, setShowOnlyStarred] = useState(false);
   const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
+  const [expandedThreat, setExpandedThreat] = useState<string | null>(null);
 
   // Stable callback for debounced search input
   const handleSearch = useCallback((value: string) => {
@@ -774,7 +821,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
       if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
       if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => selectedThreats.has(tc))) return;
+      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
       if (!matchesAssessorsFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       counts[s.category] = (counts[s.category] || 0) + 1;
@@ -810,7 +857,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
       if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
       if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => selectedThreats.has(tc))) return;
+      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
       if (!matchesAssessorsFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       const diff = currentYr - new Date(s.assessment_date).getFullYear();
@@ -845,7 +892,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
       if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
       if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => selectedThreats.has(tc))) return;
+      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
       if (!matchesAssessorsFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       const obs = s.gbif_occurrence_count ?? 0;
@@ -874,7 +921,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
       if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
       if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => selectedThreats.has(tc))) return;
+      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
       if (!matchesAssessorsFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       s.countries.forEach(code => {
@@ -970,7 +1017,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       const matchesSystem = selectedSystems.size === 0 || s.systems?.some(sys => selectedSystems.has(sys));
       const matchesTrend = selectedPopulationTrends.size === 0 || (s.population_trend != null && selectedPopulationTrends.has(s.population_trend));
       const matchesMovement = selectedMovementPatterns.size === 0 || (s.movement_pattern != null && selectedMovementPatterns.has(s.movement_pattern));
-      const matchesThreat = selectedThreats.size === 0 || s.threat_codes?.some(tc => selectedThreats.has(tc));
+      const matchesThreat = selectedThreats.size === 0 || s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")));
       const matchesSearch =
         !searchFilter ||
         s.scientific_name.toLowerCase().includes(searchFilter) ||
@@ -1662,40 +1709,78 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   </div>
                 )}
 
-                {/* Threat Categories */}
+                {/* Threat Categories (expandable) */}
                 {!isNewAssessments && (
                   <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
                     <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Threats</span>
-                    <div className="flex flex-wrap gap-1.5 max-h-[140px] overflow-y-auto">
-                      {([
-                        ["1", "Development"], ["2", "Agriculture"], ["3", "Energy & Mining"],
-                        ["4", "Transport"], ["5", "Harvesting"], ["6", "Disturbance"],
-                        ["7", "System modifications"], ["8", "Invasive species"],
-                        ["9", "Pollution"], ["10", "Geological events"],
-                        ["11", "Climate change"], ["12", "Other"],
-                      ] as const).map(([code, label]) => {
-                        const isSelected = selectedThreats.has(code);
-                        const count = taxaFilteredSpecies.filter(s => s.threat_codes?.includes(code)).length;
+                    <div className="flex flex-col gap-1 max-h-[180px] overflow-y-auto">
+                      {THREAT_CATEGORIES.map(({ code, label, children }) => {
+                        const isTopSelected = selectedThreats.has(code);
+                        const hasChildSelected = children.some(c => selectedThreats.has(c.code));
+                        const isExpanded = expandedThreat === code;
+                        const count = taxaFilteredSpecies.filter(s => speciesMatchesThreat(s, code)).length;
                         if (count === 0) return null;
                         return (
-                          <button
-                            key={code}
-                            onClick={(e) => {
-                              const isMulti = e.metaKey || e.ctrlKey;
-                              setSelectedThreats(prev => {
-                                if (isMulti) { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; }
-                                if (prev.size === 1 && prev.has(code)) return new Set();
-                                return new Set([code]);
-                              });
-                            }}
-                            className={`px-2 py-1 text-xs rounded-md transition-colors cursor-pointer ${
-                              isSelected
-                                ? "bg-rose-500 text-white"
-                                : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
-                            }`}
-                          >
-                            {label} ({count.toLocaleString()})
-                          </button>
+                          <div key={code}>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => setExpandedThreat(prev => prev === code ? null : code)}
+                                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 p-0.5"
+                              >
+                                <svg className={`w-3 h-3 transition-transform ${isExpanded ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  const isMulti = e.metaKey || e.ctrlKey;
+                                  setSelectedThreats(prev => {
+                                    if (isMulti) { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; }
+                                    if (prev.size === 1 && prev.has(code)) return new Set();
+                                    return new Set([code]);
+                                  });
+                                }}
+                                className={`px-2 py-0.5 text-xs rounded-md transition-colors cursor-pointer flex-1 text-left ${
+                                  isTopSelected
+                                    ? "bg-rose-500 text-white"
+                                    : hasChildSelected
+                                    ? "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300"
+                                    : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                                }`}
+                              >
+                                {label} ({count.toLocaleString()})
+                              </button>
+                            </div>
+                            {isExpanded && (
+                              <div className="ml-5 mt-0.5 flex flex-wrap gap-1">
+                                {children.map(child => {
+                                  const childSelected = selectedThreats.has(child.code);
+                                  const childCount = taxaFilteredSpecies.filter(s => speciesMatchesThreat(s, child.code)).length;
+                                  if (childCount === 0) return null;
+                                  return (
+                                    <button
+                                      key={child.code}
+                                      onClick={(e) => {
+                                        const isMulti = e.metaKey || e.ctrlKey;
+                                        setSelectedThreats(prev => {
+                                          if (isMulti) { const next = new Set(prev); if (next.has(child.code)) next.delete(child.code); else next.add(child.code); return next; }
+                                          if (prev.size === 1 && prev.has(child.code)) return new Set();
+                                          return new Set([child.code]);
+                                        });
+                                      }}
+                                      className={`px-1.5 py-0.5 text-[11px] rounded transition-colors cursor-pointer ${
+                                        childSelected
+                                          ? "bg-rose-500 text-white"
+                                          : "bg-zinc-50 dark:bg-zinc-800/50 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                                      }`}
+                                    >
+                                      {child.label} ({childCount.toLocaleString()})
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
                         );
                       })}
                     </div>
@@ -1853,14 +1938,16 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
               </button>
             ))}
             {Array.from(selectedThreats).map(code => {
-              const THREAT_LABELS: Record<string, string> = { "1": "Development", "2": "Agriculture", "3": "Energy & Mining", "4": "Transport", "5": "Harvesting", "6": "Disturbance", "7": "System modifications", "8": "Invasive species", "9": "Pollution", "10": "Geological events", "11": "Climate change", "12": "Other" };
+              const cat = THREAT_CATEGORIES.find(c => c.code === code);
+              const sub = !cat ? THREAT_CATEGORIES.flatMap(c => c.children).find(c => c.code === code) : null;
+              const label = cat?.label || sub?.label || code;
               return (
                 <button
                   key={`threat-${code}`}
                   onClick={() => setSelectedThreats(prev => { const next = new Set(prev); next.delete(code); return next; })}
                   className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400 flex items-center gap-1 hover:opacity-80"
                 >
-                  {THREAT_LABELS[code] || code}
+                  {label}
                   <span className="text-xs">×</span>
                 </button>
               );

@@ -56,7 +56,7 @@ export interface RedlistSpecies {
   possibly_extinct: boolean;
   possibly_extinct_in_the_wild: boolean;
   criteria: string | null; // e.g. "B1ab(ii,iii)+2ab(ii,iii)"
-  threat_codes: string[]; // Top-level threat codes e.g. ["1","2","5"]
+  threat_codes: string[]; // Full threat codes e.g. ["1.1","2.1.2","5.3.3"]
 }
 
 // =============================================================================
@@ -178,7 +178,7 @@ export async function fetchFromIucnDb(
           AND supplementary_fields->>'MovementPatterns.pattern' IS NOT NULL
       `, [assessmentIds]),
       pgClient.query(`
-        SELECT at2.assessment_id, SPLIT_PART(tl.code, '.', 1) as top_code
+        SELECT at2.assessment_id, tl.code
         FROM assessment_threats at2
         JOIN threat_lookup tl ON tl.id = at2.threat_id
         WHERE at2.assessment_id = ANY($1)
@@ -217,12 +217,12 @@ export async function fetchFromIucnDb(
       movementByAssessment.set(Number(row.assessment_id), row.pattern);
     }
 
-    // Threats (top-level codes, deduplicated)
+    // Threats (full sub-codes, deduplicated)
     const threatsByAssessment = new Map<number, Set<string>>();
     for (const row of threatsResult.rows) {
       const aid = Number(row.assessment_id);
       if (!threatsByAssessment.has(aid)) threatsByAssessment.set(aid, new Set());
-      threatsByAssessment.get(aid)!.add(row.top_code);
+      threatsByAssessment.get(aid)!.add(row.code);
     }
 
     // Assign to species
@@ -239,7 +239,7 @@ export async function fetchFromIucnDb(
       s.movement_pattern = movementByAssessment.get(s.assessment_id) ?? null;
 
       const threats = threatsByAssessment.get(s.assessment_id);
-      if (threats) s.threat_codes = Array.from(threats).sort((a, b) => Number(a) - Number(b));
+      if (threats) s.threat_codes = Array.from(threats).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
     }
   }
 
