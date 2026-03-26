@@ -1483,9 +1483,31 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
           {/* Charts row 2: Country map + (Reviewers or GBIF Observations for new-assessments) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Country Map */}
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col">
+              {speciesLoading && assessedSpecies.length === 0 ? (
+                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 min-h-[320px] flex flex-col">
+                  <div className="flex items-center justify-between mb-1">
+                    <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                      Country
+                    </h2>
+                  </div>
+                  <div className="flex-1 flex items-center justify-center">
+                    <Spinner />
+                  </div>
+                </div>
+              ) : (
+                <WorldMap
+                  selectedCountries={selectedCountries}
+                  onCountrySelect={handleCountrySelect}
+                  onClearSelection={handleClearCountry}
+                  precomputedStats={countryStatsForMap}
+                  selectedTaxa={selectedTaxa}
+                  speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
+                  onRegionFilter={handleRegionFilter}
+                />
+              )}
               {/* Realm filter */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 mt-2">
                 <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Realm</span>
                 {(["Terrestrial", "Freshwater", "Marine"] as const).map(system => {
                   const isSelected = selectedSystems.has(system);
@@ -1513,33 +1535,11 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                           : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
                       }`}
                     >
-                      {system === "Freshwater" ? "Freshwater" : system}
+                      {system}
                     </button>
                   );
                 })}
               </div>
-              {speciesLoading && assessedSpecies.length === 0 ? (
-                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 min-h-[320px] flex flex-col">
-                  <div className="flex items-center justify-between mb-1">
-                    <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                      Country
-                    </h2>
-                  </div>
-                  <div className="flex-1 flex items-center justify-center">
-                    <Spinner />
-                  </div>
-                </div>
-              ) : (
-                <WorldMap
-                  selectedCountries={selectedCountries}
-                  onCountrySelect={handleCountrySelect}
-                  onClearSelection={handleClearCountry}
-                  precomputedStats={countryStatsForMap}
-                  selectedTaxa={selectedTaxa}
-                  speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
-                  onRegionFilter={handleRegionFilter}
-                />
-              )}
             </div>
 
             {/* Reviewers (reassessments) or GBIF Observations chart (new-assessments) */}
