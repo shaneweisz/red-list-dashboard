@@ -42,6 +42,7 @@ export function parseParams(search: string) {
     threats: p.get("threats")
       ? new Set(p.get("threats")!.split(",").filter(Boolean))
       : new Set<string>(),
+    hasMap: p.get("hasMap") as "yes" | "no" | null,
     assessors: p.get("assessors")
       ? new Set(p.get("assessors")!.split("|").filter(Boolean))
       : new Set<string>(),
@@ -75,6 +76,7 @@ export function buildQs(state: {
   populationTrends: Set<string>;
   movementPatterns: Set<string>;
   threats: Set<string>;
+  hasMap: "yes" | "no" | null;
   assessors: Set<string>;
   reviewers: Set<string>;
   search: string;
@@ -95,6 +97,7 @@ export function buildQs(state: {
   if (state.populationTrends.size > 0) p.set("trends", [...state.populationTrends].join(","));
   if (state.movementPatterns.size > 0) p.set("movement", [...state.movementPatterns].join(","));
   if (state.threats.size > 0) p.set("threats", [...state.threats].join(","));
+  if (state.hasMap) p.set("hasMap", state.hasMap);
   if (state.assessors.size > 0) p.set("assessors", [...state.assessors].join("|"));
   if (state.reviewers.size > 0) p.set("reviewers", [...state.reviewers].join("|"));
   if (state.search) p.set("search", state.search);
@@ -268,6 +271,17 @@ export function useFilterParams() {
     [syncUrl]
   );
 
+  const setHasMapFilter = useCallback(
+    (value: "yes" | "no" | null) => {
+      setState(prev => {
+        const next = { ...prev, hasMap: value };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
   const setSelectedAssessors = useCallback(
     (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
       setState(prev => {
@@ -361,6 +375,7 @@ export function useFilterParams() {
         populationTrends: new Set<string>(),
         movementPatterns: new Set<string>(),
         threats: new Set<string>(),
+        hasMap: null,
         assessors: new Set<string>(),
         reviewers: new Set<string>(),
         search: "",
@@ -386,6 +401,7 @@ export function useFilterParams() {
         populationTrends: new Set<string>(),
         movementPatterns: new Set<string>(),
         threats: new Set<string>(),
+        hasMap: null,
         assessors: new Set<string>(),
         reviewers: new Set<string>(),
         search: "",
@@ -409,6 +425,7 @@ export function useFilterParams() {
     selectedPopulationTrends: state.populationTrends,
     selectedMovementPatterns: state.movementPatterns,
     selectedThreats: state.threats,
+    hasMapFilter: state.hasMap,
     selectedAssessors: state.assessors,
     selectedReviewers: state.reviewers,
     searchFilter: state.search,
@@ -426,6 +443,7 @@ export function useFilterParams() {
     setSelectedPopulationTrends,
     setSelectedMovementPatterns,
     setSelectedThreats,
+    setHasMapFilter,
     setSelectedAssessors,
     setSelectedReviewers,
     setSearchFilter,

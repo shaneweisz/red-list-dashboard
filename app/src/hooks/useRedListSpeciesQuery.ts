@@ -31,6 +31,7 @@ export interface RedListSpecies {
   possibly_extinct_in_the_wild: boolean;
   criteria: string | null;
   threat_codes: string[];
+  has_map: boolean;
 }
 
 interface SpeciesResponse {
