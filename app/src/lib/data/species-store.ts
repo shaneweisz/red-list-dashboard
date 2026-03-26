@@ -62,6 +62,13 @@ interface RedlistRow {
   population_trend: string | null;
   countries: string[];
   taxon_group_table1a: string;
+  systems: string[];
+  growth_forms: string[];
+  movement_pattern: string | null;
+  possibly_extinct: boolean;
+  possibly_extinct_in_the_wild: boolean;
+  criteria: string | null;
+  threat_codes: string[];
 }
 
 interface MappingRow {
@@ -112,6 +119,13 @@ export interface SpeciesRow {
   gbif_occurrence_count: number | null;
   gbif_observations_after_assessment_year: number | null;
   previous_assessments: PreviousAssessment[];
+  systems: string[];
+  growth_forms: string[];
+  movement_pattern: string | null;
+  possibly_extinct: boolean;
+  possibly_extinct_in_the_wild: boolean;
+  criteria: string | null;
+  threat_codes: string[];
 }
 
 export interface TaxaSummaryRow {
@@ -173,6 +187,13 @@ function parseRedlistRow(r: Record<string, string>): RedlistRow {
     population_trend: r.population_trend || null,
     countries: r.countries ? r.countries.split(";").filter(Boolean) : [],
     taxon_group_table1a: r.taxon_group_table1a,
+    systems: r.systems ? r.systems.split(";").filter(Boolean) : [],
+    growth_forms: r.growth_forms ? r.growth_forms.split(";").filter(Boolean) : [],
+    movement_pattern: r.movement_pattern || null,
+    possibly_extinct: r.possibly_extinct === "true",
+    possibly_extinct_in_the_wild: r.possibly_extinct_in_the_wild === "true",
+    criteria: r.criteria || null,
+    threat_codes: r.threat_codes ? r.threat_codes.split(";").filter(Boolean) : [],
   };
 }
 
@@ -322,6 +343,13 @@ export function getSpecies(groups: string[], includeNE: boolean): SpeciesRow[] {
         gbif_occurrence_count: gbifOccurrenceCount,
         gbif_observations_after_assessment_year: gbifObsAfterAssessment,
         previous_assessments: previousAssessments,
+        systems: r.systems,
+        growth_forms: r.growth_forms,
+        movement_pattern: r.movement_pattern,
+        possibly_extinct: r.possibly_extinct,
+        possibly_extinct_in_the_wild: r.possibly_extinct_in_the_wild,
+        criteria: r.criteria,
+        threat_codes: r.threat_codes,
       });
     }
 
@@ -350,6 +378,13 @@ export function getSpecies(groups: string[], includeNE: boolean): SpeciesRow[] {
           gbif_occurrence_count: gbif.total_count,
           gbif_observations_after_assessment_year: gbif.count_after_assessment_year,
           previous_assessments: [],
+          systems: [],
+          growth_forms: [],
+          movement_pattern: null,
+          possibly_extinct: false,
+          possibly_extinct_in_the_wild: false,
+          criteria: null,
+          threat_codes: [],
         });
       }
     }

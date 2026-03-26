@@ -50,6 +50,13 @@ export interface RedlistSpecies {
   population_trend: string | null;
   countries: string[];
   taxon_group_table1a: string;
+  systems: string[]; // Terrestrial, Freshwater, Marine
+  growth_forms: string[]; // Tree, Shrub, Forb or Herb, etc.
+  movement_pattern: string | null; // Full Migrant, Not a Migrant, etc.
+  possibly_extinct: boolean;
+  possibly_extinct_in_the_wild: boolean;
+  criteria: string | null; // e.g. "B1ab(ii,iii)+2ab(ii,iii)"
+  threat_codes: string[]; // Top-level threat codes e.g. ["1","2","5"]
 }
 
 // =============================================================================
@@ -73,7 +80,10 @@ export async function fetchFromIucnDb(
       rlc.code as category,
       a.assessment_date,
       a.year_published,
-      pt.code as population_trend_code
+      pt.code as population_trend_code,
+      a.possibly_extinct,
+      a.possibly_extinct_in_the_wild,
+      a.criteria
     FROM taxons t
     JOIN assessments a ON a.taxon_id = t.id
     JOIN assessment_scopes ascope ON ascope.assessment_id = a.id
@@ -124,41 +134,112 @@ export async function fetchFromIucnDb(
       population_trend: POPULATION_TRENDS[row.population_trend_code] || null,
       countries: [],
       taxon_group_table1a: taxonId,
+      systems: [],
+      growth_forms: [],
+      movement_pattern: null,
+      possibly_extinct: row.possibly_extinct === true,
+      possibly_extinct_in_the_wild: row.possibly_extinct_in_the_wild === true,
+      criteria: row.criteria || null,
+      threat_codes: [],
     });
     assessmentIds.push(assessmentId);
   }
 
   if (assessmentIds.length > 0) {
-    const countriesQuery = `
-      SELECT
-        a.id as assessment_id,
-        ll.code as country_code
-      FROM assessments a
-      JOIN assessment_locations al ON al.assessment_id = a.id
-      JOIN location_lookup ll ON ll.id = al.location_id
-      JOIN legend_lookup leg ON leg.id = al.legend_id
-      WHERE a.id = ANY($1)
-        AND leg.origin = 'Native'
-        AND leg.presence = 'Extant'
-        AND LENGTH(ll.code) = 2
-    `;
+    // Batch-fetch countries, systems, growth forms, movement patterns, and threats
+    const [countriesResult, systemsResult, growthFormsResult, movementResult, threatsResult] = await Promise.all([
+      pgClient.query(`
+        SELECT a.id as assessment_id, ll.code as country_code
+        FROM assessments a
+        JOIN assessment_locations al ON al.assessment_id = a.id
+        JOIN location_lookup ll ON ll.id = al.location_id
+        JOIN legend_lookup leg ON leg.id = al.legend_id
+        WHERE a.id = ANY($1)
+          AND leg.origin = 'Native'
+          AND leg.presence = 'Extant'
+          AND LENGTH(ll.code) = 2
+      `, [assessmentIds]),
+      pgClient.query(`
+        SELECT asys.assessment_id, sl.description->>'en' as system_name
+        FROM assessment_systems asys
+        JOIN system_lookup sl ON sl.id = asys.system_lookup_id
+        WHERE asys.assessment_id = ANY($1)
+      `, [assessmentIds]),
+      pgClient.query(`
+        SELECT agf.assessment_id, gfl.description->>'en' as growth_form
+        FROM assessment_growth_forms agf
+        JOIN growth_form_lookup gfl ON gfl.id = agf.growth_form_id
+        WHERE agf.assessment_id = ANY($1)
+      `, [assessmentIds]),
+      pgClient.query(`
+        SELECT assessment_id, supplementary_fields->>'MovementPatterns.pattern' as pattern
+        FROM assessment_supplementary_infos
+        WHERE assessment_id = ANY($1)
+          AND supplementary_fields->>'MovementPatterns.pattern' IS NOT NULL
+      `, [assessmentIds]),
+      pgClient.query(`
+        SELECT at2.assessment_id, SPLIT_PART(tl.code, '.', 1) as top_code
+        FROM assessment_threats at2
+        JOIN threat_lookup tl ON tl.id = at2.threat_id
+        WHERE at2.assessment_id = ANY($1)
+      `, [assessmentIds]),
+    ]);
 
-    const countriesResult = await pgClient.query(countriesQuery, [assessmentIds]);
-
+    // Countries
     const countriesByAssessment = new Map<number, Set<string>>();
     for (const row of countriesResult.rows) {
       const aid = Number(row.assessment_id);
-      if (!countriesByAssessment.has(aid)) {
-        countriesByAssessment.set(aid, new Set());
-      }
+      if (!countriesByAssessment.has(aid)) countriesByAssessment.set(aid, new Set());
       countriesByAssessment.get(aid)!.add(row.country_code);
     }
 
+    // Systems (realm)
+    const systemsByAssessment = new Map<number, Set<string>>();
+    for (const row of systemsResult.rows) {
+      const aid = Number(row.assessment_id);
+      if (!systemsByAssessment.has(aid)) systemsByAssessment.set(aid, new Set());
+      // Shorten "Freshwater (=Inland waters)" to "Freshwater"
+      const name = (row.system_name as string).replace(/ \(=.*\)/, "");
+      systemsByAssessment.get(aid)!.add(name);
+    }
+
+    // Growth forms
+    const growthFormsByAssessment = new Map<number, Set<string>>();
+    for (const row of growthFormsResult.rows) {
+      const aid = Number(row.assessment_id);
+      if (!growthFormsByAssessment.has(aid)) growthFormsByAssessment.set(aid, new Set());
+      growthFormsByAssessment.get(aid)!.add(row.growth_form);
+    }
+
+    // Movement patterns
+    const movementByAssessment = new Map<number, string>();
+    for (const row of movementResult.rows) {
+      movementByAssessment.set(Number(row.assessment_id), row.pattern);
+    }
+
+    // Threats (top-level codes, deduplicated)
+    const threatsByAssessment = new Map<number, Set<string>>();
+    for (const row of threatsResult.rows) {
+      const aid = Number(row.assessment_id);
+      if (!threatsByAssessment.has(aid)) threatsByAssessment.set(aid, new Set());
+      threatsByAssessment.get(aid)!.add(row.top_code);
+    }
+
+    // Assign to species
     for (const s of species) {
       const countries = countriesByAssessment.get(s.assessment_id);
-      if (countries) {
-        s.countries = Array.from(countries).sort();
-      }
+      if (countries) s.countries = Array.from(countries).sort();
+
+      const systems = systemsByAssessment.get(s.assessment_id);
+      if (systems) s.systems = Array.from(systems).sort();
+
+      const growthForms = growthFormsByAssessment.get(s.assessment_id);
+      if (growthForms) s.growth_forms = Array.from(growthForms).sort();
+
+      s.movement_pattern = movementByAssessment.get(s.assessment_id) ?? null;
+
+      const threats = threatsByAssessment.get(s.assessment_id);
+      if (threats) s.threat_codes = Array.from(threats).sort((a, b) => Number(a) - Number(b));
     }
   }
 
@@ -250,7 +331,9 @@ export async function fetchAssessmentHistory(
 const REDLIST_CSV_COLUMNS = [
   "sis_taxon_id", "scientific_name", "common_name", "class_name", "order_name",
   "family", "taxon_group_table1a", "assessment_id", "iucn_category", "assessment_date",
-  "year_published", "population_trend", "countries",
+  "year_published", "population_trend", "countries", "systems", "growth_forms",
+  "movement_pattern", "possibly_extinct", "possibly_extinct_in_the_wild",
+  "criteria", "threat_codes",
 ];
 
 export function writeRedlistCsv(species: RedlistSpecies[], outputPath: string): void {
@@ -269,6 +352,13 @@ export function writeRedlistCsv(species: RedlistSpecies[], outputPath: string): 
       year_published: s.year_published,
       population_trend: s.population_trend,
       countries: s.countries.join(";"),
+      systems: s.systems.join(";"),
+      growth_forms: s.growth_forms.join(";"),
+      movement_pattern: s.movement_pattern,
+      possibly_extinct: s.possibly_extinct ? "true" : "",
+      possibly_extinct_in_the_wild: s.possibly_extinct_in_the_wild ? "true" : "",
+      criteria: s.criteria,
+      threat_codes: s.threat_codes.join(";"),
     }));
 
   writeCsv(rows, REDLIST_CSV_COLUMNS, outputPath);
@@ -290,6 +380,13 @@ export function readRedlistCsv(taxonId: string): RedlistSpecies[] {
     population_trend: r.population_trend || null,
     countries: r.countries ? r.countries.split(";").filter(Boolean) : [],
     taxon_group_table1a: r.taxon_group_table1a,
+    systems: r.systems ? r.systems.split(";").filter(Boolean) : [],
+    growth_forms: r.growth_forms ? r.growth_forms.split(";").filter(Boolean) : [],
+    movement_pattern: r.movement_pattern || null,
+    possibly_extinct: r.possibly_extinct === "true",
+    possibly_extinct_in_the_wild: r.possibly_extinct_in_the_wild === "true",
+    criteria: r.criteria || null,
+    threat_codes: r.threat_codes ? r.threat_codes.split(";").filter(Boolean) : [],
   }));
 }
 
