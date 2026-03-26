@@ -14,6 +14,7 @@ import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
 import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode } from "@/lib/taxonomy-utils";
 import ReviewerChart from "./ReviewerChart";
 import { parseAssessors } from "@/lib/parseAssessors";
+import { iucnRegionCountries, countryToIucnRegion } from "@/lib/regions";
 import { useFilterParams } from "@/hooks/useFilterParams";
 import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import AssessmentAssistant from "../AssessmentAssistant";
@@ -875,6 +876,15 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     return { countryCounts: counts, uniqueCountries: sorted, countryStatsForMap: statsForMap };
   }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
 
+  // Handle region filter — select all countries in the chosen region
+  const handleRegionFilter = useCallback((region: string) => {
+    if (!region) {
+      setSelectedCountries(new Set());
+      return;
+    }
+    setSelectedCountries(new Set(iucnRegionCountries(region)));
+  }, [setSelectedCountries]);
+
   // Assessor chart: apply all filters EXCEPT assessors (include reviewers)
   const assessorChartData = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -1466,6 +1476,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   precomputedStats={countryStatsForMap}
                   selectedTaxa={selectedTaxa}
                   speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
+                  onRegionFilter={handleRegionFilter}
                 />
               )}
             </div>
@@ -1599,16 +1610,40 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 <span className="text-xs">×</span>
               </button>
             ))}
-            {Array.from(selectedCountries).map(code => (
-              <button
-                key={code}
-                onClick={() => setSelectedCountries(prev => { const next = new Set(prev); next.delete(code); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 flex items-center gap-1 hover:opacity-80"
-              >
-                {getCountryName(code)}
-                <span className="text-xs">×</span>
-              </button>
-            ))}
+            {(() => {
+              if (selectedCountries.size === 0) return null;
+              // Check if selected countries exactly match a single IUCN region
+              const regions = new Set<string>();
+              selectedCountries.forEach(c => regions.add(countryToIucnRegion(c)));
+              if (regions.size === 1) {
+                const region = [...regions][0];
+                if (region !== "Other") {
+                  const regionCodes = iucnRegionCountries(region);
+                  if (regionCodes.length === selectedCountries.size && regionCodes.every(c => selectedCountries.has(c))) {
+                    return (
+                      <button
+                        onClick={() => setSelectedCountries(new Set())}
+                        className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 flex items-center gap-1 hover:opacity-80"
+                      >
+                        {region}
+                        <span className="text-xs">×</span>
+                      </button>
+                    );
+                  }
+                }
+              }
+              // Otherwise show individual country pills
+              return Array.from(selectedCountries).map(code => (
+                <button
+                  key={code}
+                  onClick={() => setSelectedCountries(prev => { const next = new Set(prev); next.delete(code); return next; })}
+                  className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 flex items-center gap-1 hover:opacity-80"
+                >
+                  {getCountryName(code)}
+                  <span className="text-xs">×</span>
+                </button>
+              ));
+            })()}
             {!isNewAssessments && Array.from(selectedAssessors).map(name => (
               <button
                 key={`a-${name}`}
