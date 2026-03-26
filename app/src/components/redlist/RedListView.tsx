@@ -1842,9 +1842,11 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                 const code = label ? threatLabelToCode.get(label) : undefined;
                                 if (!code) return;
                                 const isMulti = event.metaKey || event.ctrlKey;
-                                if (isMulti) {
-                                  setSelectedThreats(prev => { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; });
-                                }
+                                setSelectedThreats(prev => {
+                                  if (isMulti) { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; }
+                                  if (prev.size === 1 && prev.has(code)) return new Set();
+                                  return new Set([code]);
+                                });
                                 setExpandedThreat(prev => prev === code ? null : code);
                               }}
                               barColor="#f43f5e"
