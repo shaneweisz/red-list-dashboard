@@ -1815,27 +1815,39 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   const selectedThreatLabels = new Set(
                     Array.from(selectedThreats).map(code => THREAT_CATEGORIES.find(c => c.code === code)?.label).filter(Boolean) as string[]
                   );
-                  const expandedCat = expandedThreat ? THREAT_CATEGORIES.find(c => c.code === expandedThreat) : null;
-                  // Sub-category bar data, sorted by count desc
-                  const subBarData = expandedCat
-                    ? expandedCat.children
-                        .map(child => ({ code: child.label, threatCode: child.code, count: threatCounts[child.code] ?? 0, label: `${(threatCounts[child.code] ?? 0).toLocaleString()}` }))
-                        .filter(d => d.count > 0)
-                        .sort((a, b) => b.count - a.count)
-                    : [];
+                  // Collect all expanded categories (the explicitly expanded one + any selected top-level)
+                  const expandedCodes = new Set<string>();
+                  if (expandedThreat) expandedCodes.add(expandedThreat);
+                  for (const code of selectedThreats) {
+                    if (THREAT_CATEGORIES.some(c => c.code === code)) expandedCodes.add(code);
+                  }
+                  const expandedCats = THREAT_CATEGORIES.filter(c => expandedCodes.has(c.code));
+                  const hasSubChart = expandedCats.length > 0;
+                  // Sub-category bar data from all expanded categories, sorted by count desc
+                  const subBarData = expandedCats
+                    .flatMap(cat => cat.children.map(child => ({
+                      code: child.label,
+                      threatCode: child.code,
+                      count: threatCounts[child.code] ?? 0,
+                      label: `${(threatCounts[child.code] ?? 0).toLocaleString()}`,
+                    })))
+                    .filter(d => d.count > 0)
+                    .sort((a, b) => b.count - a.count);
+                  const allSubChildren = expandedCats.flatMap(c => c.children);
                   const selectedSubLabels = new Set(
-                    Array.from(selectedThreats).map(code => expandedCat?.children.find(c => c.code === code)?.label).filter(Boolean) as string[]
+                    Array.from(selectedThreats).map(code => allSubChildren.find(c => c.code === code)?.label).filter(Boolean) as string[]
                   );
-                  const chartHeight = Math.max(200, threatBarData.length * 22 + 30);
-                  const subChartHeight = Math.max(120, subBarData.length * 22 + 30);
+                  const subTitle = expandedCats.length === 1 ? expandedCats[0].label : `${expandedCats.map(c => c.label).join(", ")}`;
+                  const chartHeight = Math.max(200, threatBarData.length * 24 + 30);
+                  const subChartHeight = Math.max(120, subBarData.length * 24 + 30);
                   return (
                     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Threats</span>
                       </div>
-                      <div className={`grid gap-4 ${expandedCat ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1"}`}>
+                      <div className={`grid gap-4 items-start ${hasSubChart ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1"}`}>
                         {/* Main threat categories chart */}
-                        <div style={{ height: chartHeight }} className="flex items-center justify-center">
+                        <div style={{ height: chartHeight }}>
                           {threatBarData.length > 0 ? (
                             <FilterBarChart
                               data={threatBarData}
@@ -1846,30 +1858,30 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                 const code = label ? threatLabelToCode.get(label) : undefined;
                                 if (!code) return;
                                 const isMulti = event.metaKey || event.ctrlKey;
-                                setExpandedThreat(prev => prev === code ? null : code);
                                 if (isMulti) {
                                   setSelectedThreats(prev => { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; });
                                 }
+                                setExpandedThreat(prev => prev === code ? null : code);
                               }}
                               barColor="#f43f5e"
-                              yAxisWidth={130}
+                              yAxisWidth={155}
                               rightMargin={55}
-                              yAxisTickMaxLength={18}
+                              yAxisTickMaxLength={22}
                             />
                           ) : null}
                         </div>
                         {/* Sub-category chart (side by side) */}
-                        {expandedCat && subBarData.length > 0 && (
+                        {hasSubChart && subBarData.length > 0 && (
                           <div>
-                            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1 block">{expandedCat.label}</span>
-                            <div style={{ height: subChartHeight }} className="flex items-center justify-center">
+                            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1 block">{subTitle}</span>
+                            <div style={{ height: subChartHeight }}>
                               <FilterBarChart
                                 data={subBarData}
                                 dataKey="code"
                                 selectedItems={selectedSubLabels}
                                 onBarClick={(data: { payload?: { code?: string } }, event: React.MouseEvent) => {
                                   const label = data.payload?.code;
-                                  const child = expandedCat.children.find(c => c.label === label);
+                                  const child = allSubChildren.find(c => c.label === label);
                                   if (!child) return;
                                   const isMulti = event.metaKey || event.ctrlKey;
                                   setSelectedThreats(prev => {
@@ -1879,9 +1891,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                   });
                                 }}
                                 barColor="#fb923c"
-                                yAxisWidth={160}
+                                yAxisWidth={170}
                                 rightMargin={55}
-                                yAxisTickMaxLength={22}
+                                yAxisTickMaxLength={24}
                               />
                             </div>
                           </div>
