@@ -322,24 +322,3 @@ export function iucnRegionCountries(region: string): string[] {
     .filter(([, r]) => r === region)
     .map(([code]) => code);
 }
-
-/** Colors for IUCN land regions */
-const IUCN_REGION_COLORS: Record<string, string> = {
-  "Antarctic": "#94a3b8",
-  "Caribbean Islands": "#f87171",
-  "East Asia": "#16a34a",
-  "Europe": "#3b82f6",
-  "Mesoamerica": "#ef4444",
-  "North Africa": "#facc15",
-  "North America": "#fca5a5",
-  "North Asia": "#7c3aed",
-  "Oceania": "#14b8a6",
-  "South America": "#dc2626",
-  "South and Southeast Asia": "#22c55e",
-  "Sub-Saharan Africa": "#eab308",
-  "West and Central Asia": "#86efac",
-};
-
-export function iucnRegionColor(region: string): string {
-  return IUCN_REGION_COLORS[region] ?? "#a1a1aa";
-}
