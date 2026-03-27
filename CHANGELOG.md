@@ -2,6 +2,17 @@
 
 All notable changes to the IUCN Red List Assessments Dashboard.
 
+## [v2.4.0] — 2026-03-24 – 2026-03-27 — Mobile UX, Filters & New Fields
+
+- Improved mobile dashboard UX with responsive viewport and fixed table/tab overflow
+- Added CSV export for filtered species list
+- Added 7 new Red List fields: systems, growth forms, movement patterns, possibly extinct, criteria, threats
+- Added More Filters section with realm, threats, population trend, movement patterns, growth form, and range map
+- Added region filter dropdown on country map
+- Renamed Red List tab to IUCN Red List and reordered detail tabs
+- Fixed invertebrate double-counting and region dropdown selection bug
+- Updated 'Fungi' label to 'Fungi & Protists'
+
 ## [v2.3.0] — 2026-03-18 – 2026-03-23 — Taxonomy Tree & Suggested Assessors
 
 - Redesigned taxonomy system: unified tree with recursive drill-down, icons, and precomputed summaries
