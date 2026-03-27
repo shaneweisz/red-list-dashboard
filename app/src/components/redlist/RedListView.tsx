@@ -1865,10 +1865,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   );
                 })()}
 
-                {/* Trend + Movement */}
-                <div className="flex flex-wrap gap-x-6 gap-y-2">
-                  {/* Population Trend */}
-                  <div className="flex items-center gap-2">
+                {/* Trend */}
+                <div className="flex items-center gap-2">
                     <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 shrink-0 w-16">Trend</span>
                     <div className="flex flex-wrap gap-1.5">
                       {(["Increasing", "Stable", "Decreasing", "Unknown"] as const).map(trend => {
@@ -1898,10 +1896,10 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                     </div>
                   </div>
 
-                  {/* Movement Patterns */}
-                  {!isNewAssessments && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 shrink-0 w-16">Movement</span>
+                {/* Movement Patterns */}
+                {!isNewAssessments && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 shrink-0 w-16">Movement</span>
                       <div className="flex flex-wrap gap-1.5">
                         {(["Full Migrant", "Altitudinal Migrant", "Nomadic", "Not a Migrant", "Unknown"] as const).map(pattern => {
                           const isSelected = selectedMovementPatterns.has(pattern);
@@ -1929,9 +1927,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                           );
                         })}
                       </div>
-                    </div>
-                  )}
-                </div>
+                  </div>
+                )}
 
                 {/* Threats: bar chart + side-by-side sub-category chart */}
                 {!isNewAssessments && (() => {
@@ -2649,20 +2646,20 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                     className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "redlist" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                     onClick={() => setActiveDetailTab("redlist")}
                                   >
-                                    Red List
+                                    IUCN Red List
                                   </button>
                                 )}
-                                <button
-                                  className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "wikipedia" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
-                                  onClick={() => setActiveDetailTab("wikipedia")}
-                                >
-                                  Wikipedia
-                                </button>
                                 <button
                                   className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "cites" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                   onClick={() => setActiveDetailTab("cites")}
                                 >
                                   CITES
+                                </button>
+                                <button
+                                  className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "wikipedia" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                  onClick={() => setActiveDetailTab("wikipedia")}
+                                >
+                                  Wikipedia
                                 </button>
                                 {s.category === "NE" && (
                                   <button
