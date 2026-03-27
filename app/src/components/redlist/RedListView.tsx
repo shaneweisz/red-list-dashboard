@@ -16,6 +16,7 @@ import ReviewerChart from "./ReviewerChart";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { iucnRegionCountries, countryToIucnRegion } from "@/lib/regions";
 import { useFilterParams } from "@/hooks/useFilterParams";
+import PresetSelector from "./PresetSelector";
 import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import { downloadSpeciesCsv } from "@/lib/exportCsv";
 import AssessmentAssistant from "../AssessmentAssistant";
@@ -324,10 +325,14 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     searchFilter, setSearchFilter,
     sortField, sortDirection, setSort,
     clearAllFilters,
+    applyPreset,
     setViewMode: setUrlViewMode,
     species: urlSpecies, tab: urlTab,
     setSpeciesParam, setTabParam,
   } = useFilterParams();
+
+  // Active preset state
+  const [activePreset, setActivePreset] = useState("default");
 
   // Initialize from shared state on mount (when switching from another view)
   const initializedRef = useRef(false);
@@ -1539,6 +1544,28 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
 
   return (
     <div className="space-y-4 min-w-0">
+      {/* Preset selector above taxa table */}
+      <div className="flex items-center justify-end">
+        <PresetSelector
+          activePreset={activePreset}
+          onSelect={(presetId, filters) => {
+            setActivePreset(presetId);
+            if (presetId === "default") {
+              // Reset to default: clear all filters and taxa
+              skipClearOnTaxaChangeRef.current = true;
+              setSelectedTaxa(new Set());
+              setSelectedSubgroups(new Set());
+              clearAllFilters();
+            } else if (filters) {
+              // Apply preset filters
+              skipClearOnTaxaChangeRef.current = true;
+              applyPreset(filters);
+            }
+            setShowOnlyStarred(false);
+          }}
+        />
+      </div>
+
       {/* Always show Taxa Summary table */}
       <TaxaSummary
         onToggleTaxon={handleToggleTaxon}

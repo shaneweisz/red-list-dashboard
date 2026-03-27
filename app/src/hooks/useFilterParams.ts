@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
+import type { PresetFilters } from "@/config/taxonomy-views";
 
 // --- URL parsing helpers ---
 
@@ -405,6 +406,33 @@ export function useFilterParams() {
     });
   }, [syncUrl]);
 
+  const applyPreset = useCallback((filters: PresetFilters) => {
+    setState(prev => {
+      const next = {
+        ...prev,
+        taxa: filters.taxa ? new Set(filters.taxa) : new Set<string>(),
+        subgroups: new Set<string>(),
+        categories: filters.categories ? new Set(filters.categories) : new Set<string>(),
+        yearRanges: filters.yearRanges ? new Set(filters.yearRanges) : new Set<string>(),
+        countries: new Set<string>(),
+        obsRanges: new Set<string>(),
+        systems: filters.systems ? new Set(filters.systems) : new Set<string>(),
+        populationTrends: filters.populationTrends ? new Set(filters.populationTrends) : new Set<string>(),
+        movementPatterns: filters.movementPatterns ? new Set(filters.movementPatterns) : new Set<string>(),
+        threats: filters.threats ? new Set(filters.threats) : new Set<string>(),
+        hasMap: null,
+        growthForms: filters.growthForms ? new Set(filters.growthForms) : new Set<string>(),
+        assessors: new Set<string>(),
+        reviewers: new Set<string>(),
+        search: "",
+        sortField: null,
+        sortDirection: "desc" as const,
+      };
+      queueMicrotask(() => syncUrl(next, true));
+      return next;
+    });
+  }, [syncUrl]);
+
   const clearAllFiltersAndTaxa = useCallback(() => {
     setState(prev => {
       const next = {
@@ -471,6 +499,7 @@ export function useFilterParams() {
     setSort,
     clearAllFilters,
     clearAllFiltersAndTaxa,
+    applyPreset,
     species: state.species,
     tab: state.tab,
     setSpeciesParam,
