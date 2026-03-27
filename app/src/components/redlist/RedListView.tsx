@@ -1732,8 +1732,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
             )}
           </div>
 
-          {/* More Filters (collapsible) */}
-          <div>
+          {/* More Filters (collapsible) - hidden for New Assessments */}
+          {!isNewAssessments && <div>
             <button
               onClick={() => setMoreFiltersOpen(prev => !prev)}
               className="flex items-center gap-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
@@ -2029,7 +2029,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 })()}
               </div>
             )}
-          </div>
+          </div>}
 
       {/* Search and Species Table */}
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
