@@ -983,6 +983,29 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     return counts;
   }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
 
+  // Map counts: apply all filters EXCEPT hasMap
+  const mapCounts = useMemo(() => {
+    let hasMap = 0;
+    let noMap = 0;
+    taxaFilteredSpecies.forEach(s => {
+      if (!matchesSearch(s)) return;
+      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
+      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
+      if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
+      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
+      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
+      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
+      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
+      if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
+      if (!matchesAssessorsFilter(s)) return;
+      if (!matchesReviewersFilter(s)) return;
+      if (s.has_map) hasMap++;
+      else noMap++;
+    });
+    return { yes: hasMap, no: noMap };
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
+
   // Population trend counts: apply all filters EXCEPT population trend
   const populationTrendCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -1766,7 +1789,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   <div className="flex flex-wrap gap-1.5">
                     {(["yes", "no"] as const).map(value => {
                       const isSelected = hasMapFilter === value;
-                      const label = value === "yes" ? "Has map" : "No map";
+                      const count = mapCounts[value];
+                      const label = value === "yes" ? `Has map (${count.toLocaleString()})` : `No map (${count.toLocaleString()})`;
                       return (
                         <button
                           key={value}
