@@ -57,6 +57,52 @@ function Spinner({ className = "" }: { className?: string }) {
 // Use RedListSpecies from the hook; alias for convenience
 type Species = RedListSpecies;
 
+/** IUCN threat classification hierarchy */
+const THREAT_CATEGORIES: { code: string; label: string; children: { code: string; label: string }[] }[] = [
+  { code: "1", label: "Development", children: [
+    { code: "1.1", label: "Housing & urban areas" }, { code: "1.2", label: "Commercial & industrial areas" }, { code: "1.3", label: "Tourism & recreation areas" },
+  ]},
+  { code: "2", label: "Agriculture", children: [
+    { code: "2.1", label: "Crops" }, { code: "2.2", label: "Wood & pulp plantations" }, { code: "2.3", label: "Livestock farming & ranching" }, { code: "2.4", label: "Aquaculture" },
+  ]},
+  { code: "3", label: "Energy & Mining", children: [
+    { code: "3.1", label: "Oil & gas drilling" }, { code: "3.2", label: "Mining & quarrying" }, { code: "3.3", label: "Renewable energy" },
+  ]},
+  { code: "4", label: "Transport", children: [
+    { code: "4.1", label: "Roads & railroads" }, { code: "4.2", label: "Utility & service lines" }, { code: "4.3", label: "Shipping lanes" }, { code: "4.4", label: "Flight paths" },
+  ]},
+  { code: "5", label: "Harvesting", children: [
+    { code: "5.1", label: "Hunting & trapping" }, { code: "5.2", label: "Gathering plants" }, { code: "5.3", label: "Logging & wood harvesting" }, { code: "5.4", label: "Fishing & harvesting" },
+  ]},
+  { code: "6", label: "Disturbance", children: [
+    { code: "6.1", label: "Recreational activities" }, { code: "6.2", label: "War & military" }, { code: "6.3", label: "Work & other activities" },
+  ]},
+  { code: "7", label: "System modifications", children: [
+    { code: "7.1", label: "Fire & fire suppression" }, { code: "7.2", label: "Dams & water management" }, { code: "7.3", label: "Other modifications" },
+  ]},
+  { code: "8", label: "Invasive species", children: [
+    { code: "8.1", label: "Invasive non-native species" }, { code: "8.2", label: "Problematic native species" }, { code: "8.3", label: "Introduced genetic material" }, { code: "8.4", label: "Unknown origin species" }, { code: "8.5", label: "Viral/prion diseases" }, { code: "8.6", label: "Diseases of unknown cause" },
+  ]},
+  { code: "9", label: "Pollution", children: [
+    { code: "9.1", label: "Domestic & urban waste water" }, { code: "9.2", label: "Industrial & military effluents" }, { code: "9.3", label: "Agricultural & forestry effluents" },
+    { code: "9.4", label: "Garbage & solid waste" }, { code: "9.5", label: "Air-borne pollutants" }, { code: "9.6", label: "Excess energy (light, thermal, noise)" },
+  ]},
+  { code: "10", label: "Geological events", children: [
+    { code: "10.1", label: "Volcanoes" }, { code: "10.2", label: "Earthquakes/tsunamis" }, { code: "10.3", label: "Avalanches/landslides" },
+  ]},
+  { code: "11", label: "Climate change", children: [
+    { code: "11.1", label: "Habitat shifting & alteration" }, { code: "11.2", label: "Droughts" }, { code: "11.3", label: "Temperature extremes" }, { code: "11.4", label: "Storms & flooding" }, { code: "11.5", label: "Other impacts" },
+  ]},
+  { code: "12", label: "Other", children: [
+    { code: "12.1", label: "Other threat" },
+  ]},
+];
+
+/** Check if a species has any threat code matching a prefix */
+function speciesMatchesThreat(s: Species, prefix: string): boolean {
+  return !!s.threat_codes?.some(tc => tc === prefix || tc.startsWith(prefix + "."));
+}
+
 interface InatDefaultImage {
   squareUrl: string | null;
   mediumUrl: string | null;
@@ -267,6 +313,12 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     selectedYearRanges, setSelectedYearRanges,
     selectedCountries, setSelectedCountries,
     selectedObsRanges, setSelectedObsRanges,
+    selectedSystems, setSelectedSystems,
+    selectedPopulationTrends, setSelectedPopulationTrends,
+    selectedMovementPatterns, setSelectedMovementPatterns,
+    selectedThreats, setSelectedThreats,
+    hasMapFilter, setHasMapFilter,
+    selectedGrowthForms, setSelectedGrowthForms,
     selectedAssessors, setSelectedAssessors,
     selectedReviewers, setSelectedReviewers,
     searchFilter, setSearchFilter,
@@ -399,6 +451,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   }, [selectedTaxa, clearAllFilters]);
 
   const [showOnlyStarred, setShowOnlyStarred] = useState(false);
+  const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
+  const [expandedThreat, setExpandedThreat] = useState<string | null>(null);
 
   // Stable callback for debounced search input
   const handleSearch = useCallback((value: string) => {
@@ -767,6 +821,13 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
       if (selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
       if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
+      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
+      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
+      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
+      if (hasMapFilter === "yes" && !s.has_map) return;
+      if (hasMapFilter === "no" && s.has_map) return;
+      if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesAssessorsFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       counts[s.category] = (counts[s.category] || 0) + 1;
@@ -781,7 +842,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       percent: total > 0 ? (((counts[code] || 0) / total) * 100).toFixed(1) : "0",
       label: `${(counts[code] || 0).toLocaleString()} (${total > 0 ? (((counts[code] || 0) / total) * 100).toFixed(1) : 0}%)`,
     }));
-  }, [taxaFilteredSpecies, selectedCountries, selectedYearRanges, selectedObsRanges, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
+  }, [taxaFilteredSpecies, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, hasMapFilter, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
 
   // Year chart: apply all filters EXCEPT year range
   const assessmentYearData = useMemo(() => {
@@ -799,6 +860,13 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
       if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
       if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
+      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
+      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
+      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
+      if (hasMapFilter === "yes" && !s.has_map) return;
+      if (hasMapFilter === "no" && s.has_map) return;
+      if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesAssessorsFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       const diff = currentYr - new Date(s.assessment_date).getFullYear();
@@ -813,7 +881,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       ...r,
       label: `${r.count.toLocaleString()} (${total > 0 ? ((r.count / total) * 100).toFixed(1) : 0}%)`,
     }));
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedObsRanges, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, hasMapFilter, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
 
   // GBIF observations chart: apply all filters EXCEPT obs range
   const gbifObsData = useMemo(() => {
@@ -830,6 +898,13 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
       if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
       if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
+      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
+      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
+      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
+      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
+      if (hasMapFilter === "yes" && !s.has_map) return;
+      if (hasMapFilter === "no" && s.has_map) return;
+      if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesAssessorsFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       const obs = s.gbif_occurrence_count ?? 0;
@@ -845,7 +920,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       ...r,
       label: `${r.count.toLocaleString()} (${total > 0 ? ((r.count / total) * 100).toFixed(1) : 0}%)`,
     }));
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, hasMapFilter, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
 
   // Country chart: apply all filters EXCEPT country
   const { countryCounts, uniqueCountries, countryStatsForMap } = useMemo(() => {
@@ -855,6 +930,13 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
       if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
       if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
+      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
+      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
+      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
+      if (hasMapFilter === "yes" && !s.has_map) return;
+      if (hasMapFilter === "no" && s.has_map) return;
+      if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesAssessorsFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       s.countries.forEach(code => {
@@ -875,7 +957,131 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       ])
     );
     return { countryCounts: counts, uniqueCountries: sorted, countryStatsForMap: statsForMap };
-  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, hasMapFilter, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
+
+  // Realm counts: apply all filters EXCEPT systems (for realm button tooltips)
+  const realmCounts = useMemo(() => {
+    const counts: Record<string, number> = { Terrestrial: 0, Freshwater: 0, Marine: 0 };
+    taxaFilteredSpecies.forEach(s => {
+      if (!matchesSearch(s)) return;
+      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
+      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
+      if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
+      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
+      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
+      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
+      if (hasMapFilter === "yes" && !s.has_map) return;
+      if (hasMapFilter === "no" && s.has_map) return;
+      if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
+      if (!matchesAssessorsFilter(s)) return;
+      if (!matchesReviewersFilter(s)) return;
+      for (const sys of s.systems ?? []) {
+        if (sys in counts) counts[sys]++;
+      }
+    });
+    return counts;
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
+
+  // Map counts: apply all filters EXCEPT hasMap
+  const mapCounts = useMemo(() => {
+    let hasMap = 0;
+    let noMap = 0;
+    taxaFilteredSpecies.forEach(s => {
+      if (!matchesSearch(s)) return;
+      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
+      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
+      if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
+      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
+      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
+      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
+      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
+      if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
+      if (!matchesAssessorsFilter(s)) return;
+      if (!matchesReviewersFilter(s)) return;
+      if (s.has_map) hasMap++;
+      else noMap++;
+    });
+    return { yes: hasMap, no: noMap };
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
+
+  // Population trend counts: apply all filters EXCEPT population trend
+  const populationTrendCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    taxaFilteredSpecies.forEach(s => {
+      if (!s.population_trend) return;
+      if (!matchesSearch(s)) return;
+      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
+      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
+      if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
+      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
+      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
+      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
+      if (hasMapFilter === "yes" && !s.has_map) return;
+      if (hasMapFilter === "no" && s.has_map) return;
+      if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
+      if (!matchesAssessorsFilter(s)) return;
+      if (!matchesReviewersFilter(s)) return;
+      counts[s.population_trend] = (counts[s.population_trend] || 0) + 1;
+    });
+    return counts;
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedMovementPatterns, selectedThreats, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
+
+  // Movement pattern counts: apply all filters EXCEPT movement pattern
+  const movementPatternCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    taxaFilteredSpecies.forEach(s => {
+      if (!s.movement_pattern) return;
+      if (!matchesSearch(s)) return;
+      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
+      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
+      if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
+      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
+      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
+      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
+      if (hasMapFilter === "yes" && !s.has_map) return;
+      if (hasMapFilter === "no" && s.has_map) return;
+      if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
+      if (!matchesAssessorsFilter(s)) return;
+      if (!matchesReviewersFilter(s)) return;
+      counts[s.movement_pattern] = (counts[s.movement_pattern] || 0) + 1;
+    });
+    return counts;
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedThreats, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
+
+  // Threat counts: apply all filters EXCEPT threats (count species per prefix, deduplicated)
+  const threatCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    taxaFilteredSpecies.forEach(s => {
+      if (!s.threat_codes?.length) return;
+      if (!matchesSearch(s)) return;
+      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
+      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
+      if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
+      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
+      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
+      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
+      if (!matchesAssessorsFilter(s)) return;
+      if (!matchesReviewersFilter(s)) return;
+      // Deduplicate: count each prefix at most once per species
+      const counted = new Set<string>();
+      for (const tc of s.threat_codes) {
+        const parts = tc.split(".");
+        for (let i = 1; i <= parts.length; i++) {
+          const prefix = parts.slice(0, i).join(".");
+          if (!counted.has(prefix)) {
+            counted.add(prefix);
+            counts[prefix] = (counts[prefix] || 0) + 1;
+          }
+        }
+      }
+    });
+    return counts;
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
 
   // Handle region filter — select all countries in the chosen region
   const handleRegionFilter = useCallback((region: string) => {
@@ -895,6 +1101,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
       if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
       if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
       if (!matchesReviewersFilter(s)) return;
       const assessors = getSpeciesAssessors(s);
       for (const a of assessors) {
@@ -908,7 +1115,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         count,
         label: count.toLocaleString(),
       }));
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, matchesSearch, matchesReviewersFilter, getSpeciesAssessors]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, hasMapFilter, selectedGrowthForms, matchesSearch, matchesReviewersFilter, getSpeciesAssessors]);
 
   // Reviewer chart: apply all filters EXCEPT reviewers (include assessors)
   const reviewerChartData = useMemo(() => {
@@ -919,6 +1126,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
       if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
       if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
       if (!matchesAssessorsFilter(s)) return;
       const reviewers = getSpeciesReviewers(s);
       for (const r of reviewers) {
@@ -932,7 +1140,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         count,
         label: count.toLocaleString(),
       }));
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, matchesSearch, matchesAssessorsFilter, getSpeciesReviewers]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, hasMapFilter, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, getSpeciesReviewers]);
 
   // ── Client-side filtering and sorting ──────────────────────────────
   const CATEGORY_ORDER: Record<string, number> = {
@@ -945,6 +1153,12 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       const matchesYear = s.category === "NE" || matchesYearRangeFilter(s.assessment_date);
       const matchesObs = matchesObsRangeFilter(s.gbif_occurrence_count);
       const matchesCountry = selectedCountries.size === 0 || s.countries.some(c => selectedCountries.has(c));
+      const matchesSystem = selectedSystems.size === 0 || s.systems?.some(sys => selectedSystems.has(sys));
+      const matchesTrend = selectedPopulationTrends.size === 0 || (s.population_trend != null && selectedPopulationTrends.has(s.population_trend));
+      const matchesMovement = selectedMovementPatterns.size === 0 || (s.movement_pattern != null && selectedMovementPatterns.has(s.movement_pattern));
+      const matchesThreat = selectedThreats.size === 0 || s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")));
+      const matchesMap = !hasMapFilter || (hasMapFilter === "yes" ? s.has_map : !s.has_map);
+      const matchesGrowth = selectedGrowthForms.size === 0 || s.growth_forms?.some(gf => selectedGrowthForms.has(gf));
       const matchesSearch =
         !searchFilter ||
         s.scientific_name.toLowerCase().includes(searchFilter) ||
@@ -953,7 +1167,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       const matchesReviewer = matchesReviewersFilter(s);
       const pinnedKey = isNewAssessments ? Math.abs(s.id) : s.sis_taxon_id;
       const matchesStarred = !showOnlyStarred || (pinnedKey != null && pinnedSet.has(pinnedKey));
-      return matchesCategory && matchesYear && matchesObs && matchesCountry && matchesSearch && matchesAssessor && matchesReviewer && matchesStarred;
+      return matchesCategory && matchesYear && matchesObs && matchesCountry && matchesSystem && matchesTrend && matchesMovement && matchesThreat && matchesMap && matchesGrowth && matchesSearch && matchesAssessor && matchesReviewer && matchesStarred;
     });
 
     const sorted = [...filtered].sort((a, b) => {
@@ -1002,7 +1216,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     });
 
     return { filteredSpecies: filtered, sortedSpecies: sorted };
-  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedCountries, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection, matchesAssessorsFilter, matchesReviewersFilter, isNewAssessments]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedCountries, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, hasMapFilter, selectedGrowthForms, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection, matchesAssessorsFilter, matchesReviewersFilter, isNewAssessments]);
 
   // ── Client-side pagination ─────────────────────────────────────────
   const totalFiltered = filteredSpecies.length;
@@ -1518,6 +1732,305 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
             )}
           </div>
 
+          {/* More Filters (collapsible) */}
+          <div>
+            <button
+              onClick={() => setMoreFiltersOpen(prev => !prev)}
+              className="flex items-center gap-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
+            >
+              <svg className={`w-3.5 h-3.5 transition-transform ${moreFiltersOpen ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+              More Filters
+              {(selectedSystems.size + (hasMapFilter ? 1 : 0) + selectedGrowthForms.size + selectedPopulationTrends.size + selectedMovementPatterns.size + selectedThreats.size > 0) && (
+                <span className="ml-1 px-1.5 py-0.5 text-[10px] rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">
+                  {selectedSystems.size + (hasMapFilter ? 1 : 0) + selectedGrowthForms.size + selectedPopulationTrends.size + selectedMovementPatterns.size + selectedThreats.size} active
+                </span>
+              )}
+            </button>
+            {moreFiltersOpen && (
+              <div className="mt-3 flex flex-col gap-3">
+                {/* Realm */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 shrink-0 w-16">Realm</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(["Terrestrial", "Freshwater", "Marine"] as const).map(system => {
+                      const isSelected = selectedSystems.has(system);
+                      const count = realmCounts[system] ?? 0;
+                      return (
+                        <button
+                          key={system}
+                          onClick={(e) => {
+                            const isMulti = e.metaKey || e.ctrlKey;
+                            setSelectedSystems(prev => {
+                              if (isMulti) { const next = new Set(prev); if (next.has(system)) next.delete(system); else next.add(system); return next; }
+                              if (prev.size === 1 && prev.has(system)) return new Set();
+                              return new Set([system]);
+                            });
+                          }}
+                          className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
+                            isSelected
+                              ? system === "Terrestrial" ? "bg-amber-500 text-white"
+                              : system === "Freshwater" ? "bg-cyan-500 text-white"
+                              : "bg-blue-600 text-white"
+                              : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                          }`}
+                        >
+                          {system} ({count.toLocaleString()})
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Range Map */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 shrink-0 w-16">Map</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(["yes", "no"] as const).map(value => {
+                      const isSelected = hasMapFilter === value;
+                      const count = mapCounts[value];
+                      const label = value === "yes" ? `Has map (${count.toLocaleString()})` : `No map (${count.toLocaleString()})`;
+                      return (
+                        <button
+                          key={value}
+                          onClick={() => setHasMapFilter(isSelected ? null : value)}
+                          className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
+                            isSelected
+                              ? "bg-indigo-500 text-white"
+                              : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Growth Form (plants/fungi only) */}
+                {(() => {
+                  // Compute growth form counts cross-filtered (exclude own filter)
+                  const gfCounts: Record<string, number> = {};
+                  taxaFilteredSpecies.forEach(s => {
+                    if (!s.growth_forms?.length) return;
+                    if (!matchesSearch(s)) return;
+                    if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
+                    if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
+                    if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
+                    if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+                    if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
+                    if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
+                    if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
+                    if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
+                    if (hasMapFilter === "yes" && !s.has_map) return;
+                    if (hasMapFilter === "no" && s.has_map) return;
+                    if (!matchesAssessorsFilter(s)) return;
+                    if (!matchesReviewersFilter(s)) return;
+                    for (const gf of s.growth_forms) {
+                      gfCounts[gf] = (gfCounts[gf] || 0) + 1;
+                    }
+                  });
+                  const sorted = Object.entries(gfCounts).sort((a, b) => b[1] - a[1]);
+                  if (sorted.length === 0) return null;
+                  return (
+                    <div className="flex items-start gap-2">
+                      <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 shrink-0 w-16 pt-1">Growth</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {sorted.map(([gf, count]) => {
+                          const isSelected = selectedGrowthForms.has(gf);
+                          return (
+                            <button
+                              key={gf}
+                              onClick={(e) => {
+                                const isMulti = e.metaKey || e.ctrlKey;
+                                setSelectedGrowthForms(prev => {
+                                  if (isMulti) { const next = new Set(prev); if (next.has(gf)) next.delete(gf); else next.add(gf); return next; }
+                                  if (prev.size === 1 && prev.has(gf)) return new Set();
+                                  return new Set([gf]);
+                                });
+                              }}
+                              className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
+                                isSelected
+                                  ? "bg-lime-500 text-white"
+                                  : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                              }`}
+                            >
+                              {gf} ({count.toLocaleString()})
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Trend */}
+                <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 shrink-0 w-16">Trend</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(["Increasing", "Stable", "Decreasing", "Unknown"] as const).map(trend => {
+                        const isSelected = selectedPopulationTrends.has(trend);
+                        const count = populationTrendCounts[trend] ?? 0;
+                        return (
+                          <button
+                            key={trend}
+                            onClick={(e) => {
+                              const isMulti = e.metaKey || e.ctrlKey;
+                              setSelectedPopulationTrends(prev => {
+                                if (isMulti) { const next = new Set(prev); if (next.has(trend)) next.delete(trend); else next.add(trend); return next; }
+                                if (prev.size === 1 && prev.has(trend)) return new Set();
+                                return new Set([trend]);
+                              });
+                            }}
+                            className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
+                              isSelected
+                                ? "bg-orange-500 text-white"
+                                : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                            }`}
+                          >
+                            {trend === "Increasing" ? "↑" : trend === "Decreasing" ? "↓" : trend === "Stable" ? "→" : "?"} {trend} ({count.toLocaleString()})
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                {/* Movement Patterns */}
+                {!isNewAssessments && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 shrink-0 w-16">Movement</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(["Full Migrant", "Altitudinal Migrant", "Nomadic", "Not a Migrant", "Unknown"] as const).map(pattern => {
+                          const isSelected = selectedMovementPatterns.has(pattern);
+                          const count = movementPatternCounts[pattern] ?? 0;
+                          if (count === 0) return null;
+                          return (
+                            <button
+                              key={pattern}
+                              onClick={(e) => {
+                                const isMulti = e.metaKey || e.ctrlKey;
+                                setSelectedMovementPatterns(prev => {
+                                  if (isMulti) { const next = new Set(prev); if (next.has(pattern)) next.delete(pattern); else next.add(pattern); return next; }
+                                  if (prev.size === 1 && prev.has(pattern)) return new Set();
+                                  return new Set([pattern]);
+                                });
+                              }}
+                              className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
+                                isSelected
+                                  ? "bg-teal-500 text-white"
+                                  : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                              }`}
+                            >
+                              {pattern} ({count.toLocaleString()})
+                            </button>
+                          );
+                        })}
+                      </div>
+                  </div>
+                )}
+
+                {/* Threats: bar chart + side-by-side sub-category chart */}
+                {!isNewAssessments && (() => {
+                  // Map label→code for reverse lookup from chart clicks
+                  const threatLabelToCode = new Map(THREAT_CATEGORIES.map(c => [c.label, c.code]));
+                  // Use label as `code` field so it displays on y-axis, sorted by count desc
+                  const threatBarData = THREAT_CATEGORIES
+                    .map(({ code, label }) => ({ code: label, threatCode: code, count: threatCounts[code] ?? 0, label: `${(threatCounts[code] ?? 0).toLocaleString()}` }))
+                    .filter(d => d.count > 0)
+                    .sort((a, b) => b.count - a.count);
+                  // selectedItems needs to use labels too for dimming
+                  const selectedThreatLabels = new Set(
+                    Array.from(selectedThreats).map(code => THREAT_CATEGORIES.find(c => c.code === code)?.label).filter(Boolean) as string[]
+                  );
+                  // Collect all expanded categories (only selected top-level threats, or the last-clicked one if nothing selected)
+                  const expandedCodes = new Set<string>();
+                  for (const code of selectedThreats) {
+                    if (THREAT_CATEGORIES.some(c => c.code === code)) expandedCodes.add(code);
+                  }
+                  if (expandedCodes.size === 0 && expandedThreat) expandedCodes.add(expandedThreat);
+                  const expandedCats = THREAT_CATEGORIES.filter(c => expandedCodes.has(c.code));
+                  const hasSubChart = expandedCats.length > 0;
+                  const chartHeight = Math.max(200, threatBarData.length * 24 + 30);
+                  return (
+                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Threats</span>
+                      </div>
+                      <div>
+                        {/* Main threat categories chart */}
+                        <div style={{ height: chartHeight }}>
+                          {threatBarData.length > 0 ? (
+                            <FilterBarChart
+                              data={threatBarData}
+                              dataKey="code"
+                              selectedItems={selectedThreatLabels}
+                              onBarClick={(data: { payload?: { code?: string; threatCode?: string } }, event: React.MouseEvent) => {
+                                const label = data.payload?.code;
+                                const code = label ? threatLabelToCode.get(label) : undefined;
+                                if (!code) return;
+                                const isMulti = event.metaKey || event.ctrlKey;
+                                setSelectedThreats(prev => {
+                                  if (isMulti) { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; }
+                                  if (prev.size === 1 && prev.has(code)) return new Set();
+                                  return new Set([code]);
+                                });
+                                setExpandedThreat(prev => prev === code ? null : code);
+                              }}
+                              barColor="#f43f5e"
+                              yAxisWidth={155}
+                              rightMargin={55}
+                              yAxisTickMaxLength={22}
+                            />
+                          ) : null}
+                        </div>
+                        {/* Sub-category charts (inline below, grouped per category) */}
+                        {hasSubChart && expandedCats.map(cat => {
+                          const catSubData = cat.children
+                            .map(child => ({ code: child.label, threatCode: child.code, count: threatCounts[child.code] ?? 0, label: `${(threatCounts[child.code] ?? 0).toLocaleString()}` }))
+                            .filter(d => d.count > 0)
+                            .sort((a, b) => b.count - a.count);
+                          if (catSubData.length === 0) return null;
+                          const catSubHeight = Math.max(80, catSubData.length * 24 + 30);
+                          const catSelectedSubLabels = new Set(
+                            Array.from(selectedThreats).map(code => cat.children.find(c => c.code === code)?.label).filter(Boolean) as string[]
+                          );
+                          return (
+                            <div key={cat.code} className="ml-8 mt-1 pl-4 border-l-2 border-rose-200 dark:border-rose-800">
+                              <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1 block">{cat.label}</span>
+                              <div style={{ height: catSubHeight }}>
+                                <FilterBarChart
+                                  data={catSubData}
+                                  dataKey="code"
+                                  selectedItems={catSelectedSubLabels}
+                                  onBarClick={(data: { payload?: { code?: string } }, event: React.MouseEvent) => {
+                                    const label = data.payload?.code;
+                                    const child = cat.children.find(c => c.label === label);
+                                    if (!child) return;
+                                    const isMulti = event.metaKey || event.ctrlKey;
+                                    setSelectedThreats(prev => {
+                                      if (isMulti) { const next = new Set(prev); if (next.has(child.code)) next.delete(child.code); else next.add(child.code); return next; }
+                                      if (prev.size === 1 && prev.has(child.code)) return new Set();
+                                      return new Set([child.code]);
+                                    });
+                                  }}
+                                  barColor="#fb923c"
+                                  yAxisWidth={170}
+                                  rightMargin={55}
+                                  yAxisTickMaxLength={24}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+          </div>
+
       {/* Search and Species Table */}
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
         {/* Search bar */}
@@ -1645,6 +2158,74 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 </button>
               ));
             })()}
+            {Array.from(selectedGrowthForms).map(gf => (
+              <button
+                key={`gf-${gf}`}
+                onClick={() => setSelectedGrowthForms(prev => { const next = new Set(prev); next.delete(gf); return next; })}
+                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-lime-100 text-lime-600 dark:bg-lime-900/30 dark:text-lime-400 flex items-center gap-1 hover:opacity-80"
+              >
+                {gf}
+                <span className="text-xs">×</span>
+              </button>
+            ))}
+            {hasMapFilter && (
+              <button
+                onClick={() => setHasMapFilter(null)}
+                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400 flex items-center gap-1 hover:opacity-80"
+              >
+                {hasMapFilter === "yes" ? "Has map" : "No map"}
+                <span className="text-xs">×</span>
+              </button>
+            )}
+            {Array.from(selectedPopulationTrends).map(trend => (
+              <button
+                key={`trend-${trend}`}
+                onClick={() => setSelectedPopulationTrends(prev => { const next = new Set(prev); next.delete(trend); return next; })}
+                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 flex items-center gap-1 hover:opacity-80"
+              >
+                {trend}
+                <span className="text-xs">×</span>
+              </button>
+            ))}
+            {Array.from(selectedMovementPatterns).map(pattern => (
+              <button
+                key={`mov-${pattern}`}
+                onClick={() => setSelectedMovementPatterns(prev => { const next = new Set(prev); next.delete(pattern); return next; })}
+                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400 flex items-center gap-1 hover:opacity-80"
+              >
+                {pattern}
+                <span className="text-xs">×</span>
+              </button>
+            ))}
+            {Array.from(selectedThreats).map(code => {
+              const cat = THREAT_CATEGORIES.find(c => c.code === code);
+              const sub = !cat ? THREAT_CATEGORIES.flatMap(c => c.children).find(c => c.code === code) : null;
+              const label = cat?.label || sub?.label || code;
+              return (
+                <button
+                  key={`threat-${code}`}
+                  onClick={() => setSelectedThreats(prev => { const next = new Set(prev); next.delete(code); return next; })}
+                  className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400 flex items-center gap-1 hover:opacity-80"
+                >
+                  {label}
+                  <span className="text-xs">×</span>
+                </button>
+              );
+            })}
+            {Array.from(selectedSystems).map(system => (
+              <button
+                key={system}
+                onClick={() => setSelectedSystems(prev => { const next = new Set(prev); next.delete(system); return next; })}
+                className={`px-2 md:px-3 py-1 text-xs md:text-sm rounded-full flex items-center gap-1 hover:opacity-80 ${
+                  system === "Terrestrial" ? "bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400"
+                  : system === "Freshwater" ? "bg-cyan-100 text-cyan-600 dark:bg-cyan-900/30 dark:text-cyan-400"
+                  : "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
+                }`}
+              >
+                {system}
+                <span className="text-xs">×</span>
+              </button>
+            ))}
             {!isNewAssessments && Array.from(selectedAssessors).map(name => (
               <button
                 key={`a-${name}`}
@@ -1665,9 +2246,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 <span className="text-xs">×</span>
               </button>
             ))}
-            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred) && (
+            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || hasMapFilter || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred) && (
               <button
-                onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setSelectedSubgroups(new Set()); setSelectedObsRanges(new Set()); setSelectedAssessors(new Set()); setSelectedReviewers(new Set()); setShowOnlyStarred(false); }}
+                onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setSelectedSubgroups(new Set()); setSelectedObsRanges(new Set()); setSelectedSystems(new Set()); setHasMapFilter(null); setSelectedGrowthForms(new Set()); setSelectedPopulationTrends(new Set()); setSelectedMovementPatterns(new Set()); setSelectedThreats(new Set()); setSelectedAssessors(new Set()); setSelectedReviewers(new Set()); setShowOnlyStarred(false); }}
                 className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 underline"
               >
                 Clear all
@@ -2065,20 +2646,20 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                     className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "redlist" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                     onClick={() => setActiveDetailTab("redlist")}
                                   >
-                                    Red List
+                                    IUCN Red List
                                   </button>
                                 )}
-                                <button
-                                  className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "wikipedia" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
-                                  onClick={() => setActiveDetailTab("wikipedia")}
-                                >
-                                  Wikipedia
-                                </button>
                                 <button
                                   className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "cites" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                   onClick={() => setActiveDetailTab("cites")}
                                 >
                                   CITES
+                                </button>
+                                <button
+                                  className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "wikipedia" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                  onClick={() => setActiveDetailTab("wikipedia")}
+                                >
+                                  Wikipedia
                                 </button>
                                 {s.category === "NE" && (
                                   <button

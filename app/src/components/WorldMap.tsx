@@ -158,6 +158,8 @@ interface WorldMapProps {
   speciesLabel?: string;
   // Callback when a region is selected from the dropdown (sets country filter)
   onRegionFilter?: (region: string) => void;
+  // Optional footer content rendered inside the panel below the map
+  footer?: React.ReactNode;
 }
 
 const DEFAULT_CENTER: [number, number] = [10, 10];
@@ -165,7 +167,7 @@ const DEFAULT_ZOOM = 1.0;
 const MIN_ZOOM = 1.0;
 const MAX_ZOOM = 8.0;
 
-function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, selectedTaxon, precomputedStats, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter }: WorldMapProps) {
+function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, selectedTaxon, precomputedStats, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, footer }: WorldMapProps) {
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoveredCountryCode, setHoveredCountryCode] = useState<string | null>(null);
   const [speciesStats, setSpeciesStats] = useState<CountryStats>(precomputedStats || {});
@@ -609,6 +611,7 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
           </button>
         </div>
       </div>
+      {footer}
     </div>
   );
 }

@@ -24,6 +24,14 @@ export interface RedListSpecies {
   gbif_occurrence_count: number | null;
   gbif_observations_after_assessment_year: number | null;
   previous_assessments: { id: number; year: string; category: string; date: string | null; assessors: string | null; reviewers: string | null }[];
+  systems: string[];
+  growth_forms: string[];
+  movement_pattern: string | null;
+  possibly_extinct: boolean;
+  possibly_extinct_in_the_wild: boolean;
+  criteria: string | null;
+  threat_codes: string[];
+  has_map: boolean;
 }
 
 interface SpeciesResponse {

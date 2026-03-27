@@ -229,7 +229,7 @@ export default function CitesSummary({
             rel="noopener noreferrer"
             className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
           >
-            Trade Database
+            View on CITES Trade Database
           </a>
           <span className="text-zinc-300 dark:text-zinc-600">|</span>
           <a
@@ -238,7 +238,7 @@ export default function CitesSummary({
             rel="noopener noreferrer"
             className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
           >
-            Species+
+            View on Species+
           </a>
         </div>
       </div>
