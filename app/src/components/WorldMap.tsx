@@ -8,7 +8,7 @@ import {
   ZoomableGroup,
 } from "react-simple-maps";
 import { geoCentroid } from "d3-geo";
-import { IUCN_REGION_ORDER, countryToIucnRegion } from "@/lib/regions";
+import { IUCN_REGION_ORDER, countryToIucnRegion, iucnRegionCountries } from "@/lib/regions";
 
 // Using the recommended TopoJSON from react-simple-maps
 const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json";
@@ -435,7 +435,13 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
                 selectedCountries.forEach(c => regions.add(countryToIucnRegion(c)));
                 if (regions.size === 1) {
                   const region = [...regions][0];
-                  if (region !== "Other") return region;
+                  if (region !== "Other") {
+                    // Only show region if ALL countries in that region are selected
+                    const regionCodes = iucnRegionCountries(region);
+                    if (regionCodes.length === selectedCountries.size && regionCodes.every(c => selectedCountries.has(c))) {
+                      return region;
+                    }
+                  }
                 }
                 return "";
               })()}
