@@ -132,7 +132,7 @@ export default function RedListPage() {
           >
             IUCN Red List
           </a>
-          {" "}and{" "}
+          ,{" "}
           <a
             href="https://www.gbif.org"
             target="_blank"
@@ -140,6 +140,42 @@ export default function RedListPage() {
             className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
           >
             GBIF
+          </a>
+          ,{" "}
+          <a
+            href="https://www.inaturalist.org"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
+          >
+            iNaturalist
+          </a>
+          ,{" "}
+          <a
+            href="https://openalex.org"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
+          >
+            OpenAlex
+          </a>
+          ,{" "}
+          <a
+            href="https://cites.org"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
+          >
+            CITES
+          </a>
+          {" "}and{" "}
+          <a
+            href="https://speciesplus.net"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
+          >
+            Species+
           </a>
           {" "}data. Any errors in aggregation or presentation are my own. Please verify against the primary sources before use, and do get in touch if you notice any issues.
         </p>
