@@ -741,9 +741,6 @@ export interface SearchResult {
   taxon_id: string;
   taxon_group: string;
   category: string;
-  order_name: string | null;
-  class_name: string | null;
-  family: string | null;
 }
 
 /**
@@ -777,9 +774,6 @@ export function searchSpecies(query: string, limit = 10): SearchResult[] {
           taxon_id: mapTaxonId(r.taxon_group_table1a),
           taxon_group: r.taxon_group_table1a,
           category: r.category,
-          order_name: r.order_name || null,
-          class_name: r.class_name || null,
-          family: r.family || null,
         });
       }
     }
@@ -799,9 +793,6 @@ export function searchSpecies(query: string, limit = 10): SearchResult[] {
           taxon_id: mapTaxonId(gbif.taxon_group_table1a),
           taxon_group: gbif.taxon_group_table1a,
           category: "NE",
-          order_name: gbif.order_name || null,
-          class_name: gbif.class_name || null,
-          family: gbif.family || null,
         });
       }
     }
