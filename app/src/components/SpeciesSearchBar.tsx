@@ -12,6 +12,9 @@ interface SearchResult {
   taxon_id: string;
   taxon_group: string;
   category: string;
+  order_name: string | null;
+  class_name: string | null;
+  family: string | null;
 }
 
 export function SpeciesSearchBar() {

@@ -175,3 +175,42 @@ export function getNodeDef(nodeId: string): { node: TaxonomyNode; parentId: stri
   if (!parentId) return null; // Root node
   return { node, parentId };
 }
+
+/**
+ * Find the most specific (deepest) taxonomy node for a species under a display root.
+ * Returns { taxa, subgroup } where taxa is the display root ID and subgroup is the
+ * most specific child node ID, or null if no subgroup matches.
+ *
+ * Example: a butterfly (insecta, lepidoptera) under "invertebrates" →
+ *   { taxa: "invertebrates", subgroup: "inv-butterflies-moths" }
+ */
+export function findSubgroupForSpecies(
+  species: { taxon_group: string; class_name: string | null; order_name: string | null; family?: string | null },
+  displayRootId: string,
+): string | null {
+  const root = NODE_INDEX.get(displayRootId);
+  if (!root?.children) return null;
+
+  function findDeepest(node: TaxonomyNode): string | null {
+    if (!node.children) return node.id;
+    for (const child of node.children) {
+      if (!child.filter.csvGroups.includes(species.taxon_group)) continue;
+      if (!matchesFilter(species, child.filter)) continue;
+      // Found a matching child — recurse deeper
+      const deeper = findDeepest(child);
+      if (deeper) return deeper;
+    }
+    // No children matched — this node is the most specific
+    return node.id;
+  }
+
+  // Search direct children of the display root
+  for (const child of root.children) {
+    if (!child.filter.csvGroups.includes(species.taxon_group)) continue;
+    if (!matchesFilter(species, child.filter)) continue;
+    const deepest = findDeepest(child);
+    if (deepest && deepest !== displayRootId) return deepest;
+  }
+
+  return null;
+}
