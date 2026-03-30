@@ -10,9 +10,14 @@ vi.mock("./csv", () => ({
   readCsv: vi.fn(() => []),
 }));
 
+const mockCsvGroups: string[] = [];
+vi.mock("../../config/taxonomy-tree", () => ({
+  get ALL_CSV_GROUPS() { return mockCsvGroups; },
+}));
+
 import * as fs from "fs";
 import { readCsv } from "./csv";
-import { getAssessorCandidates, getAssessorCandidatesByCountry } from "./species-store";
+import { getAssessorCandidates, getAssessorCandidatesByCountry, searchSpecies } from "./species-store";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -636,5 +641,100 @@ describe("getAssessorCandidatesByCountry", () => {
     const beetleResult = getAssessorCandidatesByCountry([group], ["ZA"], { orderNames: ["coleoptera"] });
     expect(beetleResult).toHaveLength(1);
     expect(beetleResult[0].name).toBe("Beetle Expert");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// searchSpecies
+// ---------------------------------------------------------------------------
+
+describe("searchSpecies", () => {
+  function setupSearch(redlistRows: TestRedlistRow[], gbifRows: { gbif_species_key: number; scientific_name: string; common_name: string; taxon_group_table1a: string }[] = []) {
+    const group = uniqueGroup();
+    mockCsvGroups.length = 0;
+    mockCsvGroups.push(group);
+
+    // Use path-based routing: redlist CSV path contains /redlist/, GBIF contains /gbif/
+    vi.mocked(readCsv).mockImplementation((filePath: string) => {
+      if (filePath.includes("/redlist/")) return redlistRows as any;
+      if (filePath.includes("/gbif/")) return gbifRows as any;
+      if (filePath.includes("mapping")) return [] as any;
+      return [] as any;
+    });
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue("{}");
+  }
+
+  it("returns empty array for queries shorter than 2 characters", () => {
+    expect(searchSpecies("a")).toEqual([]);
+    expect(searchSpecies("")).toEqual([]);
+  });
+
+  it("matches scientific name case-insensitively", () => {
+    setupSearch([
+      makeRow({ scientific_name: "Panthera leo", common_name: null, taxon_group_table1a: "mammalia" }),
+      makeRow({ scientific_name: "Felis catus", common_name: null, taxon_group_table1a: "mammalia" }),
+    ]);
+
+    const results = searchSpecies("panthera");
+    expect(results).toHaveLength(1);
+    expect(results[0].scientific_name).toBe("Panthera leo");
+  });
+
+  it("matches common name case-insensitively", () => {
+    setupSearch([
+      makeRow({ scientific_name: "Panthera leo", common_name: "Lion", taxon_group_table1a: "mammalia" }),
+      makeRow({ scientific_name: "Felis catus", common_name: "Cat", taxon_group_table1a: "mammalia" }),
+    ]);
+
+    const results = searchSpecies("lion");
+    expect(results).toHaveLength(1);
+    expect(results[0].scientific_name).toBe("Panthera leo");
+  });
+
+  it("ranks prefix matches on scientific name before substring matches", () => {
+    setupSearch([
+      makeRow({ scientific_name: "Leopardus pardalis", common_name: null, taxon_group_table1a: "mammalia" }),
+      makeRow({ scientific_name: "Panthera leo", common_name: null, taxon_group_table1a: "mammalia" }),
+      makeRow({ scientific_name: "Leo ninus", common_name: null, taxon_group_table1a: "mammalia" }),
+    ]);
+
+    const results = searchSpecies("leo");
+    // "Leo ninus" and "Leopardus pardalis" are prefix matches, "Panthera leo" is substring
+    expect(results[0].scientific_name).toBe("Leo ninus");
+    expect(results[1].scientific_name).toBe("Leopardus pardalis");
+    expect(results[2].scientific_name).toBe("Panthera leo");
+  });
+
+  it("respects the limit parameter", () => {
+    setupSearch([
+      makeRow({ scientific_name: "Testus alpha", taxon_group_table1a: "mammalia" }),
+      makeRow({ scientific_name: "Testus beta", taxon_group_table1a: "mammalia" }),
+      makeRow({ scientific_name: "Testus gamma", taxon_group_table1a: "mammalia" }),
+    ]);
+
+    const results = searchSpecies("testus", 2);
+    expect(results).toHaveLength(2);
+  });
+
+  it("returns correct taxon_id (mapped display ID)", () => {
+    setupSearch([
+      makeRow({ scientific_name: "Testus insect", taxon_group_table1a: "insecta" }),
+    ]);
+
+    const results = searchSpecies("testus");
+    expect(results).toHaveLength(1);
+    expect(results[0].taxon_id).toBe("invertebrates");
+    expect(results[0].taxon_group).toBe("insecta");
+  });
+
+  it("returns correct category for assessed species", () => {
+    setupSearch([
+      makeRow({ scientific_name: "Panthera leo", category: "VU", taxon_group_table1a: "mammalia" }),
+    ]);
+
+    const results = searchSpecies("panthera");
+    expect(results).toHaveLength(1);
+    expect(results[0].category).toBe("VU");
   });
 });

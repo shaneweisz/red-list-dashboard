@@ -122,7 +122,7 @@ const ASCOMYCOTA_ORDERS = [
 ];
 
 // All 21 Table 1a CSV groups
-const ALL_CSV_GROUPS = [
+export const ALL_CSV_GROUPS = [
   "mammalia", "aves", "reptilia", "amphibia", "fishes",
   "insecta", "arachnida", "mollusca", "crustacea", "corals",
   "other_invertebrates", "velvet_worms", "horseshoe_crabs",

@@ -9,6 +9,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { readCsv } from "./csv";
 import { countryToRegion } from "../regions";
+import { ALL_CSV_GROUPS } from "../../config/taxonomy-tree";
 
 
 // =============================================================================
@@ -727,6 +728,92 @@ function parseAssessorNames(raw: string): string[] {
   }
 
   return names.filter(Boolean);
+}
+
+// =============================================================================
+// CROSS-TAXA SPECIES SEARCH
+// =============================================================================
+
+export interface SearchResult {
+  id: number;
+  scientific_name: string;
+  common_name: string | null;
+  taxon_id: string;
+  taxon_group: string;
+  category: string;
+}
+
+/**
+ * Search for species across all taxa by scientific name or common name.
+ * Returns lightweight results sorted by relevance (prefix matches first).
+ */
+export function searchSpecies(query: string, limit = 10): SearchResult[] {
+  if (query.length < 2) return [];
+
+  const q = query.toLowerCase();
+  const results: SearchResult[] = [];
+  const mapping = loadMapping();
+
+  for (const group of ALL_CSV_GROUPS) {
+    const redlistRows = loadRedlistForGroup(group);
+    const gbifMap = loadGbifForGroup(group);
+    const linkedGbifKeys = new Set<number>();
+
+    // Search redlist (assessed) species
+    for (const r of redlistRows) {
+      const gbifKey = mapping.get(r.sis_taxon_id)?.gbif_species_key ?? null;
+      if (gbifKey) linkedGbifKeys.add(gbifKey);
+
+      const sciMatch = r.scientific_name.toLowerCase().includes(q);
+      const commonMatch = !!r.common_name && r.common_name.toLowerCase().includes(q);
+      if (sciMatch || commonMatch) {
+        results.push({
+          id: r.sis_taxon_id,
+          scientific_name: r.scientific_name,
+          common_name: r.common_name,
+          taxon_id: mapTaxonId(r.taxon_group_table1a),
+          taxon_group: r.taxon_group_table1a,
+          category: r.category,
+        });
+      }
+    }
+
+    // Search GBIF-only (NE) species
+    for (const [key, gbif] of gbifMap) {
+      if (linkedGbifKeys.has(key)) continue;
+      if (EXCLUDED_DOMESTICATED_GBIF_KEYS.has(key)) continue;
+
+      const sciMatch = gbif.scientific_name.toLowerCase().includes(q);
+      const commonMatch = !!gbif.common_name && gbif.common_name.toLowerCase().includes(q);
+      if (sciMatch || commonMatch) {
+        results.push({
+          id: -key,
+          scientific_name: gbif.scientific_name,
+          common_name: gbif.common_name || null,
+          taxon_id: mapTaxonId(gbif.taxon_group_table1a),
+          taxon_group: gbif.taxon_group_table1a,
+          category: "NE",
+        });
+      }
+    }
+  }
+
+  // Sort by relevance: prefix match on scientific_name > prefix on common_name > substring
+  results.sort((a, b) => {
+    const aLower = a.scientific_name.toLowerCase();
+    const bLower = b.scientific_name.toLowerCase();
+    const aSciPrefix = aLower.startsWith(q) ? 1 : 0;
+    const bSciPrefix = bLower.startsWith(q) ? 1 : 0;
+    if (aSciPrefix !== bSciPrefix) return bSciPrefix - aSciPrefix;
+
+    const aCommonPrefix = a.common_name?.toLowerCase().startsWith(q) ? 1 : 0;
+    const bCommonPrefix = b.common_name?.toLowerCase().startsWith(q) ? 1 : 0;
+    if (aCommonPrefix !== bCommonPrefix) return bCommonPrefix - aCommonPrefix;
+
+    return aLower.localeCompare(bLower);
+  });
+
+  return results.slice(0, limit);
 }
 
 // =============================================================================

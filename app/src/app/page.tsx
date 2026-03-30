@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { ThemeToggle } from "../components/ThemeToggle";
+import { SpeciesSearchBar } from "../components/SpeciesSearchBar";
 import { parseParams, type ViewMode } from "../hooks/useFilterParams";
 
 // Dynamically import view component
@@ -82,6 +83,9 @@ export default function RedListPage() {
             <ThemeToggle />
           </div>
         </div>
+
+        {/* Species search */}
+        <SpeciesSearchBar />
 
         {/* Content — single component instance stays mounted on viewMode switch */}
         <RedListView
