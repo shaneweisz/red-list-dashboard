@@ -412,34 +412,28 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         )}
         {isVisible("assessed") && (
           <td className={flexTdClasses}>
-            <div className="min-w-[120px] md:min-w-[180px]">
-              <div className="h-4 w-14 bg-zinc-200 dark:bg-zinc-700 rounded mb-1" />
-              <div className="flex items-center gap-2">
-                <div className="flex-1 h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
-                <div className="h-3 w-12 bg-zinc-200 dark:bg-zinc-700 rounded" />
-              </div>
+            <div className="flex items-center gap-1.5 sm:gap-3 min-w-[140px] md:min-w-[200px]">
+              <div className="h-4 w-[48px] sm:w-[60px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
+              <div className="flex-1 min-w-[40px] h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
+              <div className="h-3 w-[44px] sm:w-[52px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
             </div>
           </td>
         )}
         {isVisible("outdated") && (
           <td className={flexTdClasses}>
-            <div className="min-w-[120px] md:min-w-[180px]">
-              <div className="h-4 w-12 bg-zinc-200 dark:bg-zinc-700 rounded mb-1" />
-              <div className="flex items-center gap-2">
-                <div className="flex-1 h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
-                <div className="h-3 w-12 bg-zinc-200 dark:bg-zinc-700 rounded" />
-              </div>
+            <div className="flex items-center gap-1.5 sm:gap-3 min-w-[140px] md:min-w-[200px]">
+              <div className="h-4 w-[48px] sm:w-[60px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
+              <div className="flex-1 min-w-[40px] h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
+              <div className="h-3 w-[44px] sm:w-[52px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
             </div>
           </td>
         )}
         {isVisible("gbifUnassessed") && (
           <td className={flexTdClasses}>
-            <div className="min-w-[140px] md:min-w-[200px]">
-              <div className="flex items-center gap-3">
-                <div className="h-4 w-14 bg-zinc-200 dark:bg-zinc-700 rounded" />
-                <div className="flex-1 h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
-                <div className="h-3 w-12 bg-zinc-200 dark:bg-zinc-700 rounded" />
-              </div>
+            <div className="flex items-center gap-1.5 sm:gap-3 min-w-[140px] md:min-w-[200px]">
+              <div className="h-4 w-[48px] sm:w-[60px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
+              <div className="flex-1 min-w-[40px] h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
+              <div className="h-3 w-[44px] sm:w-[52px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
             </div>
           </td>
         )}
@@ -450,7 +444,9 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         )}
         {isVisible("gbifDistribution") && (
           <td className={flexTdClasses}>
-            <div className="h-5 w-28 bg-zinc-200 dark:bg-zinc-700 rounded" />
+            <div className="min-w-[100px] md:min-w-[120px]">
+              <div className="h-5 w-full rounded bg-zinc-200 dark:bg-zinc-700" />
+            </div>
           </td>
         )}
         {isVisible("meanGbifObs") && (
@@ -465,7 +461,9 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         )}
         {isVisible("breakdown") && (
           <td className={flexTdClasses}>
-            <div className="h-3 w-32 md:w-40 bg-zinc-200 dark:bg-zinc-700 rounded-full" />
+            <div className="min-w-[80px] md:min-w-[100px]">
+              <div className="h-4 sm:h-3 w-full rounded-full bg-zinc-200 dark:bg-zinc-700" />
+            </div>
           </td>
         )}
       </tr>
