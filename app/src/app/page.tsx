@@ -56,7 +56,14 @@ export default function RedListPage() {
             {/* View mode toggle */}
             <div className="flex rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden text-sm">
               <button
-                onClick={() => setViewMode("reassessments")}
+                onClick={() => {
+                  if (viewMode === "reassessments") return;
+                  setViewMode("reassessments");
+                  setSharedTaxa(new Set());
+                  setSharedSubgroups(new Set());
+                  window.history.pushState(null, "", "/");
+                  window.dispatchEvent(new PopStateEvent("popstate"));
+                }}
                 className={`px-3 py-2 sm:py-1.5 font-medium transition-colors ${
                   viewMode === "reassessments"
                     ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
@@ -67,9 +74,12 @@ export default function RedListPage() {
               </button>
               <button
                 onClick={() => {
-                  // Clear "all" selection — NE species must be loaded per-taxon
-                  if (sharedTaxa.has("all")) setSharedTaxa(new Set());
+                  if (viewMode === "new-assessments") return;
                   setViewMode("new-assessments");
+                  setSharedTaxa(new Set());
+                  setSharedSubgroups(new Set());
+                  window.history.pushState(null, "", "/?view=new-assessments");
+                  window.dispatchEvent(new PopStateEvent("popstate"));
                 }}
                 className={`px-3 py-2 sm:py-1.5 font-medium transition-colors ${
                   viewMode === "new-assessments"
