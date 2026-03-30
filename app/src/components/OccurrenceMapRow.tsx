@@ -49,6 +49,14 @@ const InatContributorsChart = dynamic(
   () => import("./InatContributorsChart"),
   { ssr: false }
 );
+const RangeMapLayer = dynamic(
+  () => import("./RangeMapLayer"),
+  { ssr: false }
+);
+const AohMapLayer = dynamic(
+  () => import("./AohMapLayer"),
+  { ssr: false }
+);
 
 // Syncs two Leaflet maps: when one moves/zooms, the other follows
 function MapSync({ syncRef }: { syncRef: React.MutableRefObject<{ center: [number, number]; zoom: number } | null> }) {
@@ -574,6 +582,10 @@ interface OccurrenceMapRowProps {
   mounted: boolean;
   assessmentYear?: number | null;
   assessmentDate?: string | null;
+  assessmentId?: number | null;
+  sisTaxonId?: number | null;
+  taxonGroup?: string | null;
+  hasMap?: boolean;
 }
 
 // Convert iNaturalist photo URLs to a smaller size for thumbnails
@@ -800,6 +812,10 @@ export default function OccurrenceMapRow({
   mounted,
   assessmentYear,
   assessmentDate,
+  assessmentId,
+  sisTaxonId,
+  taxonGroup,
+  hasMap,
 }: OccurrenceMapRowProps) {
   const [occurrences, setOccurrences] = useState<OccurrenceFeature[]>([]);
   const [breakdown, setBreakdown] = useState<RecordTypeBreakdown | null>(null);
@@ -832,6 +848,11 @@ export default function OccurrenceMapRow({
   const mapSyncRef = useRef<{ center: [number, number]; zoom: number } | null>(null);
   const [dedupGrid, setDedupGrid] = useState(0.01); // ~1km
   const [sampleSize, setSampleSize] = useState(300);
+
+  // Layer toggle state
+  const [showRange, setShowRange] = useState(false);
+  const [showAoh, setShowAoh] = useState(false);
+  const isAohAvailable = !!(sisTaxonId && taxonGroup && ["mammalia", "aves", "reptilia", "amphibia"].includes(taxonGroup.toLowerCase()));
   const [yearRange, setYearRange] = useState<[number, number]>([0, 9999]);
 
   // "More" popover state
@@ -1400,6 +1421,14 @@ export default function OccurrenceMapRow({
                   />
                 );
               })()}
+              {/* IUCN Range Map layer */}
+              {hasMap && assessmentId && (
+                <RangeMapLayer assessmentId={assessmentId} visible={showRange} />
+              )}
+              {/* AOH layer */}
+              {isAohAvailable && sisTaxonId && taxonGroup && (
+                <AohMapLayer sisTaxonId={sisTaxonId} taxonGroup={taxonGroup} visible={showAoh} />
+              )}
             </MapContainer>
           ) : null}
           {/* Legend */}
@@ -1813,6 +1842,39 @@ export default function OccurrenceMapRow({
                         </div>
                       )}
                     </div>
+
+                    {/* Map layers */}
+                    {(hasMap || isAohAvailable) && (
+                      <>
+                        <div className="border-t border-zinc-200 dark:border-zinc-700 pt-2 mt-1">
+                          <span className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wide">Layers</span>
+                        </div>
+                        {hasMap && assessmentId && (
+                          <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={showRange}
+                              onChange={(e) => setShowRange(e.target.checked)}
+                              className="w-3 h-3 rounded accent-rose-500"
+                            />
+                            <span className="w-2.5 h-2.5 rounded-sm border-2 border-rose-500 bg-rose-500/15" />
+                            IUCN Range Map
+                          </label>
+                        )}
+                        {isAohAvailable && (
+                          <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={showAoh}
+                              onChange={(e) => setShowAoh(e.target.checked)}
+                              className="w-3 h-3 rounded accent-green-500"
+                            />
+                            <span className="w-2.5 h-2.5 rounded-sm bg-green-500/50" />
+                            Area of Habitat (AOH)
+                          </label>
+                        )}
+                      </>
+                    )}
 
                   </div>
                 )}

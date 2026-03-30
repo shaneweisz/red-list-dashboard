@@ -2696,6 +2696,10 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                 mounted={mounted}
                                 assessmentYear={assessmentYear}
                                 assessmentDate={s.assessment_date}
+                                assessmentId={s.assessment_id}
+                                sisTaxonId={s.sis_taxon_id}
+                                taxonGroup={s.taxon_group}
+                                hasMap={s.has_map}
                               />
                             </div>
                           ) : (stackedDetailView || activeDetailTab === "gbif") && (
