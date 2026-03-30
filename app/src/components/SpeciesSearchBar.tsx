@@ -47,7 +47,7 @@ export function SpeciesSearchBar() {
         if (!res.ok) throw new Error("Search failed");
         const data = await res.json();
         setResults(data.results);
-        setIsOpen(data.results.length > 0);
+        setIsOpen(true);
         setHighlightIndex(-1);
       } catch (e) {
         if (e instanceof DOMException && e.name === "AbortError") return;
@@ -58,7 +58,10 @@ export function SpeciesSearchBar() {
       }
     }, 250);
 
-    return () => clearTimeout(timeout);
+    return () => {
+      clearTimeout(timeout);
+      abortRef.current?.abort();
+    };
   }, [query]);
 
   // Click outside to close
@@ -155,7 +158,7 @@ export function SpeciesSearchBar() {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          onFocus={() => results.length > 0 && setIsOpen(true)}
+          onFocus={() => query.length >= 2 && setIsOpen(true)}
           onKeyDown={handleKeyDown}
           placeholder="Search for any species..."
           className="w-full pl-10 pr-8 py-1 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-400 dark:focus:ring-zinc-500"
@@ -185,44 +188,50 @@ export function SpeciesSearchBar() {
       </div>
 
       {/* Dropdown */}
-      {isOpen && results.length > 0 && (
+      {isOpen && (
         <div className="absolute z-50 w-full mt-1 max-h-80 overflow-y-auto rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 shadow-lg">
-          {results.map((result, i) => (
-            <button
-              key={`${result.id}-${result.taxon_group}`}
-              onClick={() => selectResult(result)}
-              onMouseEnter={() => setHighlightIndex(i)}
-              className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 ${
-                i === highlightIndex
-                  ? "bg-zinc-100 dark:bg-zinc-700"
-                  : "hover:bg-zinc-50 dark:hover:bg-zinc-750"
-              }`}
-            >
-              <div className="flex-1 min-w-0">
-                <span className="italic text-zinc-900 dark:text-zinc-100">
-                  {result.scientific_name}
-                </span>
-                {result.common_name && (
-                  <span className="text-zinc-500 dark:text-zinc-400 ml-1">
-                    ({result.common_name})
-                  </span>
-                )}
-                <span className="text-xs text-zinc-400 dark:text-zinc-500 ml-2">
-                  {getTaxonLabel(result.taxon_id)}
-                </span>
-              </div>
-              {/* Category badge */}
-              <span
-                className="shrink-0 text-xs font-medium px-1.5 py-0.5 rounded"
-                style={{
-                  backgroundColor: CATEGORY_COLORS[result.category] ?? "#6b7280",
-                  color: ["VU", "NT", "LC", "NE"].includes(result.category) ? "#18181b" : "#ffffff",
-                }}
+          {results.length === 0 && !loading ? (
+            <div className="px-3 py-2 text-sm text-zinc-500 dark:text-zinc-400">
+              No species found
+            </div>
+          ) : (
+            results.map((result, i) => (
+              <button
+                key={`${result.id}-${result.taxon_group}`}
+                onClick={() => selectResult(result)}
+                onMouseEnter={() => setHighlightIndex(i)}
+                className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 ${
+                  i === highlightIndex
+                    ? "bg-zinc-100 dark:bg-zinc-700"
+                    : "hover:bg-zinc-50 dark:hover:bg-zinc-700/50"
+                }`}
               >
-                {result.category}
-              </span>
-            </button>
-          ))}
+                <div className="flex-1 min-w-0">
+                  <span className="italic text-zinc-900 dark:text-zinc-100">
+                    {result.scientific_name}
+                  </span>
+                  {result.common_name && (
+                    <span className="text-zinc-500 dark:text-zinc-400 ml-1">
+                      ({result.common_name})
+                    </span>
+                  )}
+                  <span className="text-xs text-zinc-400 dark:text-zinc-500 ml-2">
+                    {getTaxonLabel(result.taxon_id)}
+                  </span>
+                </div>
+                {/* Category badge */}
+                <span
+                  className="shrink-0 text-xs font-medium px-1.5 py-0.5 rounded"
+                  style={{
+                    backgroundColor: CATEGORY_COLORS[result.category] ?? "#6b7280",
+                    color: ["VU", "NT", "LC", "NE"].includes(result.category) ? "#18181b" : "#ffffff",
+                  }}
+                >
+                  {result.category}
+                </span>
+              </button>
+            ))
+          )}
         </div>
       )}
     </div>

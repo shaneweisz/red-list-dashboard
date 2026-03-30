@@ -751,4 +751,93 @@ describe("searchSpecies", () => {
     expect(results).toHaveLength(1);
     expect(results[0].category).toBe("VU");
   });
+
+  it("returns GBIF-only species with category NE and negative IDs", () => {
+    setupSearch(
+      [], // no redlist rows
+      [
+        { gbif_species_key: 12345, scientific_name: "Newus birdus", common_name: "New Bird", taxon_group_table1a: "aves" },
+        { gbif_species_key: 67890, scientific_name: "Oldus reptilus", common_name: "Old Reptile", taxon_group_table1a: "reptilia" },
+      ],
+    );
+
+    const results = searchSpecies("newus");
+    expect(results).toHaveLength(1);
+    expect(results[0].scientific_name).toBe("Newus birdus");
+    expect(results[0].common_name).toBe("New Bird");
+    expect(results[0].category).toBe("NE");
+    expect(results[0].id).toBe(-12345);
+    expect(results[0].taxon_group).toBe("aves");
+  });
+
+  it("returns correct fields for NE species including taxon_id mapping", () => {
+    setupSearch(
+      [],
+      [
+        { gbif_species_key: 99, scientific_name: "Insectus novus", common_name: "", taxon_group_table1a: "insecta" },
+      ],
+    );
+
+    const results = searchSpecies("insectus");
+    expect(results).toHaveLength(1);
+    expect(results[0].id).toBe(-99);
+    expect(results[0].scientific_name).toBe("Insectus novus");
+    expect(results[0].common_name).toBeNull(); // empty string maps to null
+    expect(results[0].taxon_id).toBe("invertebrates"); // insecta maps to invertebrates
+    expect(results[0].taxon_group).toBe("insecta");
+    expect(results[0].category).toBe("NE");
+  });
+
+  it("does not duplicate GBIF species that are linked to a redlist entry", async () => {
+    // The mapping is cached globally at module level, so we need a fresh module
+    // instance to test with non-empty mapping data.
+    vi.resetModules();
+
+    const { readCsv: readCsvFresh } = await import("./csv");
+    const freshFs = await import("fs");
+
+    const sisTaxonId = 999;
+
+    vi.mocked(readCsvFresh).mockImplementation((filePath: string) => {
+      if (filePath.includes("/redlist/")) return [{
+        sis_taxon_id: sisTaxonId,
+        assessment_id: 99900,
+        scientific_name: "Linked species",
+        common_name: "Linked Animal",
+        class_name: "Mammalia",
+        order_name: "Carnivora",
+        family: "Felidae",
+        category: "EN",
+        assessment_date: "2020-01-01",
+        year_published: "2020",
+        population_trend: null,
+        countries: [],
+        taxon_group_table1a: "mammalia",
+      }] as any;
+      if (filePath.includes("/gbif/")) return [{
+        gbif_species_key: 55555,
+        scientific_name: "Linked species",
+        common_name: "Linked Animal",
+        taxon_group_table1a: "mammalia",
+      }] as any;
+      if (filePath.includes("mapping")) return [{
+        sis_taxon_id: sisTaxonId,
+        gbif_species_key: 55555,
+        match_type: "exact",
+      }] as any;
+      return [] as any;
+    });
+    vi.mocked(freshFs.existsSync).mockReturnValue(true);
+    vi.mocked(freshFs.readFileSync).mockReturnValue("{}");
+
+    // Re-import module to get fresh caches
+    const { searchSpecies: freshSearch } = await import("./species-store");
+
+    const results = freshSearch("linked");
+    // Should only have the redlist entry, not a duplicate NE entry
+    expect(results).toHaveLength(1);
+    expect(results[0].scientific_name).toBe("Linked species");
+    expect(results[0].category).toBe("EN");
+    expect(results[0].id).toBe(sisTaxonId);
+  });
 });
