@@ -706,6 +706,20 @@ describe("searchSpecies", () => {
     expect(results[2].scientific_name).toBe("Panthera leo");
   });
 
+  it("ranks exact common name match above scientific name prefix match", () => {
+    setupSearch([
+      makeRow({ scientific_name: "Leopardus pardalis", common_name: "Ocelot", taxon_group_table1a: "mammalia" }),
+      makeRow({ scientific_name: "Panthera pardus", common_name: "Leopard", taxon_group_table1a: "mammalia" }),
+      makeRow({ scientific_name: "Neofelis nebulosa", common_name: "Leopard Cat", taxon_group_table1a: "mammalia" }),
+    ]);
+
+    const results = searchSpecies("leopard");
+    // Exact common name "Leopard" first, then common prefix "Leopard Cat", then scientific prefix "Leopardus"
+    expect(results[0].scientific_name).toBe("Panthera pardus");
+    expect(results[1].scientific_name).toBe("Neofelis nebulosa");
+    expect(results[2].scientific_name).toBe("Leopardus pardalis");
+  });
+
   it("respects the limit parameter", () => {
     setupSearch([
       makeRow({ scientific_name: "Testus alpha", taxon_group_table1a: "mammalia" }),

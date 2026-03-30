@@ -798,17 +798,27 @@ export function searchSpecies(query: string, limit = 10): SearchResult[] {
     }
   }
 
-  // Sort by relevance: prefix match on scientific_name > prefix on common_name > substring
+  // Sort by relevance: exact common name > common name prefix > scientific name prefix > substring
   results.sort((a, b) => {
+    const aCommon = a.common_name?.toLowerCase() ?? "";
+    const bCommon = b.common_name?.toLowerCase() ?? "";
+
+    // Exact common name match (e.g. "leopard" → "Leopard")
+    const aCommonExact = aCommon === q ? 1 : 0;
+    const bCommonExact = bCommon === q ? 1 : 0;
+    if (aCommonExact !== bCommonExact) return bCommonExact - aCommonExact;
+
+    // Common name prefix (e.g. "leopard" → "Leopard Cat")
+    const aCommonPrefix = aCommon.startsWith(q) ? 1 : 0;
+    const bCommonPrefix = bCommon.startsWith(q) ? 1 : 0;
+    if (aCommonPrefix !== bCommonPrefix) return bCommonPrefix - aCommonPrefix;
+
+    // Scientific name prefix (e.g. "leopard" → "Leopardus pardalis")
     const aLower = a.scientific_name.toLowerCase();
     const bLower = b.scientific_name.toLowerCase();
     const aSciPrefix = aLower.startsWith(q) ? 1 : 0;
     const bSciPrefix = bLower.startsWith(q) ? 1 : 0;
     if (aSciPrefix !== bSciPrefix) return bSciPrefix - aSciPrefix;
-
-    const aCommonPrefix = a.common_name?.toLowerCase().startsWith(q) ? 1 : 0;
-    const bCommonPrefix = b.common_name?.toLowerCase().startsWith(q) ? 1 : 0;
-    if (aCommonPrefix !== bCommonPrefix) return bCommonPrefix - aCommonPrefix;
 
     return aLower.localeCompare(bLower);
   });
