@@ -1289,6 +1289,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   }, [selectedTaxa, selectedCategories, selectedYearRanges, selectedObsRanges, selectedAssessors, selectedReviewers, searchFilter, selectedCountries, showOnlyStarred]);
 
   // Auto-navigate to the page containing the URL-selected species
+  const shouldScrollToSpeciesRef = useRef(false);
   useEffect(() => {
     if (urlSpeciesHandledRef.current || selectedSpeciesKey == null || sortedSpecies.length === 0) return;
     const idx = sortedSpecies.findIndex(s => {
@@ -1299,8 +1300,19 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       const page = Math.floor(idx / PAGE_SIZE) + 1;
       setCurrentPage(page);
       urlSpeciesHandledRef.current = true;
+      shouldScrollToSpeciesRef.current = true;
     }
   }, [sortedSpecies, selectedSpeciesKey, isNewAssessments, PAGE_SIZE]);
+
+  // Scroll the selected species row into view after page navigation
+  const selectedRowRef = useCallback((el: HTMLTableRowElement | null) => {
+    if (el && shouldScrollToSpeciesRef.current) {
+      shouldScrollToSpeciesRef.current = false;
+      requestAnimationFrame(() => {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    }
+  }, []);
 
   // Populate basic speciesDetails from DB data (GBIF counts instant, no API calls)
   // inatDefaultImage / openAlexPaperCount / papersAtAssessment are left as undefined → spinner
@@ -2431,6 +2443,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 return (
                   <React.Fragment key={s.id}>
                   <tr
+                    ref={selectedSpeciesKey === speciesKey ? selectedRowRef : undefined}
                     className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer ${selectedSpeciesKey === speciesKey ? "bg-zinc-100 dark:bg-zinc-800" : ""} ${isDragging ? "opacity-50" : ""} ${isDragOver ? "border-t-2 border-amber-500" : ""}`}
                     onClick={() => { setSelectedSpeciesKey(selectedSpeciesKey === speciesKey ? null : speciesKey); }}
                     draggable={isPinned && showOnlyStarred}
