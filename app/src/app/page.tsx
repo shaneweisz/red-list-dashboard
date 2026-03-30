@@ -42,17 +42,12 @@ export default function RedListPage() {
   return (
     <div className="min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950 px-4 sm:px-6 py-4 md:px-16 md:py-8">
       <main className="max-w-6xl w-full min-w-0 mx-auto flex-1">
-        {/* Header */}
-        <div className="mb-4 md:mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-          <div>
-            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-zinc-900 dark:text-zinc-100 mb-1 md:mb-2">
-              IUCN Red List Assessments Dashboard
-            </h1>
-            <p className="text-sm md:text-base text-zinc-600 dark:text-zinc-400">
-              Click taxa rows to filter, use charts and search to explore species.<span className="hidden sm:inline"> Cmd/Ctrl+click to multiselect.</span>
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
+        {/* Header row: title + view mode toggle */}
+        <div className="mb-3 md:mb-4 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-zinc-900 dark:text-zinc-100">
+            IUCN Red List Assessments Dashboard
+          </h1>
+          <div className="flex items-center gap-2 shrink-0">
             {/* View mode toggle */}
             <div className="flex rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden text-sm">
               <button
@@ -94,8 +89,13 @@ export default function RedListPage() {
           </div>
         </div>
 
-        {/* Species search */}
-        <SpeciesSearchBar />
+        {/* Search bar + subtitle */}
+        <div className="mb-4 md:mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <p className="text-sm md:text-base text-zinc-600 dark:text-zinc-400">
+            Click taxa rows to filter, use charts and search to explore species.<span className="hidden sm:inline"> Cmd/Ctrl+click to multiselect.</span>
+          </p>
+          <SpeciesSearchBar />
+        </div>
 
         {/* Content — single component instance stays mounted on viewMode switch */}
         <RedListView
@@ -107,7 +107,7 @@ export default function RedListPage() {
         />
       </main>
 
-      <footer className="max-w-xl mx-auto mt-5 pb-6 pt-4 border-t border-zinc-200 dark:border-zinc-800">
+      <footer className="max-w-xl mx-auto mt-2 pb-6 pt-4 border-t border-zinc-200 dark:border-zinc-800">
         <p className="text-center text-xs text-zinc-400 dark:text-zinc-500">
           Questions or feedback? Contact{" "}
           <a
