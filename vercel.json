@@ -1,3 +1,8 @@
 {
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "functions": {
+    "app/src/app/api/**/*.ts": {
+      "memory": 3009
+    }
+  }
 }
