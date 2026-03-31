@@ -749,9 +749,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       .then(data => {
         if (data?.species && !controller.signal.aborted) {
           setSingleSpeciesPreview(data.species);
-          // Mark as handled + trigger scroll so the preview row scrolls into view
           urlSpeciesHandledRef.current = true;
-          shouldScrollToSpeciesRef.current = true;
         }
       })
       .catch(() => {});
@@ -766,6 +764,17 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       setSingleSpeciesPreview(null);
     }
   }, [assessedSpecies, neSpecies, singleSpeciesPreview]);
+
+  // Scroll preview row into view after it renders
+  useEffect(() => {
+    if (!singleSpeciesPreview) return;
+    requestAnimationFrame(() => {
+      const row = document.querySelector('[data-species-preview]');
+      if (row) {
+        row.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    });
+  }, [singleSpeciesPreview]);
 
   const [stackedDetailView, setStackedDetailView] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -2490,6 +2499,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   <React.Fragment key={s.id}>
                   <tr
                     ref={selectedSpeciesKey === speciesKey ? selectedRowRef : undefined}
+                    {...(singleSpeciesPreview && s.id === singleSpeciesPreview.id ? { 'data-species-preview': true } : {})}
                     className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer ${selectedSpeciesKey === speciesKey ? "bg-zinc-100 dark:bg-zinc-800" : ""} ${isDragging ? "opacity-50" : ""} ${isDragOver ? "border-t-2 border-amber-500" : ""}`}
                     onClick={() => { setSelectedSpeciesKey(selectedSpeciesKey === speciesKey ? null : speciesKey); }}
                     draggable={isPinned && showOnlyStarred}
