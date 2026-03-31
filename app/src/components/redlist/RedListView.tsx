@@ -325,7 +325,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     sortField, sortDirection, setSort,
     clearAllFilters,
     setViewMode: setUrlViewMode,
-    species: urlSpecies, tab: urlTab,
+    species: urlSpecies, tab: urlTab, group: urlGroup,
     setSpeciesParam, setTabParam,
     fromPopstateRef,
   } = useFilterParams();
@@ -726,6 +726,41 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       urlSpeciesHandledRef.current = false; // allow auto-page-navigate for new species
     }
   }, [urlSpecies, urlTab]);
+
+  // Single-species fast path: fetch one species immediately from search navigation
+  // so the detail panel renders without waiting for the full table to load.
+  const [singleSpeciesPreview, setSingleSpeciesPreview] = useState<RedListSpecies | null>(null);
+  useEffect(() => {
+    if (urlSpecies == null || !urlGroup) {
+      setSingleSpeciesPreview(null);
+      return;
+    }
+    // Skip if species is already in bulk-loaded data
+    const allSpecies = [...(speciesByTaxon[selectedTaxa.size === 1 ? [...selectedTaxa][0] : "all"] ?? []), ...neSpecies];
+    if (allSpecies.some(s => s.id === urlSpecies)) {
+      setSingleSpeciesPreview(null);
+      return;
+    }
+    const controller = new AbortController();
+    fetch(`/api/redlist/species/${urlSpecies}?group=${encodeURIComponent(urlGroup)}`, { signal: controller.signal })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data?.species && !controller.signal.aborted) {
+          setSingleSpeciesPreview(data.species);
+        }
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [urlSpecies, urlGroup]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Clear preview once the species appears in bulk-loaded data
+  useEffect(() => {
+    if (!singleSpeciesPreview) return;
+    const allSpecies = [...assessedSpecies, ...neSpecies];
+    if (allSpecies.some(s => s.id === singleSpeciesPreview.id)) {
+      setSingleSpeciesPreview(null);
+    }
+  }, [assessedSpecies, neSpecies, singleSpeciesPreview]);
 
   const [stackedDetailView, setStackedDetailView] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -1240,10 +1275,17 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // ── Client-side pagination ─────────────────────────────────────────
   const totalFiltered = filteredSpecies.length;
   const totalPages = Math.ceil(sortedSpecies.length / PAGE_SIZE);
-  const paginatedSpecies = sortedSpecies.slice(
+  const paginatedSpeciesBase = sortedSpecies.slice(
     (currentPage - 1) * PAGE_SIZE,
     currentPage * PAGE_SIZE
   );
+
+  // Include single-species preview at the top of the page when bulk data hasn't loaded yet
+  const paginatedSpecies = useMemo(() => {
+    if (!singleSpeciesPreview) return paginatedSpeciesBase;
+    if (paginatedSpeciesBase.some(s => s.id === singleSpeciesPreview.id)) return paginatedSpeciesBase;
+    return [singleSpeciesPreview, ...paginatedSpeciesBase];
+  }, [paginatedSpeciesBase, singleSpeciesPreview]);
 
   // Helper to get country display name
   const getCountryName = (code: string) => ALPHA2_TO_NAME[code] || code;

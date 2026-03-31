@@ -400,6 +400,105 @@ export function getSpecies(groups: string[], includeNE: boolean): SpeciesRow[] {
 }
 
 /**
+ * Look up a single species by ID within a specific CSV group.
+ * Much faster than getSpecies() when you only need one row.
+ *
+ * For assessed species (id > 0), finds by sis_taxon_id in the redlist CSV.
+ * For NE species (id < 0), finds by gbif_species_key (= -id) in the GBIF CSV.
+ */
+export function getSpeciesById(id: number, taxonGroup: string): SpeciesRow | null {
+  if (id > 0) {
+    // Assessed species: look up in redlist
+    const redlistRows = loadRedlistForGroup(taxonGroup);
+    const row = redlistRows.find(r => r.sis_taxon_id === id);
+    if (!row) return null;
+
+    const mapping = loadMapping();
+    const gbifMap = loadGbifForGroup(taxonGroup);
+    const historyMap = loadHistoryForGroup(taxonGroup);
+
+    const gbifSpeciesKey = mapping.get(row.sis_taxon_id)?.gbif_species_key ?? null;
+    let gbifOccurrenceCount: number | null = null;
+    let gbifObsAfterAssessment: number | null = null;
+
+    if (gbifSpeciesKey) {
+      const gbif = gbifMap.get(gbifSpeciesKey);
+      if (gbif) {
+        gbifOccurrenceCount = gbif.total_count;
+        gbifObsAfterAssessment = gbif.count_after_assessment_year;
+      }
+    }
+
+    return {
+      id: row.sis_taxon_id,
+      sis_taxon_id: row.sis_taxon_id,
+      assessment_id: row.assessment_id,
+      scientific_name: row.scientific_name,
+      common_name: row.common_name,
+      family: row.family,
+      category: row.category,
+      assessment_date: row.assessment_date,
+      year_published: row.year_published,
+      population_trend: row.population_trend,
+      countries: row.countries,
+      class_name: row.class_name,
+      order_name: row.order_name,
+      taxon_group: row.taxon_group_table1a,
+      taxon_id: mapTaxonId(row.taxon_group_table1a),
+      gbif_species_key: gbifSpeciesKey,
+      gbif_occurrence_count: gbifOccurrenceCount,
+      gbif_observations_after_assessment_year: gbifObsAfterAssessment,
+      previous_assessments: historyMap[String(row.sis_taxon_id)] ?? [],
+      systems: row.systems,
+      growth_forms: row.growth_forms,
+      movement_pattern: row.movement_pattern,
+      possibly_extinct: row.possibly_extinct,
+      possibly_extinct_in_the_wild: row.possibly_extinct_in_the_wild,
+      criteria: row.criteria,
+      threat_codes: row.threat_codes,
+      has_map: row.has_map,
+    };
+  } else {
+    // NE species: look up in GBIF by key (= -id)
+    const gbifKey = -id;
+    const gbifMap = loadGbifForGroup(taxonGroup);
+    const gbif = gbifMap.get(gbifKey);
+    if (!gbif) return null;
+    if (EXCLUDED_DOMESTICATED_GBIF_KEYS.has(gbifKey)) return null;
+
+    return {
+      id: -gbifKey,
+      sis_taxon_id: null,
+      assessment_id: null,
+      scientific_name: gbif.scientific_name,
+      common_name: gbif.common_name || null,
+      family: gbif.family || null,
+      category: "NE",
+      assessment_date: null,
+      year_published: null,
+      population_trend: null,
+      countries: gbif.countries,
+      class_name: gbif.class_name || null,
+      order_name: gbif.order_name || null,
+      taxon_group: gbif.taxon_group_table1a,
+      taxon_id: mapTaxonId(gbif.taxon_group_table1a),
+      gbif_species_key: gbif.gbif_species_key,
+      gbif_occurrence_count: gbif.total_count,
+      gbif_observations_after_assessment_year: gbif.count_after_assessment_year,
+      previous_assessments: [],
+      systems: [],
+      growth_forms: [],
+      movement_pattern: null,
+      possibly_extinct: false,
+      possibly_extinct_in_the_wild: false,
+      criteria: null,
+      threat_codes: [],
+      has_map: false,
+    };
+  }
+}
+
+/**
  * Get taxa summary rows from the pre-computed JSON file.
  */
 export function getTaxaSummary(): TaxaSummaryRow[] {
