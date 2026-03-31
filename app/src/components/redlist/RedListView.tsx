@@ -20,6 +20,7 @@ import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import { downloadSpeciesCsv } from "@/lib/exportCsv";
 import AssessmentAssistant from "../AssessmentAssistant";
 import AssessorCandidatesTable from "../AssessorCandidatesTable";
+import { getLastSearchResult, clearLastSearchResult } from "../SpeciesSearchBar";
 
 // Dynamically import OccurrenceMapRow to avoid SSR issues with Leaflet
 const OccurrenceMapRow = dynamic(
@@ -704,7 +705,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const [selectedSpeciesKey, setSelectedSpeciesKeyRaw] = useState<number | null>(urlSpecies != null && isNewAssessments ? Math.abs(urlSpecies) : urlSpecies);
   const [activeDetailTab, setActiveDetailTabRaw] = useState<"gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors">(urlTab ?? "gbif");
   const urlSpeciesHandledRef = useRef(false);
-  const shouldScrollToSpeciesRef = useRef(false);
 
   // Wrap setters to sync with URL
   const setSelectedSpeciesKey = useCallback((key: number | null) => {
@@ -729,8 +729,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     }
   }, [urlSpecies, urlTab, isNewAssessments]);
 
-  // Single-species fast path: fetch one species immediately from search navigation
-  // so the detail panel renders without waiting for the full table to load.
+  // Single-species fast path: use cached search result to render the detail panel
+  // immediately without waiting for the bulk table to load.
   const [singleSpeciesPreview, setSingleSpeciesPreview] = useState<RedListSpecies | null>(null);
   useEffect(() => {
     if (urlSpecies == null || !urlGroup) {
@@ -743,6 +743,45 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       setSingleSpeciesPreview(null);
       return;
     }
+
+    // Try cached search result first (no API call needed)
+    const cached = getLastSearchResult();
+    if (cached && cached.id === urlSpecies) {
+      clearLastSearchResult();
+      setSingleSpeciesPreview({
+        id: cached.id,
+        sis_taxon_id: cached.id > 0 ? cached.id : null,
+        assessment_id: cached.assessment_id,
+        scientific_name: cached.scientific_name,
+        common_name: cached.common_name,
+        family: null,
+        category: cached.category,
+        assessment_date: cached.assessment_date,
+        year_published: null,
+        population_trend: null,
+        countries: cached.countries,
+        class_name: null,
+        order_name: null,
+        taxon_group: cached.taxon_group,
+        taxon_id: cached.taxon_id,
+        gbif_species_key: cached.gbif_species_key,
+        gbif_occurrence_count: null,
+        gbif_observations_after_assessment_year: null,
+        previous_assessments: [],
+        systems: [],
+        growth_forms: [],
+        movement_pattern: null,
+        possibly_extinct: false,
+        possibly_extinct_in_the_wild: false,
+        criteria: null,
+        threat_codes: [],
+        has_map: false,
+      });
+      urlSpeciesHandledRef.current = true;
+      return;
+    }
+
+    // Fallback: fetch from API (for direct URL navigation without cached search result)
     const controller = new AbortController();
     fetch(`/api/redlist/species/${urlSpecies}?group=${encodeURIComponent(urlGroup)}`, { signal: controller.signal })
       .then(res => res.ok ? res.json() : null)
@@ -765,14 +804,16 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     }
   }, [assessedSpecies, neSpecies, singleSpeciesPreview]);
 
-  // Scroll preview row into view after it renders
+  // Scroll preview row into view after it renders (double-rAF for reliable post-paint timing)
   useEffect(() => {
     if (!singleSpeciesPreview) return;
     requestAnimationFrame(() => {
-      const row = document.querySelector('[data-species-preview]');
-      if (row) {
-        row.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
+      requestAnimationFrame(() => {
+        const row = document.querySelector('[data-selected-species]');
+        if (row) {
+          row.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      });
     });
   }, [singleSpeciesPreview]);
 
@@ -1355,19 +1396,15 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       const page = Math.floor(idx / PAGE_SIZE) + 1;
       setCurrentPage(page);
       urlSpeciesHandledRef.current = true;
-      shouldScrollToSpeciesRef.current = true;
-    }
-  }, [sortedSpecies, selectedSpeciesKey, isNewAssessments, PAGE_SIZE]);
-
-  // Scroll the selected species row into view after page navigation
-  const selectedRowRef = useCallback((el: HTMLTableRowElement | null) => {
-    if (el && shouldScrollToSpeciesRef.current) {
-      shouldScrollToSpeciesRef.current = false;
+      // Scroll after React renders the new page (double-rAF for post-paint reliability)
       requestAnimationFrame(() => {
-        el.scrollIntoView({ behavior: "smooth", block: "start" });
+        requestAnimationFrame(() => {
+          const row = document.querySelector('[data-selected-species]');
+          if (row) row.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
       });
     }
-  }, []);
+  }, [sortedSpecies, selectedSpeciesKey, isNewAssessments, PAGE_SIZE]);
 
   // Populate basic speciesDetails from DB data (GBIF counts instant, no API calls)
   // inatDefaultImage / openAlexPaperCount / papersAtAssessment are left as undefined → spinner
@@ -2498,8 +2535,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 return (
                   <React.Fragment key={s.id}>
                   <tr
-                    ref={selectedSpeciesKey === speciesKey ? selectedRowRef : undefined}
-                    {...(singleSpeciesPreview && s.id === singleSpeciesPreview.id ? { 'data-species-preview': true } : {})}
+                    {...(selectedSpeciesKey === speciesKey ? { 'data-selected-species': true } : {})}
                     className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer ${selectedSpeciesKey === speciesKey ? "bg-zinc-100 dark:bg-zinc-800" : ""} ${isDragging ? "opacity-50" : ""} ${isDragOver ? "border-t-2 border-amber-500" : ""}`}
                     onClick={() => { setSelectedSpeciesKey(selectedSpeciesKey === speciesKey ? null : speciesKey); }}
                     draggable={isPinned && showOnlyStarred}

@@ -12,6 +12,22 @@ interface SearchResult {
   taxon_id: string;
   taxon_group: string;
   category: string;
+  gbif_species_key: number | null;
+  assessment_id: number | null;
+  assessment_date: string | null;
+  countries: string[];
+}
+
+/**
+ * Module-level cache of the last selected search result.
+ * RedListView reads this to construct the preview without an API call.
+ */
+let lastSelectedResult: SearchResult | null = null;
+export function getLastSearchResult(): SearchResult | null {
+  return lastSelectedResult;
+}
+export function clearLastSearchResult(): void {
+  lastSelectedResult = null;
 }
 
 export function SpeciesSearchBar() {
@@ -77,6 +93,7 @@ export function SpeciesSearchBar() {
 
   const selectResult = useCallback(
     (result: SearchResult) => {
+      lastSelectedResult = result;
       const viewMode: ViewMode = result.category === "NE" ? "new-assessments" : "reassessments";
 
       // Build URL with species selected — all filter state is driven from the URL

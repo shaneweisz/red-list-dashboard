@@ -9,7 +9,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { readCsv } from "./csv";
 import { countryToRegion } from "../regions";
-import { ALL_CSV_GROUPS } from "../../config/taxonomy-tree";
+
 
 
 // =============================================================================
@@ -830,8 +830,22 @@ function parseAssessorNames(raw: string): string[] {
 }
 
 // =============================================================================
-// CROSS-TAXA SPECIES SEARCH
+// CROSS-TAXA SPECIES SEARCH (powered by pre-built search-index.json)
 // =============================================================================
+
+/** Compact entry from data/search-index.json (short keys for size). */
+export interface SearchIndexEntry {
+  i: number;          // id
+  s: string;          // scientific_name
+  c?: string;         // common_name
+  ti: string;         // taxon_id (display group)
+  tg: string;         // taxon_group (CSV group)
+  cat: string;        // category
+  gk?: number;        // gbif_species_key
+  aid?: number;       // assessment_id
+  ad?: string;        // assessment_date
+  ctry?: string;      // countries (semicolon-separated)
+}
 
 export interface SearchResult {
   id: number;
@@ -840,61 +854,67 @@ export interface SearchResult {
   taxon_id: string;
   taxon_group: string;
   category: string;
+  gbif_species_key: number | null;
+  assessment_id: number | null;
+  assessment_date: string | null;
+  countries: string[];
+}
+
+// Cached search index + pre-lowercased names (built on first load)
+let searchIndexCache: SearchIndexEntry[] | null = null;
+let searchNamesCache: { sl: string; cl: string }[] | null = null;
+
+const SEARCH_INDEX_PATH = path.join(DATA_DIR, "search-index.json");
+
+/** @internal Reset search index cache (for tests only) */
+export function _resetSearchIndexCache(): void {
+  searchIndexCache = null;
+  searchNamesCache = null;
+}
+
+function loadSearchIndex(): { entries: SearchIndexEntry[]; names: { sl: string; cl: string }[] } {
+  if (searchIndexCache && searchNamesCache) {
+    return { entries: searchIndexCache, names: searchNamesCache };
+  }
+  const raw = fs.readFileSync(SEARCH_INDEX_PATH, "utf-8");
+  const entries = JSON.parse(raw) as SearchIndexEntry[];
+  const names = entries.map(e => ({
+    sl: e.s.toLowerCase(),
+    cl: e.c ? e.c.toLowerCase() : "",
+  }));
+  searchIndexCache = entries;
+  searchNamesCache = names;
+  return { entries, names };
 }
 
 /**
  * Search for species across all taxa by scientific name or common name.
- * Returns lightweight results sorted by relevance (prefix matches first).
+ * Uses a pre-built JSON index for fast lookups (no CSV parsing).
  */
 export function searchSpecies(query: string, limit = 10): SearchResult[] {
   if (query.length < 2) return [];
 
   const q = query.toLowerCase();
+  const { entries, names } = loadSearchIndex();
   const results: SearchResult[] = [];
-  const mapping = loadMapping();
 
-  for (const group of ALL_CSV_GROUPS) {
-    const redlistRows = loadRedlistForGroup(group);
-    const gbifMap = loadGbifForGroup(group);
-    const linkedGbifKeys = new Set<number>();
+  for (let idx = 0; idx < entries.length; idx++) {
+    const n = names[idx];
+    if (!n.sl.includes(q) && (!n.cl || !n.cl.includes(q))) continue;
 
-    // Search redlist (assessed) species
-    for (const r of redlistRows) {
-      const gbifKey = mapping.get(r.sis_taxon_id)?.gbif_species_key ?? null;
-      if (gbifKey) linkedGbifKeys.add(gbifKey);
-
-      const sciMatch = r.scientific_name.toLowerCase().includes(q);
-      const commonMatch = !!r.common_name && r.common_name.toLowerCase().includes(q);
-      if (sciMatch || commonMatch) {
-        results.push({
-          id: r.sis_taxon_id,
-          scientific_name: r.scientific_name,
-          common_name: r.common_name,
-          taxon_id: mapTaxonId(r.taxon_group_table1a),
-          taxon_group: r.taxon_group_table1a,
-          category: r.category,
-        });
-      }
-    }
-
-    // Search GBIF-only (NE) species
-    for (const [key, gbif] of gbifMap) {
-      if (linkedGbifKeys.has(key)) continue;
-      if (EXCLUDED_DOMESTICATED_GBIF_KEYS.has(key)) continue;
-
-      const sciMatch = gbif.scientific_name.toLowerCase().includes(q);
-      const commonMatch = !!gbif.common_name && gbif.common_name.toLowerCase().includes(q);
-      if (sciMatch || commonMatch) {
-        results.push({
-          id: -key,
-          scientific_name: gbif.scientific_name,
-          common_name: gbif.common_name || null,
-          taxon_id: mapTaxonId(gbif.taxon_group_table1a),
-          taxon_group: gbif.taxon_group_table1a,
-          category: "NE",
-        });
-      }
-    }
+    const e = entries[idx];
+    results.push({
+      id: e.i,
+      scientific_name: e.s,
+      common_name: e.c ?? null,
+      taxon_id: e.ti,
+      taxon_group: e.tg,
+      category: e.cat,
+      gbif_species_key: e.gk ?? null,
+      assessment_id: e.aid ?? null,
+      assessment_date: e.ad ?? null,
+      countries: e.ctry ? e.ctry.split(";") : [],
+    });
   }
 
   // Sort by relevance: exact common name > common name prefix > scientific name prefix > substring
@@ -902,17 +922,14 @@ export function searchSpecies(query: string, limit = 10): SearchResult[] {
     const aCommon = a.common_name?.toLowerCase() ?? "";
     const bCommon = b.common_name?.toLowerCase() ?? "";
 
-    // Exact common name match (e.g. "leopard" → "Leopard")
     const aCommonExact = aCommon === q ? 1 : 0;
     const bCommonExact = bCommon === q ? 1 : 0;
     if (aCommonExact !== bCommonExact) return bCommonExact - aCommonExact;
 
-    // Common name prefix (e.g. "leopard" → "Leopard Cat")
     const aCommonPrefix = aCommon.startsWith(q) ? 1 : 0;
     const bCommonPrefix = bCommon.startsWith(q) ? 1 : 0;
     if (aCommonPrefix !== bCommonPrefix) return bCommonPrefix - aCommonPrefix;
 
-    // Scientific name prefix (e.g. "leopard" → "Leopardus pardalis")
     const aLower = a.scientific_name.toLowerCase();
     const bLower = b.scientific_name.toLowerCase();
     const aSciPrefix = aLower.startsWith(q) ? 1 : 0;
