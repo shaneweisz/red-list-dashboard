@@ -680,6 +680,20 @@ describe("searchSpecies", () => {
     expect(results[0].scientific_name).toBe("Panthera leo");
   });
 
+  it("ranks prefix matches on scientific name before substring matches", () => {
+    setupSearchIndex([
+      { i: 1, s: "Leopardus pardalis", ti: "mammalia", tg: "mammalia", cat: "LC" },
+      { i: 2, s: "Panthera leo", ti: "mammalia", tg: "mammalia", cat: "VU" },
+      { i: 3, s: "Leo ninus", ti: "mammalia", tg: "mammalia", cat: "VU" },
+    ]);
+
+    const results = searchSpecies("leo");
+    // "Leo ninus" and "Leopardus pardalis" are prefix matches, "Panthera leo" is substring
+    expect(results[0].scientific_name).toBe("Leo ninus");
+    expect(results[1].scientific_name).toBe("Leopardus pardalis");
+    expect(results[2].scientific_name).toBe("Panthera leo");
+  });
+
   it("ranks exact common name match above scientific name prefix match", () => {
     setupSearchIndex([
       { i: 1, s: "Leopardus pardalis", c: "Ocelot", ti: "mammalia", tg: "mammalia", cat: "LC" },

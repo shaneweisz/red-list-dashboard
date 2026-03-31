@@ -16,37 +16,7 @@ import { TAXA } from "./taxa";
 import { readRedlistCsv } from "./fetch-redlist-species";
 import { readGbifCsv } from "./fetch-gbif-species";
 import { readMappingCsv } from "./match-redlist-species-to-gbif";
-
-// Same mapping as species-store.ts
-const DB_GROUP_TO_TAXON_ID: Record<string, string> = {
-  fishes: "fishes",
-  insecta: "invertebrates",
-  arachnida: "invertebrates",
-  mollusca: "invertebrates",
-  crustacea: "invertebrates",
-  corals: "invertebrates",
-  other_invertebrates: "invertebrates",
-  velvet_worms: "invertebrates",
-  horseshoe_crabs: "invertebrates",
-  flowering_plants: "plantae",
-  gymnosperms: "plantae",
-  ferns_and_allies: "plantae",
-  mosses: "plantae",
-  green_algae: "plantae",
-  red_algae: "plantae",
-  brown_algae: "fungi",
-  mushrooms: "fungi",
-};
-
-function mapTaxonId(group: string): string {
-  return DB_GROUP_TO_TAXON_ID[group] ?? group;
-}
-
-// Same exclusion list as species-store.ts
-const EXCLUDED_DOMESTICATED_GBIF_KEYS = new Set([
-  2441022, 2435035, 2441110, 2441056, 2440886, 7422937, 2440891,
-  9055455, 2441238, 5220190, 7515593, 2441019, 5219702, 10694102, 2436436,
-]);
+import { EXCLUDED_DOMESTICATED_GBIF_KEYS, mapTaxonId } from "../src/lib/data/taxonomy-constants";
 
 // Compact entry — null/empty fields omitted to reduce file size.
 // See SearchIndexEntry in species-store.ts for the full type.

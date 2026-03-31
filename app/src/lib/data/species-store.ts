@@ -9,31 +9,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { readCsv } from "./csv";
 import { countryToRegion } from "../regions";
-
-
-
-// =============================================================================
-// EXCLUDED DOMESTICATED SPECIES
-// =============================================================================
-
-/** GBIF species keys for domesticated species excluded from new assessments. */
-const EXCLUDED_DOMESTICATED_GBIF_KEYS = new Set([
-  2441022, // Bos taurus (Cow)
-  2435035, // Felis catus (Cat)
-  2441110, // Ovis aries (Domestic Sheep)
-  2441056, // Capra hircus (Domestic Goat)
-  2440886, // Equus caballus (Horse)
-  7422937, // Bubalus bubalis (Water Buffalo)
-  2440891, // Equus asinus (Donkey)
-  9055455, // Camelus dromedarius (Arabian Camel)
-  2441238, // Camelus bactrianus (Bactrian Camel)
-  5220190, // Lama glama (Llama)
-  7515593, // Vicugna pacos (Alpaca)
-  2441019, // Bos grunniens (Yak)
-  5219702, // Cavia porcellus (Guinea Pig)
-  10694102, // Columba domestica (Domestic Pigeon)
-  2436436, // Homo sapiens (Human)
-]);
+import { EXCLUDED_DOMESTICATED_GBIF_KEYS, mapTaxonId } from "./taxonomy-constants";
 
 // =============================================================================
 // PATHS
@@ -141,34 +117,6 @@ export interface TaxaSummaryRow {
   total_gbif_observations: number;
   mean_gbif_obs: number;
   median_gbif_obs: number | null;
-}
-
-// =============================================================================
-// DB_GROUP → DISPLAY TAXON ID (for the default 8-taxa view)
-// =============================================================================
-
-const DB_GROUP_TO_TAXON_ID: Record<string, string> = {
-  fishes: "fishes",
-  insecta: "invertebrates",
-  arachnida: "invertebrates",
-  mollusca: "invertebrates",
-  crustacea: "invertebrates",
-  corals: "invertebrates",
-  other_invertebrates: "invertebrates",
-  velvet_worms: "invertebrates",
-  horseshoe_crabs: "invertebrates",
-  flowering_plants: "plantae",
-  gymnosperms: "plantae",
-  ferns_and_allies: "plantae",
-  mosses: "plantae",
-  green_algae: "plantae",
-  red_algae: "plantae",
-  brown_algae: "fungi",
-  mushrooms: "fungi",
-};
-
-function mapTaxonId(group: string): string {
-  return DB_GROUP_TO_TAXON_ID[group] ?? group;
 }
 
 // =============================================================================
@@ -875,6 +823,12 @@ export function _resetSearchIndexCache(): void {
 function loadSearchIndex(): { entries: SearchIndexEntry[]; names: { sl: string; cl: string }[] } {
   if (searchIndexCache && searchNamesCache) {
     return { entries: searchIndexCache, names: searchNamesCache };
+  }
+  if (!fs.existsSync(SEARCH_INDEX_PATH)) {
+    console.warn(`Search index not found at ${SEARCH_INDEX_PATH}. Run: npx tsx scripts/build-search-index.ts`);
+    searchIndexCache = [];
+    searchNamesCache = [];
+    return { entries: [], names: [] };
   }
   const raw = fs.readFileSync(SEARCH_INDEX_PATH, "utf-8");
   const entries = JSON.parse(raw) as SearchIndexEntry[];
