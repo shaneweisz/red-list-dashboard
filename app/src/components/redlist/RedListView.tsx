@@ -327,6 +327,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     setViewMode: setUrlViewMode,
     species: urlSpecies, tab: urlTab,
     setSpeciesParam, setTabParam,
+    fromPopstateRef,
   } = useFilterParams();
 
   // Initialize from shared state on mount (when switching from another view)
@@ -370,14 +371,27 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     setSpeciesByTaxon({});
     setNeSpecies([]);
     setNeSpeciesFetched(false);
-    // Clear assessment-specific filters
-    clearAllFilters();
+    // Clear assessment-specific filters (preserve search + species so search-bar navigation survives mode switch)
+    setSelectedSubgroups(new Set());
+    setSelectedCategories(new Set());
+    setSelectedYearRanges(new Set());
+    setSelectedCountries(new Set());
+    setSelectedObsRanges(new Set());
+    setSelectedSystems(new Set());
+    setSelectedPopulationTrends(new Set());
+    setSelectedMovementPatterns(new Set());
+    setSelectedThreats(new Set());
+    setHasMapFilter(null);
+    setSelectedGrowthForms(new Set());
+    setSelectedAssessors(new Set());
+    setSelectedReviewers(new Set());
+    setSort(null, "desc");
     setShowOnlyStarred(false);
     // Clear "all" taxa selection when switching to new-assessments (NE dataset too large for "all")
     if (viewMode === "new-assessments") {
       setSelectedTaxa(prev => prev.has("all") ? new Set<string>() : prev);
     }
-  }, [viewMode, clearAllFilters, setSelectedTaxa]);
+  }, [viewMode, setSelectedTaxa, setSelectedSubgroups, setSelectedCategories, setSelectedYearRanges, setSelectedCountries, setSelectedObsRanges, setSelectedSystems, setSelectedPopulationTrends, setSelectedMovementPatterns, setSelectedThreats, setHasMapFilter, setSelectedGrowthForms, setSelectedAssessors, setSelectedReviewers, setSort]);
 
   // Taxon toggle handler (used by TaxaSummary)
   // Regular click: select only that taxon (or deselect if already sole selection)
@@ -442,13 +456,19 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       skipClearOnTaxaChangeRef.current = false;
       return;
     }
+    // Skip clearing when the taxa change came from URL navigation (popstate) —
+    // the URL already contains the complete state (e.g. from search bar navigation).
+    if (fromPopstateRef.current) {
+      fromPopstateRef.current = false;
+      return;
+    }
     // Skip clearing when going from no taxa to some taxa — this happens during
     // URL hydration (useFilterParams starts empty then populates from URL) and
     // there are no taxa-specific filters to reset when nothing was selected before.
     if (prev.size === 0) return;
     clearAllFilters();
     setShowOnlyStarred(false);
-  }, [selectedTaxa, clearAllFilters]);
+  }, [selectedTaxa, clearAllFilters, fromPopstateRef]);
 
   const [showOnlyStarred, setShowOnlyStarred] = useState(false);
   const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
@@ -683,6 +703,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // Row expansion state (initialized from URL params if present)
   const [selectedSpeciesKey, setSelectedSpeciesKeyRaw] = useState<number | null>(urlSpecies);
   const [activeDetailTab, setActiveDetailTabRaw] = useState<"gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors">(urlTab ?? "gbif");
+  const urlSpeciesHandledRef = useRef(false);
 
   // Wrap setters to sync with URL
   const setSelectedSpeciesKey = useCallback((key: number | null) => {
@@ -697,14 +718,12 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     setActiveDetailTabRaw(tab);
     setTabParam(tab);
   }, [setTabParam]);
-  // Hydrate species/tab from URL after useFilterParams reads the URL in its effect
-  const hydratedUrlSpeciesRef = useRef(false);
+  // Sync species/tab from URL params (fires on popstate, e.g. back/forward or search bar navigation)
   useEffect(() => {
-    if (hydratedUrlSpeciesRef.current) return;
     if (urlSpecies != null) {
-      hydratedUrlSpeciesRef.current = true;
       setSelectedSpeciesKeyRaw(urlSpecies);
       setActiveDetailTabRaw(urlTab ?? "gbif");
+      urlSpeciesHandledRef.current = false; // allow auto-page-navigate for new species
     }
   }, [urlSpecies, urlTab]);
 
@@ -1270,7 +1289,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   }, [selectedTaxa, selectedCategories, selectedYearRanges, selectedObsRanges, selectedAssessors, selectedReviewers, searchFilter, selectedCountries, showOnlyStarred]);
 
   // Auto-navigate to the page containing the URL-selected species
-  const urlSpeciesHandledRef = useRef(false);
+  const shouldScrollToSpeciesRef = useRef(false);
   useEffect(() => {
     if (urlSpeciesHandledRef.current || selectedSpeciesKey == null || sortedSpecies.length === 0) return;
     const idx = sortedSpecies.findIndex(s => {
@@ -1281,8 +1300,19 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       const page = Math.floor(idx / PAGE_SIZE) + 1;
       setCurrentPage(page);
       urlSpeciesHandledRef.current = true;
+      shouldScrollToSpeciesRef.current = true;
     }
   }, [sortedSpecies, selectedSpeciesKey, isNewAssessments, PAGE_SIZE]);
+
+  // Scroll the selected species row into view after page navigation
+  const selectedRowRef = useCallback((el: HTMLTableRowElement | null) => {
+    if (el && shouldScrollToSpeciesRef.current) {
+      shouldScrollToSpeciesRef.current = false;
+      requestAnimationFrame(() => {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    }
+  }, []);
 
   // Populate basic speciesDetails from DB data (GBIF counts instant, no API calls)
   // inatDefaultImage / openAlexPaperCount / papersAtAssessment are left as undefined → spinner
@@ -2413,6 +2443,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 return (
                   <React.Fragment key={s.id}>
                   <tr
+                    ref={selectedSpeciesKey === speciesKey ? selectedRowRef : undefined}
                     className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer ${selectedSpeciesKey === speciesKey ? "bg-zinc-100 dark:bg-zinc-800" : ""} ${isDragging ? "opacity-50" : ""} ${isDragOver ? "border-t-2 border-amber-500" : ""}`}
                     onClick={() => { setSelectedSpeciesKey(selectedSpeciesKey === speciesKey ? null : speciesKey); }}
                     draggable={isPinned && showOnlyStarred}

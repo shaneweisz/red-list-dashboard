@@ -175,3 +175,4 @@ export function getNodeDef(nodeId: string): { node: TaxonomyNode; parentId: stri
   if (!parentId) return null; // Root node
   return { node, parentId };
 }
+
