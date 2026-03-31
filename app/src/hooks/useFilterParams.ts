@@ -65,6 +65,7 @@ export function parseParams(search: string) {
     species: p.get("species") ? Number(p.get("species")) : null,
     tab: (p.get("tab") || null) as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | null,
     group: p.get("group") || null,
+    navigationId: 0, // incremented on each popstate to detect re-navigations to same URL
   };
 }
 
@@ -142,12 +143,14 @@ export function useFilterParams() {
   const fromPopstateRef = useRef(false);
 
   // Hydrate from URL on mount + sync on popstate (back/forward button)
+  const navigationIdRef = useRef(0);
   useEffect(() => {
     fromPopstateRef.current = true;
-    setState(parseParams(window.location.search));
+    setState(prev => ({ ...parseParams(window.location.search), navigationId: prev.navigationId + 1 }));
     const onPopState = () => {
       fromPopstateRef.current = true;
-      setState(parseParams(window.location.search));
+      navigationIdRef.current++;
+      setState(prev => ({ ...parseParams(window.location.search), navigationId: navigationIdRef.current }));
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
@@ -488,6 +491,7 @@ export function useFilterParams() {
     species: state.species,
     tab: state.tab,
     group: state.group,
+    navigationId: state.navigationId,
     setSpeciesParam,
     setTabParam,
   };
