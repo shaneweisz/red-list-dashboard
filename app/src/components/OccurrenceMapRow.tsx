@@ -1596,7 +1596,7 @@ export default function OccurrenceMapRow({
                         ) : (
                           <span className={`w-2 h-2 rounded-sm border ${showRange ? "border-rose-500 bg-rose-500/20" : "border-zinc-400 dark:border-zinc-500"}`} />
                         )}
-                        IUCN Range
+                        <span title="Simplified IUCN range map. Boundaries are approximate and intended for visualisation only.">IUCN Range</span>
                         {showRange && rangeCategories.length > 1 && (
                           <span
                             onClick={(e) => { e.stopPropagation(); setShowRangeFilters(!showRangeFilters); }}

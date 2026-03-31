@@ -1,20 +1,30 @@
 /**
- * Generates simplified range map GeoJSON from the IUCN PostgreSQL database
- * and uploads to Cloudflare R2.
+ * upload-range-maps: IUCN DB → Cloudflare R2
+ *
+ * Generates simplified range map GeoJSON (polygons + point localities)
+ * from the IUCN PostgreSQL database and uploads to R2.
+ *
+ * Reads assessment IDs from per-taxon CSV files (matching the sync pipeline)
+ * and skips species already uploaded to R2.
+ *
+ * Prerequisites:
+ *   1. SSH tunnel to IUCN DB
+ *   2. Environment variables: DB_*, R2_*
+ *   3. Per-taxon CSVs must exist (run fetch-redlist-species first)
  *
  * Usage:
- *   npx tsx scripts/upload-range-maps.ts                    # all species with range data
- *   npx tsx scripts/upload-range-maps.ts 280792135          # single assessment ID
- *   npx tsx scripts/upload-range-maps.ts 280792135 12345    # multiple assessment IDs
+ *   npx tsx scripts/upload-range-maps.ts                    # all taxa
+ *   npx tsx scripts/upload-range-maps.ts mammalia aves      # specific taxa
+ *   npx tsx scripts/upload-range-maps.ts --ids 280792135    # specific assessment IDs
  */
 
 import { Client } from "pg";
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-import { loadEnvFiles } from "./utils";
-
-loadEnvFiles();
+import { S3Client, PutObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
+import { loadEnvFiles, SyncLogger, readCsv, REDLIST_DIR } from "./utils";
+import { getTaxa } from "./taxa";
 
 const SIMPLIFY_TOLERANCE = 0.01; // ~1km in degrees
+const R2_PREFIX = "iucn-range-maps";
 
 const PRESENCE_LABELS: Record<number, string> = {
   1: "Extant",
@@ -60,11 +70,32 @@ function getDbClient(): Client {
   });
 }
 
+async function listExistingKeys(r2: S3Client, bucket: string): Promise<Set<string>> {
+  const keys = new Set<string>();
+  let continuationToken: string | undefined;
+
+  do {
+    const response = await r2.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: `${R2_PREFIX}/`,
+        MaxKeys: 1000,
+        ContinuationToken: continuationToken,
+      })
+    );
+    for (const obj of response.Contents ?? []) {
+      if (obj.Key) keys.add(obj.Key);
+    }
+    continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
+  } while (continuationToken);
+
+  return keys;
+}
+
 async function generateRangeGeoJSON(
   db: Client,
   assessmentId: number
 ): Promise<object | null> {
-  // Fetch polygon ranges (simplified) and point localities in parallel
   const [rangeResult, pointResult] = await Promise.all([
     db.query(
       `
@@ -125,55 +156,65 @@ async function generateRangeGeoJSON(
   return { type: "FeatureCollection", features };
 }
 
-async function getAssessmentIdsWithMaps(db: Client): Promise<number[]> {
-  const result = await db.query(`
-    SELECT DISTINCT assessment_id AS id FROM assessment_ranges WHERE geom IS NOT NULL
-    UNION
-    SELECT DISTINCT assessment_id AS id FROM assessment_points WHERE geom IS NOT NULL
-    ORDER BY id
-  `);
-  return result.rows.map((r) => r.id);
+function getAssessmentIdsFromCsvs(taxaFilter?: string[]): { assessmentId: number; hasMap: boolean }[] {
+  const taxa = getTaxa(taxaFilter);
+  const results: { assessmentId: number; hasMap: boolean }[] = [];
+
+  for (const taxon of taxa) {
+    const csvPath = `${REDLIST_DIR}/${taxon.id}.csv`;
+    try {
+      const rows = readCsv(csvPath, (row) => ({
+        assessmentId: parseInt(row.assessment_id, 10),
+        hasMap: row.has_map === "true",
+      }));
+      for (const row of rows) {
+        if (row.hasMap && !isNaN(row.assessmentId)) {
+          results.push(row);
+        }
+      }
+    } catch {
+      console.warn(`  Warning: Could not read ${csvPath}, skipping`);
+    }
+  }
+
+  return results;
 }
 
-async function main() {
-  const args = process.argv.slice(2);
-  const db = getDbClient();
-  const r2 = getR2Client();
-  const bucket = process.env.R2_BUCKET_NAME;
-
-  if (!bucket) {
-    throw new Error("Missing R2_BUCKET_NAME");
-  }
-
-  await db.connect();
-  console.log("Connected to database");
-
-  let assessmentIds: number[];
-
-  if (args.length > 0) {
-    assessmentIds = args.map((a) => parseInt(a, 10)).filter((n) => !isNaN(n));
-  } else {
-    console.log("Fetching all assessment IDs with range data...");
-    assessmentIds = await getAssessmentIdsWithMaps(db);
-  }
-
-  console.log(`Processing ${assessmentIds.length} assessment(s)...`);
-
+async function uploadBatch(
+  db: Client,
+  r2: S3Client,
+  bucket: string,
+  assessmentIds: number[],
+  existingKeys: Set<string>,
+  logger: SyncLogger,
+): Promise<{ uploaded: number; skipped: number; existing: number; failed: number }> {
   let uploaded = 0;
   let skipped = 0;
+  let existing = 0;
   let failed = 0;
 
   for (const id of assessmentIds) {
+    const key = `${R2_PREFIX}/${id}.json`;
+
     try {
+      // Skip if already in R2
+      if (existingKeys.has(key)) {
+        existing++;
+        continue;
+      }
+
+      const total = uploaded + existing + skipped + failed + 1;
+      process.stdout.write(`    [${total}/${assessmentIds.length}] ${id}...`);
+      const t0 = Date.now();
       const geojson = await generateRangeGeoJSON(db, id);
       if (!geojson) {
         skipped++;
+        logger.log("range_map_no_data", { assessmentId: id });
+        console.log(` no data (${((Date.now() - t0) / 1000).toFixed(1)}s)`);
         continue;
       }
 
       const body = JSON.stringify(geojson);
-      const key = `iucn-range-maps/${id}.json`;
-
       await r2.send(
         new PutObjectCommand({
           Bucket: bucket,
@@ -185,18 +226,116 @@ async function main() {
 
       uploaded++;
       const sizeMB = (Buffer.byteLength(body) / 1024 / 1024).toFixed(2);
-      console.log(`  Uploaded ${key} (${sizeMB} MB)`);
+      logger.log("range_map_uploaded", { assessmentId: id, sizeMB });
+      console.log(` ${sizeMB} MB (${((Date.now() - t0) / 1000).toFixed(1)}s)`);
     } catch (err) {
       failed++;
-      console.error(`  Failed ${id}:`, err instanceof Error ? err.message : err);
+      logger.log("range_map_failed", { assessmentId: id, error: err instanceof Error ? err.message : String(err) });
+      console.log(` FAILED: ${err instanceof Error ? err.message : err}`);
     }
   }
 
-  await db.end();
-  console.log(`\nDone: ${uploaded} uploaded, ${skipped} skipped (no data), ${failed} failed`);
+  return { uploaded, skipped, existing, failed };
 }
 
-main().catch((err) => {
-  console.error("Fatal:", err);
-  process.exit(1);
-});
+export async function run(opts: {
+  taxa?: string[];
+  logger?: SyncLogger;
+} = {}): Promise<void> {
+  const logger = opts.logger ?? new SyncLogger("upload-range-maps");
+  const db = getDbClient();
+  const r2 = getR2Client();
+  const bucket = process.env.R2_BUCKET_NAME;
+
+  if (!bucket) {
+    throw new Error("Missing R2_BUCKET_NAME");
+  }
+
+  await db.connect();
+  console.log("  Connected to database");
+
+  console.log("  Listing existing R2 keys...");
+  const existingKeys = await listExistingKeys(r2, bucket);
+  console.log(`  Found ${existingKeys.size} existing range maps in R2`);
+
+  const taxa = getTaxa(opts.taxa);
+  let totalUploaded = 0;
+  let totalExisting = 0;
+  let totalSkipped = 0;
+  let totalFailed = 0;
+
+  for (const taxon of taxa) {
+    const species = getAssessmentIdsFromCsvs([taxon.id]);
+    const assessmentIds = species.map((s) => s.assessmentId);
+
+    if (assessmentIds.length === 0) {
+      console.log(`  ${taxon.name}: no species with maps`);
+      continue;
+    }
+
+    const alreadyUploaded = assessmentIds.filter((id) => existingKeys.has(`${R2_PREFIX}/${id}.json`));
+    const toUpload = assessmentIds.filter((id) => !existingKeys.has(`${R2_PREFIX}/${id}.json`));
+
+    console.log(`  ${taxon.name}: ${assessmentIds.length} species with maps (${alreadyUploaded.length} already in R2, ${toUpload.length} to upload)`);
+    logger.log("range_map_taxon_start", { taxon: taxon.id, total: assessmentIds.length, toUpload: toUpload.length });
+
+    totalExisting += alreadyUploaded.length;
+    const result = await uploadBatch(db, r2, bucket, toUpload, existingKeys, logger);
+    totalUploaded += result.uploaded;
+    totalExisting += result.existing;
+    totalSkipped += result.skipped;
+    totalFailed += result.failed;
+
+    console.log(`    ${taxon.name} done: ${result.uploaded} uploaded, ${result.existing} existing, ${result.skipped} skipped, ${result.failed} failed`);
+    logger.log("range_map_taxon_complete", { taxon: taxon.id, ...result });
+  }
+
+  await db.end();
+  console.log(`\n  Total: ${totalUploaded} uploaded, ${totalExisting} already in R2, ${totalSkipped} skipped (no data), ${totalFailed} failed`);
+  logger.log("range_map_complete", { uploaded: totalUploaded, existing: totalExisting, skipped: totalSkipped, failed: totalFailed });
+  if (!opts.logger) logger.close();
+}
+
+async function main() {
+  loadEnvFiles();
+
+  const args = process.argv.slice(2);
+
+  // Direct assessment ID mode: --ids 123 456
+  if (args[0] === "--ids") {
+    const ids = args.slice(1).map((a) => parseInt(a, 10)).filter((n) => !isNaN(n));
+    if (ids.length === 0) {
+      console.error("No valid assessment IDs provided");
+      process.exit(1);
+    }
+
+    const db = getDbClient();
+    const r2 = getR2Client();
+    const bucket = process.env.R2_BUCKET_NAME!;
+    const logger = new SyncLogger("upload-range-maps");
+
+    await db.connect();
+    console.log("Connected to database");
+    console.log("Listing existing R2 keys...");
+    const existingKeys = await listExistingKeys(r2, bucket);
+    console.log(`Found ${existingKeys.size} existing range maps in R2`);
+    console.log(`Processing ${ids.length} assessment(s)...`);
+
+    const result = await uploadBatch(db, r2, bucket, ids, existingKeys, logger);
+    await db.end();
+    console.log(`\nDone: ${result.uploaded} uploaded, ${result.existing} existing, ${result.skipped} skipped, ${result.failed} failed`);
+    return;
+  }
+
+  // Taxon group mode (default)
+  const taxa = args.length > 0 ? args.map((a) => a.toLowerCase()) : undefined;
+  await run({ taxa });
+}
+
+const isDirectRun = process.argv[1]?.endsWith("upload-range-maps.ts") || process.argv[1]?.endsWith("upload-range-maps.js");
+if (isDirectRun) {
+  main().catch((err) => {
+    console.error("Fatal:", err);
+    process.exit(1);
+  });
+}

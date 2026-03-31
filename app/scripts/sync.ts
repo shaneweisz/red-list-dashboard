@@ -8,6 +8,8 @@
  *   Phase 4: fetch-gbif-country-data (GBIF API → country occurrences per species)
  *   Phase 5: fetch-gbif-new-counts  (GBIF API → updates GBIF CSVs)
  *   Phase 6: build-taxa-summary     (per-taxon CSVs → taxa-summary.json)
+ *   Phase 7: build-search-index    (all CSVs → search-index.json)
+ *   Phase 8: upload-range-maps     (IUCN DB → R2, skips existing)
  *
  * Prerequisites:
  *   1. SSH tunnel to IUCN DB (port 5433)
@@ -26,6 +28,7 @@ import { run as fetchGbifNewCounts } from "./fetch-gbif-new-counts";
 import { run as fetchGbifCountryData } from "./fetch-gbif-country-data";
 import { run as buildTaxaSummary } from "./build-taxa-summary";
 import { run as buildSearchIndex } from "./build-search-index";
+import { run as uploadRangeMaps } from "./upload-range-maps";
 
 async function main() {
   loadEnvFiles();
@@ -79,6 +82,11 @@ async function main() {
     console.log("\nPhase 7: build-search-index");
     console.log("═".repeat(60));
     await buildSearchIndex();
+
+    // Phase 8: Upload range maps to R2
+    console.log("\nPhase 8: upload-range-maps");
+    console.log("═".repeat(60));
+    await uploadRangeMaps({ taxa: taxaFilter, logger });
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
     const minutes = Math.floor(Number(elapsed) / 60);
