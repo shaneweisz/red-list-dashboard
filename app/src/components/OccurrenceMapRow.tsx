@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import type L from "leaflet";
+import type { RangeCategory } from "./RangeMapLayer";
 
 // Fixed page size for iNat photo grid (5 columns x 2 rows)
 const INAT_PAGE_SIZE = 10;
@@ -852,6 +853,9 @@ export default function OccurrenceMapRow({
   // Layer toggle state
   const [showRange, setShowRange] = useState(false);
   const [rangeLoading, setRangeLoading] = useState(false);
+  const [rangeCategories, setRangeCategories] = useState<RangeCategory[]>([]);
+  const [visibleRangeCategories, setVisibleRangeCategories] = useState<Set<string>>(new Set(["1-1", "2-1"])); // Extant + Probably Extant Native by default
+  const [showRangeFilters, setShowRangeFilters] = useState(false);
   const [showAoh, setShowAoh] = useState(false);
   const [aohLoading, setAohLoading] = useState(false);
   const [showPoints, setShowPoints] = useState(true);
@@ -1425,7 +1429,7 @@ export default function OccurrenceMapRow({
               })()}
               {/* IUCN Range Map layer */}
               {hasMap && assessmentId && (
-                <RangeMapLayer assessmentId={assessmentId} visible={showRange} onLoadingChange={setRangeLoading} />
+                <RangeMapLayer assessmentId={assessmentId} visible={showRange} onLoadingChange={setRangeLoading} onCategoriesChange={setRangeCategories} visibleCategories={visibleRangeCategories} />
               )}
               {/* AOH layer */}
               {isAohAvailable && sisTaxonId && taxonGroup && (
@@ -1577,21 +1581,64 @@ export default function OccurrenceMapRow({
                     Points
                   </button>
                   {hasMap && assessmentId && (
-                    <button
-                      onClick={() => setShowRange(!showRange)}
-                      className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] transition-colors ${
-                        showRange
-                          ? "bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 font-medium"
-                          : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
-                      }`}
-                    >
-                      {showRange && rangeLoading ? (
-                        <span className="w-2 h-2 border border-rose-500 border-t-transparent rounded-full animate-spin" />
-                      ) : (
-                        <span className={`w-2 h-2 rounded-sm border ${showRange ? "border-rose-500 bg-rose-500/20" : "border-zinc-400 dark:border-zinc-500"}`} />
+                    <>
+                      <button
+                        onClick={() => setShowRange(!showRange)}
+                        className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] transition-colors ${
+                          showRange
+                            ? "bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 font-medium"
+                            : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                        }`}
+                      >
+                        {showRange && rangeLoading ? (
+                          <span className="w-2 h-2 border border-rose-500 border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <span className={`w-2 h-2 rounded-sm border ${showRange ? "border-rose-500 bg-rose-500/20" : "border-zinc-400 dark:border-zinc-500"}`} />
+                        )}
+                        IUCN Range
+                        {showRange && rangeCategories.length > 1 && (
+                          <span
+                            onClick={(e) => { e.stopPropagation(); setShowRangeFilters(!showRangeFilters); }}
+                            className="ml-0.5 text-[8px] text-rose-400 hover:text-rose-600 cursor-pointer"
+                          >
+                            {showRangeFilters ? "▲" : "▼"}
+                          </span>
+                        )}
+                      </button>
+                      {showRange && showRangeFilters && rangeCategories.length > 1 && (
+                        <div className="flex flex-col gap-0.5 pl-2 pb-0.5">
+                          {rangeCategories.map((cat) => {
+                            const isVisible = visibleRangeCategories.has(cat.key);
+                            return (
+                              <button
+                                key={cat.key}
+                                onClick={() => {
+                                  const next = new Set(visibleRangeCategories);
+                                  if (isVisible) next.delete(cat.key);
+                                  else next.add(cat.key);
+                                  setVisibleRangeCategories(next);
+                                }}
+                                className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded text-[9px] transition-colors ${
+                                  isVisible
+                                    ? "text-zinc-700 dark:text-zinc-200"
+                                    : "text-zinc-400 dark:text-zinc-500"
+                                }`}
+                              >
+                                <span
+                                  className="w-2 h-2 rounded-sm border"
+                                  style={{
+                                    borderColor: cat.color,
+                                    backgroundColor: isVisible ? cat.color + "40" : "transparent",
+                                    ...(cat.dashArray ? { opacity: 0.7 } : {}),
+                                  }}
+                                />
+                                <span className="truncate max-w-[100px]">{cat.label}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
                       )}
-                      Range
-                    </button>
+                    </>
                   )}
                   {isAohAvailable && (
                     <button
