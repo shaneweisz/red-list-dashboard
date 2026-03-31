@@ -434,7 +434,13 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       }
       // Single click on already-sole-selected taxon: keep selected (TaxaSummary
       // handles expand/collapse toggle). Only "All Species" returns to landing.
+      // Clear search/species filters so clicking the taxon after a search resets the view.
       if (prev.size === 1 && prev.has(taxonId)) {
+        if (searchFilter || selectedSpeciesKey != null) {
+          clearAllFilters();
+          setSelectedSpeciesKeyRaw(null);
+          setSingleSpeciesPreview(null);
+        }
         return prev;
       }
       // Switching to a different taxon — clear subgroups
