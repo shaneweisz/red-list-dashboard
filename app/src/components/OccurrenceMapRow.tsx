@@ -839,7 +839,7 @@ export default function OccurrenceMapRow({
   // Advanced filter state
   const [maxUncertainty, setMaxUncertainty] = useState<number | null>(null);
   const [showUncertaintyCircles, setShowUncertaintyCircles] = useState(false);
-  const [colorByYear, setColorByYear] = useState(false);
+  const [colorByYear, setColorByYear] = useState(true);
   const [dedupEnabled, setDedupEnabled] = useState(false);
   const [basemap, setBasemap] = useState<BasemapKey>("streets");
   const [shapeByType, setShapeByType] = useState(false);
@@ -851,7 +851,10 @@ export default function OccurrenceMapRow({
 
   // Layer toggle state
   const [showRange, setShowRange] = useState(false);
+  const [rangeLoading, setRangeLoading] = useState(false);
   const [showAoh, setShowAoh] = useState(false);
+  const [aohLoading, setAohLoading] = useState(false);
+  const [showPoints, setShowPoints] = useState(true);
   const isAohAvailable = !!(sisTaxonId && taxonGroup && ["mammalia", "aves", "reptilia", "amphibia"].includes(taxonGroup.toLowerCase()));
   const [yearRange, setYearRange] = useState<[number, number]>([0, 9999]);
 
@@ -1292,7 +1295,7 @@ export default function OccurrenceMapRow({
               <LocateControl />
               {panelBbox && animatingDateIdx == null && <FitBounds bbox={panelBbox} />}
               {/* Uncertainty circles */}
-              {showUncertaintyCircles && panelOccurrences.map((feature, idx) => {
+              {showPoints && showUncertaintyCircles && panelOccurrences.map((feature, idx) => {
                 const uncertainty = feature.properties.coordinateUncertaintyInMeters;
                 if (uncertainty == null || uncertainty <= 0) return null;
                 const [lon, lat] = feature.geometry.coordinates;
@@ -1312,9 +1315,8 @@ export default function OccurrenceMapRow({
                 );
               })}
               {/* Render markers */}
-              {panelOccurrences.map((feature, idx) => {
+              {showPoints && panelOccurrences.map((feature, idx) => {
                 const [lon, lat] = feature.geometry.coordinates;
-                const isNew = isNewRecord(feature.properties.eventDate);
                 const isHighlighted = hoveredObs?.gbifID != null && feature.properties.gbifID === hoveredObs.gbifID;
                 const category = classifyOccurrence(feature);
                 const isTypeBrushed = hoveredType != null && category === hoveredType;
@@ -1334,8 +1336,8 @@ export default function OccurrenceMapRow({
                   strokeColor = colors.stroke;
                   fillColor = colors.fill;
                 } else {
-                  strokeColor = isNew ? "#15803d" : "#6b7280";
-                  fillColor = isNew ? "#22c55e" : "#9ca3af";
+                  strokeColor = "#6b7280";
+                  fillColor = "#9ca3af";
                 }
                 const inatMatch = inatPhotosByGbifId.get(feature.properties.gbifID);
                 const isFeatureHovered = hoveredFeature?.properties.gbifID === feature.properties.gbifID;
@@ -1423,11 +1425,11 @@ export default function OccurrenceMapRow({
               })()}
               {/* IUCN Range Map layer */}
               {hasMap && assessmentId && (
-                <RangeMapLayer assessmentId={assessmentId} visible={showRange} />
+                <RangeMapLayer assessmentId={assessmentId} visible={showRange} onLoadingChange={setRangeLoading} />
               )}
               {/* AOH layer */}
               {isAohAvailable && sisTaxonId && taxonGroup && (
-                <AohMapLayer sisTaxonId={sisTaxonId} taxonGroup={taxonGroup} visible={showAoh} />
+                <AohMapLayer sisTaxonId={sisTaxonId} taxonGroup={taxonGroup} visible={showAoh} onLoadingChange={setAohLoading} />
               )}
             </MapContainer>
           ) : null}
@@ -1448,6 +1450,23 @@ export default function OccurrenceMapRow({
                     <span>{maxYear}</span>
                   </div>
                   <span className="text-zinc-400">({panelOccurrences.length})</span>
+                  {assessmentYear && !splitView && (
+                    <>
+                      <span className="text-zinc-400">|</span>
+                      <button
+                        onClick={() => {
+                          if (!splitDate && assessmentDate) setSplitDate(assessmentDate.split("T")[0]);
+                          setSplitView(true);
+                          setIsPlaying(false);
+                          setAnimatingDateIdx(null);
+                          if (animationRef.current) clearInterval(animationRef.current);
+                        }}
+                        className="text-[10px] px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                      >
+                        Split view
+                      </button>
+                    </>
+                  )}
                 </>
               ) : assessmentYear && !splitView ? (
                 <>
@@ -1545,8 +1564,18 @@ export default function OccurrenceMapRow({
                 ))}
               </div>
               {/* Layer toggles */}
-              {(hasMap || isAohAvailable) && (
-                <div className="flex flex-col gap-0.5 bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 p-1">
+              <div className="flex flex-col gap-0.5 bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 p-1">
+                  <button
+                    onClick={() => setShowPoints(!showPoints)}
+                    className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] transition-colors ${
+                      showPoints
+                        ? "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium"
+                        : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                    }`}
+                  >
+                    <span className={`w-2 h-2 rounded-full border ${showPoints ? "border-blue-500 bg-blue-500/40" : "border-zinc-400 dark:border-zinc-500"}`} />
+                    Points
+                  </button>
                   {hasMap && assessmentId && (
                     <button
                       onClick={() => setShowRange(!showRange)}
@@ -1556,7 +1585,11 @@ export default function OccurrenceMapRow({
                           : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
                       }`}
                     >
-                      <span className={`w-2 h-2 rounded-sm border ${showRange ? "border-rose-500 bg-rose-500/20" : "border-zinc-400 dark:border-zinc-500"}`} />
+                      {showRange && rangeLoading ? (
+                        <span className="w-2 h-2 border border-rose-500 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <span className={`w-2 h-2 rounded-sm border ${showRange ? "border-rose-500 bg-rose-500/20" : "border-zinc-400 dark:border-zinc-500"}`} />
+                      )}
                       Range
                     </button>
                   )}
@@ -1569,12 +1602,15 @@ export default function OccurrenceMapRow({
                           : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
                       }`}
                     >
-                      <span className={`w-2 h-2 rounded-sm ${showAoh ? "bg-green-500/50" : "border border-zinc-400 dark:border-zinc-500"}`} />
+                      {showAoh && aohLoading ? (
+                        <span className="w-2 h-2 border border-green-500 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <span className={`w-2 h-2 rounded-sm ${showAoh ? "bg-green-500/50" : "border border-zinc-400 dark:border-zinc-500"}`} />
+                      )}
                       AOH
                     </button>
                   )}
                 </div>
-              )}
             </div>
           )}
         </div>

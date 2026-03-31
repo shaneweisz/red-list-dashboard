@@ -16,11 +16,12 @@ interface AohMapLayerProps {
   sisTaxonId: number;
   taxonGroup: string;
   visible: boolean;
+  onLoadingChange?: (loading: boolean) => void;
 }
 
 // This component must be rendered inside a MapContainer.
 // It uses the Leaflet map instance directly via useMap() to add an ImageOverlay.
-function AohMapLayerInner({ sisTaxonId, taxonGroup, visible }: AohMapLayerProps) {
+function AohMapLayerInner({ sisTaxonId, taxonGroup, visible, onLoadingChange }: AohMapLayerProps) {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { useMap } = require("react-leaflet");
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -37,6 +38,7 @@ function AohMapLayerInner({ sisTaxonId, taxonGroup, visible }: AohMapLayerProps)
     if (!visible || !sisTaxonId || fetchedRef.current === sisTaxonId) return;
 
     setLoading(true);
+    onLoadingChange?.(true);
 
     fetch(`/api/species/${sisTaxonId}/aoh/metadata?taxonGroup=${encodeURIComponent(taxonGroup)}`)
       .then((res) => {
@@ -65,7 +67,10 @@ function AohMapLayerInner({ sisTaxonId, taxonGroup, visible }: AohMapLayerProps)
       .catch(() => {
         // Silent fail
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        setLoading(false);
+        onLoadingChange?.(false);
+      });
 
     return () => {
       if (overlayRef.current) {

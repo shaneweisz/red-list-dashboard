@@ -12,6 +12,7 @@ const GeoJSON = dynamic(
 interface RangeMapLayerProps {
   assessmentId: number;
   visible: boolean;
+  onLoadingChange?: (loading: boolean) => void;
 }
 
 // Style each feature by presence/origin category
@@ -55,7 +56,7 @@ function featureStyle(feature: GeoJSON.Feature | undefined) {
   return { ...base, color: "#e11d48", fillColor: "#e11d48" };
 }
 
-export default function RangeMapLayer({ assessmentId, visible }: RangeMapLayerProps) {
+export default function RangeMapLayer({ assessmentId, visible, onLoadingChange }: RangeMapLayerProps) {
   const [geojson, setGeojson] = useState<GeoJsonObject | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
@@ -66,6 +67,7 @@ export default function RangeMapLayer({ assessmentId, visible }: RangeMapLayerPr
 
     setLoading(true);
     setError(false);
+    onLoadingChange?.(true);
 
     fetch(`/api/species/${assessmentId}/range-map`)
       .then((res) => {
@@ -77,8 +79,11 @@ export default function RangeMapLayer({ assessmentId, visible }: RangeMapLayerPr
         fetchedRef.current = assessmentId;
       })
       .catch(() => setError(true))
-      .finally(() => setLoading(false));
-  }, [visible, assessmentId]);
+      .finally(() => {
+        setLoading(false);
+        onLoadingChange?.(false);
+      });
+  }, [visible, assessmentId, onLoadingChange]);
 
   if (!visible || error || !geojson) return null;
 
