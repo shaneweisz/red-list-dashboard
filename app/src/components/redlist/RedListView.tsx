@@ -326,7 +326,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     sortField, sortDirection, setSort,
     clearAllFilters,
     setViewMode: setUrlViewMode,
-    species: urlSpecies, tab: urlTab, group: urlGroup, navigationId,
+    species: urlSpecies, tab: urlTab, group: urlGroup,
     setSpeciesParam, setTabParam,
     fromPopstateRef,
   } = useFilterParams();
@@ -727,7 +727,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       setActiveDetailTabRaw(urlTab ?? "gbif");
       urlSpeciesHandledRef.current = false; // allow auto-page-navigate for new species
     }
-  }, [urlSpecies, urlTab, isNewAssessments, navigationId]);
+  }, [urlSpecies, urlTab, isNewAssessments]);
 
   // Single-species fast path: use cached search result to render the detail panel
   // immediately without waiting for the bulk table to load.
@@ -737,17 +737,10 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       setSingleSpeciesPreview(null);
       return;
     }
-    // Species is already in bulk-loaded data — scroll to it directly
+    // Skip if species is already in bulk-loaded data
     const allSpecies = [...(speciesByTaxon[selectedTaxa.size === 1 ? [...selectedTaxa][0] : "all"] ?? []), ...neSpecies];
     if (allSpecies.some(s => s.id === urlSpecies)) {
       setSingleSpeciesPreview(null);
-      // Scroll directly (the auto-navigate effect may not re-run if deps haven't changed)
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          const row = document.querySelector('[data-selected-species]');
-          if (row) row.scrollIntoView({ behavior: "smooth", block: "start" });
-        });
-      });
       return;
     }
 
@@ -800,7 +793,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       })
       .catch(() => {});
     return () => controller.abort();
-  }, [urlSpecies, urlGroup, navigationId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [urlSpecies, urlGroup]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Clear preview once the species appears in bulk-loaded data
   useEffect(() => {
