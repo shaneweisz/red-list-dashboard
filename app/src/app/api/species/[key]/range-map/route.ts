@@ -62,7 +62,7 @@ export async function GET(
     const response = await client.send(
       new GetObjectCommand({
         Bucket: bucket,
-        Key: `range-maps/${assessmentId}.json`,
+        Key: `iucn-range-maps/${assessmentId}.json`,
       })
     );
 

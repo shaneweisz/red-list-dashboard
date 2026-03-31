@@ -1578,7 +1578,7 @@ export default function OccurrenceMapRow({
                     }`}
                   >
                     <span className={`w-2 h-2 rounded-full border ${showPoints ? "border-blue-500 bg-blue-500/40" : "border-zinc-400 dark:border-zinc-500"}`} />
-                    Points
+                    GBIF Points
                   </button>
                   {hasMap && assessmentId && (
                     <>

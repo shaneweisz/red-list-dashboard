@@ -154,7 +154,7 @@ async function main() {
       }
 
       const body = JSON.stringify(geojson);
-      const key = `range-maps/${id}.json`;
+      const key = `iucn-range-maps/${id}.json`;
 
       await r2.send(
         new PutObjectCommand({
