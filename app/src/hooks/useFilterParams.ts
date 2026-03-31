@@ -64,6 +64,7 @@ export function parseParams(search: string) {
     sortDirection: (p.get("dir") === "asc" ? "asc" : "desc") as "asc" | "desc",
     species: p.get("species") ? Number(p.get("species")) : null,
     tab: (p.get("tab") || null) as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | null,
+    group: p.get("group") || null,
   };
 }
 
@@ -88,6 +89,7 @@ export function buildQs(state: {
   sortDirection: "asc" | "desc";
   species: number | null;
   tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | null;
+  group?: string | null;
 }): string {
   const p = new URLSearchParams();
   if (state.viewMode === "new-assessments") p.set("view", "new-assessments");
@@ -108,6 +110,7 @@ export function buildQs(state: {
   if (state.search) p.set("search", state.search);
   if (state.species != null) p.set("species", String(state.species));
   if (state.species != null && state.tab && state.tab !== "gbif") p.set("tab", state.tab);
+  if (state.species != null && state.group) p.set("group", state.group);
   // null / "year" desc is the default — only write non-default sort to URL
   const isDefaultSort = state.sortField === null || state.sortField === "year";
   if (!isDefaultSort) {
@@ -484,6 +487,7 @@ export function useFilterParams() {
     clearAllFiltersAndTaxa,
     species: state.species,
     tab: state.tab,
+    group: state.group,
     setSpeciesParam,
     setTabParam,
   };

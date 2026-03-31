@@ -325,7 +325,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     sortField, sortDirection, setSort,
     clearAllFilters,
     setViewMode: setUrlViewMode,
-    species: urlSpecies, tab: urlTab,
+    species: urlSpecies, tab: urlTab, group: urlGroup,
     setSpeciesParam, setTabParam,
     fromPopstateRef,
   } = useFilterParams();
@@ -701,9 +701,10 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const [speciesDetails, setSpeciesDetails] = useState<Record<number, SpeciesDetails>>({});
 
   // Row expansion state (initialized from URL params if present)
-  const [selectedSpeciesKey, setSelectedSpeciesKeyRaw] = useState<number | null>(urlSpecies);
+  const [selectedSpeciesKey, setSelectedSpeciesKeyRaw] = useState<number | null>(urlSpecies != null && isNewAssessments ? Math.abs(urlSpecies) : urlSpecies);
   const [activeDetailTab, setActiveDetailTabRaw] = useState<"gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors">(urlTab ?? "gbif");
   const urlSpeciesHandledRef = useRef(false);
+  const shouldScrollToSpeciesRef = useRef(false);
 
   // Wrap setters to sync with URL
   const setSelectedSpeciesKey = useCallback((key: number | null) => {
@@ -719,13 +720,61 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     setTabParam(tab);
   }, [setTabParam]);
   // Sync species/tab from URL params (fires on popstate, e.g. back/forward or search bar navigation)
+  // In new-assessments mode, row keys use Math.abs(id) so selectedSpeciesKey must match.
   useEffect(() => {
     if (urlSpecies != null) {
-      setSelectedSpeciesKeyRaw(urlSpecies);
+      setSelectedSpeciesKeyRaw(isNewAssessments ? Math.abs(urlSpecies) : urlSpecies);
       setActiveDetailTabRaw(urlTab ?? "gbif");
       urlSpeciesHandledRef.current = false; // allow auto-page-navigate for new species
     }
-  }, [urlSpecies, urlTab]);
+  }, [urlSpecies, urlTab, isNewAssessments]);
+
+  // Single-species fast path: fetch one species immediately from search navigation
+  // so the detail panel renders without waiting for the full table to load.
+  const [singleSpeciesPreview, setSingleSpeciesPreview] = useState<RedListSpecies | null>(null);
+  useEffect(() => {
+    if (urlSpecies == null || !urlGroup) {
+      setSingleSpeciesPreview(null);
+      return;
+    }
+    // Skip if species is already in bulk-loaded data
+    const allSpecies = [...(speciesByTaxon[selectedTaxa.size === 1 ? [...selectedTaxa][0] : "all"] ?? []), ...neSpecies];
+    if (allSpecies.some(s => s.id === urlSpecies)) {
+      setSingleSpeciesPreview(null);
+      return;
+    }
+    const controller = new AbortController();
+    fetch(`/api/redlist/species/${urlSpecies}?group=${encodeURIComponent(urlGroup)}`, { signal: controller.signal })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data?.species && !controller.signal.aborted) {
+          setSingleSpeciesPreview(data.species);
+          urlSpeciesHandledRef.current = true;
+        }
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [urlSpecies, urlGroup]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Clear preview once the species appears in bulk-loaded data
+  useEffect(() => {
+    if (!singleSpeciesPreview) return;
+    const allSpecies = [...assessedSpecies, ...neSpecies];
+    if (allSpecies.some(s => s.id === singleSpeciesPreview.id)) {
+      setSingleSpeciesPreview(null);
+    }
+  }, [assessedSpecies, neSpecies, singleSpeciesPreview]);
+
+  // Scroll preview row into view after it renders
+  useEffect(() => {
+    if (!singleSpeciesPreview) return;
+    requestAnimationFrame(() => {
+      const row = document.querySelector('[data-species-preview]');
+      if (row) {
+        row.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    });
+  }, [singleSpeciesPreview]);
 
   const [stackedDetailView, setStackedDetailView] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -1240,10 +1289,17 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // ── Client-side pagination ─────────────────────────────────────────
   const totalFiltered = filteredSpecies.length;
   const totalPages = Math.ceil(sortedSpecies.length / PAGE_SIZE);
-  const paginatedSpecies = sortedSpecies.slice(
+  const paginatedSpeciesBase = sortedSpecies.slice(
     (currentPage - 1) * PAGE_SIZE,
     currentPage * PAGE_SIZE
   );
+
+  // Include single-species preview at the top of the page when bulk data hasn't loaded yet
+  const paginatedSpecies = useMemo(() => {
+    if (!singleSpeciesPreview) return paginatedSpeciesBase;
+    if (paginatedSpeciesBase.some(s => s.id === singleSpeciesPreview.id)) return paginatedSpeciesBase;
+    return [singleSpeciesPreview, ...paginatedSpeciesBase];
+  }, [paginatedSpeciesBase, singleSpeciesPreview]);
 
   // Helper to get country display name
   const getCountryName = (code: string) => ALPHA2_TO_NAME[code] || code;
@@ -1289,7 +1345,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   }, [selectedTaxa, selectedCategories, selectedYearRanges, selectedObsRanges, selectedAssessors, selectedReviewers, searchFilter, selectedCountries, showOnlyStarred]);
 
   // Auto-navigate to the page containing the URL-selected species
-  const shouldScrollToSpeciesRef = useRef(false);
   useEffect(() => {
     if (urlSpeciesHandledRef.current || selectedSpeciesKey == null || sortedSpecies.length === 0) return;
     const idx = sortedSpecies.findIndex(s => {
@@ -1309,7 +1364,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     if (el && shouldScrollToSpeciesRef.current) {
       shouldScrollToSpeciesRef.current = false;
       requestAnimationFrame(() => {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
       });
     }
   }, []);
@@ -2328,20 +2383,20 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         </div>
 
         {/* Species table */}
-        {speciesLoading && assessedSpecies.length === 0 ? (
+        {speciesLoading && assessedSpecies.length === 0 && !singleSpeciesPreview ? (
           <div className="flex items-center justify-center py-12">
             <Spinner className="h-6 w-6" />
           </div>
         ) : (
         <>
         <div className="relative">
-          {speciesLoading && (
+          {speciesLoading && !singleSpeciesPreview && (
             <div className="absolute inset-0 z-20 flex items-center justify-center">
               <Spinner className="h-6 w-6" />
             </div>
           )}
         <div
-          className={`bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-x-auto transition-opacity duration-150 ${speciesLoading ? "opacity-50 pointer-events-none" : ""}`}
+          className={`bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-x-auto transition-opacity duration-150 ${speciesLoading && !singleSpeciesPreview ? "opacity-50 pointer-events-none" : ""}`}
           onScroll={(e) => {
             e.currentTarget.style.setProperty('--scroll-left', `${e.currentTarget.scrollLeft}px`);
           }}
@@ -2444,6 +2499,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   <React.Fragment key={s.id}>
                   <tr
                     ref={selectedSpeciesKey === speciesKey ? selectedRowRef : undefined}
+                    {...(singleSpeciesPreview && s.id === singleSpeciesPreview.id ? { 'data-species-preview': true } : {})}
                     className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer ${selectedSpeciesKey === speciesKey ? "bg-zinc-100 dark:bg-zinc-800" : ""} ${isDragging ? "opacity-50" : ""} ${isDragOver ? "border-t-2 border-amber-500" : ""}`}
                     onClick={() => { setSelectedSpeciesKey(selectedSpeciesKey === speciesKey ? null : speciesKey); }}
                     draggable={isPinned && showOnlyStarred}
