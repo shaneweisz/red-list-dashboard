@@ -22,6 +22,7 @@ interface RangeMapLayerProps {
   visible: boolean;
   onLoadingChange?: (loading: boolean) => void;
   onCategoriesChange?: (categories: RangeCategory[]) => void;
+  onNotFound?: (notFound: boolean) => void;
   visibleCategories?: Set<string>;
 }
 
@@ -86,6 +87,7 @@ export default function RangeMapLayer({
   visible,
   onLoadingChange,
   onCategoriesChange,
+  onNotFound,
   visibleCategories,
 }: RangeMapLayerProps) {
   const [geojson, setGeojson] = useState<FeatureCollection | null>(null);
@@ -100,8 +102,14 @@ export default function RangeMapLayer({
     setError(false);
     onLoadingChange?.(true);
 
+    onNotFound?.(false);
+
     fetch(`/api/species/${assessmentId}/range-map`)
       .then((res) => {
+        if (res.status === 404) {
+          onNotFound?.(true);
+          throw new Error("404");
+        }
         if (!res.ok) throw new Error(`${res.status}`);
         return res.json();
       })

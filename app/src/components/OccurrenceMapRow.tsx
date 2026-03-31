@@ -856,6 +856,7 @@ export default function OccurrenceMapRow({
   const [rangeCategories, setRangeCategories] = useState<RangeCategory[]>([]);
   const [visibleRangeCategories, setVisibleRangeCategories] = useState<Set<string>>(new Set(["1-1", "2-1"])); // Extant + Probably Extant Native by default
   const [showRangeFilters, setShowRangeFilters] = useState(false);
+  const [rangeNotFound, setRangeNotFound] = useState(false);
   const [showAoh, setShowAoh] = useState(false);
   const [aohLoading, setAohLoading] = useState(false);
   const [showPoints, setShowPoints] = useState(true);
@@ -1429,7 +1430,7 @@ export default function OccurrenceMapRow({
               })()}
               {/* IUCN Range Map layer */}
               {hasMap && assessmentId && (
-                <RangeMapLayer assessmentId={assessmentId} visible={showRange} onLoadingChange={setRangeLoading} onCategoriesChange={setRangeCategories} visibleCategories={visibleRangeCategories} />
+                <RangeMapLayer assessmentId={assessmentId} visible={showRange} onLoadingChange={setRangeLoading} onCategoriesChange={setRangeCategories} onNotFound={setRangeNotFound} visibleCategories={visibleRangeCategories} />
               )}
               {/* AOH layer */}
               {isAohAvailable && sisTaxonId && taxonGroup && (
@@ -1605,6 +1606,9 @@ export default function OccurrenceMapRow({
                           </span>
                         )}
                       </button>
+                      {showRange && rangeNotFound && (
+                        <span className="text-[9px] text-zinc-400 dark:text-zinc-500 pl-2 italic">Not yet available</span>
+                      )}
                       {showRange && showRangeFilters && rangeCategories.length > 1 && (
                         <div className="flex flex-col gap-0.5 pl-2 pb-0.5">
                           {rangeCategories.map((cat) => {
