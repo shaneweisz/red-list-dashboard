@@ -1640,23 +1640,7 @@ export default function OccurrenceMapRow({
                       )}
                     </>
                   )}
-                  {isAohAvailable && (
-                    <button
-                      onClick={() => setShowAoh(!showAoh)}
-                      className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] transition-colors ${
-                        showAoh
-                          ? "bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 font-medium"
-                          : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
-                      }`}
-                    >
-                      {showAoh && aohLoading ? (
-                        <span className="w-2 h-2 border border-green-500 border-t-transparent rounded-full animate-spin" />
-                      ) : (
-                        <span className={`w-2 h-2 rounded-sm ${showAoh ? "bg-green-500/50" : "border border-zinc-400 dark:border-zinc-500"}`} />
-                      )}
-                      AOH
-                    </button>
-                  )}
+                  {/* AOH toggle hidden until backend is ready */}
                 </div>
             </div>
           )}

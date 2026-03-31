@@ -11,6 +11,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1020.0",
     "@sentry/nextjs": "^10.43.0",
     "@vercel/analytics": "^1.6.1",
     "@vercel/speed-insights": "^2.0.0",
