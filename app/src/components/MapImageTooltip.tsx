@@ -42,13 +42,17 @@ export default function MapImageTooltip({
   if (!pos) return null;
 
   const container = map.getContainer();
+  const containerRect = container.getBoundingClientRect();
+
+  const clampedX = Math.max(4, Math.min(pos.x - 42, containerRect.width - 84));
+  const showBelow = pos.y < 80;
 
   return createPortal(
     <div
       style={{
         position: "absolute",
-        left: pos.x - 42,
-        top: pos.y - 72,
+        left: clampedX,
+        top: showBelow ? pos.y + 12 : pos.y - 72,
         zIndex: 1000,
         pointerEvents: "none",
       }}
