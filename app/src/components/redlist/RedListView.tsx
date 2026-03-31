@@ -704,6 +704,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const [selectedSpeciesKey, setSelectedSpeciesKeyRaw] = useState<number | null>(urlSpecies);
   const [activeDetailTab, setActiveDetailTabRaw] = useState<"gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors">(urlTab ?? "gbif");
   const urlSpeciesHandledRef = useRef(false);
+  const shouldScrollToSpeciesRef = useRef(false);
 
   // Wrap setters to sync with URL
   const setSelectedSpeciesKey = useCallback((key: number | null) => {
@@ -747,6 +748,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       .then(data => {
         if (data?.species && !controller.signal.aborted) {
           setSingleSpeciesPreview(data.species);
+          // Mark as handled + trigger scroll so the preview row scrolls into view
+          urlSpeciesHandledRef.current = true;
+          shouldScrollToSpeciesRef.current = true;
         }
       })
       .catch(() => {});
@@ -1331,7 +1335,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   }, [selectedTaxa, selectedCategories, selectedYearRanges, selectedObsRanges, selectedAssessors, selectedReviewers, searchFilter, selectedCountries, showOnlyStarred]);
 
   // Auto-navigate to the page containing the URL-selected species
-  const shouldScrollToSpeciesRef = useRef(false);
   useEffect(() => {
     if (urlSpeciesHandledRef.current || selectedSpeciesKey == null || sortedSpecies.length === 0) return;
     const idx = sortedSpecies.findIndex(s => {
