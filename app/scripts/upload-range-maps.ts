@@ -64,31 +64,49 @@ async function generateRangeGeoJSON(
   db: Client,
   assessmentId: number
 ): Promise<object | null> {
-  const result = await db.query(
-    `
-    SELECT
-      assessment_ranges.presence,
-      assessment_ranges.origin,
-      ST_AsGeoJSON(
-        ST_SimplifyPreserveTopology(
-          ST_Union(assessment_ranges.geom::geometry),
-          $2
-        )
-      ) AS geojson
-    FROM
-      assessments
-      LEFT JOIN assessment_ranges ON assessment_ranges.assessment_id = assessments.id
-    WHERE
-      assessments.id = $1
-      AND assessment_ranges.geom IS NOT NULL
-    GROUP BY assessment_ranges.presence, assessment_ranges.origin
-    `,
-    [assessmentId, SIMPLIFY_TOLERANCE]
-  );
+  // Fetch polygon ranges (simplified) and point localities in parallel
+  const [rangeResult, pointResult] = await Promise.all([
+    db.query(
+      `
+      SELECT
+        assessment_ranges.presence,
+        assessment_ranges.origin,
+        ST_AsGeoJSON(
+          ST_SimplifyPreserveTopology(
+            ST_Union(assessment_ranges.geom::geometry),
+            $2
+          )
+        ) AS geojson,
+        'range' AS source
+      FROM
+        assessments
+        LEFT JOIN assessment_ranges ON assessment_ranges.assessment_id = assessments.id
+      WHERE
+        assessments.id = $1
+        AND assessment_ranges.geom IS NOT NULL
+      GROUP BY assessment_ranges.presence, assessment_ranges.origin
+      `,
+      [assessmentId, SIMPLIFY_TOLERANCE]
+    ),
+    db.query(
+      `
+      SELECT
+        presence,
+        origin,
+        ST_AsGeoJSON(geom::geometry) AS geojson,
+        'point' AS source
+      FROM assessment_points
+      WHERE assessment_id = $1
+        AND geom IS NOT NULL
+      `,
+      [assessmentId]
+    ),
+  ]);
 
-  if (result.rows.length === 0) return null;
+  const allRows = [...rangeResult.rows, ...pointResult.rows];
+  if (allRows.length === 0) return null;
 
-  const features = result.rows
+  const features = allRows
     .filter((row) => row.geojson != null)
     .map((row) => ({
       type: "Feature" as const,
@@ -97,6 +115,7 @@ async function generateRangeGeoJSON(
         presence_label: PRESENCE_LABELS[row.presence] ?? `Unknown (${row.presence})`,
         origin: row.origin,
         origin_label: ORIGIN_LABELS[row.origin] ?? `Unknown (${row.origin})`,
+        source: row.source,
       },
       geometry: JSON.parse(row.geojson),
     }));
@@ -106,13 +125,12 @@ async function generateRangeGeoJSON(
   return { type: "FeatureCollection", features };
 }
 
-async function getAssessmentIdsWithRanges(db: Client): Promise<number[]> {
+async function getAssessmentIdsWithMaps(db: Client): Promise<number[]> {
   const result = await db.query(`
-    SELECT DISTINCT assessments.id
-    FROM assessments
-    JOIN assessment_ranges ON assessment_ranges.assessment_id = assessments.id
-    WHERE assessment_ranges.geom IS NOT NULL
-    ORDER BY assessments.id
+    SELECT DISTINCT assessment_id AS id FROM assessment_ranges WHERE geom IS NOT NULL
+    UNION
+    SELECT DISTINCT assessment_id AS id FROM assessment_points WHERE geom IS NOT NULL
+    ORDER BY id
   `);
   return result.rows.map((r) => r.id);
 }
@@ -136,7 +154,7 @@ async function main() {
     assessmentIds = args.map((a) => parseInt(a, 10)).filter((n) => !isNaN(n));
   } else {
     console.log("Fetching all assessment IDs with range data...");
-    assessmentIds = await getAssessmentIdsWithRanges(db);
+    assessmentIds = await getAssessmentIdsWithMaps(db);
   }
 
   console.log(`Processing ${assessmentIds.length} assessment(s)...`);

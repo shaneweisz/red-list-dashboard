@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import dynamic from "next/dynamic";
 import type { GeoJsonObject, FeatureCollection, Feature } from "geojson";
+import type L from "leaflet";
 
 const GeoJSON = dynamic(
   () => import("react-leaflet").then((mod) => mod.GeoJSON),
@@ -186,11 +187,29 @@ export default function RangeMapLayer({
     };
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const leaflet = require("leaflet") as typeof L;
+
+  const pointToLayer = (_feature: Feature, latlng: L.LatLng) => {
+    const presence = _feature?.properties?.presence ?? 1;
+    const origin = _feature?.properties?.origin ?? 1;
+    const catStyle = getCategoryStyle(presence, origin);
+    return leaflet.circleMarker(latlng, {
+      radius: 4,
+      weight: 1.5,
+      opacity: 0.8,
+      fillOpacity: 0.5,
+      color: catStyle.color,
+      fillColor: catStyle.color,
+    });
+  };
+
   return (
     <GeoJSON
       key={`range-${assessmentId}-${visibleCategories ? Array.from(visibleCategories).join(",") : "all"}`}
       data={filteredGeojson}
       style={styleFeature}
+      pointToLayer={pointToLayer}
     />
   );
 }
