@@ -25,6 +25,7 @@ import { run as matchRedlistSpeciesToGbif } from "./match-redlist-species-to-gbi
 import { run as fetchGbifNewCounts } from "./fetch-gbif-new-counts";
 import { run as fetchGbifCountryData } from "./fetch-gbif-country-data";
 import { run as buildTaxaSummary } from "./build-taxa-summary";
+import { run as buildSearchIndex } from "./build-search-index";
 
 async function main() {
   loadEnvFiles();
@@ -73,6 +74,11 @@ async function main() {
     console.log("\nPhase 6: build-taxa-summary");
     console.log("═".repeat(60));
     await buildTaxaSummary();
+
+    // Phase 7: Build search index
+    console.log("\nPhase 7: build-search-index");
+    console.log("═".repeat(60));
+    await buildSearchIndex();
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
     const minutes = Math.floor(Number(elapsed) / 60);

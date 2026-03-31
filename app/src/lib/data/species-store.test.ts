@@ -12,7 +12,7 @@ vi.mock("./csv", () => ({
 
 import * as fs from "fs";
 import { readCsv } from "./csv";
-import { getAssessorCandidates, getAssessorCandidatesByCountry } from "./species-store";
+import { getAssessorCandidates, getAssessorCandidatesByCountry, searchSpecies, _resetSearchIndexCache } from "./species-store";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -638,3 +638,110 @@ describe("getAssessorCandidatesByCountry", () => {
     expect(beetleResult[0].name).toBe("Beetle Expert");
   });
 });
+
+// ---------------------------------------------------------------------------
+// searchSpecies (uses pre-built search-index.json)
+// ---------------------------------------------------------------------------
+
+describe("searchSpecies", () => {
+  function setupSearchIndex(entries: { i: number; s: string; c?: string; ti: string; tg: string; cat: string; gk?: number; aid?: number; ad?: string; ctry?: string }[]) {
+    _resetSearchIndexCache();
+    vi.mocked(fs.readFileSync).mockImplementation(((filePath: string) => {
+      if (String(filePath).includes("search-index")) return JSON.stringify(entries);
+      return "{}";
+    }) as typeof fs.readFileSync);
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+  }
+
+  it("returns empty array for queries shorter than 2 characters", () => {
+    expect(searchSpecies("a")).toEqual([]);
+    expect(searchSpecies("")).toEqual([]);
+  });
+
+  it("matches scientific name case-insensitively", () => {
+    setupSearchIndex([
+      { i: 1, s: "Panthera leo", ti: "mammalia", tg: "mammalia", cat: "VU" },
+      { i: 2, s: "Felis catus", ti: "mammalia", tg: "mammalia", cat: "LC" },
+    ]);
+
+    const results = searchSpecies("panthera");
+    expect(results).toHaveLength(1);
+    expect(results[0].scientific_name).toBe("Panthera leo");
+  });
+
+  it("matches common name case-insensitively", () => {
+    setupSearchIndex([
+      { i: 1, s: "Panthera leo", c: "Lion", ti: "mammalia", tg: "mammalia", cat: "VU" },
+      { i: 2, s: "Felis catus", c: "Cat", ti: "mammalia", tg: "mammalia", cat: "LC" },
+    ]);
+
+    const results = searchSpecies("lion");
+    expect(results).toHaveLength(1);
+    expect(results[0].scientific_name).toBe("Panthera leo");
+  });
+
+  it("ranks prefix matches on scientific name before substring matches", () => {
+    setupSearchIndex([
+      { i: 1, s: "Leopardus pardalis", ti: "mammalia", tg: "mammalia", cat: "LC" },
+      { i: 2, s: "Panthera leo", ti: "mammalia", tg: "mammalia", cat: "VU" },
+      { i: 3, s: "Leo ninus", ti: "mammalia", tg: "mammalia", cat: "VU" },
+    ]);
+
+    const results = searchSpecies("leo");
+    // "Leo ninus" and "Leopardus pardalis" are prefix matches, "Panthera leo" is substring
+    expect(results[0].scientific_name).toBe("Leo ninus");
+    expect(results[1].scientific_name).toBe("Leopardus pardalis");
+    expect(results[2].scientific_name).toBe("Panthera leo");
+  });
+
+  it("ranks exact common name match above scientific name prefix match", () => {
+    setupSearchIndex([
+      { i: 1, s: "Leopardus pardalis", c: "Ocelot", ti: "mammalia", tg: "mammalia", cat: "LC" },
+      { i: 2, s: "Panthera pardus", c: "Leopard", ti: "mammalia", tg: "mammalia", cat: "VU" },
+      { i: 3, s: "Neofelis nebulosa", c: "Leopard Cat", ti: "mammalia", tg: "mammalia", cat: "VU" },
+    ]);
+
+    const results = searchSpecies("leopard");
+    expect(results[0].scientific_name).toBe("Panthera pardus");
+    expect(results[1].scientific_name).toBe("Neofelis nebulosa");
+    expect(results[2].scientific_name).toBe("Leopardus pardalis");
+  });
+
+  it("respects the limit parameter", () => {
+    setupSearchIndex([
+      { i: 1, s: "Testus alpha", ti: "mammalia", tg: "mammalia", cat: "VU" },
+      { i: 2, s: "Testus beta", ti: "mammalia", tg: "mammalia", cat: "VU" },
+      { i: 3, s: "Testus gamma", ti: "mammalia", tg: "mammalia", cat: "VU" },
+    ]);
+
+    const results = searchSpecies("testus", 2);
+    expect(results).toHaveLength(2);
+  });
+
+  it("returns correct taxon_id mapping", () => {
+    setupSearchIndex([
+      { i: -99, s: "Insectus novus", ti: "invertebrates", tg: "insecta", cat: "NE", gk: 99 },
+    ]);
+
+    const results = searchSpecies("insectus");
+    expect(results).toHaveLength(1);
+    expect(results[0].taxon_id).toBe("invertebrates");
+    expect(results[0].taxon_group).toBe("insecta");
+    expect(results[0].category).toBe("NE");
+    expect(results[0].id).toBe(-99);
+  });
+
+  it("returns enriched fields (gbif_species_key, assessment_id, countries)", () => {
+    setupSearchIndex([
+      { i: 1, s: "Panthera leo", c: "Lion", ti: "mammalia", tg: "mammalia", cat: "VU", gk: 5219404, aid: 280792135, ad: "2025-05-05", ctry: "AO;BJ;KE" },
+    ]);
+
+    const results = searchSpecies("lion");
+    expect(results).toHaveLength(1);
+    expect(results[0].gbif_species_key).toBe(5219404);
+    expect(results[0].assessment_id).toBe(280792135);
+    expect(results[0].assessment_date).toBe("2025-05-05");
+    expect(results[0].countries).toEqual(["AO", "BJ", "KE"]);
+  });
+});
+

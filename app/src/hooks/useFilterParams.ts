@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 
 // --- URL parsing helpers ---
 
@@ -134,10 +134,16 @@ export function useFilterParams() {
   // Initialize with empty state (SSR-safe), hydrate from URL in effect
   const [state, setState] = useState(() => parseParams(""));
 
+  // Tracks whether the most recent state update came from a popstate (URL navigation).
+  // Consumers can check this to avoid clearing URL-driven state.
+  const fromPopstateRef = useRef(false);
+
   // Hydrate from URL on mount + sync on popstate (back/forward button)
   useEffect(() => {
+    fromPopstateRef.current = true;
     setState(parseParams(window.location.search));
     const onPopState = () => {
+      fromPopstateRef.current = true;
       setState(parseParams(window.location.search));
     };
     window.addEventListener("popstate", onPopState);
@@ -399,6 +405,8 @@ export function useFilterParams() {
         search: "",
         sortField: null,
         sortDirection: "desc" as const,
+        species: null,
+        tab: null,
       };
       queueMicrotask(() => syncUrl(next, false));
       return next;
@@ -426,6 +434,8 @@ export function useFilterParams() {
         search: "",
         sortField: null,
         sortDirection: "desc" as const,
+        species: null,
+        tab: null,
       };
       queueMicrotask(() => syncUrl(next, true));
       return next;
@@ -469,6 +479,7 @@ export function useFilterParams() {
     setSelectedReviewers,
     setSearchFilter,
     setSort,
+    fromPopstateRef,
     clearAllFilters,
     clearAllFiltersAndTaxa,
     species: state.species,

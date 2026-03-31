@@ -9,30 +9,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { readCsv } from "./csv";
 import { countryToRegion } from "../regions";
-
-
-// =============================================================================
-// EXCLUDED DOMESTICATED SPECIES
-// =============================================================================
-
-/** GBIF species keys for domesticated species excluded from new assessments. */
-const EXCLUDED_DOMESTICATED_GBIF_KEYS = new Set([
-  2441022, // Bos taurus (Cow)
-  2435035, // Felis catus (Cat)
-  2441110, // Ovis aries (Domestic Sheep)
-  2441056, // Capra hircus (Domestic Goat)
-  2440886, // Equus caballus (Horse)
-  7422937, // Bubalus bubalis (Water Buffalo)
-  2440891, // Equus asinus (Donkey)
-  9055455, // Camelus dromedarius (Arabian Camel)
-  2441238, // Camelus bactrianus (Bactrian Camel)
-  5220190, // Lama glama (Llama)
-  7515593, // Vicugna pacos (Alpaca)
-  2441019, // Bos grunniens (Yak)
-  5219702, // Cavia porcellus (Guinea Pig)
-  10694102, // Columba domestica (Domestic Pigeon)
-  2436436, // Homo sapiens (Human)
-]);
+import { EXCLUDED_DOMESTICATED_GBIF_KEYS, mapTaxonId } from "./taxonomy-constants";
 
 // =============================================================================
 // PATHS
@@ -140,34 +117,6 @@ export interface TaxaSummaryRow {
   total_gbif_observations: number;
   mean_gbif_obs: number;
   median_gbif_obs: number | null;
-}
-
-// =============================================================================
-// DB_GROUP → DISPLAY TAXON ID (for the default 8-taxa view)
-// =============================================================================
-
-const DB_GROUP_TO_TAXON_ID: Record<string, string> = {
-  fishes: "fishes",
-  insecta: "invertebrates",
-  arachnida: "invertebrates",
-  mollusca: "invertebrates",
-  crustacea: "invertebrates",
-  corals: "invertebrates",
-  other_invertebrates: "invertebrates",
-  velvet_worms: "invertebrates",
-  horseshoe_crabs: "invertebrates",
-  flowering_plants: "plantae",
-  gymnosperms: "plantae",
-  ferns_and_allies: "plantae",
-  mosses: "plantae",
-  green_algae: "plantae",
-  red_algae: "plantae",
-  brown_algae: "fungi",
-  mushrooms: "fungi",
-};
-
-function mapTaxonId(group: string): string {
-  return DB_GROUP_TO_TAXON_ID[group] ?? group;
 }
 
 // =============================================================================
@@ -727,6 +676,125 @@ function parseAssessorNames(raw: string): string[] {
   }
 
   return names.filter(Boolean);
+}
+
+// =============================================================================
+// CROSS-TAXA SPECIES SEARCH (powered by pre-built search-index.json)
+// =============================================================================
+
+/** Compact entry from data/search-index.json (short keys for size). */
+export interface SearchIndexEntry {
+  i: number;          // id
+  s: string;          // scientific_name
+  c?: string;         // common_name
+  ti: string;         // taxon_id (display group)
+  tg: string;         // taxon_group (CSV group)
+  cat: string;        // category
+  gk?: number;        // gbif_species_key
+  aid?: number;       // assessment_id
+  ad?: string;        // assessment_date
+  ctry?: string;      // countries (semicolon-separated)
+}
+
+export interface SearchResult {
+  id: number;
+  scientific_name: string;
+  common_name: string | null;
+  taxon_id: string;
+  taxon_group: string;
+  category: string;
+  gbif_species_key: number | null;
+  assessment_id: number | null;
+  assessment_date: string | null;
+  countries: string[];
+}
+
+// Cached search index + pre-lowercased names (built on first load)
+let searchIndexCache: SearchIndexEntry[] | null = null;
+let searchNamesCache: { sl: string; cl: string }[] | null = null;
+
+const SEARCH_INDEX_PATH = path.join(DATA_DIR, "search-index.json");
+
+/** @internal Reset search index cache (for tests only) */
+export function _resetSearchIndexCache(): void {
+  searchIndexCache = null;
+  searchNamesCache = null;
+}
+
+function loadSearchIndex(): { entries: SearchIndexEntry[]; names: { sl: string; cl: string }[] } {
+  if (searchIndexCache && searchNamesCache) {
+    return { entries: searchIndexCache, names: searchNamesCache };
+  }
+  if (!fs.existsSync(SEARCH_INDEX_PATH)) {
+    console.warn(`Search index not found at ${SEARCH_INDEX_PATH}. Run: npx tsx scripts/build-search-index.ts`);
+    searchIndexCache = [];
+    searchNamesCache = [];
+    return { entries: [], names: [] };
+  }
+  const raw = fs.readFileSync(SEARCH_INDEX_PATH, "utf-8");
+  const entries = JSON.parse(raw) as SearchIndexEntry[];
+  const names = entries.map(e => ({
+    sl: e.s.toLowerCase(),
+    cl: e.c ? e.c.toLowerCase() : "",
+  }));
+  searchIndexCache = entries;
+  searchNamesCache = names;
+  return { entries, names };
+}
+
+/**
+ * Search for species across all taxa by scientific name or common name.
+ * Uses a pre-built JSON index for fast lookups (no CSV parsing).
+ */
+export function searchSpecies(query: string, limit = 10): SearchResult[] {
+  if (query.length < 2) return [];
+
+  const q = query.toLowerCase();
+  const { entries, names } = loadSearchIndex();
+  const results: SearchResult[] = [];
+
+  for (let idx = 0; idx < entries.length; idx++) {
+    const n = names[idx];
+    if (!n.sl.includes(q) && (!n.cl || !n.cl.includes(q))) continue;
+
+    const e = entries[idx];
+    results.push({
+      id: e.i,
+      scientific_name: e.s,
+      common_name: e.c ?? null,
+      taxon_id: e.ti,
+      taxon_group: e.tg,
+      category: e.cat,
+      gbif_species_key: e.gk ?? null,
+      assessment_id: e.aid ?? null,
+      assessment_date: e.ad ?? null,
+      countries: e.ctry ? e.ctry.split(";") : [],
+    });
+  }
+
+  // Sort by relevance: exact common name > common name prefix > scientific name prefix > substring
+  results.sort((a, b) => {
+    const aCommon = a.common_name?.toLowerCase() ?? "";
+    const bCommon = b.common_name?.toLowerCase() ?? "";
+
+    const aCommonExact = aCommon === q ? 1 : 0;
+    const bCommonExact = bCommon === q ? 1 : 0;
+    if (aCommonExact !== bCommonExact) return bCommonExact - aCommonExact;
+
+    const aCommonPrefix = aCommon.startsWith(q) ? 1 : 0;
+    const bCommonPrefix = bCommon.startsWith(q) ? 1 : 0;
+    if (aCommonPrefix !== bCommonPrefix) return bCommonPrefix - aCommonPrefix;
+
+    const aLower = a.scientific_name.toLowerCase();
+    const bLower = b.scientific_name.toLowerCase();
+    const aSciPrefix = aLower.startsWith(q) ? 1 : 0;
+    const bSciPrefix = bLower.startsWith(q) ? 1 : 0;
+    if (aSciPrefix !== bSciPrefix) return bSciPrefix - aSciPrefix;
+
+    return aLower.localeCompare(bLower);
+  });
+
+  return results.slice(0, limit);
 }
 
 // =============================================================================
