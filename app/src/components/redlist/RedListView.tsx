@@ -2370,20 +2370,20 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         </div>
 
         {/* Species table */}
-        {speciesLoading && assessedSpecies.length === 0 ? (
+        {speciesLoading && assessedSpecies.length === 0 && !singleSpeciesPreview ? (
           <div className="flex items-center justify-center py-12">
             <Spinner className="h-6 w-6" />
           </div>
         ) : (
         <>
         <div className="relative">
-          {speciesLoading && (
+          {speciesLoading && !singleSpeciesPreview && (
             <div className="absolute inset-0 z-20 flex items-center justify-center">
               <Spinner className="h-6 w-6" />
             </div>
           )}
         <div
-          className={`bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-x-auto transition-opacity duration-150 ${speciesLoading ? "opacity-50 pointer-events-none" : ""}`}
+          className={`bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-x-auto transition-opacity duration-150 ${speciesLoading && !singleSpeciesPreview ? "opacity-50 pointer-events-none" : ""}`}
           onScroll={(e) => {
             e.currentTarget.style.setProperty('--scroll-left', `${e.currentTarget.scrollLeft}px`);
           }}
