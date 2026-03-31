@@ -326,7 +326,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     sortField, sortDirection, setSort,
     clearAllFilters,
     setViewMode: setUrlViewMode,
-    species: urlSpecies, tab: urlTab, group: urlGroup,
+    species: urlSpecies, tab: urlTab,
     setSpeciesParam, setTabParam,
     fromPopstateRef,
   } = useFilterParams();
@@ -737,7 +737,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // immediately without waiting for the bulk table to load.
   const [singleSpeciesPreview, setSingleSpeciesPreview] = useState<RedListSpecies | null>(null);
   useEffect(() => {
-    if (urlSpecies == null || !urlGroup) {
+    if (urlSpecies == null) {
       setSingleSpeciesPreview(null);
       return;
     }
@@ -745,10 +745,17 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     const allSpecies = [...(speciesByTaxon[selectedTaxa.size === 1 ? [...selectedTaxa][0] : "all"] ?? []), ...neSpecies];
     if (allSpecies.some(s => s.id === urlSpecies)) {
       setSingleSpeciesPreview(null);
+      // Scroll directly (the auto-navigate effect may not re-run if deps haven't changed)
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const row = document.querySelector('[data-selected-species]');
+          if (row) row.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      });
       return;
     }
 
-    // Try cached search result first (no API call needed)
+    // Use cached search result to construct preview (no API call needed)
     const cached = getLastSearchResult();
     if (cached && cached.id === urlSpecies) {
       clearLastSearchResult();
@@ -782,22 +789,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         has_map: false,
       });
       urlSpeciesHandledRef.current = true;
-      return;
     }
-
-    // Fallback: fetch from API (for direct URL navigation without cached search result)
-    const controller = new AbortController();
-    fetch(`/api/redlist/species/${urlSpecies}?group=${encodeURIComponent(urlGroup)}`, { signal: controller.signal })
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        if (data?.species && !controller.signal.aborted) {
-          setSingleSpeciesPreview(data.species);
-          urlSpeciesHandledRef.current = true;
-        }
-      })
-      .catch(() => {});
-    return () => controller.abort();
-  }, [urlSpecies, urlGroup]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [urlSpecies]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Clear preview once the species appears in bulk-loaded data
   useEffect(() => {

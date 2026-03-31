@@ -118,7 +118,6 @@ export function SpeciesSearchBar() {
         sortDirection: "desc",
         species: result.id,
         tab: "gbif",
-        group: result.taxon_group,
       });
 
       window.history.pushState(null, "", "/" + qs);

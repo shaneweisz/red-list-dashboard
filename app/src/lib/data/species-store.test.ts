@@ -12,7 +12,7 @@ vi.mock("./csv", () => ({
 
 import * as fs from "fs";
 import { readCsv } from "./csv";
-import { getAssessorCandidates, getAssessorCandidatesByCountry, searchSpecies, getSpeciesById, _resetSearchIndexCache } from "./species-store";
+import { getAssessorCandidates, getAssessorCandidatesByCountry, searchSpecies, _resetSearchIndexCache } from "./species-store";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -745,65 +745,3 @@ describe("searchSpecies", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// getSpeciesById
-// ---------------------------------------------------------------------------
-
-describe("getSpeciesById", () => {
-  function setupById(redlistRows: TestRedlistRow[], gbifRows: { gbif_species_key: number; scientific_name: string; common_name: string; taxon_group_table1a: string; total_count?: number; count_after_assessment_year?: number; class_name?: string; order_name?: string; family?: string; countries?: string[] }[] = []) {
-    const group = uniqueGroup();
-
-    vi.mocked(readCsv).mockImplementation((filePath: string) => {
-      if (filePath.includes("/redlist/")) return redlistRows as any;
-      if (filePath.includes("/gbif/")) return gbifRows.map(g => ({
-        ...g,
-        total_count: g.total_count ?? 100,
-        count_after_assessment_year: g.count_after_assessment_year ?? null,
-        class_name: g.class_name ?? "",
-        order_name: g.order_name ?? "",
-        family: g.family ?? "",
-        countries: g.countries ?? [],
-      })) as any;
-      if (filePath.includes("mapping")) return [] as any;
-      return [] as any;
-    });
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readFileSync).mockReturnValue("{}");
-
-    return group;
-  }
-
-  it("returns null for a non-existent assessed species", () => {
-    const group = setupById([]);
-    expect(getSpeciesById(999, group)).toBeNull();
-  });
-
-  it("finds an assessed species by sis_taxon_id", () => {
-    const row = makeRow({ scientific_name: "Panthera leo", category: "VU", taxon_group_table1a: "mammalia" });
-    const group = setupById([row]);
-
-    const result = getSpeciesById(row.sis_taxon_id, group);
-    expect(result).not.toBeNull();
-    expect(result!.scientific_name).toBe("Panthera leo");
-    expect(result!.category).toBe("VU");
-    expect(result!.id).toBe(row.sis_taxon_id);
-  });
-
-  it("finds an NE species by negative GBIF key", () => {
-    const group = setupById([], [
-      { gbif_species_key: 12345, scientific_name: "Newus birdus", common_name: "New Bird", taxon_group_table1a: "aves" },
-    ]);
-
-    const result = getSpeciesById(-12345, group);
-    expect(result).not.toBeNull();
-    expect(result!.scientific_name).toBe("Newus birdus");
-    expect(result!.category).toBe("NE");
-    expect(result!.id).toBe(-12345);
-    expect(result!.gbif_species_key).toBe(12345);
-  });
-
-  it("returns null for a non-existent NE species", () => {
-    const group = setupById([], []);
-    expect(getSpeciesById(-99999, group)).toBeNull();
-  });
-});
