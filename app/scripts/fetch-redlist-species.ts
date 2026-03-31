@@ -189,6 +189,10 @@ export async function fetchFromIucnDb(
         SELECT DISTINCT assessment_id
         FROM assessment_ranges
         WHERE assessment_id = ANY($1)
+        UNION
+        SELECT DISTINCT assessment_id
+        FROM assessment_points
+        WHERE assessment_id = ANY($1)
       `, [assessmentIds]),
     ]);
 
