@@ -420,6 +420,15 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       return;
     }
 
+    // Single click on already-sole-selected taxon: keep selected (TaxaSummary
+    // handles expand/collapse toggle). Clear search/species if active.
+    if (!isMulti && selectedTaxa.size === 1 && selectedTaxa.has(taxonId)) {
+      if (searchFilter || urlSpecies != null) {
+        clearAllFilters();
+      }
+      return;
+    }
+
     setSelectedTaxa(prev => {
       if (isMulti) {
         // Remove "all" if present when multi-selecting specific taxa
@@ -432,22 +441,11 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         }
         return next;
       }
-      // Single click on already-sole-selected taxon: keep selected (TaxaSummary
-      // handles expand/collapse toggle). Only "All Species" returns to landing.
-      // Clear search/species filters so clicking the taxon after a search resets the view.
-      if (prev.size === 1 && prev.has(taxonId)) {
-        if (searchFilter || selectedSpeciesKey != null) {
-          clearAllFilters();
-          setSelectedSpeciesKeyRaw(null);
-          setSingleSpeciesPreview(null);
-        }
-        return prev;
-      }
       // Switching to a different taxon — clear subgroups
       setSelectedSubgroups(new Set());
       return new Set([taxonId]);
     });
-  }, [setSelectedTaxa, setSelectedSubgroups, selectedTaxa, selectedSubgroups, isNewAssessments]);
+  }, [setSelectedTaxa, setSelectedSubgroups, selectedTaxa, selectedSubgroups, isNewAssessments, searchFilter, urlSpecies, clearAllFilters]);
 
   // Reset all other filters when taxa selection changes
   const prevTaxaRef = useRef(selectedTaxa);
