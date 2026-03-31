@@ -17,28 +17,10 @@ export async function GET(request: NextRequest) {
       species = species.filter((s) => s.category === "NE");
     }
 
-    // Stream JSON to avoid holding the entire serialized string in memory.
-    // JSON.stringify of 172K objects creates a ~113MB string; streaming writes
-    // one row at a time so V8 only needs ~1KB per iteration.
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(encoder.encode(`{"species":[`));
-        for (let i = 0; i < species.length; i++) {
-          if (i > 0) controller.enqueue(encoder.encode(","));
-          controller.enqueue(encoder.encode(JSON.stringify(species[i])));
-        }
-        controller.enqueue(encoder.encode(`],"total":${species.length}}`));
-        controller.close();
-      },
-    });
-
-    return new Response(stream, {
-      headers: {
-        "Content-Type": "application/json",
-        ...CACHE_5M,
-      },
-    });
+    return NextResponse.json(
+      { species, total: species.length },
+      { headers: CACHE_5M }
+    );
   } catch (error) {
     console.error("Species query error:", error);
     const message = error instanceof Error ? error.message : "Unknown error";
