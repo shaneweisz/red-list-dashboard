@@ -9,31 +9,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { readCsv } from "./csv";
 import { countryToRegion } from "../regions";
-import { ALL_CSV_GROUPS } from "../../config/taxonomy-tree";
-
-
-// =============================================================================
-// EXCLUDED DOMESTICATED SPECIES
-// =============================================================================
-
-/** GBIF species keys for domesticated species excluded from new assessments. */
-const EXCLUDED_DOMESTICATED_GBIF_KEYS = new Set([
-  2441022, // Bos taurus (Cow)
-  2435035, // Felis catus (Cat)
-  2441110, // Ovis aries (Domestic Sheep)
-  2441056, // Capra hircus (Domestic Goat)
-  2440886, // Equus caballus (Horse)
-  7422937, // Bubalus bubalis (Water Buffalo)
-  2440891, // Equus asinus (Donkey)
-  9055455, // Camelus dromedarius (Arabian Camel)
-  2441238, // Camelus bactrianus (Bactrian Camel)
-  5220190, // Lama glama (Llama)
-  7515593, // Vicugna pacos (Alpaca)
-  2441019, // Bos grunniens (Yak)
-  5219702, // Cavia porcellus (Guinea Pig)
-  10694102, // Columba domestica (Domestic Pigeon)
-  2436436, // Homo sapiens (Human)
-]);
+import { EXCLUDED_DOMESTICATED_GBIF_KEYS, mapTaxonId } from "./taxonomy-constants";
 
 // =============================================================================
 // PATHS
@@ -141,34 +117,6 @@ export interface TaxaSummaryRow {
   total_gbif_observations: number;
   mean_gbif_obs: number;
   median_gbif_obs: number | null;
-}
-
-// =============================================================================
-// DB_GROUP → DISPLAY TAXON ID (for the default 8-taxa view)
-// =============================================================================
-
-const DB_GROUP_TO_TAXON_ID: Record<string, string> = {
-  fishes: "fishes",
-  insecta: "invertebrates",
-  arachnida: "invertebrates",
-  mollusca: "invertebrates",
-  crustacea: "invertebrates",
-  corals: "invertebrates",
-  other_invertebrates: "invertebrates",
-  velvet_worms: "invertebrates",
-  horseshoe_crabs: "invertebrates",
-  flowering_plants: "plantae",
-  gymnosperms: "plantae",
-  ferns_and_allies: "plantae",
-  mosses: "plantae",
-  green_algae: "plantae",
-  red_algae: "plantae",
-  brown_algae: "fungi",
-  mushrooms: "fungi",
-};
-
-function mapTaxonId(group: string): string {
-  return DB_GROUP_TO_TAXON_ID[group] ?? group;
 }
 
 // =============================================================================
@@ -397,105 +345,6 @@ export function getSpecies(groups: string[], includeNE: boolean): SpeciesRow[] {
   }
 
   return results;
-}
-
-/**
- * Look up a single species by ID within a specific CSV group.
- * Much faster than getSpecies() when you only need one row.
- *
- * For assessed species (id > 0), finds by sis_taxon_id in the redlist CSV.
- * For NE species (id < 0), finds by gbif_species_key (= -id) in the GBIF CSV.
- */
-export function getSpeciesById(id: number, taxonGroup: string): SpeciesRow | null {
-  if (id > 0) {
-    // Assessed species: look up in redlist
-    const redlistRows = loadRedlistForGroup(taxonGroup);
-    const row = redlistRows.find(r => r.sis_taxon_id === id);
-    if (!row) return null;
-
-    const mapping = loadMapping();
-    const gbifMap = loadGbifForGroup(taxonGroup);
-    const historyMap = loadHistoryForGroup(taxonGroup);
-
-    const gbifSpeciesKey = mapping.get(row.sis_taxon_id)?.gbif_species_key ?? null;
-    let gbifOccurrenceCount: number | null = null;
-    let gbifObsAfterAssessment: number | null = null;
-
-    if (gbifSpeciesKey) {
-      const gbif = gbifMap.get(gbifSpeciesKey);
-      if (gbif) {
-        gbifOccurrenceCount = gbif.total_count;
-        gbifObsAfterAssessment = gbif.count_after_assessment_year;
-      }
-    }
-
-    return {
-      id: row.sis_taxon_id,
-      sis_taxon_id: row.sis_taxon_id,
-      assessment_id: row.assessment_id,
-      scientific_name: row.scientific_name,
-      common_name: row.common_name,
-      family: row.family,
-      category: row.category,
-      assessment_date: row.assessment_date,
-      year_published: row.year_published,
-      population_trend: row.population_trend,
-      countries: row.countries,
-      class_name: row.class_name,
-      order_name: row.order_name,
-      taxon_group: row.taxon_group_table1a,
-      taxon_id: mapTaxonId(row.taxon_group_table1a),
-      gbif_species_key: gbifSpeciesKey,
-      gbif_occurrence_count: gbifOccurrenceCount,
-      gbif_observations_after_assessment_year: gbifObsAfterAssessment,
-      previous_assessments: historyMap[String(row.sis_taxon_id)] ?? [],
-      systems: row.systems,
-      growth_forms: row.growth_forms,
-      movement_pattern: row.movement_pattern,
-      possibly_extinct: row.possibly_extinct,
-      possibly_extinct_in_the_wild: row.possibly_extinct_in_the_wild,
-      criteria: row.criteria,
-      threat_codes: row.threat_codes,
-      has_map: row.has_map,
-    };
-  } else {
-    // NE species: look up in GBIF by key (= -id)
-    const gbifKey = -id;
-    const gbifMap = loadGbifForGroup(taxonGroup);
-    const gbif = gbifMap.get(gbifKey);
-    if (!gbif) return null;
-    if (EXCLUDED_DOMESTICATED_GBIF_KEYS.has(gbifKey)) return null;
-
-    return {
-      id: -gbifKey,
-      sis_taxon_id: null,
-      assessment_id: null,
-      scientific_name: gbif.scientific_name,
-      common_name: gbif.common_name || null,
-      family: gbif.family || null,
-      category: "NE",
-      assessment_date: null,
-      year_published: null,
-      population_trend: null,
-      countries: gbif.countries,
-      class_name: gbif.class_name || null,
-      order_name: gbif.order_name || null,
-      taxon_group: gbif.taxon_group_table1a,
-      taxon_id: mapTaxonId(gbif.taxon_group_table1a),
-      gbif_species_key: gbif.gbif_species_key,
-      gbif_occurrence_count: gbif.total_count,
-      gbif_observations_after_assessment_year: gbif.count_after_assessment_year,
-      previous_assessments: [],
-      systems: [],
-      growth_forms: [],
-      movement_pattern: null,
-      possibly_extinct: false,
-      possibly_extinct_in_the_wild: false,
-      criteria: null,
-      threat_codes: [],
-      has_map: false,
-    };
-  }
 }
 
 /**
@@ -830,8 +679,22 @@ function parseAssessorNames(raw: string): string[] {
 }
 
 // =============================================================================
-// CROSS-TAXA SPECIES SEARCH
+// CROSS-TAXA SPECIES SEARCH (powered by pre-built search-index.json)
 // =============================================================================
+
+/** Compact entry from data/search-index.json (short keys for size). */
+export interface SearchIndexEntry {
+  i: number;          // id
+  s: string;          // scientific_name
+  c?: string;         // common_name
+  ti: string;         // taxon_id (display group)
+  tg: string;         // taxon_group (CSV group)
+  cat: string;        // category
+  gk?: number;        // gbif_species_key
+  aid?: number;       // assessment_id
+  ad?: string;        // assessment_date
+  ctry?: string;      // countries (semicolon-separated)
+}
 
 export interface SearchResult {
   id: number;
@@ -840,61 +703,73 @@ export interface SearchResult {
   taxon_id: string;
   taxon_group: string;
   category: string;
+  gbif_species_key: number | null;
+  assessment_id: number | null;
+  assessment_date: string | null;
+  countries: string[];
+}
+
+// Cached search index + pre-lowercased names (built on first load)
+let searchIndexCache: SearchIndexEntry[] | null = null;
+let searchNamesCache: { sl: string; cl: string }[] | null = null;
+
+const SEARCH_INDEX_PATH = path.join(DATA_DIR, "search-index.json");
+
+/** @internal Reset search index cache (for tests only) */
+export function _resetSearchIndexCache(): void {
+  searchIndexCache = null;
+  searchNamesCache = null;
+}
+
+function loadSearchIndex(): { entries: SearchIndexEntry[]; names: { sl: string; cl: string }[] } {
+  if (searchIndexCache && searchNamesCache) {
+    return { entries: searchIndexCache, names: searchNamesCache };
+  }
+  if (!fs.existsSync(SEARCH_INDEX_PATH)) {
+    console.warn(`Search index not found at ${SEARCH_INDEX_PATH}. Run: npx tsx scripts/build-search-index.ts`);
+    searchIndexCache = [];
+    searchNamesCache = [];
+    return { entries: [], names: [] };
+  }
+  const raw = fs.readFileSync(SEARCH_INDEX_PATH, "utf-8");
+  const entries = JSON.parse(raw) as SearchIndexEntry[];
+  const names = entries.map(e => ({
+    sl: e.s.toLowerCase(),
+    cl: e.c ? e.c.toLowerCase() : "",
+  }));
+  searchIndexCache = entries;
+  searchNamesCache = names;
+  return { entries, names };
 }
 
 /**
  * Search for species across all taxa by scientific name or common name.
- * Returns lightweight results sorted by relevance (prefix matches first).
+ * Uses a pre-built JSON index for fast lookups (no CSV parsing).
  */
 export function searchSpecies(query: string, limit = 10): SearchResult[] {
   if (query.length < 2) return [];
 
   const q = query.toLowerCase();
+  const { entries, names } = loadSearchIndex();
   const results: SearchResult[] = [];
-  const mapping = loadMapping();
 
-  for (const group of ALL_CSV_GROUPS) {
-    const redlistRows = loadRedlistForGroup(group);
-    const gbifMap = loadGbifForGroup(group);
-    const linkedGbifKeys = new Set<number>();
+  for (let idx = 0; idx < entries.length; idx++) {
+    const n = names[idx];
+    if (!n.sl.includes(q) && (!n.cl || !n.cl.includes(q))) continue;
 
-    // Search redlist (assessed) species
-    for (const r of redlistRows) {
-      const gbifKey = mapping.get(r.sis_taxon_id)?.gbif_species_key ?? null;
-      if (gbifKey) linkedGbifKeys.add(gbifKey);
-
-      const sciMatch = r.scientific_name.toLowerCase().includes(q);
-      const commonMatch = !!r.common_name && r.common_name.toLowerCase().includes(q);
-      if (sciMatch || commonMatch) {
-        results.push({
-          id: r.sis_taxon_id,
-          scientific_name: r.scientific_name,
-          common_name: r.common_name,
-          taxon_id: mapTaxonId(r.taxon_group_table1a),
-          taxon_group: r.taxon_group_table1a,
-          category: r.category,
-        });
-      }
-    }
-
-    // Search GBIF-only (NE) species
-    for (const [key, gbif] of gbifMap) {
-      if (linkedGbifKeys.has(key)) continue;
-      if (EXCLUDED_DOMESTICATED_GBIF_KEYS.has(key)) continue;
-
-      const sciMatch = gbif.scientific_name.toLowerCase().includes(q);
-      const commonMatch = !!gbif.common_name && gbif.common_name.toLowerCase().includes(q);
-      if (sciMatch || commonMatch) {
-        results.push({
-          id: -key,
-          scientific_name: gbif.scientific_name,
-          common_name: gbif.common_name || null,
-          taxon_id: mapTaxonId(gbif.taxon_group_table1a),
-          taxon_group: gbif.taxon_group_table1a,
-          category: "NE",
-        });
-      }
-    }
+    const e = entries[idx];
+    results.push({
+      id: e.i,
+      scientific_name: e.s,
+      common_name: e.c ?? null,
+      taxon_id: e.ti,
+      taxon_group: e.tg,
+      category: e.cat,
+      gbif_species_key: e.gk ?? null,
+      assessment_id: e.aid ?? null,
+      assessment_date: e.ad ?? null,
+      countries: e.ctry ? e.ctry.split(";") : [],
+    });
   }
 
   // Sort by relevance: exact common name > common name prefix > scientific name prefix > substring
@@ -902,17 +777,14 @@ export function searchSpecies(query: string, limit = 10): SearchResult[] {
     const aCommon = a.common_name?.toLowerCase() ?? "";
     const bCommon = b.common_name?.toLowerCase() ?? "";
 
-    // Exact common name match (e.g. "leopard" → "Leopard")
     const aCommonExact = aCommon === q ? 1 : 0;
     const bCommonExact = bCommon === q ? 1 : 0;
     if (aCommonExact !== bCommonExact) return bCommonExact - aCommonExact;
 
-    // Common name prefix (e.g. "leopard" → "Leopard Cat")
     const aCommonPrefix = aCommon.startsWith(q) ? 1 : 0;
     const bCommonPrefix = bCommon.startsWith(q) ? 1 : 0;
     if (aCommonPrefix !== bCommonPrefix) return bCommonPrefix - aCommonPrefix;
 
-    // Scientific name prefix (e.g. "leopard" → "Leopardus pardalis")
     const aLower = a.scientific_name.toLowerCase();
     const bLower = b.scientific_name.toLowerCase();
     const aSciPrefix = aLower.startsWith(q) ? 1 : 0;

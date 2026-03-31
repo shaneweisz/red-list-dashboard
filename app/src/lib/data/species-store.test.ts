@@ -10,14 +10,9 @@ vi.mock("./csv", () => ({
   readCsv: vi.fn(() => []),
 }));
 
-const mockCsvGroups: string[] = [];
-vi.mock("../../config/taxonomy-tree", () => ({
-  get ALL_CSV_GROUPS() { return mockCsvGroups; },
-}));
-
 import * as fs from "fs";
 import { readCsv } from "./csv";
-import { getAssessorCandidates, getAssessorCandidatesByCountry, searchSpecies, getSpeciesById } from "./species-store";
+import { getAssessorCandidates, getAssessorCandidatesByCountry, searchSpecies, _resetSearchIndexCache } from "./species-store";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -645,24 +640,17 @@ describe("getAssessorCandidatesByCountry", () => {
 });
 
 // ---------------------------------------------------------------------------
-// searchSpecies
+// searchSpecies (uses pre-built search-index.json)
 // ---------------------------------------------------------------------------
 
 describe("searchSpecies", () => {
-  function setupSearch(redlistRows: TestRedlistRow[], gbifRows: { gbif_species_key: number; scientific_name: string; common_name: string; taxon_group_table1a: string }[] = []) {
-    const group = uniqueGroup();
-    mockCsvGroups.length = 0;
-    mockCsvGroups.push(group);
-
-    // Use path-based routing: redlist CSV path contains /redlist/, GBIF contains /gbif/
-    vi.mocked(readCsv).mockImplementation((filePath: string) => {
-      if (filePath.includes("/redlist/")) return redlistRows as any;
-      if (filePath.includes("/gbif/")) return gbifRows as any;
-      if (filePath.includes("mapping")) return [] as any;
-      return [] as any;
-    });
+  function setupSearchIndex(entries: { i: number; s: string; c?: string; ti: string; tg: string; cat: string; gk?: number; aid?: number; ad?: string; ctry?: string }[]) {
+    _resetSearchIndexCache();
+    vi.mocked(fs.readFileSync).mockImplementation(((filePath: string) => {
+      if (String(filePath).includes("search-index")) return JSON.stringify(entries);
+      return "{}";
+    }) as typeof fs.readFileSync);
     vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readFileSync).mockReturnValue("{}");
   }
 
   it("returns empty array for queries shorter than 2 characters", () => {
@@ -671,9 +659,9 @@ describe("searchSpecies", () => {
   });
 
   it("matches scientific name case-insensitively", () => {
-    setupSearch([
-      makeRow({ scientific_name: "Panthera leo", common_name: null, taxon_group_table1a: "mammalia" }),
-      makeRow({ scientific_name: "Felis catus", common_name: null, taxon_group_table1a: "mammalia" }),
+    setupSearchIndex([
+      { i: 1, s: "Panthera leo", ti: "mammalia", tg: "mammalia", cat: "VU" },
+      { i: 2, s: "Felis catus", ti: "mammalia", tg: "mammalia", cat: "LC" },
     ]);
 
     const results = searchSpecies("panthera");
@@ -682,9 +670,9 @@ describe("searchSpecies", () => {
   });
 
   it("matches common name case-insensitively", () => {
-    setupSearch([
-      makeRow({ scientific_name: "Panthera leo", common_name: "Lion", taxon_group_table1a: "mammalia" }),
-      makeRow({ scientific_name: "Felis catus", common_name: "Cat", taxon_group_table1a: "mammalia" }),
+    setupSearchIndex([
+      { i: 1, s: "Panthera leo", c: "Lion", ti: "mammalia", tg: "mammalia", cat: "VU" },
+      { i: 2, s: "Felis catus", c: "Cat", ti: "mammalia", tg: "mammalia", cat: "LC" },
     ]);
 
     const results = searchSpecies("lion");
@@ -693,10 +681,10 @@ describe("searchSpecies", () => {
   });
 
   it("ranks prefix matches on scientific name before substring matches", () => {
-    setupSearch([
-      makeRow({ scientific_name: "Leopardus pardalis", common_name: null, taxon_group_table1a: "mammalia" }),
-      makeRow({ scientific_name: "Panthera leo", common_name: null, taxon_group_table1a: "mammalia" }),
-      makeRow({ scientific_name: "Leo ninus", common_name: null, taxon_group_table1a: "mammalia" }),
+    setupSearchIndex([
+      { i: 1, s: "Leopardus pardalis", ti: "mammalia", tg: "mammalia", cat: "LC" },
+      { i: 2, s: "Panthera leo", ti: "mammalia", tg: "mammalia", cat: "VU" },
+      { i: 3, s: "Leo ninus", ti: "mammalia", tg: "mammalia", cat: "VU" },
     ]);
 
     const results = searchSpecies("leo");
@@ -707,200 +695,53 @@ describe("searchSpecies", () => {
   });
 
   it("ranks exact common name match above scientific name prefix match", () => {
-    setupSearch([
-      makeRow({ scientific_name: "Leopardus pardalis", common_name: "Ocelot", taxon_group_table1a: "mammalia" }),
-      makeRow({ scientific_name: "Panthera pardus", common_name: "Leopard", taxon_group_table1a: "mammalia" }),
-      makeRow({ scientific_name: "Neofelis nebulosa", common_name: "Leopard Cat", taxon_group_table1a: "mammalia" }),
+    setupSearchIndex([
+      { i: 1, s: "Leopardus pardalis", c: "Ocelot", ti: "mammalia", tg: "mammalia", cat: "LC" },
+      { i: 2, s: "Panthera pardus", c: "Leopard", ti: "mammalia", tg: "mammalia", cat: "VU" },
+      { i: 3, s: "Neofelis nebulosa", c: "Leopard Cat", ti: "mammalia", tg: "mammalia", cat: "VU" },
     ]);
 
     const results = searchSpecies("leopard");
-    // Exact common name "Leopard" first, then common prefix "Leopard Cat", then scientific prefix "Leopardus"
     expect(results[0].scientific_name).toBe("Panthera pardus");
     expect(results[1].scientific_name).toBe("Neofelis nebulosa");
     expect(results[2].scientific_name).toBe("Leopardus pardalis");
   });
 
   it("respects the limit parameter", () => {
-    setupSearch([
-      makeRow({ scientific_name: "Testus alpha", taxon_group_table1a: "mammalia" }),
-      makeRow({ scientific_name: "Testus beta", taxon_group_table1a: "mammalia" }),
-      makeRow({ scientific_name: "Testus gamma", taxon_group_table1a: "mammalia" }),
+    setupSearchIndex([
+      { i: 1, s: "Testus alpha", ti: "mammalia", tg: "mammalia", cat: "VU" },
+      { i: 2, s: "Testus beta", ti: "mammalia", tg: "mammalia", cat: "VU" },
+      { i: 3, s: "Testus gamma", ti: "mammalia", tg: "mammalia", cat: "VU" },
     ]);
 
     const results = searchSpecies("testus", 2);
     expect(results).toHaveLength(2);
   });
 
-  it("returns correct taxon_id (mapped display ID)", () => {
-    setupSearch([
-      makeRow({ scientific_name: "Testus insect", taxon_group_table1a: "insecta" }),
+  it("returns correct taxon_id mapping", () => {
+    setupSearchIndex([
+      { i: -99, s: "Insectus novus", ti: "invertebrates", tg: "insecta", cat: "NE", gk: 99 },
     ]);
-
-    const results = searchSpecies("testus");
-    expect(results).toHaveLength(1);
-    expect(results[0].taxon_id).toBe("invertebrates");
-    expect(results[0].taxon_group).toBe("insecta");
-  });
-
-  it("returns correct category for assessed species", () => {
-    setupSearch([
-      makeRow({ scientific_name: "Panthera leo", category: "VU", taxon_group_table1a: "mammalia" }),
-    ]);
-
-    const results = searchSpecies("panthera");
-    expect(results).toHaveLength(1);
-    expect(results[0].category).toBe("VU");
-  });
-
-  it("returns GBIF-only species with category NE and negative IDs", () => {
-    setupSearch(
-      [], // no redlist rows
-      [
-        { gbif_species_key: 12345, scientific_name: "Newus birdus", common_name: "New Bird", taxon_group_table1a: "aves" },
-        { gbif_species_key: 67890, scientific_name: "Oldus reptilus", common_name: "Old Reptile", taxon_group_table1a: "reptilia" },
-      ],
-    );
-
-    const results = searchSpecies("newus");
-    expect(results).toHaveLength(1);
-    expect(results[0].scientific_name).toBe("Newus birdus");
-    expect(results[0].common_name).toBe("New Bird");
-    expect(results[0].category).toBe("NE");
-    expect(results[0].id).toBe(-12345);
-    expect(results[0].taxon_group).toBe("aves");
-  });
-
-  it("returns correct fields for NE species including taxon_id mapping", () => {
-    setupSearch(
-      [],
-      [
-        { gbif_species_key: 99, scientific_name: "Insectus novus", common_name: "", taxon_group_table1a: "insecta" },
-      ],
-    );
 
     const results = searchSpecies("insectus");
     expect(results).toHaveLength(1);
-    expect(results[0].id).toBe(-99);
-    expect(results[0].scientific_name).toBe("Insectus novus");
-    expect(results[0].common_name).toBeNull(); // empty string maps to null
-    expect(results[0].taxon_id).toBe("invertebrates"); // insecta maps to invertebrates
+    expect(results[0].taxon_id).toBe("invertebrates");
     expect(results[0].taxon_group).toBe("insecta");
     expect(results[0].category).toBe("NE");
+    expect(results[0].id).toBe(-99);
   });
 
-  it("does not duplicate GBIF species that are linked to a redlist entry", async () => {
-    // The mapping is cached globally at module level, so we need a fresh module
-    // instance to test with non-empty mapping data.
-    vi.resetModules();
-
-    const { readCsv: readCsvFresh } = await import("./csv");
-    const freshFs = await import("fs");
-
-    const sisTaxonId = 999;
-
-    vi.mocked(readCsvFresh).mockImplementation((filePath: string) => {
-      if (filePath.includes("/redlist/")) return [{
-        sis_taxon_id: sisTaxonId,
-        assessment_id: 99900,
-        scientific_name: "Linked species",
-        common_name: "Linked Animal",
-        class_name: "Mammalia",
-        order_name: "Carnivora",
-        family: "Felidae",
-        category: "EN",
-        assessment_date: "2020-01-01",
-        year_published: "2020",
-        population_trend: null,
-        countries: [],
-        taxon_group_table1a: "mammalia",
-      }] as any;
-      if (filePath.includes("/gbif/")) return [{
-        gbif_species_key: 55555,
-        scientific_name: "Linked species",
-        common_name: "Linked Animal",
-        taxon_group_table1a: "mammalia",
-      }] as any;
-      if (filePath.includes("mapping")) return [{
-        sis_taxon_id: sisTaxonId,
-        gbif_species_key: 55555,
-        match_type: "exact",
-      }] as any;
-      return [] as any;
-    });
-    vi.mocked(freshFs.existsSync).mockReturnValue(true);
-    vi.mocked(freshFs.readFileSync).mockReturnValue("{}");
-
-    // Re-import module to get fresh caches
-    const { searchSpecies: freshSearch } = await import("./species-store");
-
-    const results = freshSearch("linked");
-    // Should only have the redlist entry, not a duplicate NE entry
-    expect(results).toHaveLength(1);
-    expect(results[0].scientific_name).toBe("Linked species");
-    expect(results[0].category).toBe("EN");
-    expect(results[0].id).toBe(sisTaxonId);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// getSpeciesById
-// ---------------------------------------------------------------------------
-
-describe("getSpeciesById", () => {
-  function setupById(redlistRows: TestRedlistRow[], gbifRows: { gbif_species_key: number; scientific_name: string; common_name: string; taxon_group_table1a: string; total_count?: number; count_after_assessment_year?: number; class_name?: string; order_name?: string; family?: string; countries?: string[] }[] = []) {
-    const group = uniqueGroup();
-
-    vi.mocked(readCsv).mockImplementation((filePath: string) => {
-      if (filePath.includes("/redlist/")) return redlistRows as any;
-      if (filePath.includes("/gbif/")) return gbifRows.map(g => ({
-        ...g,
-        total_count: g.total_count ?? 100,
-        count_after_assessment_year: g.count_after_assessment_year ?? null,
-        class_name: g.class_name ?? "",
-        order_name: g.order_name ?? "",
-        family: g.family ?? "",
-        countries: g.countries ?? [],
-      })) as any;
-      if (filePath.includes("mapping")) return [] as any;
-      return [] as any;
-    });
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readFileSync).mockReturnValue("{}");
-
-    return group;
-  }
-
-  it("returns null for a non-existent assessed species", () => {
-    const group = setupById([]);
-    expect(getSpeciesById(999, group)).toBeNull();
-  });
-
-  it("finds an assessed species by sis_taxon_id", () => {
-    const row = makeRow({ scientific_name: "Panthera leo", category: "VU", taxon_group_table1a: "mammalia" });
-    const group = setupById([row]);
-
-    const result = getSpeciesById(row.sis_taxon_id, group);
-    expect(result).not.toBeNull();
-    expect(result!.scientific_name).toBe("Panthera leo");
-    expect(result!.category).toBe("VU");
-    expect(result!.id).toBe(row.sis_taxon_id);
-  });
-
-  it("finds an NE species by negative GBIF key", () => {
-    const group = setupById([], [
-      { gbif_species_key: 12345, scientific_name: "Newus birdus", common_name: "New Bird", taxon_group_table1a: "aves" },
+  it("returns enriched fields (gbif_species_key, assessment_id, countries)", () => {
+    setupSearchIndex([
+      { i: 1, s: "Panthera leo", c: "Lion", ti: "mammalia", tg: "mammalia", cat: "VU", gk: 5219404, aid: 280792135, ad: "2025-05-05", ctry: "AO;BJ;KE" },
     ]);
 
-    const result = getSpeciesById(-12345, group);
-    expect(result).not.toBeNull();
-    expect(result!.scientific_name).toBe("Newus birdus");
-    expect(result!.category).toBe("NE");
-    expect(result!.id).toBe(-12345);
-    expect(result!.gbif_species_key).toBe(12345);
-  });
-
-  it("returns null for a non-existent NE species", () => {
-    const group = setupById([], []);
-    expect(getSpeciesById(-99999, group)).toBeNull();
+    const results = searchSpecies("lion");
+    expect(results).toHaveLength(1);
+    expect(results[0].gbif_species_key).toBe(5219404);
+    expect(results[0].assessment_id).toBe(280792135);
+    expect(results[0].assessment_date).toBe("2025-05-05");
+    expect(results[0].countries).toEqual(["AO", "BJ", "KE"]);
   });
 });
+
