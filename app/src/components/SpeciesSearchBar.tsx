@@ -183,7 +183,7 @@ export function SpeciesSearchBar() {
         {/* Loading spinner */}
         {loading && (
           <div className="absolute right-8 top-1/2 -translate-y-1/2">
-            <div className="h-4 w-4 border-2 border-zinc-300 dark:border-zinc-600 border-t-transparent rounded-full animate-spin" />
+            <div className="h-4 w-4 rounded-full animate-spin border-2 border-zinc-300 dark:border-zinc-600" style={{ borderTopColor: 'transparent' }} />
           </div>
         )}
       </div>
