@@ -92,7 +92,7 @@ function AohMapLayerInner({ sisTaxonId, taxonGroup, visible }: AohMapLayerProps)
   // Stats panel rendered as a map overlay
   if (metadata && metadata.bounds) {
     return (
-      <div className="absolute top-2 right-2 z-[1000] bg-white dark:bg-zinc-800 px-2.5 py-2 rounded shadow text-xs text-zinc-600 dark:text-zinc-300 space-y-1">
+      <div className="absolute bottom-8 right-2 z-[1000] bg-white dark:bg-zinc-800 px-2.5 py-2 rounded shadow text-xs text-zinc-600 dark:text-zinc-300 space-y-1">
         <div className="font-medium text-zinc-800 dark:text-zinc-100">Area of Habitat</div>
         <div>AOH: {metadata.aoh_total.toLocaleString(undefined, { maximumFractionDigits: 0 })} km&sup2;</div>
         <div>Range: {metadata.range_total.toLocaleString(undefined, { maximumFractionDigits: 0 })} km&sup2;</div>

@@ -1528,20 +1528,53 @@ export default function OccurrenceMapRow({
           )}
           {/* Basemap toggle */}
           {!loadingOccurrences && mounted && (
-            <div className="absolute top-12 right-2 z-[1000] flex flex-col gap-0.5 bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 p-1">
-              {(Object.entries(BASEMAP_OPTIONS) as [BasemapKey, (typeof BASEMAP_OPTIONS)[BasemapKey]][]).map(([key, opt]) => (
-                <button
-                  key={key}
-                  onClick={() => setBasemap(key)}
-                  className={`px-2 py-0.5 rounded text-[10px] transition-colors ${
-                    basemap === key
-                      ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium"
-                      : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
+            <div className="absolute top-12 right-2 z-[1000] flex flex-col gap-1.5">
+              <div className="flex flex-col gap-0.5 bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 p-1">
+                {(Object.entries(BASEMAP_OPTIONS) as [BasemapKey, (typeof BASEMAP_OPTIONS)[BasemapKey]][]).map(([key, opt]) => (
+                  <button
+                    key={key}
+                    onClick={() => setBasemap(key)}
+                    className={`px-2 py-0.5 rounded text-[10px] transition-colors ${
+                      basemap === key
+                        ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium"
+                        : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              {/* Layer toggles */}
+              {(hasMap || isAohAvailable) && (
+                <div className="flex flex-col gap-0.5 bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 p-1">
+                  {hasMap && assessmentId && (
+                    <button
+                      onClick={() => setShowRange(!showRange)}
+                      className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] transition-colors ${
+                        showRange
+                          ? "bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 font-medium"
+                          : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                      }`}
+                    >
+                      <span className={`w-2 h-2 rounded-sm border ${showRange ? "border-rose-500 bg-rose-500/20" : "border-zinc-400 dark:border-zinc-500"}`} />
+                      Range
+                    </button>
+                  )}
+                  {isAohAvailable && (
+                    <button
+                      onClick={() => setShowAoh(!showAoh)}
+                      className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] transition-colors ${
+                        showAoh
+                          ? "bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 font-medium"
+                          : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                      }`}
+                    >
+                      <span className={`w-2 h-2 rounded-sm ${showAoh ? "bg-green-500/50" : "border border-zinc-400 dark:border-zinc-500"}`} />
+                      AOH
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1843,38 +1876,6 @@ export default function OccurrenceMapRow({
                       )}
                     </div>
 
-                    {/* Map layers */}
-                    {(hasMap || isAohAvailable) && (
-                      <>
-                        <div className="border-t border-zinc-200 dark:border-zinc-700 pt-2 mt-1">
-                          <span className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wide">Layers</span>
-                        </div>
-                        {hasMap && assessmentId && (
-                          <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={showRange}
-                              onChange={(e) => setShowRange(e.target.checked)}
-                              className="w-3 h-3 rounded accent-rose-500"
-                            />
-                            <span className="w-2.5 h-2.5 rounded-sm border-2 border-rose-500 bg-rose-500/15" />
-                            IUCN Range Map
-                          </label>
-                        )}
-                        {isAohAvailable && (
-                          <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={showAoh}
-                              onChange={(e) => setShowAoh(e.target.checked)}
-                              className="w-3 h-3 rounded accent-green-500"
-                            />
-                            <span className="w-2.5 h-2.5 rounded-sm bg-green-500/50" />
-                            Area of Habitat (AOH)
-                          </label>
-                        )}
-                      </>
-                    )}
 
                   </div>
                 )}
