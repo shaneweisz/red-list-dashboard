@@ -701,7 +701,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const [speciesDetails, setSpeciesDetails] = useState<Record<number, SpeciesDetails>>({});
 
   // Row expansion state (initialized from URL params if present)
-  const [selectedSpeciesKey, setSelectedSpeciesKeyRaw] = useState<number | null>(urlSpecies);
+  const [selectedSpeciesKey, setSelectedSpeciesKeyRaw] = useState<number | null>(urlSpecies != null && isNewAssessments ? Math.abs(urlSpecies) : urlSpecies);
   const [activeDetailTab, setActiveDetailTabRaw] = useState<"gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors">(urlTab ?? "gbif");
   const urlSpeciesHandledRef = useRef(false);
   const shouldScrollToSpeciesRef = useRef(false);
@@ -720,13 +720,14 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     setTabParam(tab);
   }, [setTabParam]);
   // Sync species/tab from URL params (fires on popstate, e.g. back/forward or search bar navigation)
+  // In new-assessments mode, row keys use Math.abs(id) so selectedSpeciesKey must match.
   useEffect(() => {
     if (urlSpecies != null) {
-      setSelectedSpeciesKeyRaw(urlSpecies);
+      setSelectedSpeciesKeyRaw(isNewAssessments ? Math.abs(urlSpecies) : urlSpecies);
       setActiveDetailTabRaw(urlTab ?? "gbif");
       urlSpeciesHandledRef.current = false; // allow auto-page-navigate for new species
     }
-  }, [urlSpecies, urlTab]);
+  }, [urlSpecies, urlTab, isNewAssessments]);
 
   // Single-species fast path: fetch one species immediately from search navigation
   // so the detail panel renders without waiting for the full table to load.
@@ -1354,7 +1355,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     if (el && shouldScrollToSpeciesRef.current) {
       shouldScrollToSpeciesRef.current = false;
       requestAnimationFrame(() => {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
       });
     }
   }, []);
