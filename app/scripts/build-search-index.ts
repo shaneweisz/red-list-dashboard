@@ -33,6 +33,13 @@ interface SearchEntry {
   ctry?: string;      // countries as semicolon-separated string (omitted when empty)
 }
 
+function csvEscape(value: string): string {
+  if (value.includes(",") || value.includes('"') || value.includes("\n")) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
 export async function run(): Promise<void> {
   const entries: SearchEntry[] = [];
 
@@ -89,11 +96,32 @@ export async function run(): Promise<void> {
     }
   }
 
-  const outPath = path.join(DATA_DIR, "search-index.json");
-  const json = JSON.stringify(entries);
-  fs.writeFileSync(outPath, json);
+  // Write as CSV — smaller on disk than JSON and consistent with the rest of the data layer.
+  // Countries use semicolons as separator (same as other CSVs), so we quote fields that may
+  // contain commas. Scientific/common names can contain commas too.
+  const CSV_HEADERS = ["id", "scientific_name", "common_name", "taxon_id", "taxon_group", "category", "gbif_species_key", "assessment_id", "assessment_date", "countries"];
+  const lines = [CSV_HEADERS.join(",")];
+  for (const e of entries) {
+    const fields = [
+      String(e.i),
+      csvEscape(e.s),
+      csvEscape(e.c ?? ""),
+      e.ti,
+      e.tg,
+      e.cat,
+      e.gk != null ? String(e.gk) : "",
+      e.aid != null ? String(e.aid) : "",
+      e.ad ?? "",
+      e.ctry ?? "",
+    ];
+    lines.push(fields.join(","));
+  }
+  const csv = lines.join("\n");
 
-  const sizeMB = (Buffer.byteLength(json) / 1024 / 1024).toFixed(1);
+  const outPath = path.join(DATA_DIR, "search-index.csv");
+  fs.writeFileSync(outPath, csv);
+
+  const sizeMB = (Buffer.byteLength(csv) / 1024 / 1024).toFixed(1);
   console.log(`  Wrote ${entries.length.toLocaleString()} entries to ${outPath} (${sizeMB} MB)`);
 }
 

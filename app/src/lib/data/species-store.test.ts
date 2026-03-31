@@ -640,16 +640,30 @@ describe("getAssessorCandidatesByCountry", () => {
 });
 
 // ---------------------------------------------------------------------------
-// searchSpecies (uses pre-built search-index.json)
+// searchSpecies (uses pre-built search-index.csv)
 // ---------------------------------------------------------------------------
 
 describe("searchSpecies", () => {
   function setupSearchIndex(entries: { i: number; s: string; c?: string; ti: string; tg: string; cat: string; gk?: number; aid?: number; ad?: string; ctry?: string }[]) {
     _resetSearchIndexCache();
-    vi.mocked(fs.readFileSync).mockImplementation(((filePath: string) => {
-      if (String(filePath).includes("search-index")) return JSON.stringify(entries);
-      return "{}";
-    }) as typeof fs.readFileSync);
+    // Mock readCsv to return parsed SearchResult objects when reading the search index
+    vi.mocked(readCsv).mockImplementation((filePath: string) => {
+      if (filePath.includes("search-index")) {
+        return entries.map(e => ({
+          id: e.i,
+          scientific_name: e.s,
+          common_name: e.c ?? null,
+          taxon_id: e.ti,
+          taxon_group: e.tg,
+          category: e.cat,
+          gbif_species_key: e.gk ?? null,
+          assessment_id: e.aid ?? null,
+          assessment_date: e.ad ?? null,
+          countries: e.ctry ? e.ctry.split(";") : [],
+        }));
+      }
+      return [] as any;
+    });
     vi.mocked(fs.existsSync).mockReturnValue(true);
   }
 

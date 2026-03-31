@@ -682,20 +682,6 @@ function parseAssessorNames(raw: string): string[] {
 // CROSS-TAXA SPECIES SEARCH (powered by pre-built search-index.json)
 // =============================================================================
 
-/** Compact entry from data/search-index.json (short keys for size). */
-export interface SearchIndexEntry {
-  i: number;          // id
-  s: string;          // scientific_name
-  c?: string;         // common_name
-  ti: string;         // taxon_id (display group)
-  tg: string;         // taxon_group (CSV group)
-  cat: string;        // category
-  gk?: number;        // gbif_species_key
-  aid?: number;       // assessment_id
-  ad?: string;        // assessment_date
-  ctry?: string;      // countries (semicolon-separated)
-}
-
 export interface SearchResult {
   id: number;
   scientific_name: string;
@@ -710,10 +696,10 @@ export interface SearchResult {
 }
 
 // Cached search index + pre-lowercased names (built on first load)
-let searchIndexCache: SearchIndexEntry[] | null = null;
+let searchIndexCache: SearchResult[] | null = null;
 let searchNamesCache: { sl: string; cl: string }[] | null = null;
 
-const SEARCH_INDEX_PATH = path.join(DATA_DIR, "search-index.json");
+const SEARCH_INDEX_PATH = path.join(DATA_DIR, "search-index.csv");
 
 /** @internal Reset search index cache (for tests only) */
 export function _resetSearchIndexCache(): void {
@@ -721,7 +707,7 @@ export function _resetSearchIndexCache(): void {
   searchNamesCache = null;
 }
 
-function loadSearchIndex(): { entries: SearchIndexEntry[]; names: { sl: string; cl: string }[] } {
+function loadSearchIndex(): { entries: SearchResult[]; names: { sl: string; cl: string }[] } {
   if (searchIndexCache && searchNamesCache) {
     return { entries: searchIndexCache, names: searchNamesCache };
   }
@@ -731,11 +717,21 @@ function loadSearchIndex(): { entries: SearchIndexEntry[]; names: { sl: string; 
     searchNamesCache = [];
     return { entries: [], names: [] };
   }
-  const raw = fs.readFileSync(SEARCH_INDEX_PATH, "utf-8");
-  const entries = JSON.parse(raw) as SearchIndexEntry[];
+  const entries = readCsv(SEARCH_INDEX_PATH, (r) => ({
+    id: parseInt(r.id, 10),
+    scientific_name: r.scientific_name,
+    common_name: r.common_name || null,
+    taxon_id: r.taxon_id,
+    taxon_group: r.taxon_group,
+    category: r.category || "",
+    gbif_species_key: r.gbif_species_key ? parseInt(r.gbif_species_key, 10) : null,
+    assessment_id: r.assessment_id ? parseInt(r.assessment_id, 10) : null,
+    assessment_date: r.assessment_date || null,
+    countries: r.countries ? r.countries.split(";").filter(Boolean) : [],
+  }));
   const names = entries.map(e => ({
-    sl: e.s.toLowerCase(),
-    cl: e.c ? e.c.toLowerCase() : "",
+    sl: e.scientific_name.toLowerCase(),
+    cl: e.common_name ? e.common_name.toLowerCase() : "",
   }));
   searchIndexCache = entries;
   searchNamesCache = names;
@@ -744,7 +740,7 @@ function loadSearchIndex(): { entries: SearchIndexEntry[]; names: { sl: string; 
 
 /**
  * Search for species across all taxa by scientific name or common name.
- * Uses a pre-built JSON index for fast lookups (no CSV parsing).
+ * Uses a pre-built CSV index for fast lookups (no per-group CSV parsing).
  */
 export function searchSpecies(query: string, limit = 10): SearchResult[] {
   if (query.length < 2) return [];
@@ -756,20 +752,7 @@ export function searchSpecies(query: string, limit = 10): SearchResult[] {
   for (let idx = 0; idx < entries.length; idx++) {
     const n = names[idx];
     if (!n.sl.includes(q) && (!n.cl || !n.cl.includes(q))) continue;
-
-    const e = entries[idx];
-    results.push({
-      id: e.i,
-      scientific_name: e.s,
-      common_name: e.c ?? null,
-      taxon_id: e.ti,
-      taxon_group: e.tg,
-      category: e.cat,
-      gbif_species_key: e.gk ?? null,
-      assessment_id: e.aid ?? null,
-      assessment_date: e.ad ?? null,
-      countries: e.ctry ? e.ctry.split(";") : [],
-    });
+    results.push(entries[idx]);
   }
 
   // Sort by relevance: exact common name > common name prefix > scientific name prefix > substring
