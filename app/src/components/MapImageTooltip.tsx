@@ -45,7 +45,8 @@ export default function MapImageTooltip({
   const containerRect = container.getBoundingClientRect();
 
   const clampedX = Math.max(4, Math.min(pos.x - 42, containerRect.width - 84));
-  const showBelow = pos.y < 80;
+  // Prefer showing below the point; only show above when near the bottom of the map
+  const showBelow = pos.y < containerRect.height - 80;
 
   return createPortal(
     <div

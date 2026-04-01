@@ -65,8 +65,8 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
   const halfWidth = tooltipWidth / 2;
   const clampedX = Math.max(halfWidth + 4, Math.min(pos.x, containerRect.width - halfWidth - 4));
 
-  // If tooltip would be cut off at the top, show it below the point instead
-  const showBelow = pos.y < 180;
+  // Prefer showing below the point; only show above when near the bottom of the map
+  const showBelow = pos.y < containerRect.height - 200;
 
   return createPortal(
     <div

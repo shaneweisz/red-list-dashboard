@@ -1440,23 +1440,6 @@ export default function OccurrenceMapRow({
                     <span>{maxDateLabel}</span>
                   </div>
                   <span className="text-zinc-400">({panelOccurrences.length})</span>
-                  {assessmentYear && !splitView && (
-                    <>
-                      <span className="text-zinc-400">|</span>
-                      <button
-                        onClick={() => {
-                          if (!splitDate && assessmentDate) setSplitDate(assessmentDate.split("T")[0]);
-                          setSplitView(true);
-                          setIsPlaying(false);
-                          setAnimatingDateIdx(null);
-                          if (animationRef.current) clearInterval(animationRef.current);
-                        }}
-                        className="text-[10px] px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                      >
-                        Split view
-                      </button>
-                    </>
-                  )}
                 </>
               ) : assessmentYear && !splitView ? (
                 <>
@@ -1468,19 +1451,6 @@ export default function OccurrenceMapRow({
                     <div className="w-3 h-3 rounded-full bg-green-500 border-2 border-green-700" />
                     <span>New since {assessmentYear} ({panelNewRecords.length})</span>
                   </div>
-                  <span className="text-zinc-400">|</span>
-                  <button
-                    onClick={() => {
-                      if (!splitDate && assessmentDate) setSplitDate(assessmentDate.split("T")[0]);
-                      setSplitView(true);
-                      setIsPlaying(false);
-                      setAnimatingDateIdx(null);
-                      if (animationRef.current) clearInterval(animationRef.current);
-                    }}
-                    className="text-[10px] px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                  >
-                    Split view
-                  </button>
                 </>
               ) : label ? (
                 <span>{panelOccurrences.length} occurrences</span>
@@ -1518,6 +1488,25 @@ export default function OccurrenceMapRow({
                 <span className="text-zinc-400">(deduped)</span>
               )}
             </div>
+          )}
+          {/* Split view button */}
+          {!loadingOccurrences && assessmentYear && !splitView && (
+            <button
+              onClick={() => {
+                if (!splitDate && assessmentDate) setSplitDate(assessmentDate.split("T")[0]);
+                setSplitView(true);
+                setIsPlaying(false);
+                setAnimatingDateIdx(null);
+                if (animationRef.current) clearInterval(animationRef.current);
+              }}
+              className="absolute bottom-2 right-2 z-[1000] bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-[11px] font-medium px-2.5 py-1.5 rounded shadow border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                <rect x="1" y="2" width="14" height="12" rx="1.5" />
+                <line x1="8" y1="2" x2="8" y2="14" />
+              </svg>
+              Split view
+            </button>
           )}
           {/* Animating badge */}
           {!splitView && animatingDate != null && (
