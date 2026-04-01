@@ -221,10 +221,20 @@ function deduplicateSpatially(
   return Array.from(cells.values());
 }
 
-// Year-based color interpolation (oldest=amber, newest=green)
-function yearToColor(year: number, minYear: number, maxYear: number): { stroke: string; fill: string } {
-  if (minYear === maxYear) return { stroke: "#15803d", fill: "#22c55e" };
-  const t = (year - minYear) / (maxYear - minYear); // 0 = oldest, 1 = newest
+// Convert an eventDate string (or year-only) to a numeric value for interpolation
+function dateToNumeric(eventDate?: string | null, year?: number | null): number | null {
+  if (eventDate) {
+    const ts = new Date(eventDate).getTime();
+    if (!isNaN(ts)) return ts;
+  }
+  if (year != null) return new Date(year, 0, 1).getTime();
+  return null;
+}
+
+// Date-based color interpolation (oldest=amber, newest=green)
+function dateToColor(dateNum: number, minDate: number, maxDate: number): { stroke: string; fill: string } {
+  if (minDate === maxDate) return { stroke: "#15803d", fill: "#22c55e" };
+  const t = (dateNum - minDate) / (maxDate - minDate); // 0 = oldest, 1 = newest
   // Interpolate hue from 30 (amber) to 142 (green)
   const hue = Math.round(30 + t * 112);
   const sat = Math.round(60 + t * 20);
@@ -823,7 +833,7 @@ export default function OccurrenceMapRow({
   // Advanced filter state
   const [maxUncertainty, setMaxUncertainty] = useState<number | null>(null);
   const [showUncertaintyCircles, setShowUncertaintyCircles] = useState(false);
-  const [colorByYear, setColorByYear] = useState(false);
+  const [colorByDate, setColorByDate] = useState(true);
   const [dedupEnabled, setDedupEnabled] = useState(false);
   const [basemap, setBasemap] = useState<BasemapKey>("streets");
   const [shapeByType, setShapeByType] = useState(false);
@@ -1181,15 +1191,22 @@ export default function OccurrenceMapRow({
     };
   }, [splitView, splitDate, filteredOccurrences, bbox]);
 
-  // Year range for color gradient
-  const { minYear, maxYear } = useMemo(() => {
-    const years = filteredOccurrences
-      .map((o) => o.properties.year)
-      .filter((y): y is number => y != null);
-    return {
-      minYear: years.length > 0 ? Math.min(...years) : 0,
-      maxYear: years.length > 0 ? Math.max(...years) : 0,
+  // Date range for color gradient (uses full eventDate for finer granularity)
+  const { minDateNum, maxDateNum, minDateLabel, maxDateLabel } = useMemo(() => {
+    const nums = filteredOccurrences
+      .map((o) => dateToNumeric(o.properties.eventDate, o.properties.year))
+      .filter((n): n is number => n != null);
+    if (nums.length === 0) return { minDateNum: 0, maxDateNum: 0, minDateLabel: "", maxDateLabel: "" };
+    const min = Math.min(...nums);
+    const max = Math.max(...nums);
+    const fmt = (ts: number) => {
+      const d = new Date(ts);
+      // Show just year if the range spans multiple years, otherwise show month/year
+      const rangeYears = new Date(max).getFullYear() - new Date(min).getFullYear();
+      if (rangeYears > 2) return String(d.getFullYear());
+      return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
     };
+    return { minDateNum: min, maxDateNum: max, minDateLabel: fmt(min), maxDateLabel: fmt(max) };
   }, [filteredOccurrences]);
 
   // Count by category for the legend (just pre/post assessment)
@@ -1308,10 +1325,16 @@ export default function OccurrenceMapRow({
                 } else if (isBrushed) {
                   strokeColor = "#d97706";
                   fillColor = "#f59e0b";
-                } else if (colorByYear && feature.properties.year != null) {
-                  const colors = yearToColor(feature.properties.year, minYear, maxYear);
-                  strokeColor = colors.stroke;
-                  fillColor = colors.fill;
+                } else if (colorByDate) {
+                  const dNum = dateToNumeric(feature.properties.eventDate, feature.properties.year);
+                  if (dNum != null) {
+                    const colors = dateToColor(dNum, minDateNum, maxDateNum);
+                    strokeColor = colors.stroke;
+                    fillColor = colors.fill;
+                  } else {
+                    strokeColor = "#6b7280";
+                    fillColor = "#9ca3af";
+                  }
                 } else {
                   strokeColor = isNew ? "#15803d" : "#6b7280";
                   fillColor = isNew ? "#22c55e" : "#9ca3af";
@@ -1407,18 +1430,35 @@ export default function OccurrenceMapRow({
             <div className="absolute bottom-2 left-2 z-[1000] bg-white dark:bg-zinc-800 px-2 py-1.5 rounded text-xs text-zinc-600 dark:text-zinc-300 shadow flex flex-wrap items-center gap-x-3 gap-y-1 max-w-[90%]">
               {label ? (
                 <span>{label}</span>
-              ) : colorByYear ? (
+              ) : colorByDate ? (
                 <>
                   <div className="flex items-center gap-1">
                     <div className="w-3 h-3 rounded-full" style={{ background: "hsl(30, 60%, 50%)", border: "2px solid hsl(30, 60%, 30%)" }} />
-                    <span>{minYear}</span>
+                    <span>{minDateLabel}</span>
                   </div>
                   <span>→</span>
                   <div className="flex items-center gap-1">
                     <div className="w-3 h-3 rounded-full" style={{ background: "hsl(142, 80%, 50%)", border: "2px solid hsl(142, 80%, 30%)" }} />
-                    <span>{maxYear}</span>
+                    <span>{maxDateLabel}</span>
                   </div>
                   <span className="text-zinc-400">({panelOccurrences.length})</span>
+                  {assessmentYear && !splitView && (
+                    <>
+                      <span className="text-zinc-400">|</span>
+                      <button
+                        onClick={() => {
+                          if (!splitDate && assessmentDate) setSplitDate(assessmentDate.split("T")[0]);
+                          setSplitView(true);
+                          setIsPlaying(false);
+                          setAnimatingDateIdx(null);
+                          if (animationRef.current) clearInterval(animationRef.current);
+                        }}
+                        className="text-[10px] px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                      >
+                        Split view
+                      </button>
+                    </>
+                  )}
                 </>
               ) : assessmentYear && !splitView ? (
                 <>
@@ -1753,16 +1793,16 @@ export default function OccurrenceMapRow({
                       Show uncertainty radius on map
                     </label>
 
-                    {/* Color by year toggle */}
+                    {/* Color by date toggle */}
                     <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={colorByYear}
-                        onChange={(e) => setColorByYear(e.target.checked)}
+                        checked={colorByDate}
+                        onChange={(e) => setColorByDate(e.target.checked)}
                         className="w-3 h-3 rounded accent-blue-500"
                       />
-                      Color markers by year
-                      {colorByYear && (
+                      Color markers by date
+                      {colorByDate && (
                         <span className="ml-auto flex items-center gap-1">
                           <span className="w-2 h-2 rounded-full" style={{ background: "hsl(30, 60%, 50%)" }} />
                           <span>old</span>
