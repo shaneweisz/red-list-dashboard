@@ -841,7 +841,7 @@ export default function OccurrenceMapRow({
   const [splitDate, setSplitDate] = useState<string>(assessmentDate?.split("T")[0] || "");
   const mapSyncRef = useRef<{ center: [number, number]; zoom: number } | null>(null);
   const [dedupGrid, setDedupGrid] = useState(0.01); // ~1km
-  const [sampleSize, setSampleSize] = useState(300);
+  const [sampleSize, setSampleSize] = useState(1000);
   const [yearRange, setYearRange] = useState<[number, number]>([0, 9999]);
 
   // "More" popover state
