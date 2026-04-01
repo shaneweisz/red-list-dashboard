@@ -520,7 +520,7 @@ function YearRangeTrimmer({
       {/* Hover tooltip */}
       {tooltipInfo && (
         <div
-          className="absolute bottom-full mb-1 z-50 pointer-events-none"
+          className="absolute top-full mt-1 z-50 pointer-events-none"
           style={{ left: `${tooltipInfo.pct}%`, transform: "translateX(-50%)" }}
         >
           <div className="bg-zinc-900 dark:bg-zinc-800 text-white text-[10px] rounded px-2 py-1.5 shadow-lg whitespace-nowrap">
@@ -841,7 +841,7 @@ export default function OccurrenceMapRow({
   const [splitDate, setSplitDate] = useState<string>(assessmentDate?.split("T")[0] || "");
   const mapSyncRef = useRef<{ center: [number, number]; zoom: number } | null>(null);
   const [dedupGrid, setDedupGrid] = useState(0.01); // ~1km
-  const [sampleSize, setSampleSize] = useState(300);
+  const [sampleSize, setSampleSize] = useState(1000);
   const [yearRange, setYearRange] = useState<[number, number]>([0, 9999]);
 
   // "More" popover state
@@ -1314,9 +1314,7 @@ export default function OccurrenceMapRow({
                 const isHighlighted = hoveredObs?.gbifID != null && feature.properties.gbifID === hoveredObs.gbifID;
                 const category = classifyOccurrence(feature);
                 const isTypeBrushed = hoveredType != null && category === hoveredType;
-                const isTypeDimmed = hoveredType != null && category !== hoveredType;
                 const isBrushed = (hoveredYear != null && feature.properties.year === hoveredYear) || isTypeBrushed;
-                const isDimmed = (hoveredYear != null && feature.properties.year !== hoveredYear) || isTypeDimmed;
                 let strokeColor: string;
                 let fillColor: string;
                 if (isHighlighted) {
@@ -1342,7 +1340,7 @@ export default function OccurrenceMapRow({
                 const inatMatch = inatPhotosByGbifId.get(feature.properties.gbifID);
                 const isFeatureHovered = hoveredFeature?.properties.gbifID === feature.properties.gbifID;
                 const isEmphasized = isHighlighted || isFeatureHovered;
-                const markerSize = isEmphasized ? 10 : (isBrushed ? 10 : (isDimmed ? 6 : 8));
+                const markerSize = isEmphasized ? 10 : (isBrushed ? 10 : 8);
                 const clickHandler = () => {
                   window.open(`https://www.gbif.org/occurrence/${feature.properties.gbifID}`, "_blank");
                 };
@@ -1353,7 +1351,7 @@ export default function OccurrenceMapRow({
                     mouseout: () => setHoveredFeature(null),
                   }),
                 };
-                const markerOpacity = isDimmed ? 0.15 : 1;
+                const markerOpacity = 1;
 
                 if (shapeByType) {
                   const icon = getShapeIcon(category, fillColor, strokeColor, markerSize) as L.DivIcon;
@@ -1372,12 +1370,12 @@ export default function OccurrenceMapRow({
                   <CircleMarker
                     key={feature.properties.gbifID || idx}
                     center={[lat, lon]}
-                    radius={isEmphasized ? 7 : (isBrushed ? 6 : (isDimmed ? 4 : 5))}
+                    radius={isEmphasized ? 7 : (isBrushed ? 6 : 5)}
                     pathOptions={{
                       color: strokeColor,
                       fillColor: fillColor,
-                      fillOpacity: isDimmed ? 0.15 : (isEmphasized || isBrushed ? 1 : 0.9),
-                      weight: isDimmed ? 1 : (isEmphasized || isBrushed ? 3 : 2),
+                      fillOpacity: isEmphasized || isBrushed ? 1 : 0.9,
+                      weight: isEmphasized || isBrushed ? 3 : 2,
                     }}
                     eventHandlers={hoverHandlers}
                   />
@@ -1519,9 +1517,6 @@ export default function OccurrenceMapRow({
               {dedupEnabled && (
                 <span className="text-zinc-400">(deduped)</span>
               )}
-              {!splitView && totalOccurrences != null && totalOccurrences > sampleSize && (
-                <span className="text-zinc-400">(sampled)</span>
-              )}
             </div>
           )}
           {/* Animating badge */}
@@ -1557,13 +1552,17 @@ export default function OccurrenceMapRow({
           )}
         </div>
         {/* Sample size bar (only in single view) */}
-        {!splitView && totalOccurrences != null && totalOccurrences > sampleSize && (
+        {!splitView && totalOccurrences != null && totalOccurrences > occurrences.length && (
           <div className="flex items-center justify-between px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 border-t border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-300">
             <span>
-              Sampled <strong>{sampleSize.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> records
+              Showing{" "}
+              {filteredOccurrences.length < occurrences.length ? (
+                <><strong>{filteredOccurrences.length.toLocaleString()}</strong> of <strong>{occurrences.length.toLocaleString()}</strong> loaded (filtered) &mdash; </>
+              ) : null}
+              <strong>{occurrences.length.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> total records
             </span>
             <span className="flex items-center gap-1.5">
-              <span>Increase sample:</span>
+              <span>Load more:</span>
               <select
                 value={sampleSize}
                 onChange={(e) => setSampleSize(parseInt(e.target.value))}

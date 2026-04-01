@@ -5,13 +5,6 @@ export const dynamic = "force-dynamic";
 
 const GBIF_PAGE_LIMIT = 300; // GBIF API max per request
 
-// Major basisOfRecord types that should be represented in the sample
-const MAJOR_RECORD_TYPES = [
-  "HUMAN_OBSERVATION",
-  "MACHINE_OBSERVATION",
-  "MATERIAL_SAMPLE",
-];
-
 type GbifRecord = {
   key: number;
   species?: string;
@@ -100,61 +93,9 @@ export async function GET(request: NextRequest) {
       baseParams.set("coordinateUncertaintyInMeters", `*,${maxUncertainty}`);
     }
 
-    // Primary fetch: get records without basisOfRecord filter (original behavior)
-    const { results: primaryResults, totalCount } = await fetchPaginated(baseParams, limit);
-
-    let allResults = primaryResults;
-
-    // Check which major basisOfRecord types are missing from the primary results.
-    // GBIF's default ordering can group entire record types beyond the sample window,
-    // causing types like MACHINE_OBSERVATION to be completely absent from the sample
-    // even when they represent the majority of records (see GitHub issue #58).
-    const presentTypes = new Set(
-      primaryResults.map((r) => r.basisOfRecord).filter(Boolean)
-    );
-    const missingTypes = MAJOR_RECORD_TYPES.filter(
-      (type) => !presentTypes.has(type)
-    );
-
-    if (missingTypes.length > 0 && totalCount > primaryResults.length) {
-      // Quick parallel count queries for missing types only
-      const missingCountResults = await Promise.all(
-        missingTypes.map((type) => {
-          const params = new URLSearchParams(baseParams);
-          params.set("basisOfRecord", type);
-          params.set("limit", "0");
-          return fetch(
-            `https://api.gbif.org/v1/occurrence/search?${params}`,
-            { cache: "no-store" }
-          )
-            .then((r) => r.json())
-            .then((d) => ({ type, count: (d.count as number) || 0 }))
-            .catch(() => ({ type, count: 0 }));
-        })
-      );
-
-      const typesWithRecords = missingCountResults.filter((tc) => tc.count > 0);
-
-      if (typesWithRecords.length > 0) {
-        // Allocate a proportional share of the sample to each missing type
-        const supplementResults = await Promise.all(
-          typesWithRecords.map((tc) => {
-            const share = Math.max(
-              1,
-              Math.round((tc.count / totalCount) * limit)
-            );
-            const typeLimit = Math.min(share, tc.count);
-            const params = new URLSearchParams(baseParams);
-            params.set("basisOfRecord", tc.type);
-            return fetchPaginated(params, typeLimit).then((r) => r.results);
-          })
-        );
-
-        for (const results of supplementResults) {
-          allResults = allResults.concat(results);
-        }
-      }
-    }
+    // GBIF default order: year descending, then month ascending within each year,
+    // then by gbifID ascending. No custom sort is available via the API.
+    const { results: allResults, totalCount } = await fetchPaginated(baseParams, limit);
 
     // Convert to GeoJSON
     const features = allResults

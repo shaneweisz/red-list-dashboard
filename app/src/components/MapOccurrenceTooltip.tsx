@@ -57,19 +57,40 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
   if (!pos) return null;
 
   const container = map.getContainer();
+  const containerRect = container.getBoundingClientRect();
   const uncertainty = props.coordinateUncertaintyInMeters;
+
+  // Clamp horizontal position so tooltip stays within the map container
+  const tooltipWidth = 220;
+  const halfWidth = tooltipWidth / 2;
+  const clampedX = Math.max(halfWidth + 4, Math.min(pos.x, containerRect.width - halfWidth - 4));
+
+  // If tooltip would be cut off at the top, show it below the point instead
+  const showBelow = pos.y < 180;
 
   return createPortal(
     <div
       style={{
         position: "absolute",
-        left: pos.x,
-        top: pos.y - 12,
-        transform: "translate(-50%, -100%)",
+        left: clampedX,
+        top: showBelow ? pos.y + 12 : pos.y - 12,
+        transform: showBelow ? "translate(-50%, 0%)" : "translate(-50%, -100%)",
         zIndex: 1000,
         pointerEvents: "none",
       }}
     >
+      {showBelow && (
+        <div
+          className="mx-auto"
+          style={{
+            width: 0,
+            height: 0,
+            borderLeft: "6px solid transparent",
+            borderRight: "6px solid transparent",
+            borderBottom: "6px solid white",
+          }}
+        />
+      )}
       <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden" style={{ maxWidth: 220 }}>
         {props.imageUrl && (
           <img
@@ -110,17 +131,19 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
           </div>
         </div>
       </div>
-      {/* Arrow pointing down */}
-      <div
-        className="mx-auto"
-        style={{
-          width: 0,
-          height: 0,
-          borderLeft: "6px solid transparent",
-          borderRight: "6px solid transparent",
-          borderTop: "6px solid white",
-        }}
-      />
+      {/* Arrow */}
+      {!showBelow && (
+        <div
+          className="mx-auto"
+          style={{
+            width: 0,
+            height: 0,
+            borderLeft: "6px solid transparent",
+            borderRight: "6px solid transparent",
+            borderTop: "6px solid white",
+          }}
+        />
+      )}
     </div>,
     container
   );
