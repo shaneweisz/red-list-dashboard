@@ -1690,8 +1690,8 @@ export default function OccurrenceMapRow({
                     }
                   }}
                   className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                  title={isPlaying ? "Pause" : "Play timeline"}
-                  disabled={animationDateRange.totalDays === 0}
+                  title={splitView ? "Disable split view to use animation" : isPlaying ? "Pause" : "Play timeline"}
+                  disabled={animationDateRange.totalDays === 0 || splitView}
                 >
                   {isPlaying ? (
                     <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
