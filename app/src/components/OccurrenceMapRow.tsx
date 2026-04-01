@@ -230,10 +230,20 @@ function deduplicateSpatially(
   return Array.from(cells.values());
 }
 
-// Year-based color interpolation (oldest=amber, newest=green)
-function yearToColor(year: number, minYear: number, maxYear: number): { stroke: string; fill: string } {
-  if (minYear === maxYear) return { stroke: "#15803d", fill: "#22c55e" };
-  const t = (year - minYear) / (maxYear - minYear); // 0 = oldest, 1 = newest
+// Convert an eventDate string (or year-only) to a numeric value for interpolation
+function dateToNumeric(eventDate?: string | null, year?: number | null): number | null {
+  if (eventDate) {
+    const ts = new Date(eventDate).getTime();
+    if (!isNaN(ts)) return ts;
+  }
+  if (year != null) return new Date(year, 0, 1).getTime();
+  return null;
+}
+
+// Date-based color interpolation (oldest=amber, newest=green)
+function dateToColor(dateNum: number, minDate: number, maxDate: number): { stroke: string; fill: string } {
+  if (minDate === maxDate) return { stroke: "#15803d", fill: "#22c55e" };
+  const t = (dateNum - minDate) / (maxDate - minDate); // 0 = oldest, 1 = newest
   // Interpolate hue from 30 (amber) to 142 (green)
   const hue = Math.round(30 + t * 112);
   const sat = Math.round(60 + t * 20);
@@ -519,7 +529,7 @@ function YearRangeTrimmer({
       {/* Hover tooltip */}
       {tooltipInfo && (
         <div
-          className="absolute bottom-full mb-1 z-50 pointer-events-none"
+          className="absolute top-full mt-1 z-50 pointer-events-none"
           style={{ left: `${tooltipInfo.pct}%`, transform: "translateX(-50%)" }}
         >
           <div className="bg-zinc-900 dark:bg-zinc-800 text-white text-[10px] rounded px-2 py-1.5 shadow-lg whitespace-nowrap">
@@ -707,8 +717,9 @@ function InatPhotoWithPreview({ obs, idx, onHover, onLeave }: { obs: InatObserva
         left = viewportWidth - 8 - previewWidth;
       }
 
-      // If not enough room above (~100px min), show below instead
-      const showBelow = rect.top < 100;
+      // Prefer showing below; only show above if not enough room below
+      const previewHeight = 280;
+      const showBelow = rect.bottom + previewHeight + 8 < window.innerHeight;
       const anchorTop = showBelow ? rect.bottom + 4 : rect.top - 4;
 
       setPosition({ anchorTop, left, showBelow });
@@ -840,7 +851,7 @@ export default function OccurrenceMapRow({
   // Advanced filter state
   const [maxUncertainty, setMaxUncertainty] = useState<number | null>(null);
   const [showUncertaintyCircles, setShowUncertaintyCircles] = useState(false);
-  const [colorByYear, setColorByYear] = useState(true);
+  const [colorByDate, setColorByDate] = useState(true);
   const [dedupEnabled, setDedupEnabled] = useState(false);
   const [basemap, setBasemap] = useState<BasemapKey>("streets");
   const [shapeByType, setShapeByType] = useState(false);
@@ -848,7 +859,7 @@ export default function OccurrenceMapRow({
   const [splitDate, setSplitDate] = useState<string>(assessmentDate?.split("T")[0] || "");
   const mapSyncRef = useRef<{ center: [number, number]; zoom: number } | null>(null);
   const [dedupGrid, setDedupGrid] = useState(0.01); // ~1km
-  const [sampleSize, setSampleSize] = useState(300);
+  const [sampleSize, setSampleSize] = useState(1000);
 
   // Layer toggle state
   const [showRange, setShowRange] = useState(false);
@@ -906,6 +917,7 @@ export default function OccurrenceMapRow({
 
   // Hovered occurrence on map (for hover tooltip)
   const [hoveredFeature, setHoveredFeature] = useState<OccurrenceFeature | null>(null);
+  const [hoveredPanel, setHoveredPanel] = useState<string | null>(null);
 
   // Animation state: step through unique sorted dates
   const [animatingDateIdx, setAnimatingDateIdx] = useState<number | null>(null);
@@ -1183,7 +1195,7 @@ export default function OccurrenceMapRow({
     const pre: OccurrenceFeature[] = [];
     const post: OccurrenceFeature[] = [];
     for (const o of filteredOccurrences) {
-      const d = o.properties.eventDate;
+      const d = o.properties.eventDate ?? (o.properties.year != null ? String(o.properties.year) : null);
       if (d && d > splitDate) {
         post.push(o);
       } else {
@@ -1210,15 +1222,22 @@ export default function OccurrenceMapRow({
     };
   }, [splitView, splitDate, filteredOccurrences, bbox]);
 
-  // Year range for color gradient
-  const { minYear, maxYear } = useMemo(() => {
-    const years = filteredOccurrences
-      .map((o) => o.properties.year)
-      .filter((y): y is number => y != null);
-    return {
-      minYear: years.length > 0 ? Math.min(...years) : 0,
-      maxYear: years.length > 0 ? Math.max(...years) : 0,
+  // Date range for color gradient (uses full eventDate for finer granularity)
+  const { minDateNum, maxDateNum, minDateLabel, maxDateLabel } = useMemo(() => {
+    const nums = filteredOccurrences
+      .map((o) => dateToNumeric(o.properties.eventDate, o.properties.year))
+      .filter((n): n is number => n != null);
+    if (nums.length === 0) return { minDateNum: 0, maxDateNum: 0, minDateLabel: "", maxDateLabel: "" };
+    const min = Math.min(...nums);
+    const max = Math.max(...nums);
+    const fmt = (ts: number) => {
+      const d = new Date(ts);
+      // Show just year if the range spans multiple years, otherwise show month/year
+      const rangeYears = new Date(max).getFullYear() - new Date(min).getFullYear();
+      if (rangeYears > 2) return String(d.getFullYear());
+      return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
     };
+    return { minDateNum: min, maxDateNum: max, minDateLabel: fmt(min), maxDateLabel: fmt(max) };
   }, [filteredOccurrences]);
 
   // Count by category for the legend (just pre/post assessment)
@@ -1269,6 +1288,7 @@ export default function OccurrenceMapRow({
     panelOccurrences: OccurrenceFeature[],
     panelBbox: [number, number, number, number] | null,
     label: string | null,
+    panelId: string = "main",
   ) => {
     const panelNewRecords = panelOccurrences.filter((o) => isNewRecord(o.properties.eventDate));
     const panelOldRecords = panelOccurrences.filter((o) => !isNewRecord(o.properties.eventDate));
@@ -1325,9 +1345,7 @@ export default function OccurrenceMapRow({
                 const isHighlighted = hoveredObs?.gbifID != null && feature.properties.gbifID === hoveredObs.gbifID;
                 const category = classifyOccurrence(feature);
                 const isTypeBrushed = hoveredType != null && category === hoveredType;
-                const isTypeDimmed = hoveredType != null && category !== hoveredType;
                 const isBrushed = (hoveredYear != null && feature.properties.year === hoveredYear) || isTypeBrushed;
-                const isDimmed = (hoveredYear != null && feature.properties.year !== hoveredYear) || isTypeDimmed;
                 let strokeColor: string;
                 let fillColor: string;
                 if (isHighlighted) {
@@ -1336,10 +1354,16 @@ export default function OccurrenceMapRow({
                 } else if (isBrushed) {
                   strokeColor = "#d97706";
                   fillColor = "#f59e0b";
-                } else if (colorByYear && feature.properties.year != null) {
-                  const colors = yearToColor(feature.properties.year, minYear, maxYear);
-                  strokeColor = colors.stroke;
-                  fillColor = colors.fill;
+                } else if (colorByDate) {
+                  const dNum = dateToNumeric(feature.properties.eventDate, feature.properties.year);
+                  if (dNum != null) {
+                    const colors = dateToColor(dNum, minDateNum, maxDateNum);
+                    strokeColor = colors.stroke;
+                    fillColor = colors.fill;
+                  } else {
+                    strokeColor = "#6b7280";
+                    fillColor = "#9ca3af";
+                  }
                 } else {
                   strokeColor = "#6b7280";
                   fillColor = "#9ca3af";
@@ -1347,18 +1371,18 @@ export default function OccurrenceMapRow({
                 const inatMatch = inatPhotosByGbifId.get(feature.properties.gbifID);
                 const isFeatureHovered = hoveredFeature?.properties.gbifID === feature.properties.gbifID;
                 const isEmphasized = isHighlighted || isFeatureHovered;
-                const markerSize = isEmphasized ? 10 : (isBrushed ? 10 : (isDimmed ? 6 : 8));
+                const markerSize = isEmphasized ? 10 : (isBrushed ? 10 : 8);
                 const clickHandler = () => {
                   window.open(`https://www.gbif.org/occurrence/${feature.properties.gbifID}`, "_blank");
                 };
                 const hoverHandlers = {
                   click: clickHandler,
                   ...(isTouchDevice ? {} : {
-                    mouseover: () => setHoveredFeature(feature),
-                    mouseout: () => setHoveredFeature(null),
+                    mouseover: () => { setHoveredFeature(feature); setHoveredPanel(panelId); },
+                    mouseout: () => { setHoveredFeature(null); setHoveredPanel(null); },
                   }),
                 };
-                const markerOpacity = isDimmed ? 0.15 : 1;
+                const markerOpacity = 1;
 
                 if (shapeByType) {
                   const icon = getShapeIcon(category, fillColor, strokeColor, markerSize) as L.DivIcon;
@@ -1377,12 +1401,12 @@ export default function OccurrenceMapRow({
                   <CircleMarker
                     key={feature.properties.gbifID || idx}
                     center={[lat, lon]}
-                    radius={isEmphasized ? 7 : (isBrushed ? 6 : (isDimmed ? 4 : 5))}
+                    radius={isEmphasized ? 7 : (isBrushed ? 6 : 5)}
                     pathOptions={{
                       color: strokeColor,
                       fillColor: fillColor,
-                      fillOpacity: isDimmed ? 0.15 : (isEmphasized || isBrushed ? 1 : 0.9),
-                      weight: isDimmed ? 1 : (isEmphasized || isBrushed ? 3 : 2),
+                      fillOpacity: isEmphasized || isBrushed ? 1 : 0.9,
+                      weight: isEmphasized || isBrushed ? 3 : 2,
                     }}
                     eventHandlers={hoverHandlers}
                   />
@@ -1411,7 +1435,7 @@ export default function OccurrenceMapRow({
                 </>
               )}
               {/* Hover tooltip for map markers */}
-              {hoveredFeature && !hoveredObs && (() => {
+              {hoveredFeature && !hoveredObs && hoveredPanel === panelId && (() => {
                 const [hLon, hLat] = hoveredFeature.geometry.coordinates;
                 const hInat = inatPhotosByGbifId.get(hoveredFeature.properties.gbifID);
                 return (
@@ -1443,16 +1467,16 @@ export default function OccurrenceMapRow({
             <div className="absolute bottom-2 left-2 z-[1000] bg-white dark:bg-zinc-800 px-2 py-1.5 rounded text-xs text-zinc-600 dark:text-zinc-300 shadow flex flex-wrap items-center gap-x-3 gap-y-1 max-w-[90%]">
               {label ? (
                 <span>{label}</span>
-              ) : colorByYear ? (
+              ) : colorByDate ? (
                 <>
                   <div className="flex items-center gap-1">
                     <div className="w-3 h-3 rounded-full" style={{ background: "hsl(30, 60%, 50%)", border: "2px solid hsl(30, 60%, 30%)" }} />
-                    <span>{minYear}</span>
+                    <span>{minDateLabel}</span>
                   </div>
                   <span>→</span>
                   <div className="flex items-center gap-1">
                     <div className="w-3 h-3 rounded-full" style={{ background: "hsl(142, 80%, 50%)", border: "2px solid hsl(142, 80%, 30%)" }} />
-                    <span>{maxYear}</span>
+                    <span>{maxDateLabel}</span>
                   </div>
                   <span className="text-zinc-400">({panelOccurrences.length})</span>
                   {assessmentYear && !splitView && (
@@ -1483,19 +1507,6 @@ export default function OccurrenceMapRow({
                     <div className="w-3 h-3 rounded-full bg-green-500 border-2 border-green-700" />
                     <span>New since {assessmentYear} ({panelNewRecords.length})</span>
                   </div>
-                  <span className="text-zinc-400">|</span>
-                  <button
-                    onClick={() => {
-                      if (!splitDate && assessmentDate) setSplitDate(assessmentDate.split("T")[0]);
-                      setSplitView(true);
-                      setIsPlaying(false);
-                      setAnimatingDateIdx(null);
-                      if (animationRef.current) clearInterval(animationRef.current);
-                    }}
-                    className="text-[10px] px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                  >
-                    Split view
-                  </button>
                 </>
               ) : label ? (
                 <span>{panelOccurrences.length} occurrences</span>
@@ -1532,16 +1543,32 @@ export default function OccurrenceMapRow({
               {dedupEnabled && (
                 <span className="text-zinc-400">(deduped)</span>
               )}
-              {!splitView && totalOccurrences != null && totalOccurrences > sampleSize && (
-                <span className="text-zinc-400">(sampled)</span>
-              )}
             </div>
+          )}
+          {/* Split view button */}
+          {!loadingOccurrences && assessmentYear && !splitView && (
+            <button
+              onClick={() => {
+                if (!splitDate && assessmentDate) setSplitDate(assessmentDate.split("T")[0]);
+                setSplitView(true);
+                setIsPlaying(false);
+                setAnimatingDateIdx(null);
+                if (animationRef.current) clearInterval(animationRef.current);
+              }}
+              className="absolute bottom-2 right-2 z-[1000] bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-[11px] font-medium px-2.5 py-1.5 rounded shadow border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                <rect x="1" y="2" width="14" height="12" rx="1.5" />
+                <line x1="8" y1="2" x2="8" y2="14" />
+              </svg>
+              Split view
+            </button>
           )}
           {/* Animating badge */}
           {!splitView && animatingDate != null && (
             <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[1000] bg-amber-500 text-white text-sm font-bold px-3 py-1 rounded-full shadow-md tabular-nums flex items-center gap-2">
               <span>{animatingDate}</span>
-              <span className="text-xs font-normal text-amber-100">{filteredOccurrences.length} / {filteredBeforeAnimation.length}</span>
+              <span className="text-xs font-normal text-amber-100">{panelOccurrences.length} / {filteredBeforeAnimation.length}</span>
             </div>
           )}
           {/* Label badge for split view */}
@@ -1650,13 +1677,17 @@ export default function OccurrenceMapRow({
           )}
         </div>
         {/* Sample size bar (only in single view) */}
-        {!splitView && totalOccurrences != null && totalOccurrences > sampleSize && (
+        {!splitView && totalOccurrences != null && totalOccurrences > occurrences.length && (
           <div className="flex items-center justify-between px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 border-t border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-300">
             <span>
-              Sampled <strong>{sampleSize.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> records
+              Showing{" "}
+              {filteredOccurrences.length < occurrences.length ? (
+                <><strong>{filteredOccurrences.length.toLocaleString()}</strong> of <strong>{occurrences.length.toLocaleString()}</strong> loaded (filtered) &mdash; </>
+              ) : null}
+              <strong>{occurrences.length.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> total records
             </span>
             <span className="flex items-center gap-1.5">
-              <span>Increase sample:</span>
+              <span>Load more:</span>
               <select
                 value={sampleSize}
                 onChange={(e) => setSampleSize(parseInt(e.target.value))}
@@ -1886,16 +1917,16 @@ export default function OccurrenceMapRow({
                       Show uncertainty radius on map
                     </label>
 
-                    {/* Color by year toggle */}
+                    {/* Color by date toggle */}
                     <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={colorByYear}
-                        onChange={(e) => setColorByYear(e.target.checked)}
+                        checked={colorByDate}
+                        onChange={(e) => setColorByDate(e.target.checked)}
                         className="w-3 h-3 rounded accent-blue-500"
                       />
-                      Color markers by year
-                      {colorByYear && (
+                      Color markers by date
+                      {colorByDate && (
                         <span className="ml-auto flex items-center gap-1">
                           <span className="w-2 h-2 rounded-full" style={{ background: "hsl(30, 60%, 50%)" }} />
                           <span>old</span>
@@ -2075,8 +2106,8 @@ export default function OccurrenceMapRow({
                     </button>
                   </div>
                   <div className="flex flex-col sm:flex-row gap-2">
-                    {renderMapPanel(preAssessmentOccs, filteredBbox, `Before ${splitDate} (${preAssessmentOccs.length})`)}
-                    {renderMapPanel(postAssessmentOccs, filteredBbox, `After ${splitDate} (${postAssessmentOccs.length})`)}
+                    {renderMapPanel(preAssessmentOccs, filteredBbox, `Before ${splitDate} (${preAssessmentOccs.length})`, "before")}
+                    {renderMapPanel(postAssessmentOccs, filteredBbox, `After ${splitDate} (${postAssessmentOccs.length})`, "after")}
                   </div>
                 </div>
               ) : (
