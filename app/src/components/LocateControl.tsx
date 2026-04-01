@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useMap } from "react-leaflet";
+import { useMap } from "react-map-gl/maplibre";
 
 export default function LocateControl() {
-  const map = useMap();
+  const { current: map } = useMap();
   const [locating, setLocating] = useState(false);
 
   const handleLocate = () => {
@@ -19,7 +19,7 @@ export default function LocateControl() {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const { latitude, longitude } = position.coords;
-        map.setView([latitude, longitude], 18);
+        map?.flyTo({ center: [longitude, latitude], zoom: 18 });
         setLocating(false);
       },
       (error) => {

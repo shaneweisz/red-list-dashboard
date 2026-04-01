@@ -3,30 +3,27 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
-import type L from "leaflet";
+import type { MapRef, ViewStateChangeEvent, MapLayerMouseEvent } from "react-map-gl/maplibre";
+import type maplibregl from "maplibre-gl";
 
 // Fixed page size for iNat photo grid (5 columns x 2 rows)
 const INAT_PAGE_SIZE = 10;
 
-// Dynamically import Leaflet components
-const MapContainer = dynamic(
-  () => import("react-leaflet").then((mod) => mod.MapContainer),
+// Dynamically import MapLibre GL components
+const MapGL = dynamic(
+  () => import("react-map-gl/maplibre").then((mod) => mod.Map),
   { ssr: false }
 );
-const TileLayer = dynamic(
-  () => import("react-leaflet").then((mod) => mod.TileLayer),
+const Source = dynamic(
+  () => import("react-map-gl/maplibre").then((mod) => mod.Source),
   { ssr: false }
 );
-const CircleMarker = dynamic(
-  () => import("react-leaflet").then((mod) => mod.CircleMarker),
+const Layer = dynamic(
+  () => import("react-map-gl/maplibre").then((mod) => mod.Layer),
   { ssr: false }
 );
-const Circle = dynamic(
-  () => import("react-leaflet").then((mod) => mod.Circle),
-  { ssr: false }
-);
-const Marker = dynamic(
-  () => import("react-leaflet").then((mod) => mod.Marker),
+const MapLibreMarker = dynamic(
+  () => import("react-map-gl/maplibre").then((mod) => mod.Marker),
   { ssr: false }
 );
 const LocateControl = dynamic(
@@ -37,10 +34,6 @@ const MapImageTooltip = dynamic(
   () => import("./MapImageTooltip"),
   { ssr: false }
 );
-const FitBounds = dynamic(
-  () => import("./FitBounds"),
-  { ssr: false }
-);
 const MapOccurrenceTooltip = dynamic(
   () => import("./MapOccurrenceTooltip"),
   { ssr: false }
@@ -49,47 +42,6 @@ const InatContributorsChart = dynamic(
   () => import("./InatContributorsChart"),
   { ssr: false }
 );
-
-// Syncs two Leaflet maps: when one moves/zooms, the other follows
-function MapSync({ syncRef }: { syncRef: React.MutableRefObject<{ center: [number, number]; zoom: number } | null> }) {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { useMap } = require("react-leaflet");
-  const map = useMap();
-  const isSyncing = useRef(false);
-
-  useEffect(() => {
-    const onMoveEnd = () => {
-      if (isSyncing.current) return;
-      const c = map.getCenter();
-      syncRef.current = { center: [c.lat, c.lng], zoom: map.getZoom() };
-    };
-    map.on("moveend", onMoveEnd);
-    map.on("zoomend", onMoveEnd);
-    return () => {
-      map.off("moveend", onMoveEnd);
-      map.off("zoomend", onMoveEnd);
-    };
-  }, [map, syncRef]);
-
-  // Poll for changes from the other map (lightweight — only sets view when different)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const s = syncRef.current;
-      if (!s) return;
-      const c = map.getCenter();
-      const z = map.getZoom();
-      if (Math.abs(c.lat - s.center[0]) > 0.0001 || Math.abs(c.lng - s.center[1]) > 0.0001 || z !== s.zoom) {
-        isSyncing.current = true;
-        map.setView(s.center, s.zoom, { animate: false });
-        // Reset after Leaflet fires its events
-        requestAnimationFrame(() => { isSyncing.current = false; });
-      }
-    }, 50);
-    return () => clearInterval(interval);
-  }, [map, syncRef]);
-
-  return null;
-}
 
 const INAT_DATASET_KEY = "50c9509d-22c7-4a22-a47d-8c48425ef4a7";
 
@@ -135,73 +87,99 @@ const DEDUP_OPTIONS = [
 // Sample size options
 const SAMPLE_SIZE_OPTIONS = [100, 300, 500, 1000, 2000] as const;
 
-// Basemap tile options
-const BASEMAP_OPTIONS = {
+// Basemap style options for MapLibre GL
+function makeRasterStyle(tileUrl: string, attribution: string): maplibregl.StyleSpecification {
+  return {
+    version: 8 as const,
+    sources: {
+      basemap: {
+        type: "raster" as const,
+        tiles: [tileUrl],
+        tileSize: 256,
+        attribution,
+      },
+    },
+    layers: [
+      {
+        id: "basemap-layer",
+        type: "raster" as const,
+        source: "basemap",
+      },
+    ],
+  };
+}
+// Lazy import for maplibre-gl types
+type MaplibreStyle = ReturnType<typeof makeRasterStyle>;
+const BASEMAP_STYLES: Record<string, { label: string; style: MaplibreStyle }> = {
   streets: {
     label: "Streets",
-    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    style: makeRasterStyle(
+      "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    ),
   },
   satellite: {
     label: "Satellite",
-    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    attribution: '&copy; <a href="https://www.esri.com">Esri</a> World Imagery',
+    style: makeRasterStyle(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      '&copy; <a href="https://www.esri.com">Esri</a> World Imagery'
+    ),
   },
   terrain: {
     label: "Terrain",
-    url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
-    attribution: '&copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)',
+    style: makeRasterStyle(
+      "https://tile.opentopomap.org/{z}/{x}/{y}.png",
+      '&copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)'
+    ),
   },
-} as const;
-type BasemapKey = keyof typeof BASEMAP_OPTIONS;
+};
+type BasemapKey = keyof typeof BASEMAP_STYLES;
 
-// Shape icon factory for marker shapes by record type
-const shapeIconCache = new Map<string, unknown>();
-function getShapeIcon(
-  category: string,
-  fillColor: string,
-  strokeColor: string,
-  size: number,
-): unknown {
-  const key = `${category}-${fillColor}-${strokeColor}-${size}`;
-  const cached = shapeIconCache.get(key);
-  if (cached) return cached;
-
+// Shape SVG content for marker shapes by record type (used with react-map-gl Marker)
+function ShapeMarkerSvg({
+  category,
+  fillColor,
+  strokeColor,
+  size,
+}: {
+  category: string;
+  fillColor: string;
+  strokeColor: string;
+  size: number;
+}) {
   const sw = 1.5;
   const s = size;
-  let svgContent: string;
+  let content: React.ReactNode;
 
   switch (category) {
     case "iNaturalist":
-      svgContent = `<circle cx="${s/2}" cy="${s/2}" r="${s/2 - sw}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${sw}"/>`;
+      content = <circle cx={s/2} cy={s/2} r={s/2 - sw} fill={fillColor} stroke={strokeColor} strokeWidth={sw}/>;
       break;
     case "humanOther":
-      svgContent = `<circle cx="${s/2}" cy="${s/2}" r="${s/2 - sw}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${sw}"/><circle cx="${s/2}" cy="${s/2}" r="1.5" fill="${strokeColor}"/>`;
+      content = <><circle cx={s/2} cy={s/2} r={s/2 - sw} fill={fillColor} stroke={strokeColor} strokeWidth={sw}/><circle cx={s/2} cy={s/2} r={1.5} fill={strokeColor}/></>;
       break;
     case "machineObservation":
-      svgContent = `<rect x="${sw}" y="${sw}" width="${s - sw*2}" height="${s - sw*2}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${sw}"/>`;
+      content = <rect x={sw} y={sw} width={s - sw*2} height={s - sw*2} fill={fillColor} stroke={strokeColor} strokeWidth={sw}/>;
       break;
     case "preservedSpecimen":
-      svgContent = `<rect x="${s*0.15}" y="${s*0.15}" width="${s*0.7}" height="${s*0.7}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${sw}" transform="rotate(45 ${s/2} ${s/2})"/>`;
+      content = <rect x={s*0.15} y={s*0.15} width={s*0.7} height={s*0.7} fill={fillColor} stroke={strokeColor} strokeWidth={sw} transform={`rotate(45 ${s/2} ${s/2})`}/>;
       break;
     case "materialSample":
-      svgContent = `<polygon points="${s/2},${sw} ${s-sw},${s-sw} ${sw},${s-sw}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${sw}"/>`;
+      content = <polygon points={`${s/2},${sw} ${s-sw},${s-sw} ${sw},${s-sw}`} fill={fillColor} stroke={strokeColor} strokeWidth={sw}/>;
       break;
     default:
-      svgContent = `<line x1="${s/2}" y1="${sw+1}" x2="${s/2}" y2="${s-sw-1}" stroke="${strokeColor}" stroke-width="${sw+1}" stroke-linecap="round"/><line x1="${sw+1}" y1="${s/2}" x2="${s-sw-1}" y2="${s/2}" stroke="${strokeColor}" stroke-width="${sw+1}" stroke-linecap="round"/>`;
+      content = <>
+        <line x1={s/2} y1={sw+1} x2={s/2} y2={s-sw-1} stroke={strokeColor} strokeWidth={sw+1} strokeLinecap="round"/>
+        <line x1={sw+1} y1={s/2} x2={s-sw-1} y2={s/2} stroke={strokeColor} strokeWidth={sw+1} strokeLinecap="round"/>
+      </>;
       break;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const L = require("leaflet");
-  const icon = L.divIcon({
-    html: `<svg width="${s}" height="${s}" viewBox="0 0 ${s} ${s}" xmlns="http://www.w3.org/2000/svg">${svgContent}</svg>`,
-    className: "shape-marker-icon",
-    iconSize: [s, s],
-    iconAnchor: [s / 2, s / 2],
-  });
-  shapeIconCache.set(key, icon);
-  return icon;
+  return (
+    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`} xmlns="http://www.w3.org/2000/svg" style={{ display: "block" }}>
+      {content}
+    </svg>
+  );
 }
 
 // Spatial deduplication: keep one record per grid cell, preferring newest
@@ -840,7 +818,8 @@ export default function OccurrenceMapRow({
   const [shapeByType, setShapeByType] = useState(false);
   const [splitView, setSplitView] = useState(false);
   const [splitDate, setSplitDate] = useState<string>(assessmentDate?.split("T")[0] || "");
-  const mapSyncRef = useRef<{ center: [number, number]; zoom: number } | null>(null);
+  const [sharedViewState, setSharedViewState] = useState({ longitude: 0, latitude: 20, zoom: 1.5 });
+  const mapRef = useRef<MapRef>(null);
   const [dedupGrid, setDedupGrid] = useState(0.01); // ~1km
   const [sampleSize, setSampleSize] = useState(1000);
   const [yearRange, setYearRange] = useState<[number, number]>([0, 9999]);
@@ -1254,6 +1233,160 @@ export default function OccurrenceMapRow({
     setCheckedTypes((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  // Build GeoJSON FeatureCollection with computed styling properties for the circle layer
+  const buildStyledFeatureCollection = useCallback((
+    panelOccurrences: OccurrenceFeature[],
+  ): GeoJSON.FeatureCollection => {
+    const features = panelOccurrences.map((feature) => {
+      const isNew = isNewRecord(feature.properties.eventDate);
+      const isHighlighted = hoveredObs?.gbifID != null && feature.properties.gbifID === hoveredObs.gbifID;
+      const category = classifyOccurrence(feature);
+      const isTypeBrushed = hoveredType != null && category === hoveredType;
+      const isBrushed = (hoveredYear != null && feature.properties.year === hoveredYear) || isTypeBrushed;
+      const isFeatureHovered = hoveredFeature?.properties.gbifID === feature.properties.gbifID;
+      const isEmphasized = isHighlighted || isFeatureHovered;
+
+      let strokeColor: string;
+      let fillColor: string;
+      if (isHighlighted) {
+        strokeColor = "#1d4ed8";
+        fillColor = "#3b82f6";
+      } else if (isBrushed) {
+        strokeColor = "#d97706";
+        fillColor = "#f59e0b";
+      } else if (colorByDate) {
+        const dNum = dateToNumeric(feature.properties.eventDate, feature.properties.year);
+        if (dNum != null) {
+          const colors = dateToColor(dNum, minDateNum, maxDateNum);
+          strokeColor = colors.stroke;
+          fillColor = colors.fill;
+        } else {
+          strokeColor = "#6b7280";
+          fillColor = "#9ca3af";
+        }
+      } else {
+        strokeColor = isNew ? "#15803d" : "#6b7280";
+        fillColor = isNew ? "#22c55e" : "#9ca3af";
+      }
+
+      const radius = isEmphasized ? 7 : (isBrushed ? 6 : 5);
+      const strokeWidth = isEmphasized || isBrushed ? 3 : 2;
+
+      return {
+        type: "Feature" as const,
+        properties: {
+          ...feature.properties,
+          _fillColor: fillColor,
+          _strokeColor: strokeColor,
+          _radius: radius,
+          _strokeWidth: strokeWidth,
+          _category: category,
+        },
+        geometry: feature.geometry,
+      };
+    });
+    return { type: "FeatureCollection", features };
+  }, [hoveredObs, hoveredType, hoveredYear, hoveredFeature, colorByDate, minDateNum, maxDateNum, assessmentYear]);
+
+  // Build uncertainty circles GeoJSON
+  const buildUncertaintyFeatureCollection = useCallback((
+    panelOccurrences: OccurrenceFeature[],
+  ): GeoJSON.FeatureCollection => {
+    const features = panelOccurrences
+      .filter((f) => {
+        const u = f.properties.coordinateUncertaintyInMeters;
+        return u != null && u > 0;
+      })
+      .map((feature) => ({
+        type: "Feature" as const,
+        properties: {
+          uncertaintyMeters: feature.properties.coordinateUncertaintyInMeters!,
+        },
+        geometry: feature.geometry,
+      }));
+    return { type: "FeatureCollection", features };
+  }, []);
+
+  // FitBounds helper using map ref
+  const fitMapToBbox = useCallback((bbox: [number, number, number, number]) => {
+    const map = mapRef.current;
+    if (!map) return;
+    const [minLon, minLat, maxLon, maxLat] = bbox;
+    if (minLon === maxLon && minLat === maxLat) {
+      map.flyTo({ center: [minLon, minLat], zoom: 10, duration: 500 });
+    } else {
+      map.fitBounds([[minLon, minLat], [maxLon, maxLat]], { padding: 40, maxZoom: 14, duration: 500 });
+    }
+  }, []);
+
+  // Fit bounds on data load (once, when not animating)
+  const fittedBboxRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!filteredBbox || animatingDateIdx != null) return;
+    const key = filteredBbox.join(",");
+    if (fittedBboxRef.current === key) return;
+    fittedBboxRef.current = key;
+    fitMapToBbox(filteredBbox);
+  }, [filteredBbox, animatingDateIdx, fitMapToBbox]);
+
+  // Map event handlers
+  const handleMapClick = useCallback((e: MapLayerMouseEvent) => {
+    const features = e.features;
+    if (features && features.length > 0) {
+      const gbifID = features[0].properties?.gbifID;
+      if (gbifID) {
+        window.open(`https://www.gbif.org/occurrence/${gbifID}`, "_blank");
+      }
+    }
+  }, []);
+
+  const handleMapMouseMove = useCallback((e: MapLayerMouseEvent, panelId: string) => {
+    if (isTouchDevice) return;
+    const features = e.features;
+    if (features && features.length > 0) {
+      const props = features[0].properties;
+      if (props) {
+        // Reconstruct the OccurrenceFeature from the queried feature
+        const coords = (features[0].geometry as GeoJSON.Point).coordinates as [number, number];
+        setHoveredFeature({
+          type: "Feature",
+          properties: {
+            gbifID: props.gbifID,
+            species: props.species,
+            eventDate: props.eventDate,
+            basisOfRecord: props.basisOfRecord,
+            datasetKey: props.datasetKey,
+            datasetName: props.datasetName,
+            publishingOrgKey: props.publishingOrgKey,
+            coordinateUncertaintyInMeters: props.coordinateUncertaintyInMeters,
+            year: props.year,
+            month: props.month,
+            institutionCode: props.institutionCode,
+          },
+          geometry: { type: "Point", coordinates: coords },
+        });
+        setHoveredPanel(panelId);
+      }
+    } else {
+      setHoveredFeature(null);
+      setHoveredPanel(null);
+    }
+  }, [isTouchDevice]);
+
+  const handleMapMouseLeave = useCallback(() => {
+    setHoveredFeature(null);
+    setHoveredPanel(null);
+  }, []);
+
+  // Handle view state change for split view sync
+  const handleMoveForSync = useCallback((e: ViewStateChangeEvent) => {
+    setSharedViewState({
+      longitude: e.viewState.longitude,
+      latitude: e.viewState.latitude,
+      zoom: e.viewState.zoom,
+    });
+  }, []);
+
   // Reusable map panel renderer (used once in normal mode, twice in split view)
   const renderMapPanel = (
     panelOccurrences: OccurrenceFeature[],
@@ -1263,6 +1396,55 @@ export default function OccurrenceMapRow({
   ) => {
     const panelNewRecords = panelOccurrences.filter((o) => isNewRecord(o.properties.eventDate));
     const panelOldRecords = panelOccurrences.filter((o) => !isNewRecord(o.properties.eventDate));
+    const styledGeoJson = buildStyledFeatureCollection(panelOccurrences);
+    const uncertaintyGeoJson = showUncertaintyCircles ? buildUncertaintyFeatureCollection(panelOccurrences) : null;
+
+    // Circle layer paint properties (data-driven from feature properties)
+    const circleLayerStyle = {
+      id: `occ-circles-${panelId}`,
+      type: "circle" as const,
+      paint: {
+        "circle-radius": ["get", "_radius"] as unknown as number,
+        "circle-color": ["get", "_fillColor"] as unknown as string,
+        "circle-opacity": 0.9,
+        "circle-stroke-color": ["get", "_strokeColor"] as unknown as string,
+        "circle-stroke-width": ["get", "_strokeWidth"] as unknown as number,
+      },
+    };
+
+    // Uncertainty circle layer (radius in meters converted to pixels)
+    const uncertaintyLayerStyle = {
+      id: `occ-uncertainty-${panelId}`,
+      type: "circle" as const,
+      paint: {
+        "circle-radius": [
+          "interpolate", ["exponential", 2], ["zoom"],
+          0, 0,
+          20, [
+            "/",
+            ["*", ["get", "uncertaintyMeters"], 1],
+            0.075, // approximate meters-per-pixel at zoom 20
+          ],
+        ] as unknown as number,
+        "circle-color": "#6366f1",
+        "circle-opacity": 0.06,
+        "circle-stroke-color": "#6366f1",
+        "circle-stroke-width": 0.5,
+        "circle-stroke-opacity": 0.3,
+      },
+    };
+
+    const mapProps = splitView
+      ? {
+          longitude: sharedViewState.longitude,
+          latitude: sharedViewState.latitude,
+          zoom: sharedViewState.zoom,
+          onMove: handleMoveForSync,
+        }
+      : {
+          initialViewState: { longitude: 0, latitude: 20, zoom: 1.5 },
+        };
+
     return (
       <div className="flex-1 flex flex-col rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 relative isolate z-0">
         <div className={`${splitView ? "h-[250px] sm:h-auto sm:min-h-[400px]" : "h-[300px] sm:h-auto sm:min-h-[450px]"} sm:flex-1 relative`}>
@@ -1277,126 +1459,74 @@ export default function OccurrenceMapRow({
               </div>
             </div>
           ) : mounted ? (
-            <MapContainer
-              center={[20, 0]}
-              zoom={2}
-              style={{ height: "100%", width: "100%" }}
+            <MapGL
+              ref={panelId === "main" || !splitView ? mapRef : undefined}
+              {...mapProps}
+              style={{ width: "100%", height: "100%" }}
+              mapStyle={BASEMAP_STYLES[basemap].style}
+              interactiveLayerIds={[`occ-circles-${panelId}`]}
+              onClick={handleMapClick}
+              onMouseMove={(e: MapLayerMouseEvent) => handleMapMouseMove(e, panelId)}
+              onMouseLeave={handleMapMouseLeave}
+              cursor={hoveredFeature && hoveredPanel === panelId ? "pointer" : "grab"}
             >
-              <TileLayer
-                key={basemap}
-                attribution={BASEMAP_OPTIONS[basemap].attribution}
-                url={BASEMAP_OPTIONS[basemap].url}
-              />
-              {splitView && <MapSync syncRef={mapSyncRef} />}
               <LocateControl />
-              {panelBbox && animatingDateIdx == null && <FitBounds bbox={panelBbox} />}
-              {/* Uncertainty circles */}
-              {showUncertaintyCircles && panelOccurrences.map((feature, idx) => {
-                const uncertainty = feature.properties.coordinateUncertaintyInMeters;
-                if (uncertainty == null || uncertainty <= 0) return null;
+              {/* Uncertainty circles (rendered below occurrence circles) */}
+              {uncertaintyGeoJson && (
+                <Source id={`uncertainty-${panelId}`} type="geojson" data={uncertaintyGeoJson}>
+                  <Layer {...uncertaintyLayerStyle} />
+                </Source>
+              )}
+              {/* Occurrence circles (GeoJSON source + circle layer) */}
+              {!shapeByType && (
+                <Source id={`occurrences-${panelId}`} type="geojson" data={styledGeoJson}>
+                  <Layer {...circleLayerStyle} />
+                </Source>
+              )}
+              {/* Shape-by-type mode: use individual Markers with SVG shapes */}
+              {shapeByType && panelOccurrences.map((feature, idx) => {
                 const [lon, lat] = feature.geometry.coordinates;
-                return (
-                  <Circle
-                    key={`unc-${feature.properties.gbifID || idx}`}
-                    center={[lat, lon]}
-                    radius={uncertainty}
-                    pathOptions={{
-                      color: "#6366f1",
-                      fillColor: "#6366f1",
-                      fillOpacity: 0.06,
-                      weight: 0.5,
-                      opacity: 0.3,
-                    }}
-                  />
-                );
-              })}
-              {/* Render markers */}
-              {panelOccurrences.map((feature, idx) => {
-                const [lon, lat] = feature.geometry.coordinates;
-                const isNew = isNewRecord(feature.properties.eventDate);
-                const isHighlighted = hoveredObs?.gbifID != null && feature.properties.gbifID === hoveredObs.gbifID;
-                const category = classifyOccurrence(feature);
-                const isTypeBrushed = hoveredType != null && category === hoveredType;
-                const isBrushed = (hoveredYear != null && feature.properties.year === hoveredYear) || isTypeBrushed;
-                let strokeColor: string;
-                let fillColor: string;
-                if (isHighlighted) {
-                  strokeColor = "#1d4ed8";
-                  fillColor = "#3b82f6";
-                } else if (isBrushed) {
-                  strokeColor = "#d97706";
-                  fillColor = "#f59e0b";
-                } else if (colorByDate) {
-                  const dNum = dateToNumeric(feature.properties.eventDate, feature.properties.year);
-                  if (dNum != null) {
-                    const colors = dateToColor(dNum, minDateNum, maxDateNum);
-                    strokeColor = colors.stroke;
-                    fillColor = colors.fill;
-                  } else {
-                    strokeColor = "#6b7280";
-                    fillColor = "#9ca3af";
-                  }
-                } else {
-                  strokeColor = isNew ? "#15803d" : "#6b7280";
-                  fillColor = isNew ? "#22c55e" : "#9ca3af";
-                }
-                const inatMatch = inatPhotosByGbifId.get(feature.properties.gbifID);
+                const styledFeature = styledGeoJson.features[idx];
+                const fillColor = styledFeature?.properties?._fillColor as string || "#9ca3af";
+                const strokeColor = styledFeature?.properties?._strokeColor as string || "#6b7280";
+                const category = styledFeature?.properties?._category as string || "observation";
                 const isFeatureHovered = hoveredFeature?.properties.gbifID === feature.properties.gbifID;
+                const isHighlighted = hoveredObs?.gbifID != null && feature.properties.gbifID === hoveredObs.gbifID;
+                const isBrushed = (hoveredYear != null && feature.properties.year === hoveredYear) || (hoveredType != null && category === hoveredType);
                 const isEmphasized = isHighlighted || isFeatureHovered;
                 const markerSize = isEmphasized ? 10 : (isBrushed ? 10 : 8);
-                const clickHandler = () => {
-                  window.open(`https://www.gbif.org/occurrence/${feature.properties.gbifID}`, "_blank");
-                };
-                const hoverHandlers = {
-                  click: clickHandler,
-                  ...(isTouchDevice ? {} : {
-                    mouseover: () => { setHoveredFeature(feature); setHoveredPanel(panelId); },
-                    mouseout: () => { setHoveredFeature(null); setHoveredPanel(null); },
-                  }),
-                };
-                const markerOpacity = 1;
-
-                if (shapeByType) {
-                  const icon = getShapeIcon(category, fillColor, strokeColor, markerSize) as L.DivIcon;
-                  return (
-                    <Marker
-                      key={feature.properties.gbifID || idx}
-                      position={[lat, lon]}
-                      icon={icon}
-                      opacity={markerOpacity}
-                      eventHandlers={hoverHandlers}
-                    />
-                  );
-                }
-
                 return (
-                  <CircleMarker
+                  <MapLibreMarker
                     key={feature.properties.gbifID || idx}
-                    center={[lat, lon]}
-                    radius={isEmphasized ? 7 : (isBrushed ? 6 : 5)}
-                    pathOptions={{
-                      color: strokeColor,
-                      fillColor: fillColor,
-                      fillOpacity: isEmphasized || isBrushed ? 1 : 0.9,
-                      weight: isEmphasized || isBrushed ? 3 : 2,
-                    }}
-                    eventHandlers={hoverHandlers}
-                  />
+                    longitude={lon}
+                    latitude={lat}
+                    anchor="center"
+                    onClick={() => window.open(`https://www.gbif.org/occurrence/${feature.properties.gbifID}`, "_blank")}
+                  >
+                    <div
+                      onMouseEnter={isTouchDevice ? undefined : () => { setHoveredFeature(feature); setHoveredPanel(panelId); }}
+                      onMouseLeave={isTouchDevice ? undefined : () => { setHoveredFeature(null); setHoveredPanel(null); }}
+                      style={{ cursor: "pointer" }}
+                    >
+                      <ShapeMarkerSvg category={category} fillColor={fillColor} strokeColor={strokeColor} size={markerSize} />
+                    </div>
+                  </MapLibreMarker>
                 );
               })}
               {/* Highlighted dot when hovering an iNat thumbnail */}
               {hoveredObs && hoveredObs.decimalLatitude != null && hoveredObs.decimalLongitude != null && (
                 <>
-                  <CircleMarker
-                    center={[hoveredObs.decimalLatitude, hoveredObs.decimalLongitude]}
-                    radius={5}
-                    pathOptions={{
-                      color: "#1d4ed8",
-                      fillColor: "#3b82f6",
-                      fillOpacity: 0.4,
-                      weight: 2,
-                    }}
-                  />
+                  <MapLibreMarker
+                    longitude={hoveredObs.decimalLongitude}
+                    latitude={hoveredObs.decimalLatitude}
+                    anchor="center"
+                  >
+                    <div style={{
+                      width: 10, height: 10, borderRadius: "50%",
+                      background: "rgba(59, 130, 246, 0.4)",
+                      border: "2px solid #1d4ed8",
+                    }} />
+                  </MapLibreMarker>
                   {hoveredObs.imageUrl && (
                     <MapImageTooltip
                       lat={hoveredObs.decimalLatitude!}
@@ -1424,7 +1554,7 @@ export default function OccurrenceMapRow({
                   />
                 );
               })()}
-            </MapContainer>
+            </MapGL>
           ) : null}
           {/* Legend */}
           {!loadingOccurrences && (
@@ -1527,7 +1657,7 @@ export default function OccurrenceMapRow({
           {/* Basemap toggle */}
           {!loadingOccurrences && mounted && (
             <div className="absolute top-12 right-2 z-[1000] flex flex-col gap-0.5 bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 p-1">
-              {(Object.entries(BASEMAP_OPTIONS) as [BasemapKey, (typeof BASEMAP_OPTIONS)[BasemapKey]][]).map(([key, opt]) => (
+              {(Object.entries(BASEMAP_STYLES) as [BasemapKey, (typeof BASEMAP_STYLES)[BasemapKey]][]).map(([key, opt]) => (
                 <button
                   key={key}
                   onClick={() => setBasemap(key)}

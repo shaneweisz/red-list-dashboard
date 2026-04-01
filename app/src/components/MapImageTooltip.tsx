@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { useMap } from "react-leaflet";
+import { useMap } from "react-map-gl/maplibre";
 
 /**
  * Renders a small photo tooltip above a lat/lng point on the map.
@@ -18,28 +18,25 @@ export default function MapImageTooltip({
   lng: number;
   imageUrl: string;
 }) {
-  const map = useMap();
+  const { current: map } = useMap();
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
+    if (!map) return;
     const update = () => {
-      const point = map.latLngToContainerPoint([lat, lng]);
+      const point = map.project([lng, lat]);
       setPos({ x: point.x, y: point.y });
     };
     update();
     map.on("move", update);
     map.on("zoom", update);
-    map.on("moveend", update);
-    map.on("zoomend", update);
     return () => {
       map.off("move", update);
       map.off("zoom", update);
-      map.off("moveend", update);
-      map.off("zoomend", update);
     };
   }, [map, lat, lng]);
 
-  if (!pos) return null;
+  if (!pos || !map) return null;
 
   const container = map.getContainer();
   const containerRect = container.getBoundingClientRect();

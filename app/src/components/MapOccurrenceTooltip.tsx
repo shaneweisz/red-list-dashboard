@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { useMap } from "react-leaflet";
+import { useMap } from "react-map-gl/maplibre";
 
 interface MapOccurrenceTooltipProps {
   lat: number;
@@ -33,28 +33,25 @@ function formatBasis(basis?: string): string {
 }
 
 export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
-  const map = useMap();
+  const { current: map } = useMap();
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
+    if (!map) return;
     const update = () => {
-      const point = map.latLngToContainerPoint([props.lat, props.lng]);
+      const point = map.project([props.lng, props.lat]);
       setPos({ x: point.x, y: point.y });
     };
     update();
     map.on("move", update);
     map.on("zoom", update);
-    map.on("moveend", update);
-    map.on("zoomend", update);
     return () => {
       map.off("move", update);
       map.off("zoom", update);
-      map.off("moveend", update);
-      map.off("zoomend", update);
     };
   }, [map, props.lat, props.lng]);
 
-  if (!pos) return null;
+  if (!pos || !map) return null;
 
   const container = map.getContainer();
   const containerRect = container.getBoundingClientRect();
