@@ -520,7 +520,7 @@ function YearRangeTrimmer({
       {/* Hover tooltip */}
       {tooltipInfo && (
         <div
-          className="absolute bottom-full mb-1 z-50 pointer-events-none"
+          className="absolute top-full mt-1 z-50 pointer-events-none"
           style={{ left: `${tooltipInfo.pct}%`, transform: "translateX(-50%)" }}
         >
           <div className="bg-zinc-900 dark:bg-zinc-800 text-white text-[10px] rounded px-2 py-1.5 shadow-lg whitespace-nowrap">
@@ -1314,9 +1314,7 @@ export default function OccurrenceMapRow({
                 const isHighlighted = hoveredObs?.gbifID != null && feature.properties.gbifID === hoveredObs.gbifID;
                 const category = classifyOccurrence(feature);
                 const isTypeBrushed = hoveredType != null && category === hoveredType;
-                const isTypeDimmed = hoveredType != null && category !== hoveredType;
                 const isBrushed = (hoveredYear != null && feature.properties.year === hoveredYear) || isTypeBrushed;
-                const isDimmed = (hoveredYear != null && feature.properties.year !== hoveredYear) || isTypeDimmed;
                 let strokeColor: string;
                 let fillColor: string;
                 if (isHighlighted) {
@@ -1342,7 +1340,7 @@ export default function OccurrenceMapRow({
                 const inatMatch = inatPhotosByGbifId.get(feature.properties.gbifID);
                 const isFeatureHovered = hoveredFeature?.properties.gbifID === feature.properties.gbifID;
                 const isEmphasized = isHighlighted || isFeatureHovered;
-                const markerSize = isEmphasized ? 10 : (isBrushed ? 10 : (isDimmed ? 6 : 8));
+                const markerSize = isEmphasized ? 10 : (isBrushed ? 10 : 8);
                 const clickHandler = () => {
                   window.open(`https://www.gbif.org/occurrence/${feature.properties.gbifID}`, "_blank");
                 };
@@ -1353,7 +1351,7 @@ export default function OccurrenceMapRow({
                     mouseout: () => setHoveredFeature(null),
                   }),
                 };
-                const markerOpacity = isDimmed ? 0.15 : 1;
+                const markerOpacity = 1;
 
                 if (shapeByType) {
                   const icon = getShapeIcon(category, fillColor, strokeColor, markerSize) as L.DivIcon;
@@ -1372,12 +1370,12 @@ export default function OccurrenceMapRow({
                   <CircleMarker
                     key={feature.properties.gbifID || idx}
                     center={[lat, lon]}
-                    radius={isEmphasized ? 7 : (isBrushed ? 6 : (isDimmed ? 4 : 5))}
+                    radius={isEmphasized ? 7 : (isBrushed ? 6 : 5)}
                     pathOptions={{
                       color: strokeColor,
                       fillColor: fillColor,
-                      fillOpacity: isDimmed ? 0.15 : (isEmphasized || isBrushed ? 1 : 0.9),
-                      weight: isDimmed ? 1 : (isEmphasized || isBrushed ? 3 : 2),
+                      fillOpacity: isEmphasized || isBrushed ? 1 : 0.9,
+                      weight: isEmphasized || isBrushed ? 3 : 2,
                     }}
                     eventHandlers={hoverHandlers}
                   />
