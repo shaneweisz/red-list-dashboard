@@ -1519,7 +1519,7 @@ export default function OccurrenceMapRow({
               {dedupEnabled && (
                 <span className="text-zinc-400">(deduped)</span>
               )}
-              {!splitView && totalOccurrences != null && totalOccurrences > sampleSize && (
+              {!splitView && totalOccurrences != null && totalOccurrences > occurrences.length && (
                 <span className="text-zinc-400">(sampled)</span>
               )}
             </div>
@@ -1557,13 +1557,13 @@ export default function OccurrenceMapRow({
           )}
         </div>
         {/* Sample size bar (only in single view) */}
-        {!splitView && totalOccurrences != null && totalOccurrences > sampleSize && (
+        {!splitView && totalOccurrences != null && totalOccurrences > occurrences.length && (
           <div className="flex items-center justify-between px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 border-t border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-300">
             <span>
-              Sampled <strong>{sampleSize.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> records
+              Showing <strong>{occurrences.length.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> records
             </span>
             <span className="flex items-center gap-1.5">
-              <span>Increase sample:</span>
+              <span>Load more:</span>
               <select
                 value={sampleSize}
                 onChange={(e) => setSampleSize(parseInt(e.target.value))}
