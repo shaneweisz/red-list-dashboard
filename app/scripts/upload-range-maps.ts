@@ -156,9 +156,9 @@ async function generateRangeGeoJSON(
   return { type: "FeatureCollection", features };
 }
 
-function getAssessmentIdsFromCsvs(taxaFilter?: string[]): { assessmentId: number; hasMap: boolean }[] {
+function getAssessmentIdsFromCsvs(taxaFilter?: string[]): { assessmentId: number; hasMap: boolean; scientificName: string }[] {
   const taxa = getTaxa(taxaFilter);
-  const results: { assessmentId: number; hasMap: boolean }[] = [];
+  const results: { assessmentId: number; hasMap: boolean; scientificName: string }[] = [];
 
   for (const taxon of taxa) {
     const csvPath = `${REDLIST_DIR}/${taxon.id}.csv`;
@@ -166,6 +166,7 @@ function getAssessmentIdsFromCsvs(taxaFilter?: string[]): { assessmentId: number
       const rows = readCsv(csvPath, (row) => ({
         assessmentId: parseInt(row.assessment_id, 10),
         hasMap: row.has_map === "true",
+        scientificName: row.scientific_name,
       }));
       for (const row of rows) {
         if (row.hasMap && !isNaN(row.assessmentId)) {
@@ -187,6 +188,7 @@ async function uploadBatch(
   assessmentIds: number[],
   existingKeys: Set<string>,
   logger: SyncLogger,
+  nameMap: Map<number, string> = new Map(),
 ): Promise<{ uploaded: number; skipped: number; existing: number; failed: number }> {
   let uploaded = 0;
   let skipped = 0;
@@ -195,21 +197,25 @@ async function uploadBatch(
 
   for (const id of assessmentIds) {
     const key = `${R2_PREFIX}/${id}.json`;
+    const speciesName = nameMap.get(id);
+    const label = speciesName ? `${speciesName} (${id})` : `${id}`;
 
     try {
       // Skip if already in R2
       if (existingKeys.has(key)) {
         existing++;
+        logger.log("range_map_existing", { assessmentId: id, ...(speciesName && { scientificName: speciesName }) });
+        console.log(`    ${label} — already in R2, skipping`);
         continue;
       }
 
       const total = uploaded + existing + skipped + failed + 1;
-      process.stdout.write(`    [${total}/${assessmentIds.length}] ${id}...`);
+      process.stdout.write(`    [${total}/${assessmentIds.length}] ${label}...`);
       const t0 = Date.now();
       const geojson = await generateRangeGeoJSON(db, id);
       if (!geojson) {
         skipped++;
-        logger.log("range_map_no_data", { assessmentId: id });
+        logger.log("range_map_no_data", { assessmentId: id, ...(speciesName && { scientificName: speciesName }) });
         console.log(` no data (${((Date.now() - t0) / 1000).toFixed(1)}s)`);
         continue;
       }
@@ -226,11 +232,11 @@ async function uploadBatch(
 
       uploaded++;
       const sizeMB = (Buffer.byteLength(body) / 1024 / 1024).toFixed(2);
-      logger.log("range_map_uploaded", { assessmentId: id, sizeMB });
+      logger.log("range_map_uploaded", { assessmentId: id, sizeMB, ...(speciesName && { scientificName: speciesName }) });
       console.log(` ${sizeMB} MB (${((Date.now() - t0) / 1000).toFixed(1)}s)`);
     } catch (err) {
       failed++;
-      logger.log("range_map_failed", { assessmentId: id, error: err instanceof Error ? err.message : String(err) });
+      logger.log("range_map_failed", { assessmentId: id, ...(speciesName && { scientificName: speciesName }), error: err instanceof Error ? err.message : String(err) });
       console.log(` FAILED: ${err instanceof Error ? err.message : err}`);
     }
   }
@@ -267,6 +273,7 @@ export async function run(opts: {
   for (const taxon of taxa) {
     const species = getAssessmentIdsFromCsvs([taxon.id]);
     const assessmentIds = species.map((s) => s.assessmentId);
+    const nameMap = new Map(species.map((s) => [s.assessmentId, s.scientificName]));
 
     if (assessmentIds.length === 0) {
       console.log(`  ${taxon.name}: no species with maps`);
@@ -280,7 +287,7 @@ export async function run(opts: {
     logger.log("range_map_taxon_start", { taxon: taxon.id, total: assessmentIds.length, toUpload: toUpload.length });
 
     totalExisting += alreadyUploaded.length;
-    const result = await uploadBatch(db, r2, bucket, toUpload, existingKeys, logger);
+    const result = await uploadBatch(db, r2, bucket, toUpload, existingKeys, logger, nameMap);
     totalUploaded += result.uploaded;
     totalExisting += result.existing;
     totalSkipped += result.skipped;
@@ -316,12 +323,25 @@ async function main() {
 
     await db.connect();
     console.log("Connected to database");
+
+    // Look up species names for the given assessment IDs
+    const nameResult = await db.query(
+      `SELECT a.id AS assessment_id, t.scientific_name
+       FROM assessments a
+       JOIN taxons t ON t.id = a.taxon_id
+       WHERE a.id = ANY($1)`,
+      [ids]
+    );
+    const nameMap = new Map<number, string>(
+      nameResult.rows.map((r: { assessment_id: string; scientific_name: string }) => [parseInt(r.assessment_id, 10), r.scientific_name])
+    );
+
     console.log("Listing existing R2 keys...");
     const existingKeys = await listExistingKeys(r2, bucket);
     console.log(`Found ${existingKeys.size} existing range maps in R2`);
     console.log(`Processing ${ids.length} assessment(s)...`);
 
-    const result = await uploadBatch(db, r2, bucket, ids, existingKeys, logger);
+    const result = await uploadBatch(db, r2, bucket, ids, existingKeys, logger, nameMap);
     await db.end();
     console.log(`\nDone: ${result.uploaded} uploaded, ${result.existing} existing, ${result.skipped} skipped, ${result.failed} failed`);
     return;
