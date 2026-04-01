@@ -1159,19 +1159,52 @@ export default function OccurrenceMapRow({
   }, [filteredOccurrences, splitDate]);
 
   // Split view: partition occurrences by exact assessment date
+  // When animating in split view, use filteredBeforeAnimation (unfiltered by animation)
+  // and apply per-panel animation so both panels animate simultaneously
   const { preAssessmentOccs, postAssessmentOccs, preBbox, postBbox } = useMemo(() => {
     if (!splitView || !splitDate) {
       return { preAssessmentOccs: [], postAssessmentOccs: [], preBbox: null, postBbox: null };
     }
-    const pre: OccurrenceFeature[] = [];
-    const post: OccurrenceFeature[] = [];
-    for (const o of filteredOccurrences) {
+    // Partition all (pre-animation) records by split date
+    const allPre: OccurrenceFeature[] = [];
+    const allPost: OccurrenceFeature[] = [];
+    const source = animatingDate != null ? filteredBeforeAnimation : filteredOccurrences;
+    for (const o of source) {
       const d = o.properties.eventDate;
       if (d && d > splitDate) {
-        post.push(o);
+        allPost.push(o);
       } else {
-        pre.push(o);
+        allPre.push(o);
       }
+    }
+    // When animating, apply per-panel progressive reveal
+    let pre = allPre;
+    let post = allPost;
+    if (animatingDate != null) {
+      // Map global animation progress (0..1) to each panel's own date range
+      const progress = animationDateRange.totalDays > 1 && animatingDateIdx != null
+        ? Math.min(animatingDateIdx / (animationDateRange.totalDays - 1), 1)
+        : 0;
+      const filterByProgress = (records: OccurrenceFeature[]): OccurrenceFeature[] => {
+        if (records.length === 0) return records;
+        const dates = records
+          .map((o) => o.properties.eventDate ?? (o.properties.year != null ? String(o.properties.year) : null))
+          .filter((d): d is string => d != null)
+          .sort();
+        if (dates.length === 0) return records;
+        const minD = dates[0];
+        const maxD = dates[dates.length - 1];
+        const minMs = new Date(minD).getTime();
+        const maxMs = new Date(maxD).getTime();
+        const cutoffMs = minMs + (maxMs - minMs) * progress;
+        const cutoffDate = new Date(cutoffMs).toISOString().slice(0, 10);
+        return records.filter((o) => {
+          const d = o.properties.eventDate ?? (o.properties.year != null ? String(o.properties.year) : null);
+          return d != null && d <= cutoffDate;
+        });
+      };
+      pre = filterByProgress(allPre);
+      post = filterByProgress(allPost);
     }
     const computeBbox = (features: OccurrenceFeature[]): [number, number, number, number] | null => {
       if (features.length === 0) return bbox;
@@ -1191,7 +1224,7 @@ export default function OccurrenceMapRow({
       preBbox: computeBbox(pre),
       postBbox: computeBbox(post),
     };
-  }, [splitView, splitDate, filteredOccurrences, bbox]);
+  }, [splitView, splitDate, filteredOccurrences, filteredBeforeAnimation, animatingDate, animatingDateIdx, animationDateRange, bbox]);
 
   // Date range for color gradient (uses full eventDate for finer granularity)
   const { minDateNum, maxDateNum, minDateLabel, maxDateLabel } = useMemo(() => {
@@ -1690,8 +1723,8 @@ export default function OccurrenceMapRow({
                     }
                   }}
                   className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                  title={splitView ? "Disable split view to use animation" : isPlaying ? "Pause" : "Play timeline"}
-                  disabled={animationDateRange.totalDays === 0 || splitView}
+                  title={isPlaying ? "Pause" : "Play timeline"}
+                  disabled={animationDateRange.totalDays === 0}
                 >
                   {isPlaying ? (
                     <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
