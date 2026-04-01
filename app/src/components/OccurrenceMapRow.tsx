@@ -1159,52 +1159,19 @@ export default function OccurrenceMapRow({
   }, [filteredOccurrences, splitDate]);
 
   // Split view: partition occurrences by exact assessment date
-  // When animating in split view, use filteredBeforeAnimation (unfiltered by animation)
-  // and apply per-panel animation so both panels animate simultaneously
   const { preAssessmentOccs, postAssessmentOccs, preBbox, postBbox } = useMemo(() => {
     if (!splitView || !splitDate) {
       return { preAssessmentOccs: [], postAssessmentOccs: [], preBbox: null, postBbox: null };
     }
-    // Partition all (pre-animation) records by split date
-    const allPre: OccurrenceFeature[] = [];
-    const allPost: OccurrenceFeature[] = [];
-    const source = animatingDate != null ? filteredBeforeAnimation : filteredOccurrences;
-    for (const o of source) {
-      const d = o.properties.eventDate;
+    const pre: OccurrenceFeature[] = [];
+    const post: OccurrenceFeature[] = [];
+    for (const o of filteredOccurrences) {
+      const d = o.properties.eventDate ?? (o.properties.year != null ? String(o.properties.year) : null);
       if (d && d > splitDate) {
-        allPost.push(o);
+        post.push(o);
       } else {
-        allPre.push(o);
+        pre.push(o);
       }
-    }
-    // When animating, apply per-panel progressive reveal
-    let pre = allPre;
-    let post = allPost;
-    if (animatingDate != null) {
-      // Map global animation progress (0..1) to each panel's own date range
-      const progress = animationDateRange.totalDays > 1 && animatingDateIdx != null
-        ? Math.min(animatingDateIdx / (animationDateRange.totalDays - 1), 1)
-        : 0;
-      const filterByProgress = (records: OccurrenceFeature[]): OccurrenceFeature[] => {
-        if (records.length === 0) return records;
-        const dates = records
-          .map((o) => o.properties.eventDate ?? (o.properties.year != null ? String(o.properties.year) : null))
-          .filter((d): d is string => d != null)
-          .sort();
-        if (dates.length === 0) return records;
-        const minD = dates[0];
-        const maxD = dates[dates.length - 1];
-        const minMs = new Date(minD).getTime();
-        const maxMs = new Date(maxD).getTime();
-        const cutoffMs = minMs + (maxMs - minMs) * progress;
-        const cutoffDate = new Date(cutoffMs).toISOString().slice(0, 10);
-        return records.filter((o) => {
-          const d = o.properties.eventDate ?? (o.properties.year != null ? String(o.properties.year) : null);
-          return d != null && d <= cutoffDate;
-        });
-      };
-      pre = filterByProgress(allPre);
-      post = filterByProgress(allPost);
     }
     const computeBbox = (features: OccurrenceFeature[]): [number, number, number, number] | null => {
       if (features.length === 0) return bbox;
@@ -1224,7 +1191,7 @@ export default function OccurrenceMapRow({
       preBbox: computeBbox(pre),
       postBbox: computeBbox(post),
     };
-  }, [splitView, splitDate, filteredOccurrences, filteredBeforeAnimation, animatingDate, animatingDateIdx, animationDateRange, bbox]);
+  }, [splitView, splitDate, filteredOccurrences, bbox]);
 
   // Date range for color gradient (uses full eventDate for finer granularity)
   const { minDateNum, maxDateNum, minDateLabel, maxDateLabel } = useMemo(() => {
@@ -1548,7 +1515,7 @@ export default function OccurrenceMapRow({
           {!splitView && animatingDate != null && (
             <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[1000] bg-amber-500 text-white text-sm font-bold px-3 py-1 rounded-full shadow-md tabular-nums flex items-center gap-2">
               <span>{animatingDate}</span>
-              <span className="text-xs font-normal text-amber-100">{filteredOccurrences.length} / {filteredBeforeAnimation.length}</span>
+              <span className="text-xs font-normal text-amber-100">{panelOccurrences.length} / {filteredBeforeAnimation.length}</span>
             </div>
           )}
           {/* Label badge for split view */}
