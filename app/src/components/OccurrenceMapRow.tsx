@@ -1007,28 +1007,11 @@ export default function OccurrenceMapRow({
     }
   }, [isPlaying]);
 
-  // Classify an occurrence into one of the checkbox categories
-  const getCategory = (o: OccurrenceFeature): keyof typeof checkedTypes => {
-    const basis = o.properties.basisOfRecord;
-    if (basis === "HUMAN_OBSERVATION") {
-      return o.properties.datasetKey === INAT_DATASET_KEY ? "iNaturalist" : "humanOther";
-    }
-    if (basis === "MACHINE_OBSERVATION") return "machineObservation";
-    if (basis === "OBSERVATION") return "observation";
-    if (basis === "PRESERVED_SPECIMEN") return "preservedSpecimen";
-    if (basis === "FOSSIL_SPECIMEN") return "fossilSpecimen";
-    if (basis === "LIVING_SPECIMEN") return "livingSpecimen";
-    if (basis === "MATERIAL_SAMPLE") return "materialSample";
-    if (basis === "MATERIAL_CITATION") return "materialCitation";
-    if (basis === "OCCURRENCE") return "occurrence";
-    return "observation"; // fallback
-  };
-
   // Multi-stage filtering pipeline (before animation)
   const filteredBeforeAnimation = useMemo(() => {
     let result = occurrences;
     // 1. Basis of record checkboxes
-    result = result.filter((o) => checkedTypes[getCategory(o)]);
+    result = result.filter((o) => checkedTypes[classifyOccurrence(o) as keyof typeof checkedTypes]);
     // 2. GPS uncertainty filter
     if (maxUncertainty != null) {
       result = result.filter((o) => {
@@ -1104,13 +1087,13 @@ export default function OccurrenceMapRow({
   }, [filteredBeforeAnimation, animatingDate]);
 
   // Helper to check if an occurrence is after the assessment year
-  const isNewRecord = (eventDate?: string): boolean => {
+  const isNewRecord = useCallback((eventDate?: string): boolean => {
     // In new-assessments mode (no assessment year), all records are "new" (green)
     if (!assessmentYear) return true;
     if (!eventDate) return false;
     const recordYear = new Date(eventDate).getFullYear();
     return recordYear > assessmentYear;
-  };
+  }, [assessmentYear]);
 
   // Bounding box from filtered occurrences
   const filteredBbox = useMemo<[number, number, number, number] | null>(() => {
@@ -1138,9 +1121,9 @@ export default function OccurrenceMapRow({
   }, [filteredOccurrences, splitDate]);
 
   // Split view: partition occurrences by exact assessment date
-  const { preAssessmentOccs, postAssessmentOccs, preBbox, postBbox } = useMemo(() => {
+  const { preAssessmentOccs, postAssessmentOccs } = useMemo(() => {
     if (!splitView || !splitDate) {
-      return { preAssessmentOccs: [], postAssessmentOccs: [], preBbox: null, postBbox: null };
+      return { preAssessmentOccs: [], postAssessmentOccs: [] };
     }
     const pre: OccurrenceFeature[] = [];
     const post: OccurrenceFeature[] = [];
@@ -1152,25 +1135,11 @@ export default function OccurrenceMapRow({
         pre.push(o);
       }
     }
-    const computeBbox = (features: OccurrenceFeature[]): [number, number, number, number] | null => {
-      if (features.length === 0) return bbox;
-      let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
-      for (const f of features) {
-        const [lon, lat] = f.geometry.coordinates;
-        if (lon < minLon) minLon = lon;
-        if (lon > maxLon) maxLon = lon;
-        if (lat < minLat) minLat = lat;
-        if (lat > maxLat) maxLat = lat;
-      }
-      return [minLon, minLat, maxLon, maxLat];
-    };
     return {
       preAssessmentOccs: pre,
       postAssessmentOccs: post,
-      preBbox: computeBbox(pre),
-      postBbox: computeBbox(post),
     };
-  }, [splitView, splitDate, filteredOccurrences, bbox]);
+  }, [splitView, splitDate, filteredOccurrences]);
 
   // Date range for color gradient (uses full eventDate for finer granularity)
   const { minDateNum, maxDateNum, minDateLabel, maxDateLabel } = useMemo(() => {
@@ -1190,10 +1159,6 @@ export default function OccurrenceMapRow({
     return { minDateNum: min, maxDateNum: max, minDateLabel: fmt(min), maxDateLabel: fmt(max) };
   }, [filteredOccurrences]);
 
-  // Count by category for the legend (just pre/post assessment)
-  const newRecords = filteredOccurrences.filter((o) => isNewRecord(o.properties.eventDate));
-  const oldRecords = filteredOccurrences.filter((o) => !isNewRecord(o.properties.eventDate));
-
   // Filter definitions — GBIF basis of record terminology with iNat kept separate
   const pillDefs = useMemo(() => {
     if (!breakdown) return [];
@@ -1211,23 +1176,6 @@ export default function OccurrenceMapRow({
       { key: "occurrence" as const, label: "Occurrence", count: breakdown.occurrence },
     ];
   }, [breakdown]);
-
-  // Cumulative counts per GPS uncertainty threshold (from type-filtered sample)
-  const uncertaintyCounts = useMemo(() => {
-    const typeFiltered = occurrences.filter((o) => checkedTypes[getCategory(o)]);
-    const counts = new Map<number | null, number>();
-    // "Any" = total type-filtered count
-    counts.set(null, typeFiltered.length);
-    for (const opt of UNCERTAINTY_OPTIONS) {
-      if (opt.value == null) continue;
-      const count = typeFiltered.filter((o) => {
-        const u = o.properties.coordinateUncertaintyInMeters;
-        return u != null && u <= opt.value;
-      }).length;
-      counts.set(opt.value, count);
-    }
-    return counts;
-  }, [occurrences, checkedTypes]);
 
   const toggleType = (key: keyof typeof checkedTypes) => {
     setCheckedTypes((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -1286,7 +1234,7 @@ export default function OccurrenceMapRow({
       };
     });
     return { type: "FeatureCollection", features };
-  }, [hoveredObs, hoveredType, hoveredYear, hoveredFeature, colorByDate, minDateNum, maxDateNum, assessmentYear]);
+  }, [hoveredObs, hoveredType, hoveredYear, hoveredFeature, colorByDate, minDateNum, maxDateNum, isNewRecord]);
 
   // Build uncertainty circles GeoJSON
   const buildUncertaintyFeatureCollection = useCallback((
@@ -1310,24 +1258,44 @@ export default function OccurrenceMapRow({
   // FitBounds helper using map ref
   const fitMapToBbox = useCallback((bbox: [number, number, number, number]) => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map) return false;
     const [minLon, minLat, maxLon, maxLat] = bbox;
     if (minLon === maxLon && minLat === maxLat) {
       map.flyTo({ center: [minLon, minLat], zoom: 10, duration: 500 });
     } else {
       map.fitBounds([[minLon, minLat], [maxLon, maxLat]], { padding: 40, maxZoom: 14, duration: 500 });
     }
+    return true;
   }, []);
 
-  // Fit bounds on data load (once, when not animating)
+  // Track whether we've fitted bounds for the current bbox
   const fittedBboxRef = useRef<string | null>(null);
+  const pendingBboxRef = useRef<[number, number, number, number] | null>(null);
+
+  // Fit bounds when bbox changes (may need to wait for map to be ready)
   useEffect(() => {
     if (!filteredBbox || animatingDateIdx != null) return;
     const key = filteredBbox.join(",");
     if (fittedBboxRef.current === key) return;
-    fittedBboxRef.current = key;
-    fitMapToBbox(filteredBbox);
+    if (fitMapToBbox(filteredBbox)) {
+      fittedBboxRef.current = key;
+      pendingBboxRef.current = null;
+    } else {
+      // Map not ready yet — store as pending for onLoad
+      pendingBboxRef.current = filteredBbox;
+    }
   }, [filteredBbox, animatingDateIdx, fitMapToBbox]);
+
+  // Called when the MapGL component finishes loading
+  const handleMapLoad = useCallback(() => {
+    if (pendingBboxRef.current) {
+      const bbox = pendingBboxRef.current;
+      if (fitMapToBbox(bbox)) {
+        fittedBboxRef.current = bbox.join(",");
+        pendingBboxRef.current = null;
+      }
+    }
+  }, [fitMapToBbox]);
 
   // Map event handlers
   const handleMapClick = useCallback((e: MapLayerMouseEvent) => {
@@ -1468,6 +1436,7 @@ export default function OccurrenceMapRow({
               onClick={handleMapClick}
               onMouseMove={(e: MapLayerMouseEvent) => handleMapMouseMove(e, panelId)}
               onMouseLeave={handleMapMouseLeave}
+              onLoad={panelId === "main" || !splitView ? handleMapLoad : undefined}
               cursor={hoveredFeature && hoveredPanel === panelId ? "pointer" : "grab"}
             >
               <LocateControl />
@@ -1781,7 +1750,7 @@ export default function OccurrenceMapRow({
                 </span>
                 <YearRangeTrimmer
                   features={occurrences.filter((o) => {
-                    if (!checkedTypes[getCategory(o)]) return false;
+                    if (!checkedTypes[classifyOccurrence(o) as keyof typeof checkedTypes]) return false;
                     if (maxUncertainty != null) {
                       const u = o.properties.coordinateUncertaintyInMeters;
                       if (u == null || u > maxUncertainty) return false;
@@ -1871,14 +1840,11 @@ export default function OccurrenceMapRow({
                   onChange={(e) => setMaxUncertainty(e.target.value ? parseInt(e.target.value) : null)}
                   className="text-xs px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
                 >
-                  {UNCERTAINTY_OPTIONS.map((opt) => {
-                    const count = uncertaintyCounts.get(opt.value ?? null);
-                    return (
-                      <option key={opt.label} value={opt.value ?? ""}>
-                        {opt.label}
-                      </option>
-                    );
-                  })}
+                  {UNCERTAINTY_OPTIONS.map((opt) => (
+                    <option key={opt.label} value={opt.value ?? ""}>
+                      {opt.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
