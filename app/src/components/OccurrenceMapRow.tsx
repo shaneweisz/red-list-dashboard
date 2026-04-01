@@ -1519,9 +1519,6 @@ export default function OccurrenceMapRow({
               {dedupEnabled && (
                 <span className="text-zinc-400">(deduped)</span>
               )}
-              {!splitView && totalOccurrences != null && totalOccurrences > occurrences.length && (
-                <span className="text-zinc-400">(sampled)</span>
-              )}
             </div>
           )}
           {/* Animating badge */}
@@ -1560,7 +1557,11 @@ export default function OccurrenceMapRow({
         {!splitView && totalOccurrences != null && totalOccurrences > occurrences.length && (
           <div className="flex items-center justify-between px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 border-t border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-300">
             <span>
-              Showing <strong>{occurrences.length.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> records
+              Showing{" "}
+              {filteredOccurrences.length < occurrences.length ? (
+                <><strong>{filteredOccurrences.length.toLocaleString()}</strong> of <strong>{occurrences.length.toLocaleString()}</strong> loaded (filtered) &mdash; </>
+              ) : null}
+              <strong>{occurrences.length.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> total records
             </span>
             <span className="flex items-center gap-1.5">
               <span>Load more:</span>
