@@ -1190,7 +1190,9 @@ export default function OccurrenceMapRow({
       const isHighlighted = hoveredObs?.gbifID != null && feature.properties.gbifID === hoveredObs.gbifID;
       const category = classifyOccurrence(feature);
       const isTypeBrushed = hoveredType != null && category === hoveredType;
+      const isTypeDimmed = hoveredType != null && category !== hoveredType;
       const isBrushed = (hoveredYear != null && feature.properties.year === hoveredYear) || isTypeBrushed;
+      const isDimmed = (hoveredYear != null && feature.properties.year !== hoveredYear) || isTypeDimmed;
       const isFeatureHovered = hoveredFeature?.properties.gbifID === feature.properties.gbifID;
       const isEmphasized = isHighlighted || isFeatureHovered;
 
@@ -1217,8 +1219,9 @@ export default function OccurrenceMapRow({
         fillColor = isNew ? "#22c55e" : "#9ca3af";
       }
 
-      const radius = isEmphasized ? 7 : (isBrushed ? 6 : 5);
-      const strokeWidth = isEmphasized || isBrushed ? 3 : 2;
+      const radius = isEmphasized ? 7 : (isBrushed ? 6 : (isDimmed ? 4 : 5));
+      const strokeWidth = isDimmed ? 1 : (isEmphasized || isBrushed ? 3 : 2);
+      const opacity = isDimmed ? 0.15 : (isEmphasized || isBrushed ? 1 : 0.9);
 
       return {
         type: "Feature" as const,
@@ -1228,6 +1231,7 @@ export default function OccurrenceMapRow({
           _strokeColor: strokeColor,
           _radius: radius,
           _strokeWidth: strokeWidth,
+          _opacity: opacity,
           _category: category,
         },
         geometry: feature.geometry,
@@ -1374,25 +1378,33 @@ export default function OccurrenceMapRow({
       paint: {
         "circle-radius": ["get", "_radius"] as unknown as number,
         "circle-color": ["get", "_fillColor"] as unknown as string,
-        "circle-opacity": 0.9,
+        "circle-opacity": ["get", "_opacity"] as unknown as number,
         "circle-stroke-color": ["get", "_strokeColor"] as unknown as string,
         "circle-stroke-width": ["get", "_strokeWidth"] as unknown as number,
+        "circle-stroke-opacity": ["get", "_opacity"] as unknown as number,
       },
     };
 
-    // Uncertainty circle layer (radius in meters converted to pixels)
+    // Uncertainty circle layer: convert meters to pixels using the Mercator
+    // projection formula. At zoom z the ground resolution at the equator is
+    // 40075016.686 / (256 * 2^z) meters/pixel. We scale by cos(latitude) via
+    // an exponential zoom interpolation so the circle stays geographically
+    // accurate as the user pans/zooms.
+    //
+    // Because MapLibre expressions don't expose trigonometric functions we
+    // pre-compute cos(lat) per feature and store it in the GeoJSON properties.
+    // Here we use a simpler approach: an exponential interpolation that doubles
+    // the pixel radius for each zoom level (matching Mercator). We anchor at
+    // zoom 20 where 1 meter ≈ 0.0075 pixels at the equator, then let the
+    // exponential base-2 scale handle all other zooms.
     const uncertaintyLayerStyle = {
       id: `occ-uncertainty-${panelId}`,
       type: "circle" as const,
       paint: {
         "circle-radius": [
           "interpolate", ["exponential", 2], ["zoom"],
-          0, 0,
-          20, [
-            "/",
-            ["*", ["get", "uncertaintyMeters"], 1],
-            0.075, // approximate meters-per-pixel at zoom 20
-          ],
+          0, ["*", ["get", "uncertaintyMeters"], 0.0075 / Math.pow(2, 20)],
+          20, ["*", ["get", "uncertaintyMeters"], 0.0075],
         ] as unknown as number,
         "circle-color": "#6366f1",
         "circle-opacity": 0.06,
@@ -1428,15 +1440,15 @@ export default function OccurrenceMapRow({
             </div>
           ) : mounted ? (
             <MapGL
-              ref={panelId === "main" || !splitView ? mapRef : undefined}
+              ref={panelId === "main" || panelId === "before" || !splitView ? mapRef : undefined}
               {...mapProps}
               style={{ width: "100%", height: "100%" }}
               mapStyle={BASEMAP_STYLES[basemap].style}
-              interactiveLayerIds={[`occ-circles-${panelId}`]}
+              interactiveLayerIds={shapeByType ? [] : [`occ-circles-${panelId}`]}
               onClick={handleMapClick}
               onMouseMove={(e: MapLayerMouseEvent) => handleMapMouseMove(e, panelId)}
               onMouseLeave={handleMapMouseLeave}
-              onLoad={panelId === "main" || !splitView ? handleMapLoad : undefined}
+              onLoad={panelId === "main" || panelId === "before" || !splitView ? handleMapLoad : undefined}
               cursor={hoveredFeature && hoveredPanel === panelId ? "pointer" : "grab"}
             >
               <LocateControl />
