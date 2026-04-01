@@ -1276,6 +1276,18 @@ export default function OccurrenceMapRow({
   const fittedBboxRef = useRef<string | null>(null);
   const pendingBboxRef = useRef<[number, number, number, number] | null>(null);
 
+  // Reset fitted state when split view toggles (new map instances are mounted)
+  const prevSplitViewRef = useRef(splitView);
+  useEffect(() => {
+    if (prevSplitViewRef.current !== splitView) {
+      prevSplitViewRef.current = splitView;
+      fittedBboxRef.current = null;
+      if (filteredBbox) {
+        pendingBboxRef.current = filteredBbox;
+      }
+    }
+  }, [splitView, filteredBbox]);
+
   // Fit bounds when bbox changes (may need to wait for map to be ready)
   useEffect(() => {
     if (!filteredBbox || animatingDateIdx != null) return;
