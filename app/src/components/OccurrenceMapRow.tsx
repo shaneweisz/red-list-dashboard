@@ -704,8 +704,9 @@ function InatPhotoWithPreview({ obs, idx, onHover, onLeave }: { obs: InatObserva
         left = viewportWidth - 8 - previewWidth;
       }
 
-      // If not enough room above (~100px min), show below instead
-      const showBelow = rect.top < 100;
+      // Prefer showing below; only show above if not enough room below
+      const previewHeight = 280;
+      const showBelow = rect.bottom + previewHeight + 8 < window.innerHeight;
       const anchorTop = showBelow ? rect.bottom + 4 : rect.top - 4;
 
       setPosition({ anchorTop, left, showBelow });
@@ -887,6 +888,7 @@ export default function OccurrenceMapRow({
 
   // Hovered occurrence on map (for hover tooltip)
   const [hoveredFeature, setHoveredFeature] = useState<OccurrenceFeature | null>(null);
+  const [hoveredPanel, setHoveredPanel] = useState<string | null>(null);
 
   // Animation state: step through unique sorted dates
   const [animatingDateIdx, setAnimatingDateIdx] = useState<number | null>(null);
@@ -1164,7 +1166,7 @@ export default function OccurrenceMapRow({
     const pre: OccurrenceFeature[] = [];
     const post: OccurrenceFeature[] = [];
     for (const o of filteredOccurrences) {
-      const d = o.properties.eventDate;
+      const d = o.properties.eventDate ?? (o.properties.year != null ? String(o.properties.year) : null);
       if (d && d > splitDate) {
         post.push(o);
       } else {
@@ -1257,6 +1259,7 @@ export default function OccurrenceMapRow({
     panelOccurrences: OccurrenceFeature[],
     panelBbox: [number, number, number, number] | null,
     label: string | null,
+    panelId: string = "main",
   ) => {
     const panelNewRecords = panelOccurrences.filter((o) => isNewRecord(o.properties.eventDate));
     const panelOldRecords = panelOccurrences.filter((o) => !isNewRecord(o.properties.eventDate));
@@ -1347,8 +1350,8 @@ export default function OccurrenceMapRow({
                 const hoverHandlers = {
                   click: clickHandler,
                   ...(isTouchDevice ? {} : {
-                    mouseover: () => setHoveredFeature(feature),
-                    mouseout: () => setHoveredFeature(null),
+                    mouseover: () => { setHoveredFeature(feature); setHoveredPanel(panelId); },
+                    mouseout: () => { setHoveredFeature(null); setHoveredPanel(null); },
                   }),
                 };
                 const markerOpacity = 1;
@@ -1404,7 +1407,7 @@ export default function OccurrenceMapRow({
                 </>
               )}
               {/* Hover tooltip for map markers */}
-              {hoveredFeature && !hoveredObs && (() => {
+              {hoveredFeature && !hoveredObs && hoveredPanel === panelId && (() => {
                 const [hLon, hLat] = hoveredFeature.geometry.coordinates;
                 const hInat = inatPhotosByGbifId.get(hoveredFeature.properties.gbifID);
                 return (
@@ -1440,23 +1443,6 @@ export default function OccurrenceMapRow({
                     <span>{maxDateLabel}</span>
                   </div>
                   <span className="text-zinc-400">({panelOccurrences.length})</span>
-                  {assessmentYear && !splitView && (
-                    <>
-                      <span className="text-zinc-400">|</span>
-                      <button
-                        onClick={() => {
-                          if (!splitDate && assessmentDate) setSplitDate(assessmentDate.split("T")[0]);
-                          setSplitView(true);
-                          setIsPlaying(false);
-                          setAnimatingDateIdx(null);
-                          if (animationRef.current) clearInterval(animationRef.current);
-                        }}
-                        className="text-[10px] px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                      >
-                        Split view
-                      </button>
-                    </>
-                  )}
                 </>
               ) : assessmentYear && !splitView ? (
                 <>
@@ -1468,19 +1454,6 @@ export default function OccurrenceMapRow({
                     <div className="w-3 h-3 rounded-full bg-green-500 border-2 border-green-700" />
                     <span>New since {assessmentYear} ({panelNewRecords.length})</span>
                   </div>
-                  <span className="text-zinc-400">|</span>
-                  <button
-                    onClick={() => {
-                      if (!splitDate && assessmentDate) setSplitDate(assessmentDate.split("T")[0]);
-                      setSplitView(true);
-                      setIsPlaying(false);
-                      setAnimatingDateIdx(null);
-                      if (animationRef.current) clearInterval(animationRef.current);
-                    }}
-                    className="text-[10px] px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                  >
-                    Split view
-                  </button>
                 </>
               ) : label ? (
                 <span>{panelOccurrences.length} occurrences</span>
@@ -1519,11 +1492,30 @@ export default function OccurrenceMapRow({
               )}
             </div>
           )}
+          {/* Split view button */}
+          {!loadingOccurrences && assessmentYear && !splitView && (
+            <button
+              onClick={() => {
+                if (!splitDate && assessmentDate) setSplitDate(assessmentDate.split("T")[0]);
+                setSplitView(true);
+                setIsPlaying(false);
+                setAnimatingDateIdx(null);
+                if (animationRef.current) clearInterval(animationRef.current);
+              }}
+              className="absolute bottom-2 right-2 z-[1000] bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-[11px] font-medium px-2.5 py-1.5 rounded shadow border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                <rect x="1" y="2" width="14" height="12" rx="1.5" />
+                <line x1="8" y1="2" x2="8" y2="14" />
+              </svg>
+              Split view
+            </button>
+          )}
           {/* Animating badge */}
           {!splitView && animatingDate != null && (
             <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[1000] bg-amber-500 text-white text-sm font-bold px-3 py-1 rounded-full shadow-md tabular-nums flex items-center gap-2">
               <span>{animatingDate}</span>
-              <span className="text-xs font-normal text-amber-100">{filteredOccurrences.length} / {filteredBeforeAnimation.length}</span>
+              <span className="text-xs font-normal text-amber-100">{panelOccurrences.length} / {filteredBeforeAnimation.length}</span>
             </div>
           )}
           {/* Label badge for split view */}
@@ -1980,8 +1972,8 @@ export default function OccurrenceMapRow({
                     </button>
                   </div>
                   <div className="flex flex-col sm:flex-row gap-2">
-                    {renderMapPanel(preAssessmentOccs, filteredBbox, `Before ${splitDate} (${preAssessmentOccs.length})`)}
-                    {renderMapPanel(postAssessmentOccs, filteredBbox, `After ${splitDate} (${postAssessmentOccs.length})`)}
+                    {renderMapPanel(preAssessmentOccs, filteredBbox, `Before ${splitDate} (${preAssessmentOccs.length})`, "before")}
+                    {renderMapPanel(postAssessmentOccs, filteredBbox, `After ${splitDate} (${postAssessmentOccs.length})`, "after")}
                   </div>
                 </div>
               ) : (
