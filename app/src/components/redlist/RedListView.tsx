@@ -2583,7 +2583,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                               if (preview) {
                                 (preview as HTMLImageElement).src = details.inatDefaultImage?.mediumUrl || details.inatDefaultImage?.squareUrl || '';
                                 preview.style.display = 'block';
-                                preview.style.top = `${rect.top - 192 - 8}px`;
+                                const showBelow = rect.bottom + 192 + 8 < window.innerHeight;
+                                preview.style.top = showBelow ? `${rect.bottom + 8}px` : `${rect.top - 192 - 8}px`;
                                 preview.style.left = `${rect.left}px`;
                               }
                             }}

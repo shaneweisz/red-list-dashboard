@@ -704,8 +704,9 @@ function InatPhotoWithPreview({ obs, idx, onHover, onLeave }: { obs: InatObserva
         left = viewportWidth - 8 - previewWidth;
       }
 
-      // If not enough room above (~100px min), show below instead
-      const showBelow = rect.top < 100;
+      // Prefer showing below; only show above if not enough room below
+      const previewHeight = 280;
+      const showBelow = rect.bottom + previewHeight + 8 < window.innerHeight;
       const anchorTop = showBelow ? rect.bottom + 4 : rect.top - 4;
 
       setPosition({ anchorTop, left, showBelow });
