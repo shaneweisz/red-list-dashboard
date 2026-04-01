@@ -1506,8 +1506,14 @@ export default function OccurrenceMapRow({
                   </MapLibreMarker>
                 );
               })}
-              {/* Highlighted dot when hovering an iNat thumbnail */}
+              {/* Highlighted dot when hovering an iNat thumbnail (only in the correct split panel) */}
               {hoveredObs && hoveredObs.decimalLatitude != null && hoveredObs.decimalLongitude != null && (
+                !splitView || (
+                  panelId === "main" ||
+                  (panelId === "before" && (!hoveredObs.date || hoveredObs.date <= splitDate)) ||
+                  (panelId === "after" && hoveredObs.date && hoveredObs.date > splitDate)
+                )
+              ) && (
                 <>
                   <MapLibreMarker
                     longitude={hoveredObs.decimalLongitude}
