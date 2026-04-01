@@ -888,6 +888,7 @@ export default function OccurrenceMapRow({
 
   // Hovered occurrence on map (for hover tooltip)
   const [hoveredFeature, setHoveredFeature] = useState<OccurrenceFeature | null>(null);
+  const [hoveredPanel, setHoveredPanel] = useState<string | null>(null);
 
   // Animation state: step through unique sorted dates
   const [animatingDateIdx, setAnimatingDateIdx] = useState<number | null>(null);
@@ -1258,6 +1259,7 @@ export default function OccurrenceMapRow({
     panelOccurrences: OccurrenceFeature[],
     panelBbox: [number, number, number, number] | null,
     label: string | null,
+    panelId: string = "main",
   ) => {
     const panelNewRecords = panelOccurrences.filter((o) => isNewRecord(o.properties.eventDate));
     const panelOldRecords = panelOccurrences.filter((o) => !isNewRecord(o.properties.eventDate));
@@ -1348,8 +1350,8 @@ export default function OccurrenceMapRow({
                 const hoverHandlers = {
                   click: clickHandler,
                   ...(isTouchDevice ? {} : {
-                    mouseover: () => setHoveredFeature(feature),
-                    mouseout: () => setHoveredFeature(null),
+                    mouseover: () => { setHoveredFeature(feature); setHoveredPanel(panelId); },
+                    mouseout: () => { setHoveredFeature(null); setHoveredPanel(null); },
                   }),
                 };
                 const markerOpacity = 1;
@@ -1405,7 +1407,7 @@ export default function OccurrenceMapRow({
                 </>
               )}
               {/* Hover tooltip for map markers */}
-              {hoveredFeature && !hoveredObs && (() => {
+              {hoveredFeature && !hoveredObs && hoveredPanel === panelId && (() => {
                 const [hLon, hLat] = hoveredFeature.geometry.coordinates;
                 const hInat = inatPhotosByGbifId.get(hoveredFeature.properties.gbifID);
                 return (
@@ -1970,8 +1972,8 @@ export default function OccurrenceMapRow({
                     </button>
                   </div>
                   <div className="flex flex-col sm:flex-row gap-2">
-                    {renderMapPanel(preAssessmentOccs, filteredBbox, `Before ${splitDate} (${preAssessmentOccs.length})`)}
-                    {renderMapPanel(postAssessmentOccs, filteredBbox, `After ${splitDate} (${postAssessmentOccs.length})`)}
+                    {renderMapPanel(preAssessmentOccs, filteredBbox, `Before ${splitDate} (${preAssessmentOccs.length})`, "before")}
+                    {renderMapPanel(postAssessmentOccs, filteredBbox, `After ${splitDate} (${postAssessmentOccs.length})`, "after")}
                   </div>
                 </div>
               ) : (
