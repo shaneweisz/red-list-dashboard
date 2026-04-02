@@ -23,7 +23,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "IUCN Red List Assessments Dashboard",
+  title: "IUCN Red List Dashboard",
   description: "IUCN Red List and GBIF occurrence data explorer",
 };
 
