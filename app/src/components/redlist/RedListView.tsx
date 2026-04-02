@@ -707,6 +707,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // Row expansion state (initialized from URL params if present)
   const [selectedSpeciesKey, setSelectedSpeciesKeyRaw] = useState<number | null>(urlSpecies != null && isNewAssessments ? Math.abs(urlSpecies) : urlSpecies);
   const [activeDetailTab, setActiveDetailTabRaw] = useState<"gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors">(urlTab ?? "gbif");
+  // Track which tabs have been visited so we only mount (and fetch data for) a tab on first click
+  const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set([urlTab ?? "gbif"]));
   const urlSpeciesHandledRef = useRef(false);
 
   // Wrap setters to sync with URL
@@ -715,12 +717,19 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     setSpeciesParam(key, key != null ? "gbif" : "gbif");
     if (key != null) {
       setActiveDetailTabRaw("gbif");
+      setVisitedTabs(new Set(["gbif"]));
     }
   }, [setSpeciesParam]);
 
   const setActiveDetailTab = useCallback((tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors") => {
     setActiveDetailTabRaw(tab);
     setTabParam(tab);
+    setVisitedTabs(prev => {
+      if (prev.has(tab)) return prev;
+      const next = new Set(prev);
+      next.add(tab);
+      return next;
+    });
   }, [setTabParam]);
   // Sync species/tab from URL params (fires on popstate, e.g. back/forward or search bar navigation)
   // In new-assessments mode, row keys use Math.abs(id) so selectedSpeciesKey must match.
@@ -728,6 +737,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     if (urlSpecies != null) {
       setSelectedSpeciesKeyRaw(isNewAssessments ? Math.abs(urlSpecies) : urlSpecies);
       setActiveDetailTabRaw(urlTab ?? "gbif");
+      setVisitedTabs(new Set([urlTab ?? "gbif"]));
       urlSpeciesHandledRef.current = false; // allow auto-page-navigate for new species
     }
   }, [urlSpecies, urlTab, isNewAssessments]);
@@ -2888,6 +2898,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                           {/* Content — overflow-hidden so child components don't extend past viewport */}
                           <div style={{ overflow: 'hidden', width: '100%' }}>
                           {gbifSpeciesKey ? (
+                            (stackedDetailView || visitedTabs.has("gbif")) && (
                             <div style={{ display: stackedDetailView || activeDetailTab === "gbif" ? undefined : "none" }}>
                               <OccurrenceMapRow
                                 speciesKey={gbifSpeciesKey}
@@ -2896,12 +2907,13 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                 assessmentDate={s.assessment_date}
                               />
                             </div>
+                            )
                           ) : (stackedDetailView || activeDetailTab === "gbif") && (
                             <div className="p-6 text-sm text-zinc-500 dark:text-zinc-400">
                               No GBIF match found for <span className="italic">{s.scientific_name}</span>. Occurrence data is unavailable.
                             </div>
                           )}
-                          {(assessmentYear || s.category === "NE") && (
+                          {(assessmentYear || s.category === "NE") && (stackedDetailView || visitedTabs.has("literature")) && (
                             <div className="p-4" style={{ display: stackedDetailView || activeDetailTab === "literature" ? undefined : "none" }}>
                               <NewLiteratureSinceAssessment
                                 scientificName={s.scientific_name}
@@ -2909,7 +2921,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                               />
                             </div>
                           )}
-                          {s.category !== "NE" && (
+                          {s.category !== "NE" && (stackedDetailView || visitedTabs.has("redlist")) && (
                             <div style={{ display: stackedDetailView || activeDetailTab === "redlist" ? undefined : "none" }}>
                               <RedListAssessments
                                 sisTaxonId={s.sis_taxon_id ?? undefined}
@@ -2921,13 +2933,17 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                               />
                             </div>
                           )}
+                          {(stackedDetailView || visitedTabs.has("wikipedia")) && (
                           <div style={{ display: stackedDetailView || activeDetailTab === "wikipedia" ? undefined : "none" }}>
                             <WikipediaSummary scientificName={s.scientific_name} />
                           </div>
+                          )}
+                          {(stackedDetailView || visitedTabs.has("cites")) && (
                           <div style={{ display: stackedDetailView || activeDetailTab === "cites" ? undefined : "none" }}>
                             <CitesSummary scientificName={s.scientific_name} />
                           </div>
-                          {s.category === "NE" && (
+                          )}
+                          {s.category === "NE" && (stackedDetailView || visitedTabs.has("assessors")) && (
                             <div style={{ display: stackedDetailView || activeDetailTab === "assessors" ? undefined : "none" }}>
                               <AssessorCandidatesTable
                                 taxaId={[...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group}
