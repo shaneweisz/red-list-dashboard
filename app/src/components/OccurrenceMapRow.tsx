@@ -1331,9 +1331,9 @@ export default function OccurrenceMapRow({
                     anchor="center"
                   >
                     <div style={{
-                      width: 14, height: 14, borderRadius: "50%",
-                      background: "#3b82f6",
-                      border: "2px solid #1d4ed8",
+                      width: 18, height: 18, borderRadius: "50%",
+                      background: "rgba(59, 130, 246, 0.5)",
+                      border: "2.5px solid #1d4ed8",
                     }} />
                   </MapLibreMarker>
                   {hoveredObs.imageUrl && (
