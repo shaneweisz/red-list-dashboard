@@ -82,7 +82,7 @@ export default function RedListPage() {
                     : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
                 }`}
               >
-                Unassessed
+                Not Evaluated
               </button>
             </div>
             <ThemeToggle />
