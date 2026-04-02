@@ -41,16 +41,20 @@ export default function MapImageTooltip({
   const container = map.getContainer();
   const containerRect = container.getBoundingClientRect();
 
-  const clampedX = Math.max(4, Math.min(pos.x - 42, containerRect.width - 84));
-  const showBelow = pos.y < 80;
+  // Convert to viewport-fixed coordinates to avoid overflow clipping
+  const fixedX = containerRect.left + pos.x;
+  const fixedY = containerRect.top + pos.y;
+
+  const clampedX = Math.max(containerRect.left + 4, Math.min(fixedX - 42, containerRect.right - 84));
+  const showBelow = fixedY < 80;
 
   return createPortal(
     <div
       style={{
-        position: "absolute",
+        position: "fixed",
         left: clampedX,
-        top: showBelow ? pos.y + 12 : pos.y - 72,
-        zIndex: 1000,
+        top: showBelow ? fixedY + 12 : fixedY - 72,
+        zIndex: 10000,
         pointerEvents: "none",
       }}
     >
@@ -69,6 +73,6 @@ export default function MapImageTooltip({
         }}
       />
     </div>,
-    container
+    document.body
   );
 }
