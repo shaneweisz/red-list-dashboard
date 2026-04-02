@@ -41,6 +41,11 @@ export function SpeciesSearchBar() {
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
+  // Warm-start: pre-load the search index on mount so first search is fast
+  useEffect(() => {
+    fetch("/api/search/warm").catch(() => {});
+  }, []);
+
   // Debounced fetch
   useEffect(() => {
     if (query.length < 2) {
