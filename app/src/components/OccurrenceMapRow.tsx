@@ -26,10 +26,6 @@ const MapLibreMarker = dynamic(
   () => import("react-map-gl/maplibre").then((mod) => mod.Marker),
   { ssr: false }
 );
-const LocateControl = dynamic(
-  () => import("./LocateControl"),
-  { ssr: false }
-);
 const MapImageTooltip = dynamic(
   () => import("./MapImageTooltip"),
   { ssr: false }
@@ -1316,7 +1312,6 @@ export default function OccurrenceMapRow({
               onLoad={panelId === "main" || panelId === "before" || !splitView ? handleMapLoad : undefined}
               cursor={hoveredFeature && hoveredPanel === panelId ? "pointer" : "grab"}
             >
-              <LocateControl />
               {/* Occurrence circles (GeoJSON source + circle layer) */}
               <Source id={`occurrences-${panelId}`} type="geojson" data={styledGeoJson}>
                 <Layer {...circleLayerStyle} />
