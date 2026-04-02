@@ -1336,7 +1336,7 @@ export default function OccurrenceMapRow({
                     anchor="center"
                   >
                     <div style={{
-                      width: 10, height: 10, borderRadius: "50%",
+                      width: 14, height: 14, borderRadius: "50%",
                       background: "rgba(59, 130, 246, 0.4)",
                       border: "2px solid #1d4ed8",
                     }} />
