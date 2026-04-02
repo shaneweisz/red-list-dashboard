@@ -1348,6 +1348,12 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     return [singleSpeciesPreview, ...paginatedSpeciesBase];
   }, [paginatedSpeciesBase, singleSpeciesPreview]);
 
+  // ── Single species mode: show info card instead of charts ──────────
+  const isSingleSpecies = filteredSpecies.length === 1;
+  const singleSpecies = isSingleSpecies ? filteredSpecies[0] : null;
+  const singleSpeciesAssessors = useMemo(() => singleSpecies ? getSpeciesAssessors(singleSpecies) : [], [singleSpecies, getSpeciesAssessors]);
+  const singleSpeciesReviewers = useMemo(() => singleSpecies ? getSpeciesReviewers(singleSpecies) : [], [singleSpecies, getSpeciesReviewers]);
+
   // Helper to get country display name
   const getCountryName = (code: string) => ALPHA2_TO_NAME[code] || code;
 
@@ -1727,6 +1733,17 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
               <div className="flex-1 min-h-[150px] flex items-center justify-center">
                 {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
+                ) : isSingleSpecies && singleSpecies ? (
+                  <span
+                    className="px-5 py-2.5 text-4xl font-bold rounded"
+                    style={{
+                      backgroundColor: (CATEGORY_COLORS[singleSpecies.category] || "#999") + "20",
+                      color: singleSpecies.category === "EX" || singleSpecies.category === "EW" ? "#fff" : CATEGORY_COLORS[singleSpecies.category] || "#999",
+                      ...(singleSpecies.category === "EX" || singleSpecies.category === "EW" ? { backgroundColor: CATEGORY_COLORS[singleSpecies.category] } : {}),
+                    }}
+                  >
+                    {singleSpecies.category}
+                  </span>
                 ) : categoryDataWithPercent.length > 0 ? (
                   <FilterBarChart
                     data={categoryDataWithPercent}
@@ -1758,7 +1775,18 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
               <div className="flex-1 min-h-[150px] flex items-center justify-center">
                 {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
-                ) : gbifObsData.length > 0 ? (
+                ) : isSingleSpecies && singleSpecies ? (() => {
+                  const count = singleSpecies.gbif_occurrence_count;
+                  const formatted = count == null ? "N/A"
+                    : count >= 1_000_000 ? `${Math.floor(count / 1_000_000)}M+`
+                    : count >= 1_000 ? `${Math.floor(count / 1_000)}K+`
+                    : count.toLocaleString();
+                  return (
+                    <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">
+                      {formatted}
+                    </span>
+                  );
+                })() : gbifObsData.length > 0 ? (
                   <FilterBarChart
                     data={gbifObsData}
                     dataKey="shortRange"
@@ -1780,7 +1808,19 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
               <div className="flex-1 min-h-[150px] flex items-center justify-center">
                 {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
-                ) : assessmentYearData.length > 0 ? (
+                ) : isSingleSpecies && singleSpecies ? (() => {
+                  if (!singleSpecies.assessment_date) return (
+                    <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">N/A</span>
+                  );
+                  const msPerYear = 365.25 * 24 * 60 * 60 * 1000;
+                  const elapsed = Date.now() - new Date(singleSpecies.assessment_date).getTime();
+                  const yearsSince = Math.floor(elapsed / msPerYear);
+                  return (
+                    <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">
+                      {yearsSince < 1 ? "<1" : yearsSince}
+                    </span>
+                  );
+                })() : assessmentYearData.length > 0 ? (
                   <FilterBarChart
                     data={assessmentYearData}
                     dataKey="shortRange"
@@ -1843,6 +1883,44 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                       yAxisWidth={42}
                       rightMargin={85}
                     />
+                  )}
+                </div>
+              </div>
+            ) : isSingleSpecies && singleSpecies ? (
+              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="inline-flex rounded-md bg-zinc-100 dark:bg-zinc-800 p-0.5">
+                    <button
+                      onClick={() => setReviewerFilterMode("assessors")}
+                      className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
+                        reviewerFilterMode === "assessors"
+                          ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
+                          : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+                      }`}
+                    >
+                      Assessors
+                    </button>
+                    <button
+                      onClick={() => setReviewerFilterMode("reviewers")}
+                      className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
+                        reviewerFilterMode === "reviewers"
+                          ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
+                          : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+                      }`}
+                    >
+                      Reviewers
+                    </button>
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto mt-2" style={{ maxHeight: 260 }}>
+                  {(reviewerFilterMode === "assessors" ? singleSpeciesAssessors : singleSpeciesReviewers).length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {(reviewerFilterMode === "assessors" ? singleSpeciesAssessors : singleSpeciesReviewers).map((name) => (
+                        <span key={name} className="inline-block px-3 py-1.5 text-sm rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">{name}</span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-sm text-zinc-400 dark:text-zinc-500">None listed</span>
                   )}
                 </div>
               </div>
