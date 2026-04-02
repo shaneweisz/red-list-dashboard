@@ -1120,9 +1120,9 @@ export default function OccurrenceMapRow({
         fillColor = isNew ? "#4ade80" : "#9ca3af";
       }
 
-      const radius = isFeatureHovered ? 7 : (isBrushed ? 6 : (isDimmed ? 4 : 5));
+      const radius = isBrushed ? 6 : (isDimmed ? 4 : 5);
       const strokeWidth = isDimmed ? 1 : (isFeatureHovered || isBrushed ? 3 : 2);
-      const opacity = isDimmed ? 0.15 : (isFeatureHovered || isBrushed ? 1 : 0.9);
+      const opacity = isDimmed ? 0.15 : 1;
 
       return {
         type: "Feature" as const,
@@ -1332,7 +1332,7 @@ export default function OccurrenceMapRow({
                   >
                     <div style={{
                       width: 14, height: 14, borderRadius: "50%",
-                      background: "rgba(59, 130, 246, 0.4)",
+                      background: "#3b82f6",
                       border: "2px solid #1d4ed8",
                     }} />
                   </MapLibreMarker>
