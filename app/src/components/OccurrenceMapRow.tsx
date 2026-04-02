@@ -1120,8 +1120,8 @@ export default function OccurrenceMapRow({
         const isNew = !assessmentYear || (feature.properties.eventDate
           ? new Date(feature.properties.eventDate).getFullYear() > assessmentYear
           : false);
-        strokeColor = isNew ? "#15803d" : "#6b7280";
-        fillColor = isNew ? "#22c55e" : "#9ca3af";
+        strokeColor = isNew ? "#16a34a" : "#6b7280";
+        fillColor = isNew ? "#4ade80" : "#9ca3af";
       }
 
       const radius = isFeatureHovered ? 7 : (isBrushed ? 6 : (isDimmed ? 4 : 5));
@@ -1395,7 +1395,7 @@ export default function OccurrenceMapRow({
                     <span>≤{assessmentYear}</span>
                   </div>
                   <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded-full bg-green-500 border-2 border-green-700" />
+                    <div className="w-3 h-3 rounded-full bg-green-400 border-2 border-green-600" />
                     <span>After {assessmentYear}</span>
                   </div>
                   <span className="text-zinc-400">({panelOccurrences.length})</span>
