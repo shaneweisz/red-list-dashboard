@@ -1809,12 +1809,15 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
                 ) : isSingleSpecies && singleSpecies ? (() => {
-                  const assessmentYear = singleSpecies.assessment_date
-                    ? new Date(singleSpecies.assessment_date).getFullYear() : null;
-                  const yearsSince = assessmentYear != null ? new Date().getFullYear() - assessmentYear : null;
+                  if (!singleSpecies.assessment_date) return (
+                    <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">N/A</span>
+                  );
+                  const msPerYear = 365.25 * 24 * 60 * 60 * 1000;
+                  const elapsed = Date.now() - new Date(singleSpecies.assessment_date).getTime();
+                  const yearsSince = Math.floor(elapsed / msPerYear);
                   return (
                     <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">
-                      {yearsSince != null ? yearsSince : "N/A"}
+                      {yearsSince < 1 ? "<1" : yearsSince}
                     </span>
                   );
                 })() : assessmentYearData.length > 0 ? (
