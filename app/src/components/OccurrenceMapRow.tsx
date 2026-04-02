@@ -1090,18 +1090,16 @@ export default function OccurrenceMapRow({
     panelOccurrences: OccurrenceFeature[],
   ): GeoJSON.FeatureCollection => {
     const features = panelOccurrences.map((feature) => {
-      const isHighlighted = hoveredObs?.gbifID != null && feature.properties.gbifID === hoveredObs.gbifID;
       const category = classifyOccurrence(feature);
       const isTypeBrushed = hoveredType != null && category === hoveredType;
       const isTypeDimmed = hoveredType != null && category !== hoveredType;
       const isBrushed = (hoveredYear != null && feature.properties.year === hoveredYear) || isTypeBrushed;
       const isDimmed = (hoveredYear != null && feature.properties.year !== hoveredYear) || isTypeDimmed;
       const isFeatureHovered = hoveredFeature?.properties.gbifID === feature.properties.gbifID;
-      const isEmphasized = isHighlighted || isFeatureHovered;
 
       let strokeColor: string;
       let fillColor: string;
-      if (isHighlighted) {
+      if (isFeatureHovered) {
         strokeColor = "#1d4ed8";
         fillColor = "#3b82f6";
       } else if (isBrushed) {
@@ -1126,9 +1124,9 @@ export default function OccurrenceMapRow({
         fillColor = isNew ? "#22c55e" : "#9ca3af";
       }
 
-      const radius = isEmphasized ? 7 : (isBrushed ? 6 : (isDimmed ? 4 : 5));
-      const strokeWidth = isDimmed ? 1 : (isEmphasized || isBrushed ? 3 : 2);
-      const opacity = isDimmed ? 0.15 : (isEmphasized || isBrushed ? 1 : 0.9);
+      const radius = isFeatureHovered ? 7 : (isBrushed ? 6 : (isDimmed ? 4 : 5));
+      const strokeWidth = isDimmed ? 1 : (isFeatureHovered || isBrushed ? 3 : 2);
+      const opacity = isDimmed ? 0.15 : (isFeatureHovered || isBrushed ? 1 : 0.9);
 
       return {
         type: "Feature" as const,
@@ -1144,7 +1142,7 @@ export default function OccurrenceMapRow({
       };
     });
     return { type: "FeatureCollection", features };
-  }, [hoveredObs, hoveredType, hoveredYear, hoveredFeature, colorByDate, minDateNum, maxDateNum, assessmentYear]);
+  }, [hoveredType, hoveredYear, hoveredFeature, colorByDate, minDateNum, maxDateNum, assessmentYear]);
 
   // FitBounds helper using map ref
   const fitMapToBbox = useCallback((bbox: [number, number, number, number]) => {
@@ -1403,36 +1401,38 @@ export default function OccurrenceMapRow({
                   <span className="text-zinc-400">({panelOccurrences.length})</span>
                 </>
               )}
-              {/* Toggle color mode (only when assessment year is available) */}
+              {/* Toggle color mode / split view (only when assessment year is available) */}
               {!label && assessmentYear && (
-                <button
-                  onClick={() => setColorByDate(!colorByDate)}
-                  className="ml-1 px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-[10px] text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"
-                  title={colorByDate ? "Color by before/after assessment" : "Color by date"}
-                >
-                  {colorByDate ? "Before/after" : "By date"}
-                </button>
+                <>
+                  <span className="text-zinc-300 dark:text-zinc-600">|</span>
+                  <button
+                    onClick={() => setColorByDate(!colorByDate)}
+                    className="px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-[10px] text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"
+                    title={colorByDate ? "Color by before/after assessment" : "Color by date"}
+                  >
+                    {colorByDate ? "Before/after" : "By date"}
+                  </button>
+                  {!splitView && (
+                    <button
+                      onClick={() => {
+                        if (!splitDate && assessmentDate) setSplitDate(assessmentDate.split("T")[0]);
+                        setSplitView(true);
+                        setIsPlaying(false);
+                        setAnimatingDateIdx(null);
+                        if (animationRef.current) clearInterval(animationRef.current);
+                      }}
+                      className="px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-[10px] text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-1"
+                    >
+                      <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                        <rect x="1" y="2" width="14" height="12" rx="1.5" />
+                        <line x1="8" y1="2" x2="8" y2="14" />
+                      </svg>
+                      Split view
+                    </button>
+                  )}
+                </>
               )}
             </div>
-          )}
-          {/* Split view button */}
-          {!loadingOccurrences && assessmentYear && !splitView && (
-            <button
-              onClick={() => {
-                if (!splitDate && assessmentDate) setSplitDate(assessmentDate.split("T")[0]);
-                setSplitView(true);
-                setIsPlaying(false);
-                setAnimatingDateIdx(null);
-                if (animationRef.current) clearInterval(animationRef.current);
-              }}
-              className="absolute bottom-2 right-2 z-[1000] bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-[11px] font-medium px-2.5 py-1.5 rounded shadow border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors cursor-pointer flex items-center gap-1.5"
-            >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                <rect x="1" y="2" width="14" height="12" rx="1.5" />
-                <line x1="8" y1="2" x2="8" y2="14" />
-              </svg>
-              Split view
-            </button>
           )}
           {/* Animating badge */}
           {!splitView && animatingDate != null && (
