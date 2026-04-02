@@ -159,7 +159,7 @@ export function SpeciesSearchBar() {
   }
 
   return (
-    <div ref={containerRef} className="relative w-full sm:w-[19rem]">
+    <div ref={containerRef} className="relative w-full sm:w-[20rem]">
       <div className="relative">
         {/* Magnifying glass icon */}
         <svg
