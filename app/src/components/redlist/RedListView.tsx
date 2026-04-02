@@ -10,7 +10,7 @@ import CitesSummary from "../CitesSummary";
 import WikipediaSummary from "../WikipediaSummary";
 import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME } from "../WorldMap";
-import { CATEGORY_COLORS, CATEGORY_NAMES, TAXA_BY_ID } from "@/config/taxa";
+import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
 import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode } from "@/lib/taxonomy-utils";
 import ReviewerChart from "./ReviewerChart";
 import { parseAssessors } from "@/lib/parseAssessors";
@@ -1341,8 +1341,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // ── Single species mode: show info card instead of charts ──────────
   const isSingleSpecies = filteredSpecies.length === 1;
   const singleSpecies = isSingleSpecies ? filteredSpecies[0] : null;
-  const singleSpeciesAssessors = useMemo(() => singleSpecies ? getSpeciesAssessors(singleSpecies) : [], [singleSpecies, getSpeciesAssessors]);
-  const singleSpeciesReviewers = useMemo(() => singleSpecies ? getSpeciesReviewers(singleSpecies) : [], [singleSpecies, getSpeciesReviewers]);
+
 
   // Helper to get country display name
   const getCountryName = (code: string) => ALPHA2_TO_NAME[code] || code;
@@ -1724,27 +1723,16 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
                 ) : isSingleSpecies && singleSpecies ? (
-                  <div className="flex flex-col items-center gap-2">
-                    <span
-                      className="px-4 py-2 text-2xl font-bold rounded"
-                      style={{
-                        backgroundColor: (CATEGORY_COLORS[singleSpecies.category] || "#999") + "20",
-                        color: singleSpecies.category === "EX" || singleSpecies.category === "EW" ? "#fff" : CATEGORY_COLORS[singleSpecies.category] || "#999",
-                        ...(singleSpecies.category === "EX" || singleSpecies.category === "EW" ? { backgroundColor: CATEGORY_COLORS[singleSpecies.category] } : {}),
-                      }}
-                    >
-                      {singleSpecies.category}
-                    </span>
-                    <span className="text-sm text-zinc-600 dark:text-zinc-400">{CATEGORY_NAMES[singleSpecies.category] || singleSpecies.category}</span>
-                    {singleSpecies.criteria && (
-                      <span className="text-xs text-zinc-500 dark:text-zinc-400">Criteria: {singleSpecies.criteria}</span>
-                    )}
-                    {singleSpecies.population_trend && (
-                      <span className="text-xs text-zinc-500 dark:text-zinc-400 capitalize">
-                        Trend: {singleSpecies.population_trend}
-                      </span>
-                    )}
-                  </div>
+                  <span
+                    className="px-5 py-2.5 text-4xl font-bold rounded"
+                    style={{
+                      backgroundColor: (CATEGORY_COLORS[singleSpecies.category] || "#999") + "20",
+                      color: singleSpecies.category === "EX" || singleSpecies.category === "EW" ? "#fff" : CATEGORY_COLORS[singleSpecies.category] || "#999",
+                      ...(singleSpecies.category === "EX" || singleSpecies.category === "EW" ? { backgroundColor: CATEGORY_COLORS[singleSpecies.category] } : {}),
+                    }}
+                  >
+                    {singleSpecies.category}
+                  </span>
                 ) : categoryDataWithPercent.length > 0 ? (
                   <FilterBarChart
                     data={categoryDataWithPercent}
@@ -1777,17 +1765,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
                 ) : isSingleSpecies && singleSpecies ? (
-                  <div className="flex flex-col items-center gap-1">
-                    <span className="text-3xl font-bold text-zinc-900 dark:text-zinc-100">
-                      {singleSpecies.gbif_occurrence_count != null ? singleSpecies.gbif_occurrence_count.toLocaleString() : "N/A"}
-                    </span>
-                    <span className="text-sm text-zinc-500 dark:text-zinc-400">total observations</span>
-                    {singleSpecies.gbif_observations_after_assessment_year != null && singleSpecies.gbif_observations_after_assessment_year > 0 && (
-                      <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400 mt-1">
-                        +{singleSpecies.gbif_observations_after_assessment_year.toLocaleString()} since assessment
-                      </span>
-                    )}
-                  </div>
+                  <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">
+                    {singleSpecies.gbif_occurrence_count != null ? singleSpecies.gbif_occurrence_count.toLocaleString() : "N/A"}
+                  </span>
                 ) : gbifObsData.length > 0 ? (
                   <FilterBarChart
                     data={gbifObsData}
@@ -1815,19 +1795,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                     ? new Date(singleSpecies.assessment_date).getFullYear() : null;
                   const yearsSince = assessmentYear != null ? new Date().getFullYear() - assessmentYear : null;
                   return (
-                    <div className="flex flex-col items-center gap-1">
-                      <span className="text-3xl font-bold text-zinc-900 dark:text-zinc-100">
-                        {yearsSince != null ? yearsSince : "N/A"}
-                      </span>
-                      <span className="text-sm text-zinc-500 dark:text-zinc-400">
-                        {yearsSince != null ? `year${yearsSince !== 1 ? "s" : ""}` : ""}
-                      </span>
-                      {singleSpecies.assessment_date && (
-                        <span className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                          Assessed {new Date(singleSpecies.assessment_date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
-                        </span>
-                      )}
-                    </div>
+                    <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">
+                      {yearsSince != null ? yearsSince : "N/A"}
+                    </span>
                   );
                 })() : assessmentYearData.length > 0 ? (
                   <FilterBarChart
@@ -1892,39 +1862,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                       yAxisWidth={42}
                       rightMargin={85}
                     />
-                  )}
-                </div>
-              </div>
-            ) : isSingleSpecies && singleSpecies ? (
-              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Assessors &amp; Reviewers</span>
-                </div>
-                <div className="flex-1 flex flex-col justify-center gap-3 py-2">
-                  {singleSpeciesAssessors.length > 0 ? (
-                    <div>
-                      <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Assessors</span>
-                      <div className="mt-1 flex flex-col gap-1">
-                        {singleSpeciesAssessors.map((a) => (
-                          <span key={a} className="text-sm text-zinc-700 dark:text-zinc-300">{a}</span>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <div>
-                      <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Assessors</span>
-                      <p className="text-sm text-zinc-400 dark:text-zinc-500 mt-1">N/A</p>
-                    </div>
-                  )}
-                  {singleSpeciesReviewers.length > 0 && (
-                    <div>
-                      <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Reviewers</span>
-                      <div className="mt-1 flex flex-col gap-1">
-                        {singleSpeciesReviewers.map((r) => (
-                          <span key={r} className="text-sm text-zinc-700 dark:text-zinc-300">{r}</span>
-                        ))}
-                      </div>
-                    </div>
                   )}
                 </div>
               </div>
