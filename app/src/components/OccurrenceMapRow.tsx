@@ -1095,10 +1095,7 @@ export default function OccurrenceMapRow({
 
       let strokeColor: string;
       let fillColor: string;
-      if (isFeatureHovered) {
-        strokeColor = "#1d4ed8";
-        fillColor = "#3b82f6";
-      } else if (isBrushed) {
+      if (isBrushed) {
         strokeColor = "#d97706";
         fillColor = "#f59e0b";
       } else if (colorByDate) {
@@ -1120,7 +1117,7 @@ export default function OccurrenceMapRow({
         fillColor = isNew ? "#4ade80" : "#9ca3af";
       }
 
-      const radius = isBrushed ? 6 : (isDimmed ? 4 : 5);
+      const radius = isFeatureHovered ? 6 : (isBrushed ? 6 : (isDimmed ? 4 : 5));
       const strokeWidth = isDimmed ? 1 : (isFeatureHovered || isBrushed ? 3 : 2);
       const opacity = isDimmed ? 0.15 : 1;
 
