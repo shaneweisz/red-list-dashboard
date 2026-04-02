@@ -1341,7 +1341,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // ── Single species mode: show info card instead of charts ──────────
   const isSingleSpecies = filteredSpecies.length === 1;
   const singleSpecies = isSingleSpecies ? filteredSpecies[0] : null;
-
+  const singleSpeciesAssessors = useMemo(() => singleSpecies ? getSpeciesAssessors(singleSpecies) : [], [singleSpecies, getSpeciesAssessors]);
+  const singleSpeciesReviewers = useMemo(() => singleSpecies ? getSpeciesReviewers(singleSpecies) : [], [singleSpecies, getSpeciesReviewers]);
 
   // Helper to get country display name
   const getCountryName = (code: string) => ALPHA2_TO_NAME[code] || code;
@@ -1862,6 +1863,44 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                       yAxisWidth={42}
                       rightMargin={85}
                     />
+                  )}
+                </div>
+              </div>
+            ) : isSingleSpecies && singleSpecies ? (
+              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="inline-flex rounded-md bg-zinc-100 dark:bg-zinc-800 p-0.5">
+                    <button
+                      onClick={() => setReviewerFilterMode("assessors")}
+                      className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
+                        reviewerFilterMode === "assessors"
+                          ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
+                          : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+                      }`}
+                    >
+                      Assessors
+                    </button>
+                    <button
+                      onClick={() => setReviewerFilterMode("reviewers")}
+                      className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
+                        reviewerFilterMode === "reviewers"
+                          ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
+                          : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+                      }`}
+                    >
+                      Reviewers
+                    </button>
+                  </div>
+                </div>
+                <div className="flex-1 flex flex-col justify-center py-2">
+                  {(reviewerFilterMode === "assessors" ? singleSpeciesAssessors : singleSpeciesReviewers).length > 0 ? (
+                    <div className="flex flex-col gap-1.5">
+                      {(reviewerFilterMode === "assessors" ? singleSpeciesAssessors : singleSpeciesReviewers).map((name) => (
+                        <span key={name} className="text-sm text-zinc-700 dark:text-zinc-300">{name}</span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-sm text-zinc-400 dark:text-zinc-500">None listed</span>
                   )}
                 </div>
               </div>
