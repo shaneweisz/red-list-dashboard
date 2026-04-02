@@ -739,6 +739,7 @@ export default function OccurrenceMapRow({
 
   // Advanced filter state
   const [maxUncertainty, setMaxUncertainty] = useState<number | null>(null);
+  const [colorByDate, setColorByDate] = useState(true);
   const [basemap, setBasemap] = useState<BasemapKey>("streets");
   const [splitView, setSplitView] = useState(false);
   const [splitDate, setSplitDate] = useState<string>(assessmentDate?.split("T")[0] || "");
@@ -1106,7 +1107,7 @@ export default function OccurrenceMapRow({
       } else if (isBrushed) {
         strokeColor = "#d97706";
         fillColor = "#f59e0b";
-      } else {
+      } else if (colorByDate) {
         const dNum = dateToNumeric(feature.properties.eventDate, feature.properties.year);
         if (dNum != null) {
           const colors = dateToColor(dNum, minDateNum, maxDateNum);
@@ -1116,6 +1117,13 @@ export default function OccurrenceMapRow({
           strokeColor = "#6b7280";
           fillColor = "#9ca3af";
         }
+      } else {
+        // Color by before/after assessment year
+        const isNew = !assessmentYear || (feature.properties.eventDate
+          ? new Date(feature.properties.eventDate).getFullYear() > assessmentYear
+          : false);
+        strokeColor = isNew ? "#15803d" : "#6b7280";
+        fillColor = isNew ? "#22c55e" : "#9ca3af";
       }
 
       const radius = isEmphasized ? 7 : (isBrushed ? 6 : (isDimmed ? 4 : 5));
@@ -1136,7 +1144,7 @@ export default function OccurrenceMapRow({
       };
     });
     return { type: "FeatureCollection", features };
-  }, [hoveredObs, hoveredType, hoveredYear, hoveredFeature, minDateNum, maxDateNum]);
+  }, [hoveredObs, hoveredType, hoveredYear, hoveredFeature, colorByDate, minDateNum, maxDateNum, assessmentYear]);
 
   // FitBounds helper using map ref
   const fitMapToBbox = useCallback((bbox: [number, number, number, number]) => {
@@ -1369,7 +1377,7 @@ export default function OccurrenceMapRow({
             <div className="absolute bottom-2 left-2 z-[1000] bg-white dark:bg-zinc-800 px-2 py-1.5 rounded text-xs text-zinc-600 dark:text-zinc-300 shadow flex flex-wrap items-center gap-x-3 gap-y-1 max-w-[90%]">
               {label ? (
                 <span>{label}</span>
-              ) : (
+              ) : colorByDate ? (
                 <>
                   <div className="flex items-center gap-1">
                     <div className="w-3 h-3 rounded-full" style={{ background: "hsl(30, 60%, 50%)", border: "2px solid hsl(30, 60%, 30%)" }} />
@@ -1382,6 +1390,28 @@ export default function OccurrenceMapRow({
                   </div>
                   <span className="text-zinc-400">({panelOccurrences.length})</span>
                 </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded-full bg-gray-400 border-2 border-gray-500" />
+                    <span>≤{assessmentYear}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded-full bg-green-500 border-2 border-green-700" />
+                    <span>After {assessmentYear}</span>
+                  </div>
+                  <span className="text-zinc-400">({panelOccurrences.length})</span>
+                </>
+              )}
+              {/* Toggle color mode (only when assessment year is available) */}
+              {!label && assessmentYear && (
+                <button
+                  onClick={() => setColorByDate(!colorByDate)}
+                  className="ml-1 px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-[10px] text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"
+                  title={colorByDate ? "Color by before/after assessment" : "Color by date"}
+                >
+                  {colorByDate ? "Before/after" : "By date"}
+                </button>
               )}
             </div>
           )}
