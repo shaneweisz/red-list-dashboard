@@ -10,7 +10,7 @@ import CitesSummary from "../CitesSummary";
 import WikipediaSummary from "../WikipediaSummary";
 import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME } from "../WorldMap";
-import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
+import { CATEGORY_COLORS, CATEGORY_NAMES, TAXA_BY_ID } from "@/config/taxa";
 import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode } from "@/lib/taxonomy-utils";
 import ReviewerChart from "./ReviewerChart";
 import { parseAssessors } from "@/lib/parseAssessors";
@@ -1724,16 +1724,19 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
                 ) : isSingleSpecies && singleSpecies ? (
-                  <span
-                    className="px-5 py-2.5 text-4xl font-bold rounded"
-                    style={{
-                      backgroundColor: (CATEGORY_COLORS[singleSpecies.category] || "#999") + "20",
-                      color: singleSpecies.category === "EX" || singleSpecies.category === "EW" ? "#fff" : CATEGORY_COLORS[singleSpecies.category] || "#999",
-                      ...(singleSpecies.category === "EX" || singleSpecies.category === "EW" ? { backgroundColor: CATEGORY_COLORS[singleSpecies.category] } : {}),
-                    }}
-                  >
-                    {singleSpecies.category}
-                  </span>
+                  <div className="flex flex-col items-center gap-2">
+                    <span
+                      className="px-5 py-2.5 text-4xl font-bold rounded"
+                      style={{
+                        backgroundColor: (CATEGORY_COLORS[singleSpecies.category] || "#999") + "20",
+                        color: singleSpecies.category === "EX" || singleSpecies.category === "EW" ? "#fff" : CATEGORY_COLORS[singleSpecies.category] || "#999",
+                        ...(singleSpecies.category === "EX" || singleSpecies.category === "EW" ? { backgroundColor: CATEGORY_COLORS[singleSpecies.category] } : {}),
+                      }}
+                    >
+                      {singleSpecies.category}
+                    </span>
+                    <span className="text-sm text-zinc-500 dark:text-zinc-400">{CATEGORY_NAMES[singleSpecies.category] || singleSpecies.category}</span>
+                  </div>
                 ) : categoryDataWithPercent.length > 0 ? (
                   <FilterBarChart
                     data={categoryDataWithPercent}
@@ -1765,11 +1768,18 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
               <div className="flex-1 min-h-[150px] flex items-center justify-center">
                 {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
-                ) : isSingleSpecies && singleSpecies ? (
-                  <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">
-                    {singleSpecies.gbif_occurrence_count != null ? singleSpecies.gbif_occurrence_count.toLocaleString() : "N/A"}
-                  </span>
-                ) : gbifObsData.length > 0 ? (
+                ) : isSingleSpecies && singleSpecies ? (() => {
+                  const count = singleSpecies.gbif_occurrence_count;
+                  const formatted = count == null ? "N/A"
+                    : count >= 1_000_000 ? `${Math.floor(count / 1_000_000)}M+`
+                    : count >= 1_000 ? `${Math.floor(count / 1_000)}K+`
+                    : count.toLocaleString();
+                  return (
+                    <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">
+                      {formatted}
+                    </span>
+                  );
+                })() : gbifObsData.length > 0 ? (
                   <FilterBarChart
                     data={gbifObsData}
                     dataKey="shortRange"
