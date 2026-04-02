@@ -1914,9 +1914,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 </div>
                 <div className="flex-1 overflow-y-auto mt-2" style={{ maxHeight: 260 }}>
                   {(reviewerFilterMode === "assessors" ? singleSpeciesAssessors : singleSpeciesReviewers).length > 0 ? (
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex flex-wrap gap-2">
                       {(reviewerFilterMode === "assessors" ? singleSpeciesAssessors : singleSpeciesReviewers).map((name) => (
-                        <span key={name} className="inline-block px-2 py-1 text-xs rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">{name}</span>
+                        <span key={name} className="inline-block px-3 py-1.5 text-sm rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">{name}</span>
                       ))}
                     </div>
                   ) : (
