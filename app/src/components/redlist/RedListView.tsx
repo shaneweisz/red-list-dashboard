@@ -10,7 +10,7 @@ import CitesSummary from "../CitesSummary";
 import WikipediaSummary from "../WikipediaSummary";
 import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME } from "../WorldMap";
-import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
+import { CATEGORY_COLORS, CATEGORY_NAMES, TAXA_BY_ID } from "@/config/taxa";
 import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode } from "@/lib/taxonomy-utils";
 import ReviewerChart from "./ReviewerChart";
 import { parseAssessors } from "@/lib/parseAssessors";
@@ -292,6 +292,125 @@ function GbifInfoTooltip() {
         document.body
       )}
     </span>
+  );
+}
+
+/** Compact info card shown when exactly one species is displayed (e.g. via search). */
+function SingleSpeciesInfoCard({
+  species,
+  assessors,
+  reviewers,
+}: {
+  species: Species;
+  assessors: string[];
+  reviewers: string[];
+}) {
+  const currentYear = new Date().getFullYear();
+  const assessmentYear = species.assessment_date
+    ? new Date(species.assessment_date).getFullYear()
+    : null;
+  const yearsSinceAssessed = assessmentYear != null ? currentYear - assessmentYear : null;
+
+  const categoryName = CATEGORY_NAMES[species.category] || species.category;
+  const categoryColor = CATEGORY_COLORS[species.category] || "#999";
+
+  const trendIcons: Record<string, string> = {
+    stable: "\u2192",
+    increasing: "\u2191",
+    declining: "\u2193",
+    unknown: "?",
+  };
+
+  return (
+    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+        {/* Risk Category */}
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Risk Category</span>
+          <div className="flex items-center gap-2">
+            <span
+              className="px-2.5 py-1 text-sm font-bold rounded"
+              style={{
+                backgroundColor: categoryColor + "20",
+                color: species.category === "EX" || species.category === "EW" ? "#fff" : categoryColor,
+                ...(species.category === "EX" || species.category === "EW" ? { backgroundColor: categoryColor } : {}),
+              }}
+            >
+              {species.category}
+            </span>
+            <span className="text-sm text-zinc-700 dark:text-zinc-300">{categoryName}</span>
+          </div>
+          {species.criteria && (
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">Criteria: {species.criteria}</span>
+          )}
+        </div>
+
+        {/* Years Since Assessed */}
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Years Since Assessed</span>
+          {yearsSinceAssessed != null ? (
+            <>
+              <span className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">{yearsSinceAssessed}</span>
+              <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                Assessed {species.assessment_date ? new Date(species.assessment_date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : ""}
+              </span>
+            </>
+          ) : (
+            <span className="text-sm text-zinc-400 dark:text-zinc-500">N/A</span>
+          )}
+        </div>
+
+        {/* Total GBIF */}
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Total GBIF Observations</span>
+          <span className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+            {species.gbif_occurrence_count != null ? species.gbif_occurrence_count.toLocaleString() : "N/A"}
+          </span>
+          {species.gbif_observations_after_assessment_year != null && species.gbif_observations_after_assessment_year > 0 && (
+            <span className="text-xs text-emerald-600 dark:text-emerald-400">
+              +{species.gbif_observations_after_assessment_year.toLocaleString()} since assessment
+            </span>
+          )}
+        </div>
+
+        {/* Population Trend */}
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Population Trend</span>
+          {species.population_trend ? (
+            <div className="flex items-center gap-1.5">
+              <span className="text-2xl">{trendIcons[species.population_trend] || ""}</span>
+              <span className="text-sm text-zinc-700 dark:text-zinc-300 capitalize">{species.population_trend}</span>
+            </div>
+          ) : (
+            <span className="text-sm text-zinc-400 dark:text-zinc-500">Unknown</span>
+          )}
+        </div>
+
+        {/* Assessors */}
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Assessors</span>
+          {assessors.length > 0 ? (
+            <div className="flex flex-col gap-0.5">
+              {assessors.map((a) => (
+                <span key={a} className="text-sm text-zinc-700 dark:text-zinc-300">{a}</span>
+              ))}
+            </div>
+          ) : (
+            <span className="text-sm text-zinc-400 dark:text-zinc-500">N/A</span>
+          )}
+          {reviewers.length > 0 && (
+            <>
+              <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mt-1">Reviewers</span>
+              <div className="flex flex-col gap-0.5">
+                {reviewers.map((r) => (
+                  <span key={r} className="text-sm text-zinc-700 dark:text-zinc-300">{r}</span>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1338,6 +1457,12 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     return [singleSpeciesPreview, ...paginatedSpeciesBase];
   }, [paginatedSpeciesBase, singleSpeciesPreview]);
 
+  // ── Single species mode: show info card instead of charts ──────────
+  const isSingleSpecies = filteredSpecies.length === 1;
+  const singleSpecies = isSingleSpecies ? filteredSpecies[0] : null;
+  const singleSpeciesAssessors = useMemo(() => singleSpecies ? getSpeciesAssessors(singleSpecies) : [], [singleSpecies, getSpeciesAssessors]);
+  const singleSpeciesReviewers = useMemo(() => singleSpecies ? getSpeciesReviewers(singleSpecies) : [], [singleSpecies, getSpeciesReviewers]);
+
   // Helper to get country display name
   const getCountryName = (code: string) => ALPHA2_TO_NAME[code] || code;
 
@@ -1706,8 +1831,14 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       {selectedTaxa.size > 0 && (
       <div className="space-y-3">
 
-          {/* Charts row 1: bar charts (new-assessments mode only shows GBIF Observations) */}
-          {!isNewAssessments && (
+          {/* Charts row 1: show info card for single species, bar charts for multiple */}
+          {!isNewAssessments && isSingleSpecies && singleSpecies ? (
+            <SingleSpeciesInfoCard
+              species={singleSpecies}
+              assessors={singleSpeciesAssessors}
+              reviewers={singleSpeciesReviewers}
+            />
+          ) : !isNewAssessments && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {/* Risk Category */}
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
@@ -1787,7 +1918,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
           )}
 
           {/* Charts row 2: Country map + (Reviewers or GBIF Observations for new-assessments) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* When single species, map goes full-width and assessor/reviewer chart is hidden (shown in info card) */}
+          <div className={`grid grid-cols-1 ${isSingleSpecies && !isNewAssessments ? "" : "md:grid-cols-2"} gap-4`}>
             {/* Country Map */}
             <div>
               {speciesLoading && assessedSpecies.length === 0 ? (
@@ -1814,8 +1946,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
               )}
             </div>
 
-            {/* Reviewers (reassessments) or GBIF Observations chart (new-assessments) */}
-            {isNewAssessments ? (
+            {/* Reviewers (reassessments) or GBIF Observations chart (new-assessments) - hidden for single species */}
+            {isSingleSpecies && !isNewAssessments ? null : isNewAssessments ? (
               <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">GBIF Observations <GbifInfoTooltip /></span>
