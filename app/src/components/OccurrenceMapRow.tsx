@@ -76,14 +76,6 @@ const UNCERTAINTY_OPTIONS = [
   { label: "\u2264 50km", value: 50000 },
 ] as const;
 
-// Deduplication grid sizes
-const DEDUP_OPTIONS = [
-  { label: "~10m", value: 0.0001 },
-  { label: "~100m", value: 0.001 },
-  { label: "~1km", value: 0.01 },
-  { label: "~10km", value: 0.1 },
-] as const;
-
 // Sample size options
 const SAMPLE_SIZE_OPTIONS = [100, 300, 500, 1000, 2000] as const;
 
@@ -134,70 +126,6 @@ const BASEMAP_STYLES: Record<string, { label: string; style: MaplibreStyle }> = 
   },
 };
 type BasemapKey = keyof typeof BASEMAP_STYLES;
-
-// Shape SVG content for marker shapes by record type (used with react-map-gl Marker)
-function ShapeMarkerSvg({
-  category,
-  fillColor,
-  strokeColor,
-  size,
-}: {
-  category: string;
-  fillColor: string;
-  strokeColor: string;
-  size: number;
-}) {
-  const sw = 1.5;
-  const s = size;
-  let content: React.ReactNode;
-
-  switch (category) {
-    case "iNaturalist":
-      content = <circle cx={s/2} cy={s/2} r={s/2 - sw} fill={fillColor} stroke={strokeColor} strokeWidth={sw}/>;
-      break;
-    case "humanOther":
-      content = <><circle cx={s/2} cy={s/2} r={s/2 - sw} fill={fillColor} stroke={strokeColor} strokeWidth={sw}/><circle cx={s/2} cy={s/2} r={1.5} fill={strokeColor}/></>;
-      break;
-    case "machineObservation":
-      content = <rect x={sw} y={sw} width={s - sw*2} height={s - sw*2} fill={fillColor} stroke={strokeColor} strokeWidth={sw}/>;
-      break;
-    case "preservedSpecimen":
-      content = <rect x={s*0.15} y={s*0.15} width={s*0.7} height={s*0.7} fill={fillColor} stroke={strokeColor} strokeWidth={sw} transform={`rotate(45 ${s/2} ${s/2})`}/>;
-      break;
-    case "materialSample":
-      content = <polygon points={`${s/2},${sw} ${s-sw},${s-sw} ${sw},${s-sw}`} fill={fillColor} stroke={strokeColor} strokeWidth={sw}/>;
-      break;
-    default:
-      content = <>
-        <line x1={s/2} y1={sw+1} x2={s/2} y2={s-sw-1} stroke={strokeColor} strokeWidth={sw+1} strokeLinecap="round"/>
-        <line x1={sw+1} y1={s/2} x2={s-sw-1} y2={s/2} stroke={strokeColor} strokeWidth={sw+1} strokeLinecap="round"/>
-      </>;
-      break;
-  }
-
-  return (
-    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`} xmlns="http://www.w3.org/2000/svg" style={{ display: "block" }}>
-      {content}
-    </svg>
-  );
-}
-
-// Spatial deduplication: keep one record per grid cell, preferring newest
-function deduplicateSpatially(
-  features: OccurrenceFeature[],
-  gridDeg: number
-): OccurrenceFeature[] {
-  const cells = new Map<string, OccurrenceFeature>();
-  for (const f of features) {
-    const [lon, lat] = f.geometry.coordinates;
-    const cellKey = `${Math.round(lat / gridDeg)},${Math.round(lon / gridDeg)}`;
-    const existing = cells.get(cellKey);
-    if (!existing || (f.properties.year ?? 0) > (existing.properties.year ?? 0)) {
-      cells.set(cellKey, f);
-    }
-  }
-  return Array.from(cells.values());
-}
 
 // Convert an eventDate string (or year-only) to a numeric value for interpolation
 function dateToNumeric(eventDate?: string | null, year?: number | null): number | null {
@@ -811,22 +739,13 @@ export default function OccurrenceMapRow({
 
   // Advanced filter state
   const [maxUncertainty, setMaxUncertainty] = useState<number | null>(null);
-  const [showUncertaintyCircles, setShowUncertaintyCircles] = useState(false);
-  const [colorByDate, setColorByDate] = useState(true);
-  const [dedupEnabled, setDedupEnabled] = useState(false);
   const [basemap, setBasemap] = useState<BasemapKey>("streets");
-  const [shapeByType, setShapeByType] = useState(false);
   const [splitView, setSplitView] = useState(false);
   const [splitDate, setSplitDate] = useState<string>(assessmentDate?.split("T")[0] || "");
   const [sharedViewState, setSharedViewState] = useState({ longitude: 0, latitude: 20, zoom: 1.5 });
   const mapRef = useRef<MapRef>(null);
-  const [dedupGrid, setDedupGrid] = useState(0.01); // ~1km
   const [sampleSize, setSampleSize] = useState(1000);
   const [yearRange, setYearRange] = useState<[number, number]>([0, 9999]);
-
-  // "More" popover state
-  const [moreOpen, setMoreOpen] = useState(false);
-  const moreRef = useRef<HTMLDivElement>(null);
 
   // Filters dropdown state
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -841,20 +760,17 @@ export default function OccurrenceMapRow({
   const [inatTotalCount, setInatTotalCount] = useState(0);
   const [loadingInatPhotos, setLoadingInatPhotos] = useState(false);
 
-  // Close "More" popover on outside click
+  // Close filters popover on outside click
   useEffect(() => {
-    if (!moreOpen && !filtersOpen) return;
+    if (!filtersOpen) return;
     const handler = (e: MouseEvent) => {
-      if (moreOpen && moreRef.current && !moreRef.current.contains(e.target as Node)) {
-        setMoreOpen(false);
-      }
-      if (filtersOpen && filtersRef.current && !filtersRef.current.contains(e.target as Node)) {
+      if (filtersRef.current && !filtersRef.current.contains(e.target as Node)) {
         setFiltersOpen(false);
       }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [moreOpen, filtersOpen]);
+  }, [filtersOpen]);
 
   // Hovered iNat observation (for map highlight)
   const [hoveredObs, setHoveredObs] = useState<InatObservation | null>(null);
@@ -1025,12 +941,8 @@ export default function OccurrenceMapRow({
       if (y == null) return true; // keep records without year data
       return y >= yearRange[0] && y <= yearRange[1];
     });
-    // 4. Spatial deduplication
-    if (dedupEnabled) {
-      result = deduplicateSpatially(result, dedupGrid);
-    }
     return result;
-  }, [occurrences, checkedTypes, maxUncertainty, yearRange, dedupEnabled, dedupGrid]);
+  }, [occurrences, checkedTypes, maxUncertainty, yearRange]);
 
   // Continuous date range for animation (every day from earliest to latest)
   const animationDateRange = useMemo(() => {
@@ -1085,15 +997,6 @@ export default function OccurrenceMapRow({
     }
     return filteredBeforeAnimation;
   }, [filteredBeforeAnimation, animatingDate]);
-
-  // Helper to check if an occurrence is after the assessment year
-  const isNewRecord = useCallback((eventDate?: string): boolean => {
-    // In new-assessments mode (no assessment year), all records are "new" (green)
-    if (!assessmentYear) return true;
-    if (!eventDate) return false;
-    const recordYear = new Date(eventDate).getFullYear();
-    return recordYear > assessmentYear;
-  }, [assessmentYear]);
 
   // Bounding box from filtered occurrences
   const filteredBbox = useMemo<[number, number, number, number] | null>(() => {
@@ -1186,7 +1089,6 @@ export default function OccurrenceMapRow({
     panelOccurrences: OccurrenceFeature[],
   ): GeoJSON.FeatureCollection => {
     const features = panelOccurrences.map((feature) => {
-      const isNew = isNewRecord(feature.properties.eventDate);
       const isHighlighted = hoveredObs?.gbifID != null && feature.properties.gbifID === hoveredObs.gbifID;
       const category = classifyOccurrence(feature);
       const isTypeBrushed = hoveredType != null && category === hoveredType;
@@ -1204,7 +1106,7 @@ export default function OccurrenceMapRow({
       } else if (isBrushed) {
         strokeColor = "#d97706";
         fillColor = "#f59e0b";
-      } else if (colorByDate) {
+      } else {
         const dNum = dateToNumeric(feature.properties.eventDate, feature.properties.year);
         if (dNum != null) {
           const colors = dateToColor(dNum, minDateNum, maxDateNum);
@@ -1214,9 +1116,6 @@ export default function OccurrenceMapRow({
           strokeColor = "#6b7280";
           fillColor = "#9ca3af";
         }
-      } else {
-        strokeColor = isNew ? "#15803d" : "#6b7280";
-        fillColor = isNew ? "#22c55e" : "#9ca3af";
       }
 
       const radius = isEmphasized ? 7 : (isBrushed ? 6 : (isDimmed ? 4 : 5));
@@ -1232,32 +1131,12 @@ export default function OccurrenceMapRow({
           _radius: radius,
           _strokeWidth: strokeWidth,
           _opacity: opacity,
-          _category: category,
         },
         geometry: feature.geometry,
       };
     });
     return { type: "FeatureCollection", features };
-  }, [hoveredObs, hoveredType, hoveredYear, hoveredFeature, colorByDate, minDateNum, maxDateNum, isNewRecord]);
-
-  // Build uncertainty circles GeoJSON
-  const buildUncertaintyFeatureCollection = useCallback((
-    panelOccurrences: OccurrenceFeature[],
-  ): GeoJSON.FeatureCollection => {
-    const features = panelOccurrences
-      .filter((f) => {
-        const u = f.properties.coordinateUncertaintyInMeters;
-        return u != null && u > 0;
-      })
-      .map((feature) => ({
-        type: "Feature" as const,
-        properties: {
-          uncertaintyMeters: feature.properties.coordinateUncertaintyInMeters!,
-        },
-        geometry: feature.geometry,
-      }));
-    return { type: "FeatureCollection", features };
-  }, []);
+  }, [hoveredObs, hoveredType, hoveredYear, hoveredFeature, minDateNum, maxDateNum]);
 
   // FitBounds helper using map ref
   const fitMapToBbox = useCallback((bbox: [number, number, number, number]) => {
@@ -1378,10 +1257,7 @@ export default function OccurrenceMapRow({
     label: string | null,
     panelId: string = "main",
   ) => {
-    const panelNewRecords = panelOccurrences.filter((o) => isNewRecord(o.properties.eventDate));
-    const panelOldRecords = panelOccurrences.filter((o) => !isNewRecord(o.properties.eventDate));
     const styledGeoJson = buildStyledFeatureCollection(panelOccurrences);
-    const uncertaintyGeoJson = showUncertaintyCircles ? buildUncertaintyFeatureCollection(panelOccurrences) : null;
 
     // Circle layer paint properties (data-driven from feature properties)
     const circleLayerStyle = {
@@ -1394,35 +1270,6 @@ export default function OccurrenceMapRow({
         "circle-stroke-color": ["get", "_strokeColor"] as unknown as string,
         "circle-stroke-width": ["get", "_strokeWidth"] as unknown as number,
         "circle-stroke-opacity": ["get", "_opacity"] as unknown as number,
-      },
-    };
-
-    // Uncertainty circle layer: convert meters to pixels using the Mercator
-    // projection formula. At zoom z the ground resolution at the equator is
-    // 40075016.686 / (256 * 2^z) meters/pixel. We scale by cos(latitude) via
-    // an exponential zoom interpolation so the circle stays geographically
-    // accurate as the user pans/zooms.
-    //
-    // Because MapLibre expressions don't expose trigonometric functions we
-    // pre-compute cos(lat) per feature and store it in the GeoJSON properties.
-    // Here we use a simpler approach: an exponential interpolation that doubles
-    // the pixel radius for each zoom level (matching Mercator). We anchor at
-    // zoom 20 where 1 meter ≈ 0.0075 pixels at the equator, then let the
-    // exponential base-2 scale handle all other zooms.
-    const uncertaintyLayerStyle = {
-      id: `occ-uncertainty-${panelId}`,
-      type: "circle" as const,
-      paint: {
-        "circle-radius": [
-          "interpolate", ["exponential", 2], ["zoom"],
-          0, ["*", ["get", "uncertaintyMeters"], 0.0075 / Math.pow(2, 20)],
-          20, ["*", ["get", "uncertaintyMeters"], 0.0075],
-        ] as unknown as number,
-        "circle-color": "#6366f1",
-        "circle-opacity": 0.06,
-        "circle-stroke-color": "#6366f1",
-        "circle-stroke-width": 0.5,
-        "circle-stroke-opacity": 0.3,
       },
     };
 
@@ -1456,7 +1303,7 @@ export default function OccurrenceMapRow({
               {...mapProps}
               style={{ width: "100%", height: "100%" }}
               mapStyle={BASEMAP_STYLES[basemap].style}
-              interactiveLayerIds={shapeByType ? [] : [`occ-circles-${panelId}`]}
+              interactiveLayerIds={[`occ-circles-${panelId}`]}
               onClick={handleMapClick}
               onMouseMove={(e: MapLayerMouseEvent) => handleMapMouseMove(e, panelId)}
               onMouseLeave={handleMapMouseLeave}
@@ -1464,48 +1311,10 @@ export default function OccurrenceMapRow({
               cursor={hoveredFeature && hoveredPanel === panelId ? "pointer" : "grab"}
             >
               <LocateControl />
-              {/* Uncertainty circles (rendered below occurrence circles) */}
-              {uncertaintyGeoJson && (
-                <Source id={`uncertainty-${panelId}`} type="geojson" data={uncertaintyGeoJson}>
-                  <Layer {...uncertaintyLayerStyle} />
-                </Source>
-              )}
               {/* Occurrence circles (GeoJSON source + circle layer) */}
-              {!shapeByType && (
-                <Source id={`occurrences-${panelId}`} type="geojson" data={styledGeoJson}>
-                  <Layer {...circleLayerStyle} />
-                </Source>
-              )}
-              {/* Shape-by-type mode: use individual Markers with SVG shapes */}
-              {shapeByType && panelOccurrences.map((feature, idx) => {
-                const [lon, lat] = feature.geometry.coordinates;
-                const styledFeature = styledGeoJson.features[idx];
-                const fillColor = styledFeature?.properties?._fillColor as string || "#9ca3af";
-                const strokeColor = styledFeature?.properties?._strokeColor as string || "#6b7280";
-                const category = styledFeature?.properties?._category as string || "observation";
-                const isFeatureHovered = hoveredFeature?.properties.gbifID === feature.properties.gbifID;
-                const isHighlighted = hoveredObs?.gbifID != null && feature.properties.gbifID === hoveredObs.gbifID;
-                const isBrushed = (hoveredYear != null && feature.properties.year === hoveredYear) || (hoveredType != null && category === hoveredType);
-                const isEmphasized = isHighlighted || isFeatureHovered;
-                const markerSize = isEmphasized ? 10 : (isBrushed ? 10 : 8);
-                return (
-                  <MapLibreMarker
-                    key={feature.properties.gbifID || idx}
-                    longitude={lon}
-                    latitude={lat}
-                    anchor="center"
-                    onClick={() => window.open(`https://www.gbif.org/occurrence/${feature.properties.gbifID}`, "_blank")}
-                  >
-                    <div
-                      onMouseEnter={isTouchDevice ? undefined : () => { setHoveredFeature(feature); setHoveredPanel(panelId); }}
-                      onMouseLeave={isTouchDevice ? undefined : () => { setHoveredFeature(null); setHoveredPanel(null); }}
-                      style={{ cursor: "pointer" }}
-                    >
-                      <ShapeMarkerSvg category={category} fillColor={fillColor} strokeColor={strokeColor} size={markerSize} />
-                    </div>
-                  </MapLibreMarker>
-                );
-              })}
+              <Source id={`occurrences-${panelId}`} type="geojson" data={styledGeoJson}>
+                <Layer {...circleLayerStyle} />
+              </Source>
               {/* Highlighted dot when hovering an iNat thumbnail (only in the correct split panel) */}
               {hoveredObs && hoveredObs.decimalLatitude != null && hoveredObs.decimalLongitude != null && (
                 !splitView || (
@@ -1560,7 +1369,7 @@ export default function OccurrenceMapRow({
             <div className="absolute bottom-2 left-2 z-[1000] bg-white dark:bg-zinc-800 px-2 py-1.5 rounded text-xs text-zinc-600 dark:text-zinc-300 shadow flex flex-wrap items-center gap-x-3 gap-y-1 max-w-[90%]">
               {label ? (
                 <span>{label}</span>
-              ) : colorByDate ? (
+              ) : (
                 <>
                   <div className="flex items-center gap-1">
                     <div className="w-3 h-3 rounded-full" style={{ background: "hsl(30, 60%, 50%)", border: "2px solid hsl(30, 60%, 30%)" }} />
@@ -1573,51 +1382,6 @@ export default function OccurrenceMapRow({
                   </div>
                   <span className="text-zinc-400">({panelOccurrences.length})</span>
                 </>
-              ) : assessmentYear && !splitView ? (
-                <>
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded-full bg-gray-400 border-2 border-gray-500" />
-                    <span>≤{assessmentYear} ({panelOldRecords.length})</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded-full bg-green-500 border-2 border-green-700" />
-                    <span>New since {assessmentYear} ({panelNewRecords.length})</span>
-                  </div>
-                </>
-              ) : label ? (
-                <span>{panelOccurrences.length} occurrences</span>
-              ) : (
-                <span>
-                  {totalOccurrences && totalOccurrences > occurrences.length
-                    ? `${panelOccurrences.length} of ${totalOccurrences.toLocaleString()} occurrences`
-                    : `${panelOccurrences.length} occurrences`}
-                </span>
-              )}
-              {shapeByType && (
-                <>
-                  <span className="text-zinc-400">|</span>
-                  {([
-                    ["iNaturalist", "iNat"],
-                    ["humanOther", "Other Human"],
-                    ["machineObservation", "Machine"],
-                    ["preservedSpecimen", "Specimen"],
-                    ["materialSample", "Material"],
-                  ] as const).map(([cat, catLabel]) => (
-                    <div key={cat} className="flex items-center gap-0.5">
-                      <svg width="10" height="10" viewBox="0 0 12 12" className="shrink-0">
-                        {cat === "iNaturalist" && <circle cx="6" cy="6" r="4.5" fill="#22c55e" stroke="#15803d" strokeWidth="1.5"/>}
-                        {cat === "humanOther" && <><circle cx="6" cy="6" r="4.5" fill="#22c55e" stroke="#15803d" strokeWidth="1.5"/><circle cx="6" cy="6" r="1.5" fill="#15803d"/></>}
-                        {cat === "machineObservation" && <rect x="1.5" y="1.5" width="9" height="9" fill="#22c55e" stroke="#15803d" strokeWidth="1.5"/>}
-                        {cat === "preservedSpecimen" && <rect x="1.8" y="1.8" width="8.4" height="8.4" fill="#22c55e" stroke="#15803d" strokeWidth="1.5" transform="rotate(45 6 6)"/>}
-                        {cat === "materialSample" && <polygon points="6,1.5 10.5,10.5 1.5,10.5" fill="#22c55e" stroke="#15803d" strokeWidth="1.5"/>}
-                      </svg>
-                      <span className="text-[10px]">{catLabel}</span>
-                    </div>
-                  ))}
-                </>
-              )}
-              {dedupEnabled && (
-                <span className="text-zinc-400">(deduped)</span>
               )}
             </div>
           )}
@@ -1878,102 +1642,6 @@ export default function OccurrenceMapRow({
                 </select>
               </div>
 
-              {/* Separator */}
-              <div className="w-px h-5 bg-zinc-200 dark:bg-zinc-700 mx-0.5 hidden sm:block" />
-
-              {/* "More" popover trigger */}
-              <div className="relative" ref={moreRef}>
-                <button
-                  onClick={() => setMoreOpen(!moreOpen)}
-                  className={`p-1.5 rounded border transition-colors ${
-                    moreOpen
-                      ? "bg-zinc-100 dark:bg-zinc-800 border-zinc-400 dark:border-zinc-500"
-                      : "border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                  }`}
-                  title="More filters"
-                >
-                  <svg className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                </button>
-                {moreOpen && (
-                  <div className="absolute right-0 top-full mt-1 z-50 w-72 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg p-3 space-y-3">
-                    {/* Show uncertainty radius */}
-                    <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={showUncertaintyCircles}
-                        onChange={(e) => setShowUncertaintyCircles(e.target.checked)}
-                        className="w-3 h-3 rounded accent-blue-500"
-                      />
-                      Show uncertainty radius on map
-                    </label>
-
-                    {/* Color by date toggle */}
-                    <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={colorByDate}
-                        onChange={(e) => setColorByDate(e.target.checked)}
-                        className="w-3 h-3 rounded accent-blue-500"
-                      />
-                      Color markers by date
-                      {colorByDate && (
-                        <span className="ml-auto flex items-center gap-1">
-                          <span className="w-2 h-2 rounded-full" style={{ background: "hsl(30, 60%, 50%)" }} />
-                          <span>old</span>
-                          <span className="w-2 h-2 rounded-full" style={{ background: "hsl(142, 80%, 50%)" }} />
-                          <span>new</span>
-                        </span>
-                      )}
-                    </label>
-
-                    {/* Shape by record type toggle */}
-                    <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={shapeByType}
-                        onChange={(e) => setShapeByType(e.target.checked)}
-                        className="w-3 h-3 rounded accent-blue-500"
-                      />
-                      Shape markers by record type
-                    </label>
-
-                    {/* Spatial deduplication */}
-                    <div>
-                      <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={dedupEnabled}
-                          onChange={(e) => setDedupEnabled(e.target.checked)}
-                          className="w-3 h-3 rounded accent-blue-500"
-                        />
-                        Deduplicate nearby points
-                      </label>
-                      {dedupEnabled && (
-                        <div className="mt-1 flex items-center gap-1.5 ml-[18px]">
-                          <span className="text-[10px] text-zinc-400">Grid:</span>
-                          {DEDUP_OPTIONS.map((opt) => (
-                            <button
-                              key={opt.value}
-                              onClick={() => setDedupGrid(opt.value)}
-                              className={`text-[10px] px-1.5 py-0.5 rounded border ${
-                                dedupGrid === opt.value
-                                  ? "bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300"
-                                  : "border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                              }`}
-                            >
-                              {opt.label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                  </div>
-                )}
-              </div>
             </div>
           </div>
 
@@ -2052,8 +1720,8 @@ export default function OccurrenceMapRow({
                 </div>
               )}
 
-              {/* Observers / Identifiers chart */}
-              <InatContributorsChart speciesKey={speciesKey} />
+              {/* Observers / Identifiers chart (memoized to avoid rerender on hover state changes) */}
+              {useMemo(() => <InatContributorsChart speciesKey={speciesKey} />, [speciesKey])}
             </div>
             )}
 
