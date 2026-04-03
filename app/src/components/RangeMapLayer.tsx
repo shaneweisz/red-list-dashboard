@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import dynamic from "next/dynamic";
-import type { FeatureCollection, Feature } from "geojson";
+import type { GeoJsonObject, FeatureCollection, Feature } from "geojson";
 
 const Source = dynamic(
   () => import("react-map-gl/maplibre").then((mod) => mod.Source),
@@ -192,16 +192,12 @@ export default function RangeMapLayer({
   useEffect(() => {
     if (!visible || !assessmentId || fetchedRef.current === assessmentId) return;
 
-    // Use a microtask to avoid synchronous setState in effect body
-    const controller = new AbortController();
-    Promise.resolve().then(() => {
-      setLoading(true);
-      setError(false);
-      onLoadingChange?.(true);
-      onNotFound?.(false);
-    });
+    setLoading(true);
+    setError(false);
+    onLoadingChange?.(true);
+    onNotFound?.(false);
 
-    fetch(`/api/species/${assessmentId}/range-map`, { signal: controller.signal })
+    fetch(`/api/species/${assessmentId}/range-map`)
       .then((res) => {
         if (res.status === 404) {
           onNotFound?.(true);

@@ -4,6 +4,14 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import dynamic from "next/dynamic";
 import type { MapRef } from "react-map-gl/maplibre";
 
+const Source = dynamic(
+  () => import("react-map-gl/maplibre").then((mod) => mod.Source),
+  { ssr: false }
+);
+const Layer = dynamic(
+  () => import("react-map-gl/maplibre").then((mod) => mod.Layer),
+  { ssr: false }
+);
 
 interface AohMetadata {
   id_no: string;
@@ -37,10 +45,8 @@ function AohMapLayerInner({ sisTaxonId, taxonGroup, visible, panelId = "main", m
   useEffect(() => {
     if (!visible || !sisTaxonId || fetchedRef.current === sisTaxonId) return;
 
-    Promise.resolve().then(() => {
-      setLoading(true);
-      onLoadingChange?.(true);
-    });
+    setLoading(true);
+    onLoadingChange?.(true);
 
     fetch(`/api/species/${sisTaxonId}/aoh/metadata`)
       .then((res) => {
