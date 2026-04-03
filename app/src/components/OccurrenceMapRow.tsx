@@ -133,13 +133,14 @@ function dateToNumeric(eventDate?: string | null, year?: number | null): number 
   return null;
 }
 
-// Year-based color gradient: green (2026+) → yellow (2020) → orange (2015) → red (≤2010)
-// Defined as fixed breakpoints with interpolation between them.
-const YEAR_COLOR_STOPS: { year: number; fill: string; stroke: string }[] = [
-  { year: 2010, fill: "#ef4444", stroke: "#b91c1c" }, // red
-  { year: 2015, fill: "#f97316", stroke: "#c2410c" }, // orange
-  { year: 2020, fill: "#eab308", stroke: "#a16207" }, // yellow
-  { year: 2026, fill: "#22c55e", stroke: "#15803d" }, // green
+// Year-based discrete color bands.
+// Each year within a band gets a unique shade (lighter = more recent).
+// Bands: ≤2005 red, 2006-2010 oranges, 2011-2015 yellows, 2016-2026 greens.
+const YEAR_BANDS: { minYear: number; maxYear: number; fillRange: [string, string]; strokeRange: [string, string] }[] = [
+  { minYear: -Infinity, maxYear: 2005, fillRange: ["#ef4444", "#ef4444"], strokeRange: ["#b91c1c", "#b91c1c"] }, // flat red
+  { minYear: 2006,      maxYear: 2010, fillRange: ["#c2410c", "#fb923c"], strokeRange: ["#9a3412", "#ea580c"] }, // oranges (dark→light)
+  { minYear: 2011,      maxYear: 2015, fillRange: ["#a16207", "#fde047"], strokeRange: ["#854d0e", "#eab308"] }, // yellows (dark→light)
+  { minYear: 2016,      maxYear: 2026, fillRange: ["#166534", "#4ade80"], strokeRange: ["#14532d", "#22c55e"] }, // greens (dark→light)
 ];
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -160,21 +161,19 @@ function lerpColor(a: string, b: string, t: number): string {
 }
 
 function yearToColor(year: number): { stroke: string; fill: string } {
-  if (year <= YEAR_COLOR_STOPS[0].year) return { fill: YEAR_COLOR_STOPS[0].fill, stroke: YEAR_COLOR_STOPS[0].stroke };
-  const last = YEAR_COLOR_STOPS[YEAR_COLOR_STOPS.length - 1];
-  if (year >= last.year) return { fill: last.fill, stroke: last.stroke };
-  for (let i = 0; i < YEAR_COLOR_STOPS.length - 1; i++) {
-    const lo = YEAR_COLOR_STOPS[i];
-    const hi = YEAR_COLOR_STOPS[i + 1];
-    if (year >= lo.year && year <= hi.year) {
-      const t = (year - lo.year) / (hi.year - lo.year);
+  for (const band of YEAR_BANDS) {
+    if (year >= band.minYear && year <= band.maxYear) {
+      const span = band.maxYear - band.minYear;
+      const t = span === 0 ? 1 : (year - band.minYear) / span;
       return {
-        fill: lerpColor(lo.fill, hi.fill, t),
-        stroke: lerpColor(lo.stroke, hi.stroke, t),
+        fill: lerpColor(band.fillRange[0], band.fillRange[1], t),
+        stroke: lerpColor(band.strokeRange[0], band.strokeRange[1], t),
       };
     }
   }
-  return { fill: last.fill, stroke: last.stroke };
+  // Fallback for years beyond 2026
+  const last = YEAR_BANDS[YEAR_BANDS.length - 1];
+  return { fill: last.fillRange[1], stroke: last.strokeRange[1] };
 }
 
 // Category labels for tooltip display
@@ -1403,22 +1402,22 @@ export default function OccurrenceMapRow({
                 <>
                   <div className="flex items-center gap-1">
                     <div className="w-3 h-3 rounded-full" style={{ background: "#ef4444", border: "2px solid #b91c1c" }} />
-                    <span>≤2010</span>
+                    <span>≤2005</span>
                   </div>
                   <span>→</span>
                   <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded-full" style={{ background: "#f97316", border: "2px solid #c2410c" }} />
-                    <span>2015</span>
+                    <div className="w-3 h-3 rounded-full" style={{ background: "#fb923c", border: "2px solid #ea580c" }} />
+                    <span>&apos;06–10</span>
                   </div>
                   <span>→</span>
                   <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded-full" style={{ background: "#eab308", border: "2px solid #a16207" }} />
-                    <span>2020</span>
+                    <div className="w-3 h-3 rounded-full" style={{ background: "#fde047", border: "2px solid #eab308" }} />
+                    <span>&apos;11–15</span>
                   </div>
                   <span>→</span>
                   <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded-full" style={{ background: "#22c55e", border: "2px solid #15803d" }} />
-                    <span>2026</span>
+                    <div className="w-3 h-3 rounded-full" style={{ background: "#4ade80", border: "2px solid #22c55e" }} />
+                    <span>&apos;16–26</span>
                   </div>
                   <span className="text-zinc-400">({panelOccurrences.length})</span>
                 </>
