@@ -133,17 +133,48 @@ function dateToNumeric(eventDate?: string | null, year?: number | null): number 
   return null;
 }
 
-// Date-based color interpolation (oldest=amber, newest=green)
-function dateToColor(dateNum: number, minDate: number, maxDate: number): { stroke: string; fill: string } {
-  if (minDate === maxDate) return { stroke: "#15803d", fill: "#22c55e" };
-  const t = (dateNum - minDate) / (maxDate - minDate); // 0 = oldest, 1 = newest
-  // Interpolate hue from 30 (amber) to 142 (green)
-  const hue = Math.round(30 + t * 112);
-  const sat = Math.round(60 + t * 20);
-  return {
-    stroke: `hsl(${hue}, ${sat}%, 30%)`,
-    fill: `hsl(${hue}, ${sat}%, 50%)`,
-  };
+// Year-based color gradient: green (2026+) → yellow (2020) → orange (2015) → red (≤2010)
+// Defined as fixed breakpoints with interpolation between them.
+const YEAR_COLOR_STOPS: { year: number; fill: string; stroke: string }[] = [
+  { year: 2010, fill: "#ef4444", stroke: "#b91c1c" }, // red
+  { year: 2015, fill: "#f97316", stroke: "#c2410c" }, // orange
+  { year: 2020, fill: "#eab308", stroke: "#a16207" }, // yellow
+  { year: 2026, fill: "#22c55e", stroke: "#15803d" }, // green
+];
+
+function hexToRgb(hex: string): [number, number, number] {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function rgbToHex(r: number, g: number, b: number): string {
+  return "#" + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
+}
+function lerpColor(a: string, b: string, t: number): string {
+  const [ar, ag, ab] = hexToRgb(a);
+  const [br, bg, bb] = hexToRgb(b);
+  return rgbToHex(
+    Math.round(ar + (br - ar) * t),
+    Math.round(ag + (bg - ag) * t),
+    Math.round(ab + (bb - ab) * t),
+  );
+}
+
+function yearToColor(year: number): { stroke: string; fill: string } {
+  if (year <= YEAR_COLOR_STOPS[0].year) return { fill: YEAR_COLOR_STOPS[0].fill, stroke: YEAR_COLOR_STOPS[0].stroke };
+  const last = YEAR_COLOR_STOPS[YEAR_COLOR_STOPS.length - 1];
+  if (year >= last.year) return { fill: last.fill, stroke: last.stroke };
+  for (let i = 0; i < YEAR_COLOR_STOPS.length - 1; i++) {
+    const lo = YEAR_COLOR_STOPS[i];
+    const hi = YEAR_COLOR_STOPS[i + 1];
+    if (year >= lo.year && year <= hi.year) {
+      const t = (year - lo.year) / (hi.year - lo.year);
+      return {
+        fill: lerpColor(lo.fill, hi.fill, t),
+        stroke: lerpColor(lo.stroke, hi.stroke, t),
+      };
+    }
+  }
+  return { fill: last.fill, stroke: last.stroke };
 }
 
 // Category labels for tooltip display
@@ -1099,9 +1130,10 @@ export default function OccurrenceMapRow({
         strokeColor = "#d97706";
         fillColor = "#f59e0b";
       } else if (colorByDate) {
-        const dNum = dateToNumeric(feature.properties.eventDate, feature.properties.year);
-        if (dNum != null) {
-          const colors = dateToColor(dNum, minDateNum, maxDateNum);
+        const yr = feature.properties.year
+          ?? (feature.properties.eventDate ? new Date(feature.properties.eventDate).getFullYear() : null);
+        if (yr != null) {
+          const colors = yearToColor(yr);
           strokeColor = colors.stroke;
           fillColor = colors.fill;
         } else {
@@ -1135,7 +1167,7 @@ export default function OccurrenceMapRow({
       };
     });
     return { type: "FeatureCollection", features };
-  }, [hoveredType, hoveredYear, hoveredFeature, colorByDate, minDateNum, maxDateNum, assessmentYear]);
+  }, [hoveredType, hoveredYear, hoveredFeature, colorByDate, assessmentYear]);
 
   // FitBounds helper using map ref
   const fitMapToBbox = useCallback((bbox: [number, number, number, number]) => {
@@ -1370,13 +1402,23 @@ export default function OccurrenceMapRow({
               ) : colorByDate ? (
                 <>
                   <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded-full" style={{ background: "hsl(30, 60%, 50%)", border: "2px solid hsl(30, 60%, 30%)" }} />
-                    <span>{minDateLabel}</span>
+                    <div className="w-3 h-3 rounded-full" style={{ background: "#ef4444", border: "2px solid #b91c1c" }} />
+                    <span>≤2010</span>
                   </div>
                   <span>→</span>
                   <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded-full" style={{ background: "hsl(142, 80%, 50%)", border: "2px solid hsl(142, 80%, 30%)" }} />
-                    <span>{maxDateLabel}</span>
+                    <div className="w-3 h-3 rounded-full" style={{ background: "#f97316", border: "2px solid #c2410c" }} />
+                    <span>2015</span>
+                  </div>
+                  <span>→</span>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded-full" style={{ background: "#eab308", border: "2px solid #a16207" }} />
+                    <span>2020</span>
+                  </div>
+                  <span>→</span>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded-full" style={{ background: "#22c55e", border: "2px solid #15803d" }} />
+                    <span>2026</span>
                   </div>
                   <span className="text-zinc-400">({panelOccurrences.length})</span>
                 </>
