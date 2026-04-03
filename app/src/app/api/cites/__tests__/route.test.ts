@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { NextRequest } from "next/server";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -153,8 +154,6 @@ function makeRequest(params: Record<string, string> = {}) {
   for (const [k, v] of Object.entries(params)) {
     url.searchParams.set(k, v);
   }
-  // The mock NextRequest constructor takes a string
-  const { NextRequest } = require("next/server");
   return new NextRequest(url.toString());
 }
 

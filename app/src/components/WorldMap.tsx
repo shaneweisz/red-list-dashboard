@@ -148,7 +148,6 @@ const ALL_TAXA_IDS = ["mammalia", "aves", "reptilia", "amphibia", "fishes", "inv
 interface WorldMapProps {
   selectedCountries: Set<string>;
   onCountrySelect: (countryCode: string, countryName: string, event: React.MouseEvent) => void;
-  onClearSelection: () => void;
   selectedTaxon?: string | null;
   // Optional pre-computed stats (for Red List species counts - avoids API call)
   precomputedStats?: CountryStats;
@@ -167,7 +166,7 @@ const DEFAULT_ZOOM = 1.0;
 const MIN_ZOOM = 1.0;
 const MAX_ZOOM = 8.0;
 
-function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, selectedTaxon, precomputedStats, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, footer }: WorldMapProps) {
+function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, footer }: WorldMapProps) {
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoveredCountryCode, setHoveredCountryCode] = useState<string | null>(null);
   const [speciesStats, setSpeciesStats] = useState<CountryStats>(precomputedStats || {});
@@ -350,8 +349,6 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
 
   const hoveredSpeciesStats = hoveredCountryCode ? speciesStats[hoveredCountryCode] : null;
   const hoveredOccurrenceStats = hoveredCountryCode && occurrenceStats ? occurrenceStats[hoveredCountryCode] : null;
-  const selectedCount = selectedCountries.size;
-
   return (
     <div className="relative bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 p-3 h-full flex flex-col">
       {/* Header with controls */}
@@ -517,6 +514,7 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
             <Geographies geography={GEO_URL}>
               {({ geographies }) => {
                 // Compute centroids from geometry on first load
+                /* eslint-disable react-hooks/immutability -- one-time cache populated from render callback data */
                 if (Object.keys(centroidsRef.current).length === 0) {
                   for (const geo of geographies) {
                     const name = geo.properties.name;
@@ -526,6 +524,7 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
                     }
                   }
                 }
+                /* eslint-enable react-hooks/immutability */
                 return geographies
                   .filter((geo) => geo.properties.name !== "Antarctica")
                   .map((geo) => {

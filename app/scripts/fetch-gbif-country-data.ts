@@ -58,8 +58,23 @@ const KINGDOM_KEYS = [
 // GBIF API HELPERS
 // =============================================================================
 
+interface GbifFacetCount {
+  name: string;
+  count: number;
+}
+
+interface GbifFacet {
+  field: string;
+  counts: GbifFacetCount[];
+}
+
+interface GbifResponse {
+  facets?: GbifFacet[];
+  [key: string]: unknown;
+}
+
 /** Generic GBIF GET with retry + backoff. Returns parsed JSON or null. */
-async function gbifGet(params: URLSearchParams): Promise<Record<string, any> | null> {
+async function gbifGet(params: URLSearchParams): Promise<GbifResponse | null> {
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       const res = await fetch(`https://api.gbif.org/v1/occurrence/search?${params}`);
@@ -98,9 +113,9 @@ async function fetchCountriesForKingdom(kingdomKey: number): Promise<string[]> {
   const data = await gbifGet(params);
   if (!data) return [];
 
-  const facet = data.facets?.find((f: { field: string }) => f.field === "COUNTRY");
+  const facet = data.facets?.find((f) => f.field === "COUNTRY");
   if (!facet) return [];
-  return facet.counts.map((c: { name: string }) => c.name);
+  return facet.counts.map((c) => c.name);
 }
 
 /**
@@ -131,7 +146,7 @@ async function fetchSpeciesInKingdomCountry(
     const data = await gbifGet(params);
     if (!data) break;
 
-    const facet = data.facets?.find((f: { field: string }) => f.field === "SPECIES_KEY");
+    const facet = data.facets?.find((f) => f.field === "SPECIES_KEY");
     if (!facet || facet.counts.length === 0) break;
 
     for (const c of facet.counts) {

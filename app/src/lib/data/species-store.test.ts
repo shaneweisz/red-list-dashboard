@@ -72,7 +72,7 @@ function uniqueGroup(): string {
 }
 
 function setup(rows: TestRedlistRow[], history: HistoryMap = {}) {
-  vi.mocked(readCsv).mockReturnValue(rows as any);
+  vi.mocked(readCsv).mockReturnValue(rows as ReturnType<typeof readCsv>);
   vi.mocked(fs.existsSync).mockReturnValue(true);
   vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(history));
 }
