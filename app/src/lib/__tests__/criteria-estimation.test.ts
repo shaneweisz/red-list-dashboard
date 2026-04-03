@@ -12,7 +12,6 @@ import {
   filterPoints,
   estimateCriteria,
   EOO_THRESHOLDS,
-  AOO_THRESHOLDS,
   type OccurrencePoint,
   type EstimationParams,
 } from "../criteria-estimation";

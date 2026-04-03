@@ -78,7 +78,7 @@ export default function InatContributorsChart({
   const [page, setPage] = useState(0);
 
   useEffect(() => {
-    setLoading(true);
+    setLoading(true); // eslint-disable-line react-hooks/set-state-in-effect -- loading state for fetch
     fetch(`/api/species/${speciesKey}/inat-top-observers`)
       .then((res) => res.json())
       .then((data) => {
