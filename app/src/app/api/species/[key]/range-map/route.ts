@@ -51,6 +51,7 @@ async function findR2Key(client: S3Client, bucket: string, assessmentId: number)
   }
 
   // List keys with the assessment ID prefix to find simplified variants
+  // Pick the least simplified (lowest tolerance) if multiple exist
   const response = await client.send(
     new ListObjectsV2Command({
       Bucket: bucket,
@@ -59,11 +60,20 @@ async function findR2Key(client: S3Client, bucket: string, assessmentId: number)
     })
   );
 
+  let bestKey: string | null = null;
+  let bestTolerance = Infinity;
   for (const obj of response.Contents ?? []) {
-    if (obj.Key?.endsWith(".json")) {
-      keyCache.set(assessmentId, obj.Key);
-      return obj.Key;
+    if (!obj.Key?.endsWith(".json")) continue;
+    const tolMatch = obj.Key.match(/_s([\d.]+)\.json$/);
+    const tolerance = tolMatch ? parseFloat(tolMatch[1]) : 0;
+    if (tolerance < bestTolerance) {
+      bestTolerance = tolerance;
+      bestKey = obj.Key;
     }
+  }
+  if (bestKey) {
+    keyCache.set(assessmentId, bestKey);
+    return bestKey;
   }
 
   keyCache.set(assessmentId, null);

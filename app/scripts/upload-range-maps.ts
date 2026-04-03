@@ -377,6 +377,7 @@ async function uploadBatch(
 export async function run(opts: {
   taxa?: string[];
   logger?: SyncLogger;
+  force?: boolean;
 } = {}): Promise<void> {
   const logger = opts.logger ?? new SyncLogger("upload-range-maps");
   const db = getDbClient();
@@ -390,9 +391,15 @@ export async function run(opts: {
   await db.connect();
   console.log("  Connected to database");
 
-  console.log("  Listing existing R2 keys...");
-  const existingKeys = await listExistingKeys(r2, bucket);
-  console.log(`  Found ${existingKeys.size} existing range maps in R2`);
+  let existingKeys: Set<string>;
+  if (opts.force) {
+    existingKeys = new Set();
+    console.log("  Force mode: re-uploading all species");
+  } else {
+    console.log("  Listing existing R2 keys...");
+    existingKeys = await listExistingKeys(r2, bucket);
+    console.log(`  Found ${existingKeys.size} existing range maps in R2`);
+  }
 
   const taxa = getTaxa(opts.taxa);
   let totalUploaded = 0;
@@ -437,10 +444,12 @@ async function main() {
   loadEnvFiles();
 
   const args = process.argv.slice(2);
+  const force = args.includes("--force");
+  const filteredArgs = args.filter((a) => a !== "--force");
 
   // Direct assessment ID mode: --ids 123 456
-  if (args[0] === "--ids") {
-    const ids = args.slice(1).map((a) => parseInt(a, 10)).filter((n) => !isNaN(n));
+  if (filteredArgs[0] === "--ids") {
+    const ids = filteredArgs.slice(1).map((a) => parseInt(a, 10)).filter((n) => !isNaN(n));
     if (ids.length === 0) {
       console.error("No valid assessment IDs provided");
       process.exit(1);
@@ -478,8 +487,8 @@ async function main() {
   }
 
   // Taxon group mode (default)
-  const taxa = args.length > 0 ? args.map((a) => a.toLowerCase()) : undefined;
-  await run({ taxa });
+  const taxa = filteredArgs.length > 0 ? filteredArgs.map((a) => a.toLowerCase()) : undefined;
+  await run({ taxa, force });
 }
 
 const isDirectRun = process.argv[1]?.endsWith("upload-range-maps.ts") || process.argv[1]?.endsWith("upload-range-maps.js");
