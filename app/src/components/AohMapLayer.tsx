@@ -48,7 +48,7 @@ function AohMapLayerInner({ sisTaxonId, taxonGroup, visible, panelId = "main", m
     setLoading(true);
     onLoadingChange?.(true);
 
-    fetch(`/api/species/${sisTaxonId}/aoh/metadata?taxonGroup=${encodeURIComponent(taxonGroup)}`)
+    fetch(`/api/species/${sisTaxonId}/aoh/metadata`)
       .then((res) => {
         if (!res.ok) throw new Error(`${res.status}`);
         return res.json();
@@ -66,7 +66,7 @@ function AohMapLayerInner({ sisTaxonId, taxonGroup, visible, panelId = "main", m
             [east, south],   // bottom-right
             [west, south],   // bottom-left
           ]);
-          setPngUrl(`/api/species/${sisTaxonId}/aoh?taxonGroup=${encodeURIComponent(taxonGroup)}`);
+          setPngUrl(`/api/species/${sisTaxonId}/aoh`);
         }
       })
       .catch(() => {

@@ -1,113 +1,84 @@
 import { NextRequest, NextResponse } from "next/server";
-import { existsSync } from "fs";
-import { readFile } from "fs/promises";
-import { execFile } from "child_process";
-import { promisify } from "util";
-import path from "path";
+import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { CACHE_1H } from "@/lib/cache-headers";
 
-const execFileAsync = promisify(execFile);
+const metaCache = new Map<string, { data: object; timestamp: number }>();
+const CACHE_DURATION = 60 * 60 * 1000; // 1 hour
 
-const STAR_DATA_DIR = "/scratch/sw984/star";
+let r2Client: S3Client | null = null;
 
-const TAXON_GROUP_TO_FOLDER: Record<string, string> = {
-  mammalia: "MAMMALIA",
-  aves: "AVES",
-  reptilia: "REPTILIA",
-  amphibia: "AMPHIBIA",
-};
+function getR2Client(): S3Client {
+  if (r2Client) return r2Client;
 
-// Cache bounds computation: sisTaxonId → bounds
-const boundsCache = new Map<string, [number, number, number, number]>();
+  const accountId = process.env.R2_ACCOUNT_ID;
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
 
-async function getWgs84Bounds(
-  tifPath: string
-): Promise<[number, number, number, number]> {
-  const { stdout } = await execFileAsync("gdalinfo", ["-json", tifPath]);
-  const info = JSON.parse(stdout);
-  if (info.wgs84Extent) {
-    const coords = info.wgs84Extent.coordinates[0];
-    const lons = coords.map((c: number[]) => c[0]);
-    const lats = coords.map((c: number[]) => c[1]);
-    return [
-      Math.min(...lats),
-      Math.min(...lons),
-      Math.max(...lats),
-      Math.max(...lons),
-    ];
+  if (!accountId || !accessKeyId || !secretAccessKey) {
+    throw new Error("Missing R2 credentials");
   }
-  // Fallback for older GDAL
-  const cc = info.cornerCoordinates;
-  return [cc.lowerRight[1], cc.upperLeft[0], cc.upperLeft[1], cc.lowerRight[0]];
+
+  r2Client = new S3Client({
+    region: "auto",
+    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+    credentials: { accessKeyId, secretAccessKey },
+  });
+
+  return r2Client;
 }
 
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ key: string }> }
 ) {
   const { key: sisTaxonId } = await params;
-  const taxonGroup = request.nextUrl.searchParams.get("taxonGroup");
 
-  if (!taxonGroup) {
-    return NextResponse.json(
-      { error: "taxonGroup query parameter is required" },
-      { status: 400 }
-    );
-  }
-
-  const folder = TAXON_GROUP_TO_FOLDER[taxonGroup.toLowerCase()];
-  if (!folder) {
-    return NextResponse.json(
-      { error: `Unknown taxon group: ${taxonGroup}` },
-      { status: 400 }
-    );
-  }
-
-  const jsonPath = path.join(
-    STAR_DATA_DIR,
-    "aohs",
-    "current",
-    folder,
-    `${sisTaxonId}_all.json`
-  );
-
-  if (!existsSync(jsonPath)) {
-    return NextResponse.json(
-      { error: "AOH metadata not found for this species" },
-      { status: 404 }
-    );
+  // Check in-memory cache
+  const cached = metaCache.get(sisTaxonId);
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    return NextResponse.json(cached.data, { headers: CACHE_1H });
   }
 
   try {
-    const raw = await readFile(jsonPath, "utf-8");
-    const metadata = JSON.parse(raw);
+    const client = getR2Client();
+    const bucket = process.env.R2_BUCKET_NAME;
 
-    // Get WGS84 bounds from the TIF (cached)
-    let bounds = boundsCache.get(sisTaxonId);
-    if (!bounds) {
-      const tifPath = path.join(
-        STAR_DATA_DIR,
-        "aohs",
-        "current",
-        folder,
-        `${sisTaxonId}_all.tif`
+    if (!bucket) {
+      return NextResponse.json(
+        { error: "R2 bucket not configured" },
+        { status: 500 }
       );
-      if (existsSync(tifPath)) {
-        bounds = await getWgs84Bounds(tifPath);
-        boundsCache.set(sisTaxonId, bounds);
-      }
     }
 
-    return NextResponse.json(
-      {
-        ...metadata,
-        // Add EPSG:4326 bounds as [south, west, north, east]
-        bounds: bounds ?? null,
-      },
-      { headers: CACHE_1H }
+    const response = await client.send(
+      new GetObjectCommand({
+        Bucket: bucket,
+        Key: `aoh-maps/${sisTaxonId}.json`,
+      })
     );
-  } catch (error) {
-    console.error("Error reading AOH metadata:", error);
+
+    const body = await response.Body?.transformToString();
+    if (!body) {
+      return NextResponse.json(
+        { error: "AOH metadata not found for this species" },
+        { status: 404 }
+      );
+    }
+
+    const data = JSON.parse(body);
+
+    metaCache.set(sisTaxonId, { data, timestamp: Date.now() });
+
+    return NextResponse.json(data, { headers: CACHE_1H });
+  } catch (error: unknown) {
+    const name = error instanceof Error ? error.name : "";
+    if (name === "NoSuchKey") {
+      return NextResponse.json(
+        { error: "AOH metadata not found for this species" },
+        { status: 404 }
+      );
+    }
+    console.error("Error fetching AOH metadata from R2:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unknown error" },
       { status: 500 }
