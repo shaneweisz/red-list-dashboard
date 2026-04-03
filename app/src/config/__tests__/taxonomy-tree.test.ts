@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import { describe, it, expect } from "vitest";
 import { TAXONOMY_TREE, type TaxonomyNode } from "../taxonomy-tree";
 import {
@@ -11,7 +13,6 @@ import {
   speciesMatchesNode,
   getNodeDef,
   getCsvGroupsForNode,
-  getViewRootForNode,
 } from "@/lib/taxonomy-utils";
 import { TAXONOMY_VIEWS } from "../taxonomy-views";
 
@@ -731,10 +732,10 @@ describe("Table 1a → default view mapping", () => {
 // ─── Precomputed summaries structure ──────────────────────────────────
 
 describe("node-children-summaries.json", () => {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+   
   const data = JSON.parse(
-    require("fs").readFileSync(
-      require("path").join(process.cwd(), "data/node-children-summaries.json"),
+    fs.readFileSync(
+      path.join(process.cwd(), "data/node-children-summaries.json"),
       "utf-8"
     )
   );

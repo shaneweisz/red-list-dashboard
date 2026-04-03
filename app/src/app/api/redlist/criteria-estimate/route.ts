@@ -184,7 +184,7 @@ export async function GET(request: NextRequest) {
     }));
 
     // Don't include the full filteredPoints array in the response
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+     
     const { filteredPoints: _, ...resultWithoutPoints } = result;
 
     return NextResponse.json({

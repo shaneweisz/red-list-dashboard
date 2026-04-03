@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, useId } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import type { MapRef, ViewStateChangeEvent, MapLayerMouseEvent } from "react-map-gl/maplibre";
@@ -202,7 +202,7 @@ function YearRangeTrimmer({
   const svgRef = useRef<SVGSVGElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const dragging = useRef<"start" | "end" | "animation" | null>(null);
-  const clipId = useRef(`trim-${Math.random().toString(36).slice(2, 8)}`).current;
+  const clipId = `trim-${useId().replace(/:/g, "")}`;
 
   const yearBreakdown = useMemo(() => {
     const breakdown = new Map<number, { total: number; categories: Record<string, number> }>();
@@ -254,10 +254,10 @@ function YearRangeTrimmer({
 
   // Keep yearRange in a ref so drag handlers always see the latest value
   const rangeRef = useRef(yearRange);
-  rangeRef.current = yearRange;
+  rangeRef.current = yearRange; // eslint-disable-line react-hooks/refs -- sync ref for drag event handlers
 
   const scrubRef = useRef(onAnimationScrub);
-  scrubRef.current = onAnimationScrub;
+  scrubRef.current = onAnimationScrub; // eslint-disable-line react-hooks/refs -- sync ref for drag event handlers
 
   const startDrag = useCallback((handle: "start" | "end" | "animation") => {
     dragging.current = handle;
@@ -578,11 +578,6 @@ function InatAudioCard({ obs, idx, onHover, onLeave }: { obs: InatObservation; i
 
 // iNat photo thumbnail with hover preview using portal (desktop only)
 function InatPhotoWithPreview({ obs, idx, onHover, onLeave }: { obs: InatObservation; idx: number; onHover?: () => void; onLeave?: () => void }) {
-  // If this is an audio-only observation (no image), render the audio card
-  if (!obs.imageUrl && obs.audioUrl) {
-    return <InatAudioCard obs={obs} idx={idx} onHover={onHover} onLeave={onLeave} />;
-  }
-
   const [isHovered, setIsHovered] = useState(false);
   const [position, setPosition] = useState({ anchorTop: 0, left: 0, showBelow: false });
   const [isTouchDevice, setIsTouchDevice] = useState(false);
@@ -590,7 +585,7 @@ function InatPhotoWithPreview({ obs, idx, onHover, onLeave }: { obs: InatObserva
   const hasAudio = !!obs.audioUrl;
 
   useEffect(() => {
-    setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
+    setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0); // eslint-disable-line react-hooks/set-state-in-effect -- detect on mount
   }, []);
 
   useEffect(() => {
@@ -614,6 +609,11 @@ function InatPhotoWithPreview({ obs, idx, onHover, onLeave }: { obs: InatObserva
       setPosition({ anchorTop, left, showBelow });
     }
   }, [isHovered, isTouchDevice, hasAudio]);
+
+  // If this is an audio-only observation (no image), render the audio card
+  if (!obs.imageUrl && obs.audioUrl) {
+    return <InatAudioCard obs={obs} idx={idx} onHover={onHover} onLeave={onLeave} />;
+  }
 
   return (
     <div
@@ -792,7 +792,7 @@ export default function OccurrenceMapRow({
   // Check for coarse pointer (phone/tablet) rather than maxTouchPoints which is true on Mac trackpads
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   useEffect(() => {
-    setIsTouchDevice(window.matchMedia("(pointer: coarse)").matches && !window.matchMedia("(pointer: fine)").matches);
+    setIsTouchDevice(window.matchMedia("(pointer: coarse)").matches && !window.matchMedia("(pointer: fine)").matches); // eslint-disable-line react-hooks/set-state-in-effect -- detect on mount
   }, []);
 
   // Lookup: gbifID → InatObservation (for showing photos in map popups)
@@ -811,7 +811,7 @@ export default function OccurrenceMapRow({
 
   // Fetch occurrences (re-fetches when sample size changes)
   useEffect(() => {
-    setLoadingOccurrences(true);
+    setLoadingOccurrences(true); // eslint-disable-line react-hooks/set-state-in-effect -- loading state for fetch
     const params = new URLSearchParams({
       speciesKey: speciesKey.toString(),
       limit: sampleSize.toString(),
@@ -840,7 +840,7 @@ export default function OccurrenceMapRow({
 
   // Fetch breakdown data
   useEffect(() => {
-    setLoadingBreakdown(true);
+    setLoadingBreakdown(true); // eslint-disable-line react-hooks/set-state-in-effect -- loading state for fetch
     const params = new URLSearchParams();
     if (countryCode) {
       params.set("country", countryCode);
@@ -880,35 +880,9 @@ export default function OccurrenceMapRow({
   // Re-fetch when screen size changes (page size changes)
   useEffect(() => {
     // Reset to page 0 and re-fetch with new page size
-    setInatPage(0);
+    setInatPage(0); // eslint-disable-line react-hooks/set-state-in-effect -- reset pagination on resize
     fetchInatPhotos(0, pageSize);
   }, [pageSize, fetchInatPhotos]);
-
-  // Animation playback interval (date by date)
-  useEffect(() => {
-    if (!isPlaying) return;
-    if (animatingDateIdx == null) {
-      setAnimatingDateIdx(0);
-    }
-    const totalDays = animationDateRange.totalDays;
-    // Base step: aim for ~20s animation at 1x, scale with speed
-    const baseStep = Math.max(1, Math.ceil(totalDays / (20 * 60)));
-    const step = baseStep * playbackSpeed;
-    animationRef.current = setInterval(() => {
-      setAnimatingDateIdx((prev) => {
-        const cur = prev ?? 0;
-        const next = cur + step;
-        if (next >= totalDays) {
-          setIsPlaying(false);
-          return totalDays - 1;
-        }
-        return next;
-      });
-    }, 16);
-    return () => {
-      if (animationRef.current) clearInterval(animationRef.current);
-    };
-  }, [isPlaying, playbackSpeed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Stop animation when user manually changes year range
   const handleYearRangeChange = useCallback((range: [number, number]) => {
@@ -957,6 +931,32 @@ export default function OccurrenceMapRow({
     const totalDays = Math.floor((endMs - startMs) / 86400000) + 1;
     return { start: startMs, totalDays };
   }, [filteredBeforeAnimation]);
+
+  // Animation playback interval (date by date)
+  useEffect(() => {
+    if (!isPlaying) return;
+    if (animatingDateIdx == null) {
+      setAnimatingDateIdx(0); // eslint-disable-line react-hooks/set-state-in-effect -- init animation index
+    }
+    const totalDays = animationDateRange.totalDays;
+    // Base step: aim for ~20s animation at 1x, scale with speed
+    const baseStep = Math.max(1, Math.ceil(totalDays / (20 * 60)));
+    const step = baseStep * playbackSpeed;
+    animationRef.current = setInterval(() => {
+      setAnimatingDateIdx((prev) => {
+        const cur = prev ?? 0;
+        const next = cur + step;
+        if (next >= totalDays) {
+          setIsPlaying(false);
+          return totalDays - 1;
+        }
+        return next;
+      });
+    }, 16);
+    return () => {
+      if (animationRef.current) clearInterval(animationRef.current);
+    };
+  }, [isPlaying, playbackSpeed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The current animation date cutoff
   const animatingDate = useMemo(() => {
@@ -1486,6 +1486,8 @@ export default function OccurrenceMapRow({
     );
   };
 
+  const inatContributorsChart = useMemo(() => <InatContributorsChart speciesKey={speciesKey} />, [speciesKey]);
+
   return (
     <div className="bg-zinc-50 dark:bg-zinc-800/50">
       <div className="p-2">
@@ -1743,7 +1745,7 @@ export default function OccurrenceMapRow({
               )}
 
               {/* Observers / Identifiers chart (memoized to avoid rerender on hover state changes) */}
-              {useMemo(() => <InatContributorsChart speciesKey={speciesKey} />, [speciesKey])}
+              {inatContributorsChart}
             </div>
             )}
 

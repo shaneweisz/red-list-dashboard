@@ -6,7 +6,7 @@
  * prefix before lookup.
  */
 
-import { CSSProperties } from "react";
+import React, { CSSProperties } from "react";
 import { IconBaseProps } from "react-icons";
 import {
   FaPaw,
@@ -19,7 +19,6 @@ import {
 } from "react-icons/fa";
 import {
   GiAlgae,
-  GiAngularSpider,
   GiBat,
   GiBee,
   GiBirdTwitter,
@@ -218,6 +217,5 @@ export default function TaxaIcon({
   style,
 }: TaxaIconProps) {
   const iconProps = { size, className, style };
-  const Icon = resolveIcon(taxonId) ?? FaLeaf;
-  return <Icon {...iconProps} />;
+  return React.createElement(resolveIcon(taxonId) ?? FaLeaf, iconProps);
 }
