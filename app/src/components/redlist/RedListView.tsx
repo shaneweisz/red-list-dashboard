@@ -1850,7 +1850,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 <WorldMap
                   selectedCountries={selectedCountries}
                   onCountrySelect={handleCountrySelect}
-                  onClearSelection={handleClearCountry}
                   precomputedStats={countryStatsForMap}
                   selectedTaxa={selectedTaxa}
                   speciesLabel={isNewAssessments ? "# Unassessed" : undefined}

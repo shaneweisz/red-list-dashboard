@@ -525,7 +525,6 @@ export function computeLocations(
  */
 export function computeTemporalTrends(
   points: OccurrencePoint[],
-  _gridSizeKm: number = 2,
   clusterDistanceKm: number = 10,
   splitYear?: number,
 ): TemporalResult {
@@ -838,7 +837,6 @@ export function estimateCriteria(
   const locations = computeLocations(coords, fullParams.clusterDistanceKm);
   const temporal = computeTemporalTrends(
     filtered,
-    fullParams.gridSizeKm,
     fullParams.clusterDistanceKm,
   );
 

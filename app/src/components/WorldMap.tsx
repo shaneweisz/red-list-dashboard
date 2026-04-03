@@ -148,7 +148,6 @@ const ALL_TAXA_IDS = ["mammalia", "aves", "reptilia", "amphibia", "fishes", "inv
 interface WorldMapProps {
   selectedCountries: Set<string>;
   onCountrySelect: (countryCode: string, countryName: string, event: React.MouseEvent) => void;
-  onClearSelection: () => void;
   selectedTaxon?: string | null;
   // Optional pre-computed stats (for Red List species counts - avoids API call)
   precomputedStats?: CountryStats;
@@ -167,7 +166,7 @@ const DEFAULT_ZOOM = 1.0;
 const MIN_ZOOM = 1.0;
 const MAX_ZOOM = 8.0;
 
-function WorldMap({ selectedCountries, onCountrySelect, onClearSelection: _onClearSelection, selectedTaxon, precomputedStats, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, footer }: WorldMapProps) {
+function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, footer }: WorldMapProps) {
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoveredCountryCode, setHoveredCountryCode] = useState<string | null>(null);
   const [speciesStats, setSpeciesStats] = useState<CountryStats>(precomputedStats || {});
