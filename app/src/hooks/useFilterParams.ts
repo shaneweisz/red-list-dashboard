@@ -141,7 +141,7 @@ export function useFilterParams() {
   // Hydrate from URL on mount + sync on popstate (back/forward button)
   useEffect(() => {
     fromPopstateRef.current = true;
-    setState(parseParams(window.location.search));
+    setState(parseParams(window.location.search)); // eslint-disable-line react-hooks/set-state-in-effect -- hydrate from URL on mount
     const onPopState = () => {
       fromPopstateRef.current = true;
       setState(parseParams(window.location.search));

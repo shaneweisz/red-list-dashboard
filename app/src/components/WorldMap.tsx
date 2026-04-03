@@ -514,6 +514,7 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
             <Geographies geography={GEO_URL}>
               {({ geographies }) => {
                 // Compute centroids from geometry on first load
+                /* eslint-disable react-hooks/immutability -- one-time cache populated from render callback data */
                 if (Object.keys(centroidsRef.current).length === 0) {
                   for (const geo of geographies) {
                     const name = geo.properties.name;
@@ -523,6 +524,7 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
                     }
                   }
                 }
+                /* eslint-enable react-hooks/immutability */
                 return geographies
                   .filter((geo) => geo.properties.name !== "Antarctica")
                   .map((geo) => {
