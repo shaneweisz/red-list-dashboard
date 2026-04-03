@@ -100,79 +100,6 @@ interface RangeGeoJSONResponse extends FeatureCollection {
   simplification?: SimplificationInfo;
 }
 
-/**
- * Split polygons that cross the antimeridian (±180° longitude) into separate
- * features on each side. Without this, MapLibre draws horizontal line artifacts
- * across the map where coordinates jump from ~180° to ~-180°.
- *
- * Detects crossings by checking for consecutive coordinate pairs where the
- * longitude difference exceeds 180° — a clear sign of an antimeridian crossing
- * rather than a genuinely large polygon edge.
- */
-function splitAntimeridian(fc: FeatureCollection): FeatureCollection {
-  const result: Feature[] = [];
-
-  for (const feature of fc.features) {
-    const geomType = feature.geometry?.type;
-    if (geomType !== "Polygon" && geomType !== "MultiPolygon") {
-      result.push(feature);
-      continue;
-    }
-
-    // Check if any ring crosses the antimeridian
-    const rings: number[][][] =
-      geomType === "Polygon"
-        ? (feature.geometry as { coordinates: number[][][] }).coordinates
-        : (feature.geometry as { coordinates: number[][][][] }).coordinates.flat();
-
-    let crosses = false;
-    for (const ring of rings) {
-      for (let i = 1; i < ring.length; i++) {
-        if (Math.abs(ring[i][0] - ring[i - 1][0]) > 180) {
-          crosses = true;
-          break;
-        }
-      }
-      if (crosses) break;
-    }
-
-    if (!crosses) {
-      result.push(feature);
-      continue;
-    }
-
-    // Split: shift coordinates that are on the "wrong" side of the antimeridian
-    // Create two copies: one for the western hemisphere, one for the eastern
-    for (const offset of [0, 360]) {
-      const shiftedRings: number[][][] = rings.map((ring) =>
-        ring.map(([lon, lat]) => {
-          // Normalize to [-180, 540) range, then clamp to the target hemisphere
-          let shifted = lon + offset;
-          if (shifted > 180) shifted -= 360;
-          return [shifted, lat];
-        })
-      );
-
-      // Clip: only keep rings where the centroid is in the valid range
-      const validRings = shiftedRings.filter((ring) => {
-        const avgLon = ring.reduce((s, c) => s + c[0], 0) / ring.length;
-        return offset === 0 ? avgLon <= 0 : avgLon > 0;
-      });
-
-      if (validRings.length > 0) {
-        result.push({
-          ...feature,
-          geometry: {
-            type: "Polygon",
-            coordinates: validRings,
-          } as Feature["geometry"],
-        });
-      }
-    }
-  }
-
-  return { ...fc, features: result };
-}
 
 export default function RangeMapLayer({
   assessmentId,
@@ -210,11 +137,7 @@ export default function RangeMapLayer({
         if (!res.ok) throw new Error(`${res.status}`);
         return res.json();
       })
-      .then((raw: RangeGeoJSONResponse) => {
-        // Split polygons crossing the antimeridian to avoid rendering artifacts
-        const data = splitAntimeridian(raw) as RangeGeoJSONResponse;
-        data.simplification = raw.simplification;
-
+      .then((data: RangeGeoJSONResponse) => {
         // Add _catKey property to each feature for data-driven styling
         for (const feature of data.features) {
           const presence = feature.properties?.presence ?? 1;
