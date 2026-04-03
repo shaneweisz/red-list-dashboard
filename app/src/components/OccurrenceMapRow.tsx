@@ -123,16 +123,6 @@ const BASEMAP_STYLES: Record<string, { label: string; style: MaplibreStyle }> = 
 };
 type BasemapKey = keyof typeof BASEMAP_STYLES;
 
-// Convert an eventDate string (or year-only) to a numeric value for interpolation
-function dateToNumeric(eventDate?: string | null, year?: number | null): number | null {
-  if (eventDate) {
-    const ts = new Date(eventDate).getTime();
-    if (!isNaN(ts)) return ts;
-  }
-  if (year != null) return new Date(year, 0, 1).getTime();
-  return null;
-}
-
 // Year-based discrete color bands.
 // Each year within a band gets a unique shade (lighter = more recent).
 // Bands: ≤2005 red, 2006-2010 oranges, 2011-2015 yellows, 2016-2026 greens.
@@ -1070,24 +1060,6 @@ export default function OccurrenceMapRow({
       postAssessmentOccs: post,
     };
   }, [splitView, splitDate, filteredOccurrences]);
-
-  // Date range for color gradient (uses full eventDate for finer granularity)
-  const { minDateNum, maxDateNum, minDateLabel, maxDateLabel } = useMemo(() => {
-    const nums = filteredOccurrences
-      .map((o) => dateToNumeric(o.properties.eventDate, o.properties.year))
-      .filter((n): n is number => n != null);
-    if (nums.length === 0) return { minDateNum: 0, maxDateNum: 0, minDateLabel: "", maxDateLabel: "" };
-    const min = Math.min(...nums);
-    const max = Math.max(...nums);
-    const fmt = (ts: number) => {
-      const d = new Date(ts);
-      // Show just year if the range spans multiple years, otherwise show month/year
-      const rangeYears = new Date(max).getFullYear() - new Date(min).getFullYear();
-      if (rangeYears > 2) return String(d.getFullYear());
-      return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
-    };
-    return { minDateNum: min, maxDateNum: max, minDateLabel: fmt(min), maxDateLabel: fmt(max) };
-  }, [filteredOccurrences]);
 
   // Filter definitions — GBIF basis of record terminology with iNat kept separate
   const pillDefs = useMemo(() => {
