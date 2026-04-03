@@ -2,11 +2,14 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import dynamic from "next/dynamic";
-import type { GeoJsonObject, FeatureCollection, Feature } from "geojson";
-import type L from "leaflet";
+import type { FeatureCollection, Feature } from "geojson";
 
-const GeoJSON = dynamic(
-  () => import("react-leaflet").then((mod) => mod.GeoJSON),
+const Source = dynamic(
+  () => import("react-map-gl/maplibre").then((mod) => mod.Source),
+  { ssr: false }
+);
+const Layer = dynamic(
+  () => import("react-map-gl/maplibre").then((mod) => mod.Layer),
   { ssr: false }
 );
 
@@ -21,6 +24,7 @@ export interface RangeCategory {
 interface RangeMapLayerProps {
   assessmentId: number;
   visible: boolean;
+  panelId?: string;
   onLoadingChange?: (loading: boolean) => void;
   onCategoriesChange?: (categories: RangeCategory[]) => void;
   onNotFound?: (notFound: boolean) => void;
@@ -50,42 +54,57 @@ function getCategoryKey(presence: number, origin: number): string {
 }
 
 function getCategoryStyle(presence: number, origin: number): { color: string; dashArray?: string } {
-  // Possibly Extinct or Extinct
   if (presence === 4 || presence === 5) {
     return { color: "#9ca3af", dashArray: "6 4" };
   }
-  // Possibly Extant or Presence Uncertain
   if (presence === 3 || presence === 6) {
     return { color: "#f59e0b", dashArray: "4 4" };
   }
-  // Reintroduced or Assisted Colonisation
   if (origin === 2 || origin === 6) {
     return { color: "#3b82f6" };
   }
-  // Introduced
   if (origin === 3) {
     return { color: "#8b5cf6", dashArray: "4 2" };
   }
-  // Vagrant
   if (origin === 4) {
     return { color: "#f59e0b" };
   }
-  // Default: Extant Native
   return { color: "#e11d48" };
 }
 
 function getCategoryLabel(presence: number, origin: number): string {
   const presenceLabel = PRESENCE_LABELS[presence] ?? `Presence ${presence}`;
   const originLabel = ORIGIN_LABELS[origin] ?? `Origin ${origin}`;
-  // For the most common case, simplify
   if (presence === 1 && origin === 1) return "Extant (Native)";
   if (presence === 2 && origin === 1) return "Probably Extant (Native)";
   return `${presenceLabel} (${originLabel})`;
 }
 
+// Build a MapLibre data-driven color expression from features
+function buildColorExpression(features: Feature[]): unknown[] {
+  const seen = new Map<string, string>();
+  for (const f of features) {
+    const p = f.properties?.presence ?? 1;
+    const o = f.properties?.origin ?? 1;
+    const key = getCategoryKey(p, o);
+    if (!seen.has(key)) {
+      seen.set(key, getCategoryStyle(p, o).color);
+    }
+  }
+
+  // ["match", ["get", "_catKey"], "1-1", "#e11d48", "4-1", "#9ca3af", ..., "#e11d48"]
+  const expr: unknown[] = ["match", ["get", "_catKey"]];
+  for (const [key, color] of seen) {
+    expr.push(key, color);
+  }
+  expr.push("#e11d48"); // fallback
+  return expr;
+}
+
 export default function RangeMapLayer({
   assessmentId,
   visible,
+  panelId = "main",
   onLoadingChange,
   onCategoriesChange,
   onNotFound,
@@ -102,7 +121,6 @@ export default function RangeMapLayer({
     setLoading(true);
     setError(false);
     onLoadingChange?.(true);
-
     onNotFound?.(false);
 
     fetch(`/api/species/${assessmentId}/range-map`)
@@ -115,10 +133,19 @@ export default function RangeMapLayer({
         return res.json();
       })
       .then((data: FeatureCollection) => {
+        // Add _catKey property to each feature for data-driven styling
+        for (const feature of data.features) {
+          const presence = feature.properties?.presence ?? 1;
+          const origin = feature.properties?.origin ?? 1;
+          feature.properties = {
+            ...feature.properties,
+            _catKey: getCategoryKey(presence, origin),
+          };
+        }
         setGeojson(data);
         fetchedRef.current = assessmentId;
 
-        // Extract available categories
+        // Extract categories
         const catMap = new Map<string, { presence: number; origin: number; count: number }>();
         for (const feature of data.features) {
           const presence = feature.properties?.presence ?? 1;
@@ -141,7 +168,6 @@ export default function RangeMapLayer({
             count: val.count,
           };
         });
-        // Sort: extant native first, then by label
         categories.sort((a, b) => {
           if (a.key === "1-1") return -1;
           if (b.key === "1-1") return 1;
@@ -154,62 +180,90 @@ export default function RangeMapLayer({
         setLoading(false);
         onLoadingChange?.(false);
       });
-  }, [visible, assessmentId, onLoadingChange, onCategoriesChange]);
+  }, [visible, assessmentId, onLoadingChange, onCategoriesChange, onNotFound]);
 
-  // Filter features by visible categories
-  const filteredGeojson = useMemo<GeoJsonObject | null>(() => {
-    if (!geojson) return null;
-    if (!visibleCategories) return geojson;
-    const filtered: FeatureCollection = {
-      type: "FeatureCollection",
-      features: geojson.features.filter((f: Feature) => {
-        const key = getCategoryKey(f.properties?.presence ?? 1, f.properties?.origin ?? 1);
-        return visibleCategories.has(key);
-      }),
+  // Split into polygon and point features, filtered by visible categories
+  const { polygonData, pointData, colorExpr } = useMemo(() => {
+    if (!geojson) return { polygonData: null, pointData: null, colorExpr: null };
+
+    const polygonFeatures: Feature[] = [];
+    const pointFeatures: Feature[] = [];
+
+    for (const f of geojson.features) {
+      const key = f.properties?._catKey;
+      if (visibleCategories && !visibleCategories.has(key)) continue;
+
+      const geomType = f.geometry?.type;
+      if (geomType === "Point" || geomType === "MultiPoint") {
+        pointFeatures.push(f);
+      } else {
+        polygonFeatures.push(f);
+      }
+    }
+
+    const allVisible = [...polygonFeatures, ...pointFeatures];
+    const expr = allVisible.length > 0 ? buildColorExpression(allVisible) : null;
+
+    return {
+      polygonData: {
+        type: "FeatureCollection" as const,
+        features: polygonFeatures,
+      },
+      pointData: {
+        type: "FeatureCollection" as const,
+        features: pointFeatures,
+      },
+      colorExpr: expr,
     };
-    return filtered;
   }, [geojson, visibleCategories]);
 
-  if (!visible || error || !filteredGeojson) return null;
+  if (!visible || error || !polygonData || !colorExpr) return null;
   if (loading) return null;
 
-  const styleFeature = (feature: Feature | undefined) => {
-    const presence = feature?.properties?.presence ?? 1;
-    const origin = feature?.properties?.origin ?? 1;
-    const catStyle = getCategoryStyle(presence, origin);
-    return {
-      weight: 2,
-      fillOpacity: 0.15,
-      opacity: 0.8,
-      color: catStyle.color,
-      fillColor: catStyle.color,
-      ...(catStyle.dashArray ? { dashArray: catStyle.dashArray } : {}),
-    };
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const leaflet = require("leaflet") as typeof L;
-
-  const pointToLayer = (_feature: Feature, latlng: L.LatLng) => {
-    const presence = _feature?.properties?.presence ?? 1;
-    const origin = _feature?.properties?.origin ?? 1;
-    const catStyle = getCategoryStyle(presence, origin);
-    return leaflet.circleMarker(latlng, {
-      radius: 4,
-      weight: 1.5,
-      opacity: 0.8,
-      fillOpacity: 0.5,
-      color: catStyle.color,
-      fillColor: catStyle.color,
-    });
-  };
+  const sourceIdPolygons = `range-polygons-${panelId}`;
+  const sourceIdPoints = `range-points-${panelId}`;
 
   return (
-    <GeoJSON
-      key={`range-${assessmentId}-${visibleCategories ? Array.from(visibleCategories).join(",") : "all"}`}
-      data={filteredGeojson}
-      style={styleFeature}
-      pointToLayer={pointToLayer}
-    />
+    <>
+      {/* Polygon/MultiPolygon features — fill + outline */}
+      {polygonData.features.length > 0 && (
+        <Source id={sourceIdPolygons} type="geojson" data={polygonData}>
+          <Layer
+            id={`range-fill-${panelId}`}
+            type="fill"
+            paint={{
+              "fill-color": colorExpr as unknown as string,
+              "fill-opacity": 0.15,
+            }}
+          />
+          <Layer
+            id={`range-line-${panelId}`}
+            type="line"
+            paint={{
+              "line-color": colorExpr as unknown as string,
+              "line-width": 2,
+              "line-opacity": 0.8,
+            }}
+          />
+        </Source>
+      )}
+      {/* Point features — circle markers */}
+      {pointData!.features.length > 0 && (
+        <Source id={sourceIdPoints} type="geojson" data={pointData!}>
+          <Layer
+            id={`range-circles-${panelId}`}
+            type="circle"
+            paint={{
+              "circle-radius": 4,
+              "circle-color": colorExpr as unknown as string,
+              "circle-opacity": 0.5,
+              "circle-stroke-color": colorExpr as unknown as string,
+              "circle-stroke-width": 1.5,
+              "circle-stroke-opacity": 0.8,
+            }}
+          />
+        </Source>
+      )}
+    </>
   );
 }

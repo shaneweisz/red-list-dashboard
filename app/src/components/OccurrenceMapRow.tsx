@@ -34,6 +34,14 @@ const MapOccurrenceTooltip = dynamic(
   () => import("./MapOccurrenceTooltip"),
   { ssr: false }
 );
+const RangeMapLayer = dynamic(
+  () => import("./RangeMapLayer"),
+  { ssr: false }
+);
+const AohMapLayer = dynamic(
+  () => import("./AohMapLayer"),
+  { ssr: false }
+);
 const InatContributorsChart = dynamic(
   () => import("./InatContributorsChart"),
   { ssr: false }
@@ -486,6 +494,10 @@ interface OccurrenceMapRowProps {
   mounted: boolean;
   assessmentYear?: number | null;
   assessmentDate?: string | null;
+  assessmentId?: number | null;
+  sisTaxonId?: number | null;
+  taxonGroup?: string | null;
+  hasMap?: boolean | null;
 }
 
 // Convert iNaturalist photo URLs to a smaller size for thumbnails
@@ -713,6 +725,10 @@ export default function OccurrenceMapRow({
   mounted,
   assessmentYear,
   assessmentDate,
+  assessmentId,
+  sisTaxonId,
+  taxonGroup,
+  hasMap,
 }: OccurrenceMapRowProps) {
   const [occurrences, setOccurrences] = useState<OccurrenceFeature[]>([]);
   const [breakdown, setBreakdown] = useState<RecordTypeBreakdown | null>(null);
@@ -743,6 +759,20 @@ export default function OccurrenceMapRow({
   const mapRef = useRef<MapRef>(null);
   const [sampleSize, setSampleSize] = useState(1000);
   const [yearRange, setYearRange] = useState<[number, number]>([0, 9999]);
+
+  // Range map layer state
+  const [showRange, setShowRange] = useState(false);
+  const [rangeLoading, setRangeLoading] = useState(false);
+  const [rangeNotFound, setRangeNotFound] = useState(false);
+  const [rangeCategories, setRangeCategories] = useState<import("./RangeMapLayer").RangeCategory[]>([]);
+  const [visibleCategories, setVisibleCategories] = useState<Set<string> | undefined>(undefined);
+  const [rangeCategoriesExpanded, setRangeCategoriesExpanded] = useState(false);
+
+  // AOH layer state
+  const isAohAvailable = !!(sisTaxonId && taxonGroup &&
+    ["mammalia", "aves", "reptilia", "amphibia"].includes(taxonGroup.toLowerCase()));
+  const [showAoh, setShowAoh] = useState(false);
+  const [aohLoading, setAohLoading] = useState(false);
 
   // Filters dropdown state
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -1360,6 +1390,29 @@ export default function OccurrenceMapRow({
                   />
                 );
               })()}
+              {/* IUCN Range Map layer */}
+              {showRange && assessmentId && (
+                <RangeMapLayer
+                  assessmentId={assessmentId}
+                  visible={showRange}
+                  panelId={panelId}
+                  onLoadingChange={setRangeLoading}
+                  onCategoriesChange={setRangeCategories}
+                  onNotFound={setRangeNotFound}
+                  visibleCategories={visibleCategories}
+                />
+              )}
+              {/* AOH layer */}
+              {showAoh && sisTaxonId && taxonGroup && (
+                <AohMapLayer
+                  sisTaxonId={sisTaxonId}
+                  taxonGroup={taxonGroup}
+                  visible={showAoh}
+                  panelId={panelId}
+                  mapRef={mapRef}
+                  onLoadingChange={setAohLoading}
+                />
+              )}
             </MapGL>
           ) : null}
           {/* Legend */}
@@ -1455,6 +1508,91 @@ export default function OccurrenceMapRow({
                   {opt.label}
                 </button>
               ))}
+            </div>
+          )}
+          {/* Layer toggles (Range Map, AOH) */}
+          {!loadingOccurrences && mounted && (hasMap || isAohAvailable) && (
+            <div className="absolute top-12 right-[72px] z-[1000] flex flex-col gap-0.5 bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 p-1">
+              {hasMap && assessmentId && (
+                <div className="flex flex-col">
+                  <button
+                    onClick={() => setShowRange(!showRange)}
+                    className={`px-2 py-0.5 rounded text-[10px] transition-colors flex items-center gap-1 ${
+                      showRange
+                        ? "bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 font-medium"
+                        : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                    }`}
+                    title="Toggle IUCN range map overlay. Range maps are indicative only and may not reflect current distributions."
+                  >
+                    {rangeLoading ? (
+                      <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                    ) : null}
+                    IUCN Range
+                    {showRange && rangeCategories.length > 1 && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setRangeCategoriesExpanded(!rangeCategoriesExpanded); }}
+                        className="ml-0.5 text-zinc-400 hover:text-zinc-600"
+                      >
+                        {rangeCategoriesExpanded ? "▴" : "▾"}
+                      </button>
+                    )}
+                  </button>
+                  {showRange && rangeNotFound && (
+                    <span className="px-2 py-0.5 text-[9px] text-zinc-400 italic">Not yet available</span>
+                  )}
+                  {showRange && rangeCategoriesExpanded && rangeCategories.length > 0 && (
+                    <div className="flex flex-col gap-0.5 mt-0.5 pl-1 border-l-2 border-zinc-200 dark:border-zinc-600 ml-1">
+                      {rangeCategories.map((cat) => {
+                        const isVisible = !visibleCategories || visibleCategories.has(cat.key);
+                        return (
+                          <button
+                            key={cat.key}
+                            onClick={() => {
+                              setVisibleCategories((prev) => {
+                                const next = new Set(prev ?? rangeCategories.map((c) => c.key));
+                                if (next.has(cat.key)) next.delete(cat.key);
+                                else next.add(cat.key);
+                                return next;
+                              });
+                            }}
+                            className={`flex items-center gap-1 px-1 py-0.5 rounded text-[9px] transition-colors ${
+                              isVisible ? "text-zinc-700 dark:text-zinc-300" : "text-zinc-400 dark:text-zinc-500 line-through"
+                            }`}
+                          >
+                            <span
+                              className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
+                              style={{ background: cat.color, opacity: isVisible ? 1 : 0.3 }}
+                            />
+                            {cat.label} ({cat.count})
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+              {isAohAvailable && (
+                <button
+                  onClick={() => setShowAoh(!showAoh)}
+                  className={`px-2 py-0.5 rounded text-[10px] transition-colors flex items-center gap-1 ${
+                    showAoh
+                      ? "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 font-medium"
+                      : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                  }`}
+                  title="Toggle Area of Habitat overlay"
+                >
+                  {aohLoading ? (
+                    <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                  ) : null}
+                  AOH
+                </button>
+              )}
             </div>
           )}
         </div>
