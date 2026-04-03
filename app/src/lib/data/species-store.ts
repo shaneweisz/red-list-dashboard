@@ -721,6 +721,11 @@ export function _resetSearchIndexCache(): void {
   searchNamesCache = null;
 }
 
+/** Pre-load the search index into memory (called by warm-start endpoint). */
+export function warmSearchIndex(): void {
+  loadSearchIndex();
+}
+
 function loadSearchIndex(): { entries: SearchIndexEntry[]; names: { sl: string; cl: string }[] } {
   if (searchIndexCache && searchNamesCache) {
     return { entries: searchIndexCache, names: searchNamesCache };

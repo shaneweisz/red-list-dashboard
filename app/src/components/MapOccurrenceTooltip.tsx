@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { useMap } from "react-leaflet";
+import { useMap } from "react-map-gl/maplibre";
 
 interface MapOccurrenceTooltipProps {
   lat: number;
@@ -33,49 +33,50 @@ function formatBasis(basis?: string): string {
 }
 
 export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
-  const map = useMap();
+  const { current: map } = useMap();
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
+    if (!map) return;
     const update = () => {
-      const point = map.latLngToContainerPoint([props.lat, props.lng]);
+      const point = map.project([props.lng, props.lat]);
       setPos({ x: point.x, y: point.y });
     };
     update();
     map.on("move", update);
     map.on("zoom", update);
-    map.on("moveend", update);
-    map.on("zoomend", update);
     return () => {
       map.off("move", update);
       map.off("zoom", update);
-      map.off("moveend", update);
-      map.off("zoomend", update);
     };
   }, [map, props.lat, props.lng]);
 
-  if (!pos) return null;
+  if (!pos || !map) return null;
 
   const container = map.getContainer();
   const containerRect = container.getBoundingClientRect();
   const uncertainty = props.coordinateUncertaintyInMeters;
 
+  // Convert container-relative position to viewport-fixed position
+  const fixedX = containerRect.left + pos.x;
+  const fixedY = containerRect.top + pos.y;
+
   // Clamp horizontal position so tooltip stays within the map container
   const tooltipWidth = 220;
   const halfWidth = tooltipWidth / 2;
-  const clampedX = Math.max(halfWidth + 4, Math.min(pos.x, containerRect.width - halfWidth - 4));
+  const clampedX = Math.max(containerRect.left + halfWidth + 4, Math.min(fixedX, containerRect.right - halfWidth - 4));
 
-  // If tooltip would be cut off at the top, show it below the point instead
-  const showBelow = pos.y < 180;
+  // If tooltip would be cut off at the top of the viewport, show it below the point instead
+  const showBelow = fixedY < 200;
 
   return createPortal(
     <div
       style={{
-        position: "absolute",
+        position: "fixed",
         left: clampedX,
-        top: showBelow ? pos.y + 12 : pos.y - 12,
+        top: showBelow ? fixedY + 12 : fixedY - 12,
         transform: showBelow ? "translate(-50%, 0%)" : "translate(-50%, -100%)",
-        zIndex: 1000,
+        zIndex: 10000,
         pointerEvents: "none",
       }}
     >
@@ -145,6 +146,6 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
         />
       )}
     </div>,
-    container
+    document.body
   );
 }

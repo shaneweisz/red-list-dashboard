@@ -41,7 +41,7 @@ export default function RedListPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950 px-4 sm:px-6 py-4 md:px-16 md:py-8">
-      <main className="max-w-6xl w-full min-w-0 mx-auto flex-1">
+      <main className="max-w-5xl w-full min-w-0 mx-auto flex-1">
         {/* Header row: title + view mode toggle */}
         <div className="mb-3 md:mb-4 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
           <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-zinc-900 dark:text-zinc-100">
@@ -65,7 +65,7 @@ export default function RedListPage() {
                     : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
                 }`}
               >
-                Existing Assessments
+                Reassessments
               </button>
               <button
                 onClick={() => {

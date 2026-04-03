@@ -3,43 +3,31 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
-import type L from "leaflet";
-import type { RangeCategory } from "./RangeMapLayer";
+import type { MapRef, ViewStateChangeEvent, MapLayerMouseEvent } from "react-map-gl/maplibre";
+import type maplibregl from "maplibre-gl";
 
 // Fixed page size for iNat photo grid (5 columns x 2 rows)
 const INAT_PAGE_SIZE = 10;
 
-// Dynamically import Leaflet components
-const MapContainer = dynamic(
-  () => import("react-leaflet").then((mod) => mod.MapContainer),
+// Dynamically import MapLibre GL components
+const MapGL = dynamic(
+  () => import("react-map-gl/maplibre").then((mod) => mod.Map),
   { ssr: false }
 );
-const TileLayer = dynamic(
-  () => import("react-leaflet").then((mod) => mod.TileLayer),
+const Source = dynamic(
+  () => import("react-map-gl/maplibre").then((mod) => mod.Source),
   { ssr: false }
 );
-const CircleMarker = dynamic(
-  () => import("react-leaflet").then((mod) => mod.CircleMarker),
+const Layer = dynamic(
+  () => import("react-map-gl/maplibre").then((mod) => mod.Layer),
   { ssr: false }
 );
-const Circle = dynamic(
-  () => import("react-leaflet").then((mod) => mod.Circle),
-  { ssr: false }
-);
-const Marker = dynamic(
-  () => import("react-leaflet").then((mod) => mod.Marker),
-  { ssr: false }
-);
-const LocateControl = dynamic(
-  () => import("./LocateControl"),
+const MapLibreMarker = dynamic(
+  () => import("react-map-gl/maplibre").then((mod) => mod.Marker),
   { ssr: false }
 );
 const MapImageTooltip = dynamic(
   () => import("./MapImageTooltip"),
-  { ssr: false }
-);
-const FitBounds = dynamic(
-  () => import("./FitBounds"),
   { ssr: false }
 );
 const MapOccurrenceTooltip = dynamic(
@@ -50,55 +38,6 @@ const InatContributorsChart = dynamic(
   () => import("./InatContributorsChart"),
   { ssr: false }
 );
-const RangeMapLayer = dynamic(
-  () => import("./RangeMapLayer"),
-  { ssr: false }
-);
-const AohMapLayer = dynamic(
-  () => import("./AohMapLayer"),
-  { ssr: false }
-);
-
-// Syncs two Leaflet maps: when one moves/zooms, the other follows
-function MapSync({ syncRef }: { syncRef: React.MutableRefObject<{ center: [number, number]; zoom: number } | null> }) {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { useMap } = require("react-leaflet");
-  const map = useMap();
-  const isSyncing = useRef(false);
-
-  useEffect(() => {
-    const onMoveEnd = () => {
-      if (isSyncing.current) return;
-      const c = map.getCenter();
-      syncRef.current = { center: [c.lat, c.lng], zoom: map.getZoom() };
-    };
-    map.on("moveend", onMoveEnd);
-    map.on("zoomend", onMoveEnd);
-    return () => {
-      map.off("moveend", onMoveEnd);
-      map.off("zoomend", onMoveEnd);
-    };
-  }, [map, syncRef]);
-
-  // Poll for changes from the other map (lightweight — only sets view when different)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const s = syncRef.current;
-      if (!s) return;
-      const c = map.getCenter();
-      const z = map.getZoom();
-      if (Math.abs(c.lat - s.center[0]) > 0.0001 || Math.abs(c.lng - s.center[1]) > 0.0001 || z !== s.zoom) {
-        isSyncing.current = true;
-        map.setView(s.center, s.zoom, { animate: false });
-        // Reset after Leaflet fires its events
-        requestAnimationFrame(() => { isSyncing.current = false; });
-      }
-    }, 50);
-    return () => clearInterval(interval);
-  }, [map, syncRef]);
-
-  return null;
-}
 
 const INAT_DATASET_KEY = "50c9509d-22c7-4a22-a47d-8c48425ef4a7";
 
@@ -133,102 +72,56 @@ const UNCERTAINTY_OPTIONS = [
   { label: "\u2264 50km", value: 50000 },
 ] as const;
 
-// Deduplication grid sizes
-const DEDUP_OPTIONS = [
-  { label: "~10m", value: 0.0001 },
-  { label: "~100m", value: 0.001 },
-  { label: "~1km", value: 0.01 },
-  { label: "~10km", value: 0.1 },
-] as const;
-
 // Sample size options
 const SAMPLE_SIZE_OPTIONS = [100, 300, 500, 1000, 2000] as const;
 
-// Basemap tile options
-const BASEMAP_OPTIONS = {
+// Basemap style options for MapLibre GL
+function makeRasterStyle(tileUrl: string, attribution: string): maplibregl.StyleSpecification {
+  return {
+    version: 8 as const,
+    sources: {
+      basemap: {
+        type: "raster" as const,
+        tiles: [tileUrl],
+        tileSize: 256,
+        attribution,
+      },
+    },
+    layers: [
+      {
+        id: "basemap-layer",
+        type: "raster" as const,
+        source: "basemap",
+      },
+    ],
+  };
+}
+// Lazy import for maplibre-gl types
+type MaplibreStyle = ReturnType<typeof makeRasterStyle>;
+const BASEMAP_STYLES: Record<string, { label: string; style: MaplibreStyle }> = {
   streets: {
     label: "Streets",
-    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    style: makeRasterStyle(
+      "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    ),
   },
   satellite: {
     label: "Satellite",
-    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    attribution: '&copy; <a href="https://www.esri.com">Esri</a> World Imagery',
+    style: makeRasterStyle(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      '&copy; <a href="https://www.esri.com">Esri</a> World Imagery'
+    ),
   },
   terrain: {
     label: "Terrain",
-    url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
-    attribution: '&copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)',
+    style: makeRasterStyle(
+      "https://tile.opentopomap.org/{z}/{x}/{y}.png",
+      '&copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)'
+    ),
   },
-} as const;
-type BasemapKey = keyof typeof BASEMAP_OPTIONS;
-
-// Shape icon factory for marker shapes by record type
-const shapeIconCache = new Map<string, unknown>();
-function getShapeIcon(
-  category: string,
-  fillColor: string,
-  strokeColor: string,
-  size: number,
-): unknown {
-  const key = `${category}-${fillColor}-${strokeColor}-${size}`;
-  const cached = shapeIconCache.get(key);
-  if (cached) return cached;
-
-  const sw = 1.5;
-  const s = size;
-  let svgContent: string;
-
-  switch (category) {
-    case "iNaturalist":
-      svgContent = `<circle cx="${s/2}" cy="${s/2}" r="${s/2 - sw}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${sw}"/>`;
-      break;
-    case "humanOther":
-      svgContent = `<circle cx="${s/2}" cy="${s/2}" r="${s/2 - sw}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${sw}"/><circle cx="${s/2}" cy="${s/2}" r="1.5" fill="${strokeColor}"/>`;
-      break;
-    case "machineObservation":
-      svgContent = `<rect x="${sw}" y="${sw}" width="${s - sw*2}" height="${s - sw*2}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${sw}"/>`;
-      break;
-    case "preservedSpecimen":
-      svgContent = `<rect x="${s*0.15}" y="${s*0.15}" width="${s*0.7}" height="${s*0.7}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${sw}" transform="rotate(45 ${s/2} ${s/2})"/>`;
-      break;
-    case "materialSample":
-      svgContent = `<polygon points="${s/2},${sw} ${s-sw},${s-sw} ${sw},${s-sw}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${sw}"/>`;
-      break;
-    default:
-      svgContent = `<line x1="${s/2}" y1="${sw+1}" x2="${s/2}" y2="${s-sw-1}" stroke="${strokeColor}" stroke-width="${sw+1}" stroke-linecap="round"/><line x1="${sw+1}" y1="${s/2}" x2="${s-sw-1}" y2="${s/2}" stroke="${strokeColor}" stroke-width="${sw+1}" stroke-linecap="round"/>`;
-      break;
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const L = require("leaflet");
-  const icon = L.divIcon({
-    html: `<svg width="${s}" height="${s}" viewBox="0 0 ${s} ${s}" xmlns="http://www.w3.org/2000/svg">${svgContent}</svg>`,
-    className: "shape-marker-icon",
-    iconSize: [s, s],
-    iconAnchor: [s / 2, s / 2],
-  });
-  shapeIconCache.set(key, icon);
-  return icon;
-}
-
-// Spatial deduplication: keep one record per grid cell, preferring newest
-function deduplicateSpatially(
-  features: OccurrenceFeature[],
-  gridDeg: number
-): OccurrenceFeature[] {
-  const cells = new Map<string, OccurrenceFeature>();
-  for (const f of features) {
-    const [lon, lat] = f.geometry.coordinates;
-    const cellKey = `${Math.round(lat / gridDeg)},${Math.round(lon / gridDeg)}`;
-    const existing = cells.get(cellKey);
-    if (!existing || (f.properties.year ?? 0) > (existing.properties.year ?? 0)) {
-      cells.set(cellKey, f);
-    }
-  }
-  return Array.from(cells.values());
-}
+};
+type BasemapKey = keyof typeof BASEMAP_STYLES;
 
 // Convert an eventDate string (or year-only) to a numeric value for interpolation
 function dateToNumeric(eventDate?: string | null, year?: number | null): number | null {
@@ -593,10 +486,6 @@ interface OccurrenceMapRowProps {
   mounted: boolean;
   assessmentYear?: number | null;
   assessmentDate?: string | null;
-  assessmentId?: number | null;
-  sisTaxonId?: number | null;
-  taxonGroup?: string | null;
-  hasMap?: boolean;
 }
 
 // Convert iNaturalist photo URLs to a smaller size for thumbnails
@@ -824,10 +713,6 @@ export default function OccurrenceMapRow({
   mounted,
   assessmentYear,
   assessmentDate,
-  assessmentId,
-  sisTaxonId,
-  taxonGroup,
-  hasMap,
 }: OccurrenceMapRowProps) {
   const [occurrences, setOccurrences] = useState<OccurrenceFeature[]>([]);
   const [breakdown, setBreakdown] = useState<RecordTypeBreakdown | null>(null);
@@ -850,33 +735,14 @@ export default function OccurrenceMapRow({
 
   // Advanced filter state
   const [maxUncertainty, setMaxUncertainty] = useState<number | null>(null);
-  const [showUncertaintyCircles, setShowUncertaintyCircles] = useState(false);
   const [colorByDate, setColorByDate] = useState(true);
-  const [dedupEnabled, setDedupEnabled] = useState(false);
   const [basemap, setBasemap] = useState<BasemapKey>("streets");
-  const [shapeByType, setShapeByType] = useState(false);
   const [splitView, setSplitView] = useState(false);
   const [splitDate, setSplitDate] = useState<string>(assessmentDate?.split("T")[0] || "");
-  const mapSyncRef = useRef<{ center: [number, number]; zoom: number } | null>(null);
-  const [dedupGrid, setDedupGrid] = useState(0.01); // ~1km
+  const [sharedViewState, setSharedViewState] = useState({ longitude: 0, latitude: 20, zoom: 1.5 });
+  const mapRef = useRef<MapRef>(null);
   const [sampleSize, setSampleSize] = useState(1000);
-
-  // Layer toggle state
-  const [showRange, setShowRange] = useState(false);
-  const [rangeLoading, setRangeLoading] = useState(false);
-  const [rangeCategories, setRangeCategories] = useState<RangeCategory[]>([]);
-  const [visibleRangeCategories, setVisibleRangeCategories] = useState<Set<string>>(new Set(["1-1", "2-1"])); // Extant + Probably Extant Native by default
-  const [showRangeFilters, setShowRangeFilters] = useState(false);
-  const [rangeNotFound, setRangeNotFound] = useState(false);
-  const [showAoh, setShowAoh] = useState(false);
-  const [aohLoading, setAohLoading] = useState(false);
-  const [showPoints, setShowPoints] = useState(true);
-  const isAohAvailable = !!(sisTaxonId && taxonGroup && ["mammalia", "aves", "reptilia", "amphibia"].includes(taxonGroup.toLowerCase()));
   const [yearRange, setYearRange] = useState<[number, number]>([0, 9999]);
-
-  // "More" popover state
-  const [moreOpen, setMoreOpen] = useState(false);
-  const moreRef = useRef<HTMLDivElement>(null);
 
   // Filters dropdown state
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -891,20 +757,17 @@ export default function OccurrenceMapRow({
   const [inatTotalCount, setInatTotalCount] = useState(0);
   const [loadingInatPhotos, setLoadingInatPhotos] = useState(false);
 
-  // Close "More" popover on outside click
+  // Close filters popover on outside click
   useEffect(() => {
-    if (!moreOpen && !filtersOpen) return;
+    if (!filtersOpen) return;
     const handler = (e: MouseEvent) => {
-      if (moreOpen && moreRef.current && !moreRef.current.contains(e.target as Node)) {
-        setMoreOpen(false);
-      }
-      if (filtersOpen && filtersRef.current && !filtersRef.current.contains(e.target as Node)) {
+      if (filtersRef.current && !filtersRef.current.contains(e.target as Node)) {
         setFiltersOpen(false);
       }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [moreOpen, filtersOpen]);
+  }, [filtersOpen]);
 
   // Hovered iNat observation (for map highlight)
   const [hoveredObs, setHoveredObs] = useState<InatObservation | null>(null);
@@ -1057,28 +920,11 @@ export default function OccurrenceMapRow({
     }
   }, [isPlaying]);
 
-  // Classify an occurrence into one of the checkbox categories
-  const getCategory = (o: OccurrenceFeature): keyof typeof checkedTypes => {
-    const basis = o.properties.basisOfRecord;
-    if (basis === "HUMAN_OBSERVATION") {
-      return o.properties.datasetKey === INAT_DATASET_KEY ? "iNaturalist" : "humanOther";
-    }
-    if (basis === "MACHINE_OBSERVATION") return "machineObservation";
-    if (basis === "OBSERVATION") return "observation";
-    if (basis === "PRESERVED_SPECIMEN") return "preservedSpecimen";
-    if (basis === "FOSSIL_SPECIMEN") return "fossilSpecimen";
-    if (basis === "LIVING_SPECIMEN") return "livingSpecimen";
-    if (basis === "MATERIAL_SAMPLE") return "materialSample";
-    if (basis === "MATERIAL_CITATION") return "materialCitation";
-    if (basis === "OCCURRENCE") return "occurrence";
-    return "observation"; // fallback
-  };
-
   // Multi-stage filtering pipeline (before animation)
   const filteredBeforeAnimation = useMemo(() => {
     let result = occurrences;
     // 1. Basis of record checkboxes
-    result = result.filter((o) => checkedTypes[getCategory(o)]);
+    result = result.filter((o) => checkedTypes[classifyOccurrence(o) as keyof typeof checkedTypes]);
     // 2. GPS uncertainty filter
     if (maxUncertainty != null) {
       result = result.filter((o) => {
@@ -1092,12 +938,8 @@ export default function OccurrenceMapRow({
       if (y == null) return true; // keep records without year data
       return y >= yearRange[0] && y <= yearRange[1];
     });
-    // 4. Spatial deduplication
-    if (dedupEnabled) {
-      result = deduplicateSpatially(result, dedupGrid);
-    }
     return result;
-  }, [occurrences, checkedTypes, maxUncertainty, yearRange, dedupEnabled, dedupGrid]);
+  }, [occurrences, checkedTypes, maxUncertainty, yearRange]);
 
   // Continuous date range for animation (every day from earliest to latest)
   const animationDateRange = useMemo(() => {
@@ -1153,15 +995,6 @@ export default function OccurrenceMapRow({
     return filteredBeforeAnimation;
   }, [filteredBeforeAnimation, animatingDate]);
 
-  // Helper to check if an occurrence is after the assessment year
-  const isNewRecord = (eventDate?: string): boolean => {
-    // In new-assessments mode (no assessment year), all records are "new" (green)
-    if (!assessmentYear) return true;
-    if (!eventDate) return false;
-    const recordYear = new Date(eventDate).getFullYear();
-    return recordYear > assessmentYear;
-  };
-
   // Bounding box from filtered occurrences
   const filteredBbox = useMemo<[number, number, number, number] | null>(() => {
     if (filteredOccurrences.length === 0) return bbox; // fall back to API bbox
@@ -1188,9 +1021,9 @@ export default function OccurrenceMapRow({
   }, [filteredOccurrences, splitDate]);
 
   // Split view: partition occurrences by exact assessment date
-  const { preAssessmentOccs, postAssessmentOccs, preBbox, postBbox } = useMemo(() => {
+  const { preAssessmentOccs, postAssessmentOccs } = useMemo(() => {
     if (!splitView || !splitDate) {
-      return { preAssessmentOccs: [], postAssessmentOccs: [], preBbox: null, postBbox: null };
+      return { preAssessmentOccs: [], postAssessmentOccs: [] };
     }
     const pre: OccurrenceFeature[] = [];
     const post: OccurrenceFeature[] = [];
@@ -1202,25 +1035,11 @@ export default function OccurrenceMapRow({
         pre.push(o);
       }
     }
-    const computeBbox = (features: OccurrenceFeature[]): [number, number, number, number] | null => {
-      if (features.length === 0) return bbox;
-      let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
-      for (const f of features) {
-        const [lon, lat] = f.geometry.coordinates;
-        if (lon < minLon) minLon = lon;
-        if (lon > maxLon) maxLon = lon;
-        if (lat < minLat) minLat = lat;
-        if (lat > maxLat) maxLat = lat;
-      }
-      return [minLon, minLat, maxLon, maxLat];
-    };
     return {
       preAssessmentOccs: pre,
       postAssessmentOccs: post,
-      preBbox: computeBbox(pre),
-      postBbox: computeBbox(post),
     };
-  }, [splitView, splitDate, filteredOccurrences, bbox]);
+  }, [splitView, splitDate, filteredOccurrences]);
 
   // Date range for color gradient (uses full eventDate for finer granularity)
   const { minDateNum, maxDateNum, minDateLabel, maxDateLabel } = useMemo(() => {
@@ -1240,10 +1059,6 @@ export default function OccurrenceMapRow({
     return { minDateNum: min, maxDateNum: max, minDateLabel: fmt(min), maxDateLabel: fmt(max) };
   }, [filteredOccurrences]);
 
-  // Count by category for the legend (just pre/post assessment)
-  const newRecords = filteredOccurrences.filter((o) => isNewRecord(o.properties.eventDate));
-  const oldRecords = filteredOccurrences.filter((o) => !isNewRecord(o.properties.eventDate));
-
   // Filter definitions — GBIF basis of record terminology with iNat kept separate
   const pillDefs = useMemo(() => {
     if (!breakdown) return [];
@@ -1262,26 +1077,177 @@ export default function OccurrenceMapRow({
     ];
   }, [breakdown]);
 
-  // Cumulative counts per GPS uncertainty threshold (from type-filtered sample)
-  const uncertaintyCounts = useMemo(() => {
-    const typeFiltered = occurrences.filter((o) => checkedTypes[getCategory(o)]);
-    const counts = new Map<number | null, number>();
-    // "Any" = total type-filtered count
-    counts.set(null, typeFiltered.length);
-    for (const opt of UNCERTAINTY_OPTIONS) {
-      if (opt.value == null) continue;
-      const count = typeFiltered.filter((o) => {
-        const u = o.properties.coordinateUncertaintyInMeters;
-        return u != null && u <= opt.value;
-      }).length;
-      counts.set(opt.value, count);
-    }
-    return counts;
-  }, [occurrences, checkedTypes]);
-
   const toggleType = (key: keyof typeof checkedTypes) => {
     setCheckedTypes((prev) => ({ ...prev, [key]: !prev[key] }));
   };
+
+  // Build GeoJSON FeatureCollection with computed styling properties for the circle layer
+  const buildStyledFeatureCollection = useCallback((
+    panelOccurrences: OccurrenceFeature[],
+  ): GeoJSON.FeatureCollection => {
+    const features = panelOccurrences.map((feature) => {
+      const category = classifyOccurrence(feature);
+      const isTypeBrushed = hoveredType != null && category === hoveredType;
+      const isTypeDimmed = hoveredType != null && category !== hoveredType;
+      const isBrushed = (hoveredYear != null && feature.properties.year === hoveredYear) || isTypeBrushed;
+      const isDimmed = (hoveredYear != null && feature.properties.year !== hoveredYear) || isTypeDimmed;
+      const isFeatureHovered = hoveredFeature?.properties.gbifID === feature.properties.gbifID;
+
+      let strokeColor: string;
+      let fillColor: string;
+      if (isBrushed) {
+        strokeColor = "#d97706";
+        fillColor = "#f59e0b";
+      } else if (colorByDate) {
+        const dNum = dateToNumeric(feature.properties.eventDate, feature.properties.year);
+        if (dNum != null) {
+          const colors = dateToColor(dNum, minDateNum, maxDateNum);
+          strokeColor = colors.stroke;
+          fillColor = colors.fill;
+        } else {
+          strokeColor = "#6b7280";
+          fillColor = "#9ca3af";
+        }
+      } else {
+        // Color by before/after assessment year
+        const isNew = !assessmentYear || (feature.properties.eventDate
+          ? new Date(feature.properties.eventDate).getFullYear() > assessmentYear
+          : false);
+        strokeColor = isNew ? "#16a34a" : "#6b7280";
+        fillColor = isNew ? "#4ade80" : "#9ca3af";
+      }
+
+      const radius = isFeatureHovered ? 6 : (isBrushed ? 6 : (isDimmed ? 4 : 5));
+      const strokeWidth = isDimmed ? 1 : (isFeatureHovered || isBrushed ? 3 : 2);
+      const opacity = isDimmed ? 0.15 : 1;
+
+      return {
+        type: "Feature" as const,
+        properties: {
+          ...feature.properties,
+          _fillColor: fillColor,
+          _strokeColor: strokeColor,
+          _radius: radius,
+          _strokeWidth: strokeWidth,
+          _opacity: opacity,
+        },
+        geometry: feature.geometry,
+      };
+    });
+    return { type: "FeatureCollection", features };
+  }, [hoveredType, hoveredYear, hoveredFeature, colorByDate, minDateNum, maxDateNum, assessmentYear]);
+
+  // FitBounds helper using map ref
+  const fitMapToBbox = useCallback((bbox: [number, number, number, number]) => {
+    const map = mapRef.current;
+    if (!map) return false;
+    const [minLon, minLat, maxLon, maxLat] = bbox;
+    if (minLon === maxLon && minLat === maxLat) {
+      map.flyTo({ center: [minLon, minLat], zoom: 10, duration: 500 });
+    } else {
+      map.fitBounds([[minLon, minLat], [maxLon, maxLat]], { padding: 40, maxZoom: 14, duration: 500 });
+    }
+    return true;
+  }, []);
+
+  // Track whether we've fitted bounds for the current bbox
+  const fittedBboxRef = useRef<string | null>(null);
+  const pendingBboxRef = useRef<[number, number, number, number] | null>(null);
+
+  // Reset fitted state when split view toggles (new map instances are mounted)
+  const prevSplitViewRef = useRef(splitView);
+  useEffect(() => {
+    if (prevSplitViewRef.current !== splitView) {
+      prevSplitViewRef.current = splitView;
+      fittedBboxRef.current = null;
+      if (filteredBbox) {
+        pendingBboxRef.current = filteredBbox;
+      }
+    }
+  }, [splitView, filteredBbox]);
+
+  // Fit bounds when bbox changes (may need to wait for map to be ready)
+  useEffect(() => {
+    if (!filteredBbox || animatingDateIdx != null) return;
+    const key = filteredBbox.join(",");
+    if (fittedBboxRef.current === key) return;
+    if (fitMapToBbox(filteredBbox)) {
+      fittedBboxRef.current = key;
+      pendingBboxRef.current = null;
+    } else {
+      // Map not ready yet — store as pending for onLoad
+      pendingBboxRef.current = filteredBbox;
+    }
+  }, [filteredBbox, animatingDateIdx, fitMapToBbox]);
+
+  // Called when the MapGL component finishes loading
+  const handleMapLoad = useCallback(() => {
+    if (pendingBboxRef.current) {
+      const bbox = pendingBboxRef.current;
+      if (fitMapToBbox(bbox)) {
+        fittedBboxRef.current = bbox.join(",");
+        pendingBboxRef.current = null;
+      }
+    }
+  }, [fitMapToBbox]);
+
+  // Map event handlers
+  const handleMapClick = useCallback((e: MapLayerMouseEvent) => {
+    const features = e.features;
+    if (features && features.length > 0) {
+      const gbifID = features[0].properties?.gbifID;
+      if (gbifID) {
+        window.open(`https://www.gbif.org/occurrence/${gbifID}`, "_blank");
+      }
+    }
+  }, []);
+
+  const handleMapMouseMove = useCallback((e: MapLayerMouseEvent, panelId: string) => {
+    if (isTouchDevice) return;
+    const features = e.features;
+    if (features && features.length > 0) {
+      const props = features[0].properties;
+      if (props) {
+        // Reconstruct the OccurrenceFeature from the queried feature
+        const coords = (features[0].geometry as GeoJSON.Point).coordinates as [number, number];
+        setHoveredFeature({
+          type: "Feature",
+          properties: {
+            gbifID: props.gbifID,
+            species: props.species,
+            eventDate: props.eventDate,
+            basisOfRecord: props.basisOfRecord,
+            datasetKey: props.datasetKey,
+            datasetName: props.datasetName,
+            publishingOrgKey: props.publishingOrgKey,
+            coordinateUncertaintyInMeters: props.coordinateUncertaintyInMeters,
+            year: props.year,
+            month: props.month,
+            institutionCode: props.institutionCode,
+          },
+          geometry: { type: "Point", coordinates: coords },
+        });
+        setHoveredPanel(panelId);
+      }
+    } else {
+      setHoveredFeature(null);
+      setHoveredPanel(null);
+    }
+  }, [isTouchDevice]);
+
+  const handleMapMouseLeave = useCallback(() => {
+    setHoveredFeature(null);
+    setHoveredPanel(null);
+  }, []);
+
+  // Handle view state change for split view sync
+  const handleMoveForSync = useCallback((e: ViewStateChangeEvent) => {
+    setSharedViewState({
+      longitude: e.viewState.longitude,
+      latitude: e.viewState.latitude,
+      zoom: e.viewState.zoom,
+    });
+  }, []);
 
   // Reusable map panel renderer (used once in normal mode, twice in split view)
   const renderMapPanel = (
@@ -1290,8 +1256,33 @@ export default function OccurrenceMapRow({
     label: string | null,
     panelId: string = "main",
   ) => {
-    const panelNewRecords = panelOccurrences.filter((o) => isNewRecord(o.properties.eventDate));
-    const panelOldRecords = panelOccurrences.filter((o) => !isNewRecord(o.properties.eventDate));
+    const styledGeoJson = buildStyledFeatureCollection(panelOccurrences);
+
+    // Circle layer paint properties (data-driven from feature properties)
+    const circleLayerStyle = {
+      id: `occ-circles-${panelId}`,
+      type: "circle" as const,
+      paint: {
+        "circle-radius": ["get", "_radius"] as unknown as number,
+        "circle-color": ["get", "_fillColor"] as unknown as string,
+        "circle-opacity": ["get", "_opacity"] as unknown as number,
+        "circle-stroke-color": ["get", "_strokeColor"] as unknown as string,
+        "circle-stroke-width": ["get", "_strokeWidth"] as unknown as number,
+        "circle-stroke-opacity": ["get", "_opacity"] as unknown as number,
+      },
+    };
+
+    const mapProps = splitView
+      ? {
+          longitude: sharedViewState.longitude,
+          latitude: sharedViewState.latitude,
+          zoom: sharedViewState.zoom,
+          onMove: handleMoveForSync,
+        }
+      : {
+          initialViewState: { longitude: 0, latitude: 20, zoom: 1.5 },
+        };
+
     return (
       <div className="flex-1 flex flex-col rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 relative isolate z-0">
         <div className={`${splitView ? "h-[250px] sm:h-auto sm:min-h-[400px]" : "h-[300px] sm:h-auto sm:min-h-[450px]"} sm:flex-1 relative`}>
@@ -1306,125 +1297,42 @@ export default function OccurrenceMapRow({
               </div>
             </div>
           ) : mounted ? (
-            <MapContainer
-              center={[20, 0]}
-              zoom={2}
-              style={{ height: "100%", width: "100%" }}
+            <MapGL
+              ref={panelId === "main" || panelId === "before" || !splitView ? mapRef : undefined}
+              {...mapProps}
+              style={{ width: "100%", height: "100%" }}
+              mapStyle={BASEMAP_STYLES[basemap].style}
+              interactiveLayerIds={[`occ-circles-${panelId}`]}
+              onClick={handleMapClick}
+              onMouseMove={(e: MapLayerMouseEvent) => handleMapMouseMove(e, panelId)}
+              onMouseLeave={handleMapMouseLeave}
+              onLoad={panelId === "main" || panelId === "before" || !splitView ? handleMapLoad : undefined}
+              cursor={hoveredFeature && hoveredPanel === panelId ? "pointer" : "grab"}
             >
-              <TileLayer
-                key={basemap}
-                attribution={BASEMAP_OPTIONS[basemap].attribution}
-                url={BASEMAP_OPTIONS[basemap].url}
-              />
-              {splitView && <MapSync syncRef={mapSyncRef} />}
-              <LocateControl />
-              {panelBbox && animatingDateIdx == null && <FitBounds bbox={panelBbox} />}
-              {/* Uncertainty circles */}
-              {showPoints && showUncertaintyCircles && panelOccurrences.map((feature, idx) => {
-                const uncertainty = feature.properties.coordinateUncertaintyInMeters;
-                if (uncertainty == null || uncertainty <= 0) return null;
-                const [lon, lat] = feature.geometry.coordinates;
-                return (
-                  <Circle
-                    key={`unc-${feature.properties.gbifID || idx}`}
-                    center={[lat, lon]}
-                    radius={uncertainty}
-                    pathOptions={{
-                      color: "#6366f1",
-                      fillColor: "#6366f1",
-                      fillOpacity: 0.06,
-                      weight: 0.5,
-                      opacity: 0.3,
-                    }}
-                  />
-                );
-              })}
-              {/* Render markers */}
-              {showPoints && panelOccurrences.map((feature, idx) => {
-                const [lon, lat] = feature.geometry.coordinates;
-                const isHighlighted = hoveredObs?.gbifID != null && feature.properties.gbifID === hoveredObs.gbifID;
-                const category = classifyOccurrence(feature);
-                const isTypeBrushed = hoveredType != null && category === hoveredType;
-                const isBrushed = (hoveredYear != null && feature.properties.year === hoveredYear) || isTypeBrushed;
-                let strokeColor: string;
-                let fillColor: string;
-                if (isHighlighted) {
-                  strokeColor = "#1d4ed8";
-                  fillColor = "#3b82f6";
-                } else if (isBrushed) {
-                  strokeColor = "#d97706";
-                  fillColor = "#f59e0b";
-                } else if (colorByDate) {
-                  const dNum = dateToNumeric(feature.properties.eventDate, feature.properties.year);
-                  if (dNum != null) {
-                    const colors = dateToColor(dNum, minDateNum, maxDateNum);
-                    strokeColor = colors.stroke;
-                    fillColor = colors.fill;
-                  } else {
-                    strokeColor = "#6b7280";
-                    fillColor = "#9ca3af";
-                  }
-                } else {
-                  strokeColor = "#6b7280";
-                  fillColor = "#9ca3af";
-                }
-                const inatMatch = inatPhotosByGbifId.get(feature.properties.gbifID);
-                const isFeatureHovered = hoveredFeature?.properties.gbifID === feature.properties.gbifID;
-                const isEmphasized = isHighlighted || isFeatureHovered;
-                const markerSize = isEmphasized ? 10 : (isBrushed ? 10 : 8);
-                const clickHandler = () => {
-                  window.open(`https://www.gbif.org/occurrence/${feature.properties.gbifID}`, "_blank");
-                };
-                const hoverHandlers = {
-                  click: clickHandler,
-                  ...(isTouchDevice ? {} : {
-                    mouseover: () => { setHoveredFeature(feature); setHoveredPanel(panelId); },
-                    mouseout: () => { setHoveredFeature(null); setHoveredPanel(null); },
-                  }),
-                };
-                const markerOpacity = 1;
-
-                if (shapeByType) {
-                  const icon = getShapeIcon(category, fillColor, strokeColor, markerSize) as L.DivIcon;
-                  return (
-                    <Marker
-                      key={feature.properties.gbifID || idx}
-                      position={[lat, lon]}
-                      icon={icon}
-                      opacity={markerOpacity}
-                      eventHandlers={hoverHandlers}
-                    />
-                  );
-                }
-
-                return (
-                  <CircleMarker
-                    key={feature.properties.gbifID || idx}
-                    center={[lat, lon]}
-                    radius={isEmphasized ? 7 : (isBrushed ? 6 : 5)}
-                    pathOptions={{
-                      color: strokeColor,
-                      fillColor: fillColor,
-                      fillOpacity: isEmphasized || isBrushed ? 1 : 0.9,
-                      weight: isEmphasized || isBrushed ? 3 : 2,
-                    }}
-                    eventHandlers={hoverHandlers}
-                  />
-                );
-              })}
-              {/* Highlighted dot when hovering an iNat thumbnail */}
+              {/* Occurrence circles (GeoJSON source + circle layer) */}
+              <Source id={`occurrences-${panelId}`} type="geojson" data={styledGeoJson}>
+                <Layer {...circleLayerStyle} />
+              </Source>
+              {/* Highlighted dot when hovering an iNat thumbnail (only in the correct split panel) */}
               {hoveredObs && hoveredObs.decimalLatitude != null && hoveredObs.decimalLongitude != null && (
+                !splitView || (
+                  panelId === "main" ||
+                  (panelId === "before" && (!hoveredObs.date || hoveredObs.date <= splitDate)) ||
+                  (panelId === "after" && hoveredObs.date && hoveredObs.date > splitDate)
+                )
+              ) && (
                 <>
-                  <CircleMarker
-                    center={[hoveredObs.decimalLatitude, hoveredObs.decimalLongitude]}
-                    radius={5}
-                    pathOptions={{
-                      color: "#1d4ed8",
-                      fillColor: "#3b82f6",
-                      fillOpacity: 0.4,
-                      weight: 2,
-                    }}
-                  />
+                  <MapLibreMarker
+                    longitude={hoveredObs.decimalLongitude}
+                    latitude={hoveredObs.decimalLatitude}
+                    anchor="center"
+                  >
+                    <div style={{
+                      width: 18, height: 18, borderRadius: "50%",
+                      background: "rgba(59, 130, 246, 0.5)",
+                      border: "2.5px solid #1d4ed8",
+                    }} />
+                  </MapLibreMarker>
                   {hoveredObs.imageUrl && (
                     <MapImageTooltip
                       lat={hoveredObs.decimalLatitude!}
@@ -1452,15 +1360,7 @@ export default function OccurrenceMapRow({
                   />
                 );
               })()}
-              {/* IUCN Range Map layer */}
-              {hasMap && assessmentId && (
-                <RangeMapLayer assessmentId={assessmentId} visible={showRange} onLoadingChange={setRangeLoading} onCategoriesChange={setRangeCategories} onNotFound={setRangeNotFound} visibleCategories={visibleRangeCategories} />
-              )}
-              {/* AOH layer */}
-              {isAohAvailable && sisTaxonId && taxonGroup && (
-                <AohMapLayer sisTaxonId={sisTaxonId} taxonGroup={taxonGroup} visible={showAoh} onLoadingChange={setAohLoading} />
-              )}
-            </MapContainer>
+            </MapGL>
           ) : null}
           {/* Legend */}
           {!loadingOccurrences && (
@@ -1479,90 +1379,52 @@ export default function OccurrenceMapRow({
                     <span>{maxDateLabel}</span>
                   </div>
                   <span className="text-zinc-400">({panelOccurrences.length})</span>
-                  {assessmentYear && !splitView && (
-                    <>
-                      <span className="text-zinc-400">|</span>
-                      <button
-                        onClick={() => {
-                          if (!splitDate && assessmentDate) setSplitDate(assessmentDate.split("T")[0]);
-                          setSplitView(true);
-                          setIsPlaying(false);
-                          setAnimatingDateIdx(null);
-                          if (animationRef.current) clearInterval(animationRef.current);
-                        }}
-                        className="text-[10px] px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                      >
-                        Split view
-                      </button>
-                    </>
-                  )}
                 </>
-              ) : assessmentYear && !splitView ? (
+              ) : (
                 <>
                   <div className="flex items-center gap-1">
                     <div className="w-3 h-3 rounded-full bg-gray-400 border-2 border-gray-500" />
-                    <span>≤{assessmentYear} ({panelOldRecords.length})</span>
+                    <span>≤{assessmentYear}</span>
                   </div>
                   <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded-full bg-green-500 border-2 border-green-700" />
-                    <span>New since {assessmentYear} ({panelNewRecords.length})</span>
+                    <div className="w-3 h-3 rounded-full bg-green-400 border-2 border-green-600" />
+                    <span>After {assessmentYear}</span>
                   </div>
+                  <span className="text-zinc-400">({panelOccurrences.length})</span>
                 </>
-              ) : label ? (
-                <span>{panelOccurrences.length} occurrences</span>
-              ) : (
-                <span>
-                  {totalOccurrences && totalOccurrences > occurrences.length
-                    ? `${panelOccurrences.length} of ${totalOccurrences.toLocaleString()} occurrences`
-                    : `${panelOccurrences.length} occurrences`}
-                </span>
               )}
-              {shapeByType && (
+              {/* Toggle color mode / split view (only when assessment year is available) */}
+              {!label && assessmentYear && (
                 <>
-                  <span className="text-zinc-400">|</span>
-                  {([
-                    ["iNaturalist", "iNat"],
-                    ["humanOther", "Other Human"],
-                    ["machineObservation", "Machine"],
-                    ["preservedSpecimen", "Specimen"],
-                    ["materialSample", "Material"],
-                  ] as const).map(([cat, catLabel]) => (
-                    <div key={cat} className="flex items-center gap-0.5">
-                      <svg width="10" height="10" viewBox="0 0 12 12" className="shrink-0">
-                        {cat === "iNaturalist" && <circle cx="6" cy="6" r="4.5" fill="#22c55e" stroke="#15803d" strokeWidth="1.5"/>}
-                        {cat === "humanOther" && <><circle cx="6" cy="6" r="4.5" fill="#22c55e" stroke="#15803d" strokeWidth="1.5"/><circle cx="6" cy="6" r="1.5" fill="#15803d"/></>}
-                        {cat === "machineObservation" && <rect x="1.5" y="1.5" width="9" height="9" fill="#22c55e" stroke="#15803d" strokeWidth="1.5"/>}
-                        {cat === "preservedSpecimen" && <rect x="1.8" y="1.8" width="8.4" height="8.4" fill="#22c55e" stroke="#15803d" strokeWidth="1.5" transform="rotate(45 6 6)"/>}
-                        {cat === "materialSample" && <polygon points="6,1.5 10.5,10.5 1.5,10.5" fill="#22c55e" stroke="#15803d" strokeWidth="1.5"/>}
+                  <span className="text-zinc-300 dark:text-zinc-600">|</span>
+                  <button
+                    onClick={() => setColorByDate(!colorByDate)}
+                    className="px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-[10px] text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"
+                    title={colorByDate ? "Color by before/after assessment" : "Color by date"}
+                  >
+                    {colorByDate ? "Before/after" : "By date"}
+                  </button>
+                  {!splitView && (
+                    <button
+                      onClick={() => {
+                        if (!splitDate && assessmentDate) setSplitDate(assessmentDate.split("T")[0]);
+                        setSplitView(true);
+                        setIsPlaying(false);
+                        setAnimatingDateIdx(null);
+                        if (animationRef.current) clearInterval(animationRef.current);
+                      }}
+                      className="px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-[10px] text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-1"
+                    >
+                      <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                        <rect x="1" y="2" width="14" height="12" rx="1.5" />
+                        <line x1="8" y1="2" x2="8" y2="14" />
                       </svg>
-                      <span className="text-[10px]">{catLabel}</span>
-                    </div>
-                  ))}
+                      Split view
+                    </button>
+                  )}
                 </>
-              )}
-              {dedupEnabled && (
-                <span className="text-zinc-400">(deduped)</span>
               )}
             </div>
-          )}
-          {/* Split view button */}
-          {!loadingOccurrences && assessmentYear && !splitView && (
-            <button
-              onClick={() => {
-                if (!splitDate && assessmentDate) setSplitDate(assessmentDate.split("T")[0]);
-                setSplitView(true);
-                setIsPlaying(false);
-                setAnimatingDateIdx(null);
-                if (animationRef.current) clearInterval(animationRef.current);
-              }}
-              className="absolute bottom-2 right-2 z-[1000] bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-[11px] font-medium px-2.5 py-1.5 rounded shadow border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors cursor-pointer flex items-center gap-1.5"
-            >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                <rect x="1" y="2" width="14" height="12" rx="1.5" />
-                <line x1="8" y1="2" x2="8" y2="14" />
-              </svg>
-              Split view
-            </button>
           )}
           {/* Animating badge */}
           {!splitView && animatingDate != null && (
@@ -1579,100 +1441,20 @@ export default function OccurrenceMapRow({
           )}
           {/* Basemap toggle */}
           {!loadingOccurrences && mounted && (
-            <div className="absolute top-12 right-2 z-[1000] flex flex-col gap-1.5">
-              <div className="flex flex-col gap-0.5 bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 p-1">
-                {(Object.entries(BASEMAP_OPTIONS) as [BasemapKey, (typeof BASEMAP_OPTIONS)[BasemapKey]][]).map(([key, opt]) => (
-                  <button
-                    key={key}
-                    onClick={() => setBasemap(key)}
-                    className={`px-2 py-0.5 rounded text-[10px] transition-colors ${
-                      basemap === key
-                        ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium"
-                        : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-              {/* Layer toggles */}
-              <div className="flex flex-col gap-0.5 bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 p-1">
-                  <button
-                    onClick={() => setShowPoints(!showPoints)}
-                    className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] transition-colors ${
-                      showPoints
-                        ? "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium"
-                        : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
-                    }`}
-                  >
-                    <span className={`w-2 h-2 rounded-full border ${showPoints ? "border-blue-500 bg-blue-500/40" : "border-zinc-400 dark:border-zinc-500"}`} />
-                    GBIF Points
-                  </button>
-                  {hasMap && assessmentId && (
-                    <>
-                      <button
-                        onClick={() => setShowRange(!showRange)}
-                        className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] transition-colors ${
-                          showRange
-                            ? "bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 font-medium"
-                            : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
-                        }`}
-                      >
-                        {showRange && rangeLoading ? (
-                          <span className="w-2 h-2 border border-rose-500 border-t-transparent rounded-full animate-spin" />
-                        ) : (
-                          <span className={`w-2 h-2 rounded-sm border ${showRange ? "border-rose-500 bg-rose-500/20" : "border-zinc-400 dark:border-zinc-500"}`} />
-                        )}
-                        <span title="Simplified IUCN range map. Boundaries are approximate and intended for visualisation only.">IUCN Range</span>
-                        {showRange && rangeCategories.length > 1 && (
-                          <span
-                            onClick={(e) => { e.stopPropagation(); setShowRangeFilters(!showRangeFilters); }}
-                            className="ml-0.5 text-[8px] text-rose-400 hover:text-rose-600 cursor-pointer"
-                          >
-                            {showRangeFilters ? "▲" : "▼"}
-                          </span>
-                        )}
-                      </button>
-                      {showRange && rangeNotFound && (
-                        <span className="text-[9px] text-zinc-400 dark:text-zinc-500 pl-2 italic">Not yet available</span>
-                      )}
-                      {showRange && showRangeFilters && rangeCategories.length > 1 && (
-                        <div className="flex flex-col gap-0.5 pl-2 pb-0.5">
-                          {rangeCategories.map((cat) => {
-                            const isVisible = visibleRangeCategories.has(cat.key);
-                            return (
-                              <button
-                                key={cat.key}
-                                onClick={() => {
-                                  const next = new Set(visibleRangeCategories);
-                                  if (isVisible) next.delete(cat.key);
-                                  else next.add(cat.key);
-                                  setVisibleRangeCategories(next);
-                                }}
-                                className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded text-[9px] transition-colors ${
-                                  isVisible
-                                    ? "text-zinc-700 dark:text-zinc-200"
-                                    : "text-zinc-400 dark:text-zinc-500"
-                                }`}
-                              >
-                                <span
-                                  className="w-2 h-2 rounded-sm border"
-                                  style={{
-                                    borderColor: cat.color,
-                                    backgroundColor: isVisible ? cat.color + "40" : "transparent",
-                                    ...(cat.dashArray ? { opacity: 0.7 } : {}),
-                                  }}
-                                />
-                                <span className="truncate max-w-[100px]">{cat.label}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </>
-                  )}
-                  {/* AOH toggle hidden until backend is ready */}
-                </div>
+            <div className="absolute top-12 right-2 z-[1000] flex flex-col gap-0.5 bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 p-1">
+              {(Object.entries(BASEMAP_STYLES) as [BasemapKey, (typeof BASEMAP_STYLES)[BasemapKey]][]).map(([key, opt]) => (
+                <button
+                  key={key}
+                  onClick={() => setBasemap(key)}
+                  className={`px-2 py-0.5 rounded text-[10px] transition-colors ${
+                    basemap === key
+                      ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium"
+                      : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
             </div>
           )}
         </div>
@@ -1784,7 +1566,7 @@ export default function OccurrenceMapRow({
                 </span>
                 <YearRangeTrimmer
                   features={occurrences.filter((o) => {
-                    if (!checkedTypes[getCategory(o)]) return false;
+                    if (!checkedTypes[classifyOccurrence(o) as keyof typeof checkedTypes]) return false;
                     if (maxUncertainty != null) {
                       const u = o.properties.coordinateUncertaintyInMeters;
                       if (u == null || u > maxUncertainty) return false;
@@ -1874,114 +1656,14 @@ export default function OccurrenceMapRow({
                   onChange={(e) => setMaxUncertainty(e.target.value ? parseInt(e.target.value) : null)}
                   className="text-xs px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
                 >
-                  {UNCERTAINTY_OPTIONS.map((opt) => {
-                    const count = uncertaintyCounts.get(opt.value ?? null);
-                    return (
-                      <option key={opt.label} value={opt.value ?? ""}>
-                        {opt.label}
-                      </option>
-                    );
-                  })}
+                  {UNCERTAINTY_OPTIONS.map((opt) => (
+                    <option key={opt.label} value={opt.value ?? ""}>
+                      {opt.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
-              {/* Separator */}
-              <div className="w-px h-5 bg-zinc-200 dark:bg-zinc-700 mx-0.5 hidden sm:block" />
-
-              {/* "More" popover trigger */}
-              <div className="relative" ref={moreRef}>
-                <button
-                  onClick={() => setMoreOpen(!moreOpen)}
-                  className={`p-1.5 rounded border transition-colors ${
-                    moreOpen
-                      ? "bg-zinc-100 dark:bg-zinc-800 border-zinc-400 dark:border-zinc-500"
-                      : "border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                  }`}
-                  title="More filters"
-                >
-                  <svg className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                </button>
-                {moreOpen && (
-                  <div className="absolute right-0 top-full mt-1 z-50 w-72 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg p-3 space-y-3">
-                    {/* Show uncertainty radius */}
-                    <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={showUncertaintyCircles}
-                        onChange={(e) => setShowUncertaintyCircles(e.target.checked)}
-                        className="w-3 h-3 rounded accent-blue-500"
-                      />
-                      Show uncertainty radius on map
-                    </label>
-
-                    {/* Color by date toggle */}
-                    <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={colorByDate}
-                        onChange={(e) => setColorByDate(e.target.checked)}
-                        className="w-3 h-3 rounded accent-blue-500"
-                      />
-                      Color markers by date
-                      {colorByDate && (
-                        <span className="ml-auto flex items-center gap-1">
-                          <span className="w-2 h-2 rounded-full" style={{ background: "hsl(30, 60%, 50%)" }} />
-                          <span>old</span>
-                          <span className="w-2 h-2 rounded-full" style={{ background: "hsl(142, 80%, 50%)" }} />
-                          <span>new</span>
-                        </span>
-                      )}
-                    </label>
-
-                    {/* Shape by record type toggle */}
-                    <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={shapeByType}
-                        onChange={(e) => setShapeByType(e.target.checked)}
-                        className="w-3 h-3 rounded accent-blue-500"
-                      />
-                      Shape markers by record type
-                    </label>
-
-                    {/* Spatial deduplication */}
-                    <div>
-                      <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={dedupEnabled}
-                          onChange={(e) => setDedupEnabled(e.target.checked)}
-                          className="w-3 h-3 rounded accent-blue-500"
-                        />
-                        Deduplicate nearby points
-                      </label>
-                      {dedupEnabled && (
-                        <div className="mt-1 flex items-center gap-1.5 ml-[18px]">
-                          <span className="text-[10px] text-zinc-400">Grid:</span>
-                          {DEDUP_OPTIONS.map((opt) => (
-                            <button
-                              key={opt.value}
-                              onClick={() => setDedupGrid(opt.value)}
-                              className={`text-[10px] px-1.5 py-0.5 rounded border ${
-                                dedupGrid === opt.value
-                                  ? "bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300"
-                                  : "border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                              }`}
-                            >
-                              {opt.label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-
-                  </div>
-                )}
-              </div>
             </div>
           </div>
 
@@ -2060,8 +1742,8 @@ export default function OccurrenceMapRow({
                 </div>
               )}
 
-              {/* Observers / Identifiers chart */}
-              <InatContributorsChart speciesKey={speciesKey} />
+              {/* Observers / Identifiers chart (memoized to avoid rerender on hover state changes) */}
+              {useMemo(() => <InatContributorsChart speciesKey={speciesKey} />, [speciesKey])}
             </div>
             )}
 

@@ -143,8 +143,9 @@ function buildOpenAlexUrlAfter(scientificName: string, sinceYear: number): strin
 }
 
 // Build OpenAlex search URL for papers up to a given year (sorted by most cited)
+// Use < (year+1) instead of <= year to avoid encoding issues that cause OpenAlex to hang
 function buildOpenAlexUrlBefore(scientificName: string, upToYear: number): string {
-  return `https://openalex.org/works?page=1&filter=default.search%3A${buildSearchTerms(scientificName)},publication_year%3A%3C%3D${upToYear},type%3A%21dataset&sort=cited_by_count%3Adesc`;
+  return `https://openalex.org/works?page=1&filter=default.search%3A${buildSearchTerms(scientificName)},publication_year%3A%3C${upToYear + 1},type%3A%21dataset&sort=cited_by_count%3Adesc`;
 }
 
 export default function NewLiteratureSinceAssessment({
