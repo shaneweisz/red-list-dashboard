@@ -359,7 +359,7 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
         <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0">
           Country
         </h2>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
           {/* Country search */}
           <div ref={searchContainerRef} className="relative">
             <div className="flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md">
@@ -446,7 +446,7 @@ function WorldMap({ selectedCountries, onCountrySelect, onClearSelection, select
                 return "";
               })()}
               onChange={(e) => onRegionFilter(e.target.value)}
-              className="text-xs bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="text-xs bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500 max-w-[120px] truncate"
             >
               <option value="">All Regions</option>
               {IUCN_REGION_ORDER.map(region => (
