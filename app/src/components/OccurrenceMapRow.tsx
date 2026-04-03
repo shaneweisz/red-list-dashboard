@@ -125,12 +125,12 @@ type BasemapKey = keyof typeof BASEMAP_STYLES;
 
 // Year-based discrete color bands.
 // Each year within a band gets a unique shade (lighter = more recent).
-// Bands: ≤2005 red, 2006-2010 oranges, 2011-2015 yellows, 2016-2026 greens.
+// Bands: ≤2010 red, 2011-2015 oranges, 2016-2020 yellows, 2021-present greens.
 const YEAR_BANDS: { minYear: number; maxYear: number; fillRange: [string, string]; strokeRange: [string, string] }[] = [
-  { minYear: -Infinity, maxYear: 2005, fillRange: ["#ef4444", "#ef4444"], strokeRange: ["#b91c1c", "#b91c1c"] }, // flat red
-  { minYear: 2006,      maxYear: 2010, fillRange: ["#c2410c", "#fb923c"], strokeRange: ["#9a3412", "#ea580c"] }, // oranges (dark→light)
-  { minYear: 2011,      maxYear: 2015, fillRange: ["#a16207", "#fde047"], strokeRange: ["#854d0e", "#eab308"] }, // yellows (dark→light)
-  { minYear: 2016,      maxYear: 2026, fillRange: ["#166534", "#4ade80"], strokeRange: ["#14532d", "#22c55e"] }, // greens (dark→light)
+  { minYear: -Infinity, maxYear: 2010, fillRange: ["#ef4444", "#ef4444"], strokeRange: ["#b91c1c", "#b91c1c"] }, // flat red
+  { minYear: 2011,      maxYear: 2015, fillRange: ["#c2410c", "#fb923c"], strokeRange: ["#9a3412", "#ea580c"] }, // oranges (dark→light)
+  { minYear: 2016,      maxYear: 2020, fillRange: ["#a16207", "#fde047"], strokeRange: ["#854d0e", "#eab308"] }, // yellows (dark→light)
+  { minYear: 2021,      maxYear: 2100, fillRange: ["#166534", "#4ade80"], strokeRange: ["#14532d", "#22c55e"] }, // greens (dark→light)
 ];
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -1367,29 +1367,26 @@ export default function OccurrenceMapRow({
           ) : null}
           {/* Legend */}
           {!loadingOccurrences && (
-            <div className="absolute bottom-2 left-2 z-[1000] bg-white dark:bg-zinc-800 px-2 py-1.5 rounded text-xs text-zinc-600 dark:text-zinc-300 shadow flex flex-wrap items-center gap-x-3 gap-y-1 max-w-[90%]">
+            <div className="absolute bottom-2 left-2 z-[1000] bg-white dark:bg-zinc-800 px-1.5 py-1 rounded text-[10px] text-zinc-600 dark:text-zinc-300 shadow flex flex-wrap items-center gap-x-2 gap-y-0.5 max-w-[90%]">
               {label ? (
                 <span>{label}</span>
               ) : colorByDate ? (
                 <>
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded-full" style={{ background: "#ef4444", border: "2px solid #b91c1c" }} />
-                    <span>≤2005</span>
+                  <div className="flex items-center gap-0.5">
+                    <div className="w-2.5 h-2.5 rounded-full" style={{ background: "#ef4444", border: "1.5px solid #b91c1c" }} />
+                    <span>≤&apos;10</span>
                   </div>
-                  <span>→</span>
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded-full" style={{ background: "#fb923c", border: "2px solid #ea580c" }} />
-                    <span>&apos;06–10</span>
-                  </div>
-                  <span>→</span>
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded-full" style={{ background: "#fde047", border: "2px solid #eab308" }} />
+                  <div className="flex items-center gap-0.5">
+                    <div className="w-2.5 h-2.5 rounded-full" style={{ background: "#fb923c", border: "1.5px solid #ea580c" }} />
                     <span>&apos;11–15</span>
                   </div>
-                  <span>→</span>
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded-full" style={{ background: "#4ade80", border: "2px solid #22c55e" }} />
-                    <span>&apos;16–26</span>
+                  <div className="flex items-center gap-0.5">
+                    <div className="w-2.5 h-2.5 rounded-full" style={{ background: "#fde047", border: "1.5px solid #eab308" }} />
+                    <span>&apos;16–20</span>
+                  </div>
+                  <div className="flex items-center gap-0.5">
+                    <div className="w-2.5 h-2.5 rounded-full" style={{ background: "#4ade80", border: "1.5px solid #22c55e" }} />
+                    <span>&apos;21+</span>
                   </div>
                   <span className="text-zinc-400">({panelOccurrences.length})</span>
                 </>
