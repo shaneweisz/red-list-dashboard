@@ -11,7 +11,6 @@ import {
   speciesMatchesNode,
   getNodeDef,
   getCsvGroupsForNode,
-  getViewRootForNode,
 } from "@/lib/taxonomy-utils";
 import { TAXONOMY_VIEWS } from "../taxonomy-views";
 
@@ -731,7 +730,7 @@ describe("Table 1a → default view mapping", () => {
 // ─── Precomputed summaries structure ──────────────────────────────────
 
 describe("node-children-summaries.json", () => {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+   
   const data = JSON.parse(
     require("fs").readFileSync(
       require("path").join(process.cwd(), "data/node-children-summaries.json"),

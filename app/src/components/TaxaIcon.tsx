@@ -19,7 +19,6 @@ import {
 } from "react-icons/fa";
 import {
   GiAlgae,
-  GiAngularSpider,
   GiBat,
   GiBee,
   GiBirdTwitter,

@@ -525,7 +525,7 @@ export function computeLocations(
  */
 export function computeTemporalTrends(
   points: OccurrencePoint[],
-  gridSizeKm: number = 2,
+  _gridSizeKm: number = 2,
   clusterDistanceKm: number = 10,
   splitYear?: number,
 ): TemporalResult {

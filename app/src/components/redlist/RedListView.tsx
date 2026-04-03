@@ -99,11 +99,6 @@ const THREAT_CATEGORIES: { code: string; label: string; children: { code: string
   ]},
 ];
 
-/** Check if a species has any threat code matching a prefix */
-function speciesMatchesThreat(s: Species, prefix: string): boolean {
-  return !!s.threat_codes?.some(tc => tc === prefix || tc.startsWith(prefix + "."));
-}
-
 interface InatDefaultImage {
   squareUrl: string | null;
   mediumUrl: string | null;
@@ -1038,7 +1033,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, hasMapFilter, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter]);
 
   // Country chart: apply all filters EXCEPT country
-  const { countryCounts, uniqueCountries, countryStatsForMap } = useMemo(() => {
+  const { countryStatsForMap } = useMemo(() => {
     const counts: Record<string, number> = {};
     taxaFilteredSpecies.forEach(s => {
       if (!matchesSearch(s)) return;
