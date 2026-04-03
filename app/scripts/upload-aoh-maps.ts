@@ -23,7 +23,7 @@
 import { S3Client, PutObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { loadEnvFiles, SyncLogger } from "./utils";
 import { execFileSync } from "child_process";
-import { readFileSync, existsSync, mkdtempSync, rmSync } from "fs";
+import { readFileSync, readdirSync, existsSync, mkdtempSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 
@@ -143,7 +143,7 @@ function listAohSpecies(folder: string): string[] {
   const dir = join(STAR_DATA_DIR, "aohs", "current", folder);
   if (!existsSync(dir)) return [];
 
-  const files = require("fs").readdirSync(dir) as string[];
+  const files = readdirSync(dir);
   const ids: string[] = [];
   for (const f of files) {
     const match = f.match(/^(\d+)_all\.tif$/);
