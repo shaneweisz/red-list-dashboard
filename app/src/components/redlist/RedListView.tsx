@@ -1368,9 +1368,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     });
   };
 
-  const handleClearCountry = () => {
-    setSelectedCountries(new Set());
-  };
+
 
   // Handle sort toggle
   const handleSort = (field: "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif") => {
