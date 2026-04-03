@@ -760,6 +760,9 @@ export default function OccurrenceMapRow({
   const [sampleSize, setSampleSize] = useState(1000);
   const [yearRange, setYearRange] = useState<[number, number]>([0, 9999]);
 
+  // GBIF points toggle (on by default)
+  const [showGbif, setShowGbif] = useState(true);
+
   // Range map layer state
   const [showRange, setShowRange] = useState(false);
   const [rangeLoading, setRangeLoading] = useState(false);
@@ -1340,9 +1343,11 @@ export default function OccurrenceMapRow({
               cursor={hoveredFeature && hoveredPanel === panelId ? "pointer" : "grab"}
             >
               {/* Occurrence circles (GeoJSON source + circle layer) */}
-              <Source id={`occurrences-${panelId}`} type="geojson" data={styledGeoJson}>
-                <Layer {...circleLayerStyle} />
-              </Source>
+              {showGbif && (
+                <Source id={`occurrences-${panelId}`} type="geojson" data={styledGeoJson}>
+                  <Layer {...circleLayerStyle} />
+                </Source>
+              )}
               {/* Highlighted dot when hovering an iNat thumbnail (only in the correct split panel) */}
               {hoveredObs && hoveredObs.decimalLatitude != null && hoveredObs.decimalLongitude != null && (
                 !splitView || (
@@ -1510,9 +1515,19 @@ export default function OccurrenceMapRow({
               ))}
             </div>
           )}
-          {/* Layer toggles (Range Map, AOH) */}
-          {!loadingOccurrences && mounted && (hasMap || isAohAvailable) && (
+          {/* Layer toggles (GBIF Points, Range Map, AOH) */}
+          {!loadingOccurrences && mounted && (
             <div className="absolute top-12 right-[72px] z-[1000] flex flex-col gap-0.5 bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 p-1">
+              <button
+                onClick={() => setShowGbif(!showGbif)}
+                className={`px-2 py-0.5 rounded text-[10px] transition-colors ${
+                  showGbif
+                    ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium"
+                    : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                }`}
+              >
+                GBIF Points
+              </button>
               {hasMap && assessmentId && (
                 <div className="flex flex-col">
                   <button
@@ -1530,7 +1545,7 @@ export default function OccurrenceMapRow({
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                       </svg>
                     ) : null}
-                    IUCN Range
+                    IUCN Range Map
                     {showRange && rangeCategories.length > 1 && (
                       <button
                         onClick={(e) => { e.stopPropagation(); setRangeCategoriesExpanded(!rangeCategoriesExpanded); }}
