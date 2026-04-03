@@ -772,8 +772,9 @@ export default function OccurrenceMapRow({
   const [rangeCategoriesExpanded, setRangeCategoriesExpanded] = useState(false);
   const [rangeSimplification, setRangeSimplification] = useState<import("./RangeMapLayer").SimplificationInfo | null>(null);
 
-  // AOH layer state
-  const isAohAvailable = !!(sisTaxonId && taxonGroup &&
+  // AOH layer state (hidden behind ?aoh=1 query param — prototype only, reprojection artifacts)
+  const aohEnabled = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("aoh");
+  const isAohAvailable = aohEnabled && !!(sisTaxonId && taxonGroup &&
     ["mammalia", "aves", "reptilia", "amphibia"].includes(taxonGroup.toLowerCase()));
   const [showAoh, setShowAoh] = useState(false);
   const [aohLoading, setAohLoading] = useState(false);
