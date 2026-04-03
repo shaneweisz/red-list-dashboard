@@ -963,11 +963,11 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const assessmentYearData = useMemo(() => {
     const currentYr = new Date().getFullYear();
     const ranges = [
-      { range: "0-1 years", shortRange: "0-1y", count: 0, minYear: 0 },
-      { range: "2-5 years", shortRange: "2-5y", count: 0, minYear: 2 },
-      { range: "6-10 years", shortRange: "6-10y", count: 0, minYear: 6 },
-      { range: "11-20 years", shortRange: "11-20y", count: 0, minYear: 11 },
-      { range: "20+ years", shortRange: ">20y", count: 0, minYear: 21 },
+      { range: "0-1 years", shortRange: "0-1y", count: 0, minYear: 0, color: "#22c55e" },
+      { range: "2-5 years", shortRange: "2-5y", count: 0, minYear: 2, color: "#a3e635" },
+      { range: "6-10 years", shortRange: "6-10y", count: 0, minYear: 6, color: "#eab308" },
+      { range: "11-20 years", shortRange: "11-20y", count: 0, minYear: 11, color: "#f97316" },
+      { range: "20+ years", shortRange: ">20y", count: 0, minYear: 21, color: "#ef4444" },
     ];
     taxaFilteredSpecies.forEach(s => {
       if (!s.assessment_date || s.category === "NE") return;
@@ -1826,7 +1826,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                     dataKey="shortRange"
                     selectedItems={selectedYearRanges}
                     onBarClick={handleYearClick}
-                    barColor="#3b82f6"
                     yAxisWidth={36}
                     rightMargin={85}
                   />
