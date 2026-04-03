@@ -1,11 +1,19 @@
 /**
  * upload-range-maps: IUCN DB → Cloudflare R2
  *
- * Generates simplified range map GeoJSON (polygons + point localities)
- * from the IUCN PostgreSQL database and uploads to R2.
+ * Generates range map GeoJSON (polygons + point localities) from the IUCN
+ * PostgreSQL database and uploads to R2.
  *
- * Reads assessment IDs from per-taxon CSV files (matching the sync pipeline)
- * and skips species already uploaded to R2.
+ * Geometry simplification strategy:
+ *   - Raw geometries are fetched at full resolution from the DB
+ *   - If the resulting GeoJSON exceeds MAX_SIZE_BYTES, the script iteratively
+ *     applies ST_SimplifyPreserveTopology at increasing tolerances until the
+ *     output fits. The tolerance used is recorded in the filename and as a
+ *     top-level `simplification` property in the GeoJSON so the frontend can
+ *     inform the user.
+ *   - Filename convention:
+ *       {id}.json              — full resolution (no simplification)
+ *       {id}_s0.001.json       — simplified at 0.001° (~100m)
  *
  * Prerequisites:
  *   1. SSH tunnel to IUCN DB
@@ -23,8 +31,14 @@ import { S3Client, PutObjectCommand, ListObjectsV2Command } from "@aws-sdk/clien
 import { loadEnvFiles, SyncLogger, readCsv, REDLIST_DIR } from "./utils";
 import { getTaxa } from "./taxa";
 
-const SIMPLIFY_TOLERANCE = 0.01; // ~1km in degrees
 const R2_PREFIX = "iucn-range-maps";
+
+// Max GeoJSON size before simplification kicks in (2 MB)
+const MAX_SIZE_BYTES = 2 * 1024 * 1024;
+
+// Simplification tolerances to try, in order (degrees).
+// 0.001° ≈ 100m, 0.005° ≈ 500m, 0.01° ≈ 1km, 0.05° ≈ 5km, 0.1° ≈ 10km
+const SIMPLIFY_TOLERANCES = [0.001, 0.005, 0.01, 0.05, 0.1];
 
 const PRESENCE_LABELS: Record<number, string> = {
   1: "Extant",
@@ -92,22 +106,38 @@ async function listExistingKeys(r2: S3Client, bucket: string): Promise<Set<strin
   return keys;
 }
 
-async function generateRangeGeoJSON(
+/** Check if any R2 key starts with the given prefix (handles both simplified and unsimplified filenames) */
+function hasExistingUpload(existingKeys: Set<string>, assessmentId: number): boolean {
+  const prefix = `${R2_PREFIX}/${assessmentId}`;
+  for (const key of existingKeys) {
+    // Match {id}.json or {id}_s{tolerance}.json
+    if (key === `${prefix}.json` || key.startsWith(`${prefix}_s`)) return true;
+  }
+  return false;
+}
+
+interface RangeGeoJSON {
+  type: "FeatureCollection";
+  features: object[];
+  simplification?: { tolerance: number; unit: string };
+}
+
+async function queryRangeGeoJSON(
   db: Client,
-  assessmentId: number
-): Promise<object | null> {
+  assessmentId: number,
+  tolerance: number | null,
+): Promise<RangeGeoJSON | null> {
+  const rangeGeomExpr = tolerance != null
+    ? `ST_AsGeoJSON(ST_SimplifyPreserveTopology(ST_Union(assessment_ranges.geom::geometry), ${tolerance}))`
+    : `ST_AsGeoJSON(ST_Union(assessment_ranges.geom::geometry))`;
+
   const [rangeResult, pointResult] = await Promise.all([
     db.query(
       `
       SELECT
         assessment_ranges.presence,
         assessment_ranges.origin,
-        ST_AsGeoJSON(
-          ST_SimplifyPreserveTopology(
-            ST_Union(assessment_ranges.geom::geometry),
-            $2
-          )
-        ) AS geojson,
+        ${rangeGeomExpr} AS geojson,
         'range' AS source
       FROM
         assessments
@@ -117,7 +147,7 @@ async function generateRangeGeoJSON(
         AND assessment_ranges.geom IS NOT NULL
       GROUP BY assessment_ranges.presence, assessment_ranges.origin
       `,
-      [assessmentId, SIMPLIFY_TOLERANCE]
+      [assessmentId]
     ),
     db.query(
       `
@@ -153,7 +183,54 @@ async function generateRangeGeoJSON(
 
   if (features.length === 0) return null;
 
-  return { type: "FeatureCollection", features };
+  const geojson: RangeGeoJSON = { type: "FeatureCollection", features };
+  if (tolerance != null) {
+    geojson.simplification = { tolerance, unit: "degrees" };
+  }
+  return geojson;
+}
+
+/**
+ * Generate range GeoJSON, iteratively simplifying if the output exceeds MAX_SIZE_BYTES.
+ * Returns the GeoJSON string, the R2 key to use, and the tolerance applied (if any).
+ */
+async function generateRangeGeoJSON(
+  db: Client,
+  assessmentId: number,
+): Promise<{ body: string; r2Key: string; tolerance: number | null } | null> {
+  // Try full resolution first
+  const raw = await queryRangeGeoJSON(db, assessmentId, null);
+  if (!raw) return null;
+
+  let body = JSON.stringify(raw);
+
+  if (Buffer.byteLength(body) <= MAX_SIZE_BYTES) {
+    return { body, r2Key: `${R2_PREFIX}/${assessmentId}.json`, tolerance: null };
+  }
+
+  // Iteratively simplify until under the size limit
+  for (const tolerance of SIMPLIFY_TOLERANCES) {
+    const simplified = await queryRangeGeoJSON(db, assessmentId, tolerance);
+    if (!simplified) return null;
+
+    body = JSON.stringify(simplified);
+    if (Buffer.byteLength(body) <= MAX_SIZE_BYTES) {
+      return {
+        body,
+        r2Key: `${R2_PREFIX}/${assessmentId}_s${tolerance}.json`,
+        tolerance,
+      };
+    }
+  }
+
+  // Even the most aggressive simplification didn't fit — upload it anyway
+  // with the highest tolerance applied
+  const lastTolerance = SIMPLIFY_TOLERANCES[SIMPLIFY_TOLERANCES.length - 1];
+  return {
+    body,
+    r2Key: `${R2_PREFIX}/${assessmentId}_s${lastTolerance}.json`,
+    tolerance: lastTolerance,
+  };
 }
 
 function getAssessmentIdsFromCsvs(taxaFilter?: string[]): { assessmentId: number; hasMap: boolean; scientificName: string }[] {
@@ -196,13 +273,12 @@ async function uploadBatch(
   let failed = 0;
 
   for (const id of assessmentIds) {
-    const key = `${R2_PREFIX}/${id}.json`;
     const speciesName = nameMap.get(id);
     const label = speciesName ? `${speciesName} (${id})` : `${id}`;
 
     try {
-      // Skip if already in R2
-      if (existingKeys.has(key)) {
+      // Skip if already in R2 (any variant)
+      if (hasExistingUpload(existingKeys, id)) {
         existing++;
         logger.log("range_map_existing", { assessmentId: id, ...(speciesName && { scientificName: speciesName }) });
         console.log(`    ${label} — already in R2, skipping`);
@@ -212,28 +288,33 @@ async function uploadBatch(
       const total = uploaded + existing + skipped + failed + 1;
       process.stdout.write(`    [${total}/${assessmentIds.length}] ${label}...`);
       const t0 = Date.now();
-      const geojson = await generateRangeGeoJSON(db, id);
-      if (!geojson) {
+      const result = await generateRangeGeoJSON(db, id);
+      if (!result) {
         skipped++;
         logger.log("range_map_no_data", { assessmentId: id, ...(speciesName && { scientificName: speciesName }) });
         console.log(` no data (${((Date.now() - t0) / 1000).toFixed(1)}s)`);
         continue;
       }
 
-      const body = JSON.stringify(geojson);
       await r2.send(
         new PutObjectCommand({
           Bucket: bucket,
-          Key: key,
-          Body: body,
+          Key: result.r2Key,
+          Body: result.body,
           ContentType: "application/json",
         })
       );
 
       uploaded++;
-      const sizeMB = (Buffer.byteLength(body) / 1024 / 1024).toFixed(2);
-      logger.log("range_map_uploaded", { assessmentId: id, sizeMB, ...(speciesName && { scientificName: speciesName }) });
-      console.log(` ${sizeMB} MB (${((Date.now() - t0) / 1000).toFixed(1)}s)`);
+      const sizeMB = (Buffer.byteLength(result.body) / 1024 / 1024).toFixed(2);
+      const simpLabel = result.tolerance != null ? ` [simplified ${result.tolerance}°]` : "";
+      logger.log("range_map_uploaded", {
+        assessmentId: id,
+        sizeMB,
+        ...(speciesName && { scientificName: speciesName }),
+        ...(result.tolerance != null && { simplifyTolerance: result.tolerance }),
+      });
+      console.log(` ${sizeMB} MB${simpLabel} (${((Date.now() - t0) / 1000).toFixed(1)}s)`);
     } catch (err) {
       failed++;
       logger.log("range_map_failed", { assessmentId: id, ...(speciesName && { scientificName: speciesName }), error: err instanceof Error ? err.message : String(err) });
@@ -280,8 +361,8 @@ export async function run(opts: {
       continue;
     }
 
-    const alreadyUploaded = assessmentIds.filter((id) => existingKeys.has(`${R2_PREFIX}/${id}.json`));
-    const toUpload = assessmentIds.filter((id) => !existingKeys.has(`${R2_PREFIX}/${id}.json`));
+    const alreadyUploaded = assessmentIds.filter((id) => hasExistingUpload(existingKeys, id));
+    const toUpload = assessmentIds.filter((id) => !hasExistingUpload(existingKeys, id));
 
     console.log(`  ${taxon.name}: ${assessmentIds.length} species with maps (${alreadyUploaded.length} already in R2, ${toUpload.length} to upload)`);
     logger.log("range_map_taxon_start", { taxon: taxon.id, total: assessmentIds.length, toUpload: toUpload.length });

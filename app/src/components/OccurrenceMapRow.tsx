@@ -770,6 +770,7 @@ export default function OccurrenceMapRow({
   const [rangeCategories, setRangeCategories] = useState<import("./RangeMapLayer").RangeCategory[]>([]);
   const [visibleCategories, setVisibleCategories] = useState<Set<string> | undefined>(undefined);
   const [rangeCategoriesExpanded, setRangeCategoriesExpanded] = useState(false);
+  const [rangeSimplification, setRangeSimplification] = useState<import("./RangeMapLayer").SimplificationInfo | null>(null);
 
   // AOH layer state
   const isAohAvailable = !!(sisTaxonId && taxonGroup &&
@@ -1404,6 +1405,7 @@ export default function OccurrenceMapRow({
                   onLoadingChange={setRangeLoading}
                   onCategoriesChange={setRangeCategories}
                   onNotFound={setRangeNotFound}
+                  onSimplificationChange={setRangeSimplification}
                   visibleCategories={visibleCategories}
                 />
               )}
@@ -1557,6 +1559,18 @@ export default function OccurrenceMapRow({
                   </button>
                   {showRange && rangeNotFound && (
                     <span className="px-2 py-0.5 text-[9px] text-zinc-400 italic">Not yet available</span>
+                  )}
+                  {showRange && !rangeNotFound && rangeSimplification && (
+                    <span
+                      className="px-2 py-0.5 text-[9px] text-amber-600 dark:text-amber-400 flex items-center gap-1 cursor-help"
+                      title={`This range map has been simplified at ${rangeSimplification.tolerance}° (~${Math.round(rangeSimplification.tolerance * 111)}km) to reduce file size. Fine-scale boundary details may be lost.`}
+                    >
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M12 16v-4M12 8h.01" />
+                      </svg>
+                      Simplified to {rangeSimplification.tolerance}°
+                    </span>
                   )}
                   {showRange && rangeCategoriesExpanded && rangeCategories.length > 0 && (
                     <div className="flex flex-col gap-0.5 mt-0.5 pl-1 border-l-2 border-zinc-200 dark:border-zinc-600 ml-1">

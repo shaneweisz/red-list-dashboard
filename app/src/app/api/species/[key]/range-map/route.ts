@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, GetObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { CACHE_1H } from "@/lib/cache-headers";
 
 // In-memory cache: assessmentId → { data, timestamp }
 const rangeCache = new Map<number, { data: object; timestamp: number }>();
 const CACHE_DURATION = 60 * 60 * 1000; // 1 hour
+
+// Cache the R2 key for each assessment (handles simplified vs unsimplified filenames)
+const keyCache = new Map<number, string | null>();
 
 let r2Client: S3Client | null = null;
 
@@ -26,6 +29,45 @@ function getR2Client(): S3Client {
   });
 
   return r2Client;
+}
+
+/**
+ * Find the R2 key for a given assessment ID.
+ * Files may be stored as:
+ *   iucn-range-maps/{id}.json           (full resolution)
+ *   iucn-range-maps/{id}_s{tol}.json    (simplified)
+ */
+async function findR2Key(client: S3Client, bucket: string, assessmentId: number): Promise<string | null> {
+  if (keyCache.has(assessmentId)) return keyCache.get(assessmentId)!;
+
+  // Try the unsimplified key first (most common)
+  const directKey = `iucn-range-maps/${assessmentId}.json`;
+  try {
+    await client.send(new GetObjectCommand({ Bucket: bucket, Key: directKey }));
+    keyCache.set(assessmentId, directKey);
+    return directKey;
+  } catch {
+    // Not found — check for simplified variants
+  }
+
+  // List keys with the assessment ID prefix to find simplified variants
+  const response = await client.send(
+    new ListObjectsV2Command({
+      Bucket: bucket,
+      Prefix: `iucn-range-maps/${assessmentId}`,
+      MaxKeys: 10,
+    })
+  );
+
+  for (const obj of response.Contents ?? []) {
+    if (obj.Key?.endsWith(".json")) {
+      keyCache.set(assessmentId, obj.Key);
+      return obj.Key;
+    }
+  }
+
+  keyCache.set(assessmentId, null);
+  return null;
 }
 
 export async function GET(
@@ -59,11 +101,16 @@ export async function GET(
       );
     }
 
+    const r2Key = await findR2Key(client, bucket, assessmentId);
+    if (!r2Key) {
+      return NextResponse.json(
+        { error: "No range map found for this assessment" },
+        { status: 404 }
+      );
+    }
+
     const response = await client.send(
-      new GetObjectCommand({
-        Bucket: bucket,
-        Key: `iucn-range-maps/${assessmentId}.json`,
-      })
+      new GetObjectCommand({ Bucket: bucket, Key: r2Key })
     );
 
     const body = await response.Body?.transformToString();

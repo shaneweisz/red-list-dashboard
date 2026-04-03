@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import dynamic from "next/dynamic";
-import type { FeatureCollection, Feature } from "geojson";
+import type { GeoJsonObject, FeatureCollection, Feature } from "geojson";
 
 const Source = dynamic(
   () => import("react-map-gl/maplibre").then((mod) => mod.Source),
@@ -21,6 +21,11 @@ export interface RangeCategory {
   count: number;
 }
 
+export interface SimplificationInfo {
+  tolerance: number;
+  unit: string;
+}
+
 interface RangeMapLayerProps {
   assessmentId: number;
   visible: boolean;
@@ -28,6 +33,7 @@ interface RangeMapLayerProps {
   onLoadingChange?: (loading: boolean) => void;
   onCategoriesChange?: (categories: RangeCategory[]) => void;
   onNotFound?: (notFound: boolean) => void;
+  onSimplificationChange?: (info: SimplificationInfo | null) => void;
   visibleCategories?: Set<string>;
 }
 
@@ -54,21 +60,11 @@ function getCategoryKey(presence: number, origin: number): string {
 }
 
 function getCategoryStyle(presence: number, origin: number): { color: string; dashArray?: string } {
-  if (presence === 4 || presence === 5) {
-    return { color: "#9ca3af", dashArray: "6 4" };
-  }
-  if (presence === 3 || presence === 6) {
-    return { color: "#f59e0b", dashArray: "4 4" };
-  }
-  if (origin === 2 || origin === 6) {
-    return { color: "#3b82f6" };
-  }
-  if (origin === 3) {
-    return { color: "#8b5cf6", dashArray: "4 2" };
-  }
-  if (origin === 4) {
-    return { color: "#f59e0b" };
-  }
+  if (presence === 4 || presence === 5) return { color: "#9ca3af", dashArray: "6 4" };
+  if (presence === 3 || presence === 6) return { color: "#f59e0b", dashArray: "4 4" };
+  if (origin === 2 || origin === 6) return { color: "#3b82f6" };
+  if (origin === 3) return { color: "#8b5cf6", dashArray: "4 2" };
+  if (origin === 4) return { color: "#f59e0b" };
   return { color: "#e11d48" };
 }
 
@@ -92,13 +88,16 @@ function buildColorExpression(features: Feature[]): unknown[] {
     }
   }
 
-  // ["match", ["get", "_catKey"], "1-1", "#e11d48", "4-1", "#9ca3af", ..., "#e11d48"]
   const expr: unknown[] = ["match", ["get", "_catKey"]];
   for (const [key, color] of seen) {
     expr.push(key, color);
   }
   expr.push("#e11d48"); // fallback
   return expr;
+}
+
+interface RangeGeoJSONResponse extends FeatureCollection {
+  simplification?: SimplificationInfo;
 }
 
 export default function RangeMapLayer({
@@ -108,6 +107,7 @@ export default function RangeMapLayer({
   onLoadingChange,
   onCategoriesChange,
   onNotFound,
+  onSimplificationChange,
   visibleCategories,
 }: RangeMapLayerProps) {
   const [geojson, setGeojson] = useState<FeatureCollection | null>(null);
@@ -132,7 +132,7 @@ export default function RangeMapLayer({
         if (!res.ok) throw new Error(`${res.status}`);
         return res.json();
       })
-      .then((data: FeatureCollection) => {
+      .then((data: RangeGeoJSONResponse) => {
         // Add _catKey property to each feature for data-driven styling
         for (const feature of data.features) {
           const presence = feature.properties?.presence ?? 1;
@@ -144,6 +144,9 @@ export default function RangeMapLayer({
         }
         setGeojson(data);
         fetchedRef.current = assessmentId;
+
+        // Report simplification info to parent
+        onSimplificationChange?.(data.simplification ?? null);
 
         // Extract categories
         const catMap = new Map<string, { presence: number; origin: number; count: number }>();
@@ -180,7 +183,7 @@ export default function RangeMapLayer({
         setLoading(false);
         onLoadingChange?.(false);
       });
-  }, [visible, assessmentId, onLoadingChange, onCategoriesChange, onNotFound]);
+  }, [visible, assessmentId, onLoadingChange, onCategoriesChange, onNotFound, onSimplificationChange]);
 
   // Split into polygon and point features, filtered by visible categories
   const { polygonData, pointData, colorExpr } = useMemo(() => {
