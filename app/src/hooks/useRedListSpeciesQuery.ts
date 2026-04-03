@@ -57,16 +57,16 @@ export function useRedListSpecies(taxonId: string | null) {
 
     // null means "don't fetch" — return empty state
     if (taxonId === null) {
-      setSpecies([]);
-      setIsLoading(false);
-      setError(null);
+      setSpecies([]); // eslint-disable-line react-hooks/set-state-in-effect -- reset on null taxon
+      setIsLoading(false);  
+      setError(null);  
       return;
     }
 
     const controller = new AbortController();
     abortRef.current = controller;
 
-    setIsLoading(true);
+    setIsLoading(true);  
     setError(null);
 
     fetch(`/api/redlist/species?taxon=${encodeURIComponent(taxonId)}`, {

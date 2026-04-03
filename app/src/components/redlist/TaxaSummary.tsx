@@ -126,8 +126,6 @@ const FOCUS_HIDDEN: Record<FocusMode, Set<ColumnId>> = {
   "new-assessments": new Set(["outdated", "breakdown", "totalGbifObs", "meanGbifObs", "medianGbifObs", "gbifDistribution"]),
 };
 
-const DEFAULT_HIDDEN_COLUMNS = FOCUS_HIDDEN.redlist;
-
 function DisabledAllTooltip() {
   const [hovered, setHovered] = useState(false);
   const ref = useRef<HTMLSpanElement>(null);
@@ -952,8 +950,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     const isSgExpanded = expandedTaxa.has(sg.id);
     const sgSubs = subgroupData[sg.id] ?? [];
     const isLoadingSgSubs = loadingSubgroups.has(sg.id);
-    const dotSize = depth === 1 ? "w-2 h-2" : "w-1.5 h-1.5";
-
     return (
       <React.Fragment key={sg.id}>
         <tr
