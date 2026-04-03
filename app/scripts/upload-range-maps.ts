@@ -33,8 +33,8 @@ import { getTaxa } from "./taxa";
 
 const R2_PREFIX = "iucn-range-maps";
 
-// Max GeoJSON size before simplification kicks in (2 MB)
-const MAX_SIZE_BYTES = 2 * 1024 * 1024;
+// Max GeoJSON size before simplification kicks in (10 MB)
+const MAX_SIZE_BYTES = 10 * 1024 * 1024;
 
 // Simplification tolerances to try, in order (degrees).
 // 0.001° ≈ 100m, 0.005° ≈ 500m, 0.01° ≈ 1km, 0.05° ≈ 5km, 0.1° ≈ 10km
@@ -128,8 +128,8 @@ async function queryRangeGeoJSON(
   tolerance: number | null,
 ): Promise<RangeGeoJSON | null> {
   const rangeGeomExpr = tolerance != null
-    ? `ST_AsGeoJSON(ST_SimplifyPreserveTopology(ST_Union(assessment_ranges.geom::geometry), ${tolerance}))`
-    : `ST_AsGeoJSON(ST_Union(assessment_ranges.geom::geometry))`;
+    ? `ST_AsGeoJSON(ST_SimplifyPreserveTopology(assessment_ranges.geom::geometry, ${tolerance}))`
+    : `ST_AsGeoJSON(assessment_ranges.geom::geometry)`;
 
   const [rangeResult, pointResult] = await Promise.all([
     db.query(
@@ -145,7 +145,6 @@ async function queryRangeGeoJSON(
       WHERE
         assessments.id = $1
         AND assessment_ranges.geom IS NOT NULL
-      GROUP BY assessment_ranges.presence, assessment_ranges.origin
       `,
       [assessmentId]
     ),
@@ -191,29 +190,77 @@ async function queryRangeGeoJSON(
 }
 
 /**
- * Generate range GeoJSON, iteratively simplifying if the output exceeds MAX_SIZE_BYTES.
+ * Check the total vertex count for a species' range polygons (fast query).
+ * Used to decide whether to skip full-resolution and go straight to simplification.
+ */
+async function getVertexCount(db: Client, assessmentId: number): Promise<number> {
+  const result = await db.query(
+    `SELECT COALESCE(sum(ST_NPoints(geom::geometry)), 0) AS vertices
+     FROM assessment_ranges WHERE assessment_id = $1 AND geom IS NOT NULL`,
+    [assessmentId]
+  );
+  return Number(result.rows[0]?.vertices ?? 0);
+}
+
+// Rough bytes per vertex in GeoJSON (~25 bytes for coordinate pair + JSON overhead)
+const BYTES_PER_VERTEX = 25;
+
+/**
+ * Pick the first simplification tolerance likely to bring the output under MAX_SIZE_BYTES,
+ * based on the vertex count. Returns null if full resolution should fit.
+ */
+function pickStartingTolerance(vertices: number): number | null {
+  const estimatedBytes = vertices * BYTES_PER_VERTEX;
+  if (estimatedBytes <= MAX_SIZE_BYTES) return null;
+
+  // Each tolerance level roughly reduces size by a factor.
+  // Pick the first tolerance whose expected output is under the limit.
+  // Conservative: we'll still iterate from this point if it's not enough.
+  for (const tol of SIMPLIFY_TOLERANCES) {
+    // Rough reduction factors based on empirical data
+    const reductionFactor = tol < 0.005 ? 0.5 : tol < 0.01 ? 0.15 : tol < 0.05 ? 0.05 : 0.02;
+    if (estimatedBytes * reductionFactor <= MAX_SIZE_BYTES) return tol;
+  }
+  return SIMPLIFY_TOLERANCES[SIMPLIFY_TOLERANCES.length - 1];
+}
+
+/**
+ * Generate range GeoJSON, adaptively simplifying if the output exceeds MAX_SIZE_BYTES.
+ * Checks vertex count first to skip expensive full-resolution queries for large geometries.
  * Returns the GeoJSON string, the R2 key to use, and the tolerance applied (if any).
  */
 async function generateRangeGeoJSON(
   db: Client,
   assessmentId: number,
 ): Promise<{ body: string; r2Key: string; tolerance: number | null } | null> {
-  // Try full resolution first
-  const raw = await queryRangeGeoJSON(db, assessmentId, null);
-  if (!raw) return null;
+  // Check vertex count first (fast) to decide where to start
+  const vertices = await getVertexCount(db, assessmentId);
+  const startTolerance = pickStartingTolerance(vertices);
 
-  let body = JSON.stringify(raw);
+  if (startTolerance === null) {
+    // Small enough — try full resolution
+    const raw = await queryRangeGeoJSON(db, assessmentId, null);
+    if (!raw) return null;
 
-  if (Buffer.byteLength(body) <= MAX_SIZE_BYTES) {
-    return { body, r2Key: `${R2_PREFIX}/${assessmentId}.json`, tolerance: null };
+    const body = JSON.stringify(raw);
+    if (Buffer.byteLength(body) <= MAX_SIZE_BYTES) {
+      return { body, r2Key: `${R2_PREFIX}/${assessmentId}.json`, tolerance: null };
+    }
+
+    // Estimate was wrong — fall through to simplification
   }
 
-  // Iteratively simplify until under the size limit
-  for (const tolerance of SIMPLIFY_TOLERANCES) {
+  // Start from the estimated tolerance (or the first one if estimate was wrong)
+  const startIdx = startTolerance
+    ? SIMPLIFY_TOLERANCES.indexOf(startTolerance)
+    : 0;
+
+  for (let i = Math.max(0, startIdx); i < SIMPLIFY_TOLERANCES.length; i++) {
+    const tolerance = SIMPLIFY_TOLERANCES[i];
     const simplified = await queryRangeGeoJSON(db, assessmentId, tolerance);
     if (!simplified) return null;
 
-    body = JSON.stringify(simplified);
+    const body = JSON.stringify(simplified);
     if (Buffer.byteLength(body) <= MAX_SIZE_BYTES) {
       return {
         body,
@@ -224,8 +271,10 @@ async function generateRangeGeoJSON(
   }
 
   // Even the most aggressive simplification didn't fit — upload it anyway
-  // with the highest tolerance applied
   const lastTolerance = SIMPLIFY_TOLERANCES[SIMPLIFY_TOLERANCES.length - 1];
+  const last = await queryRangeGeoJSON(db, assessmentId, lastTolerance);
+  if (!last) return null;
+  const body = JSON.stringify(last);
   return {
     body,
     r2Key: `${R2_PREFIX}/${assessmentId}_s${lastTolerance}.json`,
