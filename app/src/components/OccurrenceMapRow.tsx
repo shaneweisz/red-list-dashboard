@@ -148,25 +148,33 @@ function dateToColor(dateNum: number): { stroke: string; fill: string } {
   const clamped = Math.max(COLOR_SCALE_MIN_TS, Math.min(COLOR_SCALE_MAX_TS, dateNum));
   let hue: number;
   let sat: number;
+  let fillL: number;   // fill lightness
+  let strokeL: number; // stroke lightness
   if (clamped <= COLOR_SCALE_MID_TS) {
-    // Old segment (20+ years): amber(30) → amber-yellow(50)
+    // Old segment (20+ years): amber(30) → amber-yellow(50), darker
     const t = (clamped - COLOR_SCALE_MIN_TS) / (COLOR_SCALE_MID_TS - COLOR_SCALE_MIN_TS);
     hue = Math.round(30 + t * 20);
     sat = Math.round(60 + t * 5);
+    fillL = Math.round(35 + t * 10);   // 35% → 45%
+    strokeL = Math.round(22 + t * 5);  // 22% → 27%
   } else if (clamped <= COLOR_SCALE_RECENT_TS) {
     // Middle segment (10–20 years): yellow(55) → yellow(80)
     const t = (clamped - COLOR_SCALE_MID_TS) / (COLOR_SCALE_RECENT_TS - COLOR_SCALE_MID_TS);
     hue = Math.round(55 + t * 25);
     sat = Math.round(65 + t * 5);
+    fillL = Math.round(42 + t * 8);    // 42% → 50%
+    strokeL = Math.round(25 + t * 5);  // 25% → 30%
   } else {
-    // Recent 10 years: yellow-green(105) → green(142)
+    // Recent 10 years: green(105) → green(142), darker→brighter
     const t = (clamped - COLOR_SCALE_RECENT_TS) / (COLOR_SCALE_MAX_TS - COLOR_SCALE_RECENT_TS);
     hue = Math.round(105 + t * 37);
-    sat = Math.round(70 + t * 10);
+    sat = Math.round(65 + t * 15);     // 65% → 80%
+    fillL = Math.round(32 + t * 23);   // 32% → 55%
+    strokeL = Math.round(20 + t * 15); // 20% → 35%
   }
   return {
-    stroke: `hsl(${hue}, ${sat}%, 30%)`,
-    fill: `hsl(${hue}, ${sat}%, 50%)`,
+    stroke: `hsl(${hue}, ${sat}%, ${strokeL}%)`,
+    fill: `hsl(${hue}, ${sat}%, ${fillL}%)`,
   };
 }
 
