@@ -18,7 +18,7 @@ import { iucnRegionCountries, countryToIucnRegion } from "@/lib/regions";
 import { useFilterParams } from "@/hooks/useFilterParams";
 import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import { downloadSpeciesCsv } from "@/lib/exportCsv";
-import AssessmentAssistant from "../AssessmentAssistant";
+
 import AssessorCandidatesTable from "../AssessorCandidatesTable";
 import { getLastSearchResult, clearLastSearchResult } from "../SpeciesSearchBar";
 
@@ -635,15 +635,15 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const matchesYearRangeFilter = useCallback((assessmentDate: string | null, yearRanges: Set<string> = selectedYearRanges): boolean => {
     if (yearRanges.size === 0) return true;
     if (!assessmentDate) return false;
-    const currentYr = new Date().getFullYear();
-    const yearsSince = currentYr - new Date(assessmentDate).getFullYear();
+    const msPerYear = 365.25 * 24 * 60 * 60 * 1000;
+    const yearsSince = (Date.now() - new Date(assessmentDate).getTime()) / msPerYear;
     for (const range of yearRanges) {
       switch (range) {
-        case "0-1 years": if (yearsSince <= 1) return true; break;
-        case "2-5 years": if (yearsSince >= 2 && yearsSince <= 5) return true; break;
-        case "6-10 years": if (yearsSince >= 6 && yearsSince <= 10) return true; break;
-        case "11-20 years": if (yearsSince >= 11 && yearsSince <= 20) return true; break;
-        case "20+ years": if (yearsSince > 20) return true; break;
+        case "<1 year": if (yearsSince < 1) return true; break;
+        case "1-5 years": if (yearsSince >= 1 && yearsSince < 6) return true; break;
+        case "6-10 years": if (yearsSince >= 6 && yearsSince < 11) return true; break;
+        case "11-20 years": if (yearsSince >= 11 && yearsSince < 21) return true; break;
+        case "20+ years": if (yearsSince >= 21) return true; break;
       }
     }
     return false;
@@ -705,6 +705,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // Track which tabs have been visited so we only mount (and fetch data for) a tab on first click
   const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set([urlTab ?? "gbif"]));
   const urlSpeciesHandledRef = useRef(false);
+  // Track whether a tab change was initiated programmatically (click) vs URL navigation (popstate)
+  const programmaticTabChangeRef = useRef(false);
 
   // Wrap setters to sync with URL
   const setSelectedSpeciesKey = useCallback((key: number | null) => {
@@ -718,6 +720,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
 
   const setActiveDetailTab = useCallback((tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors") => {
     setActiveDetailTabRaw(tab);
+    programmaticTabChangeRef.current = true;
     setTabParam(tab);
     setVisitedTabs(prev => {
       if (prev.has(tab)) return prev;
@@ -730,6 +733,11 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // In new-assessments mode, row keys use Math.abs(id) so selectedSpeciesKey must match.
   useEffect(() => {
     if (urlSpecies != null) {
+      // Skip visitedTabs reset for programmatic (click) tab changes – only reset on URL navigation
+      if (programmaticTabChangeRef.current) {
+        programmaticTabChangeRef.current = false;
+        return;
+      }
       setSelectedSpeciesKeyRaw(isNewAssessments ? Math.abs(urlSpecies) : urlSpecies);
       setActiveDetailTabRaw(urlTab ?? "gbif");
       setVisitedTabs(new Set([urlTab ?? "gbif"]));
@@ -749,13 +757,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     const allSpecies = [...(speciesByTaxon[selectedTaxa.size === 1 ? [...selectedTaxa][0] : "all"] ?? []), ...neSpecies];
     if (allSpecies.some(s => s.id === urlSpecies)) {
       setSingleSpeciesPreview(null);
-      // Scroll directly (the auto-navigate effect may not re-run if deps haven't changed)
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          const row = document.querySelector('[data-selected-species]');
-          if (row) row.scrollIntoView({ behavior: "smooth", block: "start" });
-        });
-      });
       return;
     }
 
@@ -804,19 +805,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       setSingleSpeciesPreview(null);
     }
   }, [assessedSpecies, neSpecies, singleSpeciesPreview]);
-
-  // Scroll preview row into view after it renders (double-rAF for reliable post-paint timing)
-  useEffect(() => {
-    if (!singleSpeciesPreview) return;
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const row = document.querySelector('[data-selected-species]');
-        if (row) {
-          row.scrollIntoView({ behavior: "smooth", block: "start" });
-        }
-      });
-    });
-  }, [singleSpeciesPreview]);
 
   const [stackedDetailView, setStackedDetailView] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -956,10 +944,11 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
 
   // Year chart: apply all filters EXCEPT year range
   const assessmentYearData = useMemo(() => {
-    const currentYr = new Date().getFullYear();
+    const now = Date.now();
+    const msPerYear = 365.25 * 24 * 60 * 60 * 1000;
     const ranges = [
-      { range: "0-1 years", shortRange: "0-1y", count: 0, minYear: 0 },
-      { range: "2-5 years", shortRange: "2-5y", count: 0, minYear: 2 },
+      { range: "<1 year", shortRange: "<1y", count: 0, minYear: 0 },
+      { range: "1-5 years", shortRange: "1-5y", count: 0, minYear: 1 },
       { range: "6-10 years", shortRange: "6-10y", count: 0, minYear: 6 },
       { range: "11-20 years", shortRange: "11-20y", count: 0, minYear: 11 },
       { range: "20+ years", shortRange: ">20y", count: 0, minYear: 21 },
@@ -979,11 +968,11 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesAssessorsFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
-      const diff = currentYr - new Date(s.assessment_date).getFullYear();
-      if (diff <= 1) ranges[0].count++;
-      else if (diff <= 5) ranges[1].count++;
-      else if (diff <= 10) ranges[2].count++;
-      else if (diff <= 20) ranges[3].count++;
+      const yearsSince = (now - new Date(s.assessment_date).getTime()) / msPerYear;
+      if (yearsSince < 1) ranges[0].count++;
+      else if (yearsSince < 6) ranges[1].count++;
+      else if (yearsSince < 11) ranges[2].count++;
+      else if (yearsSince < 21) ranges[3].count++;
       else ranges[4].count++;
     });
     const total = ranges.reduce((sum, r) => sum + r.count, 0);
@@ -1400,13 +1389,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       const page = Math.floor(idx / PAGE_SIZE) + 1;
       setCurrentPage(page);
       urlSpeciesHandledRef.current = true;
-      // Scroll after React renders the new page (double-rAF for post-paint reliability)
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          const row = document.querySelector('[data-selected-species]');
-          if (row) row.scrollIntoView({ behavior: "smooth", block: "start" });
-        });
-      });
     }
   }, [sortedSpecies, selectedSpeciesKey, isNewAssessments, PAGE_SIZE]);
 
@@ -1714,6 +1696,66 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       {selectedTaxa.size > 0 && (
       <div className="space-y-3">
 
+          {/* Single species header — skeleton while loading */}
+          {!isSingleSpecies && urlSpecies != null && speciesLoading && (
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-5 py-4 flex items-center gap-4 animate-pulse">
+              <div className="w-24 h-24 bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <div className="h-5 bg-zinc-200 dark:bg-zinc-700 rounded w-48" />
+                <div className="h-4 bg-zinc-200 dark:bg-zinc-700 rounded w-32" />
+              </div>
+            </div>
+          )}
+          {/* Single species header */}
+          {isSingleSpecies && singleSpecies && (() => {
+            const details = speciesDetails[singleSpecies.id];
+            return (
+              <div
+                className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-5 py-4 flex items-center gap-4"
+              >
+                {details?.inatDefaultImage === undefined ? (
+                  <div className="w-24 h-24 bg-zinc-100 dark:bg-zinc-800 rounded flex-shrink-0 flex items-center justify-center">
+                    <span className="inline-block animate-spin h-5 w-5 border-2 border-zinc-400 border-t-transparent rounded-full" />
+                  </div>
+                ) : details?.inatDefaultImage?.squareUrl ? (
+                  <img
+                    src={details.inatDefaultImage.mediumUrl || details.inatDefaultImage.squareUrl}
+                    alt=""
+                    className="w-24 h-24 object-cover rounded flex-shrink-0 cursor-pointer hover:ring-2 hover:ring-red-400"
+                    onMouseEnter={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const preview = document.getElementById('image-preview');
+                      if (preview) {
+                        (preview as HTMLImageElement).src = details.inatDefaultImage?.mediumUrl || details.inatDefaultImage?.squareUrl || '';
+                        preview.style.display = 'block';
+                        preview.style.top = `${rect.top - 192 - 8}px`;
+                        preview.style.left = `${rect.left}px`;
+                      }
+                    }}
+                    onMouseLeave={() => {
+                      const preview = document.getElementById('image-preview');
+                      if (preview) preview.style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <div className="w-24 h-24 bg-zinc-100 dark:bg-zinc-800 rounded flex items-center justify-center text-zinc-400 flex-shrink-0">
+                    <TaxaIcon taxonId={singleSpecies.taxon_id || "all"} size={40} />
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <div className="italic font-semibold text-zinc-900 dark:text-zinc-100 text-lg">
+                    {singleSpecies.scientific_name}
+                  </div>
+                  {singleSpecies.common_name && (
+                    <div className="text-zinc-500 dark:text-zinc-400 text-sm">
+                      {singleSpecies.common_name}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Charts row 1: bar charts (new-assessments mode only shows GBIF Observations) */}
           {!isNewAssessments && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -1727,14 +1769,14 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   <Spinner />
                 ) : isSingleSpecies && singleSpecies ? (
                   <span
-                    className="px-5 py-2.5 text-4xl font-bold rounded"
+                    className="px-5 py-2.5 text-2xl font-bold rounded text-center"
                     style={{
                       backgroundColor: (CATEGORY_COLORS[singleSpecies.category] || "#999") + "20",
                       color: singleSpecies.category === "EX" || singleSpecies.category === "EW" ? "#fff" : CATEGORY_COLORS[singleSpecies.category] || "#999",
                       ...(singleSpecies.category === "EX" || singleSpecies.category === "EW" ? { backgroundColor: CATEGORY_COLORS[singleSpecies.category] } : {}),
                     }}
                   >
-                    {singleSpecies.category}
+                    {{ EX: "Extinct", EW: "Extinct in the Wild", CR: "Critically Endangered", EN: "Endangered", VU: "Vulnerable", NT: "Near Threatened", LC: "Least Concern", DD: "Data Deficient", NE: "Not Evaluated" }[singleSpecies.category] || singleSpecies.category}
                   </span>
                 ) : categoryDataWithPercent.length > 0 ? (
                   <FilterBarChart
@@ -1768,14 +1810,11 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
                 ) : isSingleSpecies && singleSpecies ? (() => {
-                  const count = singleSpecies.gbif_occurrence_count;
-                  const formatted = count == null ? "N/A"
-                    : count >= 1_000_000 ? `${Math.floor(count / 1_000_000)}M+`
-                    : count >= 1_000 ? `${Math.floor(count / 1_000)}K+`
-                    : count.toLocaleString();
+                  const obs = singleSpecies.gbif_occurrence_count ?? 0;
+                  const range = obs === 0 ? "0" : obs <= 10 ? "1-10" : obs <= 100 ? "11-100" : obs <= 1000 ? "101-1K" : obs <= 10000 ? "1K-10K" : "10K+";
                   return (
                     <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">
-                      {formatted}
+                      {range}
                     </span>
                   );
                 })() : gbifObsData.length > 0 ? (
@@ -1807,9 +1846,10 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   const msPerYear = 365.25 * 24 * 60 * 60 * 1000;
                   const elapsed = Date.now() - new Date(singleSpecies.assessment_date).getTime();
                   const yearsSince = Math.floor(elapsed / msPerYear);
+                  const range = yearsSince < 1 ? "<1y" : yearsSince <= 5 ? "1-5y" : yearsSince <= 10 ? "6-10y" : yearsSince <= 20 ? "11-20y" : ">20y";
                   return (
                     <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">
-                      {yearsSince < 1 ? "<1" : yearsSince}
+                      {range}
                     </span>
                   );
                 })() : assessmentYearData.length > 0 ? (
@@ -1851,6 +1891,24 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   selectedTaxa={selectedTaxa}
                   speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
                   onRegionFilter={handleRegionFilter}
+                  showGbifToggle={
+                    selectedSubgroups.size === 0
+                    && [...selectedTaxa].every(id => id in TAXA_BY_ID)
+                    && selectedCategories.size === 0
+                    && selectedYearRanges.size === 0
+                    && selectedObsRanges.size === 0
+                    && selectedCountries.size === 0
+                    && selectedSystems.size === 0
+                    && selectedPopulationTrends.size === 0
+                    && selectedMovementPatterns.size === 0
+                    && selectedThreats.size === 0
+                    && selectedGrowthForms.size === 0
+                    && selectedAssessors.size === 0
+                    && selectedReviewers.size === 0
+                    && hasMapFilter == null
+                    && !searchFilter
+                    && !showOnlyStarred
+                  }
                 />
               )}
             </div>
@@ -2610,7 +2668,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 return (
                   <React.Fragment key={s.id}>
                   <tr
-                    {...(selectedSpeciesKey === speciesKey ? { 'data-selected-species': true } : {})}
                     className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer ${selectedSpeciesKey === speciesKey ? "bg-zinc-100 dark:bg-zinc-800" : ""} ${isDragging ? "opacity-50" : ""} ${isDragOver ? "border-t-2 border-amber-500" : ""}`}
                     onClick={() => { setSelectedSpeciesKey(selectedSpeciesKey === speciesKey ? null : speciesKey); }}
                     draggable={isPinned && showOnlyStarred}
@@ -2945,12 +3002,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                           )}
                           </div>
                         </div>
-                          <div className="border-t border-zinc-200 dark:border-zinc-700">
-                            <AssessmentAssistant
-                              speciesKey={gbifSpeciesKey ?? 0}
-                              assessmentYear={assessmentYear}
-                            />
-                          </div>
                       </td>
                     </tr>
                   )}
