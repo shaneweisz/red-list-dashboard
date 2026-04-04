@@ -475,6 +475,7 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
                   <span className="font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">{formatNumber(hoveredSpeciesStats.species)}</span>
                 </div>
               )}
+              {showGbifToggle && (
               <div className="flex justify-between gap-4 text-xs">
                 <span className="text-zinc-500">GBIF Obs</span>
                 {occurrenceLoading ? (
@@ -485,6 +486,7 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
                   <span className="text-zinc-400 tabular-nums">{colorMode === "occurrences" ? "..." : "—"}</span>
                 )}
               </div>
+              )}
             </div>
           ) : (
             <div className="text-xs text-zinc-400 mt-1">No data available</div>
