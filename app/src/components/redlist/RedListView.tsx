@@ -1860,7 +1860,24 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   selectedTaxa={selectedTaxa}
                   speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
                   onRegionFilter={handleRegionFilter}
-                  showGbifToggle={selectedSubgroups.size === 0 && [...selectedTaxa].every(id => id in TAXA_BY_ID)}
+                  showGbifToggle={
+                    selectedSubgroups.size === 0
+                    && [...selectedTaxa].every(id => id in TAXA_BY_ID)
+                    && selectedCategories.size === 0
+                    && selectedYearRanges.size === 0
+                    && selectedObsRanges.size === 0
+                    && selectedCountries.size === 0
+                    && selectedSystems.size === 0
+                    && selectedPopulationTrends.size === 0
+                    && selectedMovementPatterns.size === 0
+                    && selectedThreats.size === 0
+                    && selectedGrowthForms.size === 0
+                    && selectedAssessors.size === 0
+                    && selectedReviewers.size === 0
+                    && hasMapFilter === "all"
+                    && !searchFilter
+                    && !showOnlyStarred
+                  }
                 />
               )}
             </div>
