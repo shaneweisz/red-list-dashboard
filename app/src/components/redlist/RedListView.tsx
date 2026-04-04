@@ -1713,7 +1713,21 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   <img
                     src={details.inatDefaultImage.mediumUrl || details.inatDefaultImage.squareUrl}
                     alt=""
-                    className="w-24 h-24 object-cover rounded flex-shrink-0"
+                    className="w-24 h-24 object-cover rounded flex-shrink-0 cursor-pointer hover:ring-2 hover:ring-red-400"
+                    onMouseEnter={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const preview = document.getElementById('image-preview');
+                      if (preview) {
+                        (preview as HTMLImageElement).src = details.inatDefaultImage?.mediumUrl || details.inatDefaultImage?.squareUrl || '';
+                        preview.style.display = 'block';
+                        preview.style.top = `${rect.top - 192 - 8}px`;
+                        preview.style.left = `${rect.left}px`;
+                      }
+                    }}
+                    onMouseLeave={() => {
+                      const preview = document.getElementById('image-preview');
+                      if (preview) preview.style.display = 'none';
+                    }}
                   />
                 ) : (
                   <div className="w-24 h-24 bg-zinc-100 dark:bg-zinc-800 rounded flex items-center justify-center text-zinc-400 flex-shrink-0">
