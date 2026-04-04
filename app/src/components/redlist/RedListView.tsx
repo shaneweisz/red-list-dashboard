@@ -18,7 +18,7 @@ import { iucnRegionCountries, countryToIucnRegion } from "@/lib/regions";
 import { useFilterParams } from "@/hooks/useFilterParams";
 import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import { downloadSpeciesCsv } from "@/lib/exportCsv";
-import AssessmentAssistant from "../AssessmentAssistant";
+
 import AssessorCandidatesTable from "../AssessorCandidatesTable";
 import { getLastSearchResult, clearLastSearchResult } from "../SpeciesSearchBar";
 
@@ -2994,12 +2994,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                           )}
                           </div>
                         </div>
-                          <div className="border-t border-zinc-200 dark:border-zinc-700">
-                            <AssessmentAssistant
-                              speciesKey={gbifSpeciesKey ?? 0}
-                              assessmentYear={assessmentYear}
-                            />
-                          </div>
                       </td>
                     </tr>
                   )}
