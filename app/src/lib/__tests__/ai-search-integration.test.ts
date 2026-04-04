@@ -318,6 +318,32 @@ describeIfKey("AI Search integration (Gemini)", () => {
     expect(hasAmazon, `countries should include Amazon-region codes`).toBe(true);
   }, TIMEOUT);
 
+  it("threats: corals affected by climate change — uses subgroup", async () => {
+    const result = await runAiSearch(
+      "coral species affected by climate change",
+      API_KEY!,
+      opts,
+    );
+
+    console.log("[corals climate]", result.queryString, "|", result.explanation);
+    logToolCalls(result);
+
+    const params = parseQs(result.queryString);
+    expect(result.queryString).toMatch(/^\?/);
+
+    expectParamContainsAny(params, "taxa", ["invertebrates"]);
+
+    // Should have drilled down to the coral subgroup
+    const subgroups = (params.get("subgroups") || "").split(",");
+    const hasCoral = subgroups.some((s) => s.toLowerCase().includes("coral"));
+    expect(hasCoral, `subgroups should include coral subgroup, got: ${subgroups.join(",")}`).toBe(true);
+
+    // Threat 11 = Climate change
+    const threats = (params.get("threats") || "").split(",");
+    const hasClimate = threats.some((t) => t === "11" || t.startsWith("11."));
+    expect(hasClimate, `threats should include climate change codes, got: ${threats.join(",")}`).toBe(true);
+  }, TIMEOUT);
+
   it("threats: mammals threatened by hunting in Central Africa", async () => {
     const result = await runAiSearch(
       "mammals threatened by hunting in Central Africa",

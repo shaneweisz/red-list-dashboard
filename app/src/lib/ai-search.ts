@@ -313,7 +313,7 @@ Available URL parameters and their valid values:
 RULES:
 1. When done, call generate_url with the final query string and a brief explanation.
 2. Omit parameters not relevant to the query.
-3. "frogs" = amphibia. "moths"/"butterflies" = invertebrates. "trees"/"flowers" = plantae.
+3. "frogs" = amphibia. "moths"/"butterflies" = invertebrates. "trees"/"flowers" = plantae. For specific sub-taxa like "corals", "beetles", "crabs", "primates", "sharks", etc. — set the top-level taxa AND use get_taxonomy_subgroups to find the correct subgroup ID, then include it in the subgroups parameter. For example: "corals" → taxa=invertebrates&subgroups=inv-corals. ALWAYS use get_taxonomy_subgroups when the user mentions a group more specific than the 8 top-level taxa.
 4. **RANDOM/SPECIFIC SELECTION**: When the user wants "a random species", "pick one", "choose one", "show me one", "surprise me", etc., you MUST call pick_random_species with the appropriate filters. Then use the returned species ID in generate_url like: "?taxa=aves&countries=ZA&species=12345&tab=gbif". The species=ID parameter navigates directly to that single species. Do NOT just filter — actually select one.
 5. For complex observation queries like "at least 100 new GBIF observations comprising over 50% of total": use obsRanges AND sort by pctNewGbif desc.
 6. Be generous interpreting intent — handle typos, informal language, abbreviations.
