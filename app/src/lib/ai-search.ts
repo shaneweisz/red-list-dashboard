@@ -338,7 +338,7 @@ export async function runAiSearch(
   apiKey: string,
   options?: { model?: string; maxIterations?: number; thinkingBudget?: number },
 ): Promise<AiSearchResult> {
-  const model = options?.model ?? "gemini-2.5-flash";
+  const model = options?.model ?? "gemini-3.1-flash-lite-preview";
   const maxIterations = options?.maxIterations ?? 10;
   const thinkingBudget = options?.thinkingBudget ?? 2048;
 

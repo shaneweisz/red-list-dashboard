@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
         for (let i = 0; i < 10; i++) {
           const genStart = Date.now();
           const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-3.1-flash-lite-preview",
             contents,
             config: {
               systemInstruction: SYSTEM_PROMPT,
@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
           const usage = response.usageMetadata;
           trace?.generation({
             name: `gemini-turn-${i}`,
-            model: "gemini-2.5-flash",
+            model: "gemini-3.1-flash-lite-preview",
             input: i === 0 ? query.trim() : contents.slice(-1),
             output: parts,
             startTime: new Date(genStart),
