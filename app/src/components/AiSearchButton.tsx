@@ -171,6 +171,7 @@ export function AiSearchButton() {
       case "search_species": return "Searching species";
       case "search_assessors": return "Looking up assessors";
       case "get_taxonomy_subgroups": return "Checking subgroups";
+      case "pick_random_species": return "Picking a random species";
       default: return name;
     }
   }

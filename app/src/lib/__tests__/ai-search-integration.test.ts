@@ -93,7 +93,7 @@ describeIfKey("AI Search integration (Gemini)", () => {
     expect(assessors.toLowerCase()).toContain("bachman");
   }, TIMEOUT);
 
-  it("species search: random bird from South Africa", async () => {
+  it("species search: random bird from South Africa — selects exactly one", async () => {
     const result = await runAiSearch(
       "a random bird species from South Africa",
       API_KEY!,
@@ -109,9 +109,14 @@ describeIfKey("AI Search integration (Gemini)", () => {
     // Should filter to aves
     expectParamContainsAny(params, "taxa", ["aves"]);
 
-    // Should include ZA in countries
-    const countries = (params.get("countries") || "").split(",");
-    expect(countries).toContain("ZA");
+    // Should have used pick_random_species tool
+    const usedRandomTool = result.toolCalls.some((tc) => tc.name === "pick_random_species");
+    expect(usedRandomTool, "Should have called pick_random_species to select one species").toBe(true);
+
+    // Should have a species=ID parameter selecting exactly one species
+    const speciesId = params.get("species");
+    expect(speciesId, "Should include species=ID to select exactly one species").toBeTruthy();
+    expect(Number(speciesId)).toBeGreaterThan(0);
   }, TIMEOUT);
 
   it("complex: outdated moth with 100+ new GBIF observations at 50%+ of total", async () => {

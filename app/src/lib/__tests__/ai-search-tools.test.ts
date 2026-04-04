@@ -3,6 +3,7 @@ import {
   toolSearchSpecies,
   toolSearchAssessors,
   toolGetTaxonomySubgroups,
+  toolPickRandomSpecies,
   dispatchToolCall,
   getAllAssessorNames,
 } from "../ai-search";
@@ -106,6 +107,41 @@ describe("toolGetTaxonomySubgroups", () => {
   });
 });
 
+describe("toolPickRandomSpecies", () => {
+  it("picks exactly one species from aves", () => {
+    const result = toolPickRandomSpecies("aves");
+    expect(result).toMatch(/^Randomly selected 1 of \d+ matching species:/);
+    expect(result).toMatch(/\[id:\d+\]/);
+  }, DATA_TIMEOUT);
+
+  it("filters by country", () => {
+    const result = toolPickRandomSpecies("aves", ["ZA"]);
+    expect(result).toMatch(/^Randomly selected 1 of \d+ matching species:/);
+    // The count should be less than all aves
+    const allResult = toolPickRandomSpecies("aves");
+    const filteredCount = parseInt(result.match(/1 of (\d+)/)?.[1] || "0");
+    const allCount = parseInt(allResult.match(/1 of (\d+)/)?.[1] || "0");
+    expect(filteredCount).toBeLessThan(allCount);
+  });
+
+  it("filters by category", () => {
+    const result = toolPickRandomSpecies("mammalia", undefined, ["CR"]);
+    expect(result).toMatch(/^Randomly selected 1 of \d+ matching species:/);
+    expect(result).toContain("— CR");
+  });
+
+  it("filters by country and category together", () => {
+    const result = toolPickRandomSpecies("aves", ["ZA"], ["CR", "EN"]);
+    expect(result).toMatch(/^Randomly selected 1 of \d+ matching species:/);
+  });
+
+  it("returns error when no species match", () => {
+    // Nonexistent taxon should return no matches
+    const result = toolPickRandomSpecies("nonexistent_taxon", ["ZZ"]);
+    expect(result).toBe("No species match those filters.");
+  });
+});
+
 describe("dispatchToolCall", () => {
   it("dispatches search_species", () => {
     const result = dispatchToolCall("search_species", { query: "frog", limit: 2 });
@@ -120,6 +156,11 @@ describe("dispatchToolCall", () => {
   it("dispatches get_taxonomy_subgroups", () => {
     const result = dispatchToolCall("get_taxonomy_subgroups", { parent_id: "all" });
     expect(result).toContain("mammalia");
+  });
+
+  it("dispatches pick_random_species", () => {
+    const result = dispatchToolCall("pick_random_species", { taxa_id: "aves", countries: ["ZA"] });
+    expect(result).toMatch(/Randomly selected/);
   });
 
   it("returns error for unknown tool", () => {

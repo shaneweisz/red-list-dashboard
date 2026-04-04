@@ -6,7 +6,8 @@
  */
 
 import { GoogleGenAI, Type, FunctionCallingConfigMode, type Tool } from "@google/genai";
-import { searchSpecies } from "@/lib/data/species-store";
+import { searchSpecies, getSpecies } from "@/lib/data/species-store";
+import { getCsvGroupsForNode } from "@/lib/taxonomy-utils";
 import { parseAssessors } from "@/lib/parseAssessors";
 import * as fs from "fs";
 import * as path from "path";
@@ -66,7 +67,7 @@ export function toolSearchSpecies(query: string, limit: number): string {
   return results
     .map(
       (r) =>
-        `${r.scientific_name}${r.common_name ? ` (${r.common_name})` : ""} — ${r.category}, taxon: ${r.taxon_id}` +
+        `[id:${r.id}] ${r.scientific_name}${r.common_name ? ` (${r.common_name})` : ""} — ${r.category}, taxon: ${r.taxon_id}` +
         (r.countries.length > 0 ? `, countries: ${r.countries.slice(0, 10).join(",")}` : "")
     )
     .join("\n");
@@ -97,6 +98,36 @@ export function toolGetTaxonomySubgroups(parentId: string): string {
     .join("\n");
 }
 
+export function toolPickRandomSpecies(
+  taxaId: string,
+  countries?: string[],
+  categories?: string[],
+): string {
+  const groups = getCsvGroupsForNode(taxaId);
+  let species = getSpecies(groups, false);
+
+  if (countries && countries.length > 0) {
+    const countrySet = new Set(countries.map((c) => c.toUpperCase()));
+    species = species.filter((s) =>
+      s.countries.some((c) => countrySet.has(c))
+    );
+  }
+
+  if (categories && categories.length > 0) {
+    const catSet = new Set(categories);
+    species = species.filter((s) => catSet.has(s.category));
+  }
+
+  if (species.length === 0) return "No species match those filters.";
+
+  const pick = species[Math.floor(Math.random() * species.length)];
+  return (
+    `Randomly selected 1 of ${species.length} matching species:\n` +
+    `[id:${pick.id}] ${pick.scientific_name}${pick.common_name ? ` (${pick.common_name})` : ""} — ${pick.category}, taxon: ${pick.taxon_id}` +
+    (pick.countries.length > 0 ? `, countries: ${pick.countries.slice(0, 10).join(",")}` : "")
+  );
+}
+
 /** Dispatch a tool call by name, return the string result */
 export function dispatchToolCall(
   name: string,
@@ -112,6 +143,12 @@ export function dispatchToolCall(
       return toolSearchAssessors((args.query as string) || "");
     case "get_taxonomy_subgroups":
       return toolGetTaxonomySubgroups((args.parent_id as string) || "");
+    case "pick_random_species":
+      return toolPickRandomSpecies(
+        (args.taxa_id as string) || "all",
+        args.countries ? (args.countries as string[]) : undefined,
+        args.categories ? (args.categories as string[]) : undefined,
+      );
     default:
       return `Unknown tool: ${name}`;
   }
@@ -170,6 +207,31 @@ export const geminiTools: Tool[] = [
             },
           },
           required: ["parent_id"],
+        },
+      },
+      {
+        name: "pick_random_species",
+        description:
+          "Pick one random species matching the given filters. Use this when the user asks for 'a random species', 'pick one', 'choose one', 'surprise me', etc. Returns exactly one species with its ID, name, category, and countries. After calling this, use the returned species ID in generate_url with the species=ID parameter to navigate directly to that species.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            taxa_id: {
+              type: Type.STRING,
+              description: "Taxonomy node ID to filter by (e.g. 'aves', 'mammalia', 'amphibia', 'all')",
+            },
+            countries: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+              description: "Optional array of ISO country codes to filter by (e.g. ['ZA', 'BR'])",
+            },
+            categories: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+              description: "Optional array of IUCN categories to filter by (e.g. ['CR', 'EN', 'VU'])",
+            },
+          },
+          required: ["taxa_id"],
         },
       },
       {
@@ -252,10 +314,11 @@ RULES:
 1. When done, call generate_url with the final query string and a brief explanation.
 2. Omit parameters not relevant to the query.
 3. "frogs" = amphibia. "moths"/"butterflies" = invertebrates. "trees"/"flowers" = plantae.
-4. For "random" queries, apply the relevant filters — the dashboard shows matching species.
+4. **RANDOM/SPECIFIC SELECTION**: When the user wants "a random species", "pick one", "choose one", "show me one", "surprise me", etc., you MUST call pick_random_species with the appropriate filters. Then use the returned species ID in generate_url like: "?taxa=aves&countries=ZA&species=12345&tab=gbif". The species=ID parameter navigates directly to that single species. Do NOT just filter — actually select one.
 5. For complex observation queries like "at least 100 new GBIF observations comprising over 50% of total": use obsRanges AND sort by pctNewGbif desc.
 6. Be generous interpreting intent — handle typos, informal language, abbreviations.
-7. Keep your reasoning concise — a few sentences per step, not paragraphs.`;
+7. Keep your reasoning concise — a few sentences per step, not paragraphs.
+8. The search_species tool returns results with [id:NUMBER] prefix — you can use these IDs in the species= URL parameter to link directly to a specific species.`;
 
 // ─── Agentic loop (non-streaming, for testing) ─────────────────────
 
