@@ -635,15 +635,15 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const matchesYearRangeFilter = useCallback((assessmentDate: string | null, yearRanges: Set<string> = selectedYearRanges): boolean => {
     if (yearRanges.size === 0) return true;
     if (!assessmentDate) return false;
-    const currentYr = new Date().getFullYear();
-    const yearsSince = currentYr - new Date(assessmentDate).getFullYear();
+    const msPerYear = 365.25 * 24 * 60 * 60 * 1000;
+    const yearsSince = (Date.now() - new Date(assessmentDate).getTime()) / msPerYear;
     for (const range of yearRanges) {
       switch (range) {
         case "<1 year": if (yearsSince < 1) return true; break;
-        case "1-5 years": if (yearsSince >= 1 && yearsSince <= 5) return true; break;
-        case "6-10 years": if (yearsSince >= 6 && yearsSince <= 10) return true; break;
-        case "11-20 years": if (yearsSince >= 11 && yearsSince <= 20) return true; break;
-        case "20+ years": if (yearsSince > 20) return true; break;
+        case "1-5 years": if (yearsSince >= 1 && yearsSince < 6) return true; break;
+        case "6-10 years": if (yearsSince >= 6 && yearsSince < 11) return true; break;
+        case "11-20 years": if (yearsSince >= 11 && yearsSince < 21) return true; break;
+        case "20+ years": if (yearsSince >= 21) return true; break;
       }
     }
     return false;
@@ -936,7 +936,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
 
   // Year chart: apply all filters EXCEPT year range
   const assessmentYearData = useMemo(() => {
-    const currentYr = new Date().getFullYear();
+    const now = Date.now();
+    const msPerYear = 365.25 * 24 * 60 * 60 * 1000;
     const ranges = [
       { range: "<1 year", shortRange: "<1y", count: 0, minYear: 0 },
       { range: "1-5 years", shortRange: "1-5y", count: 0, minYear: 1 },
@@ -959,11 +960,11 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesAssessorsFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
-      const diff = currentYr - new Date(s.assessment_date).getFullYear();
-      if (diff < 1) ranges[0].count++;
-      else if (diff <= 5) ranges[1].count++;
-      else if (diff <= 10) ranges[2].count++;
-      else if (diff <= 20) ranges[3].count++;
+      const yearsSince = (now - new Date(s.assessment_date).getTime()) / msPerYear;
+      if (yearsSince < 1) ranges[0].count++;
+      else if (yearsSince < 6) ranges[1].count++;
+      else if (yearsSince < 11) ranges[2].count++;
+      else if (yearsSince < 21) ranges[3].count++;
       else ranges[4].count++;
     });
     const total = ranges.reduce((sum, r) => sum + r.count, 0);
