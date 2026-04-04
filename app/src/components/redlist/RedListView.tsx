@@ -705,6 +705,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // Track which tabs have been visited so we only mount (and fetch data for) a tab on first click
   const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set([urlTab ?? "gbif"]));
   const urlSpeciesHandledRef = useRef(false);
+  // Track whether a tab change was initiated programmatically (click) vs URL navigation (popstate)
+  const programmaticTabChangeRef = useRef(false);
 
   // Wrap setters to sync with URL
   const setSelectedSpeciesKey = useCallback((key: number | null) => {
@@ -718,6 +720,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
 
   const setActiveDetailTab = useCallback((tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors") => {
     setActiveDetailTabRaw(tab);
+    programmaticTabChangeRef.current = true;
     setTabParam(tab);
     setVisitedTabs(prev => {
       if (prev.has(tab)) return prev;
@@ -730,6 +733,11 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // In new-assessments mode, row keys use Math.abs(id) so selectedSpeciesKey must match.
   useEffect(() => {
     if (urlSpecies != null) {
+      // Skip visitedTabs reset for programmatic (click) tab changes – only reset on URL navigation
+      if (programmaticTabChangeRef.current) {
+        programmaticTabChangeRef.current = false;
+        return;
+      }
       setSelectedSpeciesKeyRaw(isNewAssessments ? Math.abs(urlSpecies) : urlSpecies);
       setActiveDetailTabRaw(urlTab ?? "gbif");
       setVisitedTabs(new Set([urlTab ?? "gbif"]));
