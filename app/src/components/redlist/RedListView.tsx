@@ -1692,7 +1692,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
             const details = speciesDetails[singleSpecies.id];
             return (
               <div
-                ref={(el) => { if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); }}
                 className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 flex items-center gap-3"
               >
                 {details?.inatDefaultImage === undefined ? (
@@ -1861,6 +1860,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   selectedTaxa={selectedTaxa}
                   speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
                   onRegionFilter={handleRegionFilter}
+                  showGbifToggle={selectedSubgroups.size === 0 && [...selectedTaxa].every(id => id in TAXA_BY_ID)}
                 />
               )}
             </div>
