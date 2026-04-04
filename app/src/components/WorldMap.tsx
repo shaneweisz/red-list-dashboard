@@ -159,6 +159,8 @@ interface WorldMapProps {
   onRegionFilter?: (region: string) => void;
   // Optional footer content rendered inside the panel below the map
   footer?: React.ReactNode;
+  // Whether to show the Species/GBIF color mode toggle (only accurate for top-level taxa)
+  showGbifToggle?: boolean;
 }
 
 const DEFAULT_CENTER: [number, number] = [10, 10];
@@ -166,7 +168,7 @@ const DEFAULT_ZOOM = 1.0;
 const MIN_ZOOM = 1.0;
 const MAX_ZOOM = 8.0;
 
-function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, footer }: WorldMapProps) {
+function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, footer, showGbifToggle = true }: WorldMapProps) {
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoveredCountryCode, setHoveredCountryCode] = useState<string | null>(null);
   const [speciesStats, setSpeciesStats] = useState<CountryStats>(precomputedStats || {});
@@ -174,6 +176,11 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
   const [loading, setLoading] = useState(!precomputedStats);
   const [occurrenceLoading, setOccurrenceLoading] = useState(false);
   const [colorMode, setColorMode] = useState<ColorMode>("species");
+
+  // Reset to species mode when GBIF toggle is hidden
+  useEffect(() => {
+    if (!showGbifToggle) setColorMode("species");
+  }, [showGbifToggle]);
 
   // Zoom & pan state
   const [center, setCenter] = useState<[number, number]>(DEFAULT_CENTER);
@@ -409,7 +416,8 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
               </div>
             )}
           </div>
-          {/* Color mode toggle */}
+          {/* Color mode toggle (only shown when GBIF numbers are accurate for the current view) */}
+          {showGbifToggle && (
           <div className="flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md p-0.5 text-[10px]">
             <button
               onClick={() => setColorMode("species")}
@@ -424,6 +432,7 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
               GBIF
             </button>
           </div>
+          )}
           {onRegionFilter && (
             <select
               value={(() => {
@@ -466,6 +475,7 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
                   <span className="font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">{formatNumber(hoveredSpeciesStats.species)}</span>
                 </div>
               )}
+              {showGbifToggle && (
               <div className="flex justify-between gap-4 text-xs">
                 <span className="text-zinc-500">GBIF Obs</span>
                 {occurrenceLoading ? (
@@ -476,6 +486,7 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
                   <span className="text-zinc-400 tabular-nums">{colorMode === "occurrences" ? "..." : "—"}</span>
                 )}
               </div>
+              )}
             </div>
           ) : (
             <div className="text-xs text-zinc-400 mt-1">No data available</div>
