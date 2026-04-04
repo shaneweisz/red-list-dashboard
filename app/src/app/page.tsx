@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { SpeciesSearchBar } from "../components/SpeciesSearchBar";
+import { AiSearchButton } from "../components/AiSearchButton";
 import { parseParams, type ViewMode } from "../hooks/useFilterParams";
 
 // Dynamically import view component
@@ -94,7 +95,10 @@ export default function RedListPage() {
           <p className="text-sm md:text-base text-zinc-600 dark:text-zinc-400">
             Click taxa rows to filter, use charts and search to explore species.<span className="hidden sm:inline"> Cmd/Ctrl+click to multiselect.</span>
           </p>
-          <SpeciesSearchBar />
+          <div className="flex items-center gap-1.5">
+            <SpeciesSearchBar />
+            <AiSearchButton />
+          </div>
         </div>
 
         {/* Content — single component instance stays mounted on viewMode switch */}

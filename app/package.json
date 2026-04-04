@@ -11,6 +11,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@google/genai": "^1.48.0",
     "@sentry/nextjs": "^10.43.0",
     "@vercel/analytics": "^1.6.1",
     "@vercel/speed-insights": "^2.0.0",
