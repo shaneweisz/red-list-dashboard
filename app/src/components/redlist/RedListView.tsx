@@ -1692,6 +1692,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
             const details = speciesDetails[singleSpecies.id];
             return (
               <div
+                ref={(el) => { if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); }}
                 className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 flex items-center gap-3"
               >
                 {details?.inatDefaultImage === undefined ? (
@@ -1702,7 +1703,23 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   <img
                     src={details.inatDefaultImage.mediumUrl || details.inatDefaultImage.squareUrl}
                     alt=""
-                    className="w-12 h-12 object-cover rounded flex-shrink-0"
+                    className="w-12 h-12 object-cover rounded flex-shrink-0 cursor-pointer hover:ring-2 hover:ring-red-400"
+                    onMouseEnter={(e) => {
+                      const img = e.currentTarget;
+                      const rect = img.getBoundingClientRect();
+                      const preview = document.getElementById('image-preview');
+                      if (preview) {
+                        (preview as HTMLImageElement).src = details.inatDefaultImage?.mediumUrl || details.inatDefaultImage?.squareUrl || '';
+                        preview.style.display = 'block';
+                        const showBelow = rect.bottom + 192 + 8 < window.innerHeight;
+                        preview.style.top = showBelow ? `${rect.bottom + 8}px` : `${rect.top - 192 - 8}px`;
+                        preview.style.left = `${rect.left}px`;
+                      }
+                    }}
+                    onMouseLeave={() => {
+                      const preview = document.getElementById('image-preview');
+                      if (preview) preview.style.display = 'none';
+                    }}
                   />
                 ) : (
                   <div className="w-12 h-12 bg-zinc-100 dark:bg-zinc-800 rounded flex items-center justify-center text-zinc-400 flex-shrink-0">
@@ -1736,14 +1753,14 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   <Spinner />
                 ) : isSingleSpecies && singleSpecies ? (
                   <span
-                    className="px-5 py-2.5 text-4xl font-bold rounded"
+                    className="px-5 py-2.5 text-2xl font-bold rounded text-center"
                     style={{
                       backgroundColor: (CATEGORY_COLORS[singleSpecies.category] || "#999") + "20",
                       color: singleSpecies.category === "EX" || singleSpecies.category === "EW" ? "#fff" : CATEGORY_COLORS[singleSpecies.category] || "#999",
                       ...(singleSpecies.category === "EX" || singleSpecies.category === "EW" ? { backgroundColor: CATEGORY_COLORS[singleSpecies.category] } : {}),
                     }}
                   >
-                    {singleSpecies.category}
+                    {{ EX: "Extinct", EW: "Extinct in the Wild", CR: "Critically Endangered", EN: "Endangered", VU: "Vulnerable", NT: "Near Threatened", LC: "Least Concern", DD: "Data Deficient", NE: "Not Evaluated" }[singleSpecies.category] || singleSpecies.category}
                   </span>
                 ) : categoryDataWithPercent.length > 0 ? (
                   <FilterBarChart
@@ -1777,14 +1794,11 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
                 ) : isSingleSpecies && singleSpecies ? (() => {
-                  const count = singleSpecies.gbif_occurrence_count;
-                  const formatted = count == null ? "N/A"
-                    : count >= 1_000_000 ? `${Math.floor(count / 1_000_000)}M+`
-                    : count >= 1_000 ? `${Math.floor(count / 1_000)}K+`
-                    : count.toLocaleString();
+                  const obs = singleSpecies.gbif_occurrence_count ?? 0;
+                  const range = obs === 0 ? "0" : obs <= 10 ? "1-10" : obs <= 100 ? "11-100" : obs <= 1000 ? "101-1K" : obs <= 10000 ? "1K-10K" : "10K+";
                   return (
                     <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">
-                      {formatted}
+                      {range}
                     </span>
                   );
                 })() : gbifObsData.length > 0 ? (
@@ -1816,9 +1830,10 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   const msPerYear = 365.25 * 24 * 60 * 60 * 1000;
                   const elapsed = Date.now() - new Date(singleSpecies.assessment_date).getTime();
                   const yearsSince = Math.floor(elapsed / msPerYear);
+                  const range = yearsSince <= 1 ? "0-1y" : yearsSince <= 5 ? "2-5y" : yearsSince <= 10 ? "6-10y" : yearsSince <= 20 ? "11-20y" : ">20y";
                   return (
                     <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">
-                      {yearsSince < 1 ? "<1" : yearsSince}
+                      {range}
                     </span>
                   );
                 })() : assessmentYearData.length > 0 ? (
