@@ -134,7 +134,7 @@ function dateToNumeric(eventDate?: string | null, year?: number | null): number 
 }
 
 // Fixed absolute color scale so the same year always maps to the same color
-// across all species. Simple continuous hue gradient: red(0) → green(130).
+// across all species. Simple continuous hue gradient: orange-red(20) → green(130).
 // Anchored so that the last ~20 years span the full visible range.
 const COLOR_SCALE_MIN_YEAR = new Date().getFullYear() - 20;
 const COLOR_SCALE_MAX_YEAR = new Date().getFullYear();
@@ -143,10 +143,10 @@ const COLOR_SCALE_MAX_TS = new Date(COLOR_SCALE_MAX_YEAR, 0, 1).getTime();
 
 // Date-based color interpolation — continuous hue gradient
 function dateToColor(dateNum: number): { stroke: string; fill: string } {
-  // Clamp to range; anything older than 40 years gets the reddest color
+  // Clamp to range; anything older than 20 years gets the orange-red color
   const t = Math.max(0, Math.min(1, (dateNum - COLOR_SCALE_MIN_TS) / (COLOR_SCALE_MAX_TS - COLOR_SCALE_MIN_TS)));
-  // Hue: 0 (red) → 130 (green)
-  const hue = Math.round(t * 130);
+  // Hue: 20 (orange-red) → 130 (green)
+  const hue = Math.round(20 + t * 110);
   return {
     stroke: `hsl(${hue}, 75%, 30%)`,
     fill: `hsl(${hue}, 75%, 50%)`,
