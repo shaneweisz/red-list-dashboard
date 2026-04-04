@@ -1687,6 +1687,16 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       {selectedTaxa.size > 0 && (
       <div className="space-y-3">
 
+          {/* Single species header — skeleton while loading */}
+          {!isSingleSpecies && urlSpecies != null && speciesLoading && (
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 flex items-center gap-3 animate-pulse">
+              <div className="w-12 h-12 bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <div className="h-4 bg-zinc-200 dark:bg-zinc-700 rounded w-48" />
+                <div className="h-3 bg-zinc-200 dark:bg-zinc-700 rounded w-32" />
+              </div>
+            </div>
+          )}
           {/* Single species header */}
           {isSingleSpecies && singleSpecies && (() => {
             const details = speciesDetails[singleSpecies.id];
