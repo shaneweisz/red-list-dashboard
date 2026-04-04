@@ -320,6 +320,26 @@ RULES:
 7. Keep your reasoning concise — a few sentences per step, not paragraphs.
 8. The search_species tool returns results with [id:NUMBER] prefix — you can use these IDs in the species= URL parameter to link directly to a specific species.`;
 
+// ─── Rate-limit retry helper ────────────────────────────────────────
+
+async function generateWithRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries = 3,
+): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (err: unknown) {
+      const is429 =
+        err instanceof Error &&
+        (err.message.includes("429") || err.message.includes("RESOURCE_EXHAUSTED"));
+      if (!is429 || attempt >= maxRetries) throw err;
+      const delay = Math.pow(2, attempt + 1) * 1000; // 2s, 4s, 8s
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+}
+
 // ─── Agentic loop (non-streaming, for testing) ─────────────────────
 
 export interface AiSearchResult {
@@ -357,24 +377,26 @@ export async function runAiSearch(
   const reasoningSteps: string[] = [];
 
   for (let i = 0; i < maxIterations; i++) {
-    const response = await ai.models.generateContent({
-      model,
-      contents,
-      config: {
-        systemInstruction: SYSTEM_PROMPT,
-        temperature: 0.2,
-        maxOutputTokens: 2048,
-        tools: geminiTools,
-        toolConfig: {
-          functionCallingConfig: {
-            mode: FunctionCallingConfigMode.AUTO,
+    const response = await generateWithRetry(() =>
+      ai.models.generateContent({
+        model,
+        contents,
+        config: {
+          systemInstruction: SYSTEM_PROMPT,
+          temperature: 0.2,
+          maxOutputTokens: 2048,
+          tools: geminiTools,
+          toolConfig: {
+            functionCallingConfig: {
+              mode: FunctionCallingConfigMode.AUTO,
+            },
+          },
+          thinkingConfig: {
+            thinkingBudget,
           },
         },
-        thinkingConfig: {
-          thinkingBudget,
-        },
-      },
-    });
+      })
+    );
 
     const candidate = response.candidates?.[0];
     if (!candidate?.content?.parts) break;

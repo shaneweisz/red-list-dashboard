@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { runAiSearch, type AiSearchResult } from "../ai-search";
 
 // =============================================================================
@@ -38,9 +38,17 @@ function expectParamContainsAny(
 // Shared options — lower thinking budget to save tokens
 const opts = { thinkingBudget: 1024, maxIterations: 6 };
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 describeIfKey("AI Search integration (Gemini)", () => {
   // Generous timeout — agentic loop can take 10-30s
   const TIMEOUT = 60_000;
+
+  // Rate-limit guard: wait between tests to stay under the free-tier RPM limit.
+  // Each agentic loop makes 2-6 API calls; a 5s gap keeps us well under 15 RPM.
+  beforeEach(async () => {
+    await sleep(5_000);
+  });
 
   it("simple: threatened frogs in South America", async () => {
     const result = await runAiSearch(

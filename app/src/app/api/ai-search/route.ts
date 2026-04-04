@@ -7,6 +7,24 @@ import {
 } from "@/lib/ai-search";
 import { getLangfuse } from "@/lib/langfuse";
 
+async function generateWithRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries = 3,
+): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (err: unknown) {
+      const is429 =
+        err instanceof Error &&
+        (err.message.includes("429") || err.message.includes("RESOURCE_EXHAUSTED"));
+      if (!is429 || attempt >= maxRetries) throw err;
+      const delay = Math.pow(2, attempt + 1) * 1000;
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+}
+
 export async function POST(req: NextRequest) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -64,24 +82,26 @@ export async function POST(req: NextRequest) {
 
         for (let i = 0; i < 10; i++) {
           const genStart = Date.now();
-          const response = await ai.models.generateContent({
-            model: "gemini-3.1-flash-lite-preview",
-            contents,
-            config: {
-              systemInstruction: SYSTEM_PROMPT,
-              temperature: 0.2,
-              maxOutputTokens: 2048,
-              tools: geminiTools,
-              toolConfig: {
-                functionCallingConfig: {
-                  mode: FunctionCallingConfigMode.AUTO,
+          const response = await generateWithRetry(() =>
+            ai.models.generateContent({
+              model: "gemini-3.1-flash-lite-preview",
+              contents,
+              config: {
+                systemInstruction: SYSTEM_PROMPT,
+                temperature: 0.2,
+                maxOutputTokens: 2048,
+                tools: geminiTools,
+                toolConfig: {
+                  functionCallingConfig: {
+                    mode: FunctionCallingConfigMode.AUTO,
+                  },
+                },
+                thinkingConfig: {
+                  thinkingBudget: 2048,
                 },
               },
-              thinkingConfig: {
-                thinkingBudget: 2048,
-              },
-            },
-          });
+            })
+          );
 
           const candidate = response.candidates?.[0];
           if (!candidate?.content?.parts) break;
