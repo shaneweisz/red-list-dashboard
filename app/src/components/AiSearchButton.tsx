@@ -7,6 +7,57 @@ interface ReasoningStep {
   text: string;
 }
 
+const EXAMPLE_CATEGORIES = [
+  {
+    label: "Reassessment triage",
+    examples: [
+      "outdated mammals with many new GBIF observations",
+      "species overdue for reassessment with declining populations",
+      "old assessments with 10K+ new observations, sorted by % new",
+    ],
+  },
+  {
+    label: "Data gaps",
+    examples: [
+      "data deficient freshwater fish in Southeast Asia",
+      "DD species that now have over 1000 GBIF observations",
+      "species with no GBIF observations at all",
+    ],
+  },
+  {
+    label: "Threats & conservation",
+    examples: [
+      "species threatened by agriculture in the Amazon",
+      "coral species affected by climate change",
+      "mammals threatened by hunting in Central Africa",
+    ],
+  },
+  {
+    label: "Category change candidates",
+    examples: [
+      "near threatened species with declining populations",
+      "LC species with very few observations",
+      "vulnerable migratory birds",
+    ],
+  },
+  {
+    label: "Assessor & region queries",
+    examples: [
+      "plant assessments by Steve Bachman",
+      "reptile assessors in the Caribbean",
+      "who reviews amphibians in Madagascar",
+    ],
+  },
+  {
+    label: "Explore & discover",
+    examples: [
+      "a random endangered bird from South Africa",
+      "critically endangered marine mammals",
+      "extinct in the wild species",
+    ],
+  },
+];
+
 export function AiSearchButton() {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -14,6 +65,7 @@ export function AiSearchButton() {
   const [error, setError] = useState<string | null>(null);
   const [steps, setSteps] = useState<ReasoningStep[]>([]);
   const [explanation, setExplanation] = useState<string | null>(null);
+  const [showExamples, setShowExamples] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const stepsEndRef = useRef<HTMLDivElement>(null);
@@ -57,16 +109,32 @@ export function AiSearchButton() {
     setError(null);
     setSteps([]);
     setExplanation(null);
+    setShowExamples(false);
   }, []);
+
+  function submitQuery(q: string) {
+    setQuery(q);
+    setShowExamples(false);
+    // Trigger submit on next tick after state updates
+    requestAnimationFrame(() => {
+      doSubmit(q);
+    });
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!query.trim() || loading) return;
+    doSubmit(query.trim());
+  }
+
+  async function doSubmit(q: string) {
+    if (!q || loading) return;
 
     setLoading(true);
     setError(null);
     setSteps([]);
     setExplanation(null);
+    setShowExamples(false);
 
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -76,7 +144,7 @@ export function AiSearchButton() {
       const res = await fetch("/api/ai-search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: query.trim() }),
+        body: JSON.stringify({ query: q }),
         signal: controller.signal,
       });
 
@@ -144,7 +212,6 @@ export function AiSearchButton() {
       }
       case "tool_result": {
         const result = data.result as string;
-        // Truncate long results for display
         const display = result.length > 300 ? result.slice(0, 300) + "…" : result;
         setSteps((prev) => [...prev, { type: "tool_result", text: display }]);
         break;
@@ -153,7 +220,6 @@ export function AiSearchButton() {
         const qs = data.queryString as string;
         const expl = data.explanation as string;
         setExplanation(expl);
-        // Navigate
         window.history.pushState(null, "", "/" + qs);
         window.dispatchEvent(new PopStateEvent("popstate"));
         setLoading(false);
@@ -212,11 +278,21 @@ export function AiSearchButton() {
       {isOpen && (
         <div className="absolute right-0 z-50 mt-2 w-80 sm:w-[26rem] rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 shadow-xl">
           <div className="px-3 pt-3 pb-2">
-            <p className="text-xs font-medium text-violet-600 dark:text-violet-400 mb-1.5">
-              AI Search
-            </p>
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-xs font-medium text-violet-600 dark:text-violet-400">
+                AI Search
+              </p>
+              {!hasActivity && (
+                <button
+                  onClick={() => setShowExamples(!showExamples)}
+                  className="text-[11px] text-zinc-400 dark:text-zinc-500 hover:text-violet-500 dark:hover:text-violet-400 transition-colors"
+                >
+                  {showExamples ? "Hide examples" : "Show examples"}
+                </button>
+              )}
+            </div>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-2">
-              Describe what you&apos;re looking for in plain English.
+              Describe what you&apos;re looking for in plain English — filter by taxa, region, threat, assessor, GBIF data, and more.
             </p>
             <form onSubmit={handleSubmit} className="flex gap-1.5">
               <input
@@ -224,7 +300,7 @@ export function AiSearchButton() {
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder='e.g. "threatened frogs in South America"'
+                placeholder='e.g. "DD freshwater fish with 1000+ new observations"'
                 disabled={loading}
                 className="flex-1 min-w-0 px-3 py-1.5 text-sm rounded-md border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-violet-400 dark:focus:ring-violet-500 disabled:opacity-50"
               />
@@ -267,9 +343,34 @@ export function AiSearchButton() {
               </div>
             )}
 
-            {!hasActivity && (
+            {/* Examples panel */}
+            {showExamples && !hasActivity && (
+              <div className="mt-2 max-h-64 overflow-y-auto rounded-md border border-zinc-100 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900">
+                <div className="px-2 py-1.5 space-y-2">
+                  {EXAMPLE_CATEGORIES.map((cat) => (
+                    <div key={cat.label}>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-0.5">
+                        {cat.label}
+                      </p>
+                      {cat.examples.map((ex) => (
+                        <button
+                          key={ex}
+                          onClick={() => submitQuery(ex)}
+                          className="block w-full text-left text-[11px] px-1.5 py-0.5 rounded text-zinc-600 dark:text-zinc-300 hover:bg-violet-50 dark:hover:bg-violet-900/30 hover:text-violet-700 dark:hover:text-violet-300 transition-colors"
+                        >
+                          &ldquo;{ex}&rdquo;
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Compact hints when examples panel is closed */}
+            {!hasActivity && !showExamples && (
               <div className="mt-2 text-[11px] text-zinc-400 dark:text-zinc-500 leading-relaxed">
-                Try: &ldquo;plant assessments by Steve Bachman&rdquo;, &ldquo;a random bird from South Africa&rdquo;, &ldquo;outdated moths with many new GBIF observations&rdquo;
+                Supports reassessment triage, data gaps, threats, assessor lookup, random species, and more.
               </div>
             )}
           </div>

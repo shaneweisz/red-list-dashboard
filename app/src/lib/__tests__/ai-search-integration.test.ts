@@ -205,6 +205,176 @@ describeIfKey("AI Search integration (Gemini)", () => {
     const countries = (params.get("countries") || "").split(",");
     expect(countries).toContain("AU");
   }, TIMEOUT);
+
+  // ── Reassessment triage ─────────────────────────────────────────────
+
+  it("triage: outdated species with many new observations sorted by % new", async () => {
+    const result = await runAiSearch(
+      "old assessments with 10K+ new GBIF observations, sorted by percentage new",
+      API_KEY!,
+      opts,
+    );
+
+    console.log("[triage: outdated + high obs]", result.queryString, "|", result.explanation);
+    logToolCalls(result);
+
+    const params = parseQs(result.queryString);
+    expect(result.queryString).toMatch(/^\?/);
+
+    // Should have outdated year ranges
+    const years = params.get("years") || "";
+    expect(years).toMatch(/20\+|11-20/);
+
+    // Should filter to high observation ranges
+    expectParamContainsAny(params, "obsRanges", ["10K+", "1K-10K"]);
+
+    // Should sort by pctNewGbif
+    expect(params.get("sort")).toBe("pctNewGbif");
+  }, TIMEOUT);
+
+  // ── Data gap identification ─────────────────────────────────────────
+
+  it("data gaps: DD freshwater fish in Southeast Asia", async () => {
+    const result = await runAiSearch(
+      "data deficient freshwater fish in Southeast Asia",
+      API_KEY!,
+      opts,
+    );
+
+    console.log("[DD freshwater fish SEA]", result.queryString, "|", result.explanation);
+    logToolCalls(result);
+
+    const params = parseQs(result.queryString);
+    expect(result.queryString).toMatch(/^\?/);
+
+    expectParamContainsAny(params, "taxa", ["fishes"]);
+    expectParamContainsAny(params, "categories", ["DD"]);
+    expectParamContainsAny(params, "systems", ["Freshwater"]);
+
+    // Should have SE Asian country codes
+    const countries = (params.get("countries") || "").split(",");
+    const seAsia = ["BN", "ID", "KH", "LA", "MM", "MY", "PH", "SG", "TH", "TL", "VN"];
+    const hasSEA = countries.some((c) => seAsia.includes(c));
+    expect(hasSEA, `countries should include SE Asian codes, got: ${countries.join(",")}`).toBe(true);
+  }, TIMEOUT);
+
+  it("data gaps: DD species with many new observations", async () => {
+    const result = await runAiSearch(
+      "data deficient species that now have over 1000 GBIF observations",
+      API_KEY!,
+      opts,
+    );
+
+    console.log("[DD with 1K+ obs]", result.queryString, "|", result.explanation);
+    logToolCalls(result);
+
+    const params = parseQs(result.queryString);
+    expect(result.queryString).toMatch(/^\?/);
+
+    expectParamContainsAny(params, "categories", ["DD"]);
+    expectParamContainsAny(params, "obsRanges", ["1K-10K", "10K+"]);
+  }, TIMEOUT);
+
+  it("data gaps: species with zero observations", async () => {
+    const result = await runAiSearch(
+      "species with no GBIF observations at all",
+      API_KEY!,
+      opts,
+    );
+
+    console.log("[zero obs]", result.queryString, "|", result.explanation);
+    logToolCalls(result);
+
+    const params = parseQs(result.queryString);
+    expect(result.queryString).toMatch(/^\?/);
+
+    expectParamContainsAny(params, "obsRanges", ["0"]);
+  }, TIMEOUT);
+
+  // ── Threat-focused queries ──────────────────────────────────────────
+
+  it("threats: species threatened by agriculture in South America", async () => {
+    const result = await runAiSearch(
+      "species threatened by agriculture in the Amazon",
+      API_KEY!,
+      opts,
+    );
+
+    console.log("[agriculture Amazon]", result.queryString, "|", result.explanation);
+    logToolCalls(result);
+
+    const params = parseQs(result.queryString);
+    expect(result.queryString).toMatch(/^\?/);
+
+    // Threat code 2 = Agriculture (or sub-codes 2.1, 2.2, 2.3, 2.4)
+    const threats = (params.get("threats") || "").split(",");
+    const hasAgri = threats.some((t) => t === "2" || t.startsWith("2."));
+    expect(hasAgri, `threats should include agriculture codes, got: ${threats.join(",")}`).toBe(true);
+
+    // Should include SA country codes (Amazon region)
+    const countries = (params.get("countries") || "").split(",");
+    const amazonCountries = ["BR", "CO", "PE", "EC", "BO", "VE", "GY", "SR", "GF"];
+    const hasAmazon = countries.some((c) => amazonCountries.includes(c));
+    expect(hasAmazon, `countries should include Amazon-region codes`).toBe(true);
+  }, TIMEOUT);
+
+  it("threats: mammals threatened by hunting in Central Africa", async () => {
+    const result = await runAiSearch(
+      "mammals threatened by hunting in Central Africa",
+      API_KEY!,
+      opts,
+    );
+
+    console.log("[hunting Central Africa]", result.queryString, "|", result.explanation);
+    logToolCalls(result);
+
+    const params = parseQs(result.queryString);
+    expect(result.queryString).toMatch(/^\?/);
+
+    expectParamContainsAny(params, "taxa", ["mammalia"]);
+
+    // Threat 5.1 = Hunting & trapping, or 5 = Harvesting
+    const threats = (params.get("threats") || "").split(",");
+    const hasHunting = threats.some((t) => t === "5" || t === "5.1");
+    expect(hasHunting, `threats should include hunting codes, got: ${threats.join(",")}`).toBe(true);
+  }, TIMEOUT);
+
+  // ── Category change candidates ──────────────────────────────────────
+
+  it("category change: NT species with declining populations", async () => {
+    const result = await runAiSearch(
+      "near threatened species with declining populations",
+      API_KEY!,
+      opts,
+    );
+
+    console.log("[NT declining]", result.queryString, "|", result.explanation);
+    logToolCalls(result);
+
+    const params = parseQs(result.queryString);
+    expect(result.queryString).toMatch(/^\?/);
+
+    expectParamContainsAny(params, "categories", ["NT"]);
+    expectParamContainsAny(params, "trends", ["Decreasing"]);
+  }, TIMEOUT);
+
+  // ── Explore & discover ──────────────────────────────────────────────
+
+  it("explore: extinct in the wild species", async () => {
+    const result = await runAiSearch(
+      "extinct in the wild species",
+      API_KEY!,
+      opts,
+    );
+
+    console.log("[EW species]", result.queryString, "|", result.explanation);
+    logToolCalls(result);
+
+    const params = parseQs(result.queryString);
+    expect(result.queryString).toMatch(/^\?/);
+
+    expectParamContainsAny(params, "categories", ["EW"]);
+  }, TIMEOUT);
 });
 
 function logToolCalls(result: AiSearchResult) {
