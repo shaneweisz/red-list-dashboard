@@ -39,8 +39,8 @@ describe("parseParams", () => {
   });
 
   it("parses year ranges", () => {
-    const result = parseParams("?years=0-1+years,11-20+years");
-    expect(result.yearRanges).toEqual(new Set(["0-1 years", "11-20 years"]));
+    const result = parseParams("?years=%3C1+year,11-20+years");
+    expect(result.yearRanges).toEqual(new Set(["<1 year", "11-20 years"]));
   });
 
   it("parses countries", () => {
@@ -205,9 +205,9 @@ describe("buildQs", () => {
   });
 
   it("includes year ranges", () => {
-    const qs = buildQs({ ...emptyState, yearRanges: new Set(["0-1 years"]) });
+    const qs = buildQs({ ...emptyState, yearRanges: new Set(["<1 year"]) });
     const params = new URLSearchParams(qs);
-    expect(params.get("years")).toBe("0-1 years");
+    expect(params.get("years")).toBe("<1 year");
   });
 
   it("includes search", () => {

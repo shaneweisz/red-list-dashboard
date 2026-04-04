@@ -639,8 +639,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     const yearsSince = currentYr - new Date(assessmentDate).getFullYear();
     for (const range of yearRanges) {
       switch (range) {
-        case "0-1 years": if (yearsSince <= 1) return true; break;
-        case "2-5 years": if (yearsSince >= 2 && yearsSince <= 5) return true; break;
+        case "<1 year": if (yearsSince < 1) return true; break;
+        case "1-5 years": if (yearsSince >= 1 && yearsSince <= 5) return true; break;
         case "6-10 years": if (yearsSince >= 6 && yearsSince <= 10) return true; break;
         case "11-20 years": if (yearsSince >= 11 && yearsSince <= 20) return true; break;
         case "20+ years": if (yearsSince > 20) return true; break;
@@ -938,8 +938,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const assessmentYearData = useMemo(() => {
     const currentYr = new Date().getFullYear();
     const ranges = [
-      { range: "0-1 years", shortRange: "0-1y", count: 0, minYear: 0 },
-      { range: "2-5 years", shortRange: "2-5y", count: 0, minYear: 2 },
+      { range: "<1 year", shortRange: "<1y", count: 0, minYear: 0 },
+      { range: "1-5 years", shortRange: "1-5y", count: 0, minYear: 1 },
       { range: "6-10 years", shortRange: "6-10y", count: 0, minYear: 6 },
       { range: "11-20 years", shortRange: "11-20y", count: 0, minYear: 11 },
       { range: "20+ years", shortRange: ">20y", count: 0, minYear: 21 },
@@ -960,7 +960,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       if (!matchesAssessorsFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       const diff = currentYr - new Date(s.assessment_date).getFullYear();
-      if (diff <= 1) ranges[0].count++;
+      if (diff < 1) ranges[0].count++;
       else if (diff <= 5) ranges[1].count++;
       else if (diff <= 10) ranges[2].count++;
       else if (diff <= 20) ranges[3].count++;
@@ -1839,7 +1839,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   const msPerYear = 365.25 * 24 * 60 * 60 * 1000;
                   const elapsed = Date.now() - new Date(singleSpecies.assessment_date).getTime();
                   const yearsSince = Math.floor(elapsed / msPerYear);
-                  const range = yearsSince <= 1 ? "0-1y" : yearsSince <= 5 ? "2-5y" : yearsSince <= 10 ? "6-10y" : yearsSince <= 20 ? "11-20y" : ">20y";
+                  const range = yearsSince < 1 ? "<1y" : yearsSince <= 5 ? "1-5y" : yearsSince <= 10 ? "6-10y" : yearsSince <= 20 ? "11-20y" : ">20y";
                   return (
                     <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">
                       {range}
