@@ -1689,11 +1689,11 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
 
           {/* Single species header — skeleton while loading */}
           {!isSingleSpecies && urlSpecies != null && speciesLoading && (
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 flex items-center gap-3 animate-pulse">
-              <div className="w-12 h-12 bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-5 py-4 flex items-center gap-4 animate-pulse">
+              <div className="w-24 h-24 bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
               <div className="min-w-0 flex-1 space-y-2">
-                <div className="h-4 bg-zinc-200 dark:bg-zinc-700 rounded w-48" />
-                <div className="h-3 bg-zinc-200 dark:bg-zinc-700 rounded w-32" />
+                <div className="h-5 bg-zinc-200 dark:bg-zinc-700 rounded w-48" />
+                <div className="h-4 bg-zinc-200 dark:bg-zinc-700 rounded w-32" />
               </div>
             </div>
           )}
@@ -1702,41 +1702,25 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
             const details = speciesDetails[singleSpecies.id];
             return (
               <div
-                className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 flex items-center gap-3"
+                className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-5 py-4 flex items-center gap-4"
               >
                 {details?.inatDefaultImage === undefined ? (
-                  <div className="w-12 h-12 bg-zinc-100 dark:bg-zinc-800 rounded flex-shrink-0 flex items-center justify-center">
-                    <span className="inline-block animate-spin h-4 w-4 border-2 border-zinc-400 border-t-transparent rounded-full" />
+                  <div className="w-24 h-24 bg-zinc-100 dark:bg-zinc-800 rounded flex-shrink-0 flex items-center justify-center">
+                    <span className="inline-block animate-spin h-5 w-5 border-2 border-zinc-400 border-t-transparent rounded-full" />
                   </div>
                 ) : details?.inatDefaultImage?.squareUrl ? (
                   <img
                     src={details.inatDefaultImage.mediumUrl || details.inatDefaultImage.squareUrl}
                     alt=""
-                    className="w-12 h-12 object-cover rounded flex-shrink-0 cursor-pointer hover:ring-2 hover:ring-red-400"
-                    onMouseEnter={(e) => {
-                      const img = e.currentTarget;
-                      const rect = img.getBoundingClientRect();
-                      const preview = document.getElementById('image-preview');
-                      if (preview) {
-                        (preview as HTMLImageElement).src = details.inatDefaultImage?.mediumUrl || details.inatDefaultImage?.squareUrl || '';
-                        preview.style.display = 'block';
-                        const showBelow = rect.bottom + 192 + 8 < window.innerHeight;
-                        preview.style.top = showBelow ? `${rect.bottom + 8}px` : `${rect.top - 192 - 8}px`;
-                        preview.style.left = `${rect.left}px`;
-                      }
-                    }}
-                    onMouseLeave={() => {
-                      const preview = document.getElementById('image-preview');
-                      if (preview) preview.style.display = 'none';
-                    }}
+                    className="w-24 h-24 object-cover rounded flex-shrink-0"
                   />
                 ) : (
-                  <div className="w-12 h-12 bg-zinc-100 dark:bg-zinc-800 rounded flex items-center justify-center text-zinc-400 flex-shrink-0">
-                    <TaxaIcon taxonId={singleSpecies.taxon_id || "all"} size={24} />
+                  <div className="w-24 h-24 bg-zinc-100 dark:bg-zinc-800 rounded flex items-center justify-center text-zinc-400 flex-shrink-0">
+                    <TaxaIcon taxonId={singleSpecies.taxon_id || "all"} size={40} />
                   </div>
                 )}
                 <div className="min-w-0">
-                  <div className="italic font-semibold text-zinc-900 dark:text-zinc-100 text-base">
+                  <div className="italic font-semibold text-zinc-900 dark:text-zinc-100 text-lg">
                     {singleSpecies.scientific_name}
                   </div>
                   {singleSpecies.common_name && (
