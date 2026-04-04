@@ -1687,6 +1687,40 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       {selectedTaxa.size > 0 && (
       <div className="space-y-3">
 
+          {/* Single species header */}
+          {isSingleSpecies && singleSpecies && (() => {
+            const details = speciesDetails[singleSpecies.id];
+            return (
+              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 flex items-center gap-3">
+                {details?.inatDefaultImage === undefined ? (
+                  <div className="w-12 h-12 bg-zinc-100 dark:bg-zinc-800 rounded flex-shrink-0 flex items-center justify-center">
+                    <span className="inline-block animate-spin h-4 w-4 border-2 border-zinc-400 border-t-transparent rounded-full" />
+                  </div>
+                ) : details?.inatDefaultImage?.squareUrl ? (
+                  <img
+                    src={details.inatDefaultImage.mediumUrl || details.inatDefaultImage.squareUrl}
+                    alt=""
+                    className="w-12 h-12 object-cover rounded flex-shrink-0"
+                  />
+                ) : (
+                  <div className="w-12 h-12 bg-zinc-100 dark:bg-zinc-800 rounded flex items-center justify-center text-zinc-400 flex-shrink-0">
+                    <TaxaIcon taxonId={singleSpecies.taxon_id || "all"} size={24} />
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <div className="italic font-semibold text-zinc-900 dark:text-zinc-100 text-base">
+                    {singleSpecies.scientific_name}
+                  </div>
+                  {singleSpecies.common_name && (
+                    <div className="text-zinc-500 dark:text-zinc-400 text-sm">
+                      {singleSpecies.common_name}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Charts row 1: bar charts (new-assessments mode only shows GBIF Observations) */}
           {!isNewAssessments && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
