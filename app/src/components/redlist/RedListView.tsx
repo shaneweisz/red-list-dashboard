@@ -749,13 +749,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     const allSpecies = [...(speciesByTaxon[selectedTaxa.size === 1 ? [...selectedTaxa][0] : "all"] ?? []), ...neSpecies];
     if (allSpecies.some(s => s.id === urlSpecies)) {
       setSingleSpeciesPreview(null);
-      // Scroll directly (the auto-navigate effect may not re-run if deps haven't changed)
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          const row = document.querySelector('[data-selected-species]');
-          if (row) row.scrollIntoView({ behavior: "smooth", block: "start" });
-        });
-      });
       return;
     }
 
@@ -804,19 +797,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       setSingleSpeciesPreview(null);
     }
   }, [assessedSpecies, neSpecies, singleSpeciesPreview]);
-
-  // Scroll preview row into view after it renders (double-rAF for reliable post-paint timing)
-  useEffect(() => {
-    if (!singleSpeciesPreview) return;
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const row = document.querySelector('[data-selected-species]');
-        if (row) {
-          row.scrollIntoView({ behavior: "smooth", block: "start" });
-        }
-      });
-    });
-  }, [singleSpeciesPreview]);
 
   const [stackedDetailView, setStackedDetailView] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -1400,13 +1380,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       const page = Math.floor(idx / PAGE_SIZE) + 1;
       setCurrentPage(page);
       urlSpeciesHandledRef.current = true;
-      // Scroll after React renders the new page (double-rAF for post-paint reliability)
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          const row = document.querySelector('[data-selected-species]');
-          if (row) row.scrollIntoView({ behavior: "smooth", block: "start" });
-        });
-      });
     }
   }, [sortedSpecies, selectedSpeciesKey, isNewAssessments, PAGE_SIZE]);
 
@@ -2610,7 +2583,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 return (
                   <React.Fragment key={s.id}>
                   <tr
-                    {...(selectedSpeciesKey === speciesKey ? { 'data-selected-species': true } : {})}
                     className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer ${selectedSpeciesKey === speciesKey ? "bg-zinc-100 dark:bg-zinc-800" : ""} ${isDragging ? "opacity-50" : ""} ${isDragOver ? "border-t-2 border-amber-500" : ""}`}
                     onClick={() => { setSelectedSpeciesKey(selectedSpeciesKey === speciesKey ? null : speciesKey); }}
                     draggable={isPinned && showOnlyStarred}
