@@ -1757,7 +1757,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Risk Category</span>
                               </div>
               <div className="flex-1 min-h-[150px] flex items-center justify-center">
-                {speciesLoading && assessedSpecies.length === 0 ? (
+                {speciesLoading && assessedSpecies.length === 0 && categoryDataWithPercent.every(d => d.count === 0) ? (
                   <Spinner />
                 ) : isSingleSpecies && singleSpecies ? (
                   <span
@@ -1799,7 +1799,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">GBIF Observations <GbifInfoTooltip /></span>
                               </div>
               <div className="flex-1 min-h-[150px] flex items-center justify-center">
-                {speciesLoading && assessedSpecies.length === 0 ? (
+                {speciesLoading && assessedSpecies.length === 0 && gbifObsData.every(d => d.count === 0) ? (
                   <Spinner />
                 ) : isSingleSpecies && singleSpecies ? (() => {
                   const obs = singleSpecies.gbif_occurrence_count ?? 0;
@@ -1829,7 +1829,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Years Since Assessed</span>
                               </div>
               <div className="flex-1 min-h-[150px] flex items-center justify-center">
-                {speciesLoading && assessedSpecies.length === 0 ? (
+                {speciesLoading && assessedSpecies.length === 0 && assessmentYearData.every(d => d.count === 0) ? (
                   <Spinner />
                 ) : isSingleSpecies && singleSpecies ? (() => {
                   if (!singleSpecies.assessment_date) return (
@@ -1864,7 +1864,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Country Map */}
             <div>
-              {speciesLoading && assessedSpecies.length === 0 ? (
+              {speciesLoading && assessedSpecies.length === 0 && !Object.keys(countryStatsForMap).length ? (
                 <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 min-h-[320px] flex flex-col">
                   <div className="flex items-center justify-between mb-1">
                     <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
@@ -1912,7 +1912,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">GBIF Observations <GbifInfoTooltip /></span>
                 </div>
                 <div style={{ height: 180 }} className="flex items-center justify-center">
-                  {speciesLoading && assessedSpecies.length === 0 ? (
+                  {speciesLoading && assessedSpecies.length === 0 && gbifObsData.every(d => d.count === 0) ? (
                     <Spinner />
                   ) : (
                     <FilterBarChart
