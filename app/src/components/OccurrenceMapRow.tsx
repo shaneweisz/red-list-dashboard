@@ -134,10 +134,13 @@ function dateToNumeric(eventDate?: string | null, year?: number | null): number 
 }
 
 // Fixed absolute color scale so the same year always maps to the same color
-// across all species. Piecewise: 1900→10-years-ago is amber-to-yellow,
-// last 10 years is green range only.
+// across all species. Three segments:
+//   20+ years ago  → amber range   (hue 30–50)
+//   10–20 years ago → yellow range  (hue 55–80)
+//   last 10 years  → green range   (hue 105–142)
 const COLOR_SCALE_MIN_TS = new Date(1900, 0, 1).getTime();
 const COLOR_SCALE_MAX_TS = new Date(new Date().getFullYear(), 0, 1).getTime();
+const COLOR_SCALE_MID_TS = new Date(new Date().getFullYear() - 20, 0, 1).getTime();
 const COLOR_SCALE_RECENT_TS = new Date(new Date().getFullYear() - 10, 0, 1).getTime();
 
 // Date-based color interpolation using a fixed absolute piecewise scale
@@ -145,11 +148,16 @@ function dateToColor(dateNum: number): { stroke: string; fill: string } {
   const clamped = Math.max(COLOR_SCALE_MIN_TS, Math.min(COLOR_SCALE_MAX_TS, dateNum));
   let hue: number;
   let sat: number;
-  if (clamped <= COLOR_SCALE_RECENT_TS) {
-    // Old segment: amber(30) → yellow(80)
-    const t = (clamped - COLOR_SCALE_MIN_TS) / (COLOR_SCALE_RECENT_TS - COLOR_SCALE_MIN_TS);
-    hue = Math.round(30 + t * 50);
-    sat = Math.round(60 + t * 10);
+  if (clamped <= COLOR_SCALE_MID_TS) {
+    // Old segment (20+ years): amber(30) → amber-yellow(50)
+    const t = (clamped - COLOR_SCALE_MIN_TS) / (COLOR_SCALE_MID_TS - COLOR_SCALE_MIN_TS);
+    hue = Math.round(30 + t * 20);
+    sat = Math.round(60 + t * 5);
+  } else if (clamped <= COLOR_SCALE_RECENT_TS) {
+    // Middle segment (10–20 years): yellow(55) → yellow(80)
+    const t = (clamped - COLOR_SCALE_MID_TS) / (COLOR_SCALE_RECENT_TS - COLOR_SCALE_MID_TS);
+    hue = Math.round(55 + t * 25);
+    sat = Math.round(65 + t * 5);
   } else {
     // Recent 10 years: yellow-green(105) → green(142)
     const t = (clamped - COLOR_SCALE_RECENT_TS) / (COLOR_SCALE_MAX_TS - COLOR_SCALE_RECENT_TS);
