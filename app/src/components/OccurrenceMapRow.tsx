@@ -134,16 +134,28 @@ function dateToNumeric(eventDate?: string | null, year?: number | null): number 
 }
 
 // Fixed absolute color scale so the same year always maps to the same color
-// across all species. Range: 1900 → current year. Last ~10 years are green.
+// across all species. Piecewise: 1900→10-years-ago is amber-to-yellow,
+// last 10 years is green range only.
 const COLOR_SCALE_MIN_TS = new Date(1900, 0, 1).getTime();
 const COLOR_SCALE_MAX_TS = new Date(new Date().getFullYear(), 0, 1).getTime();
+const COLOR_SCALE_RECENT_TS = new Date(new Date().getFullYear() - 10, 0, 1).getTime();
 
-// Date-based color interpolation using a fixed absolute scale (oldest=amber, newest=green)
+// Date-based color interpolation using a fixed absolute piecewise scale
 function dateToColor(dateNum: number): { stroke: string; fill: string } {
-  const t = Math.max(0, Math.min(1, (dateNum - COLOR_SCALE_MIN_TS) / (COLOR_SCALE_MAX_TS - COLOR_SCALE_MIN_TS)));
-  // Interpolate hue from 30 (amber) to 142 (green)
-  const hue = Math.round(30 + t * 112);
-  const sat = Math.round(60 + t * 20);
+  const clamped = Math.max(COLOR_SCALE_MIN_TS, Math.min(COLOR_SCALE_MAX_TS, dateNum));
+  let hue: number;
+  let sat: number;
+  if (clamped <= COLOR_SCALE_RECENT_TS) {
+    // Old segment: amber(30) → yellow(80)
+    const t = (clamped - COLOR_SCALE_MIN_TS) / (COLOR_SCALE_RECENT_TS - COLOR_SCALE_MIN_TS);
+    hue = Math.round(30 + t * 50);
+    sat = Math.round(60 + t * 10);
+  } else {
+    // Recent 10 years: yellow-green(105) → green(142)
+    const t = (clamped - COLOR_SCALE_RECENT_TS) / (COLOR_SCALE_MAX_TS - COLOR_SCALE_RECENT_TS);
+    hue = Math.round(105 + t * 37);
+    sat = Math.round(70 + t * 10);
+  }
   return {
     stroke: `hsl(${hue}, ${sat}%, 30%)`,
     fill: `hsl(${hue}, ${sat}%, 50%)`,
