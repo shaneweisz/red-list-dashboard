@@ -1409,7 +1409,7 @@ export default function OccurrenceMapRow({
                     className="px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-[10px] text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"
                     title={colorByDate ? "Color by before/after assessment" : "Color by date"}
                   >
-                    {colorByDate ? "Color by before/after assess. date" : "By date"}
+                    {colorByDate ? "Color by before/after assess. date" : "Color by date"}
                   </button>
                   {!splitView && (
                     <button
