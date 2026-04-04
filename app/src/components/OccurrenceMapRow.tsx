@@ -134,32 +134,19 @@ function dateToNumeric(eventDate?: string | null, year?: number | null): number 
 }
 
 // Fixed absolute color scale so the same year always maps to the same color
-// across all species. Three segments with wide hue ranges:
-//   20+ years ago   → red-orange to amber  (hue 10–40)
-//   10–20 years ago → amber to yellow      (hue 45–85)
-//   last 10 years   → yellow-green to green (hue 95–142)
-const COLOR_SCALE_MIN_TS = new Date(1900, 0, 1).getTime();
-const COLOR_SCALE_MAX_TS = new Date(new Date().getFullYear(), 0, 1).getTime();
-const COLOR_SCALE_MID_TS = new Date(new Date().getFullYear() - 20, 0, 1).getTime();
-const COLOR_SCALE_RECENT_TS = new Date(new Date().getFullYear() - 10, 0, 1).getTime();
+// across all species. Simple continuous hue gradient: red(0) → green(130).
+// Anchored so that the last ~40 years span the full visible range.
+const COLOR_SCALE_MIN_YEAR = new Date().getFullYear() - 40;
+const COLOR_SCALE_MAX_YEAR = new Date().getFullYear();
+const COLOR_SCALE_MIN_TS = new Date(COLOR_SCALE_MIN_YEAR, 0, 1).getTime();
+const COLOR_SCALE_MAX_TS = new Date(COLOR_SCALE_MAX_YEAR, 0, 1).getTime();
 
-// Date-based color interpolation — pure hue gradient, constant lightness
+// Date-based color interpolation — continuous hue gradient
 function dateToColor(dateNum: number): { stroke: string; fill: string } {
-  const clamped = Math.max(COLOR_SCALE_MIN_TS, Math.min(COLOR_SCALE_MAX_TS, dateNum));
-  let hue: number;
-  if (clamped <= COLOR_SCALE_MID_TS) {
-    // Old segment (20+ years): red-orange(10) → amber(40)
-    const t = (clamped - COLOR_SCALE_MIN_TS) / (COLOR_SCALE_MID_TS - COLOR_SCALE_MIN_TS);
-    hue = Math.round(10 + t * 30);
-  } else if (clamped <= COLOR_SCALE_RECENT_TS) {
-    // Middle segment (10–20 years): amber(45) → yellow(85)
-    const t = (clamped - COLOR_SCALE_MID_TS) / (COLOR_SCALE_RECENT_TS - COLOR_SCALE_MID_TS);
-    hue = Math.round(45 + t * 40);
-  } else {
-    // Recent 10 years: yellow-green(95) → green(142)
-    const t = (clamped - COLOR_SCALE_RECENT_TS) / (COLOR_SCALE_MAX_TS - COLOR_SCALE_RECENT_TS);
-    hue = Math.round(95 + t * 47);
-  }
+  // Clamp to range; anything older than 40 years gets the reddest color
+  const t = Math.max(0, Math.min(1, (dateNum - COLOR_SCALE_MIN_TS) / (COLOR_SCALE_MAX_TS - COLOR_SCALE_MIN_TS)));
+  // Hue: 0 (red) → 130 (green)
+  const hue = Math.round(t * 130);
   return {
     stroke: `hsl(${hue}, 75%, 30%)`,
     fill: `hsl(${hue}, 75%, 50%)`,
