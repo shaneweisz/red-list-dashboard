@@ -1,21 +1,32 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
+
+interface ReasoningStep {
+  type: "thinking" | "reasoning" | "tool_call" | "tool_result";
+  text: string;
+}
 
 export function AiSearchButton() {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [steps, setSteps] = useState<ReasoningStep[]>([]);
+  const [explanation, setExplanation] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const stepsEndRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Auto-scroll reasoning panel
+  useEffect(() => {
+    stepsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [steps]);
 
   // Focus input when panel opens
   useEffect(() => {
-    if (isOpen) {
-      // Small delay to let the panel render
-      requestAnimationFrame(() => inputRef.current?.focus());
-    }
+    if (isOpen) requestAnimationFrame(() => inputRef.current?.focus());
   }, [isOpen]);
 
   // Close on click outside
@@ -23,26 +34,30 @@ export function AiSearchButton() {
     if (!isOpen) return;
     const handleClick = (e: MouseEvent) => {
       if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-        setError(null);
+        handleClose();
       }
     };
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
-  }, [isOpen]);
+  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Close on Escape
   useEffect(() => {
     if (!isOpen) return;
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setIsOpen(false);
-        setError(null);
-      }
+      if (e.key === "Escape") handleClose();
     };
     document.addEventListener("keydown", handleKey);
     return () => document.removeEventListener("keydown", handleKey);
-  }, [isOpen]);
+  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleClose = useCallback(() => {
+    abortRef.current?.abort();
+    setIsOpen(false);
+    setError(null);
+    setSteps([]);
+    setExplanation(null);
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -50,12 +65,19 @@ export function AiSearchButton() {
 
     setLoading(true);
     setError(null);
+    setSteps([]);
+    setExplanation(null);
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     try {
       const res = await fetch("/api/ai-search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: query.trim() }),
+        signal: controller.signal,
       });
 
       if (!res.ok) {
@@ -63,28 +85,111 @@ export function AiSearchButton() {
         throw new Error(data.error || `Request failed (${res.status})`);
       }
 
-      const { queryString } = await res.json();
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No response stream");
 
-      // Navigate to the generated URL
-      window.history.pushState(null, "", "/" + queryString);
-      window.dispatchEvent(new PopStateEvent("popstate"));
+      const decoder = new TextDecoder();
+      let buffer = "";
 
-      setQuery("");
-      setIsOpen(false);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        let eventType = "";
+        for (const line of lines) {
+          if (line.startsWith("event: ")) {
+            eventType = line.slice(7);
+          } else if (line.startsWith("data: ") && eventType) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              handleSSEEvent(eventType, data);
+            } catch {
+              // skip malformed JSON
+            }
+            eventType = "";
+          }
+        }
+      }
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoading(false);
     }
   }
 
+  function handleSSEEvent(event: string, data: Record<string, unknown>) {
+    switch (event) {
+      case "thinking":
+        setSteps((prev) => [...prev, { type: "thinking", text: data.text as string }]);
+        break;
+      case "reasoning":
+        setSteps((prev) => [...prev, { type: "reasoning", text: data.text as string }]);
+        break;
+      case "tool_call": {
+        const name = data.name as string;
+        const args = data.args as Record<string, unknown>;
+        const argsStr = Object.entries(args)
+          .map(([k, v]) => `${k}: ${JSON.stringify(v)}`)
+          .join(", ");
+        setSteps((prev) => [
+          ...prev,
+          { type: "tool_call", text: `${formatToolName(name)}(${argsStr})` },
+        ]);
+        break;
+      }
+      case "tool_result": {
+        const result = data.result as string;
+        // Truncate long results for display
+        const display = result.length > 300 ? result.slice(0, 300) + "…" : result;
+        setSteps((prev) => [...prev, { type: "tool_result", text: display }]);
+        break;
+      }
+      case "result": {
+        const qs = data.queryString as string;
+        const expl = data.explanation as string;
+        setExplanation(expl);
+        // Navigate
+        window.history.pushState(null, "", "/" + qs);
+        window.dispatchEvent(new PopStateEvent("popstate"));
+        setLoading(false);
+        break;
+      }
+      case "error":
+        setError(data.message as string);
+        setLoading(false);
+        break;
+    }
+  }
+
+  function formatToolName(name: string): string {
+    switch (name) {
+      case "search_species": return "Searching species";
+      case "search_assessors": return "Looking up assessors";
+      case "get_taxonomy_subgroups": return "Checking subgroups";
+      default: return name;
+    }
+  }
+
+  const hasActivity = steps.length > 0 || explanation || error;
+
   return (
     <div ref={panelRef} className="relative">
-      {/* Magic wand toggle button */}
+      {/* Sparkle toggle button */}
       <button
         onClick={() => {
-          setIsOpen(!isOpen);
-          setError(null);
+          if (isOpen) {
+            handleClose();
+          } else {
+            setIsOpen(true);
+            setError(null);
+            setSteps([]);
+            setExplanation(null);
+          }
         }}
         title="AI Search — describe what you're looking for"
         className={`flex items-center justify-center w-8 h-8 rounded-lg border transition-colors ${
@@ -93,14 +198,7 @@ export function AiSearchButton() {
             : "border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-violet-300 dark:hover:border-violet-600 hover:text-violet-500 dark:hover:text-violet-400"
         }`}
       >
-        {/* Sparkles / magic wand icon */}
-        <svg
-          className="h-4 w-4"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={2}
-          viewBox="0 0 24 24"
-        >
+        <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
           <path
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -111,7 +209,7 @@ export function AiSearchButton() {
 
       {/* Dropdown panel */}
       {isOpen && (
-        <div className="absolute right-0 z-50 mt-2 w-80 sm:w-96 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 shadow-xl">
+        <div className="absolute right-0 z-50 mt-2 w-80 sm:w-[26rem] rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 shadow-xl">
           <div className="px-3 pt-3 pb-2">
             <p className="text-xs font-medium text-violet-600 dark:text-violet-400 mb-1.5">
               AI Search
@@ -141,17 +239,73 @@ export function AiSearchButton() {
                 )}
               </button>
             </form>
-            {error && (
-              <p className="mt-2 text-xs text-red-600 dark:text-red-400">
-                {error}
-              </p>
+
+            {/* Reasoning / activity log */}
+            {hasActivity && (
+              <div className="mt-2 max-h-52 overflow-y-auto rounded-md border border-zinc-100 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 text-[11px] leading-relaxed">
+                <div className="px-2 py-1.5 space-y-1">
+                  {steps.map((step, i) => (
+                    <StepRow key={i} step={step} />
+                  ))}
+                  {loading && steps.length > 0 && (
+                    <div className="flex items-center gap-1 text-zinc-400">
+                      <div className="h-3 w-3 rounded-full animate-spin border border-zinc-300 dark:border-zinc-600 border-t-transparent" />
+                      <span>Thinking…</span>
+                    </div>
+                  )}
+                  {explanation && (
+                    <div className="pt-1 border-t border-zinc-200 dark:border-zinc-700 text-emerald-600 dark:text-emerald-400 font-medium">
+                      ✓ {explanation}
+                    </div>
+                  )}
+                  {error && (
+                    <div className="text-red-600 dark:text-red-400">{error}</div>
+                  )}
+                  <div ref={stepsEndRef} />
+                </div>
+              </div>
             )}
-            <div className="mt-2 text-[11px] text-zinc-400 dark:text-zinc-500 leading-relaxed">
-              Try: &ldquo;plant assessments by Steve Bachman&rdquo;, &ldquo;a random bird from South Africa&rdquo;, &ldquo;outdated moth with many new GBIF observations&rdquo;
-            </div>
+
+            {!hasActivity && (
+              <div className="mt-2 text-[11px] text-zinc-400 dark:text-zinc-500 leading-relaxed">
+                Try: &ldquo;plant assessments by Steve Bachman&rdquo;, &ldquo;a random bird from South Africa&rdquo;, &ldquo;outdated moths with many new GBIF observations&rdquo;
+              </div>
+            )}
           </div>
         </div>
       )}
     </div>
   );
+}
+
+function StepRow({ step }: { step: ReasoningStep }) {
+  switch (step.type) {
+    case "thinking":
+      return (
+        <div className="text-zinc-400 dark:text-zinc-500 italic">
+          {step.text}
+        </div>
+      );
+    case "reasoning":
+      return (
+        <div className="text-zinc-600 dark:text-zinc-300">
+          {step.text}
+        </div>
+      );
+    case "tool_call":
+      return (
+        <div className="flex items-start gap-1 text-violet-600 dark:text-violet-400">
+          <svg className="h-3 w-3 mt-0.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+          </svg>
+          <span>{step.text}</span>
+        </div>
+      );
+    case "tool_result":
+      return (
+        <div className="pl-4 text-zinc-500 dark:text-zinc-400 whitespace-pre-wrap break-words font-mono text-[10px]">
+          {step.text}
+        </div>
+      );
+  }
 }
