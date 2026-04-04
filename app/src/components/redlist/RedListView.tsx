@@ -1874,7 +1874,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                     && selectedGrowthForms.size === 0
                     && selectedAssessors.size === 0
                     && selectedReviewers.size === 0
-                    && hasMapFilter === "all"
+                    && hasMapFilter == null
                     && !searchFilter
                     && !showOnlyStarred
                   }
