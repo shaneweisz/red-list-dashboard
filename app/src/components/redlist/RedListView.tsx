@@ -1691,7 +1691,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
           {isSingleSpecies && singleSpecies && (() => {
             const details = speciesDetails[singleSpecies.id];
             return (
-              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 flex items-center gap-3">
+              <div
+                ref={(el) => { if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); }}
+                className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 flex items-center gap-3"
                 {details?.inatDefaultImage === undefined ? (
                   <div className="w-12 h-12 bg-zinc-100 dark:bg-zinc-800 rounded flex-shrink-0 flex items-center justify-center">
                     <span className="inline-block animate-spin h-4 w-4 border-2 border-zinc-400 border-t-transparent rounded-full" />

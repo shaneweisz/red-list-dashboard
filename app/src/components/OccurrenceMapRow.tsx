@@ -135,8 +135,8 @@ function dateToNumeric(eventDate?: string | null, year?: number | null): number 
 
 // Fixed absolute color scale so the same year always maps to the same color
 // across all species. Simple continuous hue gradient: red(0) → green(130).
-// Anchored so that the last ~40 years span the full visible range.
-const COLOR_SCALE_MIN_YEAR = new Date().getFullYear() - 40;
+// Anchored so that the last ~20 years span the full visible range.
+const COLOR_SCALE_MIN_YEAR = new Date().getFullYear() - 20;
 const COLOR_SCALE_MAX_YEAR = new Date().getFullYear();
 const COLOR_SCALE_MIN_TS = new Date(COLOR_SCALE_MIN_YEAR, 0, 1).getTime();
 const COLOR_SCALE_MAX_TS = new Date(COLOR_SCALE_MAX_YEAR, 0, 1).getTime();
