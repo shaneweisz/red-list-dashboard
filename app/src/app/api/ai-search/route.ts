@@ -5,6 +5,7 @@ import {
   geminiTools,
   dispatchToolCall,
 } from "@/lib/ai-search";
+import { getLangfuse } from "@/lib/langfuse";
 
 export async function POST(req: NextRequest) {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -42,6 +43,13 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      const langfuse = getLangfuse();
+      const trace = langfuse?.trace({
+        name: "ai-search",
+        input: { query: query.trim() },
+        tags: ["ai-search"],
+      });
+
       try {
         const ai = new GoogleGenAI({ apiKey });
 
@@ -55,6 +63,7 @@ export async function POST(req: NextRequest) {
         }> = [{ role: "user", parts: [{ text: query.trim() }] }];
 
         for (let i = 0; i < 10; i++) {
+          const genStart = Date.now();
           const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
             contents,
@@ -78,6 +87,22 @@ export async function POST(req: NextRequest) {
           if (!candidate?.content?.parts) break;
 
           const parts = candidate.content.parts;
+
+          // Log the LLM generation to Langfuse
+          const usage = response.usageMetadata;
+          trace?.generation({
+            name: `gemini-turn-${i}`,
+            model: "gemini-2.5-flash",
+            input: i === 0 ? query.trim() : contents.slice(-1),
+            output: parts,
+            startTime: new Date(genStart),
+            endTime: new Date(),
+            usage: usage ? {
+              input: usage.promptTokenCount ?? 0,
+              output: usage.candidatesTokenCount ?? 0,
+              total: usage.totalTokenCount ?? 0,
+            } : undefined,
+          });
 
           for (const part of parts) {
             if ("thought" in part && part.thought && "text" in part && part.text) {
@@ -108,12 +133,16 @@ export async function POST(req: NextRequest) {
             if (name === "generate_url") {
               const qs = (args.query_string as string) || "";
               const explanation = (args.explanation as string) || "";
+              trace?.update({ output: { queryString: qs, explanation } });
               send("result", { queryString: qs, explanation });
+              await langfuse?.flushAsync();
               controller.close();
               return;
             }
 
+            const toolSpan = trace?.span({ name: `tool:${name}`, input: args });
             const result = dispatchToolCall(name, args);
+            toolSpan?.end({ output: { result: result.slice(0, 500) } });
             send("tool_result", { name, result });
             functionResponseParts.push({
               functionResponse: { name, response: { result } },
@@ -123,11 +152,15 @@ export async function POST(req: NextRequest) {
           contents.push({ role: "user", parts: functionResponseParts });
         }
 
+        trace?.update({ output: { error: "No final URL produced" } });
         send("error", { message: "AI did not produce a final URL. Please try rephrasing." });
+        await langfuse?.flushAsync();
         controller.close();
       } catch (e) {
         const message = e instanceof Error ? e.message : "Unknown error";
         console.error("AI search error:", message);
+        trace?.update({ output: { error: message } });
+        await langfuse?.flushAsync();
         send("error", { message: `AI request failed: ${message}` });
         controller.close();
       }
