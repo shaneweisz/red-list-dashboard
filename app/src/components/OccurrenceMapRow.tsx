@@ -133,10 +133,14 @@ function dateToNumeric(eventDate?: string | null, year?: number | null): number 
   return null;
 }
 
-// Date-based color interpolation (oldest=amber, newest=green)
-function dateToColor(dateNum: number, minDate: number, maxDate: number): { stroke: string; fill: string } {
-  if (minDate === maxDate) return { stroke: "#15803d", fill: "#22c55e" };
-  const t = (dateNum - minDate) / (maxDate - minDate); // 0 = oldest, 1 = newest
+// Fixed absolute color scale so the same year always maps to the same color
+// across all species. Range: 1900 → current year. Last ~10 years are green.
+const COLOR_SCALE_MIN_TS = new Date(1900, 0, 1).getTime();
+const COLOR_SCALE_MAX_TS = new Date(new Date().getFullYear(), 0, 1).getTime();
+
+// Date-based color interpolation using a fixed absolute scale (oldest=amber, newest=green)
+function dateToColor(dateNum: number): { stroke: string; fill: string } {
+  const t = Math.max(0, Math.min(1, (dateNum - COLOR_SCALE_MIN_TS) / (COLOR_SCALE_MAX_TS - COLOR_SCALE_MIN_TS)));
   // Interpolate hue from 30 (amber) to 142 (green)
   const hue = Math.round(30 + t * 112);
   const sat = Math.round(60 + t * 20);
@@ -1101,7 +1105,7 @@ export default function OccurrenceMapRow({
       } else if (colorByDate) {
         const dNum = dateToNumeric(feature.properties.eventDate, feature.properties.year);
         if (dNum != null) {
-          const colors = dateToColor(dNum, minDateNum, maxDateNum);
+          const colors = dateToColor(dNum);
           strokeColor = colors.stroke;
           fillColor = colors.fill;
         } else {
@@ -1135,7 +1139,7 @@ export default function OccurrenceMapRow({
       };
     });
     return { type: "FeatureCollection", features };
-  }, [hoveredType, hoveredYear, hoveredFeature, colorByDate, minDateNum, maxDateNum, assessmentYear]);
+  }, [hoveredType, hoveredYear, hoveredFeature, colorByDate, assessmentYear]);
 
   // FitBounds helper using map ref
   const fitMapToBbox = useCallback((bbox: [number, number, number, number]) => {
@@ -1370,12 +1374,12 @@ export default function OccurrenceMapRow({
               ) : colorByDate ? (
                 <>
                   <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded-full" style={{ background: "hsl(30, 60%, 50%)", border: "2px solid hsl(30, 60%, 30%)" }} />
+                    <div className="w-3 h-3 rounded-full" style={{ background: dateToColor(minDateNum).fill, border: `2px solid ${dateToColor(minDateNum).stroke}` }} />
                     <span>{minDateLabel}</span>
                   </div>
                   <span>→</span>
                   <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded-full" style={{ background: "hsl(142, 80%, 50%)", border: "2px solid hsl(142, 80%, 30%)" }} />
+                    <div className="w-3 h-3 rounded-full" style={{ background: dateToColor(maxDateNum).fill, border: `2px solid ${dateToColor(maxDateNum).stroke}` }} />
                     <span>{maxDateLabel}</span>
                   </div>
                   <span className="text-zinc-400">({panelOccurrences.length})</span>
