@@ -746,7 +746,7 @@ export default function OccurrenceMapRow({
 
   // Advanced filter state
   const [maxUncertainty, setMaxUncertainty] = useState<number | null>(50000);
-  const [colorByDate, setColorByDate] = useState(true);
+  const [colorByDate, setColorByDate] = useState(false);
   const [basemap, setBasemap] = useState<BasemapKey>("streets");
   const [splitView, setSplitView] = useState(false);
   const [splitDate, setSplitDate] = useState<string>(assessmentDate?.split("T")[0] || "");
@@ -1120,9 +1120,9 @@ export default function OccurrenceMapRow({
           fillColor = "#9ca3af";
         }
       } else {
-        // Color by before/after assessment year
-        const isNew = !assessmentYear || (feature.properties.eventDate
-          ? new Date(feature.properties.eventDate).getFullYear() > assessmentYear
+        // Color by before/after assessment date
+        const isNew = !assessmentDate || (feature.properties.eventDate
+          ? new Date(feature.properties.eventDate) > new Date(assessmentDate)
           : false);
         strokeColor = isNew ? "#16a34a" : "#6b7280";
         fillColor = isNew ? "#4ade80" : "#9ca3af";
@@ -1146,7 +1146,7 @@ export default function OccurrenceMapRow({
       };
     });
     return { type: "FeatureCollection", features };
-  }, [hoveredType, hoveredYear, hoveredFeature, colorByDate, assessmentYear]);
+  }, [hoveredType, hoveredYear, hoveredFeature, colorByDate, assessmentDate]);
 
   // FitBounds helper using map ref
   const fitMapToBbox = useCallback((bbox: [number, number, number, number]) => {
@@ -1396,11 +1396,11 @@ export default function OccurrenceMapRow({
                 <>
                   <div className="flex items-center gap-1">
                     <div className="w-3 h-3 rounded-full bg-gray-400 border-2 border-gray-500" />
-                    <span>≤{assessmentYear}</span>
+                    <span>≤{assessmentDate?.split("T")[0] ?? assessmentYear}</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <div className="w-3 h-3 rounded-full bg-green-400 border-2 border-green-600" />
-                    <span>After {assessmentYear}</span>
+                    <span>After {assessmentDate?.split("T")[0] ?? assessmentYear}</span>
                   </div>
                   <span className="text-zinc-400">({panelOccurrences.length})</span>
                 </>
