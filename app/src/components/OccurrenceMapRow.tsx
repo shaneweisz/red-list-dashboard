@@ -127,6 +127,26 @@ const BASEMAP_STYLES: Record<string, { label: string; style: MaplibreStyle }> = 
 };
 type BasemapKey = keyof typeof BASEMAP_STYLES;
 
+/**
+ * Determine whether an occurrence record is "new" (recorded after the assessment date).
+ * Uses full date comparison when eventDate is available, falls back to year comparison.
+ */
+export function isAfterAssessment(
+  eventDate: string | undefined | null,
+  year: number | undefined | null,
+  assessmentDate: string | undefined | null,
+  assessmentYear: number | undefined | null,
+): boolean {
+  if (!assessmentDate) return true;
+  if (eventDate) {
+    return new Date(eventDate) > new Date(assessmentDate);
+  }
+  if (year != null && assessmentYear != null) {
+    return year > assessmentYear;
+  }
+  return false;
+}
+
 // Convert an eventDate string (or year-only) to a numeric value for interpolation
 function dateToNumeric(eventDate?: string | null, year?: number | null): number | null {
   if (eventDate) {
@@ -1120,12 +1140,8 @@ export default function OccurrenceMapRow({
           fillColor = "#9ca3af";
         }
       } else {
-        // Color by before/after assessment date (fall back to year comparison for records without a full date)
-        const isNew = !assessmentDate || (feature.properties.eventDate
-          ? new Date(feature.properties.eventDate) > new Date(assessmentDate)
-          : (feature.properties.year != null && assessmentYear != null
-            ? feature.properties.year > assessmentYear
-            : false));
+        // Color by before/after assessment date
+        const isNew = isAfterAssessment(feature.properties.eventDate, feature.properties.year, assessmentDate, assessmentYear);
         strokeColor = isNew ? "#16a34a" : "#6b7280";
         fillColor = isNew ? "#4ade80" : "#9ca3af";
       }
