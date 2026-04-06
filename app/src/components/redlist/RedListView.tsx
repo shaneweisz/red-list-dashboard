@@ -2905,14 +2905,17 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                     IUCN Red List
                                   </button>
                                 )}
-                                <span title="Temporarily disabled while we verify permissions to use CITES data">
+                                <div className="relative group">
                                   <button
                                     className="px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap text-zinc-300 dark:text-zinc-600 cursor-not-allowed"
                                     disabled
                                   >
                                     CITES
                                   </button>
-                                </span>
+                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-zinc-800 dark:bg-zinc-700 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
+                                    Temporarily disabled while we verify permission to use CITES data
+                                  </div>
+                                </div>
                                 <button
                                   className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "wikipedia" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                   onClick={() => setActiveDetailTab("wikipedia")}
