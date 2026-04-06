@@ -26,8 +26,11 @@ async function generateWithRetry<T>(
   }
 }
 
+const DEFAULT_MODEL = "gemini-3.1-flash-lite-preview";
+
 export async function POST(req: NextRequest) {
   const apiKey = process.env.GEMINI_API_KEY;
+  const model = process.env.GEMINI_MODEL || DEFAULT_MODEL;
   if (!apiKey) {
     return new Response(
       JSON.stringify({ error: "GEMINI_API_KEY not configured" }),
@@ -85,7 +88,7 @@ export async function POST(req: NextRequest) {
           const genStart = Date.now();
           const response = await generateWithRetry(() =>
             ai.models.generateContent({
-              model: "gemini-3.1-flash-lite-preview",
+              model,
               contents,
               config: {
                 systemInstruction: SYSTEM_PROMPT,
@@ -113,7 +116,7 @@ export async function POST(req: NextRequest) {
           const usage = response.usageMetadata;
           trace?.generation({
             name: `gemini-turn-${i}`,
-            model: "gemini-3.1-flash-lite-preview",
+            model,
             input: i === 0 ? query.trim() : contents.slice(-1),
             output: parts,
             startTime: new Date(genStart),
