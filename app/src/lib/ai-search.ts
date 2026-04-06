@@ -128,6 +128,60 @@ export function toolPickRandomSpecies(
   );
 }
 
+// ─── URL parameter validation ──────────────────────────────────────
+
+const VALID_VALUES: Record<string, Set<string>> = {
+  taxa: new Set(["all", "mammalia", "aves", "reptilia", "amphibia", "fishes", "invertebrates", "plantae", "fungi"]),
+  categories: new Set(["EX", "EW", "CR", "EN", "VU", "NT", "LC", "DD", "NE"]),
+  years: new Set(["0-1 years", "2-5 years", "6-10 years", "11-20 years", "20+ years"]),
+  obsRanges: new Set(["0", "1-10", "11-100", "101-1K", "1K-10K", "10K+"]),
+  systems: new Set(["Terrestrial", "Freshwater", "Marine"]),
+  trends: new Set(["Increasing", "Stable", "Decreasing", "Unknown"]),
+  view: new Set(["reassessments", "new-assessments"]),
+  sort: new Set(["year", "category", "totalGbif", "newGbif", "pctNewGbif"]),
+  dir: new Set(["asc", "desc"]),
+  hasMap: new Set(["yes", "no"]),
+};
+
+/** Comma-separated params where each value must be in the allowed set */
+const CSV_PARAMS = ["taxa", "categories", "years", "obsRanges", "systems", "trends"];
+
+/** Validate and fix a generated query string. Returns { fixed, warnings }. */
+export function validateQueryString(qs: string): { fixed: string; warnings: string[] } {
+  const params = new URLSearchParams(qs.startsWith("?") ? qs.slice(1) : qs);
+  const warnings: string[] = [];
+
+  for (const key of CSV_PARAMS) {
+    const raw = params.get(key);
+    if (!raw) continue;
+    const allowed = VALID_VALUES[key];
+    const values = raw.split(",");
+    const valid = values.filter((v) => allowed.has(v));
+    const invalid = values.filter((v) => !allowed.has(v));
+    if (invalid.length > 0) {
+      warnings.push(`Invalid ${key} value(s): ${invalid.join(", ")}. Valid: ${[...allowed].join(", ")}`);
+      if (valid.length > 0) {
+        params.set(key, valid.join(","));
+      } else {
+        params.delete(key);
+      }
+    }
+  }
+
+  for (const key of ["view", "sort", "dir", "hasMap"]) {
+    const raw = params.get(key);
+    if (!raw) continue;
+    const allowed = VALID_VALUES[key];
+    if (!allowed.has(raw)) {
+      warnings.push(`Invalid ${key} value: "${raw}". Valid: ${[...allowed].join(", ")}`);
+      params.delete(key);
+    }
+  }
+
+  const fixed = "?" + params.toString();
+  return { fixed, warnings };
+}
+
 /** Dispatch a tool call by name, return the string result */
 export function dispatchToolCall(
   name: string,
@@ -347,6 +401,7 @@ export interface AiSearchResult {
   explanation: string;
   toolCalls: Array<{ name: string; args: Record<string, unknown>; result: string }>;
   reasoningSteps: string[];
+  warnings: string[];
 }
 
 /**
@@ -430,11 +485,14 @@ export async function runAiSearch(
       const { name, args } = fc.functionCall;
 
       if (name === "generate_url") {
+        const rawQs = (args.query_string as string) || "";
+        const { fixed, warnings } = validateQueryString(rawQs);
         return {
-          queryString: (args.query_string as string) || "",
+          queryString: fixed,
           explanation: (args.explanation as string) || "",
           toolCalls,
           reasoningSteps,
+          warnings,
         };
       }
 

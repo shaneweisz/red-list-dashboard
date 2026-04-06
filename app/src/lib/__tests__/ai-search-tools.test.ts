@@ -6,6 +6,7 @@ import {
   toolPickRandomSpecies,
   dispatchToolCall,
   getAllAssessorNames,
+  validateQueryString,
 } from "../ai-search";
 
 // =============================================================================
@@ -189,5 +190,69 @@ describe("getAllAssessorNames", () => {
     const names = getAllAssessorNames();
     const hasBachman = names.some((n) => n.toLowerCase().includes("bachman"));
     expect(hasBachman).toBe(true);
+  });
+});
+
+describe("validateQueryString", () => {
+  it("passes through valid params unchanged", () => {
+    const qs = "?taxa=mammalia&categories=CR,EN&obsRanges=10K%2B&sort=year&dir=desc";
+    const { fixed, warnings } = validateQueryString(qs);
+    expect(warnings).toHaveLength(0);
+    const params = new URLSearchParams(fixed.slice(1));
+    expect(params.get("taxa")).toBe("mammalia");
+    expect(params.get("categories")).toBe("CR,EN");
+    expect(params.get("obsRanges")).toBe("10K+");
+  });
+
+  it("strips invalid obsRanges values like '10K'", () => {
+    const { fixed, warnings } = validateQueryString("?obsRanges=10K");
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("10K");
+    const params = new URLSearchParams(fixed.slice(1));
+    expect(params.has("obsRanges")).toBe(false); // no valid values left
+  });
+
+  it("keeps valid values and strips invalid from mixed CSV", () => {
+    const { fixed, warnings } = validateQueryString("?categories=CR,INVALID,EN");
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("INVALID");
+    const params = new URLSearchParams(fixed.slice(1));
+    expect(params.get("categories")).toBe("CR,EN");
+  });
+
+  it("strips invalid taxa", () => {
+    const { fixed, warnings } = validateQueryString("?taxa=birds");
+    expect(warnings).toHaveLength(1);
+    const params = new URLSearchParams(fixed.slice(1));
+    expect(params.has("taxa")).toBe(false);
+  });
+
+  it("strips invalid sort value", () => {
+    const { fixed, warnings } = validateQueryString("?sort=name");
+    expect(warnings).toHaveLength(1);
+    const params = new URLSearchParams(fixed.slice(1));
+    expect(params.has("sort")).toBe(false);
+  });
+
+  it("strips invalid systems value", () => {
+    const { fixed, warnings } = validateQueryString("?systems=Ocean");
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("Ocean");
+    const params = new URLSearchParams(fixed.slice(1));
+    expect(params.has("systems")).toBe(false);
+  });
+
+  it("preserves unvalidated params like countries and assessors", () => {
+    const qs = "?countries=ZA,BR&assessors=Bachman,%20S.P.&search=frog";
+    const { fixed, warnings } = validateQueryString(qs);
+    expect(warnings).toHaveLength(0);
+    const params = new URLSearchParams(fixed.slice(1));
+    expect(params.get("countries")).toBe("ZA,BR");
+    expect(params.get("search")).toBe("frog");
+  });
+
+  it("reports multiple warnings for multiple invalid params", () => {
+    const { warnings } = validateQueryString("?taxa=birds&categories=CRIT&obsRanges=10K");
+    expect(warnings).toHaveLength(3);
   });
 });

@@ -4,6 +4,7 @@ import {
   SYSTEM_PROMPT,
   geminiTools,
   dispatchToolCall,
+  validateQueryString,
 } from "@/lib/ai-search";
 import { getLangfuse } from "@/lib/langfuse";
 
@@ -151,9 +152,13 @@ export async function POST(req: NextRequest) {
             send("tool_call", { name, args });
 
             if (name === "generate_url") {
-              const qs = (args.query_string as string) || "";
+              const rawQs = (args.query_string as string) || "";
               const explanation = (args.explanation as string) || "";
-              trace?.update({ output: { queryString: qs, explanation } });
+              const { fixed: qs, warnings } = validateQueryString(rawQs);
+              if (warnings.length > 0) {
+                send("validation", { warnings });
+              }
+              trace?.update({ output: { queryString: qs, explanation, warnings } });
               send("result", { queryString: qs, explanation });
               await langfuse?.flushAsync();
               controller.close();
