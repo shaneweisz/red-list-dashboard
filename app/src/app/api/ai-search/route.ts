@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let body: { query: string };
+  let body: { query: string; model?: string };
   try {
     body = await req.json();
   } catch {
@@ -55,6 +55,9 @@ export async function POST(req: NextRequest) {
       headers: { "Content-Type": "application/json" },
     });
   }
+
+  // Client-provided model takes priority, then env var, then default
+  const selectedModel = body.model || model;
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -88,7 +91,7 @@ export async function POST(req: NextRequest) {
           const genStart = Date.now();
           const response = await generateWithRetry(() =>
             ai.models.generateContent({
-              model,
+              model: selectedModel,
               contents,
               config: {
                 systemInstruction: SYSTEM_PROMPT,
@@ -116,7 +119,7 @@ export async function POST(req: NextRequest) {
           const usage = response.usageMetadata;
           trace?.generation({
             name: `gemini-turn-${i}`,
-            model,
+            model: selectedModel,
             input: i === 0 ? query.trim() : contents.slice(-1),
             output: parts,
             startTime: new Date(genStart),

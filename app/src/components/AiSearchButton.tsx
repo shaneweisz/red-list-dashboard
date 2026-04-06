@@ -7,6 +7,12 @@ interface ReasoningStep {
   text: string;
 }
 
+const MODELS = [
+  { id: "gemini-3.1-flash-lite-preview", label: "3.1 Flash Lite" },
+  { id: "gemini-2.5-flash", label: "2.5 Flash" },
+  { id: "gemini-2.5-pro", label: "2.5 Pro" },
+];
+
 const EXAMPLE_CATEGORIES = [
   {
     label: "Reassessment triage",
@@ -66,6 +72,7 @@ export function AiSearchButton() {
   const [steps, setSteps] = useState<ReasoningStep[]>([]);
   const [explanation, setExplanation] = useState<string | null>(null);
   const [showExamples, setShowExamples] = useState(false);
+  const [selectedModel, setSelectedModel] = useState(MODELS[0].id);
   const inputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const stepsEndRef = useRef<HTMLDivElement>(null);
@@ -144,7 +151,7 @@ export function AiSearchButton() {
       const res = await fetch("/api/ai-search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: q }),
+        body: JSON.stringify({ query: q, model: selectedModel }),
         signal: controller.signal,
       });
 
@@ -279,9 +286,20 @@ export function AiSearchButton() {
         <div className="absolute right-0 z-50 mt-2 w-80 sm:w-[26rem] rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 shadow-xl">
           <div className="px-3 pt-3 pb-2">
             <div className="flex items-center justify-between mb-1.5">
-              <p className="text-xs font-medium text-violet-600 dark:text-violet-400">
-                AI Search
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-medium text-violet-600 dark:text-violet-400">
+                  AI Search
+                </p>
+                <select
+                  value={selectedModel}
+                  onChange={(e) => setSelectedModel(e.target.value)}
+                  className="text-[10px] pl-1 pr-0.5 py-0 rounded border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 text-zinc-500 dark:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                >
+                  {MODELS.map((m) => (
+                    <option key={m.id} value={m.id}>{m.label}</option>
+                  ))}
+                </select>
+              </div>
               {!hasActivity && (
                 <button
                   onClick={() => setShowExamples(!showExamples)}
