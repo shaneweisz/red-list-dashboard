@@ -487,12 +487,30 @@ export async function runAiSearch(
       if (name === "generate_url") {
         const rawQs = (args.query_string as string) || "";
         const { fixed, warnings } = validateQueryString(rawQs);
+
+        if (warnings.length > 0) {
+          // Feed errors back to the model so it can fix them
+          contents.push({ role: "model", parts: parts as typeof contents[0]["parts"] });
+          contents.push({
+            role: "user",
+            parts: [{
+              functionResponse: {
+                name: "generate_url",
+                response: {
+                  result: `VALIDATION ERROR: ${warnings.join("; ")}. Please call generate_url again with corrected values.`,
+                },
+              },
+            }],
+          });
+          break; // continue outer loop so model can retry
+        }
+
         return {
           queryString: fixed,
           explanation: (args.explanation as string) || "",
           toolCalls,
           reasoningSteps,
-          warnings,
+          warnings: [],
         };
       }
 
