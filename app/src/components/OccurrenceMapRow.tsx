@@ -26,6 +26,10 @@ const MapLibreMarker = dynamic(
   () => import("react-map-gl/maplibre").then((mod) => mod.Marker),
   { ssr: false }
 );
+const ScaleControl = dynamic(
+  () => import("react-map-gl/maplibre").then((mod) => mod.ScaleControl),
+  { ssr: false }
+);
 const MapImageTooltip = dynamic(
   () => import("./MapImageTooltip"),
   { ssr: false }
@@ -741,7 +745,7 @@ export default function OccurrenceMapRow({
   });
 
   // Advanced filter state
-  const [maxUncertainty, setMaxUncertainty] = useState<number | null>(null);
+  const [maxUncertainty, setMaxUncertainty] = useState<number | null>(50000);
   const [colorByDate, setColorByDate] = useState(true);
   const [basemap, setBasemap] = useState<BasemapKey>("streets");
   const [splitView, setSplitView] = useState(false);
@@ -1316,6 +1320,7 @@ export default function OccurrenceMapRow({
               onLoad={panelId === "main" || panelId === "before" || !splitView ? handleMapLoad : undefined}
               cursor={hoveredFeature && hoveredPanel === panelId ? "pointer" : "grab"}
             >
+              <ScaleControl position="bottom-right" />
               {/* Occurrence circles (GeoJSON source + circle layer) */}
               <Source id={`occurrences-${panelId}`} type="geojson" data={styledGeoJson}>
                 <Layer {...circleLayerStyle} />
