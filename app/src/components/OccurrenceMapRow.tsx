@@ -26,6 +26,10 @@ const MapLibreMarker = dynamic(
   () => import("react-map-gl/maplibre").then((mod) => mod.Marker),
   { ssr: false }
 );
+const ScaleControl = dynamic(
+  () => import("react-map-gl/maplibre").then((mod) => mod.ScaleControl),
+  { ssr: false }
+);
 const MapImageTooltip = dynamic(
   () => import("./MapImageTooltip"),
   { ssr: false }
@@ -131,6 +135,26 @@ const BASEMAP_STYLES: Record<string, { label: string; style: MaplibreStyle }> = 
 };
 type BasemapKey = keyof typeof BASEMAP_STYLES;
 
+/**
+ * Determine whether an occurrence record is "new" (recorded after the assessment date).
+ * Uses full date comparison when eventDate is available, falls back to year comparison.
+ */
+export function isAfterAssessment(
+  eventDate: string | undefined | null,
+  year: number | undefined | null,
+  assessmentDate: string | undefined | null,
+  assessmentYear: number | undefined | null,
+): boolean {
+  if (!assessmentDate) return true;
+  if (eventDate) {
+    return new Date(eventDate) > new Date(assessmentDate);
+  }
+  if (year != null && assessmentYear != null) {
+    return year > assessmentYear;
+  }
+  return false;
+}
+
 // Convert an eventDate string (or year-only) to a numeric value for interpolation
 function dateToNumeric(eventDate?: string | null, year?: number | null): number | null {
   if (eventDate) {
@@ -141,16 +165,23 @@ function dateToNumeric(eventDate?: string | null, year?: number | null): number 
   return null;
 }
 
-// Date-based color interpolation (oldest=amber, newest=green)
-function dateToColor(dateNum: number, minDate: number, maxDate: number): { stroke: string; fill: string } {
-  if (minDate === maxDate) return { stroke: "#15803d", fill: "#22c55e" };
-  const t = (dateNum - minDate) / (maxDate - minDate); // 0 = oldest, 1 = newest
-  // Interpolate hue from 30 (amber) to 142 (green)
-  const hue = Math.round(30 + t * 112);
-  const sat = Math.round(60 + t * 20);
+// Fixed absolute color scale so the same year always maps to the same color
+// across all species. Simple continuous hue gradient: orange-red(20) → green(130).
+// Anchored so that the last ~20 years span the full visible range.
+const COLOR_SCALE_MIN_YEAR = new Date().getFullYear() - 20;
+const COLOR_SCALE_MAX_YEAR = new Date().getFullYear();
+const COLOR_SCALE_MIN_TS = new Date(COLOR_SCALE_MIN_YEAR, 0, 1).getTime();
+const COLOR_SCALE_MAX_TS = new Date(COLOR_SCALE_MAX_YEAR, 0, 1).getTime();
+
+// Date-based color interpolation — continuous hue gradient
+function dateToColor(dateNum: number): { stroke: string; fill: string } {
+  // Clamp to range; anything older than 20 years gets the orange-red color
+  const t = Math.max(0, Math.min(1, (dateNum - COLOR_SCALE_MIN_TS) / (COLOR_SCALE_MAX_TS - COLOR_SCALE_MIN_TS)));
+  // Hue: 20 (orange-red) → 130 (green)
+  const hue = Math.round(20 + t * 110);
   return {
-    stroke: `hsl(${hue}, ${sat}%, 30%)`,
-    fill: `hsl(${hue}, ${sat}%, 50%)`,
+    stroke: `hsl(${hue}, 75%, 30%)`,
+    fill: `hsl(${hue}, 75%, 50%)`,
   };
 }
 
@@ -750,8 +781,8 @@ export default function OccurrenceMapRow({
   });
 
   // Advanced filter state
-  const [maxUncertainty, setMaxUncertainty] = useState<number | null>(null);
-  const [colorByDate, setColorByDate] = useState(true);
+  const [maxUncertainty, setMaxUncertainty] = useState<number | null>(50000);
+  const [colorByDate, setColorByDate] = useState(false);
   const [basemap, setBasemap] = useState<BasemapKey>("streets");
   const [splitView, setSplitView] = useState(false);
   const [splitDate, setSplitDate] = useState<string>(assessmentDate?.split("T")[0] || "");
@@ -1135,7 +1166,7 @@ export default function OccurrenceMapRow({
       } else if (colorByDate) {
         const dNum = dateToNumeric(feature.properties.eventDate, feature.properties.year);
         if (dNum != null) {
-          const colors = dateToColor(dNum, minDateNum, maxDateNum);
+          const colors = dateToColor(dNum);
           strokeColor = colors.stroke;
           fillColor = colors.fill;
         } else {
@@ -1143,10 +1174,8 @@ export default function OccurrenceMapRow({
           fillColor = "#9ca3af";
         }
       } else {
-        // Color by before/after assessment year
-        const isNew = !assessmentYear || (feature.properties.eventDate
-          ? new Date(feature.properties.eventDate).getFullYear() > assessmentYear
-          : false);
+        // Color by before/after assessment date
+        const isNew = isAfterAssessment(feature.properties.eventDate, feature.properties.year, assessmentDate, assessmentYear);
         strokeColor = isNew ? "#16a34a" : "#6b7280";
         fillColor = isNew ? "#4ade80" : "#9ca3af";
       }
@@ -1169,7 +1198,7 @@ export default function OccurrenceMapRow({
       };
     });
     return { type: "FeatureCollection", features };
-  }, [hoveredType, hoveredYear, hoveredFeature, colorByDate, minDateNum, maxDateNum, assessmentYear]);
+  }, [hoveredType, hoveredYear, hoveredFeature, colorByDate, assessmentDate, assessmentYear]);
 
   // FitBounds helper using map ref
   const fitMapToBbox = useCallback((bbox: [number, number, number, number]) => {
@@ -1343,6 +1372,7 @@ export default function OccurrenceMapRow({
               onLoad={panelId === "main" || panelId === "before" || !splitView ? handleMapLoad : undefined}
               cursor={hoveredFeature && hoveredPanel === panelId ? "pointer" : "grab"}
             >
+              <ScaleControl position="bottom-right" />
               {/* Occurrence circles (GeoJSON source + circle layer) */}
               {showGbif && (
                 <Source id={`occurrences-${panelId}`} type="geojson" data={styledGeoJson}>
@@ -1430,12 +1460,12 @@ export default function OccurrenceMapRow({
               ) : colorByDate ? (
                 <>
                   <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded-full" style={{ background: "hsl(30, 60%, 50%)", border: "2px solid hsl(30, 60%, 30%)" }} />
+                    <div className="w-3 h-3 rounded-full" style={{ background: dateToColor(minDateNum).fill, border: `2px solid ${dateToColor(minDateNum).stroke}` }} />
                     <span>{minDateLabel}</span>
                   </div>
                   <span>→</span>
                   <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded-full" style={{ background: "hsl(142, 80%, 50%)", border: "2px solid hsl(142, 80%, 30%)" }} />
+                    <div className="w-3 h-3 rounded-full" style={{ background: dateToColor(maxDateNum).fill, border: `2px solid ${dateToColor(maxDateNum).stroke}` }} />
                     <span>{maxDateLabel}</span>
                   </div>
                   <span className="text-zinc-400">({panelOccurrences.length})</span>
@@ -1444,11 +1474,11 @@ export default function OccurrenceMapRow({
                 <>
                   <div className="flex items-center gap-1">
                     <div className="w-3 h-3 rounded-full bg-gray-400 border-2 border-gray-500" />
-                    <span>≤{assessmentYear}</span>
+                    <span>≤{assessmentDate?.split("T")[0] ?? assessmentYear}</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <div className="w-3 h-3 rounded-full bg-green-400 border-2 border-green-600" />
-                    <span>After {assessmentYear}</span>
+                    <span>After {assessmentDate?.split("T")[0] ?? assessmentYear}</span>
                   </div>
                   <span className="text-zinc-400">({panelOccurrences.length})</span>
                 </>
@@ -1462,7 +1492,7 @@ export default function OccurrenceMapRow({
                     className="px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-[10px] text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"
                     title={colorByDate ? "Color by before/after assessment" : "Color by date"}
                   >
-                    {colorByDate ? "Before/after" : "By date"}
+                    {colorByDate ? "Color by before/after assess. date" : "Color by date"}
                   </button>
                   {!splitView && (
                     <button
