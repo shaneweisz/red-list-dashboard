@@ -1120,10 +1120,12 @@ export default function OccurrenceMapRow({
           fillColor = "#9ca3af";
         }
       } else {
-        // Color by before/after assessment date
+        // Color by before/after assessment date (fall back to year comparison for records without a full date)
         const isNew = !assessmentDate || (feature.properties.eventDate
           ? new Date(feature.properties.eventDate) > new Date(assessmentDate)
-          : false);
+          : (feature.properties.year != null && assessmentYear != null
+            ? feature.properties.year > assessmentYear
+            : false));
         strokeColor = isNew ? "#16a34a" : "#6b7280";
         fillColor = isNew ? "#4ade80" : "#9ca3af";
       }
@@ -1146,7 +1148,7 @@ export default function OccurrenceMapRow({
       };
     });
     return { type: "FeatureCollection", features };
-  }, [hoveredType, hoveredYear, hoveredFeature, colorByDate, assessmentDate]);
+  }, [hoveredType, hoveredYear, hoveredFeature, colorByDate, assessmentDate, assessmentYear]);
 
   // FitBounds helper using map ref
   const fitMapToBbox = useCallback((bbox: [number, number, number, number]) => {
