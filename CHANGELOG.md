@@ -2,6 +2,28 @@
 
 All notable changes to the IUCN Red List Assessments Dashboard.
 
+## [v2.7.0] — 2026-04-03 – 2026-04-06 — Map Colors & Linting
+
+- Refined occurrence map color scale to continuous hue gradient
+- Default to before/after assessment date coloring with 50km GPS uncertainty filter
+- Added ESLint rules for unused imports/variables and fixed all lint errors
+- Fixed filter chart flashing and years-since-assessed calculation
+
+## [v2.6.0] — 2026-04-02 — MapLibre & Single Species View
+
+- Migrated occurrence map from react-leaflet to MapLibre GL JS
+- Added single-species info card with profile pic, assessors, and key metrics
+- Lazy-load API tabs and warm-start search API on page load
+- Narrowed dashboard layout and added before/after date toggle on map legend
+
+## [v2.5.0] — 2026-03-27 – 2026-04-01 — Search & Map Improvements
+
+- Added cross-taxa species search bar with client-side search index
+- Added color-by-date view for GBIF occurrence map
+- Increased default GBIF sample size from 300 to 1000
+- Added footer data source attributions
+- Fixed split view animations, tooltip clipping, and mobile skeleton layout
+
 ## [v2.4.0] — 2026-03-24 – 2026-03-27 — Mobile UX, Filters & New Fields
 
 - Improved mobile dashboard UX with responsive viewport and fixed table/tab overflow
