@@ -2906,8 +2906,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                   </button>
                                 )}
                                 <button
-                                  className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "cites" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
-                                  onClick={() => setActiveDetailTab("cites")}
+                                  className="px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap text-zinc-300 dark:text-zinc-600 cursor-not-allowed"
+                                  disabled
+                                  title="Temporarily disabled while we verify permissions to use CITES data"
                                 >
                                   CITES
                                 </button>
