@@ -98,42 +98,49 @@ function renderAohPng(
   const warpedPath = join(tmpDir, "warped.tif");
   const pngPath = join(tmpDir, "aoh.png");
 
-  // Step 1: Reproject Mollweide → WGS84, cap pixel size
-  const warpArgs = [
-    "-t_srs", "EPSG:4326",
+  // Step 1: Reproject Mollweide → Web Mercator. We target EPSG:3857 (not
+  // 4326) so the PNG pixel grid matches MapLibre's image-source quad,
+  // which is sampled in Mercator screen space. An equirectangular PNG
+  // drifts visibly from vector overlays at higher latitudes.
+  execFileSync("gdalwarp", [
+    "-t_srs", "EPSG:3857",
     "-r", "near",
     "-co", "COMPRESS=LZW",
     "-overwrite",
-  ];
+    tifPath,
+    warpedPath,
+  ]);
 
-  // Check source dimensions and cap if needed
-  const infoOut = execFileSync("gdalinfo", ["-json", tifPath], { encoding: "utf-8" });
-  const info = JSON.parse(infoOut);
-  const srcWidth = info.size[0];
-  const srcHeight = info.size[1];
-  const longest = Math.max(srcWidth, srcHeight);
-  if (longest > MAX_SIZE) {
-    const scale = MAX_SIZE / longest;
-    warpArgs.push("-ts", String(Math.round(srcWidth * scale)), String(Math.round(srcHeight * scale)));
-  }
-
-  warpArgs.push(tifPath, warpedPath);
-  execFileSync("gdalwarp", warpArgs);
-
-  // Step 2: Get WGS84 bounds from warped file
+  // Step 2: Get WGS84 bounds (gdalinfo reports wgs84Extent in lon/lat
+  // regardless of source SRS), used by the frontend image-source coords.
   const bounds = getWgs84Bounds(warpedPath);
 
-  // Step 3: Render to PNG
-  execFileSync("gdal_translate", [
+  // Step 3: Render to PNG, downsampling if the warped raster exceeds
+  // MAX_SIZE on its longest edge.
+  const warpedInfo = JSON.parse(
+    execFileSync("gdalinfo", ["-json", warpedPath], { encoding: "utf-8" })
+  );
+  const [warpedWidth, warpedHeight] = warpedInfo.size;
+  const longest = Math.max(warpedWidth, warpedHeight);
+
+  const translateArgs = [
     "-of", "PNG",
     "-ot", "Byte",
     "-scale",
     "-a_nodata", "none",
     "-b", "1",
     "-colorinterp", "green",
-    warpedPath,
-    pngPath,
-  ]);
+  ];
+  if (longest > MAX_SIZE) {
+    const scale = MAX_SIZE / longest;
+    translateArgs.push(
+      "-outsize",
+      String(Math.round(warpedWidth * scale)),
+      String(Math.round(warpedHeight * scale))
+    );
+  }
+  translateArgs.push(warpedPath, pngPath);
+  execFileSync("gdal_translate", translateArgs);
 
   return { pngBuffer: readFileSync(pngPath), bounds };
 }
