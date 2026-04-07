@@ -1180,7 +1180,7 @@ export default function OccurrenceMapRow({
         fillColor = isNew ? "#4ade80" : "#9ca3af";
       }
 
-      const radius = isFeatureHovered ? 6 : (isBrushed ? 6 : (isDimmed ? 4 : 5));
+      const radius = isFeatureHovered ? 5 : (isBrushed ? 5 : (isDimmed ? 3 : 4));
       const strokeWidth = isDimmed ? 1 : (isFeatureHovered || isBrushed ? 3 : 2);
       const opacity = isDimmed ? 0.15 : 1;
 
@@ -1433,7 +1433,13 @@ export default function OccurrenceMapRow({
                   visible={showRange}
                   panelId={panelId}
                   onLoadingChange={setRangeLoading}
-                  onCategoriesChange={setRangeCategories}
+                  onCategoriesChange={(cats) => {
+                    setRangeCategories(cats);
+                    // Default to showing only Extant (Native) if it exists
+                    if (cats.some((c) => c.key === "1-1")) {
+                      setVisibleCategories(new Set(["1-1"]));
+                    }
+                  }}
                   onNotFound={setRangeNotFound}
                   onSimplificationChange={setRangeSimplification}
                   visibleCategories={visibleCategories}
@@ -1552,7 +1558,7 @@ export default function OccurrenceMapRow({
             <div className="absolute top-12 right-[72px] z-[1000] flex flex-col gap-0.5 bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 p-1">
               <button
                 onClick={() => setShowGbif(!showGbif)}
-                className={`px-2 py-0.5 rounded text-[10px] transition-colors ${
+                className={`px-2 py-0.5 rounded text-[10px] transition-colors text-left ${
                   showGbif
                     ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium"
                     : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
