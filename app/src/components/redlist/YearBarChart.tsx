@@ -90,7 +90,11 @@ export default function YearBarChart({
           tickFormatter={formatTick}
         />
         <Tooltip
-          formatter={(value: number) => [value.toLocaleString(), "Species"]}
+          formatter={(value: number, _name, props: { payload?: { label?: string } }) => [
+            // Prefer the precomputed "count (pct%)" label if present, otherwise fall back to raw count
+            props?.payload?.label ?? value.toLocaleString(),
+            "Species",
+          ]}
           labelFormatter={(year: string) => `Assessed ${year}`}
           contentStyle={{
             backgroundColor: "#18181b",

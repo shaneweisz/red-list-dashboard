@@ -1014,7 +1014,12 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     }));
   }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, hasMapFilter, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter]);
 
-  // Assessments-by-year chart: apply all filters EXCEPT year range + specific-year
+  // Assessments-by-year chart: apply all filters EXCEPT the two year-based ones.
+  // The Range bucket chart and the Year chart share a single cross-filter facet
+  // ("when was this species assessed"), so we exclude BOTH selectedYearRanges and
+  // selectedAssessmentYears here — the by-year chart should always show the full
+  // timeline so users can switch/expand their year selection regardless of what
+  // they picked in the range view, and vice-versa.
   const assessmentYearsByYearData = useMemo(() => {
     const counts: Record<string, number> = {};
     taxaFilteredSpecies.forEach(s => {
@@ -1970,7 +1975,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                             <polyline points="15 18 9 12 15 6" />
                           </svg>
                         </button>
-                        <span className="tabular-nums min-w-[64px] text-center">{label}</span>
+                        <span className="tabular-nums min-w-[64px] text-center" aria-live="polite" aria-atomic="true">{label}</span>
                         <button
                           type="button"
                           onClick={() => canNext && setYearsPage(p => Math.min(yearsTotalPages - 1, p + 1))}
@@ -2716,7 +2721,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
             ))}
             {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || hasMapFilter || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred) && (
               <button
-                onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setSelectedSubgroups(new Set()); setSelectedObsRanges(new Set()); setSelectedSystems(new Set()); setHasMapFilter(null); setSelectedGrowthForms(new Set()); setSelectedPopulationTrends(new Set()); setSelectedMovementPatterns(new Set()); setSelectedThreats(new Set()); setSelectedAssessors(new Set()); setSelectedReviewers(new Set()); setSelectedAssessmentYears(new Set()); setShowOnlyStarred(false); }}
+                onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setSelectedSubgroups(new Set()); setSelectedObsRanges(new Set()); setSelectedSystems(new Set()); setHasMapFilter(null); setSelectedGrowthForms(new Set()); setSelectedPopulationTrends(new Set()); setSelectedMovementPatterns(new Set()); setSelectedThreats(new Set()); setSelectedAssessors(new Set()); setSelectedReviewers(new Set()); setShowOnlyStarred(false); }}
                 className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 underline"
               >
                 Clear all

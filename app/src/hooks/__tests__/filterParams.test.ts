@@ -333,7 +333,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
       subgroups: new Set<string>(),
       categories: new Set(["CR", "EN"]),
       yearRanges: new Set(["11-20 years"]),
-      assessmentYears: new Set<string>(),
+      assessmentYears: new Set(["2023", "2024"]),
       countries: new Set(["ZA"]),
       obsRanges: new Set<string>(),
       systems: new Set<string>(),
@@ -357,6 +357,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
     expect(parsed.taxa).toEqual(original.taxa);
     expect(parsed.categories).toEqual(original.categories);
     expect(parsed.yearRanges).toEqual(original.yearRanges);
+    expect(parsed.assessmentYears).toEqual(original.assessmentYears);
     expect(parsed.countries).toEqual(original.countries);
     expect(parsed.search).toBe(original.search);
     expect(parsed.sortField).toBe(original.sortField);
