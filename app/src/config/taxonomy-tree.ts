@@ -86,17 +86,6 @@ const MAMMAL_NAMED_ORDERS = [
   "perissodactyla", "pholidota",
 ];
 
-// Bird subgroup helpers
-const BIRD_NAMED_ORDERS = [
-  "passeriformes", "caprimulgiformes", "piciformes", "psittaciformes",
-  "charadriiformes", "columbiformes", "galliformes",
-  "accipitriformes", "falconiformes", "cathartiformes",
-  "strigiformes",
-  "anseriformes", "gruiformes", "podicipediformes", "phoenicopteriformes", "gaviiformes",
-  "procellariiformes", "sphenisciformes", "suliformes", "phaethontiformes",
-  "pelecaniformes", "ciconiiformes",
-];
-
 // Insect named orders
 const INSECT_NAMED_ORDERS = [
   "coleoptera", "lepidoptera", "diptera", "hymenoptera",
@@ -581,7 +570,7 @@ const RED_ALGAE_NODE: TaxonomyNode = {
 
 const MUSHROOMS_NODE: TaxonomyNode = {
   id: "mushrooms",
-  name: "Mushrooms, etc.",
+  name: "Fungi",
   filter: { csvGroups: ["mushrooms"] },
   estimatedDescribed: 157_648,
   estimatedSource: IUCN_SOURCE + " (" + SPECIES_FUNGORUM + ")",
@@ -765,121 +754,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
       estimatedSource: IUCN_SOURCE,
       estimatedSourceUrl: IUCN_SOURCE_URL,
       color: "#3b82f6",
-      children: [
-        {
-          id: "songbirds",
-          name: "Songbirds",
-          filter: { csvGroups: ["aves"], orderNames: ["passeriformes"] },
-          estimatedDescribed: 6_688,
-          estimatedSource: "BirdLife/IUCN — assessed Passeriformes",
-          estimatedSourceUrl: IUCN_SOURCE_URL,
-        },
-        {
-          id: "hummingbirds-swifts",
-          name: "Hummingbirds & Swifts",
-          filter: { csvGroups: ["aves"], orderNames: ["caprimulgiformes"] },
-          estimatedDescribed: 603,
-          estimatedSource: "BirdLife/IUCN — assessed Caprimulgiformes",
-          estimatedSourceUrl: IUCN_SOURCE_URL,
-        },
-        {
-          id: "woodpeckers-toucans",
-          name: "Woodpeckers & Toucans",
-          filter: { csvGroups: ["aves"], orderNames: ["piciformes"] },
-          estimatedDescribed: 481,
-          estimatedSource: "BirdLife/IUCN — assessed Piciformes",
-          estimatedSourceUrl: IUCN_SOURCE_URL,
-        },
-        {
-          id: "parrots",
-          name: "Parrots",
-          filter: { csvGroups: ["aves"], orderNames: ["psittaciformes"] },
-          estimatedDescribed: 421,
-          estimatedSource: "BirdLife/IUCN — assessed Psittaciformes",
-          estimatedSourceUrl: IUCN_SOURCE_URL,
-        },
-        {
-          id: "shorebirds",
-          name: "Shorebirds",
-          filter: { csvGroups: ["aves"], orderNames: ["charadriiformes"] },
-          estimatedDescribed: 387,
-          estimatedSource: "BirdLife/IUCN — assessed Charadriiformes",
-          estimatedSourceUrl: IUCN_SOURCE_URL,
-        },
-        {
-          id: "pigeons-doves",
-          name: "Pigeons & Doves",
-          filter: { csvGroups: ["aves"], orderNames: ["columbiformes"] },
-          estimatedDescribed: 369,
-          estimatedSource: "BirdLife/IUCN — assessed Columbiformes",
-          estimatedSourceUrl: IUCN_SOURCE_URL,
-        },
-        {
-          id: "raptors",
-          name: "Raptors",
-          filter: { csvGroups: ["aves"], orderNames: ["accipitriformes", "falconiformes", "cathartiformes"] },
-          estimatedDescribed: 324,
-          estimatedSource: "BirdLife/IUCN — assessed raptor orders",
-          estimatedSourceUrl: IUCN_SOURCE_URL,
-        },
-        {
-          id: "gamebirds",
-          name: "Gamebirds",
-          filter: { csvGroups: ["aves"], orderNames: ["galliformes"] },
-          estimatedDescribed: 309,
-          estimatedSource: "BirdLife/IUCN — assessed Galliformes",
-          estimatedSourceUrl: IUCN_SOURCE_URL,
-        },
-        {
-          id: "owls",
-          name: "Owls",
-          filter: { csvGroups: ["aves"], orderNames: ["strigiformes"] },
-          estimatedDescribed: 242,
-          estimatedSource: "BirdLife/IUCN — assessed Strigiformes",
-          estimatedSourceUrl: IUCN_SOURCE_URL,
-        },
-        {
-          id: "waterbirds",
-          name: "Waterbirds",
-          filter: {
-            csvGroups: ["aves"],
-            orderNames: ["anseriformes", "gruiformes", "podicipediformes", "phoenicopteriformes", "gaviiformes"],
-          },
-          estimatedDescribed: 404,
-          estimatedSource: "BirdLife/IUCN — assessed waterbird orders",
-          estimatedSourceUrl: IUCN_SOURCE_URL,
-        },
-        {
-          id: "seabirds",
-          name: "Seabirds",
-          filter: {
-            csvGroups: ["aves"],
-            orderNames: ["procellariiformes", "sphenisciformes", "suliformes", "phaethontiformes"],
-          },
-          estimatedDescribed: 223,
-          estimatedSource: "BirdLife/IUCN — assessed seabird orders",
-          estimatedSourceUrl: IUCN_SOURCE_URL,
-        },
-        {
-          id: "herons-storks",
-          name: "Herons & Storks",
-          filter: { csvGroups: ["aves"], orderNames: ["pelecaniformes", "ciconiiformes"] },
-          estimatedDescribed: 136,
-          estimatedSource: "BirdLife/IUCN — assessed Pelecaniformes + Ciconiiformes",
-          estimatedSourceUrl: IUCN_SOURCE_URL,
-        },
-        {
-          id: "other-birds",
-          name: "Other Birds",
-          filter: {
-            csvGroups: ["aves"],
-            excludeOrders: BIRD_NAMED_ORDERS,
-          },
-          estimatedDescribed: 598,
-          estimatedSource: "Remainder of IUCN Table 1a total of 11,185",
-          estimatedSourceUrl: IUCN_SOURCE_URL,
-        },
-      ],
     },
 
     // ─── REPTILIA ──────────────────────────────────────────────────────

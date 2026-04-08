@@ -141,7 +141,7 @@ describe("Table 1a groups", () => {
 });
 
 // =============================================================================
-// Mammal and bird subgroups (new)
+// Mammal subgroups (new)
 // =============================================================================
 
 describe("New mammal subgroups", () => {
@@ -168,26 +168,11 @@ describe("New mammal subgroups", () => {
   });
 });
 
-describe("New bird subgroups", () => {
-  const avesNode = findNode("aves");
-
-  it("aves has children", () => {
-    expect(avesNode?.children?.length).toBeGreaterThan(0);
-  });
-
-  it("all bird subgroups use aves csvGroup", () => {
-    for (const child of avesNode?.children ?? []) {
-      expect(child.filter.csvGroups).toEqual(["aves"]);
-    }
-  });
-
-  it("has expected subgroups", () => {
-    const ids = new Set(avesNode?.children?.map(c => c.id) ?? []);
-    expect(ids.has("songbirds")).toBe(true);
-    expect(ids.has("parrots")).toBe(true);
-    expect(ids.has("raptors")).toBe(true);
-    expect(ids.has("owls")).toBe(true);
-    expect(ids.has("other-birds")).toBe(true);
+describe("Aves is a leaf (no drill-down)", () => {
+  it("aves has no children", () => {
+    const avesNode = findNode("aves");
+    expect(avesNode).toBeDefined();
+    expect(avesNode?.children).toBeUndefined();
   });
 });
 
@@ -265,7 +250,6 @@ describe("getNodeDef", () => {
 describe("hasChildren", () => {
   it("returns true for expandable nodes", () => {
     expect(hasChildren("mammalia")).toBe(true);
-    expect(hasChildren("aves")).toBe(true);
     expect(hasChildren("reptilia")).toBe(true);
     expect(hasChildren("insecta")).toBe(true);
     expect(hasChildren("invertebrates")).toBe(true);
@@ -273,6 +257,7 @@ describe("hasChildren", () => {
   });
 
   it("returns false for leaf nodes", () => {
+    expect(hasChildren("aves")).toBe(false);
     expect(hasChildren("arachnida")).toBe(false);
     expect(hasChildren("velvet_worms")).toBe(false);
     expect(hasChildren("horseshoe_crabs")).toBe(false);
@@ -387,7 +372,7 @@ describe("speciesMatchesNode – excludeOrders filter", () => {
 });
 
 // =============================================================================
-// speciesMatchesNode — new mammal/bird subgroups
+// speciesMatchesNode — mammal subgroups
 // =============================================================================
 
 describe("speciesMatchesNode – mammal subgroups", () => {
@@ -419,33 +404,6 @@ describe("speciesMatchesNode – mammal subgroups", () => {
   it("rejects named order from other-mammals", () => {
     const species = { taxon_group: "mammalia", class_name: "Mammalia", order_name: "Carnivora" };
     expect(speciesMatchesNode(species, "other-mammals")).toBe(false);
-  });
-});
-
-describe("speciesMatchesNode – bird subgroups", () => {
-  it("matches passerine to songbirds", () => {
-    const species = { taxon_group: "aves", class_name: "Aves", order_name: "Passeriformes" };
-    expect(speciesMatchesNode(species, "songbirds")).toBe(true);
-  });
-
-  it("matches parrot to parrots", () => {
-    const species = { taxon_group: "aves", class_name: "Aves", order_name: "Psittaciformes" };
-    expect(speciesMatchesNode(species, "parrots")).toBe(true);
-  });
-
-  it("matches raptor to raptors", () => {
-    const species = { taxon_group: "aves", class_name: "Aves", order_name: "Accipitriformes" };
-    expect(speciesMatchesNode(species, "raptors")).toBe(true);
-  });
-
-  it("matches rare order to other-birds", () => {
-    const species = { taxon_group: "aves", class_name: "Aves", order_name: "Coraciiformes" };
-    expect(speciesMatchesNode(species, "other-birds")).toBe(true);
-  });
-
-  it("rejects named order from other-birds", () => {
-    const species = { taxon_group: "aves", class_name: "Aves", order_name: "Passeriformes" };
-    expect(speciesMatchesNode(species, "other-birds")).toBe(false);
   });
 });
 
@@ -645,14 +603,6 @@ describe("Subgroup partition coverage", () => {
     expect([...new Set(namedOrders)].sort()).toEqual([...otherMammals.filter.excludeOrders!].sort());
   });
 
-  it("bird subgroups: named orders match other-birds excludeOrders", () => {
-    const subs = findNode("aves")!.children!;
-    const otherBirds = subs.find(sg => sg.id === "other-birds")!;
-    const namedOrders = subs
-      .filter(sg => sg.id !== "other-birds")
-      .flatMap(sg => sg.filter.orderNames ?? []);
-    expect([...new Set(namedOrders)].sort()).toEqual([...otherBirds.filter.excludeOrders!].sort());
-  });
 });
 
 // ─── Default view: no double counting ────────────────────────────────
