@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useRef } from "react";
+import { useRef } from "react";
 import {
   BarChart,
   Bar,
@@ -31,7 +31,7 @@ interface BarChartClickState {
   activePayload?: Array<{ payload?: { code?: string; count?: number; label?: string } }>;
 }
 
-function YearBarChart({
+export default function YearBarChart({
   data,
   selectedItems,
   onBarClick,
@@ -121,5 +121,3 @@ function YearBarChart({
     </ResponsiveContainer>
   );
 }
-
-export default memo(YearBarChart);

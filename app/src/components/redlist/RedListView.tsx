@@ -1606,7 +1606,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   }, [selectedSpeciesKey, paginatedSpecies, speciesDetails]);
 
   // Handle category bar click (Cmd/Ctrl+click for multi-select, regular click replaces)
-  const handleCategoryClick = useCallback((data: { payload?: { code?: string } }, event: React.MouseEvent) => {
+  const handleCategoryClick = (data: { payload?: { code?: string } }, event: React.MouseEvent) => {
     const code = data.payload?.code;
     if (!code) return;
     const isMultiSelect = event.metaKey || event.ctrlKey;
@@ -1628,10 +1628,10 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         return new Set([code]);
       }
     });
-  }, [setSelectedCategories]);
+  };
 
   // Handle year range bar click (Cmd/Ctrl+click for multi-select, regular click replaces)
-  const handleYearClick = useCallback((data: { payload?: { range?: string } }, event: React.MouseEvent) => {
+  const handleYearClick = (data: { payload?: { range?: string } }, event: React.MouseEvent) => {
     const range = data.payload?.range;
     if (!range) return;
     const isMultiSelect = event.metaKey || event.ctrlKey;
@@ -1651,10 +1651,10 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         return new Set([range]);
       }
     });
-  }, [setSelectedYearRanges]);
+  };
 
   // Handle specific assessment year bar click (Cmd/Ctrl+click for multi-select)
-  const handleAssessmentYearClick = useCallback((data: { payload?: { code?: string } }, event: React.MouseEvent) => {
+  const handleAssessmentYearClick = (data: { payload?: { code?: string } }, event: React.MouseEvent) => {
     const year = data.payload?.code;
     if (!year) return;
     const isMultiSelect = event.metaKey || event.ctrlKey;
@@ -1669,9 +1669,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         return new Set([year]);
       }
     });
-  }, [setSelectedAssessmentYears]);
+  };
   // Handle GBIF observation range bar click
-  const handleObsClick = useCallback((data: { payload?: { range?: string } }, event: React.MouseEvent) => {
+  const handleObsClick = (data: { payload?: { range?: string } }, event: React.MouseEvent) => {
     const range = data.payload?.range;
     if (!range) return;
     const isMultiSelect = event.metaKey || event.ctrlKey;
@@ -1686,7 +1686,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         return new Set([range]);
       }
     });
-  }, [setSelectedObsRanges]);
+  };
 
   // Toggle a single assessor/reviewer in/out of selection (used by search list)
   const handleAssessorToggle = useCallback((code: string) => {

@@ -1,6 +1,5 @@
 "use client";
 
-import { memo } from "react";
 import {
   BarChart,
   Bar,
@@ -37,7 +36,7 @@ interface FilterBarChartProps {
   yAxisTickMaxLength?: number;
 }
 
-function FilterBarChart({
+export default function FilterBarChart({
   data,
   dataKey,
   selectedItems,
@@ -113,5 +112,3 @@ function FilterBarChart({
     </ResponsiveContainer>
   );
 }
-
-export default memo(FilterBarChart);
