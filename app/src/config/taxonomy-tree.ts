@@ -70,16 +70,8 @@ const SPECIES_FUNGORUM_URL = "https://doi.org/10.48580/dg9ld-4hj";
 
 // ─── Mammal subgroup helpers ─────────────────────────────────────────
 
-// Cetacean families within order Artiodactyla (modern taxonomy)
-const CETACEAN_FAMILIES = [
-  "delphinidae", "ziphiidae", "balaenopteridae", "phocoenidae",
-  "balaenidae", "platanistidae", "monodontidae", "kogiidae",
-  "pontoporiidae", "physeteridae", "neobalaenidae", "lipotidae",
-  "iniidae", "eschrichtiidae",
-];
-
 const MAMMAL_NAMED_ORDERS = [
-  "rodentia", "chiroptera", "eulipotyphla", "afrosoricida", "macroscelidea",
+  "rodentia", "chiroptera", "eulipotyphla",
   "primates", "diprotodontia", "dasyuromorphia", "didelphimorphia",
   "peramelemorphia", "paucituberculata", "notoryctemorphia", "microbiotheria",
   "carnivora", "artiodactyla", "lagomorpha", "sirenia",
@@ -92,44 +84,12 @@ const INSECT_NAMED_ORDERS = [
   "hemiptera", "orthoptera", "odonata",
 ];
 
-// ─── Plant class/order lists (raw APG-style taxonomy) ───────────────
+// ─── Plant taxonomy ──────────────────────────────────────────────────
 //
-// Orders listed below are the ones actually present in the IUCN CSVs.
-// Classes without drill-downs contain a single dominant order and are
-// left as leaves. Large classes with a long tail use an "other-<class>"
-// catch-all via excludeOrders, mirroring the pattern used for insects.
-
-// Magnoliopsida (eudicots) — all orders with ≥500 assessed species.
-// The long tail of small orders is rolled into "other-magnoliopsida".
-const MAGNOLIOPSIDA_NAMED_ORDERS = [
-  "malpighiales", "fabales", "myrtales", "gentianales", "ericales",
-  "sapindales", "lamiales", "caryophyllales", "laurales", "asterales",
-  "malvales", "rosales", "magnoliales", "proteales", "apiales",
-  "fagales", "oxalidales", "solanales", "brassicales", "celastrales",
-];
-
-// Liliopsida (monocots) — all 10 orders present in the data.
-const LILIOPSIDA_ORDERS = [
-  "asparagales", "poales", "arecales", "zingiberales", "alismatales",
-  "pandanales", "liliales", "dioscoreales", "commelinales", "acorales",
-];
-
-// Polypodiopsida (ferns) — named orders with ≥10 assessed species.
-const POLYPODIOPSIDA_NAMED_ORDERS = [
-  "polypodiales", "cyatheales", "hymenophyllales", "salviniales",
-];
-
-// Bryopsida (true mosses) — named orders with ≥5 assessed species.
-const BRYOPSIDA_NAMED_ORDERS = [
-  "hypnales", "pottiales", "dicranales", "grimmiales",
-  "bryales", "orthotrichales", "hookeriales",
-];
-
-// Florideophyceae (red algae) — named orders with ≥3 assessed species.
-const FLORIDEOPHYCEAE_NAMED_ORDERS = [
-  "ceramiales", "corallinales", "gigartinales", "gelidiales",
-  "halymeniales", "hapalidiales",
-];
+// Plant Table 1a groups are leaves. We deliberately do not drill down:
+// robust described-species counts at the class and order level don't
+// exist across the full tree, and showing "X assessed of 0 described"
+// would read as broken data to specialists.
 
 // Fungi ascomycota orders
 const ASCOMYCOTA_ORDERS = [
@@ -249,14 +209,14 @@ const OTHER_INVERTEBRATES_NODE: TaxonomyNode = {
       estimatedSourceUrl: "https://www.marinespecies.org/aphia.php?p=taxdetails&id=1806",
     },
     {
-      id: "worms",
-      name: "Worms",
+      id: "annelids",
+      name: "Annelids",
       filter: {
         csvGroups: ["other_invertebrates"],
-        classNames: ["clitellata", "polychaeta", "nemertea", "turbellaria"],
+        classNames: ["clitellata", "polychaeta"],
       },
-      estimatedDescribed: 27_800,
-      estimatedSource: "~22K Annelida + ~1.3K Nemertea + ~4.5K Turbellaria (WoRMS; various)",
+      estimatedDescribed: 22_000,
+      estimatedSource: "~22K Annelida spp. (WoRMS; Catalogue of Life)",
       estimatedSourceUrl: "https://www.marinespecies.org/aphia.php?p=taxdetails&id=882",
     },
     {
@@ -264,9 +224,9 @@ const OTHER_INVERTEBRATES_NODE: TaxonomyNode = {
       name: "Other Invertebrates",
       filter: {
         csvGroups: ["other_invertebrates"],
-        excludeClasses: ["asteroidea", "echinoidea", "holothuroidea", "clitellata", "polychaeta", "nemertea", "turbellaria"],
+        excludeClasses: ["asteroidea", "echinoidea", "holothuroidea", "clitellata", "polychaeta"],
       },
-      estimatedDescribed: 195_685,
+      estimatedDescribed: 201_485,
       estimatedSource: "Remainder from IUCN Table 1a 'Others', minus Echinoderms & Worms",
       estimatedSourceUrl: COL_2025_URL,
     },
@@ -291,10 +251,7 @@ const HORSESHOE_CRABS_NODE: TaxonomyNode = {
   estimatedSourceUrl: IUCN_SOURCE_URL,
 };
 
-// ─── Plant nodes (class → order) ─────────────────────────────────────
-//
-// Plant subgroups mirror real botanical ranks (class, then order).
-// No colloquial / growth-form groupings — botanists want raw taxonomy.
+// ─── Plant nodes (all leaves — see comment above) ────────────────────
 
 const FLOWERING_PLANTS_NODE: TaxonomyNode = {
   id: "flowering_plants",
@@ -303,47 +260,6 @@ const FLOWERING_PLANTS_NODE: TaxonomyNode = {
   estimatedDescribed: 369_000,
   estimatedSource: IUCN_SOURCE + " (State of the World's Plants 2017)",
   estimatedSourceUrl: IUCN_SOURCE_URL,
-  children: [
-    {
-      id: "magnoliopsida",
-      name: "Magnoliopsida (Eudicots)",
-      filter: { csvGroups: ["flowering_plants"], classNames: ["magnoliopsida"] },
-      children: [
-        ...MAGNOLIOPSIDA_NAMED_ORDERS.map((order) => ({
-          id: order,
-          name: order.charAt(0).toUpperCase() + order.slice(1),
-          filter: {
-            csvGroups: ["flowering_plants"],
-            classNames: ["magnoliopsida"],
-            orderNames: [order],
-          },
-        })),
-        {
-          id: "other-magnoliopsida",
-          name: "Other Magnoliopsida",
-          filter: {
-            csvGroups: ["flowering_plants"],
-            classNames: ["magnoliopsida"],
-            excludeOrders: MAGNOLIOPSIDA_NAMED_ORDERS,
-          },
-        },
-      ],
-    },
-    {
-      id: "liliopsida",
-      name: "Liliopsida (Monocots)",
-      filter: { csvGroups: ["flowering_plants"], classNames: ["liliopsida"] },
-      children: LILIOPSIDA_ORDERS.map((order) => ({
-        id: order,
-        name: order.charAt(0).toUpperCase() + order.slice(1),
-        filter: {
-          csvGroups: ["flowering_plants"],
-          classNames: ["liliopsida"],
-          orderNames: [order],
-        },
-      })),
-    },
-  ],
 };
 
 const GYMNOSPERMS_NODE: TaxonomyNode = {
@@ -353,28 +269,6 @@ const GYMNOSPERMS_NODE: TaxonomyNode = {
   estimatedDescribed: 1_113,
   estimatedSource: IUCN_SOURCE + " (Christenhusz et al. 2011)",
   estimatedSourceUrl: "https://stateoftheworldsplants.org/2017/report/SOTWP_2017.pdf",
-  children: [
-    {
-      id: "pinopsida",
-      name: "Pinopsida",
-      filter: { csvGroups: ["gymnosperms"], classNames: ["pinopsida"] },
-    },
-    {
-      id: "cycadopsida",
-      name: "Cycadopsida",
-      filter: { csvGroups: ["gymnosperms"], classNames: ["cycadopsida"] },
-    },
-    {
-      id: "gnetopsida",
-      name: "Gnetopsida",
-      filter: { csvGroups: ["gymnosperms"], classNames: ["gnetopsida"] },
-    },
-    {
-      id: "ginkgoopsida",
-      name: "Ginkgoopsida",
-      filter: { csvGroups: ["gymnosperms"], classNames: ["ginkgoopsida"] },
-    },
-  ],
 };
 
 const FERNS_AND_ALLIES_NODE: TaxonomyNode = {
@@ -384,55 +278,6 @@ const FERNS_AND_ALLIES_NODE: TaxonomyNode = {
   estimatedDescribed: 11_800,
   estimatedSource: IUCN_SOURCE + " (State of the World's Plants 2017)",
   estimatedSourceUrl: "https://stateoftheworldsplants.org/2017/report/SOTWP_2017.pdf",
-  children: [
-    {
-      id: "polypodiopsida",
-      name: "Polypodiopsida",
-      filter: { csvGroups: ["ferns_and_allies"], classNames: ["polypodiopsida"] },
-      children: [
-        ...POLYPODIOPSIDA_NAMED_ORDERS.map((order) => ({
-          id: order,
-          name: order.charAt(0).toUpperCase() + order.slice(1),
-          filter: {
-            csvGroups: ["ferns_and_allies"],
-            classNames: ["polypodiopsida"],
-            orderNames: [order],
-          },
-        })),
-        {
-          id: "other-polypodiopsida",
-          name: "Other Polypodiopsida",
-          filter: {
-            csvGroups: ["ferns_and_allies"],
-            classNames: ["polypodiopsida"],
-            excludeOrders: POLYPODIOPSIDA_NAMED_ORDERS,
-          },
-        },
-      ],
-    },
-    {
-      id: "lycopodiopsida",
-      name: "Lycopodiopsida",
-      filter: { csvGroups: ["ferns_and_allies"], classNames: ["lycopodiopsida"] },
-      children: [
-        {
-          id: "isoetales",
-          name: "Isoetales",
-          filter: { csvGroups: ["ferns_and_allies"], classNames: ["lycopodiopsida"], orderNames: ["isoetales"] },
-        },
-        {
-          id: "lycopodiales",
-          name: "Lycopodiales",
-          filter: { csvGroups: ["ferns_and_allies"], classNames: ["lycopodiopsida"], orderNames: ["lycopodiales"] },
-        },
-        {
-          id: "selaginellales",
-          name: "Selaginellales",
-          filter: { csvGroups: ["ferns_and_allies"], classNames: ["lycopodiopsida"], orderNames: ["selaginellales"] },
-        },
-      ],
-    },
-  ],
 };
 
 const MOSSES_NODE: TaxonomyNode = {
@@ -442,68 +287,6 @@ const MOSSES_NODE: TaxonomyNode = {
   estimatedDescribed: 21_925,
   estimatedSource: IUCN_SOURCE + " (" + CHRISTENHUSZ + ")",
   estimatedSourceUrl: CHRISTENHUSZ_URL,
-  children: [
-    {
-      id: "bryopsida",
-      name: "Bryopsida",
-      filter: { csvGroups: ["mosses"], classNames: ["bryopsida"] },
-      children: [
-        ...BRYOPSIDA_NAMED_ORDERS.map((order) => ({
-          id: order,
-          name: order.charAt(0).toUpperCase() + order.slice(1),
-          filter: {
-            csvGroups: ["mosses"],
-            classNames: ["bryopsida"],
-            orderNames: [order],
-          },
-        })),
-        {
-          id: "other-bryopsida",
-          name: "Other Bryopsida",
-          filter: {
-            csvGroups: ["mosses"],
-            classNames: ["bryopsida"],
-            excludeOrders: BRYOPSIDA_NAMED_ORDERS,
-          },
-        },
-      ],
-    },
-    {
-      id: "jungermanniopsida",
-      name: "Jungermanniopsida",
-      filter: { csvGroups: ["mosses"], classNames: ["jungermanniopsida"] },
-    },
-    {
-      id: "marchantiopsida",
-      name: "Marchantiopsida",
-      filter: { csvGroups: ["mosses"], classNames: ["marchantiopsida"] },
-    },
-    {
-      id: "anthocerotopsida",
-      name: "Anthocerotopsida",
-      filter: { csvGroups: ["mosses"], classNames: ["anthocerotopsida"] },
-    },
-    {
-      id: "sphagnopsida",
-      name: "Sphagnopsida",
-      filter: { csvGroups: ["mosses"], classNames: ["sphagnopsida"] },
-    },
-    {
-      id: "andreaeopsida",
-      name: "Andreaeopsida",
-      filter: { csvGroups: ["mosses"], classNames: ["andreaeopsida"] },
-    },
-    {
-      id: "polytrichopsida",
-      name: "Polytrichopsida",
-      filter: { csvGroups: ["mosses"], classNames: ["polytrichopsida"] },
-    },
-    {
-      id: "takakiopsida",
-      name: "Takakiopsida",
-      filter: { csvGroups: ["mosses"], classNames: ["takakiopsida"] },
-    },
-  ],
 };
 
 const GREEN_ALGAE_NODE: TaxonomyNode = {
@@ -513,23 +296,6 @@ const GREEN_ALGAE_NODE: TaxonomyNode = {
   estimatedDescribed: 14_550,
   estimatedSource: IUCN_SOURCE,
   estimatedSourceUrl: IUCN_SOURCE_URL,
-  children: [
-    {
-      id: "charophyceae",
-      name: "Charophyceae",
-      filter: { csvGroups: ["green_algae"], classNames: ["charophyceae"] },
-    },
-    {
-      id: "ulvophyceae",
-      name: "Ulvophyceae",
-      filter: { csvGroups: ["green_algae"], classNames: ["ulvophyceae"] },
-    },
-    {
-      id: "chlorophyceae",
-      name: "Chlorophyceae",
-      filter: { csvGroups: ["green_algae"], classNames: ["chlorophyceae"] },
-    },
-  ],
 };
 
 const RED_ALGAE_NODE: TaxonomyNode = {
@@ -539,33 +305,6 @@ const RED_ALGAE_NODE: TaxonomyNode = {
   estimatedDescribed: 7_744,
   estimatedSource: IUCN_SOURCE,
   estimatedSourceUrl: IUCN_SOURCE_URL,
-  children: [
-    {
-      id: "florideophyceae",
-      name: "Florideophyceae",
-      filter: { csvGroups: ["red_algae"], classNames: ["florideophyceae"] },
-      children: [
-        ...FLORIDEOPHYCEAE_NAMED_ORDERS.map((order) => ({
-          id: order,
-          name: order.charAt(0).toUpperCase() + order.slice(1),
-          filter: {
-            csvGroups: ["red_algae"],
-            classNames: ["florideophyceae"],
-            orderNames: [order],
-          },
-        })),
-        {
-          id: "other-florideophyceae",
-          name: "Other Florideophyceae",
-          filter: {
-            csvGroups: ["red_algae"],
-            classNames: ["florideophyceae"],
-            excludeOrders: FLORIDEOPHYCEAE_NAMED_ORDERS,
-          },
-        },
-      ],
-    },
-  ],
 };
 
 const MUSHROOMS_NODE: TaxonomyNode = {
@@ -577,19 +316,19 @@ const MUSHROOMS_NODE: TaxonomyNode = {
   estimatedSourceUrl: SPECIES_FUNGORUM_URL,
   children: [
     {
-      id: "moulds-yeasts-cup",
-      name: "Moulds, Yeasts & Cup Fungi",
+      id: "ascomycota",
+      name: "Ascomycota",
       filter: { csvGroups: ["mushrooms"], orderNames: ASCOMYCOTA_ORDERS },
       estimatedDescribed: 98_000,
       estimatedSource: "~98K Ascomycota spp. (" + SPECIES_FUNGORUM + "; He et al. 2019)",
       estimatedSourceUrl: SPECIES_FUNGORUM_URL,
     },
     {
-      id: "bracket-mushroom-fungi",
-      name: "Bracket Fungi & Mushrooms",
+      id: "other-fungi",
+      name: "Other Fungi",
       filter: { csvGroups: ["mushrooms"], excludeOrders: ASCOMYCOTA_ORDERS },
       estimatedDescribed: 59_648,
-      estimatedSource: "Remainder of 157,648 total fungi (" + SPECIES_FUNGORUM + ")",
+      estimatedSource: "Remainder of 157,648 total fungi — mostly Basidiomycota, plus Chytridiomycota, Zygomycota, etc. (" + SPECIES_FUNGORUM + ")",
       estimatedSourceUrl: SPECIES_FUNGORUM_URL,
     },
   ],
@@ -642,11 +381,11 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedSourceUrl: MDD_URL,
         },
         {
-          id: "insectivores",
-          name: "Insectivores",
-          filter: { csvGroups: ["mammalia"], orderNames: ["eulipotyphla", "afrosoricida", "macroscelidea"] },
-          estimatedDescribed: 674,
-          estimatedSource: MDD + " — Eulipotyphla (599) + Afrosoricida (55) + Macroscelidea (20)",
+          id: "eulipotyphla",
+          name: "Eulipotyphla",
+          filter: { csvGroups: ["mammalia"], orderNames: ["eulipotyphla"] },
+          estimatedDescribed: 599,
+          estimatedSource: MDD + " — Eulipotyphla (hedgehogs, shrews, moles, solenodons)",
           estimatedSourceUrl: MDD_URL,
         },
         {
@@ -680,15 +419,11 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedSourceUrl: MDD_URL,
         },
         {
-          id: "even-toed-ungulates",
-          name: "Even-toed Ungulates",
-          filter: {
-            csvGroups: ["mammalia"],
-            orderNames: ["artiodactyla"],
-            excludeFamilies: CETACEAN_FAMILIES,
-          },
-          estimatedDescribed: 278,
-          estimatedSource: MDD + " — Artiodactyla (371) minus ~93 cetacean spp.",
+          id: "artiodactyls",
+          name: "Artiodactyls",
+          filter: { csvGroups: ["mammalia"], orderNames: ["artiodactyla"] },
+          estimatedDescribed: 371,
+          estimatedSource: MDD + " — Artiodactyla (includes cetaceans under Cetartiodactyla)",
           estimatedSourceUrl: MDD_URL,
         },
         {
@@ -700,19 +435,11 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedSourceUrl: MDD_URL,
         },
         {
-          id: "whales-dolphins",
-          name: "Whales & Dolphins",
-          filter: {
-            csvGroups: ["mammalia"],
-            orderNames: ["artiodactyla", "sirenia"],
-            // Families filter separates cetaceans from other artiodactyls and
-            // covers all extant/known sirenians (Trichechidae = manatees,
-            // Dugongidae = dugong + Steller's sea cow). If a newly-described
-            // sirenian family is added to IUCN data, it must be listed here.
-            families: [...CETACEAN_FAMILIES, "trichechidae", "dugongidae"],
-          },
-          estimatedDescribed: 98,
-          estimatedSource: MDD + " — ~93 cetacean spp. within Artiodactyla + Sirenia (5)",
+          id: "sirenians",
+          name: "Sirenians",
+          filter: { csvGroups: ["mammalia"], orderNames: ["sirenia"] },
+          estimatedDescribed: 5,
+          estimatedSource: MDD + " — Sirenia (manatees + dugong)",
           estimatedSourceUrl: MDD_URL,
         },
         {
@@ -738,8 +465,8 @@ export const TAXONOMY_TREE: TaxonomyNode = {
             csvGroups: ["mammalia"],
             excludeOrders: MAMMAL_NAMED_ORDERS,
           },
-          estimatedDescribed: 142,
-          estimatedSource: "Remainder of IUCN Table 1a total of 6,819 minus " + MDD + " named orders",
+          estimatedDescribed: 217,
+          estimatedSource: "Remainder of IUCN Table 1a total of 6,819 minus " + MDD + " named orders (incl. Afrosoricida ~55 + Macroscelidea ~20 + other small orders)",
           estimatedSourceUrl: IUCN_SOURCE_URL,
         },
       ],
@@ -767,11 +494,11 @@ export const TAXONOMY_TREE: TaxonomyNode = {
       color: "#84cc16",
       children: [
         {
-          id: "lizards-snakes",
-          name: "Lizards & Snakes",
-          filter: { csvGroups: ["reptilia"], orderNames: ["squamata", "rhynchocephalia"] },
-          estimatedDescribed: 12_109,
-          estimatedSource: "Reptile Database, Sep 2025 (12,502 total minus Testudines & Crocodylia)",
+          id: "squamates",
+          name: "Squamates",
+          filter: { csvGroups: ["reptilia"], orderNames: ["squamata"] },
+          estimatedDescribed: 12_108,
+          estimatedSource: "Reptile Database, Sep 2025 — Squamata (lizards, snakes, amphisbaenians)",
           estimatedSourceUrl: REPTILE_DB_URL,
         },
         {
@@ -788,6 +515,14 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           filter: { csvGroups: ["reptilia"], orderNames: ["crocodylia"] },
           estimatedDescribed: 27,
           estimatedSource: REPTILE_DB,
+          estimatedSourceUrl: REPTILE_DB_URL,
+        },
+        {
+          id: "tuataras",
+          name: "Tuataras",
+          filter: { csvGroups: ["reptilia"], orderNames: ["rhynchocephalia"] },
+          estimatedDescribed: 1,
+          estimatedSource: REPTILE_DB + " — Rhynchocephalia (Sphenodon punctatus)",
           estimatedSourceUrl: REPTILE_DB_URL,
         },
       ],
@@ -841,11 +576,19 @@ export const TAXONOMY_TREE: TaxonomyNode = {
       color: "#06b6d4",
       children: [
         {
-          id: "bony-fish",
-          name: "Bony Fish",
-          filter: { csvGroups: ["fishes"], classNames: ["actinopterygii", "sarcopterygii"] },
-          estimatedDescribed: 35_880,
-          estimatedSource: ESCHMEYER + " (37,288 total minus Chondrichthyes & jawless)",
+          id: "ray-finned-fishes",
+          name: "Ray-finned Fishes",
+          filter: { csvGroups: ["fishes"], classNames: ["actinopterygii"] },
+          estimatedDescribed: 35_872,
+          estimatedSource: ESCHMEYER + " — Actinopterygii",
+          estimatedSourceUrl: ESCHMEYER_URL,
+        },
+        {
+          id: "lobe-finned-fishes",
+          name: "Lobe-finned Fishes",
+          filter: { csvGroups: ["fishes"], classNames: ["sarcopterygii"] },
+          estimatedDescribed: 8,
+          estimatedSource: ESCHMEYER + " — Sarcopterygii (coelacanths + lungfish; paraphyletic once tetrapods are excluded)",
           estimatedSourceUrl: ESCHMEYER_URL,
         },
         {

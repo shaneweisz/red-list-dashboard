@@ -121,8 +121,8 @@ describe("parseParams", () => {
   });
 
   it("parses multiple subgroups", () => {
-    const result = parseParams("?subgroups=sharks-rays,bony-fish");
-    expect(result.subgroups).toEqual(new Set(["sharks-rays", "bony-fish"]));
+    const result = parseParams("?subgroups=sharks-rays,ray-finned-fishes");
+    expect(result.subgroups).toEqual(new Set(["sharks-rays", "ray-finned-fishes"]));
   });
 
   it("defaults subgroups to empty set when absent", () => {
@@ -131,9 +131,9 @@ describe("parseParams", () => {
   });
 
   it("parses subgroups with other params", () => {
-    const result = parseParams("?taxa=fishes&subgroups=bony-fish&categories=CR");
+    const result = parseParams("?taxa=fishes&subgroups=ray-finned-fishes&categories=CR");
     expect(result.taxa).toEqual(new Set(["fishes"]));
-    expect(result.subgroups).toEqual(new Set(["bony-fish"]));
+    expect(result.subgroups).toEqual(new Set(["ray-finned-fishes"]));
     expect(result.categories).toEqual(new Set(["CR"]));
   });
 
@@ -248,11 +248,11 @@ describe("buildQs", () => {
   });
 
   it("includes multiple subgroups", () => {
-    const qs = buildQs({ ...emptyState, subgroups: new Set(["sharks-rays", "bony-fish"]) });
+    const qs = buildQs({ ...emptyState, subgroups: new Set(["sharks-rays", "ray-finned-fishes"]) });
     const params = new URLSearchParams(qs);
     const sgs = params.get("subgroups")!.split(",");
     expect(sgs).toContain("sharks-rays");
-    expect(sgs).toContain("bony-fish");
+    expect(sgs).toContain("ray-finned-fishes");
   });
 
   it("omits subgroups when empty", () => {
@@ -403,7 +403,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
     const original = {
       viewMode: "reassessments" as const,
       taxa: new Set(["fishes"]),
-      subgroups: new Set(["sharks-rays", "bony-fish"]),
+      subgroups: new Set(["sharks-rays", "ray-finned-fishes"]),
       categories: new Set<string>(),
       yearRanges: new Set<string>(),
       assessmentYears: new Set<string>(),
@@ -426,7 +426,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
 
     const qs = buildQs(original);
     const parsed = parseParams(qs);
-    expect(parsed.subgroups).toEqual(new Set(["sharks-rays", "bony-fish"]));
+    expect(parsed.subgroups).toEqual(new Set(["sharks-rays", "ray-finned-fishes"]));
     expect(parsed.taxa).toEqual(new Set(["fishes"]));
   });
 

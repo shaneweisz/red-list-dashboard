@@ -37,17 +37,12 @@ import {
   GiHighGrass,
   GiHorseHead,
   GiKangaroo,
-  GiLilyPads,
-  GiLotus,
   GiMushroom,
   GiMushroomGills,
   GiMushrooms,
   GiNautilusShell,
-  GiOak,
-  GiPalmTree,
   GiPangolin,
   GiPineTree,
-  GiPlantSeed,
   GiRabbit,
   GiRat,
   GiSalamander,
@@ -57,9 +52,7 @@ import {
   GiSnake,
   GiSpermWhale,
   GiSpiderAlt,
-  GiSunflower,
   GiTurtle,
-  GiWheat,
   GiWolfHead,
 } from "react-icons/gi";
 
@@ -82,21 +75,22 @@ const ICON_MAP: Record<string, React.ComponentType<IconBaseProps>> = {
   // Mammal subgroups
   rodents: GiRat,
   bats: GiBat,
-  insectivores: GiHedgehog,
+  eulipotyphla: GiHedgehog,
   primates: GiGorilla,
   marsupials: GiKangaroo,
   carnivores: GiWolfHead,
-  "even-toed-ungulates": GiDeer,
+  artiodactyls: GiDeer,
   "rabbits-hares": GiRabbit,
-  "whales-dolphins": GiSpermWhale,
+  sirenians: GiSpermWhale,
   "odd-toed-ungulates": GiHorseHead,
   pangolins: GiPangolin,
   "other-mammals": FaPaw,
 
   // Reptile subgroups
-  "lizards-snakes": GiSnake,
+  squamates: GiSnake,
   "turtles-tortoises": GiTurtle,
   crocodilians: GiCrocJaws,
+  tuataras: GiSnake,
 
   // Amphibian subgroups
   "frogs-toads": FaFrog,
@@ -104,7 +98,8 @@ const ICON_MAP: Record<string, React.ComponentType<IconBaseProps>> = {
   caecilians: FaFrog,
 
   // Fish subgroups
-  "bony-fish": FaFish,
+  "ray-finned-fishes": FaFish,
+  "lobe-finned-fishes": FaFish,
   "sharks-rays": GiSharkFin,
   "jawless-fish": FaFish,
 
@@ -126,48 +121,24 @@ const ICON_MAP: Record<string, React.ComponentType<IconBaseProps>> = {
   corals: GiCoral,
   other_invertebrates: FaBug,
   echinoderms: GiSeaStar,
-  worms: GiEarthWorm,
+  annelids: GiEarthWorm,
   "other-invertebrates-catch-all": FaBug,
   velvet_worms: GiEarthWorm,
   horseshoe_crabs: GiCrab,
 
-  // Plant subgroups (raw class/order taxonomy)
+  // Plant Table 1a groups (leaves — no drill-down)
   flowering_plants: GiFlowers,
-  magnoliopsida: GiFlowers,
-  liliopsida: GiWheat,
-  "other-magnoliopsida": GiFlowers,
-  // Eudicot orders with recognisable icons
-  asterales: GiSunflower,
-  fabales: GiPlantSeed,
-  rosales: GiOak,
-  fagales: GiOak,
-  // Monocot orders with recognisable icons
-  asparagales: GiLotus,
-  poales: GiWheat,
-  arecales: GiPalmTree,
-  alismatales: GiLilyPads,
   gymnosperms: GiPineTree,
-  pinopsida: GiPineTree,
-  cycadopsida: GiPalmTree,
-  gnetopsida: GiPineTree,
-  ginkgoopsida: GiFern,
   ferns_and_allies: GiFern,
-  polypodiopsida: GiFern,
-  lycopodiopsida: GiFern,
   mosses: GiHighGrass,
-  bryopsida: GiHighGrass,
-  jungermanniopsida: GiHighGrass,
-  marchantiopsida: GiHighGrass,
-  anthocerotopsida: GiHighGrass,
-  sphagnopsida: GiHighGrass,
   green_algae: GiAlgae,
   red_algae: GiAlgae,
   brown_algae: GiAlgae,
 
   // Fungi subgroups
   mushrooms: GiMushroom,
-  "moulds-yeasts-cup": GiMushroomGills,
-  "bracket-mushroom-fungi": GiMushrooms,
+  ascomycota: GiMushroomGills,
+  "other-fungi": GiMushrooms,
 };
 
 // Prefixes applied to subgroup IDs to disambiguate across parent taxa
