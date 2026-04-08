@@ -31,11 +31,17 @@ export default function YearBarChart({
   barColor = "#3b82f6",
   yMax,
 }: YearBarChartProps) {
+  // Compact number formatter for Y-axis ticks (e.g. 12000 → "12k")
+  const formatTick = (value: number): string => {
+    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value % 1_000_000 === 0 ? 0 : 1)}M`;
+    if (value >= 1_000) return `${(value / 1_000).toFixed(value % 1_000 === 0 ? 0 : 1)}k`;
+    return String(value);
+  };
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart
         data={data}
-        margin={{ top: 8, right: 8, left: 0, bottom: 4 }}
+        margin={{ top: 8, right: 8, left: 4, bottom: 4 }}
         barCategoryGap={2}
       >
         <XAxis
@@ -54,9 +60,10 @@ export default function YearBarChart({
           tick={{ fontSize: 10, fill: "#a1a1aa" }}
           tickLine={false}
           axisLine={false}
-          width={30}
+          width={40}
           allowDecimals={false}
           domain={yMax != null ? [0, yMax] : undefined}
+          tickFormatter={formatTick}
         />
         <Tooltip
           formatter={(value: number) => [value.toLocaleString(), "Species"]}
