@@ -197,6 +197,24 @@ describe("matchSpeciesList — duplicate handling", () => {
   });
 });
 
+describe("matchSpeciesList — defensive deduping", () => {
+  it("synonym list containing the canonical name itself does not double-link", async () => {
+    // Defensive: the SQL filters self-equal synonyms before they hit the CSV,
+    // but if one ever leaks through (or is added by hand), the matching loop
+    // must still dedupe — only one mapping row, sourced as canonical.
+    const species = [speciesOf(1, "Aquarana catesbeianus", ["Aquarana catesbeianus"])];
+    const matchFn = matchFromTable({
+      "Aquarana catesbeianus": { key: 100, matchType: "EXACT" },
+    });
+    const entries = await matchSpeciesList(species, new Set([100]), logger, matchFn, 1);
+
+    expect(linked(entries)).toEqual([
+      { sis_taxon_id: 1, gbif_species_key: 100, match_type: "EXACT", name_source: "canonical" },
+    ]);
+    expect(diagnostics(entries)).toEqual([]);
+  });
+});
+
 describe("matchSpeciesList — empty input", () => {
   it("returns empty array for empty species list", async () => {
     const entries = await matchSpeciesList([], new Set([100]), logger, matchFromTable({}), 1);

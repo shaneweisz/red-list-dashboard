@@ -295,10 +295,14 @@ export function getSpecies(groups: string[], includeNE: boolean): SpeciesRow[] {
       let gbifOccurrenceCount: number | null = null;
       let gbifObsAfterAssessment: number | null = null;
       // A species may map to multiple GBIF keys (canonical + synonym matches).
-      // Sum occurrence counts across all linked keys; the displayed
-      // gbif_species_key field is the first non-null one (canonical wins
-      // because the matching script processes canonicals first).
-      let primaryGbifKey: number | null = null;
+      // Sum occurrence counts across all linked keys. The displayed
+      // gbif_species_key prefers a canonical-source match (used for external
+      // links like the GBIF species page), falling back to the first non-null
+      // link if no canonical match exists. Selection is by name_source rather
+      // than row order so the reader doesn't depend on the writer's pass
+      // ordering.
+      let canonicalGbifKey: number | null = null;
+      let fallbackGbifKey: number | null = null;
       const links = mapping.get(r.sis_taxon_id) ?? [];
 
       for (const link of links) {
@@ -311,9 +315,12 @@ export function getSpecies(groups: string[], includeNE: boolean): SpeciesRow[] {
           gbifObsAfterAssessment = (gbifObsAfterAssessment ?? 0) + gbif.count_after_assessment_year;
         }
         linkedGbifKeys.add(key);
-        if (primaryGbifKey == null) primaryGbifKey = key;
+        if (link.name_source === "canonical" && canonicalGbifKey == null) {
+          canonicalGbifKey = key;
+        }
+        if (fallbackGbifKey == null) fallbackGbifKey = key;
       }
-      const gbifSpeciesKey = primaryGbifKey;
+      const gbifSpeciesKey = canonicalGbifKey ?? fallbackGbifKey;
 
       const previousAssessments = historyMap[String(r.sis_taxon_id)] ?? [];
 

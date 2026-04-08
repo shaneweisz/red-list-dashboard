@@ -904,6 +904,56 @@ describe("getSpecies (1:N mapping)", () => {
     expect(Number.isNaN(results[0].gbif_occurrence_count!)).toBe(false);
   });
 
+  it("primary gbif_species_key prefers canonical regardless of mapping CSV row order", () => {
+    // The matcher writes canonical rows before synonym rows today, but the
+    // reader must not depend on that — selection should be by name_source.
+    // This fixture deliberately lists the synonym row FIRST.
+    const group = uniqueGroup();
+    const row = makeRow({ scientific_name: "Aquarana catesbeianus", taxon_group_table1a: group });
+    setupGetSpecies({
+      group,
+      redlistRows: [row],
+      mappingRows: [
+        { sis_taxon_id: row.sis_taxon_id, gbif_species_key: 200, match_type: "EXACT", name_source: "synonym" },
+        { sis_taxon_id: row.sis_taxon_id, gbif_species_key: 100, match_type: "EXACT", name_source: "canonical" },
+      ],
+      gbifRows: [
+        { gbif_species_key: 100, scientific_name: "Aquarana catesbeianus", total_count: 50, count_after_assessment_year: 10 },
+        { gbif_species_key: 200, scientific_name: "Lithobates catesbeianus", total_count: 30, count_after_assessment_year: 5 },
+      ],
+    });
+
+    const results = getSpecies([group], false);
+    expect(results).toHaveLength(1);
+    // Despite the synonym row appearing first in the mapping, the canonical
+    // key (100) is selected as the displayed/external-link gbif_species_key.
+    expect(results[0].gbif_species_key).toBe(100);
+    // Counts still aggregate across both keys.
+    expect(results[0].gbif_occurrence_count).toBe(80);
+  });
+
+  it("falls back to first non-null link when no canonical-source link exists", () => {
+    // Edge case: a species whose canonical name didn't match GBIF at all,
+    // but a synonym did. The displayed gbif_species_key should be the
+    // synonym key (only option), not null.
+    const group = uniqueGroup();
+    const row = makeRow({ scientific_name: "Aquarana catesbeianus", taxon_group_table1a: group });
+    setupGetSpecies({
+      group,
+      redlistRows: [row],
+      mappingRows: [
+        { sis_taxon_id: row.sis_taxon_id, gbif_species_key: 200, match_type: "EXACT", name_source: "synonym" },
+      ],
+      gbifRows: [
+        { gbif_species_key: 200, scientific_name: "Lithobates catesbeianus", total_count: 30, count_after_assessment_year: 5 },
+      ],
+    });
+
+    const results = getSpecies([group], false);
+    expect(results[0].gbif_species_key).toBe(200);
+    expect(results[0].gbif_occurrence_count).toBe(30);
+  });
+
   it("Bullfrog regression: legacy Lithobates key is linked to Aquarana, not surfaced as NE", () => {
     // The user-reported bug: Lithobates catesbeianus appearing as a separate
     // NE row even though Aquarana catesbeianus has an assessment. With the

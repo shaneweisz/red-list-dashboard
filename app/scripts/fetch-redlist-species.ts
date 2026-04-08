@@ -231,17 +231,24 @@ export async function fetchFromIucnDb(
             AND ts.status NOT IN ('DELETE','D')
         ),
         all_latest_canonicals AS (
+          -- Excludes hybrids ("Salix x fragilis") and bracketed subgenera
+          -- ("Bombus (Bombus) terrestris") so split_part(' ', 1/2) yields a
+          -- valid (genus, species) pair. These are rare and would otherwise
+          -- emit garbage tokens like "(Bombus)" that can't collide with real
+          -- synonym names anyway, so excluding them is safe.
           SELECT sis_id, scientific_name
           FROM taxons
           WHERE latest = true
             AND infra_name IS NULL
             AND subpopulation_name IS NULL
+            AND scientific_name !~ ' [x×] '
+            AND position('(' in scientific_name) = 0
         ),
         synonym_claim_counts AS (
           SELECT genus_name, species_name, COUNT(DISTINCT sis_id) AS claim_count
           FROM (
             SELECT genus_name, species_name, sis_id FROM all_latest_synonyms
-            UNION
+            UNION ALL
             SELECT split_part(scientific_name, ' ', 1),
                    split_part(scientific_name, ' ', 2),
                    sis_id
