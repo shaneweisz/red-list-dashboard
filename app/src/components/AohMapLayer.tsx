@@ -13,6 +13,16 @@ interface AohMetadata {
   prevalence: number;
   category: string;
   bounds: [number, number, number, number] | null; // [south, west, north, east]
+  /**
+   * Set when the source raster's bounding box extended slightly outside
+   * the valid Mollweide projection ellipse (globe-spanning species like
+   * wide-ranging seabirds). The upload script trimmed `x` % off the
+   * left/right edges and `y` % off the top/bottom before reprojecting.
+   * The trimmed edge pixels are guaranteed to be empty so no habitat
+   * is lost — but we surface this so the user knows the displayed AOH
+   * footprint is slightly smaller than the source raster's full bbox.
+   */
+  inset_clip?: { x: number; y: number };
 }
 
 interface AohMapLayerProps {
@@ -152,6 +162,19 @@ function AohMapLayerInner({ sisTaxonId, taxonGroup, visible, panelId = "main", m
         <div>AOH: {metadata.aoh_total.toLocaleString(undefined, { maximumFractionDigits: 0 })} km&sup2;</div>
         <div>Range: {metadata.range_total.toLocaleString(undefined, { maximumFractionDigits: 0 })} km&sup2;</div>
         <div>Prevalence: {(metadata.prevalence * 100).toFixed(1)}%</div>
+        {metadata.inset_clip && (
+          <div
+            className="text-amber-600 dark:text-amber-400 flex items-center gap-1 cursor-help pt-0.5"
+            title={`This species' range spans most of the globe, and the source raster's bounding-box corners fell just outside the valid Mollweide projection domain. The upload pipeline trimmed ${metadata.inset_clip.x}% off the left/right edges${metadata.inset_clip.y > 0 ? ` and ${metadata.inset_clip.y}% off the top/bottom` : ""} so the reprojection to Web Mercator could complete. The trimmed edge pixels are empty (no habitat), so the displayed AOH is unchanged.`}
+          >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 16v-4M12 8h.01" />
+            </svg>
+            Edges trimmed {metadata.inset_clip.x}%
+            {metadata.inset_clip.y > 0 ? `×${metadata.inset_clip.y}%` : ""}
+          </div>
+        )}
       </div>
     );
   }

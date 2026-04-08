@@ -1,7 +1,46 @@
 import { NextRequest, NextResponse } from "next/server";
-import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, GetObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 
 let r2Client: S3Client | null = null;
+
+// Cache the resolved key for each species so the variant lookup
+// (canonical vs `_c{x}x{y}` clipped) only runs once per process.
+const keyCache = new Map<string, string | null>();
+
+/**
+ * Find the AOH PNG R2 key for a species. Files may be stored as:
+ *   aoh-maps/{id}.png             (normal)
+ *   aoh-maps/{id}_c{x}x{y}.png    (edges trimmed for globe-spanning species)
+ */
+async function findAohPngKey(client: S3Client, bucket: string, sisTaxonId: string): Promise<string | null> {
+  if (keyCache.has(sisTaxonId)) return keyCache.get(sisTaxonId)!;
+
+  const directKey = `aoh-maps/${sisTaxonId}.png`;
+  try {
+    await client.send(new GetObjectCommand({ Bucket: bucket, Key: directKey }));
+    keyCache.set(sisTaxonId, directKey);
+    return directKey;
+  } catch {
+    // Fall through to listing for clipped variants
+  }
+
+  const response = await client.send(
+    new ListObjectsV2Command({
+      Bucket: bucket,
+      Prefix: `aoh-maps/${sisTaxonId}_c`,
+      MaxKeys: 5,
+    })
+  );
+  for (const obj of response.Contents ?? []) {
+    if (obj.Key?.endsWith(".png")) {
+      keyCache.set(sisTaxonId, obj.Key);
+      return obj.Key;
+    }
+  }
+
+  keyCache.set(sisTaxonId, null);
+  return null;
+}
 
 function getR2Client(): S3Client {
   if (r2Client) return r2Client;
@@ -40,11 +79,16 @@ export async function GET(
       );
     }
 
+    const r2Key = await findAohPngKey(client, bucket, sisTaxonId);
+    if (!r2Key) {
+      return NextResponse.json(
+        { error: "AOH map not found for this species" },
+        { status: 404 }
+      );
+    }
+
     const response = await client.send(
-      new GetObjectCommand({
-        Bucket: bucket,
-        Key: `aoh-maps/${sisTaxonId}.png`,
-      })
+      new GetObjectCommand({ Bucket: bucket, Key: r2Key })
     );
 
     const body = await response.Body?.transformToByteArray();

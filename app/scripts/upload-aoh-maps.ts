@@ -91,10 +91,89 @@ function getWgs84Bounds(tifPath: string): [number, number, number, number] {
   return [cc.lowerRight[1], cc.upperLeft[0], cc.upperLeft[1], cc.lowerRight[0]];
 }
 
+interface InsetClip {
+  /** Percent of width trimmed off the left and right edges (integer 1-100). */
+  x: number;
+  /** Percent of height trimmed off the top and bottom edges (integer 1-100). */
+  y: number;
+}
+
+/**
+ * Reproject a Mollweide AOH raster to Web Mercator.
+ *
+ * For most species this is a single gdalwarp call. For globe-spanning
+ * species (e.g. wide-ranging seabirds, sea snakes), the rectangular
+ * source raster's corner pixels lie just outside the valid Mollweide
+ * projection ellipse, so PROJ refuses with "Point outside of projection
+ * domain" / "Cannot find coordinate operations". In that case we
+ * pre-clip the source via -srcwin to inset the bbox inside the ellipse,
+ * escalating the inset until the warp succeeds. The clipped pixels
+ * around the edge are guaranteed to be empty (otherwise they'd already
+ * be inside the ellipse), so no habitat is lost — but we still record
+ * the inset in the output metadata so the frontend can flag it.
+ *
+ * Returns the inset percentages used, or null if no clipping was needed.
+ */
+function warpMollweideToMercator(srcPath: string, dstPath: string): InsetClip | null {
+  const baseArgs = [
+    "-t_srs", "EPSG:3857",
+    "-r", "near",
+    "-srcnodata", "0",
+    "-dstnodata", "0",
+    "-co", "COMPRESS=LZW",
+    "-overwrite",
+  ];
+
+  try {
+    execFileSync("gdalwarp", [...baseArgs, srcPath, dstPath], { stdio: "pipe" });
+    return null;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!/coordinate operations|projection domain/i.test(msg)) throw err;
+  }
+
+  const info = JSON.parse(execFileSync("gdalinfo", ["-json", srcPath], { encoding: "utf-8" }));
+  const [w, h] = info.size as [number, number];
+  const clippedPath = dstPath + ".clipped.tif";
+
+  // Escalating inset levels: most failures only need a 1% horizontal
+  // inset, but a few wide+tall rasters need ~5% on both axes.
+  const insets: InsetClip[] = [
+    { x: 1, y: 0 },
+    { x: 5, y: 5 },
+    { x: 10, y: 10 },
+  ];
+
+  for (const inset of insets) {
+    const ix = Math.max(1, Math.ceil((w * inset.x) / 100));
+    const iy = Math.max(0, Math.ceil((h * inset.y) / 100));
+    const newW = w - 2 * ix;
+    const newH = h - 2 * iy;
+    if (newW <= 0 || newH <= 0) continue;
+    try {
+      execFileSync("gdal_translate", [
+        "-srcwin", String(ix), String(iy), String(newW), String(newH),
+        srcPath, clippedPath,
+      ], { stdio: "pipe" });
+      execFileSync("gdalwarp", [...baseArgs, clippedPath, dstPath], { stdio: "pipe" });
+      return inset;
+    } catch {
+      // Try the next inset level
+    } finally {
+      if (existsSync(clippedPath)) rmSync(clippedPath);
+    }
+  }
+
+  throw new Error(
+    `gdalwarp failed for ${srcPath} even after escalating insets — ` +
+    `source CRS may not be standard Mollweide`
+  );
+}
+
 function renderAohPng(
   tifPath: string,
   tmpDir: string,
-): { pngBuffer: Buffer; bounds: [number, number, number, number] } {
+): { pngBuffer: Buffer; bounds: [number, number, number, number]; insetClip: InsetClip | null } {
   const warpedPath = join(tmpDir, "warped.tif");
   const pngPath = join(tmpDir, "aoh.png");
 
@@ -104,16 +183,7 @@ function renderAohPng(
   // drifts visibly from vector overlays at higher latitudes.
   // -srcnodata/-dstnodata 0 flags absence pixels as nodata so we can
   // turn them into transparent alpha when rendering the PNG below.
-  execFileSync("gdalwarp", [
-    "-t_srs", "EPSG:3857",
-    "-r", "near",
-    "-srcnodata", "0",
-    "-dstnodata", "0",
-    "-co", "COMPRESS=LZW",
-    "-overwrite",
-    tifPath,
-    warpedPath,
-  ]);
+  const insetClip = warpMollweideToMercator(tifPath, warpedPath);
 
   // Step 2: Get WGS84 bounds (gdalinfo reports wgs84Extent in lon/lat
   // regardless of source SRS), used by the frontend image-source coords.
@@ -155,7 +225,21 @@ function renderAohPng(
   translateArgs.push(warpedPath, pngPath);
   execFileSync("gdal_translate", translateArgs);
 
-  return { pngBuffer: readFileSync(pngPath), bounds };
+  return { pngBuffer: readFileSync(pngPath), bounds, insetClip };
+}
+
+/** Build R2 key suffix encoding the inset clip, if any: e.g. `_c1x0`, `_c5x5`. */
+function insetSuffix(inset: InsetClip | null): string {
+  return inset ? `_c${inset.x}x${inset.y}` : "";
+}
+
+/** Match either `{id}.png` or `{id}_c{x}x{y}.png` (and same for .json). */
+function hasExistingAohUpload(existingKeys: Set<string>, id: string): boolean {
+  if (existingKeys.has(`${R2_PREFIX}/${id}.png`)) return true;
+  for (const key of existingKeys) {
+    if (key.startsWith(`${R2_PREFIX}/${id}_c`) && key.endsWith(".png")) return true;
+  }
+  return false;
 }
 
 /** List all sisTaxonIds that have AOH TIFs for a given taxon group folder */
@@ -188,11 +272,8 @@ async function uploadBatch(
   const tmpDir = mkdtempSync(join(tmpdir(), "aoh-upload-"));
 
   for (const id of ids) {
-    const pngKey = `${R2_PREFIX}/${id}.png`;
-    const metaKey = `${R2_PREFIX}/${id}.json`;
-
     try {
-      if (existingKeys.has(pngKey)) {
+      if (hasExistingAohUpload(existingKeys, id)) {
         existing++;
         logger.log("aoh_existing", { sisTaxonId: id });
         console.log(`    ${id} — already in R2, skipping`);
@@ -214,7 +295,14 @@ async function uploadBatch(
       }
 
       // Render PNG + extract bounds
-      const { pngBuffer, bounds } = renderAohPng(tifPath, tmpDir);
+      const { pngBuffer, bounds, insetClip } = renderAohPng(tifPath, tmpDir);
+
+      // Encode inset clip in the R2 filename so the PNG/metadata variant
+      // is visible from a plain R2 listing — same convention as the
+      // simplified range-map files (`_s{tolerance}.json`).
+      const suffix = insetSuffix(insetClip);
+      const pngKey = `${R2_PREFIX}/${id}${suffix}.png`;
+      const metaKey = `${R2_PREFIX}/${id}${suffix}.json`;
 
       // Read metadata JSON if it exists
       let metadata: Record<string, unknown> = {};
@@ -222,8 +310,13 @@ async function uploadBatch(
         metadata = JSON.parse(readFileSync(jsonPath, "utf-8"));
       }
 
-      // Combine metadata with bounds
-      const metaJson = JSON.stringify({ ...metadata, bounds });
+      // Combine metadata with bounds + (optional) inset_clip note. The
+      // frontend reads inset_clip to display a "edges trimmed" tooltip.
+      const metaJson = JSON.stringify({
+        ...metadata,
+        bounds,
+        ...(insetClip && { inset_clip: insetClip }),
+      });
 
       // Upload PNG
       await r2.send(
@@ -247,8 +340,13 @@ async function uploadBatch(
 
       uploaded++;
       const sizeMB = (pngBuffer.length / 1024 / 1024).toFixed(2);
-      logger.log("aoh_uploaded", { sisTaxonId: id, sizeMB });
-      console.log(` ${sizeMB} MB (${((Date.now() - t0) / 1000).toFixed(1)}s)`);
+      logger.log("aoh_uploaded", {
+        sisTaxonId: id,
+        sizeMB,
+        ...(insetClip && { insetClip }),
+      });
+      const clipNote = insetClip ? ` [clipped ${insetClip.x}%×${insetClip.y}%]` : "";
+      console.log(` ${sizeMB} MB${clipNote} (${((Date.now() - t0) / 1000).toFixed(1)}s)`);
     } catch (err) {
       failed++;
       logger.log("aoh_failed", { sisTaxonId: id, error: err instanceof Error ? err.message : String(err) });
@@ -303,8 +401,8 @@ export async function run(opts: {
       continue;
     }
 
-    const alreadyUploaded = ids.filter((id) => existingKeys.has(`${R2_PREFIX}/${id}.png`));
-    const toUpload = ids.filter((id) => !existingKeys.has(`${R2_PREFIX}/${id}.png`));
+    const alreadyUploaded = ids.filter((id) => hasExistingAohUpload(existingKeys, id));
+    const toUpload = ids.filter((id) => !hasExistingAohUpload(existingKeys, id));
 
     console.log(`  ${folder}: ${ids.length} species with AOH (${alreadyUploaded.length} already in R2, ${toUpload.length} to upload)`);
     logger.log("aoh_taxon_start", { taxon: folder, total: ids.length, toUpload: toUpload.length });

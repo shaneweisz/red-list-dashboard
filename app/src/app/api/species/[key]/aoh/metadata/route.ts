@@ -1,11 +1,45 @@
 import { NextRequest, NextResponse } from "next/server";
-import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, GetObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { CACHE_1H } from "@/lib/cache-headers";
 
 const metaCache = new Map<string, { data: object; timestamp: number }>();
 const CACHE_DURATION = 60 * 60 * 1000; // 1 hour
 
+// Cache resolved key per species (canonical vs `_c{x}x{y}` clipped variant)
+const keyCache = new Map<string, string | null>();
+
 let r2Client: S3Client | null = null;
+
+/** Mirror of findAohPngKey but for the .json metadata sibling. */
+async function findAohMetaKey(client: S3Client, bucket: string, sisTaxonId: string): Promise<string | null> {
+  if (keyCache.has(sisTaxonId)) return keyCache.get(sisTaxonId)!;
+
+  const directKey = `aoh-maps/${sisTaxonId}.json`;
+  try {
+    await client.send(new GetObjectCommand({ Bucket: bucket, Key: directKey }));
+    keyCache.set(sisTaxonId, directKey);
+    return directKey;
+  } catch {
+    // Fall through to listing for clipped variants
+  }
+
+  const response = await client.send(
+    new ListObjectsV2Command({
+      Bucket: bucket,
+      Prefix: `aoh-maps/${sisTaxonId}_c`,
+      MaxKeys: 5,
+    })
+  );
+  for (const obj of response.Contents ?? []) {
+    if (obj.Key?.endsWith(".json")) {
+      keyCache.set(sisTaxonId, obj.Key);
+      return obj.Key;
+    }
+  }
+
+  keyCache.set(sisTaxonId, null);
+  return null;
+}
 
 function getR2Client(): S3Client {
   if (r2Client) return r2Client;
@@ -50,11 +84,16 @@ export async function GET(
       );
     }
 
+    const r2Key = await findAohMetaKey(client, bucket, sisTaxonId);
+    if (!r2Key) {
+      return NextResponse.json(
+        { error: "AOH metadata not found for this species" },
+        { status: 404 }
+      );
+    }
+
     const response = await client.send(
-      new GetObjectCommand({
-        Bucket: bucket,
-        Key: `aoh-maps/${sisTaxonId}.json`,
-      })
+      new GetObjectCommand({ Bucket: bucket, Key: r2Key })
     );
 
     const body = await response.Body?.transformToString();
