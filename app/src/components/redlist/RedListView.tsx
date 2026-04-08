@@ -711,6 +711,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       setYearsChartMode("year");
     }
   }, [selectedAssessmentYears]);
+  // Paginate the by-year chart: show 10 years at a time, defaulting to the most recent
+  const YEARS_PAGE_SIZE = 10;
+  const [yearsPage, setYearsPage] = useState(0);
 
   // Helper to check if species matches the assessors filter
   const matchesAssessorsFilter = useCallback((s: Species): boolean => {
@@ -1042,6 +1045,20 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         label: `${count.toLocaleString()} (${total > 0 ? ((count / total) * 100).toFixed(1) : 0}%)`,
       }));
   }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, hasMapFilter, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter]);
+
+  const yearsTotalPages = Math.max(1, Math.ceil(assessmentYearsByYearData.length / YEARS_PAGE_SIZE));
+  const paginatedAssessmentYearsData = useMemo(
+    () => assessmentYearsByYearData.slice(yearsPage * YEARS_PAGE_SIZE, (yearsPage + 1) * YEARS_PAGE_SIZE),
+    [assessmentYearsByYearData, yearsPage]
+  );
+
+  // When Year view is (re)activated or the data reshapes, jump to the most recent page.
+  // User-driven page clicks don't trigger this because yearsTotalPages is stable under those.
+  useEffect(() => {
+    if (yearsChartMode === "year") {
+      setYearsPage(Math.max(0, yearsTotalPages - 1));
+    }
+  }, [yearsChartMode, yearsTotalPages]);
 
   // GBIF observations chart: apply all filters EXCEPT obs range
   const gbifObsData = useMemo(() => {
@@ -1925,34 +1942,73 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                   {yearsChartMode === "range" ? "Years Since Assessed" : "Assessments by Year"}
                 </span>
-                {!(isSingleSpecies && singleSpecies) && (
-                  <div className="inline-flex rounded-md bg-zinc-100 dark:bg-zinc-800 p-0.5" role="group" aria-label="Year chart view">
-                    <button
-                      type="button"
-                      onClick={() => setYearsChartMode("range")}
-                      className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
-                        yearsChartMode === "range"
-                          ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
-                          : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
-                      }`}
-                      aria-pressed={yearsChartMode === "range"}
-                    >
-                      Range
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setYearsChartMode("year")}
-                      className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
-                        yearsChartMode === "year"
-                          ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
-                          : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
-                      }`}
-                      aria-pressed={yearsChartMode === "year"}
-                    >
-                      Year
-                    </button>
-                  </div>
-                )}
+                <div className="flex items-center gap-2">
+                  {/* Pagination controls (year view only, and only when multiple pages) */}
+                  {!(isSingleSpecies && singleSpecies) && yearsChartMode === "year" && yearsTotalPages > 1 && (() => {
+                    const firstYear = paginatedAssessmentYearsData[0]?.code;
+                    const lastYear = paginatedAssessmentYearsData[paginatedAssessmentYearsData.length - 1]?.code;
+                    const label = firstYear && lastYear
+                      ? (firstYear === lastYear ? firstYear : `${firstYear}–${lastYear}`)
+                      : "";
+                    const canPrev = yearsPage > 0;
+                    const canNext = yearsPage < yearsTotalPages - 1;
+                    return (
+                      <div className="inline-flex items-center gap-1 text-xs text-zinc-500 dark:text-zinc-400">
+                        <button
+                          type="button"
+                          onClick={() => canPrev && setYearsPage(p => Math.max(0, p - 1))}
+                          disabled={!canPrev}
+                          className="w-5 h-5 flex items-center justify-center rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
+                          aria-label="Previous years"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="15 18 9 12 15 6" />
+                          </svg>
+                        </button>
+                        <span className="tabular-nums min-w-[64px] text-center">{label}</span>
+                        <button
+                          type="button"
+                          onClick={() => canNext && setYearsPage(p => Math.min(yearsTotalPages - 1, p + 1))}
+                          disabled={!canNext}
+                          className="w-5 h-5 flex items-center justify-center rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
+                          aria-label="Next years"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="9 18 15 12 9 6" />
+                          </svg>
+                        </button>
+                      </div>
+                    );
+                  })()}
+                  {!(isSingleSpecies && singleSpecies) && (
+                    <div className="inline-flex rounded-md bg-zinc-100 dark:bg-zinc-800 p-0.5" role="group" aria-label="Year chart view">
+                      <button
+                        type="button"
+                        onClick={() => setYearsChartMode("range")}
+                        className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
+                          yearsChartMode === "range"
+                            ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
+                            : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+                        }`}
+                        aria-pressed={yearsChartMode === "range"}
+                      >
+                        Range
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setYearsChartMode("year")}
+                        className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
+                          yearsChartMode === "year"
+                            ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
+                            : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+                        }`}
+                        aria-pressed={yearsChartMode === "year"}
+                      >
+                        Year
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="flex-1 min-h-[150px] flex flex-col">
                 {speciesLoading && assessedSpecies.length === 0 ? (
@@ -1988,16 +2044,14 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                       />
                     </div>
                   ) : null
-                ) : assessmentYearsByYearData.length > 0 ? (
-                  <div className="flex-1 overflow-x-auto">
-                    <div style={{ minWidth: Math.max(200, assessmentYearsByYearData.length * 24), height: "100%", minHeight: 150 }}>
-                      <YearBarChart
-                        data={assessmentYearsByYearData}
-                        selectedItems={selectedAssessmentYears}
-                        onBarClick={handleAssessmentYearClick}
-                        barColor="#3b82f6"
-                      />
-                    </div>
+                ) : paginatedAssessmentYearsData.length > 0 ? (
+                  <div className="flex-1">
+                    <YearBarChart
+                      data={paginatedAssessmentYearsData}
+                      selectedItems={selectedAssessmentYears}
+                      onBarClick={handleAssessmentYearClick}
+                      barColor="#3b82f6"
+                    />
                   </div>
                 ) : (
                   <div className="flex-1 flex items-center justify-center">
