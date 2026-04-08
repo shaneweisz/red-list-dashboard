@@ -1062,13 +1062,27 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     [assessmentYearsByYearData]
   );
 
-  // When Year view is (re)activated or the data reshapes, jump to the most recent page.
-  // User-driven page clicks don't trigger this because yearsTotalPages is stable under those.
+  // Jump to the most recent page when Year view is first entered — either on
+  // the initial mount (when the URL already selects a specific year) or on the
+  // Range → Year toggle. A ref initialized to `null` detects "never been in
+  // year view before". Unrelated cross-filter changes that reshape
+  // yearsTotalPages don't teleport the user, because this effect only fires
+  // its body on the transition, not on every dataset update.
+  const prevYearsChartModeRef = useRef<"range" | "year" | null>(null);
   useEffect(() => {
-    if (yearsChartMode === "year") {
+    if (yearsChartMode === "year" && prevYearsChartModeRef.current !== "year") {
       setYearsPage(Math.max(0, yearsTotalPages - 1));
     }
+    prevYearsChartModeRef.current = yearsChartMode;
   }, [yearsChartMode, yearsTotalPages]);
+  // Clamp yearsPage into the valid range when the dataset shrinks beneath it,
+  // but preserve the user's current page otherwise so cross-filter tweaks
+  // don't bounce them away from the years they were browsing.
+  useEffect(() => {
+    if (yearsPage > yearsTotalPages - 1) {
+      setYearsPage(Math.max(0, yearsTotalPages - 1));
+    }
+  }, [yearsPage, yearsTotalPages]);
 
   // GBIF observations chart: apply all filters EXCEPT obs range
   const gbifObsData = useMemo(() => {
