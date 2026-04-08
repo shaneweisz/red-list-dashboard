@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { memo, useState, useEffect, useMemo } from "react";
 import dynamic from "next/dynamic";
 import type { RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 
@@ -68,7 +68,7 @@ interface AssessmentYearsChartProps {
  * chevrons or toggling Range ↔ Year doesn't force the parent dashboard
  * (and every sibling chart) to re-render.
  */
-export default function AssessmentYearsChart({
+function AssessmentYearsChart({
   loading,
   isSingleSpecies,
   singleSpecies,
@@ -242,3 +242,5 @@ export default function AssessmentYearsChart({
     </div>
   );
 }
+
+export default memo(AssessmentYearsChart);
