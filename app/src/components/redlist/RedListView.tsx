@@ -1874,18 +1874,10 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   <div className="italic font-semibold text-zinc-900 dark:text-zinc-100 text-lg">
                     {singleSpecies.scientific_name}
                   </div>
-                  {singleSpecies.taxon_id === "plantae" ? (
-                    singleSpecies.family && (
-                      <div className="text-zinc-500 dark:text-zinc-400 text-sm">
-                        {singleSpecies.family}
-                      </div>
-                    )
-                  ) : (
-                    singleSpecies.common_name && (
-                      <div className="text-zinc-500 dark:text-zinc-400 text-sm">
-                        {singleSpecies.common_name}
-                      </div>
-                    )
+                  {singleSpecies.common_name && (
+                    <div className="text-zinc-500 dark:text-zinc-400 text-sm">
+                      {singleSpecies.common_name}
+                    </div>
                   )}
                 </div>
               </div>
@@ -2291,12 +2283,11 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   </div>
                 </div>
 
-                {/* Growth Form (fungi only — plants use raw taxonomy instead) */}
+                {/* Growth Form (plants/fungi only) */}
                 {(() => {
                   // Compute growth form counts cross-filtered (exclude own filter)
                   const gfCounts: Record<string, number> = {};
                   taxaFilteredSpecies.forEach(s => {
-                    if (s.taxon_id === "plantae") return;
                     if (!s.growth_forms?.length) return;
                     if (!matchesSearch(s)) return;
                     if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
@@ -2969,18 +2960,10 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                           >
                             {s.scientific_name}
                           </span>
-                          {s.taxon_id === "plantae" ? (
-                            s.family && (
-                              <div className="text-zinc-500 dark:text-zinc-400 text-xs truncate max-w-[140px] md:max-w-none">
-                                {s.family}
-                              </div>
-                            )
-                          ) : (
-                            s.common_name && (
-                              <div className="text-zinc-500 dark:text-zinc-400 text-xs truncate max-w-[140px] md:max-w-none">
-                                {s.common_name}
-                              </div>
-                            )
+                          {s.common_name && (
+                            <div className="text-zinc-500 dark:text-zinc-400 text-xs truncate max-w-[140px] md:max-w-none">
+                              {s.common_name}
+                            </div>
                           )}
                         </div>
                       </div>
