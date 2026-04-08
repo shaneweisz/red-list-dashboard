@@ -43,6 +43,16 @@ describe("parseParams", () => {
     expect(result.yearRanges).toEqual(new Set(["<1 year", "11-20 years"]));
   });
 
+  it("parses assessment years", () => {
+    const result = parseParams("?assessmentYears=2023,2024");
+    expect(result.assessmentYears).toEqual(new Set(["2023", "2024"]));
+  });
+
+  it("defaults assessmentYears to empty set when absent", () => {
+    const result = parseParams("");
+    expect(result.assessmentYears.size).toBe(0);
+  });
+
   it("parses countries", () => {
     const result = parseParams("?countries=ZA,KE");
     expect(result.countries).toEqual(new Set(["ZA", "KE"]));
@@ -154,6 +164,7 @@ describe("buildQs", () => {
     taxa: new Set<string>(),
     categories: new Set<string>(),
     yearRanges: new Set<string>(),
+    assessmentYears: new Set<string>(),
     countries: new Set<string>(),
     obsRanges: new Set<string>(),
     systems: new Set<string>(),
@@ -208,6 +219,20 @@ describe("buildQs", () => {
     const qs = buildQs({ ...emptyState, yearRanges: new Set(["<1 year"]) });
     const params = new URLSearchParams(qs);
     expect(params.get("years")).toBe("<1 year");
+  });
+
+  it("includes assessment years", () => {
+    const qs = buildQs({ ...emptyState, assessmentYears: new Set(["2023", "2024"]) });
+    const params = new URLSearchParams(qs);
+    const years = params.get("assessmentYears")!.split(",");
+    expect(years).toContain("2023");
+    expect(years).toContain("2024");
+  });
+
+  it("omits assessmentYears when empty", () => {
+    const qs = buildQs({ ...emptyState, assessmentYears: new Set() });
+    const params = new URLSearchParams(qs);
+    expect(params.has("assessmentYears")).toBe(false);
   });
 
   it("includes search", () => {
@@ -308,6 +333,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
       subgroups: new Set<string>(),
       categories: new Set(["CR", "EN"]),
       yearRanges: new Set(["11-20 years"]),
+      assessmentYears: new Set<string>(),
       countries: new Set(["ZA"]),
       obsRanges: new Set<string>(),
       systems: new Set<string>(),
@@ -344,6 +370,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
       subgroups: new Set<string>(),
       categories: new Set<string>(),
       yearRanges: new Set<string>(),
+      assessmentYears: new Set<string>(),
       countries: new Set<string>(),
       obsRanges: new Set<string>(),
       systems: new Set<string>(),
@@ -378,6 +405,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
       subgroups: new Set(["sharks-rays", "bony-fish"]),
       categories: new Set<string>(),
       yearRanges: new Set<string>(),
+      assessmentYears: new Set<string>(),
       countries: new Set<string>(),
       obsRanges: new Set<string>(),
       systems: new Set<string>(),
@@ -408,6 +436,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
       subgroups: new Set<string>(),
       categories: new Set<string>(),
       yearRanges: new Set<string>(),
+      assessmentYears: new Set<string>(),
       countries: new Set<string>(),
       obsRanges: new Set<string>(),
       systems: new Set<string>(),
@@ -437,6 +466,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
       subgroups: new Set<string>(),
       categories: new Set<string>(),
       yearRanges: new Set<string>(),
+      assessmentYears: new Set<string>(),
       countries: new Set<string>(),
       obsRanges: new Set<string>(),
       systems: new Set<string>(),
