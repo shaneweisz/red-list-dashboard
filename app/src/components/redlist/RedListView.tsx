@@ -40,6 +40,12 @@ const FilterBarChart = dynamic(
   { ssr: false, loading: () => <div className="h-full animate-pulse bg-zinc-200 dark:bg-zinc-800 rounded" /> }
 );
 
+// Dedicated vertical bar chart for "Assessments by Year" view
+const YearBarChart = dynamic(
+  () => import("./YearBarChart"),
+  { ssr: false, loading: () => <div className="h-full animate-pulse bg-zinc-200 dark:bg-zinc-800 rounded" /> }
+);
+
 // Simple spinner component for loading states
 function Spinner({ className = "" }: { className?: string }) {
   return (
@@ -1027,9 +1033,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       counts[year] = (counts[year] || 0) + 1;
     });
     const total = Object.values(counts).reduce((sum, c) => sum + c, 0);
-    // Sort years descending (most recent first)
+    // Sort years ascending so the horizontal chart reads chronologically (oldest → newest)
     return Object.entries(counts)
-      .sort(([a], [b]) => Number(b) - Number(a))
+      .sort(([a], [b]) => Number(a) - Number(b))
       .map(([year, count]) => ({
         code: year,
         count,
@@ -1983,16 +1989,13 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                     </div>
                   ) : null
                 ) : assessmentYearsByYearData.length > 0 ? (
-                  <div className="flex-1 overflow-y-auto" style={{ maxHeight: 260 }}>
-                    <div style={{ height: Math.max(150, assessmentYearsByYearData.length * 20) }}>
-                      <FilterBarChart
+                  <div className="flex-1 overflow-x-auto">
+                    <div style={{ minWidth: Math.max(200, assessmentYearsByYearData.length * 24), height: "100%", minHeight: 150 }}>
+                      <YearBarChart
                         data={assessmentYearsByYearData}
-                        dataKey="code"
                         selectedItems={selectedAssessmentYears}
                         onBarClick={handleAssessmentYearClick}
                         barColor="#3b82f6"
-                        yAxisWidth={42}
-                        rightMargin={85}
                       />
                     </div>
                   </div>
