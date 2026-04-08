@@ -1051,6 +1051,11 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     () => assessmentYearsByYearData.slice(yearsPage * YEARS_PAGE_SIZE, (yearsPage + 1) * YEARS_PAGE_SIZE),
     [assessmentYearsByYearData, yearsPage]
   );
+  // Global max across all years so the Y-axis scale stays fixed as users page
+  const yearsGlobalMax = useMemo(
+    () => assessmentYearsByYearData.reduce((m, d) => Math.max(m, d.count), 0),
+    [assessmentYearsByYearData]
+  );
 
   // When Year view is (re)activated or the data reshapes, jump to the most recent page.
   // User-driven page clicks don't trigger this because yearsTotalPages is stable under those.
@@ -2051,6 +2056,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                       selectedItems={selectedAssessmentYears}
                       onBarClick={handleAssessmentYearClick}
                       barColor="#3b82f6"
+                      yMax={yearsGlobalMax}
                     />
                   </div>
                 ) : (

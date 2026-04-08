@@ -20,6 +20,8 @@ interface YearBarChartProps {
   selectedItems: Set<string>;
   onBarClick: (data: { payload?: { code?: string } }, event: React.MouseEvent) => void;
   barColor?: string;
+  /** Fixed Y-axis max so the scale stays stable across pagination */
+  yMax?: number;
 }
 
 export default function YearBarChart({
@@ -27,6 +29,7 @@ export default function YearBarChart({
   selectedItems,
   onBarClick,
   barColor = "#3b82f6",
+  yMax,
 }: YearBarChartProps) {
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -53,6 +56,7 @@ export default function YearBarChart({
           axisLine={false}
           width={30}
           allowDecimals={false}
+          domain={yMax != null ? [0, yMax] : undefined}
         />
         <Tooltip
           formatter={(value: number) => [value.toLocaleString(), "Species"]}
