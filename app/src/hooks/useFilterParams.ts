@@ -24,6 +24,9 @@ export function parseParams(search: string) {
     yearRanges: p.get("years")
       ? new Set(p.get("years")!.split(",").filter(Boolean))
       : new Set<string>(),
+    assessmentYears: p.get("assessmentYears")
+      ? new Set(p.get("assessmentYears")!.split(",").filter(Boolean))
+      : new Set<string>(),
     countries: p.get("countries")
       ? new Set(p.get("countries")!.split(",").filter(Boolean))
       : new Set<string>(),
@@ -73,6 +76,7 @@ export function buildQs(state: {
   subgroups: Set<string>;
   categories: Set<string>;
   yearRanges: Set<string>;
+  assessmentYears: Set<string>;
   countries: Set<string>;
   obsRanges: Set<string>;
   systems: Set<string>;
@@ -95,6 +99,7 @@ export function buildQs(state: {
   if (state.subgroups.size > 0) p.set("subgroups", [...state.subgroups].join(","));
   if (state.categories.size > 0) p.set("categories", [...state.categories].join(","));
   if (state.yearRanges.size > 0) p.set("years", [...state.yearRanges].join(","));
+  if (state.assessmentYears.size > 0) p.set("assessmentYears", [...state.assessmentYears].join(","));
   if (state.countries.size > 0) p.set("countries", [...state.countries].join(","));
   if (state.obsRanges.size > 0) p.set("obsRanges", [...state.obsRanges].join(","));
   if (state.systems.size > 0) p.set("systems", [...state.systems].join(","));
@@ -191,6 +196,18 @@ export function useFilterParams() {
       setState(prev => {
         const nextYears = typeof updater === "function" ? updater(prev.yearRanges) : updater;
         const next = { ...prev, yearRanges: nextYears };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
+  const setSelectedAssessmentYears = useCallback(
+    (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+      setState(prev => {
+        const nextYears = typeof updater === "function" ? updater(prev.assessmentYears) : updater;
+        const next = { ...prev, assessmentYears: nextYears };
         queueMicrotask(() => syncUrl(next, false));
         return next;
       });
@@ -392,6 +409,7 @@ export function useFilterParams() {
         subgroups: new Set<string>(),
         categories: new Set<string>(),
         yearRanges: new Set<string>(),
+        assessmentYears: new Set<string>(),
         countries: new Set<string>(),
         obsRanges: new Set<string>(),
         systems: new Set<string>(),
@@ -421,6 +439,7 @@ export function useFilterParams() {
         subgroups: new Set<string>(),
         categories: new Set<string>(),
         yearRanges: new Set<string>(),
+        assessmentYears: new Set<string>(),
         countries: new Set<string>(),
         obsRanges: new Set<string>(),
         systems: new Set<string>(),
@@ -448,6 +467,7 @@ export function useFilterParams() {
     selectedSubgroups: state.subgroups,
     selectedCategories: state.categories,
     selectedYearRanges: state.yearRanges,
+    selectedAssessmentYears: state.assessmentYears,
     selectedCountries: state.countries,
     selectedObsRanges: state.obsRanges,
     selectedSystems: state.systems,
@@ -467,6 +487,7 @@ export function useFilterParams() {
     setSelectedSubgroups,
     setSelectedCategories,
     setSelectedYearRanges,
+    setSelectedAssessmentYears,
     setSelectedCountries,
     setSelectedObsRanges,
     setSelectedSystems,
