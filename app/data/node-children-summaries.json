@@ -260,7 +260,7 @@
     },
     {
       "id": "gymnosperms",
-      "name": "Conifers & Cycads",
+      "name": "Gymnosperms",
       "estimatedDescribed": 1113,
       "totalAssessed": 1062,
       "outdated": 626,
@@ -277,7 +277,7 @@
     },
     {
       "id": "ferns_and_allies",
-      "name": "Ferns & Horsetails",
+      "name": "Ferns & Allies",
       "estimatedDescribed": 11800,
       "totalAssessed": 834,
       "outdated": 447,
@@ -355,7 +355,7 @@
     },
     {
       "id": "mushrooms",
-      "name": "Mushrooms, etc.",
+      "name": "Fungi",
       "estimatedDescribed": 157648,
       "totalAssessed": 1302,
       "outdated": 45,
@@ -465,19 +465,19 @@
       }
     },
     {
-      "id": "insectivores",
-      "name": "Insectivores",
-      "estimatedDescribed": 674,
-      "totalAssessed": 591,
-      "outdated": 102,
+      "id": "eulipotyphla",
+      "name": "Eulipotyphla",
+      "estimatedDescribed": 599,
+      "totalAssessed": 517,
+      "outdated": 31,
       "gbifNeSpeciesCount": 0,
       "byCategory": {
-        "EN": 52,
-        "LC": 351,
-        "NT": 23,
-        "DD": 105,
-        "VU": 41,
-        "CR": 11,
+        "LC": 306,
+        "NT": 21,
+        "EN": 44,
+        "DD": 97,
+        "VU": 31,
+        "CR": 10,
         "EX": 8
       }
     },
@@ -533,21 +533,21 @@
       }
     },
     {
-      "id": "even-toed-ungulates",
-      "name": "Even-toed Ungulates",
-      "estimatedDescribed": 278,
-      "totalAssessed": 243,
-      "outdated": 81,
+      "id": "artiodactyls",
+      "name": "Artiodactyls",
+      "estimatedDescribed": 371,
+      "totalAssessed": 336,
+      "outdated": 84,
       "gbifNeSpeciesCount": 35,
       "byCategory": {
-        "CR": 10,
-        "LC": 92,
-        "VU": 50,
-        "EN": 38,
-        "NT": 29,
+        "CR": 15,
+        "LC": 141,
+        "VU": 57,
+        "EN": 50,
+        "NT": 39,
         "EX": 8,
         "EW": 1,
-        "DD": 15
+        "DD": 25
       }
     },
     {
@@ -568,20 +568,15 @@
       }
     },
     {
-      "id": "whales-dolphins",
-      "name": "Whales & Dolphins",
-      "estimatedDescribed": 98,
-      "totalAssessed": 98,
-      "outdated": 5,
+      "id": "sirenians",
+      "name": "Sirenians",
+      "estimatedDescribed": 5,
+      "totalAssessed": 5,
+      "outdated": 2,
       "gbifNeSpeciesCount": 0,
       "byCategory": {
-        "LC": 49,
-        "EN": 12,
-        "VU": 11,
-        "NT": 10,
-        "EX": 1,
-        "CR": 5,
-        "DD": 10
+        "VU": 4,
+        "EX": 1
       }
     },
     {
@@ -615,256 +610,32 @@
     {
       "id": "other-mammals",
       "name": "Other Mammals",
-      "estimatedDescribed": 142,
-      "totalAssessed": 77,
-      "outdated": 21,
+      "estimatedDescribed": 217,
+      "totalAssessed": 151,
+      "outdated": 92,
       "gbifNeSpeciesCount": 26,
       "byCategory": {
-        "LC": 44,
-        "NT": 7,
-        "DD": 12,
-        "EN": 5,
-        "VU": 5,
-        "CR": 4
-      }
-    }
-  ],
-  "aves": [
-    {
-      "id": "songbirds",
-      "name": "Songbirds",
-      "estimatedDescribed": 6688,
-      "totalAssessed": 6688,
-      "outdated": 0,
-      "gbifNeSpeciesCount": 304,
-      "byCategory": {
-        "LC": 5555,
-        "EX": 64,
-        "EN": 170,
-        "NT": 516,
-        "CR": 79,
-        "VU": 285,
-        "DD": 18,
-        "EW": 1
-      }
-    },
-    {
-      "id": "hummingbirds-swifts",
-      "name": "Hummingbirds & Swifts",
-      "estimatedDescribed": 603,
-      "totalAssessed": 603,
-      "outdated": 0,
-      "gbifNeSpeciesCount": 1,
-      "byCategory": {
-        "LC": 511,
-        "VU": 26,
-        "DD": 8,
-        "NT": 33,
-        "CR": 11,
-        "EX": 2,
-        "EN": 12
-      }
-    },
-    {
-      "id": "woodpeckers-toucans",
-      "name": "Woodpeckers & Toucans",
-      "estimatedDescribed": 481,
-      "totalAssessed": 481,
-      "outdated": 0,
-      "gbifNeSpeciesCount": 15,
-      "byCategory": {
-        "LC": 425,
-        "NT": 38,
-        "VU": 9,
-        "EN": 6,
-        "CR": 2,
-        "EX": 1
-      }
-    },
-    {
-      "id": "parrots",
-      "name": "Parrots",
-      "estimatedDescribed": 421,
-      "totalAssessed": 421,
-      "outdated": 0,
-      "gbifNeSpeciesCount": 16,
-      "byCategory": {
-        "LC": 244,
-        "EN": 30,
-        "NT": 52,
-        "VU": 54,
-        "CR": 23,
-        "DD": 1,
-        "EX": 16,
-        "EW": 1
-      }
-    },
-    {
-      "id": "shorebirds",
-      "name": "Shorebirds",
-      "estimatedDescribed": 387,
-      "totalAssessed": 387,
-      "outdated": 0,
-      "gbifNeSpeciesCount": 19,
-      "byCategory": {
-        "LC": 268,
-        "VU": 33,
-        "CR": 10,
-        "DD": 1,
-        "EN": 16,
-        "NT": 51,
-        "EX": 8
-      }
-    },
-    {
-      "id": "pigeons-doves",
-      "name": "Pigeons & Doves",
-      "estimatedDescribed": 369,
-      "totalAssessed": 369,
-      "outdated": 0,
-      "gbifNeSpeciesCount": 4,
-      "byCategory": {
-        "EX": 16,
-        "LC": 245,
-        "VU": 29,
-        "NT": 48,
-        "EN": 17,
-        "CR": 13,
-        "EW": 1
-      }
-    },
-    {
-      "id": "raptors",
-      "name": "Raptors",
-      "estimatedDescribed": 324,
-      "totalAssessed": 324,
-      "outdated": 0,
-      "gbifNeSpeciesCount": 19,
-      "byCategory": {
-        "LC": 217,
-        "VU": 29,
-        "NT": 38,
-        "CR": 13,
-        "EN": 24,
-        "EX": 3
-      }
-    },
-    {
-      "id": "gamebirds",
-      "name": "Gamebirds",
-      "estimatedDescribed": 309,
-      "totalAssessed": 309,
-      "outdated": 0,
-      "gbifNeSpeciesCount": 7,
-      "byCategory": {
-        "LC": 199,
-        "VU": 43,
-        "NT": 36,
-        "EN": 17,
-        "CR": 11,
-        "EW": 1,
-        "EX": 1,
-        "DD": 1
-      }
-    },
-    {
-      "id": "owls",
-      "name": "Owls",
-      "estimatedDescribed": 242,
-      "totalAssessed": 242,
-      "outdated": 0,
-      "gbifNeSpeciesCount": 22,
-      "byCategory": {
-        "LC": 176,
-        "NT": 26,
-        "VU": 22,
-        "DD": 1,
-        "EN": 8,
-        "CR": 4,
-        "EX": 5
-      }
-    },
-    {
-      "id": "waterbirds",
-      "name": "Waterbirds",
-      "estimatedDescribed": 404,
-      "totalAssessed": 404,
-      "outdated": 0,
-      "gbifNeSpeciesCount": 62,
-      "byCategory": {
-        "LC": 267,
-        "NT": 28,
-        "EN": 21,
-        "VU": 35,
-        "CR": 17,
-        "EX": 34,
-        "DD": 2
-      }
-    },
-    {
-      "id": "seabirds",
-      "name": "Seabirds",
-      "estimatedDescribed": 223,
-      "totalAssessed": 223,
-      "outdated": 0,
-      "gbifNeSpeciesCount": 13,
-      "byCategory": {
-        "LC": 103,
-        "EN": 29,
-        "EX": 3,
-        "VU": 42,
-        "NT": 24,
-        "CR": 19,
-        "DD": 3
-      }
-    },
-    {
-      "id": "herons-storks",
-      "name": "Herons & Storks",
-      "estimatedDescribed": 136,
-      "totalAssessed": 136,
-      "outdated": 0,
-      "gbifNeSpeciesCount": 4,
-      "byCategory": {
-        "LC": 96,
-        "NT": 14,
-        "VU": 7,
-        "EN": 9,
-        "CR": 4,
-        "EX": 6
-      }
-    },
-    {
-      "id": "other-birds",
-      "name": "Other Birds",
-      "estimatedDescribed": 598,
-      "totalAssessed": 598,
-      "outdated": 0,
-      "gbifNeSpeciesCount": 39,
-      "byCategory": {
-        "NT": 63,
-        "LC": 451,
-        "VU": 54,
         "EN": 13,
-        "CR": 10,
-        "DD": 1,
-        "EX": 5,
-        "EW": 1
+        "LC": 89,
+        "NT": 9,
+        "DD": 20,
+        "VU": 15,
+        "CR": 5
       }
     }
   ],
   "reptilia": [
     {
-      "id": "lizards-snakes",
-      "name": "Lizards & Snakes",
-      "estimatedDescribed": 12109,
-      "totalAssessed": 10068,
+      "id": "squamates",
+      "name": "Squamates",
+      "estimatedDescribed": 12108,
+      "totalAssessed": 10067,
       "outdated": 5419,
       "gbifNeSpeciesCount": 972,
       "byCategory": {
         "EN": 752,
         "NT": 528,
-        "LC": 6350,
+        "LC": 6349,
         "CR": 357,
         "VU": 566,
         "EX": 24,
@@ -904,6 +675,17 @@
         "VU": 3,
         "LC": 12,
         "EN": 1
+      }
+    },
+    {
+      "id": "tuataras",
+      "name": "Tuataras",
+      "estimatedDescribed": 1,
+      "totalAssessed": 1,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 0,
+      "byCategory": {
+        "LC": 1
       }
     }
   ],
@@ -962,23 +744,37 @@
   ],
   "fishes": [
     {
-      "id": "bony-fish",
-      "name": "Bony Fish",
-      "estimatedDescribed": 35880,
-      "totalAssessed": 27724,
-      "outdated": 11083,
+      "id": "ray-finned-fishes",
+      "name": "Ray-finned Fishes",
+      "estimatedDescribed": 35872,
+      "totalAssessed": 27716,
+      "outdated": 11079,
       "gbifNeSpeciesCount": 0,
       "byCategory": {
-        "CR": 778,
+        "CR": 777,
         "EX": 90,
-        "EN": 1360,
-        "VU": 1503,
+        "EN": 1359,
+        "VU": 1502,
         "EW": 11,
-        "LC": 17855,
+        "LC": 17850,
         "NT": 888,
         "DD": 5236,
         "LR/lc": 1,
         "LR/nt": 2
+      }
+    },
+    {
+      "id": "lobe-finned-fishes",
+      "name": "Lobe-finned Fishes",
+      "estimatedDescribed": 8,
+      "totalAssessed": 8,
+      "outdated": 4,
+      "gbifNeSpeciesCount": 0,
+      "byCategory": {
+        "CR": 1,
+        "VU": 1,
+        "LC": 5,
+        "EN": 1
       }
     },
     {
@@ -1178,205 +974,45 @@
       }
     },
     {
-      "id": "worms",
-      "name": "Worms",
-      "estimatedDescribed": 27800,
-      "totalAssessed": 367,
-      "outdated": 16,
-      "gbifNeSpeciesCount": 7164,
+      "id": "annelids",
+      "name": "Annelids",
+      "estimatedDescribed": 22000,
+      "totalAssessed": 359,
+      "outdated": 10,
+      "gbifNeSpeciesCount": 6858,
       "byCategory": {
-        "EN": 17,
-        "LC": 109,
-        "DD": 195,
-        "VU": 13,
-        "EX": 3,
-        "NT": 20,
+        "VU": 12,
+        "EN": 16,
+        "DD": 193,
+        "NT": 19,
         "LR/nt": 1,
-        "CR": 9
+        "CR": 8,
+        "EX": 2,
+        "LC": 108
       }
     },
     {
       "id": "other-invertebrates-catch-all",
       "name": "Other Invertebrates",
-      "estimatedDescribed": 195685,
-      "totalAssessed": 398,
-      "outdated": 197,
-      "gbifNeSpeciesCount": 9457,
+      "estimatedDescribed": 201485,
+      "totalAssessed": 406,
+      "outdated": 203,
+      "gbifNeSpeciesCount": 9763,
       "byCategory": {
-        "CR": 49,
-        "VU": 25,
-        "LC": 75,
-        "DD": 116,
-        "EN": 52,
-        "NT": 78,
-        "EX": 3
-      }
-    }
-  ],
-  "flowering_plants": [
-    {
-      "id": "orchids-lilies-bulbs",
-      "name": "Orchids, Lilies & Bulbs",
-      "estimatedDescribed": 36000,
-      "totalAssessed": 3736,
-      "outdated": 1532,
-      "gbifNeSpeciesCount": 15619,
-      "byCategory": {
-        "EN": 863,
-        "VU": 505,
-        "DD": 463,
-        "CR": 440,
-        "LC": 1247,
-        "NT": 206,
-        "LR/nt": 2,
-        "EX": 7,
-        "EW": 3
-      }
-    },
-    {
-      "id": "composites-wildflowers",
-      "name": "Composites & Wildflowers",
-      "estimatedDescribed": 26900,
-      "totalAssessed": 2776,
-      "outdated": 1216,
-      "gbifNeSpeciesCount": 19306,
-      "byCategory": {
-        "EN": 613,
-        "VU": 520,
-        "CR": 373,
-        "LC": 897,
-        "EX": 29,
-        "NT": 202,
-        "LR/nt": 13,
-        "EW": 6,
-        "DD": 122,
-        "LR/lc": 1
-      }
-    },
-    {
-      "id": "legumes",
-      "name": "Legumes",
-      "estimatedDescribed": 20800,
-      "totalAssessed": 6570,
-      "outdated": 1649,
-      "gbifNeSpeciesCount": 9526,
-      "byCategory": {
-        "LC": 3760,
-        "EN": 887,
-        "VU": 731,
-        "CR": 325,
-        "EW": 4,
-        "EX": 5,
-        "NT": 390,
-        "LR/nt": 15,
-        "DD": 443,
-        "LR/cd": 8,
-        "LR/lc": 2
-      }
-    },
-    {
-      "id": "grasses-cereals",
-      "name": "Grasses & Cereals",
-      "estimatedDescribed": 18900,
-      "totalAssessed": 2843,
-      "outdated": 1562,
-      "gbifNeSpeciesCount": 12202,
-      "byCategory": {
-        "LR/nt": 3,
-        "VU": 272,
-        "LC": 1707,
-        "DD": 218,
-        "EN": 334,
-        "NT": 124,
-        "CR": 178,
-        "EX": 5,
-        "EW": 2
-      }
-    },
-    {
-      "id": "palms-relatives",
-      "name": "Palms & Relatives",
-      "estimatedDescribed": 2600,
-      "totalAssessed": 1301,
-      "outdated": 401,
-      "gbifNeSpeciesCount": 422,
-      "byCategory": {
-        "VU": 135,
-        "CR": 186,
-        "LC": 536,
-        "EN": 209,
-        "LR/lc": 7,
-        "DD": 132,
-        "NT": 75,
-        "LR/nt": 13,
-        "EW": 1,
-        "LR/cd": 6,
-        "EX": 1
-      }
-    },
-    {
-      "id": "aquatic-flowering",
-      "name": "Aquatic Flowering Plants",
-      "estimatedDescribed": 4600,
-      "totalAssessed": 710,
-      "outdated": 503,
-      "gbifNeSpeciesCount": 1995,
-      "byCategory": {
-        "VU": 93,
-        "DD": 116,
-        "NT": 48,
-        "EN": 74,
-        "CR": 38,
-        "LC": 341
-      }
-    },
-    {
-      "id": "broadleaf-trees-shrubs",
-      "name": "Broadleaf Trees & Shrubs",
-      "estimatedDescribed": 88600,
-      "totalAssessed": 39093,
-      "outdated": 5190,
-      "gbifNeSpeciesCount": 31620,
-      "byCategory": {
-        "LR/cd": 67,
-        "VU": 5446,
-        "LC": 18086,
-        "EN": 6427,
-        "NT": 2192,
-        "LR/nt": 179,
-        "CR": 3211,
-        "EX": 50,
-        "EW": 14,
-        "DD": 3321,
-        "LR/lc": 100
-      }
-    },
-    {
-      "id": "other-flowering-plants",
-      "name": "Other Flowering Plants",
-      "estimatedDescribed": 170600,
-      "totalAssessed": 17516,
-      "outdated": 5435,
-      "gbifNeSpeciesCount": 46394,
-      "byCategory": {
-        "LC": 8159,
-        "DD": 1271,
-        "VU": 2553,
-        "LR/nt": 45,
-        "EN": 2908,
-        "EX": 37,
-        "CR": 1457,
-        "LR/cd": 27,
-        "NT": 1034,
-        "LR/lc": 15,
-        "EW": 10
+        "CR": 50,
+        "VU": 26,
+        "LC": 76,
+        "DD": 118,
+        "EN": 53,
+        "EX": 4,
+        "NT": 79
       }
     }
   ],
   "mushrooms": [
     {
-      "id": "moulds-yeasts-cup",
-      "name": "Moulds, Yeasts & Cup Fungi",
+      "id": "ascomycota",
+      "name": "Ascomycota",
       "estimatedDescribed": 98000,
       "totalAssessed": 179,
       "outdated": 8,
@@ -1391,8 +1027,8 @@
       }
     },
     {
-      "id": "bracket-mushroom-fungi",
-      "name": "Bracket Fungi & Mushrooms",
+      "id": "other-fungi",
+      "name": "Other Fungi",
       "estimatedDescribed": 59648,
       "totalAssessed": 1123,
       "outdated": 37,
@@ -1713,38 +1349,38 @@
       }
     },
     {
-      "id": "inv-worms",
-      "name": "Worms",
-      "estimatedDescribed": 27800,
-      "totalAssessed": 367,
-      "outdated": 16,
-      "gbifNeSpeciesCount": 7164,
+      "id": "inv-annelids",
+      "name": "Annelids",
+      "estimatedDescribed": 22000,
+      "totalAssessed": 359,
+      "outdated": 10,
+      "gbifNeSpeciesCount": 6858,
       "byCategory": {
-        "EN": 17,
-        "LC": 109,
-        "DD": 195,
-        "VU": 13,
-        "EX": 3,
-        "NT": 20,
+        "VU": 12,
+        "EN": 16,
+        "DD": 193,
+        "NT": 19,
         "LR/nt": 1,
-        "CR": 9
+        "CR": 8,
+        "EX": 2,
+        "LC": 108
       }
     },
     {
       "id": "inv-other-invertebrates-catch-all",
       "name": "Other Invertebrates",
-      "estimatedDescribed": 195685,
-      "totalAssessed": 398,
-      "outdated": 197,
-      "gbifNeSpeciesCount": 9457,
+      "estimatedDescribed": 201485,
+      "totalAssessed": 406,
+      "outdated": 203,
+      "gbifNeSpeciesCount": 9763,
       "byCategory": {
-        "CR": 49,
-        "VU": 25,
-        "LC": 75,
-        "DD": 116,
-        "EN": 52,
-        "NT": 78,
-        "EX": 3
+        "CR": 50,
+        "VU": 26,
+        "LC": 76,
+        "DD": 118,
+        "EN": 53,
+        "EX": 4,
+        "NT": 79
       }
     }
   ],
@@ -1772,7 +1408,7 @@
     },
     {
       "id": "pl-gymnosperms",
-      "name": "Conifers & Cycads",
+      "name": "Gymnosperms",
       "estimatedDescribed": 1113,
       "totalAssessed": 1062,
       "outdated": 626,
@@ -1789,7 +1425,7 @@
     },
     {
       "id": "pl-ferns_and_allies",
-      "name": "Ferns & Horsetails",
+      "name": "Ferns & Allies",
       "estimatedDescribed": 11800,
       "totalAssessed": 834,
       "outdated": 447,
@@ -1852,170 +1488,10 @@
       }
     }
   ],
-  "pl-flowering_plants": [
-    {
-      "id": "pl-orchids-lilies-bulbs",
-      "name": "Orchids, Lilies & Bulbs",
-      "estimatedDescribed": 36000,
-      "totalAssessed": 3736,
-      "outdated": 1532,
-      "gbifNeSpeciesCount": 15619,
-      "byCategory": {
-        "EN": 863,
-        "VU": 505,
-        "DD": 463,
-        "CR": 440,
-        "LC": 1247,
-        "NT": 206,
-        "LR/nt": 2,
-        "EX": 7,
-        "EW": 3
-      }
-    },
-    {
-      "id": "pl-composites-wildflowers",
-      "name": "Composites & Wildflowers",
-      "estimatedDescribed": 26900,
-      "totalAssessed": 2776,
-      "outdated": 1216,
-      "gbifNeSpeciesCount": 19306,
-      "byCategory": {
-        "EN": 613,
-        "VU": 520,
-        "CR": 373,
-        "LC": 897,
-        "EX": 29,
-        "NT": 202,
-        "LR/nt": 13,
-        "EW": 6,
-        "DD": 122,
-        "LR/lc": 1
-      }
-    },
-    {
-      "id": "pl-legumes",
-      "name": "Legumes",
-      "estimatedDescribed": 20800,
-      "totalAssessed": 6570,
-      "outdated": 1649,
-      "gbifNeSpeciesCount": 9526,
-      "byCategory": {
-        "LC": 3760,
-        "EN": 887,
-        "VU": 731,
-        "CR": 325,
-        "EW": 4,
-        "EX": 5,
-        "NT": 390,
-        "LR/nt": 15,
-        "DD": 443,
-        "LR/cd": 8,
-        "LR/lc": 2
-      }
-    },
-    {
-      "id": "pl-grasses-cereals",
-      "name": "Grasses & Cereals",
-      "estimatedDescribed": 18900,
-      "totalAssessed": 2843,
-      "outdated": 1562,
-      "gbifNeSpeciesCount": 12202,
-      "byCategory": {
-        "LR/nt": 3,
-        "VU": 272,
-        "LC": 1707,
-        "DD": 218,
-        "EN": 334,
-        "NT": 124,
-        "CR": 178,
-        "EX": 5,
-        "EW": 2
-      }
-    },
-    {
-      "id": "pl-palms-relatives",
-      "name": "Palms & Relatives",
-      "estimatedDescribed": 2600,
-      "totalAssessed": 1301,
-      "outdated": 401,
-      "gbifNeSpeciesCount": 422,
-      "byCategory": {
-        "VU": 135,
-        "CR": 186,
-        "LC": 536,
-        "EN": 209,
-        "LR/lc": 7,
-        "DD": 132,
-        "NT": 75,
-        "LR/nt": 13,
-        "EW": 1,
-        "LR/cd": 6,
-        "EX": 1
-      }
-    },
-    {
-      "id": "pl-aquatic-flowering",
-      "name": "Aquatic Flowering Plants",
-      "estimatedDescribed": 4600,
-      "totalAssessed": 710,
-      "outdated": 503,
-      "gbifNeSpeciesCount": 1995,
-      "byCategory": {
-        "VU": 93,
-        "DD": 116,
-        "NT": 48,
-        "EN": 74,
-        "CR": 38,
-        "LC": 341
-      }
-    },
-    {
-      "id": "pl-broadleaf-trees-shrubs",
-      "name": "Broadleaf Trees & Shrubs",
-      "estimatedDescribed": 88600,
-      "totalAssessed": 39093,
-      "outdated": 5190,
-      "gbifNeSpeciesCount": 31620,
-      "byCategory": {
-        "LR/cd": 67,
-        "VU": 5446,
-        "LC": 18086,
-        "EN": 6427,
-        "NT": 2192,
-        "LR/nt": 179,
-        "CR": 3211,
-        "EX": 50,
-        "EW": 14,
-        "DD": 3321,
-        "LR/lc": 100
-      }
-    },
-    {
-      "id": "pl-other-flowering-plants",
-      "name": "Other Flowering Plants",
-      "estimatedDescribed": 170600,
-      "totalAssessed": 17516,
-      "outdated": 5435,
-      "gbifNeSpeciesCount": 46394,
-      "byCategory": {
-        "LC": 8159,
-        "DD": 1271,
-        "VU": 2553,
-        "LR/nt": 45,
-        "EN": 2908,
-        "EX": 37,
-        "CR": 1457,
-        "LR/cd": 27,
-        "NT": 1034,
-        "LR/lc": 15,
-        "EW": 10
-      }
-    }
-  ],
   "fungi": [
     {
       "id": "fu-mushrooms",
-      "name": "Mushrooms, etc.",
+      "name": "Fungi",
       "estimatedDescribed": 157648,
       "totalAssessed": 1302,
       "outdated": 45,
@@ -2046,8 +1522,8 @@
   ],
   "fu-mushrooms": [
     {
-      "id": "fu-moulds-yeasts-cup",
-      "name": "Moulds, Yeasts & Cup Fungi",
+      "id": "fu-ascomycota",
+      "name": "Ascomycota",
       "estimatedDescribed": 98000,
       "totalAssessed": 179,
       "outdated": 8,
@@ -2062,8 +1538,8 @@
       }
     },
     {
-      "id": "fu-bracket-mushroom-fungi",
-      "name": "Bracket Fungi & Mushrooms",
+      "id": "fu-other-fungi",
+      "name": "Other Fungi",
       "estimatedDescribed": 59648,
       "totalAssessed": 1123,
       "outdated": 37,

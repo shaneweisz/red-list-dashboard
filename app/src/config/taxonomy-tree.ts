@@ -70,31 +70,12 @@ const SPECIES_FUNGORUM_URL = "https://doi.org/10.48580/dg9ld-4hj";
 
 // ─── Mammal subgroup helpers ─────────────────────────────────────────
 
-// Cetacean families within order Artiodactyla (modern taxonomy)
-const CETACEAN_FAMILIES = [
-  "delphinidae", "ziphiidae", "balaenopteridae", "phocoenidae",
-  "balaenidae", "platanistidae", "monodontidae", "kogiidae",
-  "pontoporiidae", "physeteridae", "neobalaenidae", "lipotidae",
-  "iniidae", "eschrichtiidae",
-];
-
 const MAMMAL_NAMED_ORDERS = [
-  "rodentia", "chiroptera", "eulipotyphla", "afrosoricida", "macroscelidea",
+  "rodentia", "chiroptera", "eulipotyphla",
   "primates", "diprotodontia", "dasyuromorphia", "didelphimorphia",
   "peramelemorphia", "paucituberculata", "notoryctemorphia", "microbiotheria",
   "carnivora", "artiodactyla", "lagomorpha", "sirenia",
   "perissodactyla", "pholidota",
-];
-
-// Bird subgroup helpers
-const BIRD_NAMED_ORDERS = [
-  "passeriformes", "caprimulgiformes", "piciformes", "psittaciformes",
-  "charadriiformes", "columbiformes", "galliformes",
-  "accipitriformes", "falconiformes", "cathartiformes",
-  "strigiformes",
-  "anseriformes", "gruiformes", "podicipediformes", "phoenicopteriformes", "gaviiformes",
-  "procellariiformes", "sphenisciformes", "suliformes", "phaethontiformes",
-  "pelecaniformes", "ciconiiformes",
 ];
 
 // Insect named orders
@@ -103,13 +84,12 @@ const INSECT_NAMED_ORDERS = [
   "hemiptera", "orthoptera", "odonata",
 ];
 
-// Flowering plant named orders
-const FLOWERING_NAMED_ORDERS = [
-  "asparagales", "asterales", "fabales", "poales", "arecales",
-  "alismatales", "ceratophyllales", "nymphaeales",
-  "fagales", "rosales", "malpighiales", "sapindales", "myrtales",
-  "laurales", "magnoliales", "malvales", "ericales", "gentianales",
-];
+// ─── Plant taxonomy ──────────────────────────────────────────────────
+//
+// Plant Table 1a groups are leaves. We deliberately do not drill down:
+// robust described-species counts at the class and order level don't
+// exist across the full tree, and showing "X assessed of 0 described"
+// would read as broken data to specialists.
 
 // Fungi ascomycota orders
 const ASCOMYCOTA_ORDERS = [
@@ -229,14 +209,14 @@ const OTHER_INVERTEBRATES_NODE: TaxonomyNode = {
       estimatedSourceUrl: "https://www.marinespecies.org/aphia.php?p=taxdetails&id=1806",
     },
     {
-      id: "worms",
-      name: "Worms",
+      id: "annelids",
+      name: "Annelids",
       filter: {
         csvGroups: ["other_invertebrates"],
-        classNames: ["clitellata", "polychaeta", "nemertea", "turbellaria"],
+        classNames: ["clitellata", "polychaeta"],
       },
-      estimatedDescribed: 27_800,
-      estimatedSource: "~22K Annelida + ~1.3K Nemertea + ~4.5K Turbellaria (WoRMS; various)",
+      estimatedDescribed: 22_000,
+      estimatedSource: "~22K Annelida spp. (WoRMS; Catalogue of Life)",
       estimatedSourceUrl: "https://www.marinespecies.org/aphia.php?p=taxdetails&id=882",
     },
     {
@@ -244,9 +224,9 @@ const OTHER_INVERTEBRATES_NODE: TaxonomyNode = {
       name: "Other Invertebrates",
       filter: {
         csvGroups: ["other_invertebrates"],
-        excludeClasses: ["asteroidea", "echinoidea", "holothuroidea", "clitellata", "polychaeta", "nemertea", "turbellaria"],
+        excludeClasses: ["asteroidea", "echinoidea", "holothuroidea", "clitellata", "polychaeta"],
       },
-      estimatedDescribed: 195_685,
+      estimatedDescribed: 201_485,
       estimatedSource: "Remainder from IUCN Table 1a 'Others', minus Echinoderms & Worms",
       estimatedSourceUrl: COL_2025_URL,
     },
@@ -271,6 +251,8 @@ const HORSESHOE_CRABS_NODE: TaxonomyNode = {
   estimatedSourceUrl: IUCN_SOURCE_URL,
 };
 
+// ─── Plant nodes (all leaves — see comment above) ────────────────────
+
 const FLOWERING_PLANTS_NODE: TaxonomyNode = {
   id: "flowering_plants",
   name: "Flowering Plants",
@@ -278,44 +260,11 @@ const FLOWERING_PLANTS_NODE: TaxonomyNode = {
   estimatedDescribed: 369_000,
   estimatedSource: IUCN_SOURCE + " (State of the World's Plants 2017)",
   estimatedSourceUrl: IUCN_SOURCE_URL,
-  children: [
-    { id: "orchids-lilies-bulbs", name: "Orchids, Lilies & Bulbs", filter: { csvGroups: ["flowering_plants"], orderNames: ["asparagales"] }, estimatedDescribed: 36_000, estimatedSource: CHRISTENHUSZ, estimatedSourceUrl: CHRISTENHUSZ_URL },
-    { id: "composites-wildflowers", name: "Composites & Wildflowers", filter: { csvGroups: ["flowering_plants"], orderNames: ["asterales"] }, estimatedDescribed: 26_900, estimatedSource: CHRISTENHUSZ, estimatedSourceUrl: CHRISTENHUSZ_URL },
-    { id: "legumes", name: "Legumes", filter: { csvGroups: ["flowering_plants"], orderNames: ["fabales"] }, estimatedDescribed: 20_800, estimatedSource: CHRISTENHUSZ, estimatedSourceUrl: CHRISTENHUSZ_URL },
-    { id: "grasses-cereals", name: "Grasses & Cereals", filter: { csvGroups: ["flowering_plants"], orderNames: ["poales"] }, estimatedDescribed: 18_900, estimatedSource: CHRISTENHUSZ, estimatedSourceUrl: CHRISTENHUSZ_URL },
-    { id: "palms-relatives", name: "Palms & Relatives", filter: { csvGroups: ["flowering_plants"], orderNames: ["arecales"] }, estimatedDescribed: 2_600, estimatedSource: CHRISTENHUSZ, estimatedSourceUrl: CHRISTENHUSZ_URL },
-    { id: "aquatic-flowering", name: "Aquatic Flowering Plants", filter: { csvGroups: ["flowering_plants"], orderNames: ["alismatales", "ceratophyllales", "nymphaeales"] }, estimatedDescribed: 4_600, estimatedSource: CHRISTENHUSZ, estimatedSourceUrl: CHRISTENHUSZ_URL },
-    {
-      id: "broadleaf-trees-shrubs",
-      name: "Broadleaf Trees & Shrubs",
-      filter: {
-        csvGroups: ["flowering_plants"],
-        orderNames: [
-          "fagales", "rosales", "malpighiales", "sapindales", "myrtales",
-          "laurales", "magnoliales", "malvales", "ericales", "gentianales",
-        ],
-      },
-      estimatedDescribed: 88_600,
-      estimatedSource: CHRISTENHUSZ + " — sum of 10 orders",
-      estimatedSourceUrl: CHRISTENHUSZ_URL,
-    },
-    {
-      id: "other-flowering-plants",
-      name: "Other Flowering Plants",
-      filter: {
-        csvGroups: ["flowering_plants"],
-        excludeOrders: FLOWERING_NAMED_ORDERS,
-      },
-      estimatedDescribed: 170_600,
-      estimatedSource: "Remainder from IUCN Table 1a total of 369,000 (State of the World's Plants 2017)",
-      estimatedSourceUrl: COL_2025_URL,
-    },
-  ],
 };
 
 const GYMNOSPERMS_NODE: TaxonomyNode = {
   id: "gymnosperms",
-  name: "Conifers & Cycads",
+  name: "Gymnosperms",
   filter: { csvGroups: ["gymnosperms"] },
   estimatedDescribed: 1_113,
   estimatedSource: IUCN_SOURCE + " (Christenhusz et al. 2011)",
@@ -324,7 +273,7 @@ const GYMNOSPERMS_NODE: TaxonomyNode = {
 
 const FERNS_AND_ALLIES_NODE: TaxonomyNode = {
   id: "ferns_and_allies",
-  name: "Ferns & Horsetails",
+  name: "Ferns & Allies",
   filter: { csvGroups: ["ferns_and_allies"] },
   estimatedDescribed: 11_800,
   estimatedSource: IUCN_SOURCE + " (State of the World's Plants 2017)",
@@ -360,26 +309,26 @@ const RED_ALGAE_NODE: TaxonomyNode = {
 
 const MUSHROOMS_NODE: TaxonomyNode = {
   id: "mushrooms",
-  name: "Mushrooms, etc.",
+  name: "Fungi",
   filter: { csvGroups: ["mushrooms"] },
   estimatedDescribed: 157_648,
   estimatedSource: IUCN_SOURCE + " (" + SPECIES_FUNGORUM + ")",
   estimatedSourceUrl: SPECIES_FUNGORUM_URL,
   children: [
     {
-      id: "moulds-yeasts-cup",
-      name: "Moulds, Yeasts & Cup Fungi",
+      id: "ascomycota",
+      name: "Ascomycota",
       filter: { csvGroups: ["mushrooms"], orderNames: ASCOMYCOTA_ORDERS },
       estimatedDescribed: 98_000,
       estimatedSource: "~98K Ascomycota spp. (" + SPECIES_FUNGORUM + "; He et al. 2019)",
       estimatedSourceUrl: SPECIES_FUNGORUM_URL,
     },
     {
-      id: "bracket-mushroom-fungi",
-      name: "Bracket Fungi & Mushrooms",
+      id: "other-fungi",
+      name: "Other Fungi",
       filter: { csvGroups: ["mushrooms"], excludeOrders: ASCOMYCOTA_ORDERS },
       estimatedDescribed: 59_648,
-      estimatedSource: "Remainder of 157,648 total fungi (" + SPECIES_FUNGORUM + ")",
+      estimatedSource: "Remainder of 157,648 total fungi — mostly Basidiomycota, plus Chytridiomycota, Zygomycota, etc. (" + SPECIES_FUNGORUM + ")",
       estimatedSourceUrl: SPECIES_FUNGORUM_URL,
     },
   ],
@@ -432,11 +381,11 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedSourceUrl: MDD_URL,
         },
         {
-          id: "insectivores",
-          name: "Insectivores",
-          filter: { csvGroups: ["mammalia"], orderNames: ["eulipotyphla", "afrosoricida", "macroscelidea"] },
-          estimatedDescribed: 674,
-          estimatedSource: MDD + " — Eulipotyphla (599) + Afrosoricida (55) + Macroscelidea (20)",
+          id: "eulipotyphla",
+          name: "Eulipotyphla",
+          filter: { csvGroups: ["mammalia"], orderNames: ["eulipotyphla"] },
+          estimatedDescribed: 599,
+          estimatedSource: MDD + " — Eulipotyphla (hedgehogs, shrews, moles, solenodons)",
           estimatedSourceUrl: MDD_URL,
         },
         {
@@ -470,15 +419,11 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedSourceUrl: MDD_URL,
         },
         {
-          id: "even-toed-ungulates",
-          name: "Even-toed Ungulates",
-          filter: {
-            csvGroups: ["mammalia"],
-            orderNames: ["artiodactyla"],
-            excludeFamilies: CETACEAN_FAMILIES,
-          },
-          estimatedDescribed: 278,
-          estimatedSource: MDD + " — Artiodactyla (371) minus ~93 cetacean spp.",
+          id: "artiodactyls",
+          name: "Artiodactyls",
+          filter: { csvGroups: ["mammalia"], orderNames: ["artiodactyla"] },
+          estimatedDescribed: 371,
+          estimatedSource: MDD + " — Artiodactyla (includes cetaceans under Cetartiodactyla)",
           estimatedSourceUrl: MDD_URL,
         },
         {
@@ -490,19 +435,11 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedSourceUrl: MDD_URL,
         },
         {
-          id: "whales-dolphins",
-          name: "Whales & Dolphins",
-          filter: {
-            csvGroups: ["mammalia"],
-            orderNames: ["artiodactyla", "sirenia"],
-            // Families filter separates cetaceans from other artiodactyls and
-            // covers all extant/known sirenians (Trichechidae = manatees,
-            // Dugongidae = dugong + Steller's sea cow). If a newly-described
-            // sirenian family is added to IUCN data, it must be listed here.
-            families: [...CETACEAN_FAMILIES, "trichechidae", "dugongidae"],
-          },
-          estimatedDescribed: 98,
-          estimatedSource: MDD + " — ~93 cetacean spp. within Artiodactyla + Sirenia (5)",
+          id: "sirenians",
+          name: "Sirenians",
+          filter: { csvGroups: ["mammalia"], orderNames: ["sirenia"] },
+          estimatedDescribed: 5,
+          estimatedSource: MDD + " — Sirenia (manatees + dugong)",
           estimatedSourceUrl: MDD_URL,
         },
         {
@@ -528,8 +465,8 @@ export const TAXONOMY_TREE: TaxonomyNode = {
             csvGroups: ["mammalia"],
             excludeOrders: MAMMAL_NAMED_ORDERS,
           },
-          estimatedDescribed: 142,
-          estimatedSource: "Remainder of IUCN Table 1a total of 6,819 minus " + MDD + " named orders",
+          estimatedDescribed: 217,
+          estimatedSource: "Remainder of IUCN Table 1a total of 6,819 minus " + MDD + " named orders (incl. Afrosoricida ~55 + Macroscelidea ~20 + other small orders)",
           estimatedSourceUrl: IUCN_SOURCE_URL,
         },
       ],
@@ -544,121 +481,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
       estimatedSource: IUCN_SOURCE,
       estimatedSourceUrl: IUCN_SOURCE_URL,
       color: "#3b82f6",
-      children: [
-        {
-          id: "songbirds",
-          name: "Songbirds",
-          filter: { csvGroups: ["aves"], orderNames: ["passeriformes"] },
-          estimatedDescribed: 6_688,
-          estimatedSource: "BirdLife/IUCN — assessed Passeriformes",
-          estimatedSourceUrl: IUCN_SOURCE_URL,
-        },
-        {
-          id: "hummingbirds-swifts",
-          name: "Hummingbirds & Swifts",
-          filter: { csvGroups: ["aves"], orderNames: ["caprimulgiformes"] },
-          estimatedDescribed: 603,
-          estimatedSource: "BirdLife/IUCN — assessed Caprimulgiformes",
-          estimatedSourceUrl: IUCN_SOURCE_URL,
-        },
-        {
-          id: "woodpeckers-toucans",
-          name: "Woodpeckers & Toucans",
-          filter: { csvGroups: ["aves"], orderNames: ["piciformes"] },
-          estimatedDescribed: 481,
-          estimatedSource: "BirdLife/IUCN — assessed Piciformes",
-          estimatedSourceUrl: IUCN_SOURCE_URL,
-        },
-        {
-          id: "parrots",
-          name: "Parrots",
-          filter: { csvGroups: ["aves"], orderNames: ["psittaciformes"] },
-          estimatedDescribed: 421,
-          estimatedSource: "BirdLife/IUCN — assessed Psittaciformes",
-          estimatedSourceUrl: IUCN_SOURCE_URL,
-        },
-        {
-          id: "shorebirds",
-          name: "Shorebirds",
-          filter: { csvGroups: ["aves"], orderNames: ["charadriiformes"] },
-          estimatedDescribed: 387,
-          estimatedSource: "BirdLife/IUCN — assessed Charadriiformes",
-          estimatedSourceUrl: IUCN_SOURCE_URL,
-        },
-        {
-          id: "pigeons-doves",
-          name: "Pigeons & Doves",
-          filter: { csvGroups: ["aves"], orderNames: ["columbiformes"] },
-          estimatedDescribed: 369,
-          estimatedSource: "BirdLife/IUCN — assessed Columbiformes",
-          estimatedSourceUrl: IUCN_SOURCE_URL,
-        },
-        {
-          id: "raptors",
-          name: "Raptors",
-          filter: { csvGroups: ["aves"], orderNames: ["accipitriformes", "falconiformes", "cathartiformes"] },
-          estimatedDescribed: 324,
-          estimatedSource: "BirdLife/IUCN — assessed raptor orders",
-          estimatedSourceUrl: IUCN_SOURCE_URL,
-        },
-        {
-          id: "gamebirds",
-          name: "Gamebirds",
-          filter: { csvGroups: ["aves"], orderNames: ["galliformes"] },
-          estimatedDescribed: 309,
-          estimatedSource: "BirdLife/IUCN — assessed Galliformes",
-          estimatedSourceUrl: IUCN_SOURCE_URL,
-        },
-        {
-          id: "owls",
-          name: "Owls",
-          filter: { csvGroups: ["aves"], orderNames: ["strigiformes"] },
-          estimatedDescribed: 242,
-          estimatedSource: "BirdLife/IUCN — assessed Strigiformes",
-          estimatedSourceUrl: IUCN_SOURCE_URL,
-        },
-        {
-          id: "waterbirds",
-          name: "Waterbirds",
-          filter: {
-            csvGroups: ["aves"],
-            orderNames: ["anseriformes", "gruiformes", "podicipediformes", "phoenicopteriformes", "gaviiformes"],
-          },
-          estimatedDescribed: 404,
-          estimatedSource: "BirdLife/IUCN — assessed waterbird orders",
-          estimatedSourceUrl: IUCN_SOURCE_URL,
-        },
-        {
-          id: "seabirds",
-          name: "Seabirds",
-          filter: {
-            csvGroups: ["aves"],
-            orderNames: ["procellariiformes", "sphenisciformes", "suliformes", "phaethontiformes"],
-          },
-          estimatedDescribed: 223,
-          estimatedSource: "BirdLife/IUCN — assessed seabird orders",
-          estimatedSourceUrl: IUCN_SOURCE_URL,
-        },
-        {
-          id: "herons-storks",
-          name: "Herons & Storks",
-          filter: { csvGroups: ["aves"], orderNames: ["pelecaniformes", "ciconiiformes"] },
-          estimatedDescribed: 136,
-          estimatedSource: "BirdLife/IUCN — assessed Pelecaniformes + Ciconiiformes",
-          estimatedSourceUrl: IUCN_SOURCE_URL,
-        },
-        {
-          id: "other-birds",
-          name: "Other Birds",
-          filter: {
-            csvGroups: ["aves"],
-            excludeOrders: BIRD_NAMED_ORDERS,
-          },
-          estimatedDescribed: 598,
-          estimatedSource: "Remainder of IUCN Table 1a total of 11,185",
-          estimatedSourceUrl: IUCN_SOURCE_URL,
-        },
-      ],
     },
 
     // ─── REPTILIA ──────────────────────────────────────────────────────
@@ -672,11 +494,11 @@ export const TAXONOMY_TREE: TaxonomyNode = {
       color: "#84cc16",
       children: [
         {
-          id: "lizards-snakes",
-          name: "Lizards & Snakes",
-          filter: { csvGroups: ["reptilia"], orderNames: ["squamata", "rhynchocephalia"] },
-          estimatedDescribed: 12_109,
-          estimatedSource: "Reptile Database, Sep 2025 (12,502 total minus Testudines & Crocodylia)",
+          id: "squamates",
+          name: "Squamates",
+          filter: { csvGroups: ["reptilia"], orderNames: ["squamata"] },
+          estimatedDescribed: 12_108,
+          estimatedSource: "Reptile Database, Sep 2025 — Squamata (lizards, snakes, amphisbaenians)",
           estimatedSourceUrl: REPTILE_DB_URL,
         },
         {
@@ -693,6 +515,14 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           filter: { csvGroups: ["reptilia"], orderNames: ["crocodylia"] },
           estimatedDescribed: 27,
           estimatedSource: REPTILE_DB,
+          estimatedSourceUrl: REPTILE_DB_URL,
+        },
+        {
+          id: "tuataras",
+          name: "Tuataras",
+          filter: { csvGroups: ["reptilia"], orderNames: ["rhynchocephalia"] },
+          estimatedDescribed: 1,
+          estimatedSource: REPTILE_DB + " — Rhynchocephalia (Sphenodon punctatus)",
           estimatedSourceUrl: REPTILE_DB_URL,
         },
       ],
@@ -746,11 +576,19 @@ export const TAXONOMY_TREE: TaxonomyNode = {
       color: "#06b6d4",
       children: [
         {
-          id: "bony-fish",
-          name: "Bony Fish",
-          filter: { csvGroups: ["fishes"], classNames: ["actinopterygii", "sarcopterygii"] },
-          estimatedDescribed: 35_880,
-          estimatedSource: ESCHMEYER + " (37,288 total minus Chondrichthyes & jawless)",
+          id: "ray-finned-fishes",
+          name: "Ray-finned Fishes",
+          filter: { csvGroups: ["fishes"], classNames: ["actinopterygii"] },
+          estimatedDescribed: 35_872,
+          estimatedSource: ESCHMEYER + " — Actinopterygii",
+          estimatedSourceUrl: ESCHMEYER_URL,
+        },
+        {
+          id: "lobe-finned-fishes",
+          name: "Lobe-finned Fishes",
+          filter: { csvGroups: ["fishes"], classNames: ["sarcopterygii"] },
+          estimatedDescribed: 8,
+          estimatedSource: ESCHMEYER + " — Sarcopterygii (coelacanths + lungfish; paraphyletic once tetrapods are excluded)",
           estimatedSourceUrl: ESCHMEYER_URL,
         },
         {
