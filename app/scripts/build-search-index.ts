@@ -38,8 +38,10 @@ export async function run(): Promise<void> {
 
   const mapping = readMappingCsv();
   const linkedGbifKeys = new Set<number>();
-  for (const entry of mapping.values()) {
-    if (entry.gbif_species_key != null) linkedGbifKeys.add(entry.gbif_species_key);
+  for (const links of mapping.values()) {
+    for (const link of links) {
+      if (link.gbif_species_key != null) linkedGbifKeys.add(link.gbif_species_key);
+    }
   }
 
   for (const taxon of TAXA) {
@@ -50,7 +52,10 @@ export async function run(): Promise<void> {
     if (fs.existsSync(redlistPath)) {
       const redlistSpecies = readRedlistCsv(taxon.id);
       for (const r of redlistSpecies) {
-        const gbifKey = mapping.get(r.sis_taxon_id)?.gbif_species_key ?? null;
+        // For the search index we only need a single representative GBIF key
+        // (used to build species detail page links). Pick the first linked one.
+        const links = mapping.get(r.sis_taxon_id) ?? [];
+        const gbifKey = links.find((l) => l.gbif_species_key != null)?.gbif_species_key ?? null;
         const entry: SearchEntry = {
           i: r.sis_taxon_id,
           s: r.scientific_name,
