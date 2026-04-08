@@ -275,7 +275,7 @@ describe("hasChildren", () => {
   it("returns false for leaf nodes", () => {
     expect(hasChildren("arachnida")).toBe(false);
     expect(hasChildren("velvet_worms")).toBe(false);
-    expect(hasChildren("green_algae")).toBe(false);
+    expect(hasChildren("horseshoe_crabs")).toBe(false);
   });
 });
 
@@ -599,13 +599,32 @@ describe("Subgroup partition coverage", () => {
     expect([...namedOrders].sort()).toEqual([...otherInsects.filter.excludeOrders!].sort());
   });
 
-  it("flowering_plants: named orders match other-flowering-plants excludeOrders", () => {
+  it("flowering_plants splits into Magnoliopsida and Liliopsida classes", () => {
     const subs = findNode("flowering_plants")!.children!;
-    const otherFlowering = subs.find(sg => sg.id === "other-flowering-plants")!;
+    const ids = subs.map(c => c.id);
+    expect(ids).toEqual(["magnoliopsida", "liliopsida"]);
+    for (const child of subs) {
+      expect(child.filter.classNames).toEqual([child.id]);
+    }
+  });
+
+  it("magnoliopsida: named orders match other-magnoliopsida excludeOrders", () => {
+    const subs = findNode("magnoliopsida")!.children!;
+    const catchAll = subs.find(sg => sg.id === "other-magnoliopsida")!;
     const namedOrders = subs
-      .filter(sg => sg.id !== "other-flowering-plants")
+      .filter(sg => sg.id !== "other-magnoliopsida")
       .flatMap(sg => sg.filter.orderNames ?? []);
-    expect([...namedOrders].sort()).toEqual([...otherFlowering.filter.excludeOrders!].sort());
+    expect([...namedOrders].sort()).toEqual([...catchAll.filter.excludeOrders!].sort());
+  });
+
+  it("liliopsida lists monocot orders with no catch-all", () => {
+    const subs = findNode("liliopsida")!.children!;
+    expect(subs.length).toBeGreaterThan(0);
+    for (const child of subs) {
+      expect(child.filter.classNames).toEqual(["liliopsida"]);
+      expect(child.filter.orderNames).toBeDefined();
+      expect(child.filter.excludeOrders).toBeUndefined();
+    }
   });
 
   it("fungi subgroups partition the mushrooms group", () => {
@@ -699,7 +718,8 @@ describe("prefixTree virtual nodes", () => {
 
   it("prefixed nodes are in NODE_INDEX", () => {
     expect(NODE_INDEX.has("inv-beetles")).toBe(true);
-    expect(NODE_INDEX.has("pl-orchids-lilies-bulbs")).toBe(true);
+    expect(NODE_INDEX.has("pl-magnoliopsida")).toBe(true);
+    expect(NODE_INDEX.has("pl-asterales")).toBe(true);
     expect(NODE_INDEX.has("fu-moulds-yeasts-cup")).toBe(true);
   });
 });

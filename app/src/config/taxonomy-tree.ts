@@ -103,12 +103,43 @@ const INSECT_NAMED_ORDERS = [
   "hemiptera", "orthoptera", "odonata",
 ];
 
-// Flowering plant named orders
-const FLOWERING_NAMED_ORDERS = [
-  "asparagales", "asterales", "fabales", "poales", "arecales",
-  "alismatales", "ceratophyllales", "nymphaeales",
-  "fagales", "rosales", "malpighiales", "sapindales", "myrtales",
-  "laurales", "magnoliales", "malvales", "ericales", "gentianales",
+// ─── Plant class/order lists (raw APG-style taxonomy) ───────────────
+//
+// Orders listed below are the ones actually present in the IUCN CSVs.
+// Classes without drill-downs contain a single dominant order and are
+// left as leaves. Large classes with a long tail use an "other-<class>"
+// catch-all via excludeOrders, mirroring the pattern used for insects.
+
+// Magnoliopsida (eudicots) — all orders with ≥500 assessed species.
+// The long tail of small orders is rolled into "other-magnoliopsida".
+const MAGNOLIOPSIDA_NAMED_ORDERS = [
+  "malpighiales", "fabales", "myrtales", "gentianales", "ericales",
+  "sapindales", "lamiales", "caryophyllales", "laurales", "asterales",
+  "malvales", "rosales", "magnoliales", "proteales", "apiales",
+  "fagales", "oxalidales", "solanales", "brassicales", "celastrales",
+];
+
+// Liliopsida (monocots) — all 10 orders present in the data.
+const LILIOPSIDA_ORDERS = [
+  "asparagales", "poales", "arecales", "zingiberales", "alismatales",
+  "pandanales", "liliales", "dioscoreales", "commelinales", "acorales",
+];
+
+// Polypodiopsida (ferns) — named orders with ≥10 assessed species.
+const POLYPODIOPSIDA_NAMED_ORDERS = [
+  "polypodiales", "cyatheales", "hymenophyllales", "salviniales",
+];
+
+// Bryopsida (true mosses) — named orders with ≥5 assessed species.
+const BRYOPSIDA_NAMED_ORDERS = [
+  "hypnales", "pottiales", "dicranales", "grimmiales",
+  "bryales", "orthotrichales", "hookeriales",
+];
+
+// Florideophyceae (red algae) — named orders with ≥3 assessed species.
+const FLORIDEOPHYCEAE_NAMED_ORDERS = [
+  "ceramiales", "corallinales", "gigartinales", "gelidiales",
+  "halymeniales", "hapalidiales",
 ];
 
 // Fungi ascomycota orders
@@ -271,6 +302,11 @@ const HORSESHOE_CRABS_NODE: TaxonomyNode = {
   estimatedSourceUrl: IUCN_SOURCE_URL,
 };
 
+// ─── Plant nodes (class → order) ─────────────────────────────────────
+//
+// Plant subgroups mirror real botanical ranks (class, then order).
+// No colloquial / growth-form groupings — botanists want raw taxonomy.
+
 const FLOWERING_PLANTS_NODE: TaxonomyNode = {
   id: "flowering_plants",
   name: "Flowering Plants",
@@ -279,56 +315,135 @@ const FLOWERING_PLANTS_NODE: TaxonomyNode = {
   estimatedSource: IUCN_SOURCE + " (State of the World's Plants 2017)",
   estimatedSourceUrl: IUCN_SOURCE_URL,
   children: [
-    { id: "orchids-lilies-bulbs", name: "Orchids, Lilies & Bulbs", filter: { csvGroups: ["flowering_plants"], orderNames: ["asparagales"] }, estimatedDescribed: 36_000, estimatedSource: CHRISTENHUSZ, estimatedSourceUrl: CHRISTENHUSZ_URL },
-    { id: "composites-wildflowers", name: "Composites & Wildflowers", filter: { csvGroups: ["flowering_plants"], orderNames: ["asterales"] }, estimatedDescribed: 26_900, estimatedSource: CHRISTENHUSZ, estimatedSourceUrl: CHRISTENHUSZ_URL },
-    { id: "legumes", name: "Legumes", filter: { csvGroups: ["flowering_plants"], orderNames: ["fabales"] }, estimatedDescribed: 20_800, estimatedSource: CHRISTENHUSZ, estimatedSourceUrl: CHRISTENHUSZ_URL },
-    { id: "grasses-cereals", name: "Grasses & Cereals", filter: { csvGroups: ["flowering_plants"], orderNames: ["poales"] }, estimatedDescribed: 18_900, estimatedSource: CHRISTENHUSZ, estimatedSourceUrl: CHRISTENHUSZ_URL },
-    { id: "palms-relatives", name: "Palms & Relatives", filter: { csvGroups: ["flowering_plants"], orderNames: ["arecales"] }, estimatedDescribed: 2_600, estimatedSource: CHRISTENHUSZ, estimatedSourceUrl: CHRISTENHUSZ_URL },
-    { id: "aquatic-flowering", name: "Aquatic Flowering Plants", filter: { csvGroups: ["flowering_plants"], orderNames: ["alismatales", "ceratophyllales", "nymphaeales"] }, estimatedDescribed: 4_600, estimatedSource: CHRISTENHUSZ, estimatedSourceUrl: CHRISTENHUSZ_URL },
     {
-      id: "broadleaf-trees-shrubs",
-      name: "Broadleaf Trees & Shrubs",
-      filter: {
-        csvGroups: ["flowering_plants"],
-        orderNames: [
-          "fagales", "rosales", "malpighiales", "sapindales", "myrtales",
-          "laurales", "magnoliales", "malvales", "ericales", "gentianales",
-        ],
-      },
-      estimatedDescribed: 88_600,
-      estimatedSource: CHRISTENHUSZ + " — sum of 10 orders",
-      estimatedSourceUrl: CHRISTENHUSZ_URL,
+      id: "magnoliopsida",
+      name: "Magnoliopsida (Eudicots)",
+      filter: { csvGroups: ["flowering_plants"], classNames: ["magnoliopsida"] },
+      children: [
+        ...MAGNOLIOPSIDA_NAMED_ORDERS.map((order) => ({
+          id: order,
+          name: order.charAt(0).toUpperCase() + order.slice(1),
+          filter: {
+            csvGroups: ["flowering_plants"],
+            classNames: ["magnoliopsida"],
+            orderNames: [order],
+          },
+        })),
+        {
+          id: "other-magnoliopsida",
+          name: "Other Magnoliopsida",
+          filter: {
+            csvGroups: ["flowering_plants"],
+            classNames: ["magnoliopsida"],
+            excludeOrders: MAGNOLIOPSIDA_NAMED_ORDERS,
+          },
+        },
+      ],
     },
     {
-      id: "other-flowering-plants",
-      name: "Other Flowering Plants",
-      filter: {
-        csvGroups: ["flowering_plants"],
-        excludeOrders: FLOWERING_NAMED_ORDERS,
-      },
-      estimatedDescribed: 170_600,
-      estimatedSource: "Remainder from IUCN Table 1a total of 369,000 (State of the World's Plants 2017)",
-      estimatedSourceUrl: COL_2025_URL,
+      id: "liliopsida",
+      name: "Liliopsida (Monocots)",
+      filter: { csvGroups: ["flowering_plants"], classNames: ["liliopsida"] },
+      children: LILIOPSIDA_ORDERS.map((order) => ({
+        id: order,
+        name: order.charAt(0).toUpperCase() + order.slice(1),
+        filter: {
+          csvGroups: ["flowering_plants"],
+          classNames: ["liliopsida"],
+          orderNames: [order],
+        },
+      })),
     },
   ],
 };
 
 const GYMNOSPERMS_NODE: TaxonomyNode = {
   id: "gymnosperms",
-  name: "Conifers & Cycads",
+  name: "Gymnosperms",
   filter: { csvGroups: ["gymnosperms"] },
   estimatedDescribed: 1_113,
   estimatedSource: IUCN_SOURCE + " (Christenhusz et al. 2011)",
   estimatedSourceUrl: "https://stateoftheworldsplants.org/2017/report/SOTWP_2017.pdf",
+  children: [
+    {
+      id: "pinopsida",
+      name: "Pinopsida",
+      filter: { csvGroups: ["gymnosperms"], classNames: ["pinopsida"] },
+    },
+    {
+      id: "cycadopsida",
+      name: "Cycadopsida",
+      filter: { csvGroups: ["gymnosperms"], classNames: ["cycadopsida"] },
+    },
+    {
+      id: "gnetopsida",
+      name: "Gnetopsida",
+      filter: { csvGroups: ["gymnosperms"], classNames: ["gnetopsida"] },
+    },
+    {
+      id: "ginkgoopsida",
+      name: "Ginkgoopsida",
+      filter: { csvGroups: ["gymnosperms"], classNames: ["ginkgoopsida"] },
+    },
+  ],
 };
 
 const FERNS_AND_ALLIES_NODE: TaxonomyNode = {
   id: "ferns_and_allies",
-  name: "Ferns & Horsetails",
+  name: "Ferns & Allies",
   filter: { csvGroups: ["ferns_and_allies"] },
   estimatedDescribed: 11_800,
   estimatedSource: IUCN_SOURCE + " (State of the World's Plants 2017)",
   estimatedSourceUrl: "https://stateoftheworldsplants.org/2017/report/SOTWP_2017.pdf",
+  children: [
+    {
+      id: "polypodiopsida",
+      name: "Polypodiopsida",
+      filter: { csvGroups: ["ferns_and_allies"], classNames: ["polypodiopsida"] },
+      children: [
+        ...POLYPODIOPSIDA_NAMED_ORDERS.map((order) => ({
+          id: order,
+          name: order.charAt(0).toUpperCase() + order.slice(1),
+          filter: {
+            csvGroups: ["ferns_and_allies"],
+            classNames: ["polypodiopsida"],
+            orderNames: [order],
+          },
+        })),
+        {
+          id: "other-polypodiopsida",
+          name: "Other Polypodiopsida",
+          filter: {
+            csvGroups: ["ferns_and_allies"],
+            classNames: ["polypodiopsida"],
+            excludeOrders: POLYPODIOPSIDA_NAMED_ORDERS,
+          },
+        },
+      ],
+    },
+    {
+      id: "lycopodiopsida",
+      name: "Lycopodiopsida",
+      filter: { csvGroups: ["ferns_and_allies"], classNames: ["lycopodiopsida"] },
+      children: [
+        {
+          id: "isoetales",
+          name: "Isoetales",
+          filter: { csvGroups: ["ferns_and_allies"], classNames: ["lycopodiopsida"], orderNames: ["isoetales"] },
+        },
+        {
+          id: "lycopodiales",
+          name: "Lycopodiales",
+          filter: { csvGroups: ["ferns_and_allies"], classNames: ["lycopodiopsida"], orderNames: ["lycopodiales"] },
+        },
+        {
+          id: "selaginellales",
+          name: "Selaginellales",
+          filter: { csvGroups: ["ferns_and_allies"], classNames: ["lycopodiopsida"], orderNames: ["selaginellales"] },
+        },
+      ],
+    },
+  ],
 };
 
 const MOSSES_NODE: TaxonomyNode = {
@@ -338,6 +453,68 @@ const MOSSES_NODE: TaxonomyNode = {
   estimatedDescribed: 21_925,
   estimatedSource: IUCN_SOURCE + " (" + CHRISTENHUSZ + ")",
   estimatedSourceUrl: CHRISTENHUSZ_URL,
+  children: [
+    {
+      id: "bryopsida",
+      name: "Bryopsida",
+      filter: { csvGroups: ["mosses"], classNames: ["bryopsida"] },
+      children: [
+        ...BRYOPSIDA_NAMED_ORDERS.map((order) => ({
+          id: order,
+          name: order.charAt(0).toUpperCase() + order.slice(1),
+          filter: {
+            csvGroups: ["mosses"],
+            classNames: ["bryopsida"],
+            orderNames: [order],
+          },
+        })),
+        {
+          id: "other-bryopsida",
+          name: "Other Bryopsida",
+          filter: {
+            csvGroups: ["mosses"],
+            classNames: ["bryopsida"],
+            excludeOrders: BRYOPSIDA_NAMED_ORDERS,
+          },
+        },
+      ],
+    },
+    {
+      id: "jungermanniopsida",
+      name: "Jungermanniopsida",
+      filter: { csvGroups: ["mosses"], classNames: ["jungermanniopsida"] },
+    },
+    {
+      id: "marchantiopsida",
+      name: "Marchantiopsida",
+      filter: { csvGroups: ["mosses"], classNames: ["marchantiopsida"] },
+    },
+    {
+      id: "anthocerotopsida",
+      name: "Anthocerotopsida",
+      filter: { csvGroups: ["mosses"], classNames: ["anthocerotopsida"] },
+    },
+    {
+      id: "sphagnopsida",
+      name: "Sphagnopsida",
+      filter: { csvGroups: ["mosses"], classNames: ["sphagnopsida"] },
+    },
+    {
+      id: "andreaeopsida",
+      name: "Andreaeopsida",
+      filter: { csvGroups: ["mosses"], classNames: ["andreaeopsida"] },
+    },
+    {
+      id: "polytrichopsida",
+      name: "Polytrichopsida",
+      filter: { csvGroups: ["mosses"], classNames: ["polytrichopsida"] },
+    },
+    {
+      id: "takakiopsida",
+      name: "Takakiopsida",
+      filter: { csvGroups: ["mosses"], classNames: ["takakiopsida"] },
+    },
+  ],
 };
 
 const GREEN_ALGAE_NODE: TaxonomyNode = {
@@ -347,6 +524,23 @@ const GREEN_ALGAE_NODE: TaxonomyNode = {
   estimatedDescribed: 14_550,
   estimatedSource: IUCN_SOURCE,
   estimatedSourceUrl: IUCN_SOURCE_URL,
+  children: [
+    {
+      id: "charophyceae",
+      name: "Charophyceae",
+      filter: { csvGroups: ["green_algae"], classNames: ["charophyceae"] },
+    },
+    {
+      id: "ulvophyceae",
+      name: "Ulvophyceae",
+      filter: { csvGroups: ["green_algae"], classNames: ["ulvophyceae"] },
+    },
+    {
+      id: "chlorophyceae",
+      name: "Chlorophyceae",
+      filter: { csvGroups: ["green_algae"], classNames: ["chlorophyceae"] },
+    },
+  ],
 };
 
 const RED_ALGAE_NODE: TaxonomyNode = {
@@ -356,6 +550,33 @@ const RED_ALGAE_NODE: TaxonomyNode = {
   estimatedDescribed: 7_744,
   estimatedSource: IUCN_SOURCE,
   estimatedSourceUrl: IUCN_SOURCE_URL,
+  children: [
+    {
+      id: "florideophyceae",
+      name: "Florideophyceae",
+      filter: { csvGroups: ["red_algae"], classNames: ["florideophyceae"] },
+      children: [
+        ...FLORIDEOPHYCEAE_NAMED_ORDERS.map((order) => ({
+          id: order,
+          name: order.charAt(0).toUpperCase() + order.slice(1),
+          filter: {
+            csvGroups: ["red_algae"],
+            classNames: ["florideophyceae"],
+            orderNames: [order],
+          },
+        })),
+        {
+          id: "other-florideophyceae",
+          name: "Other Florideophyceae",
+          filter: {
+            csvGroups: ["red_algae"],
+            classNames: ["florideophyceae"],
+            excludeOrders: FLORIDEOPHYCEAE_NAMED_ORDERS,
+          },
+        },
+      ],
+    },
+  ],
 };
 
 const MUSHROOMS_NODE: TaxonomyNode = {

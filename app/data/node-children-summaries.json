@@ -260,7 +260,7 @@
     },
     {
       "id": "gymnosperms",
-      "name": "Conifers & Cycads",
+      "name": "Gymnosperms",
       "estimatedDescribed": 1113,
       "totalAssessed": 1062,
       "outdated": 626,
@@ -277,7 +277,7 @@
     },
     {
       "id": "ferns_and_allies",
-      "name": "Ferns & Horsetails",
+      "name": "Ferns & Allies",
       "estimatedDescribed": 11800,
       "totalAssessed": 834,
       "outdated": 447,
@@ -1215,48 +1215,74 @@
   ],
   "flowering_plants": [
     {
-      "id": "orchids-lilies-bulbs",
-      "name": "Orchids, Lilies & Bulbs",
-      "estimatedDescribed": 36000,
-      "totalAssessed": 3736,
-      "outdated": 1532,
-      "gbifNeSpeciesCount": 15619,
+      "id": "magnoliopsida",
+      "name": "Magnoliopsida (Eudicots)",
+      "estimatedDescribed": 0,
+      "totalAssessed": 64175,
+      "outdated": 13174,
+      "gbifNeSpeciesCount": 103670,
       "byCategory": {
-        "EN": 863,
-        "VU": 505,
-        "DD": 463,
-        "CR": 440,
-        "LC": 1247,
-        "NT": 206,
-        "LR/nt": 2,
-        "EX": 7,
-        "EW": 3
+        "LR/cd": 102,
+        "VU": 8952,
+        "LC": 30280,
+        "EN": 10509,
+        "NT": 3679,
+        "LR/nt": 252,
+        "DD": 4941,
+        "CR": 5190,
+        "EW": 33,
+        "EX": 119,
+        "LR/lc": 118
       }
     },
     {
-      "id": "composites-wildflowers",
-      "name": "Composites & Wildflowers",
-      "estimatedDescribed": 26900,
-      "totalAssessed": 2776,
-      "outdated": 1216,
-      "gbifNeSpeciesCount": 19306,
+      "id": "liliopsida",
+      "name": "Liliopsida (Monocots)",
+      "estimatedDescribed": 0,
+      "totalAssessed": 10370,
+      "outdated": 4314,
+      "gbifNeSpeciesCount": 33414,
       "byCategory": {
-        "EN": 613,
-        "VU": 520,
-        "CR": 373,
-        "LC": 897,
-        "EX": 29,
-        "NT": 202,
-        "LR/nt": 13,
-        "EW": 6,
-        "DD": 122,
-        "LR/lc": 1
+        "VU": 1303,
+        "CR": 1018,
+        "LC": 4453,
+        "EN": 1806,
+        "NT": 592,
+        "DD": 1145,
+        "LR/lc": 7,
+        "LR/nt": 18,
+        "EW": 7,
+        "LR/cd": 6,
+        "EX": 15
+      }
+    }
+  ],
+  "magnoliopsida": [
+    {
+      "id": "malpighiales",
+      "name": "Malpighiales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 7279,
+      "outdated": 1081,
+      "gbifNeSpeciesCount": 5861,
+      "byCategory": {
+        "VU": 929,
+        "EN": 1033,
+        "LC": 3821,
+        "LR/nt": 28,
+        "CR": 479,
+        "EX": 9,
+        "DD": 617,
+        "LR/cd": 15,
+        "NT": 341,
+        "LR/lc": 5,
+        "EW": 2
       }
     },
     {
-      "id": "legumes",
-      "name": "Legumes",
-      "estimatedDescribed": 20800,
+      "id": "fabales",
+      "name": "Fabales",
+      "estimatedDescribed": 0,
       "totalAssessed": 6570,
       "outdated": 1649,
       "gbifNeSpeciesCount": 9526,
@@ -1275,9 +1301,406 @@
       }
     },
     {
-      "id": "grasses-cereals",
-      "name": "Grasses & Cereals",
-      "estimatedDescribed": 18900,
+      "id": "myrtales",
+      "name": "Myrtales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 6021,
+      "outdated": 584,
+      "gbifNeSpeciesCount": 3853,
+      "byCategory": {
+        "NT": 394,
+        "VU": 837,
+        "EN": 999,
+        "LC": 2701,
+        "CR": 505,
+        "DD": 521,
+        "EX": 9,
+        "LR/lc": 31,
+        "LR/nt": 15,
+        "LR/cd": 9
+      }
+    },
+    {
+      "id": "gentianales",
+      "name": "Gentianales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 5795,
+      "outdated": 974,
+      "gbifNeSpeciesCount": 6896,
+      "byCategory": {
+        "CR": 509,
+        "LC": 2596,
+        "EN": 1034,
+        "VU": 898,
+        "EX": 9,
+        "NT": 308,
+        "LR/nt": 18,
+        "LR/lc": 5,
+        "DD": 414,
+        "LR/cd": 2,
+        "EW": 2
+      }
+    },
+    {
+      "id": "ericales",
+      "name": "Ericales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 4831,
+      "outdated": 795,
+      "gbifNeSpeciesCount": 4588,
+      "byCategory": {
+        "NT": 341,
+        "EN": 808,
+        "LC": 2000,
+        "VU": 758,
+        "EW": 4,
+        "DD": 404,
+        "CR": 432,
+        "EX": 3,
+        "LR/lc": 24,
+        "LR/cd": 19,
+        "LR/nt": 38
+      }
+    },
+    {
+      "id": "sapindales",
+      "name": "Sapindales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 3737,
+      "outdated": 409,
+      "gbifNeSpeciesCount": 1823,
+      "byCategory": {
+        "LC": 1904,
+        "EN": 576,
+        "NT": 186,
+        "VU": 517,
+        "LR/nt": 37,
+        "DD": 258,
+        "CR": 235,
+        "LR/cd": 8,
+        "LR/lc": 9,
+        "EX": 6,
+        "EW": 1
+      }
+    },
+    {
+      "id": "lamiales",
+      "name": "Lamiales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 3506,
+      "outdated": 1281,
+      "gbifNeSpeciesCount": 12445,
+      "byCategory": {
+        "LC": 1604,
+        "LR/nt": 8,
+        "VU": 558,
+        "EN": 658,
+        "CR": 276,
+        "DD": 207,
+        "NT": 182,
+        "LR/cd": 2,
+        "EX": 7,
+        "LR/lc": 3,
+        "EW": 1
+      }
+    },
+    {
+      "id": "caryophyllales",
+      "name": "Caryophyllales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 2918,
+      "outdated": 1946,
+      "gbifNeSpeciesCount": 7255,
+      "byCategory": {
+        "LC": 1511,
+        "CR": 289,
+        "NT": 139,
+        "EN": 395,
+        "LR/nt": 4,
+        "VU": 350,
+        "LR/lc": 3,
+        "DD": 218,
+        "EX": 7,
+        "LR/cd": 2
+      }
+    },
+    {
+      "id": "laurales",
+      "name": "Laurales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 2855,
+      "outdated": 81,
+      "gbifNeSpeciesCount": 313,
+      "byCategory": {
+        "LC": 1148,
+        "VU": 407,
+        "NT": 111,
+        "EN": 622,
+        "DD": 217,
+        "CR": 337,
+        "LR/lc": 4,
+        "LR/nt": 6,
+        "LR/cd": 1,
+        "EX": 2
+      }
+    },
+    {
+      "id": "asterales",
+      "name": "Asterales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 2776,
+      "outdated": 1216,
+      "gbifNeSpeciesCount": 19306,
+      "byCategory": {
+        "EN": 613,
+        "VU": 520,
+        "CR": 373,
+        "LC": 897,
+        "EX": 29,
+        "NT": 202,
+        "LR/nt": 13,
+        "EW": 6,
+        "DD": 122,
+        "LR/lc": 1
+      }
+    },
+    {
+      "id": "malvales",
+      "name": "Malvales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 2622,
+      "outdated": 221,
+      "gbifNeSpeciesCount": 2732,
+      "byCategory": {
+        "LC": 978,
+        "EN": 567,
+        "CR": 280,
+        "EX": 10,
+        "VU": 452,
+        "EW": 4,
+        "LR/cd": 7,
+        "NT": 169,
+        "DD": 150,
+        "LR/lc": 2,
+        "LR/nt": 3
+      }
+    },
+    {
+      "id": "rosales",
+      "name": "Rosales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 2457,
+      "outdated": 379,
+      "gbifNeSpeciesCount": 4874,
+      "byCategory": {
+        "LR/cd": 1,
+        "VU": 212,
+        "LC": 1436,
+        "EN": 272,
+        "NT": 118,
+        "CR": 167,
+        "LR/nt": 10,
+        "LR/lc": 8,
+        "DD": 231,
+        "EX": 2
+      }
+    },
+    {
+      "id": "magnoliales",
+      "name": "Magnoliales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 2403,
+      "outdated": 457,
+      "gbifNeSpeciesCount": 374,
+      "byCategory": {
+        "EN": 408,
+        "CR": 170,
+        "VU": 348,
+        "NT": 126,
+        "LC": 969,
+        "DD": 346,
+        "LR/lc": 12,
+        "LR/cd": 3,
+        "LR/nt": 20,
+        "EW": 1
+      }
+    },
+    {
+      "id": "proteales",
+      "name": "Proteales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 1663,
+      "outdated": 15,
+      "gbifNeSpeciesCount": 235,
+      "byCategory": {
+        "LC": 754,
+        "VU": 293,
+        "NT": 161,
+        "EN": 290,
+        "EX": 5,
+        "LR/cd": 2,
+        "DD": 45,
+        "CR": 113
+      }
+    },
+    {
+      "id": "apiales",
+      "name": "Apiales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 1369,
+      "outdated": 362,
+      "gbifNeSpeciesCount": 2642,
+      "byCategory": {
+        "VU": 202,
+        "LC": 568,
+        "CR": 132,
+        "LR/nt": 9,
+        "LR/cd": 5,
+        "EN": 206,
+        "LR/lc": 2,
+        "NT": 103,
+        "DD": 139,
+        "EX": 3
+      }
+    },
+    {
+      "id": "fagales",
+      "name": "Fagales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 1093,
+      "outdated": 209,
+      "gbifNeSpeciesCount": 306,
+      "byCategory": {
+        "VU": 88,
+        "NT": 98,
+        "EN": 108,
+        "DD": 163,
+        "LC": 533,
+        "CR": 97,
+        "LR/cd": 2,
+        "LR/nt": 4
+      }
+    },
+    {
+      "id": "oxalidales",
+      "name": "Oxalidales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 960,
+      "outdated": 67,
+      "gbifNeSpeciesCount": 647,
+      "byCategory": {
+        "CR": 69,
+        "EN": 146,
+        "LC": 487,
+        "NT": 55,
+        "VU": 109,
+        "LR/lc": 1,
+        "LR/nt": 4,
+        "DD": 82,
+        "LR/cd": 7
+      }
+    },
+    {
+      "id": "solanales",
+      "name": "Solanales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 918,
+      "outdated": 146,
+      "gbifNeSpeciesCount": 2444,
+      "byCategory": {
+        "CR": 49,
+        "EN": 149,
+        "LR/nt": 2,
+        "VU": 100,
+        "DD": 52,
+        "LC": 507,
+        "NT": 50,
+        "LR/cd": 2,
+        "EW": 7
+      }
+    },
+    {
+      "id": "brassicales",
+      "name": "Brassicales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 564,
+      "outdated": 223,
+      "gbifNeSpeciesCount": 2999,
+      "byCategory": {
+        "CR": 48,
+        "LC": 250,
+        "DD": 68,
+        "EN": 89,
+        "VU": 78,
+        "NT": 29,
+        "EX": 2
+      }
+    },
+    {
+      "id": "celastrales",
+      "name": "Celastrales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 528,
+      "outdated": 75,
+      "gbifNeSpeciesCount": 384,
+      "byCategory": {
+        "EN": 90,
+        "CR": 26,
+        "VU": 72,
+        "LC": 279,
+        "DD": 34,
+        "LR/lc": 1,
+        "LR/nt": 3,
+        "NT": 22,
+        "EX": 1
+      }
+    },
+    {
+      "id": "other-magnoliopsida",
+      "name": "Other Magnoliopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 3310,
+      "outdated": 1004,
+      "gbifNeSpeciesCount": 14167,
+      "byCategory": {
+        "DD": 210,
+        "VU": 493,
+        "EX": 10,
+        "LR/nt": 15,
+        "EN": 559,
+        "NT": 154,
+        "CR": 279,
+        "LC": 1577,
+        "LR/cd": 7,
+        "LR/lc": 5,
+        "EW": 1
+      }
+    }
+  ],
+  "liliopsida": [
+    {
+      "id": "asparagales",
+      "name": "Asparagales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 3736,
+      "outdated": 1532,
+      "gbifNeSpeciesCount": 15619,
+      "byCategory": {
+        "EN": 863,
+        "VU": 505,
+        "DD": 463,
+        "CR": 440,
+        "LC": 1247,
+        "NT": 206,
+        "LR/nt": 2,
+        "EX": 7,
+        "EW": 3
+      }
+    },
+    {
+      "id": "poales",
+      "name": "Poales",
+      "estimatedDescribed": 0,
       "totalAssessed": 2843,
       "outdated": 1562,
       "gbifNeSpeciesCount": 12202,
@@ -1294,9 +1717,9 @@
       }
     },
     {
-      "id": "palms-relatives",
-      "name": "Palms & Relatives",
-      "estimatedDescribed": 2600,
+      "id": "arecales",
+      "name": "Arecales",
+      "estimatedDescribed": 0,
       "totalAssessed": 1301,
       "outdated": 401,
       "gbifNeSpeciesCount": 422,
@@ -1315,61 +1738,720 @@
       }
     },
     {
-      "id": "aquatic-flowering",
-      "name": "Aquatic Flowering Plants",
-      "estimatedDescribed": 4600,
-      "totalAssessed": 710,
-      "outdated": 503,
-      "gbifNeSpeciesCount": 1995,
+      "id": "zingiberales",
+      "name": "Zingiberales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 932,
+      "outdated": 98,
+      "gbifNeSpeciesCount": 832,
+      "byCategory": {
+        "CR": 75,
+        "EN": 174,
+        "VU": 160,
+        "DD": 117,
+        "NT": 66,
+        "LC": 337,
+        "EX": 2,
+        "EW": 1
+      }
+    },
+    {
+      "id": "alismatales",
+      "name": "Alismatales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 683,
+      "outdated": 486,
+      "gbifNeSpeciesCount": 1921,
       "byCategory": {
         "VU": 93,
-        "DD": 116,
+        "DD": 112,
         "NT": 48,
-        "EN": 74,
-        "CR": 38,
-        "LC": 341
+        "EN": 72,
+        "CR": 37,
+        "LC": 321
       }
     },
     {
-      "id": "broadleaf-trees-shrubs",
-      "name": "Broadleaf Trees & Shrubs",
-      "estimatedDescribed": 88600,
-      "totalAssessed": 39093,
-      "outdated": 5190,
-      "gbifNeSpeciesCount": 31620,
+      "id": "pandanales",
+      "name": "Pandanales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 417,
+      "outdated": 51,
+      "gbifNeSpeciesCount": 392,
       "byCategory": {
-        "LR/cd": 67,
-        "VU": 5446,
-        "LC": 18086,
-        "EN": 6427,
-        "NT": 2192,
-        "LR/nt": 179,
-        "CR": 3211,
-        "EX": 50,
-        "EW": 14,
-        "DD": 3321,
-        "LR/lc": 100
+        "VU": 72,
+        "NT": 30,
+        "EN": 97,
+        "CR": 57,
+        "DD": 65,
+        "LC": 96
       }
     },
     {
-      "id": "other-flowering-plants",
-      "name": "Other Flowering Plants",
-      "estimatedDescribed": 170600,
-      "totalAssessed": 17516,
-      "outdated": 5435,
-      "gbifNeSpeciesCount": 46394,
+      "id": "liliales",
+      "name": "Liliales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 252,
+      "outdated": 79,
+      "gbifNeSpeciesCount": 1075,
       "byCategory": {
-        "LC": 8159,
-        "DD": 1271,
-        "VU": 2553,
-        "LR/nt": 45,
-        "EN": 2908,
-        "EX": 37,
-        "CR": 1457,
-        "LR/cd": 27,
-        "NT": 1034,
-        "LR/lc": 15,
-        "EW": 10
+        "CR": 21,
+        "DD": 23,
+        "NT": 30,
+        "EN": 29,
+        "VU": 45,
+        "LC": 104
+      }
+    },
+    {
+      "id": "dioscoreales",
+      "name": "Dioscoreales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 124,
+      "outdated": 66,
+      "gbifNeSpeciesCount": 425,
+      "byCategory": {
+        "CR": 19,
+        "VU": 14,
+        "LC": 54,
+        "EN": 16,
+        "NT": 11,
+        "DD": 10
+      }
+    },
+    {
+      "id": "commelinales",
+      "name": "Commelinales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 80,
+      "outdated": 37,
+      "gbifNeSpeciesCount": 523,
+      "byCategory": {
+        "VU": 7,
+        "EN": 12,
+        "LC": 49,
+        "DD": 5,
+        "CR": 5,
+        "NT": 2
+      }
+    },
+    {
+      "id": "acorales",
+      "name": "Acorales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 2,
+      "outdated": 2,
+      "gbifNeSpeciesCount": 0,
+      "byCategory": {
+        "LC": 2
+      }
+    }
+  ],
+  "gymnosperms": [
+    {
+      "id": "pinopsida",
+      "name": "Pinopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 617,
+      "outdated": 531,
+      "gbifNeSpeciesCount": 53,
+      "byCategory": {
+        "LC": 303,
+        "EN": 94,
+        "CR": 30,
+        "VU": 83,
+        "NT": 99,
+        "DD": 8
+      }
+    },
+    {
+      "id": "cycadopsida",
+      "name": "Cycadopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 347,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 10,
+      "byCategory": {
+        "EW": 5,
+        "CR": 63,
+        "EN": 104,
+        "VU": 72,
+        "LC": 65,
+        "NT": 37,
+        "DD": 1
+      }
+    },
+    {
+      "id": "gnetopsida",
+      "name": "Gnetopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 97,
+      "outdated": 94,
+      "gbifNeSpeciesCount": 10,
+      "byCategory": {
+        "LC": 76,
+        "NT": 6,
+        "VU": 5,
+        "EN": 1,
+        "DD": 9
+      }
+    },
+    {
+      "id": "ginkgoopsida",
+      "name": "Ginkgoopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 1,
+      "outdated": 1,
+      "gbifNeSpeciesCount": 0,
+      "byCategory": {
+        "EN": 1
+      }
+    }
+  ],
+  "ferns_and_allies": [
+    {
+      "id": "polypodiopsida",
+      "name": "Polypodiopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 717,
+      "outdated": 378,
+      "gbifNeSpeciesCount": 5647,
+      "byCategory": {
+        "DD": 97,
+        "NT": 43,
+        "EN": 107,
+        "VU": 99,
+        "CR": 74,
+        "LC": 294,
+        "EX": 2,
+        "EW": 1
+      }
+    },
+    {
+      "id": "lycopodiopsida",
+      "name": "Lycopodiopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 117,
+      "outdated": 69,
+      "gbifNeSpeciesCount": 591,
+      "byCategory": {
+        "VU": 18,
+        "LC": 47,
+        "EN": 13,
+        "NT": 10,
+        "CR": 16,
+        "DD": 13
+      }
+    }
+  ],
+  "polypodiopsida": [
+    {
+      "id": "polypodiales",
+      "name": "Polypodiales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 459,
+      "outdated": 304,
+      "gbifNeSpeciesCount": 4536,
+      "byCategory": {
+        "DD": 63,
+        "NT": 31,
+        "EN": 83,
+        "VU": 83,
+        "CR": 62,
+        "LC": 134,
+        "EX": 2,
+        "EW": 1
+      }
+    },
+    {
+      "id": "cyatheales",
+      "name": "Cyatheales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 159,
+      "outdated": 19,
+      "gbifNeSpeciesCount": 276,
+      "byCategory": {
+        "EN": 12,
+        "VU": 12,
+        "NT": 7,
+        "DD": 26,
+        "LC": 101,
+        "CR": 1
+      }
+    },
+    {
+      "id": "hymenophyllales",
+      "name": "Hymenophyllales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 38,
+      "outdated": 19,
+      "gbifNeSpeciesCount": 361,
+      "byCategory": {
+        "VU": 3,
+        "DD": 6,
+        "CR": 7,
+        "NT": 4,
+        "EN": 8,
+        "LC": 10
+      }
+    },
+    {
+      "id": "salviniales",
+      "name": "Salviniales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 32,
+      "outdated": 18,
+      "gbifNeSpeciesCount": 32,
+      "byCategory": {
+        "LC": 25,
+        "EN": 4,
+        "CR": 1,
+        "VU": 1,
+        "DD": 1
+      }
+    },
+    {
+      "id": "other-polypodiopsida",
+      "name": "Other Polypodiopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 29,
+      "outdated": 18,
+      "gbifNeSpeciesCount": 442,
+      "byCategory": {
+        "CR": 3,
+        "LC": 24,
+        "DD": 1,
+        "NT": 1
+      }
+    }
+  ],
+  "lycopodiopsida": [
+    {
+      "id": "isoetales",
+      "name": "Isoetales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 72,
+      "outdated": 43,
+      "gbifNeSpeciesCount": 70,
+      "byCategory": {
+        "VU": 7,
+        "CR": 15,
+        "EN": 8,
+        "NT": 5,
+        "LC": 26,
+        "DD": 11
+      }
+    },
+    {
+      "id": "lycopodiales",
+      "name": "Lycopodiales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 27,
+      "outdated": 19,
+      "gbifNeSpeciesCount": 233,
+      "byCategory": {
+        "VU": 10,
+        "LC": 9,
+        "EN": 3,
+        "NT": 4,
+        "CR": 1
+      }
+    },
+    {
+      "id": "selaginellales",
+      "name": "Selaginellales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 18,
+      "outdated": 7,
+      "gbifNeSpeciesCount": 288,
+      "byCategory": {
+        "VU": 1,
+        "NT": 1,
+        "LC": 12,
+        "EN": 2,
+        "DD": 2
+      }
+    }
+  ],
+  "mosses": [
+    {
+      "id": "bryopsida",
+      "name": "Bryopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 188,
+      "outdated": 33,
+      "gbifNeSpeciesCount": 4152,
+      "byCategory": {
+        "CR": 26,
+        "NT": 22,
+        "EX": 4,
+        "EN": 38,
+        "VU": 32,
+        "LC": 38,
+        "DD": 28
+      }
+    },
+    {
+      "id": "jungermanniopsida",
+      "name": "Jungermanniopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 101,
+      "outdated": 39,
+      "gbifNeSpeciesCount": 2600,
+      "byCategory": {
+        "VU": 21,
+        "LR/lc": 2,
+        "EN": 25,
+        "CR": 14,
+        "NT": 11,
+        "LC": 25,
+        "DD": 3
+      }
+    },
+    {
+      "id": "marchantiopsida",
+      "name": "Marchantiopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 13,
+      "outdated": 10,
+      "gbifNeSpeciesCount": 215,
+      "byCategory": {
+        "EN": 3,
+        "LR/lc": 1,
+        "CR": 2,
+        "VU": 2,
+        "DD": 4,
+        "NT": 1
+      }
+    },
+    {
+      "id": "anthocerotopsida",
+      "name": "Anthocerotopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 3,
+      "outdated": 1,
+      "gbifNeSpeciesCount": 68,
+      "byCategory": {
+        "EN": 2,
+        "LC": 1
+      }
+    },
+    {
+      "id": "sphagnopsida",
+      "name": "Sphagnopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 17,
+      "outdated": 2,
+      "gbifNeSpeciesCount": 136,
+      "byCategory": {
+        "VU": 4,
+        "CR": 6,
+        "LC": 3,
+        "EN": 3,
+        "DD": 1
+      }
+    },
+    {
+      "id": "andreaeopsida",
+      "name": "Andreaeopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 3,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 32,
+      "byCategory": {
+        "DD": 1,
+        "VU": 1,
+        "EN": 1
+      }
+    },
+    {
+      "id": "polytrichopsida",
+      "name": "Polytrichopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 1,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 135,
+      "byCategory": {
+        "NT": 1
+      }
+    },
+    {
+      "id": "takakiopsida",
+      "name": "Takakiopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 1,
+      "outdated": 1,
+      "gbifNeSpeciesCount": 1,
+      "byCategory": {
+        "VU": 1
+      }
+    }
+  ],
+  "bryopsida": [
+    {
+      "id": "hypnales",
+      "name": "Hypnales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 70,
+      "outdated": 16,
+      "gbifNeSpeciesCount": 1323,
+      "byCategory": {
+        "CR": 12,
+        "EX": 3,
+        "EN": 16,
+        "VU": 12,
+        "DD": 8,
+        "NT": 8,
+        "LC": 11
+      }
+    },
+    {
+      "id": "pottiales",
+      "name": "Pottiales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 32,
+      "outdated": 2,
+      "gbifNeSpeciesCount": 445,
+      "byCategory": {
+        "CR": 1,
+        "VU": 7,
+        "DD": 10,
+        "NT": 3,
+        "EN": 4,
+        "LC": 7
+      }
+    },
+    {
+      "id": "dicranales",
+      "name": "Dicranales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 25,
+      "outdated": 5,
+      "gbifNeSpeciesCount": 810,
+      "byCategory": {
+        "EN": 5,
+        "CR": 5,
+        "VU": 1,
+        "LC": 7,
+        "NT": 5,
+        "EX": 1,
+        "DD": 1
+      }
+    },
+    {
+      "id": "grimmiales",
+      "name": "Grimmiales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 20,
+      "outdated": 2,
+      "gbifNeSpeciesCount": 239,
+      "byCategory": {
+        "VU": 7,
+        "EN": 3,
+        "DD": 2,
+        "LC": 5,
+        "NT": 1,
+        "CR": 2
+      }
+    },
+    {
+      "id": "bryales",
+      "name": "Bryales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 12,
+      "outdated": 1,
+      "gbifNeSpeciesCount": 357,
+      "byCategory": {
+        "VU": 3,
+        "DD": 3,
+        "NT": 2,
+        "LC": 3,
+        "EN": 1
+      }
+    },
+    {
+      "id": "orthotrichales",
+      "name": "Orthotrichales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 10,
+      "outdated": 2,
+      "gbifNeSpeciesCount": 282,
+      "byCategory": {
+        "EN": 2,
+        "LC": 3,
+        "DD": 1,
+        "CR": 3,
+        "VU": 1
+      }
+    },
+    {
+      "id": "hookeriales",
+      "name": "Hookeriales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 8,
+      "outdated": 3,
+      "gbifNeSpeciesCount": 221,
+      "byCategory": {
+        "CR": 3,
+        "EN": 1,
+        "VU": 1,
+        "NT": 1,
+        "DD": 2
+      }
+    },
+    {
+      "id": "other-bryopsida",
+      "name": "Other Bryopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 11,
+      "outdated": 2,
+      "gbifNeSpeciesCount": 475,
+      "byCategory": {
+        "NT": 2,
+        "EN": 6,
+        "LC": 2,
+        "DD": 1
+      }
+    }
+  ],
+  "green_algae": [
+    {
+      "id": "charophyceae",
+      "name": "Charophyceae",
+      "estimatedDescribed": 0,
+      "totalAssessed": 15,
+      "outdated": 11,
+      "gbifNeSpeciesCount": 97,
+      "byCategory": {
+        "LC": 11,
+        "DD": 3,
+        "NT": 1
+      }
+    },
+    {
+      "id": "ulvophyceae",
+      "name": "Ulvophyceae",
+      "estimatedDescribed": 0,
+      "totalAssessed": 2,
+      "outdated": 1,
+      "gbifNeSpeciesCount": 650,
+      "byCategory": {
+        "DD": 2
+      }
+    },
+    {
+      "id": "chlorophyceae",
+      "name": "Chlorophyceae",
+      "estimatedDescribed": 0,
+      "totalAssessed": 1,
+      "outdated": 1,
+      "gbifNeSpeciesCount": 719,
+      "byCategory": {
+        "DD": 1
+      }
+    }
+  ],
+  "red_algae": [
+    {
+      "id": "florideophyceae",
+      "name": "Florideophyceae",
+      "estimatedDescribed": 0,
+      "totalAssessed": 78,
+      "outdated": 58,
+      "gbifNeSpeciesCount": 2510,
+      "byCategory": {
+        "EX": 1,
+        "DD": 60,
+        "LC": 8,
+        "VU": 3,
+        "CR": 6
+      }
+    }
+  ],
+  "florideophyceae": [
+    {
+      "id": "ceramiales",
+      "name": "Ceramiales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 38,
+      "outdated": 24,
+      "gbifNeSpeciesCount": 895,
+      "byCategory": {
+        "EX": 1,
+        "DD": 27,
+        "LC": 4,
+        "VU": 3,
+        "CR": 3
+      }
+    },
+    {
+      "id": "corallinales",
+      "name": "Corallinales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 11,
+      "outdated": 11,
+      "gbifNeSpeciesCount": 285,
+      "byCategory": {
+        "DD": 11
+      }
+    },
+    {
+      "id": "gigartinales",
+      "name": "Gigartinales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 7,
+      "outdated": 7,
+      "gbifNeSpeciesCount": 485,
+      "byCategory": {
+        "DD": 5,
+        "LC": 2
+      }
+    },
+    {
+      "id": "gelidiales",
+      "name": "Gelidiales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 5,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 73,
+      "byCategory": {
+        "LC": 1,
+        "DD": 4
+      }
+    },
+    {
+      "id": "halymeniales",
+      "name": "Halymeniales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 4,
+      "outdated": 4,
+      "gbifNeSpeciesCount": 98,
+      "byCategory": {
+        "DD": 3,
+        "LC": 1
+      }
+    },
+    {
+      "id": "hapalidiales",
+      "name": "Hapalidiales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 3,
+      "outdated": 3,
+      "gbifNeSpeciesCount": 0,
+      "byCategory": {
+        "DD": 3
+      }
+    },
+    {
+      "id": "other-florideophyceae",
+      "name": "Other Florideophyceae",
+      "estimatedDescribed": 0,
+      "totalAssessed": 10,
+      "outdated": 9,
+      "gbifNeSpeciesCount": 674,
+      "byCategory": {
+        "DD": 7,
+        "CR": 3
       }
     }
   ],
@@ -1772,7 +2854,7 @@
     },
     {
       "id": "pl-gymnosperms",
-      "name": "Conifers & Cycads",
+      "name": "Gymnosperms",
       "estimatedDescribed": 1113,
       "totalAssessed": 1062,
       "outdated": 626,
@@ -1789,7 +2871,7 @@
     },
     {
       "id": "pl-ferns_and_allies",
-      "name": "Ferns & Horsetails",
+      "name": "Ferns & Allies",
       "estimatedDescribed": 11800,
       "totalAssessed": 834,
       "outdated": 447,
@@ -1854,48 +2936,74 @@
   ],
   "pl-flowering_plants": [
     {
-      "id": "pl-orchids-lilies-bulbs",
-      "name": "Orchids, Lilies & Bulbs",
-      "estimatedDescribed": 36000,
-      "totalAssessed": 3736,
-      "outdated": 1532,
-      "gbifNeSpeciesCount": 15619,
+      "id": "pl-magnoliopsida",
+      "name": "Magnoliopsida (Eudicots)",
+      "estimatedDescribed": 0,
+      "totalAssessed": 64175,
+      "outdated": 13174,
+      "gbifNeSpeciesCount": 103670,
       "byCategory": {
-        "EN": 863,
-        "VU": 505,
-        "DD": 463,
-        "CR": 440,
-        "LC": 1247,
-        "NT": 206,
-        "LR/nt": 2,
-        "EX": 7,
-        "EW": 3
+        "LR/cd": 102,
+        "VU": 8952,
+        "LC": 30280,
+        "EN": 10509,
+        "NT": 3679,
+        "LR/nt": 252,
+        "DD": 4941,
+        "CR": 5190,
+        "EW": 33,
+        "EX": 119,
+        "LR/lc": 118
       }
     },
     {
-      "id": "pl-composites-wildflowers",
-      "name": "Composites & Wildflowers",
-      "estimatedDescribed": 26900,
-      "totalAssessed": 2776,
-      "outdated": 1216,
-      "gbifNeSpeciesCount": 19306,
+      "id": "pl-liliopsida",
+      "name": "Liliopsida (Monocots)",
+      "estimatedDescribed": 0,
+      "totalAssessed": 10370,
+      "outdated": 4314,
+      "gbifNeSpeciesCount": 33414,
       "byCategory": {
-        "EN": 613,
-        "VU": 520,
-        "CR": 373,
-        "LC": 897,
-        "EX": 29,
-        "NT": 202,
-        "LR/nt": 13,
-        "EW": 6,
-        "DD": 122,
-        "LR/lc": 1
+        "VU": 1303,
+        "CR": 1018,
+        "LC": 4453,
+        "EN": 1806,
+        "NT": 592,
+        "DD": 1145,
+        "LR/lc": 7,
+        "LR/nt": 18,
+        "EW": 7,
+        "LR/cd": 6,
+        "EX": 15
+      }
+    }
+  ],
+  "pl-magnoliopsida": [
+    {
+      "id": "pl-malpighiales",
+      "name": "Malpighiales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 7279,
+      "outdated": 1081,
+      "gbifNeSpeciesCount": 5861,
+      "byCategory": {
+        "VU": 929,
+        "EN": 1033,
+        "LC": 3821,
+        "LR/nt": 28,
+        "CR": 479,
+        "EX": 9,
+        "DD": 617,
+        "LR/cd": 15,
+        "NT": 341,
+        "LR/lc": 5,
+        "EW": 2
       }
     },
     {
-      "id": "pl-legumes",
-      "name": "Legumes",
-      "estimatedDescribed": 20800,
+      "id": "pl-fabales",
+      "name": "Fabales",
+      "estimatedDescribed": 0,
       "totalAssessed": 6570,
       "outdated": 1649,
       "gbifNeSpeciesCount": 9526,
@@ -1914,9 +3022,406 @@
       }
     },
     {
-      "id": "pl-grasses-cereals",
-      "name": "Grasses & Cereals",
-      "estimatedDescribed": 18900,
+      "id": "pl-myrtales",
+      "name": "Myrtales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 6021,
+      "outdated": 584,
+      "gbifNeSpeciesCount": 3853,
+      "byCategory": {
+        "NT": 394,
+        "VU": 837,
+        "EN": 999,
+        "LC": 2701,
+        "CR": 505,
+        "DD": 521,
+        "EX": 9,
+        "LR/lc": 31,
+        "LR/nt": 15,
+        "LR/cd": 9
+      }
+    },
+    {
+      "id": "pl-gentianales",
+      "name": "Gentianales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 5795,
+      "outdated": 974,
+      "gbifNeSpeciesCount": 6896,
+      "byCategory": {
+        "CR": 509,
+        "LC": 2596,
+        "EN": 1034,
+        "VU": 898,
+        "EX": 9,
+        "NT": 308,
+        "LR/nt": 18,
+        "LR/lc": 5,
+        "DD": 414,
+        "LR/cd": 2,
+        "EW": 2
+      }
+    },
+    {
+      "id": "pl-ericales",
+      "name": "Ericales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 4831,
+      "outdated": 795,
+      "gbifNeSpeciesCount": 4588,
+      "byCategory": {
+        "NT": 341,
+        "EN": 808,
+        "LC": 2000,
+        "VU": 758,
+        "EW": 4,
+        "DD": 404,
+        "CR": 432,
+        "EX": 3,
+        "LR/lc": 24,
+        "LR/cd": 19,
+        "LR/nt": 38
+      }
+    },
+    {
+      "id": "pl-sapindales",
+      "name": "Sapindales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 3737,
+      "outdated": 409,
+      "gbifNeSpeciesCount": 1823,
+      "byCategory": {
+        "LC": 1904,
+        "EN": 576,
+        "NT": 186,
+        "VU": 517,
+        "LR/nt": 37,
+        "DD": 258,
+        "CR": 235,
+        "LR/cd": 8,
+        "LR/lc": 9,
+        "EX": 6,
+        "EW": 1
+      }
+    },
+    {
+      "id": "pl-lamiales",
+      "name": "Lamiales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 3506,
+      "outdated": 1281,
+      "gbifNeSpeciesCount": 12445,
+      "byCategory": {
+        "LC": 1604,
+        "LR/nt": 8,
+        "VU": 558,
+        "EN": 658,
+        "CR": 276,
+        "DD": 207,
+        "NT": 182,
+        "LR/cd": 2,
+        "EX": 7,
+        "LR/lc": 3,
+        "EW": 1
+      }
+    },
+    {
+      "id": "pl-caryophyllales",
+      "name": "Caryophyllales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 2918,
+      "outdated": 1946,
+      "gbifNeSpeciesCount": 7255,
+      "byCategory": {
+        "LC": 1511,
+        "CR": 289,
+        "NT": 139,
+        "EN": 395,
+        "LR/nt": 4,
+        "VU": 350,
+        "LR/lc": 3,
+        "DD": 218,
+        "EX": 7,
+        "LR/cd": 2
+      }
+    },
+    {
+      "id": "pl-laurales",
+      "name": "Laurales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 2855,
+      "outdated": 81,
+      "gbifNeSpeciesCount": 313,
+      "byCategory": {
+        "LC": 1148,
+        "VU": 407,
+        "NT": 111,
+        "EN": 622,
+        "DD": 217,
+        "CR": 337,
+        "LR/lc": 4,
+        "LR/nt": 6,
+        "LR/cd": 1,
+        "EX": 2
+      }
+    },
+    {
+      "id": "pl-asterales",
+      "name": "Asterales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 2776,
+      "outdated": 1216,
+      "gbifNeSpeciesCount": 19306,
+      "byCategory": {
+        "EN": 613,
+        "VU": 520,
+        "CR": 373,
+        "LC": 897,
+        "EX": 29,
+        "NT": 202,
+        "LR/nt": 13,
+        "EW": 6,
+        "DD": 122,
+        "LR/lc": 1
+      }
+    },
+    {
+      "id": "pl-malvales",
+      "name": "Malvales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 2622,
+      "outdated": 221,
+      "gbifNeSpeciesCount": 2732,
+      "byCategory": {
+        "LC": 978,
+        "EN": 567,
+        "CR": 280,
+        "EX": 10,
+        "VU": 452,
+        "EW": 4,
+        "LR/cd": 7,
+        "NT": 169,
+        "DD": 150,
+        "LR/lc": 2,
+        "LR/nt": 3
+      }
+    },
+    {
+      "id": "pl-rosales",
+      "name": "Rosales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 2457,
+      "outdated": 379,
+      "gbifNeSpeciesCount": 4874,
+      "byCategory": {
+        "LR/cd": 1,
+        "VU": 212,
+        "LC": 1436,
+        "EN": 272,
+        "NT": 118,
+        "CR": 167,
+        "LR/nt": 10,
+        "LR/lc": 8,
+        "DD": 231,
+        "EX": 2
+      }
+    },
+    {
+      "id": "pl-magnoliales",
+      "name": "Magnoliales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 2403,
+      "outdated": 457,
+      "gbifNeSpeciesCount": 374,
+      "byCategory": {
+        "EN": 408,
+        "CR": 170,
+        "VU": 348,
+        "NT": 126,
+        "LC": 969,
+        "DD": 346,
+        "LR/lc": 12,
+        "LR/cd": 3,
+        "LR/nt": 20,
+        "EW": 1
+      }
+    },
+    {
+      "id": "pl-proteales",
+      "name": "Proteales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 1663,
+      "outdated": 15,
+      "gbifNeSpeciesCount": 235,
+      "byCategory": {
+        "LC": 754,
+        "VU": 293,
+        "NT": 161,
+        "EN": 290,
+        "EX": 5,
+        "LR/cd": 2,
+        "DD": 45,
+        "CR": 113
+      }
+    },
+    {
+      "id": "pl-apiales",
+      "name": "Apiales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 1369,
+      "outdated": 362,
+      "gbifNeSpeciesCount": 2642,
+      "byCategory": {
+        "VU": 202,
+        "LC": 568,
+        "CR": 132,
+        "LR/nt": 9,
+        "LR/cd": 5,
+        "EN": 206,
+        "LR/lc": 2,
+        "NT": 103,
+        "DD": 139,
+        "EX": 3
+      }
+    },
+    {
+      "id": "pl-fagales",
+      "name": "Fagales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 1093,
+      "outdated": 209,
+      "gbifNeSpeciesCount": 306,
+      "byCategory": {
+        "VU": 88,
+        "NT": 98,
+        "EN": 108,
+        "DD": 163,
+        "LC": 533,
+        "CR": 97,
+        "LR/cd": 2,
+        "LR/nt": 4
+      }
+    },
+    {
+      "id": "pl-oxalidales",
+      "name": "Oxalidales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 960,
+      "outdated": 67,
+      "gbifNeSpeciesCount": 647,
+      "byCategory": {
+        "CR": 69,
+        "EN": 146,
+        "LC": 487,
+        "NT": 55,
+        "VU": 109,
+        "LR/lc": 1,
+        "LR/nt": 4,
+        "DD": 82,
+        "LR/cd": 7
+      }
+    },
+    {
+      "id": "pl-solanales",
+      "name": "Solanales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 918,
+      "outdated": 146,
+      "gbifNeSpeciesCount": 2444,
+      "byCategory": {
+        "CR": 49,
+        "EN": 149,
+        "LR/nt": 2,
+        "VU": 100,
+        "DD": 52,
+        "LC": 507,
+        "NT": 50,
+        "LR/cd": 2,
+        "EW": 7
+      }
+    },
+    {
+      "id": "pl-brassicales",
+      "name": "Brassicales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 564,
+      "outdated": 223,
+      "gbifNeSpeciesCount": 2999,
+      "byCategory": {
+        "CR": 48,
+        "LC": 250,
+        "DD": 68,
+        "EN": 89,
+        "VU": 78,
+        "NT": 29,
+        "EX": 2
+      }
+    },
+    {
+      "id": "pl-celastrales",
+      "name": "Celastrales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 528,
+      "outdated": 75,
+      "gbifNeSpeciesCount": 384,
+      "byCategory": {
+        "EN": 90,
+        "CR": 26,
+        "VU": 72,
+        "LC": 279,
+        "DD": 34,
+        "LR/lc": 1,
+        "LR/nt": 3,
+        "NT": 22,
+        "EX": 1
+      }
+    },
+    {
+      "id": "pl-other-magnoliopsida",
+      "name": "Other Magnoliopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 3310,
+      "outdated": 1004,
+      "gbifNeSpeciesCount": 14167,
+      "byCategory": {
+        "DD": 210,
+        "VU": 493,
+        "EX": 10,
+        "LR/nt": 15,
+        "EN": 559,
+        "NT": 154,
+        "CR": 279,
+        "LC": 1577,
+        "LR/cd": 7,
+        "LR/lc": 5,
+        "EW": 1
+      }
+    }
+  ],
+  "pl-liliopsida": [
+    {
+      "id": "pl-asparagales",
+      "name": "Asparagales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 3736,
+      "outdated": 1532,
+      "gbifNeSpeciesCount": 15619,
+      "byCategory": {
+        "EN": 863,
+        "VU": 505,
+        "DD": 463,
+        "CR": 440,
+        "LC": 1247,
+        "NT": 206,
+        "LR/nt": 2,
+        "EX": 7,
+        "EW": 3
+      }
+    },
+    {
+      "id": "pl-poales",
+      "name": "Poales",
+      "estimatedDescribed": 0,
       "totalAssessed": 2843,
       "outdated": 1562,
       "gbifNeSpeciesCount": 12202,
@@ -1933,9 +3438,9 @@
       }
     },
     {
-      "id": "pl-palms-relatives",
-      "name": "Palms & Relatives",
-      "estimatedDescribed": 2600,
+      "id": "pl-arecales",
+      "name": "Arecales",
+      "estimatedDescribed": 0,
       "totalAssessed": 1301,
       "outdated": 401,
       "gbifNeSpeciesCount": 422,
@@ -1954,61 +3459,720 @@
       }
     },
     {
-      "id": "pl-aquatic-flowering",
-      "name": "Aquatic Flowering Plants",
-      "estimatedDescribed": 4600,
-      "totalAssessed": 710,
-      "outdated": 503,
-      "gbifNeSpeciesCount": 1995,
+      "id": "pl-zingiberales",
+      "name": "Zingiberales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 932,
+      "outdated": 98,
+      "gbifNeSpeciesCount": 832,
+      "byCategory": {
+        "CR": 75,
+        "EN": 174,
+        "VU": 160,
+        "DD": 117,
+        "NT": 66,
+        "LC": 337,
+        "EX": 2,
+        "EW": 1
+      }
+    },
+    {
+      "id": "pl-alismatales",
+      "name": "Alismatales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 683,
+      "outdated": 486,
+      "gbifNeSpeciesCount": 1921,
       "byCategory": {
         "VU": 93,
-        "DD": 116,
+        "DD": 112,
         "NT": 48,
-        "EN": 74,
-        "CR": 38,
-        "LC": 341
+        "EN": 72,
+        "CR": 37,
+        "LC": 321
       }
     },
     {
-      "id": "pl-broadleaf-trees-shrubs",
-      "name": "Broadleaf Trees & Shrubs",
-      "estimatedDescribed": 88600,
-      "totalAssessed": 39093,
-      "outdated": 5190,
-      "gbifNeSpeciesCount": 31620,
+      "id": "pl-pandanales",
+      "name": "Pandanales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 417,
+      "outdated": 51,
+      "gbifNeSpeciesCount": 392,
       "byCategory": {
-        "LR/cd": 67,
-        "VU": 5446,
-        "LC": 18086,
-        "EN": 6427,
-        "NT": 2192,
-        "LR/nt": 179,
-        "CR": 3211,
-        "EX": 50,
-        "EW": 14,
-        "DD": 3321,
-        "LR/lc": 100
+        "VU": 72,
+        "NT": 30,
+        "EN": 97,
+        "CR": 57,
+        "DD": 65,
+        "LC": 96
       }
     },
     {
-      "id": "pl-other-flowering-plants",
-      "name": "Other Flowering Plants",
-      "estimatedDescribed": 170600,
-      "totalAssessed": 17516,
-      "outdated": 5435,
-      "gbifNeSpeciesCount": 46394,
+      "id": "pl-liliales",
+      "name": "Liliales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 252,
+      "outdated": 79,
+      "gbifNeSpeciesCount": 1075,
       "byCategory": {
-        "LC": 8159,
-        "DD": 1271,
-        "VU": 2553,
-        "LR/nt": 45,
-        "EN": 2908,
-        "EX": 37,
-        "CR": 1457,
-        "LR/cd": 27,
-        "NT": 1034,
-        "LR/lc": 15,
-        "EW": 10
+        "CR": 21,
+        "DD": 23,
+        "NT": 30,
+        "EN": 29,
+        "VU": 45,
+        "LC": 104
+      }
+    },
+    {
+      "id": "pl-dioscoreales",
+      "name": "Dioscoreales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 124,
+      "outdated": 66,
+      "gbifNeSpeciesCount": 425,
+      "byCategory": {
+        "CR": 19,
+        "VU": 14,
+        "LC": 54,
+        "EN": 16,
+        "NT": 11,
+        "DD": 10
+      }
+    },
+    {
+      "id": "pl-commelinales",
+      "name": "Commelinales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 80,
+      "outdated": 37,
+      "gbifNeSpeciesCount": 523,
+      "byCategory": {
+        "VU": 7,
+        "EN": 12,
+        "LC": 49,
+        "DD": 5,
+        "CR": 5,
+        "NT": 2
+      }
+    },
+    {
+      "id": "pl-acorales",
+      "name": "Acorales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 2,
+      "outdated": 2,
+      "gbifNeSpeciesCount": 0,
+      "byCategory": {
+        "LC": 2
+      }
+    }
+  ],
+  "pl-gymnosperms": [
+    {
+      "id": "pl-pinopsida",
+      "name": "Pinopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 617,
+      "outdated": 531,
+      "gbifNeSpeciesCount": 53,
+      "byCategory": {
+        "LC": 303,
+        "EN": 94,
+        "CR": 30,
+        "VU": 83,
+        "NT": 99,
+        "DD": 8
+      }
+    },
+    {
+      "id": "pl-cycadopsida",
+      "name": "Cycadopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 347,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 10,
+      "byCategory": {
+        "EW": 5,
+        "CR": 63,
+        "EN": 104,
+        "VU": 72,
+        "LC": 65,
+        "NT": 37,
+        "DD": 1
+      }
+    },
+    {
+      "id": "pl-gnetopsida",
+      "name": "Gnetopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 97,
+      "outdated": 94,
+      "gbifNeSpeciesCount": 10,
+      "byCategory": {
+        "LC": 76,
+        "NT": 6,
+        "VU": 5,
+        "EN": 1,
+        "DD": 9
+      }
+    },
+    {
+      "id": "pl-ginkgoopsida",
+      "name": "Ginkgoopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 1,
+      "outdated": 1,
+      "gbifNeSpeciesCount": 0,
+      "byCategory": {
+        "EN": 1
+      }
+    }
+  ],
+  "pl-ferns_and_allies": [
+    {
+      "id": "pl-polypodiopsida",
+      "name": "Polypodiopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 717,
+      "outdated": 378,
+      "gbifNeSpeciesCount": 5647,
+      "byCategory": {
+        "DD": 97,
+        "NT": 43,
+        "EN": 107,
+        "VU": 99,
+        "CR": 74,
+        "LC": 294,
+        "EX": 2,
+        "EW": 1
+      }
+    },
+    {
+      "id": "pl-lycopodiopsida",
+      "name": "Lycopodiopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 117,
+      "outdated": 69,
+      "gbifNeSpeciesCount": 591,
+      "byCategory": {
+        "VU": 18,
+        "LC": 47,
+        "EN": 13,
+        "NT": 10,
+        "CR": 16,
+        "DD": 13
+      }
+    }
+  ],
+  "pl-polypodiopsida": [
+    {
+      "id": "pl-polypodiales",
+      "name": "Polypodiales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 459,
+      "outdated": 304,
+      "gbifNeSpeciesCount": 4536,
+      "byCategory": {
+        "DD": 63,
+        "NT": 31,
+        "EN": 83,
+        "VU": 83,
+        "CR": 62,
+        "LC": 134,
+        "EX": 2,
+        "EW": 1
+      }
+    },
+    {
+      "id": "pl-cyatheales",
+      "name": "Cyatheales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 159,
+      "outdated": 19,
+      "gbifNeSpeciesCount": 276,
+      "byCategory": {
+        "EN": 12,
+        "VU": 12,
+        "NT": 7,
+        "DD": 26,
+        "LC": 101,
+        "CR": 1
+      }
+    },
+    {
+      "id": "pl-hymenophyllales",
+      "name": "Hymenophyllales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 38,
+      "outdated": 19,
+      "gbifNeSpeciesCount": 361,
+      "byCategory": {
+        "VU": 3,
+        "DD": 6,
+        "CR": 7,
+        "NT": 4,
+        "EN": 8,
+        "LC": 10
+      }
+    },
+    {
+      "id": "pl-salviniales",
+      "name": "Salviniales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 32,
+      "outdated": 18,
+      "gbifNeSpeciesCount": 32,
+      "byCategory": {
+        "LC": 25,
+        "EN": 4,
+        "CR": 1,
+        "VU": 1,
+        "DD": 1
+      }
+    },
+    {
+      "id": "pl-other-polypodiopsida",
+      "name": "Other Polypodiopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 29,
+      "outdated": 18,
+      "gbifNeSpeciesCount": 442,
+      "byCategory": {
+        "CR": 3,
+        "LC": 24,
+        "DD": 1,
+        "NT": 1
+      }
+    }
+  ],
+  "pl-lycopodiopsida": [
+    {
+      "id": "pl-isoetales",
+      "name": "Isoetales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 72,
+      "outdated": 43,
+      "gbifNeSpeciesCount": 70,
+      "byCategory": {
+        "VU": 7,
+        "CR": 15,
+        "EN": 8,
+        "NT": 5,
+        "LC": 26,
+        "DD": 11
+      }
+    },
+    {
+      "id": "pl-lycopodiales",
+      "name": "Lycopodiales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 27,
+      "outdated": 19,
+      "gbifNeSpeciesCount": 233,
+      "byCategory": {
+        "VU": 10,
+        "LC": 9,
+        "EN": 3,
+        "NT": 4,
+        "CR": 1
+      }
+    },
+    {
+      "id": "pl-selaginellales",
+      "name": "Selaginellales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 18,
+      "outdated": 7,
+      "gbifNeSpeciesCount": 288,
+      "byCategory": {
+        "VU": 1,
+        "NT": 1,
+        "LC": 12,
+        "EN": 2,
+        "DD": 2
+      }
+    }
+  ],
+  "pl-mosses": [
+    {
+      "id": "pl-bryopsida",
+      "name": "Bryopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 188,
+      "outdated": 33,
+      "gbifNeSpeciesCount": 4152,
+      "byCategory": {
+        "CR": 26,
+        "NT": 22,
+        "EX": 4,
+        "EN": 38,
+        "VU": 32,
+        "LC": 38,
+        "DD": 28
+      }
+    },
+    {
+      "id": "pl-jungermanniopsida",
+      "name": "Jungermanniopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 101,
+      "outdated": 39,
+      "gbifNeSpeciesCount": 2600,
+      "byCategory": {
+        "VU": 21,
+        "LR/lc": 2,
+        "EN": 25,
+        "CR": 14,
+        "NT": 11,
+        "LC": 25,
+        "DD": 3
+      }
+    },
+    {
+      "id": "pl-marchantiopsida",
+      "name": "Marchantiopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 13,
+      "outdated": 10,
+      "gbifNeSpeciesCount": 215,
+      "byCategory": {
+        "EN": 3,
+        "LR/lc": 1,
+        "CR": 2,
+        "VU": 2,
+        "DD": 4,
+        "NT": 1
+      }
+    },
+    {
+      "id": "pl-anthocerotopsida",
+      "name": "Anthocerotopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 3,
+      "outdated": 1,
+      "gbifNeSpeciesCount": 68,
+      "byCategory": {
+        "EN": 2,
+        "LC": 1
+      }
+    },
+    {
+      "id": "pl-sphagnopsida",
+      "name": "Sphagnopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 17,
+      "outdated": 2,
+      "gbifNeSpeciesCount": 136,
+      "byCategory": {
+        "VU": 4,
+        "CR": 6,
+        "LC": 3,
+        "EN": 3,
+        "DD": 1
+      }
+    },
+    {
+      "id": "pl-andreaeopsida",
+      "name": "Andreaeopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 3,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 32,
+      "byCategory": {
+        "DD": 1,
+        "VU": 1,
+        "EN": 1
+      }
+    },
+    {
+      "id": "pl-polytrichopsida",
+      "name": "Polytrichopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 1,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 135,
+      "byCategory": {
+        "NT": 1
+      }
+    },
+    {
+      "id": "pl-takakiopsida",
+      "name": "Takakiopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 1,
+      "outdated": 1,
+      "gbifNeSpeciesCount": 1,
+      "byCategory": {
+        "VU": 1
+      }
+    }
+  ],
+  "pl-bryopsida": [
+    {
+      "id": "pl-hypnales",
+      "name": "Hypnales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 70,
+      "outdated": 16,
+      "gbifNeSpeciesCount": 1323,
+      "byCategory": {
+        "CR": 12,
+        "EX": 3,
+        "EN": 16,
+        "VU": 12,
+        "DD": 8,
+        "NT": 8,
+        "LC": 11
+      }
+    },
+    {
+      "id": "pl-pottiales",
+      "name": "Pottiales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 32,
+      "outdated": 2,
+      "gbifNeSpeciesCount": 445,
+      "byCategory": {
+        "CR": 1,
+        "VU": 7,
+        "DD": 10,
+        "NT": 3,
+        "EN": 4,
+        "LC": 7
+      }
+    },
+    {
+      "id": "pl-dicranales",
+      "name": "Dicranales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 25,
+      "outdated": 5,
+      "gbifNeSpeciesCount": 810,
+      "byCategory": {
+        "EN": 5,
+        "CR": 5,
+        "VU": 1,
+        "LC": 7,
+        "NT": 5,
+        "EX": 1,
+        "DD": 1
+      }
+    },
+    {
+      "id": "pl-grimmiales",
+      "name": "Grimmiales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 20,
+      "outdated": 2,
+      "gbifNeSpeciesCount": 239,
+      "byCategory": {
+        "VU": 7,
+        "EN": 3,
+        "DD": 2,
+        "LC": 5,
+        "NT": 1,
+        "CR": 2
+      }
+    },
+    {
+      "id": "pl-bryales",
+      "name": "Bryales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 12,
+      "outdated": 1,
+      "gbifNeSpeciesCount": 357,
+      "byCategory": {
+        "VU": 3,
+        "DD": 3,
+        "NT": 2,
+        "LC": 3,
+        "EN": 1
+      }
+    },
+    {
+      "id": "pl-orthotrichales",
+      "name": "Orthotrichales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 10,
+      "outdated": 2,
+      "gbifNeSpeciesCount": 282,
+      "byCategory": {
+        "EN": 2,
+        "LC": 3,
+        "DD": 1,
+        "CR": 3,
+        "VU": 1
+      }
+    },
+    {
+      "id": "pl-hookeriales",
+      "name": "Hookeriales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 8,
+      "outdated": 3,
+      "gbifNeSpeciesCount": 221,
+      "byCategory": {
+        "CR": 3,
+        "EN": 1,
+        "VU": 1,
+        "NT": 1,
+        "DD": 2
+      }
+    },
+    {
+      "id": "pl-other-bryopsida",
+      "name": "Other Bryopsida",
+      "estimatedDescribed": 0,
+      "totalAssessed": 11,
+      "outdated": 2,
+      "gbifNeSpeciesCount": 475,
+      "byCategory": {
+        "NT": 2,
+        "EN": 6,
+        "LC": 2,
+        "DD": 1
+      }
+    }
+  ],
+  "pl-green_algae": [
+    {
+      "id": "pl-charophyceae",
+      "name": "Charophyceae",
+      "estimatedDescribed": 0,
+      "totalAssessed": 15,
+      "outdated": 11,
+      "gbifNeSpeciesCount": 97,
+      "byCategory": {
+        "LC": 11,
+        "DD": 3,
+        "NT": 1
+      }
+    },
+    {
+      "id": "pl-ulvophyceae",
+      "name": "Ulvophyceae",
+      "estimatedDescribed": 0,
+      "totalAssessed": 2,
+      "outdated": 1,
+      "gbifNeSpeciesCount": 650,
+      "byCategory": {
+        "DD": 2
+      }
+    },
+    {
+      "id": "pl-chlorophyceae",
+      "name": "Chlorophyceae",
+      "estimatedDescribed": 0,
+      "totalAssessed": 1,
+      "outdated": 1,
+      "gbifNeSpeciesCount": 719,
+      "byCategory": {
+        "DD": 1
+      }
+    }
+  ],
+  "pl-red_algae": [
+    {
+      "id": "pl-florideophyceae",
+      "name": "Florideophyceae",
+      "estimatedDescribed": 0,
+      "totalAssessed": 78,
+      "outdated": 58,
+      "gbifNeSpeciesCount": 2510,
+      "byCategory": {
+        "EX": 1,
+        "DD": 60,
+        "LC": 8,
+        "VU": 3,
+        "CR": 6
+      }
+    }
+  ],
+  "pl-florideophyceae": [
+    {
+      "id": "pl-ceramiales",
+      "name": "Ceramiales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 38,
+      "outdated": 24,
+      "gbifNeSpeciesCount": 895,
+      "byCategory": {
+        "EX": 1,
+        "DD": 27,
+        "LC": 4,
+        "VU": 3,
+        "CR": 3
+      }
+    },
+    {
+      "id": "pl-corallinales",
+      "name": "Corallinales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 11,
+      "outdated": 11,
+      "gbifNeSpeciesCount": 285,
+      "byCategory": {
+        "DD": 11
+      }
+    },
+    {
+      "id": "pl-gigartinales",
+      "name": "Gigartinales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 7,
+      "outdated": 7,
+      "gbifNeSpeciesCount": 485,
+      "byCategory": {
+        "DD": 5,
+        "LC": 2
+      }
+    },
+    {
+      "id": "pl-gelidiales",
+      "name": "Gelidiales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 5,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 73,
+      "byCategory": {
+        "LC": 1,
+        "DD": 4
+      }
+    },
+    {
+      "id": "pl-halymeniales",
+      "name": "Halymeniales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 4,
+      "outdated": 4,
+      "gbifNeSpeciesCount": 98,
+      "byCategory": {
+        "DD": 3,
+        "LC": 1
+      }
+    },
+    {
+      "id": "pl-hapalidiales",
+      "name": "Hapalidiales",
+      "estimatedDescribed": 0,
+      "totalAssessed": 3,
+      "outdated": 3,
+      "gbifNeSpeciesCount": 0,
+      "byCategory": {
+        "DD": 3
+      }
+    },
+    {
+      "id": "pl-other-florideophyceae",
+      "name": "Other Florideophyceae",
+      "estimatedDescribed": 0,
+      "totalAssessed": 10,
+      "outdated": 9,
+      "gbifNeSpeciesCount": 674,
+      "byCategory": {
+        "DD": 7,
+        "CR": 3
       }
     }
   ],
