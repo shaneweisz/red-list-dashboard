@@ -102,9 +102,13 @@ function renderAohPng(
   // 4326) so the PNG pixel grid matches MapLibre's image-source quad,
   // which is sampled in Mercator screen space. An equirectangular PNG
   // drifts visibly from vector overlays at higher latitudes.
+  // -srcnodata/-dstnodata 0 flags absence pixels as nodata so we can
+  // turn them into transparent alpha when rendering the PNG below.
   execFileSync("gdalwarp", [
     "-t_srs", "EPSG:3857",
     "-r", "near",
+    "-srcnodata", "0",
+    "-dstnodata", "0",
     "-co", "COMPRESS=LZW",
     "-overwrite",
     tifPath,
@@ -123,13 +127,22 @@ function renderAohPng(
   const [warpedWidth, warpedHeight] = warpedInfo.size;
   const longest = Math.max(warpedWidth, warpedHeight);
 
+  // -scale 0 1 1 255 maps fractional habitat values [0,1] → byte [1,255],
+  // reserving 0 exclusively for nodata. This gives a *consistent* mapping
+  // across species, instead of GDAL's default per-image autoscale which
+  // makes a species with max=0.05 look identical in intensity to one with
+  // max=1.0.
+  // -b 1 -b mask emits a 2-band grayscale+alpha PNG: band 1 is the value,
+  // the second band is the nodata mask flipped to alpha (0 = transparent
+  // for absence, 255 = opaque for presence). Without this the PNG renders
+  // as an opaque rectangle covering the species' bounding box.
   const translateArgs = [
     "-of", "PNG",
     "-ot", "Byte",
-    "-scale",
-    "-a_nodata", "none",
+    "-scale", "0", "1", "1", "255",
     "-b", "1",
-    "-colorinterp", "green",
+    "-b", "mask",
+    "-colorinterp", "green,alpha",
   ];
   if (longest > MAX_SIZE) {
     const scale = MAX_SIZE / longest;
