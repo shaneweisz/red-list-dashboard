@@ -3171,6 +3171,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                 mounted={mounted}
                                 assessmentYear={assessmentYear}
                                 assessmentDate={s.assessment_date}
+                                taxonId={s.taxon_id}
                               />
                             </div>
                             )

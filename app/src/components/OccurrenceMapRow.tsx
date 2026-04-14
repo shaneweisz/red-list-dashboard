@@ -517,7 +517,13 @@ interface OccurrenceMapRowProps {
   mounted: boolean;
   assessmentYear?: number | null;
   assessmentDate?: string | null;
+  taxonId?: string | null;
 }
+
+// Taxa for which preserved specimens (herbarium/fungarium sheets) are a
+// large and important fraction of GBIF records, so they should be shown
+// on the map by default rather than hidden behind a filter.
+const PRESERVED_SPECIMEN_DEFAULT_TAXA = new Set(["plantae", "fungi"]);
 
 // Convert iNaturalist photo URLs to a smaller size for thumbnails
 // e.g. .../photos/123/original.jpeg -> .../photos/123/small.jpeg (240px)
@@ -744,19 +750,27 @@ export default function OccurrenceMapRow({
   mounted,
   assessmentYear,
   assessmentDate,
+  taxonId,
 }: OccurrenceMapRowProps) {
   const [occurrences, setOccurrences] = useState<OccurrenceFeature[]>([]);
   const [breakdown, setBreakdown] = useState<RecordTypeBreakdown | null>(null);
   const [loadingOccurrences, setLoadingOccurrences] = useState(true);
   const [loadingBreakdown, setLoadingBreakdown] = useState(true);
 
-  // Checkbox state for each observation type category (default: all checked except specimens, citations & occurrence)
+  // Herbarium/fungarium specimens are a large and often authoritative
+  // fraction of GBIF records for plants and fungi, so include them by
+  // default for those taxa. For animals they're typically historical
+  // museum records that can mislead current-distribution reads, so
+  // default off.
+  const preservedDefault = taxonId != null && PRESERVED_SPECIMEN_DEFAULT_TAXA.has(taxonId);
+
+  // Checkbox state for each observation type category
   const [checkedTypes, setCheckedTypes] = useState({
     iNaturalist: true,
     humanOther: true,
     machineObservation: true,
     observation: false,
-    preservedSpecimen: false,
+    preservedSpecimen: preservedDefault,
     fossilSpecimen: false,
     livingSpecimen: false,
     materialSample: true,
@@ -1094,19 +1108,22 @@ export default function OccurrenceMapRow({
   const pillDefs = useMemo(() => {
     if (!breakdown) return [];
     const humanOtherCount = Math.max(0, breakdown.humanObservation - breakdown.iNaturalist);
+    const preservedTooltip = preservedDefault
+      ? "Herbarium/fungarium sheets — a large and often authoritative fraction of plant & fungus records. On by default for plants and fungi. Caveats: some are geolocated to country centroids, and GBIF's event date reflects collection date, not when the specimen was digitised."
+      : "Museum specimens (often historical). Off by default for animals since old specimens may not reflect current distribution. For plants & fungi this is a core record type and is on by default.";
     return [
       { key: "iNaturalist" as const, label: "iNaturalist (community science)", count: breakdown.iNaturalist },
       { key: "humanOther" as const, label: "Human observation (e.g. eBird, field surveys)", count: humanOtherCount },
       { key: "machineObservation" as const, label: "Machine observation (e.g. camera traps)", count: breakdown.machineObservation },
       { key: "observation" as const, label: "Observation", count: breakdown.observation },
-      { key: "preservedSpecimen" as const, label: "Preserved specimen (e.g. herbaria, museums)", count: breakdown.preservedSpecimen },
+      { key: "preservedSpecimen" as const, label: "Preserved specimen (e.g. herbaria, museums)", count: breakdown.preservedSpecimen, tooltip: preservedTooltip },
       { key: "fossilSpecimen" as const, label: "Fossil specimen", count: breakdown.fossilSpecimen },
       { key: "livingSpecimen" as const, label: "Living specimen (e.g. zoos, botanical gardens)", count: breakdown.livingSpecimen },
       { key: "materialSample" as const, label: "Material sample (e.g. eDNA)", count: breakdown.materialSample },
       { key: "materialCitation" as const, label: "Material citation (literature records)", count: breakdown.materialCitation },
       { key: "occurrence" as const, label: "Occurrence", count: breakdown.occurrence },
     ];
-  }, [breakdown]);
+  }, [breakdown, preservedDefault]);
 
   const toggleType = (key: keyof typeof checkedTypes) => {
     setCheckedTypes((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -1568,6 +1585,15 @@ export default function OccurrenceMapRow({
                           <span className={active ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-400 dark:text-zinc-500"}>
                             {pill.label}
                           </span>
+                          {"tooltip" in pill && pill.tooltip && (
+                            <span
+                              title={pill.tooltip}
+                              className="text-zinc-400 dark:text-zinc-500 cursor-help select-none shrink-0"
+                              aria-label={pill.tooltip}
+                            >
+                              ⓘ
+                            </span>
+                          )}
                           <span className={`ml-auto tabular-nums shrink-0 ${active ? "text-emerald-500 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"}`}>
                             {pill.count.toLocaleString()}
                           </span>
