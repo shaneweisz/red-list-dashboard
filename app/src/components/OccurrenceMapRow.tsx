@@ -1732,7 +1732,7 @@ export default function OccurrenceMapRow({
               {/* Hide country centroids */}
               <label
                 className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer"
-                title={`Drop records within ~20 km of their country's Natural Earth label point — a common artefact for specimens with only country-level locality`}
+                title="Drop records within 1 km of their country's Natural Earth centroid — matches CoordinateCleaner's cc_cen defaults."
               >
                 <input
                   type="checkbox"

@@ -1,24 +1,24 @@
 /**
  * Detects GBIF records that were georeferenced to a country centroid rather
  * than a real collection locality — a common artefact for older herbarium /
- * museum specimens, flagged in the R `CoordinateCleaner` package as `cc_cen`.
+ * museum specimens, flagged by the R `CoordinateCleaner` package's `cc_cen`
+ * function.
  *
- * The centroid table is generated from Natural Earth's 10m Admin 0 countries
- * dataset (LABEL_X / LABEL_Y — cartographic label point per country) and is
- * rebuilt via `scripts/fetch-country-centroids.ts`. Natural Earth is public
- * domain.
+ * Matches CoordinateCleaner's country-centroid defaults:
+ *   - Centroids: Natural Earth 10m Admin 0 label points (public domain).
+ *   - Buffer: 1 km — tight enough that false positives are negligible even
+ *     in small countries, so no area-based exclusions are needed.
+ *
+ * The centroid table is rebuilt via `scripts/fetch-country-centroids.ts`.
  */
 
 import centroids from "../../data/country-centroids.json";
 
 const CENTROIDS = centroids as unknown as Record<string, [number, number]>;
 
-/** Buffer radius (km) around each country centroid within which a record is
- * treated as "likely a country-centroid artefact". Chosen generously enough
- * to catch records with rounded coordinates (e.g. (1.5, 42.5) vs NE label
- * (1.5394, 42.5476)) while still being a small fraction of any country's
- * extent. */
-export const CENTROID_BUFFER_KM = 20;
+/** Default buffer radius (km) — matches CoordinateCleaner's `buffer = 1000`
+ * (metres) default for `cc_cen`. */
+export const CENTROID_BUFFER_KM = 1;
 
 const EARTH_RADIUS_KM = 6371;
 

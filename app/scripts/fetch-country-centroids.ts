@@ -2,9 +2,10 @@
  * fetch-country-centroids: generate country centroid lookup from Natural Earth
  *
  * Downloads the Natural Earth 10m Admin 0 countries GeoJSON (public domain)
- * and extracts ISO 3166-1 alpha-2 → (lat, lon) using the cartographic LABEL_X
- * / LABEL_Y fields. Used by the map's "Hide country-centroid records" filter
- * to flag GBIF observations georeferenced to a country's center.
+ * and extracts ISO 3166-1 alpha-2 → (lon, lat) using the cartographic
+ * LABEL_X / LABEL_Y fields. Mirrors the country-centroid half of the R
+ * `CoordinateCleaner` package's `cc_cen` test (Natural Earth centroids,
+ * 1 km default buffer — see lib/countryCentroids.ts).
  *
  * Source: https://www.naturalearthdata.com/ (Terms: public domain)
  * Mirror: nvkelso/natural-earth-vector (also public domain)

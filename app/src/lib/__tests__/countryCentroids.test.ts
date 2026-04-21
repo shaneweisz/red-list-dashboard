@@ -59,7 +59,7 @@ describe("getCentroid", () => {
 });
 
 // ---------------------------------------------------------------------------
-// isLikelyCountryCentroid
+// isLikelyCountryCentroid — matches CoordinateCleaner::cc_cen defaults
 // ---------------------------------------------------------------------------
 describe("isLikelyCountryCentroid", () => {
   it("flags a point exactly at the country's Natural Earth label", () => {
@@ -68,46 +68,44 @@ describe("isLikelyCountryCentroid", () => {
     expect(isLikelyCountryCentroid(lat, lon, "ZA")).toBe(true);
   });
 
-  it("flags a point with rounded-centroid coordinates (e.g. 1-decimal)", () => {
-    // Andorra NE label ≈ (1.5394, 42.5476). A record at (42.5, 1.5) is a
-    // classic rounded country centroid; ~6.5 km from the NE label.
-    expect(isLikelyCountryCentroid(42.5, 1.5, "AD")).toBe(true);
+  it("flags a point a few hundred metres from the centroid", () => {
+    const [lon, lat] = getCentroid("MG")!;
+    // ~0.005° ≈ 555 m north — still within the 1 km default buffer.
+    expect(isLikelyCountryCentroid(lat + 0.005, lon, "MG")).toBe(true);
+  });
+
+  it("does not flag a point more than 1 km from the centroid", () => {
+    const [lon, lat] = getCentroid("MG")!;
+    // ~0.02° ≈ 2.2 km north — outside the default 1 km buffer.
+    expect(isLikelyCountryCentroid(lat + 0.02, lon, "MG")).toBe(false);
   });
 
   it("does not flag a point far from the centroid", () => {
     // Cape Agulhas (southern tip of South Africa) is hundreds of km from the
-    // ZA label point, so it must not be flagged.
+    // ZA label point.
     expect(isLikelyCountryCentroid(-34.83, 20.0, "ZA")).toBe(false);
   });
 
-  it("does not flag a point if the country code is unknown", () => {
+  it("does not flag when the country code is unknown / null / empty", () => {
     expect(isLikelyCountryCentroid(0, 0, "XX")).toBe(false);
-  });
-
-  it("does not flag when countryCode is null/undefined/empty", () => {
     expect(isLikelyCountryCentroid(0, 0, null)).toBe(false);
     expect(isLikelyCountryCentroid(0, 0, undefined)).toBe(false);
     expect(isLikelyCountryCentroid(0, 0, "")).toBe(false);
   });
 
   it("respects a custom buffer", () => {
-    // 100 km west of the Andorra label should NOT be flagged at the default
-    // 20km buffer…
-    const [lon, lat] = getCentroid("AD")!;
-    const farLon = lon + 2; // ~165 km east at this latitude
-    expect(isLikelyCountryCentroid(lat, farLon, "AD")).toBe(false);
-    // …but should be at a 200 km buffer.
-    expect(isLikelyCountryCentroid(lat, farLon, "AD", 200)).toBe(true);
+    const [lon, lat] = getCentroid("ZA")!;
+    const farLon = lon + 1.5; // ~165 km east at this latitude
+    expect(isLikelyCountryCentroid(lat, farLon, "ZA")).toBe(false);
+    expect(isLikelyCountryCentroid(lat, farLon, "ZA", 300)).toBe(true);
   });
 
   it("is case-insensitive on the country code", () => {
-    const [lon, lat] = getCentroid("AD")!;
-    expect(isLikelyCountryCentroid(lat, lon, "ad")).toBe(true);
+    const [lon, lat] = getCentroid("ZA")!;
+    expect(isLikelyCountryCentroid(lat, lon, "za")).toBe(true);
   });
 
-  it("exposes a sensible default buffer", () => {
-    // Sanity check: the buffer is small vs. any real country's extent.
-    expect(CENTROID_BUFFER_KM).toBeGreaterThan(0);
-    expect(CENTROID_BUFFER_KM).toBeLessThan(100);
+  it("uses CoordinateCleaner's 1 km default buffer", () => {
+    expect(CENTROID_BUFFER_KM).toBe(1);
   });
 });
