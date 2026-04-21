@@ -14,6 +14,7 @@ type GbifRecord = {
   decimalLongitude: number;
   decimalLatitude: number;
   country?: string;
+  countryCode?: string;
   basisOfRecord?: string;
   datasetKey?: string;
   datasetName?: string;
@@ -108,6 +109,7 @@ export async function GET(request: NextRequest) {
           eventDate: r.eventDate,
           recordedBy: r.recordedBy,
           country: r.country,
+          countryCode: r.countryCode,
           basisOfRecord: r.basisOfRecord,
           datasetKey: r.datasetKey,
           datasetName: r.datasetName,

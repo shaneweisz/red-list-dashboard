@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import type { MapRef, ViewStateChangeEvent, MapLayerMouseEvent } from "react-map-gl/maplibre";
 import type maplibregl from "maplibre-gl";
 import { mapTaxonId } from "@/lib/data/taxonomy-constants";
+import { isLikelyCountryCentroid } from "@/lib/countryCentroids";
 
 // Fixed page size for iNat photo grid (5 columns x 2 rows)
 const INAT_PAGE_SIZE = 10;
@@ -60,6 +61,7 @@ interface OccurrenceFeature {
     year?: number | null;
     month?: number | null;
     institutionCode?: string;
+    countryCode?: string;
   };
   geometry: {
     type: "Point";
@@ -782,6 +784,10 @@ export default function OccurrenceMapRow({
 
   // Advanced filter state
   const [maxUncertainty, setMaxUncertainty] = useState<number | null>(50000);
+  // Hide GBIF records georeferenced to a country centroid (default on for
+  // plants/fungi — herbarium sheets with only country-level locality are
+  // often flagged this way). Toggleable for all kingdoms.
+  const [hideCountryCentroids, setHideCountryCentroids] = useState(isPlantOrFungiTaxonGroup(taxonGroup));
   const [colorByDate, setColorByDate] = useState(false);
   const [basemap, setBasemap] = useState<BasemapKey>("streets");
   const [splitView, setSplitView] = useState(false);
@@ -959,8 +965,15 @@ export default function OccurrenceMapRow({
       if (y == null) return true; // keep records without year data
       return y >= yearRange[0] && y <= yearRange[1];
     });
+    // 4. Country-centroid filter (drop points near their country's label)
+    if (hideCountryCentroids) {
+      result = result.filter((o) => {
+        const [lon, lat] = o.geometry.coordinates;
+        return !isLikelyCountryCentroid(lat, lon, o.properties.countryCode);
+      });
+    }
     return result;
-  }, [occurrences, checkedTypes, maxUncertainty, yearRange]);
+  }, [occurrences, checkedTypes, maxUncertainty, yearRange, hideCountryCentroids]);
 
   // Continuous date range for animation (every day from earliest to latest)
   const animationDateRange = useMemo(() => {
@@ -1619,6 +1632,10 @@ export default function OccurrenceMapRow({
                       const u = o.properties.coordinateUncertaintyInMeters;
                       if (u == null || u > maxUncertainty) return false;
                     }
+                    if (hideCountryCentroids) {
+                      const [lon, lat] = o.geometry.coordinates;
+                      if (isLikelyCountryCentroid(lat, lon, o.properties.countryCode)) return false;
+                    }
                     return true;
                   })}
                   yearRange={yearRange}
@@ -1711,6 +1728,20 @@ export default function OccurrenceMapRow({
                   ))}
                 </select>
               </div>
+
+              {/* Hide country centroids */}
+              <label
+                className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer"
+                title={`Drop records within ~20 km of their country's Natural Earth label point — a common artefact for specimens with only country-level locality`}
+              >
+                <input
+                  type="checkbox"
+                  checked={hideCountryCentroids}
+                  onChange={(e) => setHideCountryCentroids(e.target.checked)}
+                  className="w-3 h-3 rounded accent-emerald-500"
+                />
+                Hide country centroids
+              </label>
 
             </div>
           </div>
