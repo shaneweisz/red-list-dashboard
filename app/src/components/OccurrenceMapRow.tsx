@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import type { MapRef, ViewStateChangeEvent, MapLayerMouseEvent } from "react-map-gl/maplibre";
 import type maplibregl from "maplibre-gl";
+import { mapTaxonId } from "@/lib/data/taxonomy-constants";
 
 // Fixed page size for iNat photo grid (5 columns x 2 rows)
 const INAT_PAGE_SIZE = 10;
@@ -517,6 +518,10 @@ interface OccurrenceMapRowProps {
   mounted: boolean;
   assessmentYear?: number | null;
   assessmentDate?: string | null;
+  /** CSV taxon group (e.g. "flowering_plants", "mushrooms") — used to default
+   * preserved specimens ON for plants & fungi, where herbarium/fungarium
+   * records are a core data source. */
+  taxonGroup?: string;
 }
 
 // Convert iNaturalist photo URLs to a smaller size for thumbnails
@@ -738,12 +743,23 @@ function InatPhotoWithPreview({ obs, idx, onHover, onLeave }: { obs: InatObserva
   );
 }
 
+/**
+ * Plants & fungi rely heavily on herbarium/fungarium specimens in GBIF, so
+ * preserved specimens should be ON by default for those kingdoms.
+ */
+export function isPlantOrFungiTaxonGroup(taxonGroup: string | undefined): boolean {
+  if (!taxonGroup) return false;
+  const kingdom = mapTaxonId(taxonGroup);
+  return kingdom === "plantae" || kingdom === "fungi";
+}
+
 export default function OccurrenceMapRow({
   speciesKey,
   countryCode,
   mounted,
   assessmentYear,
   assessmentDate,
+  taxonGroup,
 }: OccurrenceMapRowProps) {
   const [occurrences, setOccurrences] = useState<OccurrenceFeature[]>([]);
   const [breakdown, setBreakdown] = useState<RecordTypeBreakdown | null>(null);
@@ -756,7 +772,7 @@ export default function OccurrenceMapRow({
     humanOther: true,
     machineObservation: true,
     observation: false,
-    preservedSpecimen: false,
+    preservedSpecimen: isPlantOrFungiTaxonGroup(taxonGroup),
     fossilSpecimen: false,
     livingSpecimen: false,
     materialSample: true,
