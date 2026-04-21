@@ -743,6 +743,16 @@ function InatPhotoWithPreview({ obs, idx, onHover, onLeave }: { obs: InatObserva
   );
 }
 
+/**
+ * Plants & fungi rely heavily on herbarium/fungarium specimens in GBIF, so
+ * preserved specimens should be ON by default for those kingdoms.
+ */
+export function isPlantOrFungiTaxonGroup(taxonGroup: string | undefined): boolean {
+  if (!taxonGroup) return false;
+  const kingdom = mapTaxonId(taxonGroup);
+  return kingdom === "plantae" || kingdom === "fungi";
+}
+
 export default function OccurrenceMapRow({
   speciesKey,
   countryCode,
@@ -756,17 +766,13 @@ export default function OccurrenceMapRow({
   const [loadingOccurrences, setLoadingOccurrences] = useState(true);
   const [loadingBreakdown, setLoadingBreakdown] = useState(true);
 
-  // Plants & fungi rely heavily on herbarium/fungarium specimens in GBIF, so
-  // default preserved specimens ON for those kingdoms (per BGCI feedback).
-  const isPlantOrFungi = taxonGroup ? ["plantae", "fungi"].includes(mapTaxonId(taxonGroup)) : false;
-
   // Checkbox state for each observation type category (default: all checked except specimens, citations & occurrence)
   const [checkedTypes, setCheckedTypes] = useState({
     iNaturalist: true,
     humanOther: true,
     machineObservation: true,
     observation: false,
-    preservedSpecimen: isPlantOrFungi,
+    preservedSpecimen: isPlantOrFungiTaxonGroup(taxonGroup),
     fossilSpecimen: false,
     livingSpecimen: false,
     materialSample: true,
