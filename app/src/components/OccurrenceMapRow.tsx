@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import type { MapRef, ViewStateChangeEvent, MapLayerMouseEvent } from "react-map-gl/maplibre";
 import type maplibregl from "maplibre-gl";
+import { mapTaxonId } from "@/lib/data/taxonomy-constants";
 
 // Fixed page size for iNat photo grid (5 columns x 2 rows)
 const INAT_PAGE_SIZE = 10;
@@ -517,6 +518,10 @@ interface OccurrenceMapRowProps {
   mounted: boolean;
   assessmentYear?: number | null;
   assessmentDate?: string | null;
+  /** CSV taxon group (e.g. "flowering_plants", "mushrooms") — used to default
+   * preserved specimens ON for plants & fungi, where herbarium/fungarium
+   * records are a core data source. */
+  taxonGroup?: string;
 }
 
 // Convert iNaturalist photo URLs to a smaller size for thumbnails
@@ -744,11 +749,16 @@ export default function OccurrenceMapRow({
   mounted,
   assessmentYear,
   assessmentDate,
+  taxonGroup,
 }: OccurrenceMapRowProps) {
   const [occurrences, setOccurrences] = useState<OccurrenceFeature[]>([]);
   const [breakdown, setBreakdown] = useState<RecordTypeBreakdown | null>(null);
   const [loadingOccurrences, setLoadingOccurrences] = useState(true);
   const [loadingBreakdown, setLoadingBreakdown] = useState(true);
+
+  // Plants & fungi rely heavily on herbarium/fungarium specimens in GBIF, so
+  // default preserved specimens ON for those kingdoms (per BGCI feedback).
+  const isPlantOrFungi = taxonGroup ? ["plantae", "fungi"].includes(mapTaxonId(taxonGroup)) : false;
 
   // Checkbox state for each observation type category (default: all checked except specimens, citations & occurrence)
   const [checkedTypes, setCheckedTypes] = useState({
@@ -756,7 +766,7 @@ export default function OccurrenceMapRow({
     humanOther: true,
     machineObservation: true,
     observation: false,
-    preservedSpecimen: false,
+    preservedSpecimen: isPlantOrFungi,
     fossilSpecimen: false,
     livingSpecimen: false,
     materialSample: true,
