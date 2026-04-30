@@ -61,6 +61,48 @@ function RowBackground({ x = 0, y = 0, width = 0, height = 0, payload, onRowClic
   );
 }
 
+interface ClickableLabelProps {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  value?: string | number;
+  index?: number;
+  entries: FilterBarChartProps["data"];
+  onLabelClick: (
+    payload: { code?: string; range?: string },
+    event: React.MouseEvent<SVGGElement>,
+  ) => void;
+}
+
+function ClickableLabel({
+  x = 0,
+  y = 0,
+  width = 0,
+  height = 0,
+  value,
+  index,
+  entries,
+  onLabelClick,
+}: ClickableLabelProps) {
+  const entry = typeof index === "number" ? entries[index] : undefined;
+  const textX = x + width + 5;
+  const textY = y + height / 2 + 4;
+  return (
+    <g
+      style={{ cursor: "pointer" }}
+      onClick={(event) => {
+        if (entry) onLabelClick({ code: entry.code, range: entry.range }, event);
+      }}
+    >
+      <rect x={textX - 2} y={y} width={80} height={Math.max(height, 14)} fill="transparent" />
+      <text x={textX} y={textY} fontSize={11} fill="#a1a1aa" textAnchor="start">
+        {value}
+      </text>
+    </g>
+  );
+}
+
 interface YAxisTickProps {
   x?: number;
   y?: number;
@@ -176,8 +218,15 @@ export default function FilterBarChart({
           })}
           <LabelList
             dataKey="label"
-            position="right"
-            style={{ fontSize: 11, fill: "#a1a1aa" }}
+            content={(props) => (
+              <ClickableLabel
+                {...(props as ClickableLabelProps)}
+                entries={data}
+                onLabelClick={(payload, event) =>
+                  onBarClick({ payload }, event as unknown as React.MouseEvent)
+                }
+              />
+            )}
           />
         </Bar>
       </BarChart>
