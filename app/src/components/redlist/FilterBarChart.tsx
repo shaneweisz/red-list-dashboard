@@ -65,6 +65,9 @@ export default function FilterBarChart({
     onBarClick({ payload: { code: entry.code, range: entry.range } }, event);
   };
 
+  // Wrap in a div with a single click handler so the whole row is a hit target
+  // (bar, y-axis label, count label, empty space) — not just the visible bar,
+  // which is hard to click when counts are small.
   return (
     <div onClick={handleClick} style={{ width: "100%", height: "100%", cursor: "pointer" }}>
       <ResponsiveContainer width="100%" height="100%">
