@@ -51,12 +51,14 @@ export default function FilterBarChart({
   yAxisTickMaxLength,
 }: FilterBarChartProps) {
   const handleChartClick = (
-    state: { activePayload?: Array<{ payload?: { code?: string; range?: string } }> } | null,
-    event: React.MouseEvent,
+    state: unknown,
+    event: unknown,
   ) => {
-    const active = state?.activePayload?.[0];
+    const activePayload = (state as { activePayload?: Array<{ payload?: { code?: string; range?: string } }> } | null)
+      ?.activePayload;
+    const active = activePayload?.[0];
     if (active?.payload) {
-      onBarClick({ payload: active.payload }, event);
+      onBarClick({ payload: active.payload }, event as React.MouseEvent);
     }
   };
 
