@@ -36,6 +36,31 @@ interface FilterBarChartProps {
   yAxisTickMaxLength?: number;
 }
 
+interface RowBackgroundProps {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  payload?: { code?: string; range?: string };
+  onRowClick?: (payload: { code?: string; range?: string }, event: React.MouseEvent<SVGRectElement>) => void;
+}
+
+function RowBackground({ x = 0, y = 0, width = 0, height = 0, payload, onRowClick }: RowBackgroundProps) {
+  return (
+    <rect
+      x={x}
+      y={y}
+      width={width}
+      height={height}
+      fill="transparent"
+      style={{ cursor: "pointer" }}
+      onClick={(event) => {
+        if (payload && onRowClick) onRowClick(payload, event);
+      }}
+    />
+  );
+}
+
 export default function FilterBarChart({
   data,
   dataKey,
@@ -50,18 +75,6 @@ export default function FilterBarChart({
   highlightedItems,
   yAxisTickMaxLength,
 }: FilterBarChartProps) {
-  const handleChartClick = (
-    state: unknown,
-    event: unknown,
-  ) => {
-    const activePayload = (state as { activePayload?: Array<{ payload?: { code?: string; range?: string } }> } | null)
-      ?.activePayload;
-    const active = activePayload?.[0];
-    if (active?.payload) {
-      onBarClick({ payload: active.payload }, event as React.MouseEvent);
-    }
-  };
-
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart
@@ -69,8 +82,6 @@ export default function FilterBarChart({
         layout="vertical"
         margin={{ top: 5, right: rightMargin, left: leftMargin, bottom: 5 }}
         barCategoryGap={4}
-        onClick={handleChartClick}
-        style={{ cursor: "pointer" }}
       >
         <XAxis type="number" hide domain={xAxisMax ? [0, xAxisMax] : undefined} />
         <YAxis
@@ -99,6 +110,13 @@ export default function FilterBarChart({
         <Bar
           dataKey="count"
           radius={[0, 4, 4, 0]}
+          cursor="pointer"
+          onClick={(barData, _index, event) => onBarClick(barData, event as React.MouseEvent)}
+          background={
+            <RowBackground
+              onRowClick={(payload, event) => onBarClick({ payload }, event as unknown as React.MouseEvent)}
+            />
+          }
         >
           {data.map((entry, index) => {
             const itemKey = entry.code || entry.range || "";
