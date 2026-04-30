@@ -50,6 +50,16 @@ export default function FilterBarChart({
   highlightedItems,
   yAxisTickMaxLength,
 }: FilterBarChartProps) {
+  const handleChartClick = (
+    state: { activePayload?: Array<{ payload?: { code?: string; range?: string } }> } | null,
+    event: React.MouseEvent,
+  ) => {
+    const active = state?.activePayload?.[0];
+    if (active?.payload) {
+      onBarClick({ payload: active.payload }, event);
+    }
+  };
+
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart
@@ -57,6 +67,8 @@ export default function FilterBarChart({
         layout="vertical"
         margin={{ top: 5, right: rightMargin, left: leftMargin, bottom: 5 }}
         barCategoryGap={4}
+        onClick={handleChartClick}
+        style={{ cursor: "pointer" }}
       >
         <XAxis type="number" hide domain={xAxisMax ? [0, xAxisMax] : undefined} />
         <YAxis
@@ -85,8 +97,6 @@ export default function FilterBarChart({
         <Bar
           dataKey="count"
           radius={[0, 4, 4, 0]}
-          cursor="pointer"
-          onClick={(barData, _index, event) => onBarClick(barData, event as React.MouseEvent)}
         >
           {data.map((entry, index) => {
             const itemKey = entry.code || entry.range || "";
