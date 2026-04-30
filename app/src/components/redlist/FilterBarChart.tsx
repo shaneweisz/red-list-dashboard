@@ -61,6 +61,35 @@ function RowBackground({ x = 0, y = 0, width = 0, height = 0, payload, onRowClic
   );
 }
 
+interface YAxisTickProps {
+  x?: number;
+  y?: number;
+  payload?: { value: string };
+  tickWidth: number;
+  maxLength?: number;
+  onTickClick: (value: string, event: React.MouseEvent<SVGGElement>) => void;
+}
+
+function YAxisTick({ x = 0, y = 0, payload, tickWidth, maxLength, onTickClick }: YAxisTickProps) {
+  const value = payload?.value ?? "";
+  const display =
+    maxLength && value.length > maxLength ? value.slice(0, maxLength) + "…" : value;
+  return (
+    <g style={{ cursor: "pointer" }} onClick={(event) => onTickClick(value, event)}>
+      <rect
+        x={x - tickWidth}
+        y={y - 10}
+        width={tickWidth}
+        height={20}
+        fill="transparent"
+      />
+      <text x={x} y={y} dy={4} textAnchor="end" fontSize={11} fill="#a1a1aa">
+        {display}
+      </text>
+    </g>
+  );
+}
+
 export default function FilterBarChart({
   data,
   dataKey,
@@ -87,14 +116,27 @@ export default function FilterBarChart({
         <YAxis
           type="category"
           dataKey={dataKey}
-          tick={{ fontSize: 11, fill: "#a1a1aa" }}
+          tick={
+            <YAxisTick
+              tickWidth={yAxisWidth}
+              maxLength={yAxisTickMaxLength}
+              onTickClick={(value, event) => {
+                const entry = data.find(
+                  (d) => (dataKey === "code" ? d.code : d.shortRange) === value,
+                );
+                if (entry) {
+                  onBarClick(
+                    { payload: { code: entry.code, range: entry.range } },
+                    event as unknown as React.MouseEvent,
+                  );
+                }
+              }}
+            />
+          }
           tickLine={false}
           axisLine={false}
           width={yAxisWidth}
           interval={0}
-          tickFormatter={yAxisTickMaxLength ? (value: string) =>
-            value.length > yAxisTickMaxLength ? value.slice(0, yAxisTickMaxLength) + "…" : value
-          : undefined}
         />
         <Tooltip
           formatter={(value: number) => [value.toLocaleString(), "Species"]}
