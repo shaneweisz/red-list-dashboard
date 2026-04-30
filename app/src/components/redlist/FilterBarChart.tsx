@@ -57,6 +57,14 @@ export default function FilterBarChart({
         layout="vertical"
         margin={{ top: 5, right: rightMargin, left: leftMargin, bottom: 5 }}
         barCategoryGap={4}
+        style={{ cursor: "pointer" }}
+        onClick={(state, event) => {
+          // Hook the chart-level click so the whole row is clickable, not just
+          // the (often tiny) coloured bar segment.
+          const active = (state as { activePayload?: Array<{ payload?: { code?: string; range?: string } }> } | undefined)?.activePayload?.[0];
+          if (!active) return;
+          onBarClick(active, event as unknown as React.MouseEvent);
+        }}
       >
         <XAxis type="number" hide domain={xAxisMax ? [0, xAxisMax] : undefined} />
         <YAxis
@@ -85,8 +93,6 @@ export default function FilterBarChart({
         <Bar
           dataKey="count"
           radius={[0, 4, 4, 0]}
-          cursor="pointer"
-          onClick={(barData, _index, event) => onBarClick(barData, event as React.MouseEvent)}
         >
           {data.map((entry, index) => {
             const itemKey = entry.code || entry.range || "";
