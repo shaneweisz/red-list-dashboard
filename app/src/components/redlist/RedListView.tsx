@@ -1442,7 +1442,10 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   }, [paginatedSpeciesBase, singleSpeciesPreview]);
 
   // ── Single species mode: show info card instead of charts ──────────
-  const isSingleSpecies = filteredSpecies.length === 1;
+  // Only activate when arrived via the main search bar (which sets the
+  // `species` URL param). Filters that incidentally narrow results to one
+  // species should keep showing the regular charts view.
+  const isSingleSpecies = filteredSpecies.length === 1 && urlSpecies != null;
   const singleSpecies = isSingleSpecies ? filteredSpecies[0] : null;
   const singleSpeciesAssessors = useMemo(() => singleSpecies ? getSpeciesAssessors(singleSpecies) : [], [singleSpecies, getSpeciesAssessors]);
   const singleSpeciesReviewers = useMemo(() => singleSpecies ? getSpeciesReviewers(singleSpecies) : [], [singleSpecies, getSpeciesReviewers]);
