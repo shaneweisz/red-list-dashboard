@@ -60,10 +60,13 @@ export default function FilterBarChart({
         style={{ cursor: "pointer" }}
         onClick={(state, event) => {
           // Hook the chart-level click so the whole row is clickable, not just
-          // the (often tiny) coloured bar segment.
-          const active = (state as { activePayload?: Array<{ payload?: { code?: string; range?: string } }> } | undefined)?.activePayload?.[0];
-          if (!active) return;
-          onBarClick(active, event as unknown as React.MouseEvent);
+          // the (often tiny) coloured bar segment. Recharts 3 gives us the
+          // active row index here, which we map back to the data entry.
+          const idx = (state as { activeIndex?: number | string } | undefined)?.activeIndex;
+          if (typeof idx !== "number") return;
+          const payload = data[idx];
+          if (!payload) return;
+          onBarClick({ payload }, event as unknown as React.MouseEvent);
         }}
       >
         <XAxis type="number" hide domain={xAxisMax ? [0, xAxisMax] : undefined} />
