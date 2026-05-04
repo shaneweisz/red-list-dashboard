@@ -1,11 +1,12 @@
 /**
  * fetch-redlist-species: IUCN Red List DB → CSV
  *
- * Connects to the IUCN Red List PostgreSQL database (via SSH tunnel)
- * and writes per-taxon species data to data/redlist/{taxonId}.csv.
+ * Connects to the IUCN Red List PostgreSQL database and writes per-taxon
+ * species data to data/redlist/{taxonId}.csv.
  *
  * Prerequisites:
- *   1. SSH tunnel to IUCN DB (port 5433)
+ *   1. DB connectivity — set DB_HOST/DB_PORT to the server directly if
+ *      reachable, otherwise SSH-tunnel it to localhost:5433
  *   2. Environment variables: DB_HOST, DB_NAME, DB_USER, DB_PASSWORD
  *
  * Usage:
