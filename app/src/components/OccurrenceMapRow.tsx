@@ -788,7 +788,7 @@ export default function OccurrenceMapRow({
   const [splitDate, setSplitDate] = useState<string>(assessmentDate?.split("T")[0] || "");
   const [sharedViewState, setSharedViewState] = useState({ longitude: 0, latitude: 20, zoom: 1.5 });
   const mapRef = useRef<MapRef>(null);
-  const [sampleSize, setSampleSize] = useState(1000);
+  const [sampleSize, setSampleSize] = useState(300);
   const [yearRange, setYearRange] = useState<[number, number]>([0, 9999]);
 
   // Filters dropdown state
