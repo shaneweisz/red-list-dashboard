@@ -10,6 +10,14 @@ interface CitesListing {
   annotation: string | null;
 }
 
+interface CitesReservation {
+  appendix: string;
+  effectiveAt: string;
+  annotation: string | null;
+  country: string | null;
+  countryCode: string | null;
+}
+
 interface CitesSuspension {
   country: string;
   countryCode: string;
@@ -49,6 +57,7 @@ interface CitesData {
     family?: string;
   };
   currentListings?: CitesListing[];
+  reservations?: CitesReservation[];
   suspensions?: CitesSuspension[];
   quotas?: CitesQuota[];
   nativeCountries?: CitesCountry[];
@@ -267,6 +276,41 @@ export default function CitesSummary({
                 {listing.annotation && (
                   <p className="w-full text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 pl-0.5">
                     {listing.annotation}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Reservations — country-specific opt-outs from a listing */}
+      {data.reservations && data.reservations.length > 0 && (
+        <div>
+          <h4 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
+            Reservations ({data.reservations.length})
+          </h4>
+          <div className="space-y-2">
+            {data.reservations.map((r, i) => (
+              <div
+                key={i}
+                className="flex flex-wrap items-start gap-2 text-sm"
+              >
+                <AppendixBadge appendix={r.appendix} />
+                <span className="text-zinc-700 dark:text-zinc-300">
+                  {r.country || r.countryCode || "Unknown party"}
+                </span>
+                <span className="text-zinc-500 dark:text-zinc-400 text-xs mt-0.5">
+                  since{" "}
+                  {new Date(r.effectiveAt).toLocaleDateString("en-GB", {
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </span>
+                {r.annotation && (
+                  <p className="w-full text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 pl-0.5">
+                    {r.annotation}
                   </p>
                 )}
               </div>
