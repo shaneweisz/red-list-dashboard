@@ -14,11 +14,11 @@
       "EW": 1,
       "LR/nt": 1
     },
-    "gbif_species_count": 4858,
+    "gbif_species_count": 4870,
     "gbif_ne_species_count": 325,
-    "total_gbif_observations": 38075574,
-    "mean_gbif_obs": 7837.705640181144,
-    "median_gbif_obs": 46
+    "total_gbif_observations": 38262834,
+    "mean_gbif_obs": 7856.844763860369,
+    "median_gbif_obs": 47
   },
   {
     "table1a_taxon_group": "aves",
@@ -35,10 +35,10 @@
       "DD": 36
     },
     "gbif_species_count": 11187,
-    "gbif_ne_species_count": 524,
-    "total_gbif_observations": 2299919996,
-    "mean_gbif_obs": 205588.62930186823,
-    "median_gbif_obs": 5313
+    "gbif_ne_species_count": 525,
+    "total_gbif_observations": 2301552329,
+    "mean_gbif_obs": 205734.5426834719,
+    "median_gbif_obs": 5317
   },
   {
     "table1a_taxon_group": "reptilia",
@@ -57,10 +57,10 @@
       "EW": 2,
       "LR/cd": 1
     },
-    "gbif_species_count": 9163,
-    "gbif_ne_species_count": 1064,
-    "total_gbif_observations": 8381248,
-    "mean_gbif_obs": 914.6838371712321,
+    "gbif_species_count": 9180,
+    "gbif_ne_species_count": 1070,
+    "total_gbif_observations": 8462101,
+    "mean_gbif_obs": 921.7974945533769,
     "median_gbif_obs": 23
   },
   {
@@ -77,10 +77,10 @@
       "EX": 37,
       "EW": 2
     },
-    "gbif_species_count": 5874,
-    "gbif_ne_species_count": 226,
-    "total_gbif_observations": 8194304,
-    "mean_gbif_obs": 1395.0125978890023,
+    "gbif_species_count": 5910,
+    "gbif_ne_species_count": 230,
+    "total_gbif_observations": 8243156,
+    "mean_gbif_obs": 1394.781049069374,
     "median_gbif_obs": 17
   },
   {
@@ -99,10 +99,10 @@
       "LR/lc": 1,
       "LR/nt": 2
     },
-    "gbif_species_count": 23093,
-    "gbif_ne_species_count": 3765,
-    "total_gbif_observations": 82179329,
-    "mean_gbif_obs": 3558.625081193435,
+    "gbif_species_count": 23118,
+    "gbif_ne_species_count": 3766,
+    "total_gbif_observations": 82641161,
+    "mean_gbif_obs": 3574.753914698503,
     "median_gbif_obs": 20
   },
   {
@@ -122,10 +122,10 @@
       "EW": 1,
       "LR/cd": 3
     },
-    "gbif_species_count": 252679,
-    "gbif_ne_species_count": 243628,
-    "total_gbif_observations": 214946305,
-    "mean_gbif_obs": 850.6694462143669,
+    "gbif_species_count": 253274,
+    "gbif_ne_species_count": 244215,
+    "total_gbif_observations": 214376066,
+    "mean_gbif_obs": 846.4195535270103,
     "median_gbif_obs": 8
   },
   {
@@ -144,10 +144,10 @@
       "LR/lc": 16,
       "EW": 12
     },
-    "gbif_species_count": 29128,
-    "gbif_ne_species_count": 25027,
-    "total_gbif_observations": 15083663,
-    "mean_gbif_obs": 517.8406687723153,
+    "gbif_species_count": 29240,
+    "gbif_ne_species_count": 25143,
+    "total_gbif_observations": 15170582,
+    "mean_gbif_obs": 518.8297537619699,
     "median_gbif_obs": 6
   },
   {
@@ -167,10 +167,10 @@
       "LR/nt": 1,
       "EW": 1
     },
-    "gbif_species_count": 19028,
-    "gbif_ne_species_count": 17319,
-    "total_gbif_observations": 14405634,
-    "mean_gbif_obs": 757.0755728400252,
+    "gbif_species_count": 19708,
+    "gbif_ne_species_count": 17993,
+    "total_gbif_observations": 14432474,
+    "mean_gbif_obs": 732.3155063933428,
     "median_gbif_obs": 6
   },
   {
@@ -186,10 +186,10 @@
       "CR": 121,
       "EX": 9
     },
-    "gbif_species_count": 21948,
-    "gbif_ne_species_count": 21621,
-    "total_gbif_observations": 6495476,
-    "mean_gbif_obs": 295.9484235465646,
+    "gbif_species_count": 22063,
+    "gbif_ne_species_count": 21735,
+    "total_gbif_observations": 6546477,
+    "mean_gbif_obs": 296.71744549698593,
     "median_gbif_obs": 5
   },
   {
@@ -204,10 +204,10 @@
       "EN": 245,
       "NT": 24
     },
-    "gbif_species_count": 5459,
-    "gbif_ne_species_count": 4577,
-    "total_gbif_observations": 34824110,
-    "mean_gbif_obs": 6379.210478109544,
+    "gbif_species_count": 5462,
+    "gbif_ne_species_count": 4580,
+    "total_gbif_observations": 34831818,
+    "mean_gbif_obs": 6377.11790552911,
     "median_gbif_obs": 7
   },
   {
@@ -223,8 +223,8 @@
     },
     "gbif_species_count": 78,
     "gbif_ne_species_count": 70,
-    "total_gbif_observations": 1651,
-    "mean_gbif_obs": 21.166666666666668,
+    "total_gbif_observations": 1657,
+    "mean_gbif_obs": 21.243589743589745,
     "median_gbif_obs": 4
   },
   {
@@ -238,9 +238,9 @@
     },
     "gbif_species_count": 4,
     "gbif_ne_species_count": 0,
-    "total_gbif_observations": 22073,
-    "mean_gbif_obs": 5518.25,
-    "median_gbif_obs": 346.5
+    "total_gbif_observations": 22275,
+    "mean_gbif_obs": 5568.75,
+    "median_gbif_obs": 360
   },
   {
     "table1a_taxon_group": "other_invertebrates",
@@ -256,10 +256,10 @@
       "EX": 6,
       "NT": 98
     },
-    "gbif_species_count": 19424,
-    "gbif_ne_species_count": 19018,
-    "total_gbif_observations": 14892079,
-    "mean_gbif_obs": 766.6844625205931,
+    "gbif_species_count": 19515,
+    "gbif_ne_species_count": 19109,
+    "total_gbif_observations": 14925214,
+    "mean_gbif_obs": 764.8072764540098,
     "median_gbif_obs": 7
   },
   {
@@ -276,10 +276,10 @@
       "LR/lc": 3,
       "DD": 37
     },
-    "gbif_species_count": 7592,
-    "gbif_ne_species_count": 7376,
-    "total_gbif_observations": 11617066,
-    "mean_gbif_obs": 1530.1720231822972,
+    "gbif_species_count": 7599,
+    "gbif_ne_species_count": 7383,
+    "total_gbif_observations": 11644429,
+    "mean_gbif_obs": 1532.3633372812212,
     "median_gbif_obs": 8
   },
   {
@@ -296,10 +296,10 @@
       "EX": 2,
       "EW": 1
     },
-    "gbif_species_count": 6824,
-    "gbif_ne_species_count": 6301,
-    "total_gbif_observations": 12154446,
-    "mean_gbif_obs": 1781.1321805392731,
+    "gbif_species_count": 6813,
+    "gbif_ne_species_count": 6290,
+    "total_gbif_observations": 12440149,
+    "mean_gbif_obs": 1825.9429032731543,
     "median_gbif_obs": 10
   },
   {
@@ -317,8 +317,8 @@
     },
     "gbif_species_count": 976,
     "gbif_ne_species_count": 74,
-    "total_gbif_observations": 7038517,
-    "mean_gbif_obs": 7211.5952868852455,
+    "total_gbif_observations": 7129574,
+    "mean_gbif_obs": 7304.891393442623,
     "median_gbif_obs": 35.5
   },
   {
@@ -338,10 +338,10 @@
       "EX": 134,
       "LR/lc": 125
     },
-    "gbif_species_count": 182004,
-    "gbif_ne_species_count": 138093,
-    "total_gbif_observations": 376572910,
-    "mean_gbif_obs": 2069.036449748357,
+    "gbif_species_count": 182198,
+    "gbif_ne_species_count": 138222,
+    "total_gbif_observations": 383328743,
+    "mean_gbif_obs": 2103.913012217478,
     "median_gbif_obs": 13
   },
   {
@@ -353,11 +353,11 @@
       "LC": 11,
       "NT": 1
     },
-    "gbif_species_count": 2769,
-    "gbif_ne_species_count": 2759,
-    "total_gbif_observations": 1208349,
-    "mean_gbif_obs": 436.38461538461536,
-    "median_gbif_obs": 18
+    "gbif_species_count": 2782,
+    "gbif_ne_species_count": 2772,
+    "total_gbif_observations": 1228276,
+    "mean_gbif_obs": 441.5082674335011,
+    "median_gbif_obs": 17.5
   },
   {
     "table1a_taxon_group": "red_algae",
@@ -372,8 +372,8 @@
     },
     "gbif_species_count": 2660,
     "gbif_ne_species_count": 2638,
-    "total_gbif_observations": 1137978,
-    "mean_gbif_obs": 427.81127819548874,
+    "total_gbif_observations": 1139544,
+    "mean_gbif_obs": 428.4,
     "median_gbif_obs": 16
   },
   {
@@ -388,10 +388,10 @@
       "LC": 491,
       "DD": 290
     },
-    "gbif_species_count": 52910,
-    "gbif_ne_species_count": 52022,
-    "total_gbif_observations": 29331121,
-    "mean_gbif_obs": 554.3587412587412,
+    "gbif_species_count": 53297,
+    "gbif_ne_species_count": 52405,
+    "total_gbif_observations": 29395017,
+    "mean_gbif_obs": 551.5323001294632,
     "median_gbif_obs": 9
   },
   {
@@ -406,8 +406,8 @@
     },
     "gbif_species_count": 6379,
     "gbif_ne_species_count": 6373,
-    "total_gbif_observations": 11278540,
-    "mean_gbif_obs": 1768.0733657313058,
+    "total_gbif_observations": 11284587,
+    "mean_gbif_obs": 1769.021319956106,
     "median_gbif_obs": 18
   }
 ]
