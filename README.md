@@ -121,35 +121,62 @@ npx tsx scripts/sync.ts mammalia aves    # Specific taxa only
 4. `fetch-gbif-new-counts` — GBIF API → updates GBIF CSVs with temporal splits
 5. `build-taxa-summary` — aggregates per-taxon CSVs → `data/taxa-summary.json`
 
+**Publishing a refresh.** `app/data/` lives in a private R2 bucket; the active version is pinned via `app/latest-sync.txt`. To publish a fresh sync:
+
+```bash
+npx tsx scripts/sync.ts                # regenerate app/data/ locally
+npm run diff-data-vs-r2                # spot-check what changed vs the live pinned sync
+npm run upload-data-to-r2              # upload to R2, bump app/latest-sync.txt
+git add app/latest-sync.txt && git commit -m "Bump data sync to <ts>"
+git push                               # open PR; merging flips production
+```
+
+Production only switches to the new sync once the pointer-bump PR merges to main and Vercel redeploys.
+
 ## Getting Started
 
 ```bash
 cd app
 npm install
+npm run fetch-data-from-r2   # populates app/data/ from private R2 (requires R2 creds in .env.local)
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+The Red List CSVs live in a private R2 bucket rather than in the repo, so the first step downloads them locally (~240MB). `npm run build` runs the same fetch automatically as `prebuild`.
 
 ## Scripts
 
 | Command | Description |
 |---------|-------------|
 | `npm run dev` | Start development server |
-| `npm run build` | Production build |
+| `npm run build` | Production build (auto-runs `fetch-data-from-r2` first) |
 | `npm run start` | Start production server |
 | `npm run lint` | Run ESLint |
 | `npm test` | Run tests (Vitest) |
 | `npm run test:watch` | Run tests in watch mode |
+| `npm run fetch-data-from-r2` | Download the sync pinned in `app/latest-sync.txt` from R2 into `app/data/` |
+| `npm run upload-data-to-r2` | Upload current `app/data/` to R2 as a new timestamped sync and bump `app/latest-sync.txt` |
+| `npm run diff-data-vs-r2` | Diff local `app/data/` against the currently-pinned R2 sync |
 
 ## Environment Variables
 
-Create `app/.env.local` with:
+Create `app/.env.local` with at least the R2 credentials (required to fetch `app/data/`):
 
 ```
+# Cloudflare R2 — required for fetch-data-from-r2 / prebuild
+R2_ACCOUNT_ID=your_account_id
+R2_ACCESS_KEY_ID=your_access_key_id
+R2_SECRET_ACCESS_KEY=your_secret_access_key
+R2_DATA_BUCKET_NAME=dashboard-data
+
+# Used by the data sync pipeline (not needed for local dev once app/data/ is populated)
 RED_LIST_API_KEY=your_iucn_api_key
 SPECIES_PLUS_API_KEY=your_cites_species_plus_api_key
 ```
+
+See `app/.env.example` for the full list including database and analytics keys.
 
 ## Tech Stack
 
