@@ -121,6 +121,18 @@ npx tsx scripts/sync.ts mammalia aves    # Specific taxa only
 4. `fetch-gbif-new-counts` — GBIF API → updates GBIF CSVs with temporal splits
 5. `build-taxa-summary` — aggregates per-taxon CSVs → `data/taxa-summary.json`
 
+**Publishing a refresh.** `app/data/` lives in a private R2 bucket; the active version is pinned via `app/latest-sync.txt`. To publish a fresh sync:
+
+```bash
+npx tsx scripts/sync.ts                # regenerate app/data/ locally
+npm run diff-data-vs-r2                # spot-check what changed vs the live pinned sync
+npm run upload-data-to-r2              # upload to R2, bump app/latest-sync.txt
+git add app/latest-sync.txt && git commit -m "Bump data sync to <ts>"
+git push                               # open PR; merging flips production
+```
+
+Production only switches to the new sync once the pointer-bump PR merges to main and Vercel redeploys.
+
 ## Getting Started
 
 ```bash
@@ -144,8 +156,9 @@ The Red List CSVs live in a private R2 bucket rather than in the repo, so the fi
 | `npm run lint` | Run ESLint |
 | `npm test` | Run tests (Vitest) |
 | `npm run test:watch` | Run tests in watch mode |
-| `npm run fetch-data-from-r2` | Download the latest `app/data/` sync from R2 |
-| `npm run upload-data-to-r2` | Upload current `app/data/` to R2 as a new timestamped sync |
+| `npm run fetch-data-from-r2` | Download the sync pinned in `app/latest-sync.txt` from R2 into `app/data/` |
+| `npm run upload-data-to-r2` | Upload current `app/data/` to R2 as a new timestamped sync and bump `app/latest-sync.txt` |
+| `npm run diff-data-vs-r2` | Diff local `app/data/` against the currently-pinned R2 sync |
 
 ## Environment Variables
 

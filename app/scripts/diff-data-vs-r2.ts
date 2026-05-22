@@ -28,7 +28,7 @@ import type { Readable } from "stream";
 import { loadEnvFiles, DATA_DIR, mapConcurrent, readCsv } from "./utils";
 
 const DOWNLOAD_CONCURRENCY = 16;
-const LATEST_POINTER_KEY = "latest.txt";
+const LATEST_SYNC_FILE = path.join(__dirname, "..", "latest-sync.txt");
 
 function getR2Client(): S3Client {
   const accountId = process.env.R2_ACCOUNT_ID;
@@ -77,14 +77,12 @@ async function downloadLiveSync(
   bucket: string,
   targetDir: string
 ): Promise<string> {
-  const pointerResp = await client.send(
-    new GetObjectCommand({ Bucket: bucket, Key: LATEST_POINTER_KEY })
-  );
-  const timestamp = (await streamToBuffer(pointerResp.Body as Readable))
-    .toString("utf-8")
-    .trim();
+  if (!fs.existsSync(LATEST_SYNC_FILE)) {
+    throw new Error(`Pointer file not found: ${LATEST_SYNC_FILE}`);
+  }
+  const timestamp = fs.readFileSync(LATEST_SYNC_FILE, "utf-8").trim();
   if (!timestamp) {
-    throw new Error(`Empty ${LATEST_POINTER_KEY} in s3://${bucket}/`);
+    throw new Error(`Empty pointer file: ${LATEST_SYNC_FILE}`);
   }
   const syncPrefix = `syncs/${timestamp}/`;
 

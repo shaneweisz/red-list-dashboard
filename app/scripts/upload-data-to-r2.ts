@@ -2,22 +2,21 @@
  * upload-data-to-r2: app/data/ → Cloudflare R2 dashboard-data bucket
  *
  * Uploads every file under app/data/ to syncs/<timestamp>/ in the
- * dashboard-data R2 bucket, then writes latest.txt pointing to that
- * timestamp.
- *
- * The latest.txt write is the final step. A fetch picking up latest.txt
- * always sees a fully-uploaded sync — partial uploads from a crashed run
- * leave the previous sync live.
+ * dashboard-data R2 bucket, then updates the repo-tracked
+ * app/latest-sync.txt to point at the new timestamp. The pointer
+ * change is committed via PR — production only switches to the new
+ * sync once that PR merges.
  *
  * Layout in R2:
  *   <bucket>/
- *     latest.txt              ← "2026-05-20T10-30-00Z"
  *     syncs/
  *       2026-05-20T10-30-00Z/
  *         gbif/amphibia.csv
  *         redlist/...
  *         search-index.json
  *         ...
+ *
+ * Active sync pointer lives in app/latest-sync.txt (version-controlled).
  *
  * Prerequisites:
  *   - Environment variables: R2_ACCOUNT_ID, R2_ACCESS_KEY_ID,
@@ -34,7 +33,7 @@ import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { loadEnvFiles, SyncLogger, DATA_DIR, mapConcurrent } from "./utils";
 
 const UPLOAD_CONCURRENCY = 16;
-const LATEST_POINTER_KEY = "latest.txt";
+const LATEST_SYNC_FILE = path.join(__dirname, "..", "latest-sync.txt");
 
 function getR2Client(): S3Client {
   const accountId = process.env.R2_ACCOUNT_ID;
@@ -128,19 +127,17 @@ async function main(): Promise<void> {
   });
   console.log("");
 
-  // Final atomic step: flip the pointer to the new sync.
-  await client.send(
-    new PutObjectCommand({
-      Bucket: bucket,
-      Key: LATEST_POINTER_KEY,
-      Body: timestamp,
-      ContentType: "text/plain",
-    })
-  );
-  logger.log("latest_pointer_written", { timestamp });
+  // Update the repo-tracked pointer file so the next PR flips production.
+  fs.writeFileSync(LATEST_SYNC_FILE, timestamp + "\n");
+  logger.log("pointer_file_updated", { timestamp, path: LATEST_SYNC_FILE });
 
   console.log(`Uploaded ${localPaths.length} files`);
-  console.log(`latest.txt now points to: ${timestamp}`);
+  console.log(`Updated ${path.relative(process.cwd(), LATEST_SYNC_FILE)} → ${timestamp}`);
+  console.log("");
+  console.log("Next steps:");
+  console.log("  git add app/latest-sync.txt");
+  console.log(`  git commit -m "Bump data sync to ${timestamp}"`);
+  console.log("  git push  # open PR; merging flips production to the new sync");
   logger.close();
 }
 

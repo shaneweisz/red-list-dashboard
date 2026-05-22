@@ -1,18 +1,18 @@
 /**
  * fetch-data-from-r2: Cloudflare R2 dashboard-data bucket → app/data/
  *
- * Reads latest.txt from the bucket, lists every object under
- * syncs/<that-timestamp>/, and downloads them into app/data/ preserving
- * relative paths.
+ * Reads the active sync timestamp from app/latest-sync.txt (the
+ * repo-tracked pointer), lists every object under syncs/<timestamp>/
+ * in R2, and downloads them into app/data/ preserving relative paths.
  *
- * Intended as a `prebuild` step so Vercel and local builds populate
- * app/data/ from R2 (app/data/ will be gitignored once the migration
- * lands).
+ * Runs as `prebuild` so Vercel and local builds populate app/data/
+ * from R2 based on whatever timestamp is committed to the branch.
  *
  * Prerequisites:
  *   - Environment variables: R2_ACCOUNT_ID, R2_ACCESS_KEY_ID,
  *     R2_SECRET_ACCESS_KEY, R2_DATA_BUCKET_NAME
- *   - At least one prior upload via scripts/upload-data-to-r2.ts
+ *   - app/latest-sync.txt exists and references a sync that's been
+ *     uploaded via scripts/upload-data-to-r2.ts
  *
  * Usage:
  *   npx tsx scripts/fetch-data-from-r2.ts
@@ -29,7 +29,7 @@ import type { Readable } from "stream";
 import { loadEnvFiles, SyncLogger, DATA_DIR, mapConcurrent } from "./utils";
 
 const DOWNLOAD_CONCURRENCY = 16;
-const LATEST_POINTER_KEY = "latest.txt";
+const LATEST_SYNC_FILE = path.join(__dirname, "..", "latest-sync.txt");
 
 function getR2Client(): S3Client {
   const accountId = process.env.R2_ACCOUNT_ID;
@@ -72,15 +72,13 @@ async function main(): Promise<void> {
   const client = getR2Client();
   const bucket = getDataBucket();
 
-  // 1. Resolve the live sync via latest.txt.
-  const pointerResp = await client.send(
-    new GetObjectCommand({ Bucket: bucket, Key: LATEST_POINTER_KEY })
-  );
-  const timestamp = (await streamToBuffer(pointerResp.Body as Readable))
-    .toString("utf-8")
-    .trim();
+  // 1. Resolve the active sync via the repo-tracked pointer file.
+  if (!fs.existsSync(LATEST_SYNC_FILE)) {
+    throw new Error(`Pointer file not found: ${LATEST_SYNC_FILE}`);
+  }
+  const timestamp = fs.readFileSync(LATEST_SYNC_FILE, "utf-8").trim();
   if (!timestamp) {
-    throw new Error(`Empty ${LATEST_POINTER_KEY} in s3://${bucket}/`);
+    throw new Error(`Empty pointer file: ${LATEST_SYNC_FILE}`);
   }
   const syncPrefix = `syncs/${timestamp}/`;
   console.log(`Fetching sync ${timestamp} from s3://${bucket}/${syncPrefix}`);
