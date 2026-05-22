@@ -88,6 +88,10 @@ async function main() {
 
     console.log("\n" + "=".repeat(60));
     console.log(`Sync complete: ${minutes}m ${seconds}s`);
+    console.log("");
+    console.log("Next steps:");
+    console.log("  npm run diff-data-vs-r2     # see what changed vs the live R2 sync");
+    console.log("  npm run upload-data-to-r2   # publish this sync to R2");
   } finally {
     logger.close();
   }
