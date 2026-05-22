@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "npm run fetch-data-from-r2",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
