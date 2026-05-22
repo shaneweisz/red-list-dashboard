@@ -126,30 +126,44 @@ npx tsx scripts/sync.ts mammalia aves    # Specific taxa only
 ```bash
 cd app
 npm install
+npm run fetch-data-from-r2   # populates app/data/ from private R2 (requires R2 creds in .env.local)
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+The Red List CSVs live in a private R2 bucket rather than in the repo, so the first step downloads them locally (~240MB). `npm run build` runs the same fetch automatically as `prebuild`.
 
 ## Scripts
 
 | Command | Description |
 |---------|-------------|
 | `npm run dev` | Start development server |
-| `npm run build` | Production build |
+| `npm run build` | Production build (auto-runs `fetch-data-from-r2` first) |
 | `npm run start` | Start production server |
 | `npm run lint` | Run ESLint |
 | `npm test` | Run tests (Vitest) |
 | `npm run test:watch` | Run tests in watch mode |
+| `npm run fetch-data-from-r2` | Download the latest `app/data/` sync from R2 |
+| `npm run upload-data-to-r2` | Upload current `app/data/` to R2 as a new timestamped sync |
 
 ## Environment Variables
 
-Create `app/.env.local` with:
+Create `app/.env.local` with at least the R2 credentials (required to fetch `app/data/`):
 
 ```
+# Cloudflare R2 — required for fetch-data-from-r2 / prebuild
+R2_ACCOUNT_ID=your_account_id
+R2_ACCESS_KEY_ID=your_access_key_id
+R2_SECRET_ACCESS_KEY=your_secret_access_key
+R2_DATA_BUCKET_NAME=dashboard-data
+
+# Used by the data sync pipeline (not needed for local dev once app/data/ is populated)
 RED_LIST_API_KEY=your_iucn_api_key
 SPECIES_PLUS_API_KEY=your_cites_species_plus_api_key
 ```
+
+See `app/.env.example` for the full list including database and analytics keys.
 
 ## Tech Stack
 
