@@ -25,6 +25,7 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   title: "IUCN Red List Assessments Dashboard",
   description: "IUCN Red List and GBIF occurrence data explorer",
+  robots: { index: false, follow: false },
 };
 
 export default function RootLayout({
