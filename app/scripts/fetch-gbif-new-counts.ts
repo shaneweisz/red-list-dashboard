@@ -46,11 +46,17 @@ function loadAssessmentYears(taxonId: string, taxonGbifKeys: Set<number>): Map<n
   const speciesAssessmentYear = new Map<number, number>();
   const redlistSpecies = readRedlistCsv(taxonId);
   for (const s of redlistSpecies) {
-    const m = mapping.get(s.sis_taxon_id);
-    const gbifKey = m?.gbif_species_key;
-    if (gbifKey && taxonGbifKeys.has(gbifKey) && s.assessment_date) {
-      const year = parseInt(s.assessment_date.slice(0, 4), 10);
-      if (!isNaN(year)) speciesAssessmentYear.set(gbifKey, year);
+    const links = mapping.get(s.sis_taxon_id) ?? [];
+    if (!s.assessment_date) continue;
+    const year = parseInt(s.assessment_date.slice(0, 4), 10);
+    if (isNaN(year)) continue;
+    // A single sis_taxon_id may map to multiple GBIF keys (canonical + synonyms).
+    // Tag every linked key with the same assessment year.
+    for (const link of links) {
+      const gbifKey = link.gbif_species_key;
+      if (gbifKey && taxonGbifKeys.has(gbifKey)) {
+        speciesAssessmentYear.set(gbifKey, year);
+      }
     }
   }
   return speciesAssessmentYear;

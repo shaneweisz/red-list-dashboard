@@ -50,8 +50,10 @@ export async function run(): Promise<void> {
   // Load mapping to determine which GBIF species are linked to redlist entries
   const mapping = readMappingCsv();
   const linkedGbifKeys = new Set<number>();
-  for (const entry of mapping.values()) {
-    if (entry.gbif_species_key != null) linkedGbifKeys.add(entry.gbif_species_key);
+  for (const links of mapping.values()) {
+    for (const link of links) {
+      if (link.gbif_species_key != null) linkedGbifKeys.add(link.gbif_species_key);
+    }
   }
 
   for (const taxon of TAXA) {

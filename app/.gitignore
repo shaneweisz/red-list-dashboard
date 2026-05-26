@@ -36,8 +36,14 @@ yarn-error.log*
 
 # sync script logs
 /logs
-/data/_old-single-csvs
-/data/test-subsets
+
+# Red List data — fetched from private R2 by scripts/fetch-data-from-r2.ts.
+# Run `npm run fetch-data-from-r2` after cloning to populate locally.
+# Exceptions: small derived aggregates that tests/CI depend on are kept
+# in-repo so CI doesn't need R2 credentials.
+/data/*
+!/data/taxa-summary.json
+!/data/node-children-summaries.json
 
 # vercel
 .vercel

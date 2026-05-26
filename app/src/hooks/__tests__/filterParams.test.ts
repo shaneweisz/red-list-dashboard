@@ -43,6 +43,16 @@ describe("parseParams", () => {
     expect(result.yearRanges).toEqual(new Set(["<1 year", "11-20 years"]));
   });
 
+  it("parses assessment years", () => {
+    const result = parseParams("?assessmentYears=2023,2024");
+    expect(result.assessmentYears).toEqual(new Set(["2023", "2024"]));
+  });
+
+  it("defaults assessmentYears to empty set when absent", () => {
+    const result = parseParams("");
+    expect(result.assessmentYears.size).toBe(0);
+  });
+
   it("parses countries", () => {
     const result = parseParams("?countries=ZA,KE");
     expect(result.countries).toEqual(new Set(["ZA", "KE"]));
@@ -111,8 +121,8 @@ describe("parseParams", () => {
   });
 
   it("parses multiple subgroups", () => {
-    const result = parseParams("?subgroups=sharks-rays,bony-fish");
-    expect(result.subgroups).toEqual(new Set(["sharks-rays", "bony-fish"]));
+    const result = parseParams("?subgroups=sharks-rays,ray-finned-fishes");
+    expect(result.subgroups).toEqual(new Set(["sharks-rays", "ray-finned-fishes"]));
   });
 
   it("defaults subgroups to empty set when absent", () => {
@@ -121,9 +131,9 @@ describe("parseParams", () => {
   });
 
   it("parses subgroups with other params", () => {
-    const result = parseParams("?taxa=fishes&subgroups=bony-fish&categories=CR");
+    const result = parseParams("?taxa=fishes&subgroups=ray-finned-fishes&categories=CR");
     expect(result.taxa).toEqual(new Set(["fishes"]));
-    expect(result.subgroups).toEqual(new Set(["bony-fish"]));
+    expect(result.subgroups).toEqual(new Set(["ray-finned-fishes"]));
     expect(result.categories).toEqual(new Set(["CR"]));
   });
 
@@ -154,6 +164,7 @@ describe("buildQs", () => {
     taxa: new Set<string>(),
     categories: new Set<string>(),
     yearRanges: new Set<string>(),
+    assessmentYears: new Set<string>(),
     countries: new Set<string>(),
     obsRanges: new Set<string>(),
     systems: new Set<string>(),
@@ -210,6 +221,20 @@ describe("buildQs", () => {
     expect(params.get("years")).toBe("<1 year");
   });
 
+  it("includes assessment years", () => {
+    const qs = buildQs({ ...emptyState, assessmentYears: new Set(["2023", "2024"]) });
+    const params = new URLSearchParams(qs);
+    const years = params.get("assessmentYears")!.split(",");
+    expect(years).toContain("2023");
+    expect(years).toContain("2024");
+  });
+
+  it("omits assessmentYears when empty", () => {
+    const qs = buildQs({ ...emptyState, assessmentYears: new Set() });
+    const params = new URLSearchParams(qs);
+    expect(params.has("assessmentYears")).toBe(false);
+  });
+
   it("includes search", () => {
     const qs = buildQs({ ...emptyState, search: "elephant" });
     const params = new URLSearchParams(qs);
@@ -223,11 +248,11 @@ describe("buildQs", () => {
   });
 
   it("includes multiple subgroups", () => {
-    const qs = buildQs({ ...emptyState, subgroups: new Set(["sharks-rays", "bony-fish"]) });
+    const qs = buildQs({ ...emptyState, subgroups: new Set(["sharks-rays", "ray-finned-fishes"]) });
     const params = new URLSearchParams(qs);
     const sgs = params.get("subgroups")!.split(",");
     expect(sgs).toContain("sharks-rays");
-    expect(sgs).toContain("bony-fish");
+    expect(sgs).toContain("ray-finned-fishes");
   });
 
   it("omits subgroups when empty", () => {
@@ -308,6 +333,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
       subgroups: new Set<string>(),
       categories: new Set(["CR", "EN"]),
       yearRanges: new Set(["11-20 years"]),
+      assessmentYears: new Set(["2023", "2024"]),
       countries: new Set(["ZA"]),
       obsRanges: new Set<string>(),
       systems: new Set<string>(),
@@ -331,6 +357,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
     expect(parsed.taxa).toEqual(original.taxa);
     expect(parsed.categories).toEqual(original.categories);
     expect(parsed.yearRanges).toEqual(original.yearRanges);
+    expect(parsed.assessmentYears).toEqual(original.assessmentYears);
     expect(parsed.countries).toEqual(original.countries);
     expect(parsed.search).toBe(original.search);
     expect(parsed.sortField).toBe(original.sortField);
@@ -344,6 +371,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
       subgroups: new Set<string>(),
       categories: new Set<string>(),
       yearRanges: new Set<string>(),
+      assessmentYears: new Set<string>(),
       countries: new Set<string>(),
       obsRanges: new Set<string>(),
       systems: new Set<string>(),
@@ -375,9 +403,10 @@ describe("parseParams ↔ buildQs round-trip", () => {
     const original = {
       viewMode: "reassessments" as const,
       taxa: new Set(["fishes"]),
-      subgroups: new Set(["sharks-rays", "bony-fish"]),
+      subgroups: new Set(["sharks-rays", "ray-finned-fishes"]),
       categories: new Set<string>(),
       yearRanges: new Set<string>(),
+      assessmentYears: new Set<string>(),
       countries: new Set<string>(),
       obsRanges: new Set<string>(),
       systems: new Set<string>(),
@@ -397,7 +426,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
 
     const qs = buildQs(original);
     const parsed = parseParams(qs);
-    expect(parsed.subgroups).toEqual(new Set(["sharks-rays", "bony-fish"]));
+    expect(parsed.subgroups).toEqual(new Set(["sharks-rays", "ray-finned-fishes"]));
     expect(parsed.taxa).toEqual(new Set(["fishes"]));
   });
 
@@ -408,6 +437,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
       subgroups: new Set<string>(),
       categories: new Set<string>(),
       yearRanges: new Set<string>(),
+      assessmentYears: new Set<string>(),
       countries: new Set<string>(),
       obsRanges: new Set<string>(),
       systems: new Set<string>(),
@@ -437,6 +467,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
       subgroups: new Set<string>(),
       categories: new Set<string>(),
       yearRanges: new Set<string>(),
+      assessmentYears: new Set<string>(),
       countries: new Set<string>(),
       obsRanges: new Set<string>(),
       systems: new Set<string>(),

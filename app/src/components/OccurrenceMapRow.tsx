@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import type { MapRef, ViewStateChangeEvent, MapLayerMouseEvent } from "react-map-gl/maplibre";
 import type maplibregl from "maplibre-gl";
+import { mapTaxonId } from "@/lib/data/taxonomy-constants";
 
 // Fixed page size for iNat photo grid (5 columns x 2 rows)
 const INAT_PAGE_SIZE = 10;
@@ -527,7 +528,10 @@ interface OccurrenceMapRowProps {
   assessmentDate?: string | null;
   assessmentId?: number | null;
   sisTaxonId?: number | null;
-  taxonGroup?: string | null;
+  /** CSV taxon group (e.g. "flowering_plants", "mushrooms") — used to default
+   * preserved specimens ON for plants & fungi, where herbarium/fungarium
+   * records are a core data source. */
+  taxonGroup?: string;
   hasMap?: boolean | null;
 }
 
@@ -750,6 +754,16 @@ function InatPhotoWithPreview({ obs, idx, onHover, onLeave }: { obs: InatObserva
   );
 }
 
+/**
+ * Plants & fungi rely heavily on herbarium/fungarium specimens in GBIF, so
+ * preserved specimens should be ON by default for those kingdoms.
+ */
+export function isPlantOrFungiTaxonGroup(taxonGroup: string | undefined): boolean {
+  if (!taxonGroup) return false;
+  const kingdom = mapTaxonId(taxonGroup);
+  return kingdom === "plantae" || kingdom === "fungi";
+}
+
 export default function OccurrenceMapRow({
   speciesKey,
   countryCode,
@@ -772,7 +786,7 @@ export default function OccurrenceMapRow({
     humanOther: true,
     machineObservation: true,
     observation: false,
-    preservedSpecimen: false,
+    preservedSpecimen: isPlantOrFungiTaxonGroup(taxonGroup),
     fossilSpecimen: false,
     livingSpecimen: false,
     materialSample: true,
@@ -788,7 +802,7 @@ export default function OccurrenceMapRow({
   const [splitDate, setSplitDate] = useState<string>(assessmentDate?.split("T")[0] || "");
   const [sharedViewState, setSharedViewState] = useState({ longitude: 0, latitude: 20, zoom: 1.5 });
   const mapRef = useRef<MapRef>(null);
-  const [sampleSize, setSampleSize] = useState(1000);
+  const [sampleSize, setSampleSize] = useState(300);
   const [yearRange, setYearRange] = useState<[number, number]>([0, 9999]);
 
   // GBIF points toggle (on by default)
