@@ -13,7 +13,7 @@ The dashboard answers questions like:
 
 ### Red List Data
 - **Source**: Pre-downloaded IUCN Red List data stored as per-taxon CSV files
-- **Coverage**: 22 taxonomic groups across vertebrates, invertebrates, plants, fungi, and protists
+- **Coverage**: 21 taxonomic groups across vertebrates, invertebrates, plants, fungi, and protists
 - **Fields**: Species name, IUCN category (CR/EN/VU/etc.), assessment date, historical assessments, population trend, range countries
 
 ### GBIF Integration
@@ -90,14 +90,11 @@ Data:     SWR for client-side fetching
 Hosting:  Vercel
 
 Data Flow:
-┌─────────────────┐     ┌─────────────────┐
-│  IUCN Red List   │────▶│  Static CSVs    │────▶ API Routes ────▶ Dashboard UI
-│  (pre-cached)   │     │  data/redlist/   │
-└─────────────────┘     └─────────────────┘
-┌─────────────────┐     ┌─────────────────┐
-│  GBIF API       │────▶│  Static CSVs    │────▶ API Routes ────▶ Dashboard UI
-│  (pre-cached)   │     │  data/gbif/     │
-└─────────────────┘     └─────────────────┘
+┌─────────────────┐  scripts/sync.ts   ┌──────────────────┐  prebuild fetch   ┌───────────────┐
+│  IUCN Red List   │───────────────────▶│  Per-taxon CSVs  │──────────────────▶│  app/data/     │──▶ API Routes ──▶ UI
+│  GBIF API        │  (offline pipeline)│  in private R2   │  (at build time)  │  (local copy)  │
+└─────────────────┘                    └──────────────────┘                   └───────────────┘
+                          version pinned by app/latest-sync.txt (git-tracked)
 
 Live external APIs:
   GBIF REST API     → occurrence points, record breakdowns, iNaturalist photos
@@ -118,8 +115,10 @@ npx tsx scripts/sync.ts mammalia aves    # Specific taxa only
 1. `fetch-redlist-species` — Red List database → per-taxon CSVs in `data/redlist/`
 2. `fetch-gbif-species` — GBIF API → per-taxon CSVs in `data/gbif/`
 3. `match-redlist-species-to-gbif` — GBIF Match API → `data/mapping.csv`
-4. `fetch-gbif-new-counts` — GBIF API → updates GBIF CSVs with temporal splits
-5. `build-taxa-summary` — aggregates per-taxon CSVs → `data/taxa-summary.json`
+4. `fetch-gbif-country-data` — GBIF API → per-species country occurrence counts
+5. `fetch-gbif-new-counts` — GBIF API → updates GBIF CSVs with temporal splits
+6. `build-taxa-summary` — aggregates per-taxon CSVs → `data/taxa-summary.json` and `data/node-children-summaries.json`
+7. `build-search-index` — builds `data/search-index.json` for fast species search
 
 **Publishing a refresh.** `app/data/` lives in a private R2 bucket; the active version is pinned via `app/latest-sync.txt`. To publish a fresh sync:
 
@@ -171,9 +170,16 @@ R2_ACCESS_KEY_ID=your_access_key_id
 R2_SECRET_ACCESS_KEY=your_secret_access_key
 R2_DATA_BUCKET_NAME=dashboard-data
 
-# Used by the data sync pipeline (not needed for local dev once app/data/ is populated)
+# Live external APIs — needed at runtime for the Red List assessment-detail and CITES tabs
 RED_LIST_API_KEY=your_iucn_api_key
 SPECIES_PLUS_API_KEY=your_cites_species_plus_api_key
+
+# IUCN Red List Postgres database — needed only to run the data sync pipeline
+DB_HOST=your_db_host
+DB_PORT=your_db_port
+DB_NAME=your_db_name
+DB_USER=your_db_user
+DB_PASSWORD=your_db_password
 ```
 
 See `app/.env.example` for the full list including database and analytics keys.
