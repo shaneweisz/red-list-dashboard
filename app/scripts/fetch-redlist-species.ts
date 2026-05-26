@@ -1,11 +1,12 @@
 /**
  * fetch-redlist-species: IUCN Red List DB → CSV
  *
- * Connects to the IUCN Red List PostgreSQL database (via SSH tunnel)
- * and writes per-taxon species data to data/redlist/{taxonId}.csv.
+ * Connects to the IUCN Red List PostgreSQL database and writes per-taxon
+ * species data to data/redlist/{taxonId}.csv.
  *
  * Prerequisites:
- *   1. SSH tunnel to IUCN DB (port 5433)
+ *   1. DB connectivity — set DB_HOST/DB_PORT to the server directly if
+ *      reachable, otherwise SSH-tunnel it to localhost:5433
  *   2. Environment variables: DB_HOST, DB_NAME, DB_USER, DB_PASSWORD
  *
  * Usage:
@@ -36,6 +37,13 @@ const POPULATION_TRENDS: Record<string, string> = {
 // TYPES
 // =============================================================================
 
+export interface RedlistSynonym {
+  /** Canonical-form binomial, e.g. "Lithobates catesbeianus" */
+  name: string;
+  /** Synonym status from IUCN: ACCEPTED, NEW, ADD, MERGE, SPLIT, etc. */
+  status: string;
+}
+
 export interface RedlistSpecies {
   sis_taxon_id: number;
   assessment_id: number;
@@ -58,6 +66,14 @@ export interface RedlistSpecies {
   criteria: string | null; // e.g. "B1ab(ii,iii)+2ab(ii,iii)"
   threat_codes: string[]; // Full threat codes e.g. ["1.1","2.1.2","5.3.3"]
   has_map: boolean; // Whether a range map exists in assessment_ranges
+  /**
+   * Scientific-name synonyms from the IUCN taxon_synonyms table, after
+   * dropping (a) the species's own canonical name and (b) any synonym whose
+   * binomial is claimed by more than one current latest taxon (ambiguous
+   * splits/lumps). Used to find additional GBIF backbone keys for species
+   * that have been recently reclassified.
+   */
+  synonyms: RedlistSynonym[];
 }
 
 // =============================================================================
@@ -143,13 +159,16 @@ export async function fetchFromIucnDb(
       criteria: row.criteria || null,
       threat_codes: [],
       has_map: false,
+      synonyms: [],
     });
     assessmentIds.push(assessmentId);
   }
 
   if (assessmentIds.length > 0) {
-    // Batch-fetch countries, systems, growth forms, movement patterns, and threats
-    const [countriesResult, systemsResult, growthFormsResult, movementResult, threatsResult, rangeMapResult] = await Promise.all([
+    const sisIds = species.map((s) => s.sis_taxon_id);
+
+    // Batch-fetch countries, systems, growth forms, movement patterns, threats, range maps, and synonyms
+    const [countriesResult, systemsResult, growthFormsResult, movementResult, threatsResult, rangeMapResult, synonymsResult] = await Promise.all([
       pgClient.query(`
         SELECT a.id as assessment_id, ll.code as country_code
         FROM assessments a
@@ -194,6 +213,58 @@ export async function fetchFromIucnDb(
         FROM assessment_points
         WHERE assessment_id = ANY($1)
       `, [assessmentIds]),
+      // Synonyms with global ambiguity filtering. The CTEs scan all latest
+      // taxa (not just this batch) because ambiguity is a global property:
+      // a synonym is dropped if its (genus, species) is claimed by more
+      // than one current latest taxon (whether as a synonym of one and
+      // canonical of another, or as a synonym of two daughters of a split).
+      pgClient.query(`
+        WITH all_latest_synonyms AS (
+          SELECT t.sis_id, ts.genus_name, ts.species_name, ts.status
+          FROM taxon_synonyms ts
+          JOIN taxons t ON t.id = ts.taxon_id
+          WHERE t.latest = true
+            AND t.infra_name IS NULL
+            AND t.subpopulation_name IS NULL
+            AND ts.genus_name IS NOT NULL
+            AND ts.species_name IS NOT NULL
+            AND ts.infra_name IS NULL
+            AND ts.status NOT IN ('DELETE','D')
+        ),
+        all_latest_canonicals AS (
+          -- Excludes hybrids ("Salix x fragilis") and bracketed subgenera
+          -- ("Bombus (Bombus) terrestris") so split_part(' ', 1/2) yields a
+          -- valid (genus, species) pair. These are rare and would otherwise
+          -- emit garbage tokens like "(Bombus)" that can't collide with real
+          -- synonym names anyway, so excluding them is safe.
+          SELECT sis_id, scientific_name
+          FROM taxons
+          WHERE latest = true
+            AND infra_name IS NULL
+            AND subpopulation_name IS NULL
+            AND scientific_name !~ ' [x×] '
+            AND position('(' in scientific_name) = 0
+        ),
+        synonym_claim_counts AS (
+          SELECT genus_name, species_name, COUNT(DISTINCT sis_id) AS claim_count
+          FROM (
+            SELECT genus_name, species_name, sis_id FROM all_latest_synonyms
+            UNION ALL
+            SELECT split_part(scientific_name, ' ', 1),
+                   split_part(scientific_name, ' ', 2),
+                   sis_id
+            FROM all_latest_canonicals
+          ) u
+          GROUP BY genus_name, species_name
+        )
+        SELECT als.sis_id, als.genus_name, als.species_name, als.status
+        FROM all_latest_synonyms als
+        JOIN synonym_claim_counts scc
+          ON scc.genus_name = als.genus_name
+         AND scc.species_name = als.species_name
+        WHERE als.sis_id = ANY($1)
+          AND scc.claim_count = 1
+      `, [sisIds]),
     ]);
 
     // Countries
@@ -260,6 +331,34 @@ export async function fetchFromIucnDb(
     }
     for (const s of species) {
       s.has_map = assessmentsWithMaps.has(s.assessment_id);
+    }
+
+    // Synonyms (deduplicated per sis_id, excluding the species's own canonical name).
+    // The SQL has already dropped ambiguous (multi-claimed) names.
+    const synonymsBySisId = new Map<number, RedlistSynonym[]>();
+    const seenBySisId = new Map<number, Set<string>>();
+    for (const row of synonymsResult.rows) {
+      const sisId = Number(row.sis_id);
+      const name = `${row.genus_name} ${row.species_name}`;
+      let seen = seenBySisId.get(sisId);
+      if (!seen) {
+        seen = new Set();
+        seenBySisId.set(sisId, seen);
+      }
+      if (seen.has(name)) continue;
+      seen.add(name);
+      let list = synonymsBySisId.get(sisId);
+      if (!list) {
+        list = [];
+        synonymsBySisId.set(sisId, list);
+      }
+      list.push({ name, status: row.status || "" });
+    }
+    for (const s of species) {
+      const list = synonymsBySisId.get(s.sis_taxon_id);
+      if (!list) continue;
+      // Drop self-equal synonyms (defensive — the SQL ambiguity filter doesn't catch these)
+      s.synonyms = list.filter((syn) => syn.name !== s.scientific_name);
     }
   }
 
@@ -353,8 +452,33 @@ const REDLIST_CSV_COLUMNS = [
   "family", "taxon_group_table1a", "assessment_id", "iucn_category", "assessment_date",
   "year_published", "population_trend", "countries", "systems", "growth_forms",
   "movement_pattern", "possibly_extinct", "possibly_extinct_in_the_wild",
-  "criteria", "threat_codes", "has_map",
+  "criteria", "threat_codes", "has_map", "synonyms",
 ];
+
+/**
+ * Encode synonyms as semicolon-separated `name:status` pairs.
+ * Colon is safe as the within-pair delimiter (binomials are space-separated,
+ * statuses are an enum, neither contains colons).
+ */
+export function encodeSynonyms(synonyms: RedlistSynonym[]): string {
+  return synonyms.map((s) => `${s.name}:${s.status}`).join(";");
+}
+
+export function decodeSynonyms(raw: string | undefined): RedlistSynonym[] {
+  if (!raw) return [];
+  const result: RedlistSynonym[] = [];
+  for (const part of raw.split(";")) {
+    if (!part) continue;
+    const idx = part.indexOf(":");
+    if (idx === -1) {
+      // Tolerate legacy/malformed entries with no status
+      result.push({ name: part, status: "" });
+    } else {
+      result.push({ name: part.slice(0, idx), status: part.slice(idx + 1) });
+    }
+  }
+  return result;
+}
 
 export function writeRedlistCsv(species: RedlistSpecies[], outputPath: string): void {
   const rows = species
@@ -380,6 +504,7 @@ export function writeRedlistCsv(species: RedlistSpecies[], outputPath: string): 
       criteria: s.criteria,
       threat_codes: s.threat_codes.join(";"),
       has_map: s.has_map ? "true" : "",
+      synonyms: encodeSynonyms(s.synonyms),
     }));
 
   writeCsv(rows, REDLIST_CSV_COLUMNS, outputPath);
@@ -409,6 +534,7 @@ export function readRedlistCsv(taxonId: string): RedlistSpecies[] {
     criteria: r.criteria || null,
     threat_codes: r.threat_codes ? r.threat_codes.split(";").filter(Boolean) : [],
     has_map: r.has_map === "true",
+    synonyms: decodeSynonyms(r.synonyms),
   }));
 }
 
@@ -429,7 +555,7 @@ export async function run(opts: {
 
   const pgClient = new Client({
     host: process.env.DB_HOST || "localhost",
-    port: 5433,
+    port: process.env.DB_PORT ? parseInt(process.env.DB_PORT, 10) : 5433,
     database: process.env.DB_NAME,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,

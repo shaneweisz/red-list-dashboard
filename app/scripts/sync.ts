@@ -10,7 +10,7 @@
  *   Phase 6: build-taxa-summary     (per-taxon CSVs → taxa-summary.json)
  *
  * Prerequisites:
- *   1. SSH tunnel to IUCN DB (port 5433)
+ *   1. DB connectivity to IUCN Postgres (direct via DB_HOST/DB_PORT, or SSH-tunneled to localhost:5433)
  *   2. Environment variables (see .env.example)
  *
  * Usage:
@@ -88,6 +88,10 @@ async function main() {
 
     console.log("\n" + "=".repeat(60));
     console.log(`Sync complete: ${minutes}m ${seconds}s`);
+    console.log("");
+    console.log("Next steps:");
+    console.log("  npm run diff-data-vs-r2     # see what changed vs the live R2 sync");
+    console.log("  npm run upload-data-to-r2   # publish this sync to R2");
   } finally {
     logger.close();
   }

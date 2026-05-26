@@ -417,6 +417,76 @@ describe("/api/cites", () => {
   // Legislation & distributions edge cases
   // -------------------------------------------------------------------------
 
+  // -------------------------------------------------------------------------
+  // Reservations are split from listings (so newly-listed taxa don't appear
+  // to have many duplicate appendix entries)
+  // -------------------------------------------------------------------------
+
+  it("separates country reservations (R+) from appendix listings", async () => {
+    const legislationWithReservations = {
+      cites_listings: [
+        {
+          id: 1,
+          is_current: true,
+          appendix: "I",
+          change_type: "+",
+          effective_at: "2023-02-23",
+          annotation: null,
+        },
+        {
+          id: 2,
+          is_current: true,
+          appendix: "I",
+          change_type: "R+",
+          effective_at: "2023-02-23",
+          annotation: null,
+          party: { iso_code2: "JP", name: "Japan", type: null },
+        },
+        {
+          id: 3,
+          is_current: true,
+          appendix: "I",
+          change_type: "R+",
+          effective_at: "2023-02-23",
+          annotation: null,
+          party: { iso_code2: "NO", name: "Norway", type: null },
+        },
+        {
+          id: 4,
+          is_current: false,
+          appendix: "II",
+          change_type: "R-",
+          effective_at: "2020-01-01",
+          annotation: null,
+          party: { iso_code2: "CH", name: "Switzerland", type: null },
+        },
+      ],
+      cites_quotas: [],
+      cites_suspensions: [],
+    };
+
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ taxon_concepts: [ACCEPTED_CONCEPT] }))
+      .mockResolvedValueOnce(jsonResponse(legislationWithReservations))
+      .mockResolvedValueOnce(jsonResponse([]));
+
+    vi.stubGlobal("fetch", fetchMock);
+    const { GET } = await importRoute();
+    const res = await GET(makeRequest({ name: "Manis gigantea" }));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.currentListings).toHaveLength(1);
+    expect(body.currentListings[0].appendix).toBe("I");
+
+    expect(body.reservations).toHaveLength(2);
+    expect(body.reservations.map((r: { country: string }) => r.country).sort()).toEqual([
+      "Japan",
+      "Norway",
+    ]);
+    expect(body.reservations[0].countryCode).toMatch(/JP|NO/);
+  });
+
   it("handles failed legislation and distribution fetches gracefully", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ taxon_concepts: [ACCEPTED_CONCEPT] }))
@@ -433,6 +503,7 @@ describe("/api/cites", () => {
     expect(res.status).toBe(200);
     expect(body.found).toBe(true);
     expect(body.currentListings).toEqual([]);
+    expect(body.reservations).toEqual([]);
     expect(body.suspensions).toEqual([]);
     expect(body.quotas).toEqual([]);
     expect(body.nativeCountries).toEqual([]);

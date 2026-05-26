@@ -49,9 +49,12 @@ interface CitesLegislation {
     id: number;
     is_current: boolean;
     appendix: string;
+    // "+", "-" mark appendix additions/removals; "R+", "R-" mark country
+    // reservations entered/withdrawn against a listing.
     change_type: string;
     effective_at: string;
     annotation: string | null;
+    party?: { iso_code2: string; name: string; type: string | null } | null;
   }[];
   cites_quotas: {
     quota: number;
@@ -188,9 +191,20 @@ export async function GET(request: NextRequest) {
       (n) => n.language === "EN"
     )?.name;
 
-    // Build current listings from legislation (more detailed than taxon_concepts)
-    const currentListings = (legislation?.cites_listings || []).filter(
+    // Split current legislation entries into appendix listings vs country
+    // reservations. Reservations (R+) share an appendix with the parent
+    // listing, so without this split a newly-listed taxon with several
+    // reservations is shown as having many duplicate appendix entries.
+    const currentLegislation = (legislation?.cites_listings || []).filter(
       (l) => l.is_current
+    );
+    const isReservation = (changeType: string) =>
+      changeType === "R+" || changeType === "R-";
+    const currentListings = currentLegislation.filter(
+      (l) => !isReservation(l.change_type)
+    );
+    const currentReservations = currentLegislation.filter(
+      (l) => l.change_type === "R+"
     );
 
     const currentSuspensions = (legislation?.cites_suspensions || []).filter(
@@ -223,6 +237,13 @@ export async function GET(request: NextRequest) {
         appendix: l.appendix,
         effectiveAt: l.effective_at,
         annotation: l.annotation,
+      })),
+      reservations: currentReservations.map((l) => ({
+        appendix: l.appendix,
+        effectiveAt: l.effective_at,
+        annotation: l.annotation,
+        country: l.party?.name ?? null,
+        countryCode: l.party?.iso_code2 ?? null,
       })),
       suspensions: currentSuspensions.map((s) => ({
         country: s.geo_entity.name,

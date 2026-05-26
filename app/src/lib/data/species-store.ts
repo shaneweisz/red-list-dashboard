@@ -53,6 +53,13 @@ interface MappingRow {
   sis_taxon_id: number;
   gbif_species_key: number | null;
   match_type: string;
+  name_source: string;
+}
+
+interface MappingLink {
+  gbif_species_key: number | null;
+  match_type: string;
+  name_source: string;
 }
 
 interface GbifRow {
@@ -154,6 +161,7 @@ function parseMappingRow(r: Record<string, string>): MappingRow {
     sis_taxon_id: parseInt(r.sis_taxon_id, 10),
     gbif_species_key: r.gbif_species_key ? parseInt(r.gbif_species_key, 10) : null,
     match_type: r.match_type || "",
+    name_source: r.name_source || "",
   };
 }
 
@@ -181,11 +189,26 @@ type HistoryMap = Record<string, PreviousAssessment[]>;
 const redlistCache = new Map<string, RedlistRow[]>();
 const gbifCache = new Map<string, Map<number, GbifRow>>();
 const historyCache = new Map<string, HistoryMap>();
-let mappingCache: Map<number, { gbif_species_key: number | null; match_type: string }> | null = null;
+let mappingCache: Map<number, MappingLink[]> | null = null;
 let taxaSummaryCache: TaxaSummaryRow[] | null = null;
 let nodeChildrenSummariesCache: Record<string, NodeSummary[]> | null = null;
 
-function loadMapping(): Map<number, { gbif_species_key: number | null; match_type: string }> {
+/** @internal Reset all module-level caches (for tests only). */
+export function _resetCaches(): void {
+  mappingCache = null;
+  redlistCache.clear();
+  gbifCache.clear();
+  historyCache.clear();
+  taxaSummaryCache = null;
+  nodeChildrenSummariesCache = null;
+}
+
+/**
+ * Load mapping.csv as a 1:N map: each sis_taxon_id may have multiple linked
+ * GBIF keys (canonical + synonym matches), or a single null-key row for
+ * unlinked species (NO_GBIF_DATA / NONE / DUPLICATE diagnostics).
+ */
+function loadMapping(): Map<number, MappingLink[]> {
   if (mappingCache) return mappingCache;
   const csvPath = path.join(DATA_DIR, "mapping.csv");
   if (!fs.existsSync(csvPath)) {
@@ -193,9 +216,18 @@ function loadMapping(): Map<number, { gbif_species_key: number | null; match_typ
     return mappingCache;
   }
   const rows = readCsv(csvPath, parseMappingRow);
-  const map = new Map<number, { gbif_species_key: number | null; match_type: string }>();
+  const map = new Map<number, MappingLink[]>();
   for (const row of rows) {
-    map.set(row.sis_taxon_id, { gbif_species_key: row.gbif_species_key, match_type: row.match_type });
+    let list = map.get(row.sis_taxon_id);
+    if (!list) {
+      list = [];
+      map.set(row.sis_taxon_id, list);
+    }
+    list.push({
+      gbif_species_key: row.gbif_species_key,
+      match_type: row.match_type,
+      name_source: row.name_source,
+    });
   }
   mappingCache = map;
   return mappingCache;
@@ -262,16 +294,33 @@ export function getSpecies(groups: string[], includeNE: boolean): SpeciesRow[] {
     for (const r of redlistRows) {
       let gbifOccurrenceCount: number | null = null;
       let gbifObsAfterAssessment: number | null = null;
-      const gbifSpeciesKey = mapping.get(r.sis_taxon_id)?.gbif_species_key ?? null;
+      // A species may map to multiple GBIF keys (canonical + synonym matches).
+      // Sum occurrence counts across all linked keys. The displayed
+      // gbif_species_key prefers a canonical-source match (used for external
+      // links like the GBIF species page), falling back to the first non-null
+      // link if no canonical match exists. Selection is by name_source rather
+      // than row order so the reader doesn't depend on the writer's pass
+      // ordering.
+      let canonicalGbifKey: number | null = null;
+      let fallbackGbifKey: number | null = null;
+      const links = mapping.get(r.sis_taxon_id) ?? [];
 
-      if (gbifSpeciesKey) {
-        const gbif = gbifMap.get(gbifSpeciesKey);
-        if (gbif) {
-          gbifOccurrenceCount = gbif.total_count;
-          gbifObsAfterAssessment = gbif.count_after_assessment_year;
-          linkedGbifKeys.add(gbifSpeciesKey);
+      for (const link of links) {
+        const key = link.gbif_species_key;
+        if (key == null) continue;
+        const gbif = gbifMap.get(key);
+        if (!gbif) continue;
+        gbifOccurrenceCount = (gbifOccurrenceCount ?? 0) + gbif.total_count;
+        if (gbif.count_after_assessment_year != null) {
+          gbifObsAfterAssessment = (gbifObsAfterAssessment ?? 0) + gbif.count_after_assessment_year;
         }
+        linkedGbifKeys.add(key);
+        if (link.name_source === "canonical" && canonicalGbifKey == null) {
+          canonicalGbifKey = key;
+        }
+        if (fallbackGbifKey == null) fallbackGbifKey = key;
       }
+      const gbifSpeciesKey = canonicalGbifKey ?? fallbackGbifKey;
 
       const previousAssessments = historyMap[String(r.sis_taxon_id)] ?? [];
 
