@@ -10,7 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSpecies, searchSpecies, type SpeciesRow } from "@/lib/data/species-store";
+import { getSpecies, searchSpecies, isOutdated, type SpeciesRow } from "@/lib/data/species-store";
 import { getCsvGroupsForNode, speciesMatchesNode } from "@/lib/taxonomy-utils";
 import { matchesSpeciesFilter, type SpeciesFilterCriteria } from "@/lib/species-filter";
 import { CATEGORY_ORDER } from "@/config/taxa";
@@ -72,6 +72,19 @@ export async function GET(req: NextRequest) {
   const hasMap: "yes" | "no" | null = hasMapRaw === "yes" ? "yes" : hasMapRaw === "no" ? "no" : null;
   const search = (sp.get("search") ?? "").trim();
 
+  const intParam = (k: string): number | undefined => {
+    const v = sp.get(k);
+    if (v == null) return undefined;
+    const n = parseInt(v, 10);
+    return Number.isNaN(n) ? undefined : n;
+  };
+  const minObs = intParam("minObs");
+  const maxObs = intParam("maxObs");
+  const minAssessmentYear = intParam("minAssessmentYear");
+  const maxAssessmentYear = intParam("maxAssessmentYear");
+  const outdatedRaw = sp.get("outdated");
+  const outdated: "yes" | "no" | null = outdatedRaw === "yes" ? "yes" : outdatedRaw === "no" ? "no" : null;
+
   const unresolved = [
     ...taxa.unresolved.map((v) => `taxa=${v}`),
     ...threats.unresolved.map((v) => `threats=${v}`),
@@ -117,9 +130,15 @@ export async function GET(req: NextRequest) {
     growthForms: setOrUndef(growthForms),
     hasMap,
     search: search ? search.toLowerCase() : undefined,
+    minObs,
+    maxObs,
+    minAssessmentYear,
+    maxAssessmentYear,
   };
 
-  const matched = rows.filter((r) => matchesSpeciesFilter(r, criteria));
+  let matched = rows.filter((r) => matchesSpeciesFilter(r, criteria));
+  // "outdated" uses the same >10-year rule as the dashboard / taxa-summary.
+  if (outdated) matched = matched.filter((r) => isOutdated(r.assessment_date) === (outdated === "yes"));
   matched.sort((a, b) => {
     const ca = CATEGORY_ORDER[a.category] ?? 99;
     const cb = CATEGORY_ORDER[b.category] ?? 99;
@@ -132,7 +151,18 @@ export async function GET(req: NextRequest) {
   const breakdown: Record<string, number> = {};
   for (const r of matched) breakdown[r.category] = (breakdown[r.category] ?? 0) + 1;
 
+  // Outdated stats (over assessed species only — NE has no assessment date).
+  const assessed = matched.filter((r) => r.category !== "NE");
+  const outdatedCount = assessed.filter((r) => isOutdated(r.assessment_date)).length;
+  const outdatedPct = assessed.length ? Math.round((outdatedCount / assessed.length) * 100) : null;
+  const stats = { assessed: assessed.length, outdated: outdatedCount, outdated_pct: outdatedPct };
+
   const interpreted = describeFilters({ taxa, threats, categories, countries, systems, trends, movement, growthForms, hasMap, search });
+  if (minObs != null) interpreted.push(`GBIF observations ≥ ${minObs.toLocaleString()}`);
+  if (maxObs != null) interpreted.push(`GBIF observations ≤ ${maxObs.toLocaleString()}`);
+  if (minAssessmentYear != null) interpreted.push(`Assessed in or after ${minAssessmentYear}`);
+  if (maxAssessmentYear != null) interpreted.push(`Assessed in or before ${maxAssessmentYear}`);
+  if (outdated) interpreted.push(outdated === "yes" ? "Outdated assessments (>10 yrs old)" : "Current assessments (≤10 yrs old)");
 
   if (format === "json") {
     return NextResponse.json(
@@ -144,6 +174,7 @@ export async function GET(req: NextRequest) {
         shown: shown.length,
         capped: total > RESULT_CAP,
         breakdown,
+        stats,
         species: shown.map((s) => ({
           scientific_name: s.scientific_name,
           common_name: s.common_name,
@@ -153,13 +184,16 @@ export async function GET(req: NextRequest) {
           countries: s.countries,
           systems: s.systems,
           population_trend: s.population_trend,
+          assessment_date: s.assessment_date,
+          outdated: isOutdated(s.assessment_date),
+          gbif_occurrence_count: s.gbif_occurrence_count,
         })),
       },
       { headers: CACHE_1H },
     );
   }
 
-  return html(resultsHtml({ interpreted, unresolved, total, shown, breakdown }));
+  return html(resultsHtml({ interpreted, unresolved, total, shown, breakdown, stats }));
 }
 
 // ─── rendering ─────────────────────────────────────────────────────────────
@@ -219,8 +253,10 @@ function unresolvedBlock(unresolved: string[]): string {
   return `<p class="warn">Couldn't interpret: ${unresolved.map((u) => `<code>${esc(u)}</code>`).join(", ")}. See <a href="/llms.txt">/llms.txt</a> for valid values.</p>`;
 }
 
-function resultsHtml(a: { interpreted: string[]; unresolved: string[]; total: number; shown: SpeciesRow[]; breakdown: Record<string, number> }): string {
-  const { interpreted, unresolved, total, shown, breakdown } = a;
+type Stats = { assessed: number; outdated: number; outdated_pct: number | null };
+
+function resultsHtml(a: { interpreted: string[]; unresolved: string[]; total: number; shown: SpeciesRow[]; breakdown: Record<string, number>; stats: Stats }): string {
+  const { interpreted, unresolved, total, shown, breakdown, stats } = a;
   const filterDesc = interpreted.length ? esc(interpreted.join("; ")) : "no filters";
   const breakdownStr = Object.entries(breakdown)
     .sort((x, y) => (CATEGORY_ORDER[x[0]] ?? 99) - (CATEGORY_ORDER[y[0]] ?? 99))
@@ -234,16 +270,21 @@ function resultsHtml(a: { interpreted: string[]; unresolved: string[]; total: nu
   } else {
     summary = `<p class="summary"><strong>${total.toLocaleString()}</strong> species match — ${filterDesc}.${total > shown.length ? ` Showing the first ${shown.length}.` : ""}</p>`;
     if (breakdownStr) summary += `<p>By category: ${breakdownStr}</p>`;
+    if (stats.assessed > 0 && stats.outdated_pct != null) {
+      summary += `<p>Assessments outdated (>10 yrs old): <strong>${stats.outdated.toLocaleString()}</strong> of ${stats.assessed.toLocaleString()} (<strong>${stats.outdated_pct}%</strong>).</p>`;
+    }
   }
 
   const rows = shown
     .map((s) => {
       const threats = [...new Set((s.threat_codes ?? []).map(threatDisplay))].map(esc).join(", ");
-      return `<tr><td><em>${esc(s.scientific_name)}</em></td><td>${esc(s.common_name ?? "")}</td><td>${esc(categoryLabel(s.category))}</td><td>${threats}</td></tr>`;
+      const year = s.assessment_date ? esc(s.assessment_date.slice(0, 4)) : "—";
+      const obs = s.gbif_occurrence_count != null ? s.gbif_occurrence_count.toLocaleString() : "—";
+      return `<tr><td><em>${esc(s.scientific_name)}</em></td><td>${esc(s.common_name ?? "")}</td><td>${esc(categoryLabel(s.category))}</td><td>${year}</td><td>${obs}</td><td>${threats}</td></tr>`;
     })
     .join("");
   const table = shown.length
-    ? `<table><thead><tr><th>Scientific name</th><th>Common name</th><th>IUCN category</th><th>Threats</th></tr></thead><tbody>${rows}</tbody></table>`
+    ? `<table><thead><tr><th>Scientific name</th><th>Common name</th><th>IUCN category</th><th>Assessed</th><th>GBIF obs.</th><th>Threats</th></tr></thead><tbody>${rows}</tbody></table>`
     : "";
 
   return `${PAGE_HEAD}<h1>Red List — filtered species</h1>${unresolvedBlock(unresolved)}${summary}${table}${PAGE_FOOT}`;
@@ -261,7 +302,13 @@ function indexData(unresolved: string[]) {
       trends: POPULATION_TRENDS,
       hasMap: ["yes", "no"],
       search: "free-text scientific or common name",
+      outdated: "yes | no (assessment >10 years old)",
+      minObs: "min GBIF occurrence count (e.g. 100)",
+      maxObs: "max GBIF occurrence count",
+      minAssessmentYear: "earliest assessment year (e.g. 2015)",
+      maxAssessmentYear: "latest assessment year",
     },
+    note: "Every response includes a `stats` object: assessed count, outdated count, and outdated_pct (>10-yr rule) — use it for percentage questions.",
     examples: EXAMPLES,
   };
 }
@@ -269,9 +316,9 @@ function indexData(unresolved: string[]) {
 const EXAMPLES: { url: string; desc: string }[] = [
   { url: `${BASE}?taxa=corals&threats=climate-change`, desc: "Coral species threatened by climate change" },
   { url: `${BASE}?taxa=corals&threats=11&categories=CR,EN`, desc: "Critically endangered / endangered corals hit by climate change" },
-  { url: `${BASE}?taxa=amphibia&threats=invasive-species`, desc: "Amphibians threatened by invasive species & disease" },
+  { url: `${BASE}?taxa=mammalia`, desc: "All mammals — read stats.outdated_pct for % of outdated assessments" },
+  { url: `${BASE}?taxa=insecta&categories=DD&minObs=100&outdated=yes&countries=India`, desc: "Data-deficient insects in India with >100 GBIF records, assessed over 10 years ago" },
   { url: `${BASE}?taxa=mammalia&categories=critically-endangered&trends=Decreasing`, desc: "Critically endangered mammals with declining populations" },
-  { url: `${BASE}?taxa=fishes&systems=Freshwater&threats=dams`, desc: "Freshwater fish threatened by dams & water management" },
   { url: `${BASE}?search=tiger`, desc: "Look up a species by name" },
 ];
 
@@ -290,6 +337,8 @@ ${unresolvedBlock(unresolved)}
 <p><strong>threats</strong>: ${threatList} — plus aliases like <code>climate-change</code>, <code>pollution</code>, <code>overfishing</code>.</p>
 <p><strong>categories</strong>: ${catList} — plus <code>threatened</code> (= CR, EN, VU).</p>
 <p><strong>systems</strong>: ${SYSTEMS.map((s) => `<code>${s}</code>`).join(", ")}. <strong>trends</strong>: ${POPULATION_TRENDS.map((s) => `<code>${s}</code>`).join(", ")}. <strong>hasMap</strong>: <code>yes</code>/<code>no</code>. <strong>search</strong>: name text.</p>
+<p><strong>outdated</strong>: <code>yes</code>/<code>no</code> (assessment &gt;10 yrs old). <strong>minObs</strong>/<strong>maxObs</strong>: GBIF occurrence count bounds. <strong>minAssessmentYear</strong>/<strong>maxAssessmentYear</strong>: assessment year bounds. <strong>countries</strong>: ISO code or name.</p>
+<p>Every response leads with a total, a by-category breakdown, and an outdated count + %, so percentage questions (e.g. "% of mammals outdated") are answered in one request.</p>
 <h2>Examples</h2><ul>${examples}</ul>
 ${PAGE_FOOT}`;
 }

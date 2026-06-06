@@ -28,6 +28,8 @@ export interface FilterableSpecies {
   growth_forms?: string[] | null;
   scientific_name: string;
   common_name: string | null;
+  gbif_occurrence_count?: number | null;
+  assessment_date?: string | null;
 }
 
 export interface SpeciesFilterCriteria {
@@ -41,6 +43,12 @@ export interface SpeciesFilterCriteria {
   hasMap?: "yes" | "no" | null;
   /** Already lowercased by the caller. */
   search?: string;
+  /** GBIF occurrence count bounds (null obs counts as 0). */
+  minObs?: number;
+  maxObs?: number;
+  /** Assessment year bounds (inclusive). */
+  minAssessmentYear?: number;
+  maxAssessmentYear?: number;
 }
 
 const empty = (s?: Set<string>) => !s || s.size === 0;
@@ -77,6 +85,20 @@ export function matchesSpeciesFilter(s: FilterableSpecies, f: SpeciesFilterCrite
     s.scientific_name.toLowerCase().includes(q) ||
     (s.common_name?.toLowerCase().includes(q) ?? false);
 
+  const obs = s.gbif_occurrence_count ?? 0;
+  const matchesMinObs = f.minObs == null || obs >= f.minObs;
+  const matchesMaxObs = f.maxObs == null || obs <= f.maxObs;
+
+  let matchesYear = true;
+  if (f.minAssessmentYear != null || f.maxAssessmentYear != null) {
+    const year = s.assessment_date ? parseInt(s.assessment_date.slice(0, 4), 10) : NaN;
+    if (Number.isNaN(year)) matchesYear = false;
+    else {
+      if (f.minAssessmentYear != null && year < f.minAssessmentYear) matchesYear = false;
+      if (f.maxAssessmentYear != null && year > f.maxAssessmentYear) matchesYear = false;
+    }
+  }
+
   return (
     matchesCategory &&
     matchesCountry &&
@@ -86,6 +108,9 @@ export function matchesSpeciesFilter(s: FilterableSpecies, f: SpeciesFilterCrite
     matchesThreat &&
     matchesMap &&
     matchesGrowth &&
-    matchesSearch
+    matchesSearch &&
+    matchesMinObs &&
+    matchesMaxObs &&
+    matchesYear
   );
 }

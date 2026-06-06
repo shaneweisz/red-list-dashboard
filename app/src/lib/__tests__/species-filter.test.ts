@@ -13,6 +13,8 @@ function sp(overrides: Partial<FilterableSpecies> = {}): FilterableSpecies {
     growth_forms: [],
     scientific_name: "Acropora cervicornis",
     common_name: "Staghorn coral",
+    gbif_occurrence_count: 50,
+    assessment_date: "2018-06-01",
     ...overrides,
   };
 }
@@ -76,5 +78,20 @@ describe("matchesSpeciesFilter", () => {
   it("handles missing optional arrays safely", () => {
     expect(matchesSpeciesFilter(sp({ threat_codes: null }), { threats: new Set(["11"]) })).toBe(false);
     expect(matchesSpeciesFilter(sp({ systems: null }), { systems: new Set(["Marine"]) })).toBe(false);
+  });
+
+  it("matches GBIF observation bounds (null counts as 0)", () => {
+    expect(matchesSpeciesFilter(sp({ gbif_occurrence_count: 150 }), { minObs: 100 })).toBe(true);
+    expect(matchesSpeciesFilter(sp({ gbif_occurrence_count: 50 }), { minObs: 100 })).toBe(false);
+    expect(matchesSpeciesFilter(sp({ gbif_occurrence_count: null }), { minObs: 1 })).toBe(false);
+    expect(matchesSpeciesFilter(sp({ gbif_occurrence_count: 5 }), { maxObs: 10 })).toBe(true);
+    expect(matchesSpeciesFilter(sp({ gbif_occurrence_count: 500 }), { minObs: 100, maxObs: 1000 })).toBe(true);
+  });
+
+  it("matches assessment-year bounds (inclusive)", () => {
+    expect(matchesSpeciesFilter(sp({ assessment_date: "2015-01-01" }), { minAssessmentYear: 2015 })).toBe(true);
+    expect(matchesSpeciesFilter(sp({ assessment_date: "2014-12-31" }), { minAssessmentYear: 2015 })).toBe(false);
+    expect(matchesSpeciesFilter(sp({ assessment_date: "2010-01-01" }), { maxAssessmentYear: 2012 })).toBe(true);
+    expect(matchesSpeciesFilter(sp({ assessment_date: null }), { minAssessmentYear: 2000 })).toBe(false);
   });
 });

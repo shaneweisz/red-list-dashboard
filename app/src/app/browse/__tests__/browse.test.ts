@@ -2,9 +2,15 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 
 // Mock the data store so the route logic can be tested without CSV data.
+// isOutdated keeps its real >10-year rule (it's a pure function).
 vi.mock("@/lib/data/species-store", () => ({
   getSpecies: vi.fn(() => []),
   searchSpecies: vi.fn(() => []),
+  isOutdated: (date: string | null) => {
+    if (!date) return true;
+    const year = parseInt(date.slice(0, 4), 10);
+    return Number.isNaN(year) ? true : new Date().getFullYear() - year > 10;
+  },
 }));
 
 import { getSpecies, searchSpecies } from "@/lib/data/species-store";
@@ -22,9 +28,12 @@ function row(overrides: Record<string, unknown> = {}) {
     category: "CR", threat_codes: ["11.1", "11.4", "5.4"],
     countries: ["US"], systems: ["Marine"], population_trend: "Decreasing",
     movement_pattern: null, growth_forms: [], has_map: true,
+    gbif_occurrence_count: 50, assessment_date: "2018-06-01",
     ...overrides,
   };
 }
+
+const RECENT_YEAR = `${new Date().getFullYear()}-01-01`; // never outdated (>10yr rule)
 
 function get(qs: string) {
   return GET(new NextRequest(`https://red.cst.cam.ac.uk/browse${qs}`));
@@ -101,6 +110,35 @@ describe("/browse", () => {
     expect(data.total).toBe(1);
     expect(data.species[0].scientific_name).toBe("Panthera tigris");
     expect(mSearch).toHaveBeenCalled();
+  });
+
+  it("reports outdated stats for percentage questions", async () => {
+    mGetSpecies.mockReturnValue([
+      row({ taxon_group: "mammalia", assessment_date: "1990-01-01" }),
+      row({ taxon_group: "mammalia", assessment_date: "1995-01-01" }),
+      row({ taxon_group: "mammalia", assessment_date: RECENT_YEAR }),
+      row({ taxon_group: "mammalia", assessment_date: RECENT_YEAR }),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ] as any);
+    const data = await (await get("?taxa=mammalia&format=json")).json();
+    expect(data.stats.assessed).toBe(4);
+    expect(data.stats.outdated).toBe(2);
+    expect(data.stats.outdated_pct).toBe(50);
+  });
+
+  it("filters by outdated, minObs and country together", async () => {
+    mGetSpecies.mockReturnValue([
+      row({ scientific_name: "Match sp", taxon_group: "insecta", category: "DD", countries: ["IN"], gbif_occurrence_count: 150, assessment_date: "2005-01-01" }),
+      row({ scientific_name: "TooFewObs sp", taxon_group: "insecta", category: "DD", countries: ["IN"], gbif_occurrence_count: 5, assessment_date: "2005-01-01" }),
+      row({ scientific_name: "Recent sp", taxon_group: "insecta", category: "DD", countries: ["IN"], gbif_occurrence_count: 150, assessment_date: RECENT_YEAR }),
+      row({ scientific_name: "WrongCountry sp", taxon_group: "insecta", category: "DD", countries: ["US"], gbif_occurrence_count: 150, assessment_date: "2005-01-01" }),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ] as any);
+    const data = await (await get("?taxa=insecta&categories=DD&minObs=100&outdated=yes&countries=India&format=json")).json();
+    expect(data.total).toBe(1);
+    expect(data.species[0].scientific_name).toBe("Match sp");
+    expect(data.interpreted.join(" | ")).toMatch(/India \(IN\)/);
+    expect(data.interpreted.join(" | ")).toMatch(/Outdated/);
   });
 
   it("serves an HTML index for a bare request", async () => {

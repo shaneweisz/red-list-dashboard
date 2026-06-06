@@ -39,6 +39,9 @@ Rules:
 - Within one filter, multiple values are OR; across filters they are AND.
 - Threats match by prefix: threats=11 covers 11.1, 11.4, ... ("Climate change").
 - Results are capped at 200 rows; the total count is always shown.
+- Every response includes a "stats" object (and an HTML line): assessed count,
+  outdated count, and outdated_pct — the % of assessments older than 10 years.
+  Use it for percentage questions; no need to list species.
 
 ## Parameters
 
@@ -57,17 +60,20 @@ ${cats}
 systems: ${SYSTEMS.join(", ")}
 trends:  ${POPULATION_TRENDS.join(", ")}
 hasMap:  yes | no
-countries: ISO alpha-2 code or country name (e.g. BR or Brazil)
+countries: ISO alpha-2 code or country name (e.g. IN or India)
 search:  free-text scientific or common name
+outdated: yes | no  (assessment more than 10 years old)
+minObs / maxObs: GBIF occurrence-count bounds (e.g. minObs=100)
+minAssessmentYear / maxAssessmentYear: assessment-year bounds (e.g. minAssessmentYear=2015)
 
 ## Examples
 
 - https://red.cst.cam.ac.uk/browse?taxa=corals&threats=climate-change
     Which coral species are threatened by climate change
-- https://red.cst.cam.ac.uk/browse?taxa=corals&threats=11&categories=CR,EN
-    Critically endangered / endangered corals affected by climate change
-- https://red.cst.cam.ac.uk/browse?taxa=amphibia&threats=invasive-species
-    Amphibians threatened by invasive species & disease
+- https://red.cst.cam.ac.uk/browse?taxa=mammalia
+    What % of mammal assessments are outdated → read stats.outdated_pct
+- https://red.cst.cam.ac.uk/browse?taxa=insecta&categories=DD&minObs=100&outdated=yes&countries=India
+    Data-deficient insects in India with >100 GBIF records, assessed over 10 years ago
 - https://red.cst.cam.ac.uk/browse?taxa=mammalia&categories=critically-endangered&trends=Decreasing
     Critically endangered mammals with declining populations
 - https://red.cst.cam.ac.uk/browse?search=tiger
