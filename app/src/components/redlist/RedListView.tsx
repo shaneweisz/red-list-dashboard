@@ -17,6 +17,8 @@ import { parseAssessors } from "@/lib/parseAssessors";
 import { iucnRegionCountries, countryToIucnRegion } from "@/lib/regions";
 import { useFilterParams } from "@/hooks/useFilterParams";
 import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
+import { THREAT_CATEGORIES } from "@/lib/filter-vocab";
+import { matchesSpeciesFilter } from "@/lib/species-filter";
 
 import AssessorCandidatesTable from "../AssessorCandidatesTable";
 import { getLastSearchResult, clearLastSearchResult } from "../SpeciesSearchBar";
@@ -63,46 +65,6 @@ function Spinner({ className = "" }: { className?: string }) {
 // Use RedListSpecies from the hook; alias for convenience
 type Species = RedListSpecies;
 
-/** IUCN threat classification hierarchy */
-const THREAT_CATEGORIES: { code: string; label: string; children: { code: string; label: string }[] }[] = [
-  { code: "1", label: "Development", children: [
-    { code: "1.1", label: "Housing & urban areas" }, { code: "1.2", label: "Commercial & industrial areas" }, { code: "1.3", label: "Tourism & recreation areas" },
-  ]},
-  { code: "2", label: "Agriculture", children: [
-    { code: "2.1", label: "Crops" }, { code: "2.2", label: "Wood & pulp plantations" }, { code: "2.3", label: "Livestock farming & ranching" }, { code: "2.4", label: "Aquaculture" },
-  ]},
-  { code: "3", label: "Energy & Mining", children: [
-    { code: "3.1", label: "Oil & gas drilling" }, { code: "3.2", label: "Mining & quarrying" }, { code: "3.3", label: "Renewable energy" },
-  ]},
-  { code: "4", label: "Transport", children: [
-    { code: "4.1", label: "Roads & railroads" }, { code: "4.2", label: "Utility & service lines" }, { code: "4.3", label: "Shipping lanes" }, { code: "4.4", label: "Flight paths" },
-  ]},
-  { code: "5", label: "Harvesting", children: [
-    { code: "5.1", label: "Hunting & trapping" }, { code: "5.2", label: "Gathering plants" }, { code: "5.3", label: "Logging & wood harvesting" }, { code: "5.4", label: "Fishing & harvesting" },
-  ]},
-  { code: "6", label: "Disturbance", children: [
-    { code: "6.1", label: "Recreational activities" }, { code: "6.2", label: "War & military" }, { code: "6.3", label: "Work & other activities" },
-  ]},
-  { code: "7", label: "System modifications", children: [
-    { code: "7.1", label: "Fire & fire suppression" }, { code: "7.2", label: "Dams & water management" }, { code: "7.3", label: "Other modifications" },
-  ]},
-  { code: "8", label: "Invasive species", children: [
-    { code: "8.1", label: "Invasive non-native species" }, { code: "8.2", label: "Problematic native species" }, { code: "8.3", label: "Introduced genetic material" }, { code: "8.4", label: "Unknown origin species" }, { code: "8.5", label: "Viral/prion diseases" }, { code: "8.6", label: "Diseases of unknown cause" },
-  ]},
-  { code: "9", label: "Pollution", children: [
-    { code: "9.1", label: "Domestic & urban waste water" }, { code: "9.2", label: "Industrial & military effluents" }, { code: "9.3", label: "Agricultural & forestry effluents" },
-    { code: "9.4", label: "Garbage & solid waste" }, { code: "9.5", label: "Air-borne pollutants" }, { code: "9.6", label: "Excess energy (light, thermal, noise)" },
-  ]},
-  { code: "10", label: "Geological events", children: [
-    { code: "10.1", label: "Volcanoes" }, { code: "10.2", label: "Earthquakes/tsunamis" }, { code: "10.3", label: "Avalanches/landslides" },
-  ]},
-  { code: "11", label: "Climate change", children: [
-    { code: "11.1", label: "Habitat shifting & alteration" }, { code: "11.2", label: "Droughts" }, { code: "11.3", label: "Temperature extremes" }, { code: "11.4", label: "Storms & flooding" }, { code: "11.5", label: "Other impacts" },
-  ]},
-  { code: "12", label: "Other", children: [
-    { code: "12.1", label: "Other threat" },
-  ]},
-];
 
 interface InatDefaultImage {
   squareUrl: string | null;
@@ -1356,26 +1318,28 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     const CATEGORY_ORDER: Record<string, number> = {
       EX: 0, EW: 1, CR: 2, EN: 3, VU: 4, NT: 5, LC: 6, DD: 7, NE: 8,
     };
+    // Base filters (category, country, system, trend, movement, threat, map,
+    // growth, search) share one predicate with the /browse endpoint.
+    const baseCriteria = {
+      categories: selectedCategories,
+      threats: selectedThreats,
+      countries: selectedCountries,
+      systems: selectedSystems,
+      populationTrends: selectedPopulationTrends,
+      movementPatterns: selectedMovementPatterns,
+      growthForms: selectedGrowthForms,
+      hasMap: hasMapFilter,
+      search: searchFilter,
+    };
     const filtered = taxaFilteredSpecies.filter((s) => {
-      const matchesCategory = selectedCategories.size === 0 || selectedCategories.has(s.category);
+      // Time-relative / GBIF / assessor / starred checks stay local to the SPA.
       const matchesYear = s.category === "NE" || (matchesYearRangeFilter(s.assessment_date) && matchesAssessmentYearFilter(s.assessment_date));
       const matchesObs = matchesObsRangeFilter(s.gbif_occurrence_count);
-      const matchesCountry = selectedCountries.size === 0 || s.countries.some(c => selectedCountries.has(c));
-      const matchesSystem = selectedSystems.size === 0 || s.systems?.some(sys => selectedSystems.has(sys));
-      const matchesTrend = selectedPopulationTrends.size === 0 || (s.population_trend != null && selectedPopulationTrends.has(s.population_trend));
-      const matchesMovement = selectedMovementPatterns.size === 0 || (s.movement_pattern != null && selectedMovementPatterns.has(s.movement_pattern));
-      const matchesThreat = selectedThreats.size === 0 || s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")));
-      const matchesMap = !hasMapFilter || (hasMapFilter === "yes" ? s.has_map : !s.has_map);
-      const matchesGrowth = selectedGrowthForms.size === 0 || s.growth_forms?.some(gf => selectedGrowthForms.has(gf));
-      const matchesSearch =
-        !searchFilter ||
-        s.scientific_name.toLowerCase().includes(searchFilter) ||
-        s.common_name?.toLowerCase().includes(searchFilter);
       const matchesAssessor = matchesAssessorsFilter(s);
       const matchesReviewer = matchesReviewersFilter(s);
       const pinnedKey = isNewAssessments ? Math.abs(s.id) : s.sis_taxon_id;
       const matchesStarred = !showOnlyStarred || (pinnedKey != null && pinnedSet.has(pinnedKey));
-      return matchesCategory && matchesYear && matchesObs && matchesCountry && matchesSystem && matchesTrend && matchesMovement && matchesThreat && matchesMap && matchesGrowth && matchesSearch && matchesAssessor && matchesReviewer && matchesStarred;
+      return matchesSpeciesFilter(s, baseCriteria) && matchesYear && matchesObs && matchesAssessor && matchesReviewer && matchesStarred;
     });
 
     const sorted = [...filtered].sort((a, b) => {

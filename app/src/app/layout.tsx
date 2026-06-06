@@ -40,6 +40,13 @@ export default function RootLayout({
         <PostHogProvider>
           <ThemeProvider>{children}</ThemeProvider>
         </PostHogProvider>
+        {/* Server-rendered footer: gives crawlers & LLMs (which see only this
+            shell, not the client-rendered app) a path into the data. */}
+        <footer style={{ textAlign: "center", padding: "1rem", fontSize: "0.8rem", opacity: 0.6 }}>
+          <a href="/browse">Text / no-JS view (for LLMs &amp; crawlers)</a>
+          {" · "}
+          <a href="/llms.txt">llms.txt</a>
+        </footer>
         <Analytics />
         <SpeedInsights />
       </body>
