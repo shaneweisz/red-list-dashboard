@@ -12,7 +12,9 @@
     "test:watch": "vitest",
     "upload-data-to-r2": "npx tsx scripts/upload-data-to-r2.ts",
     "fetch-data-from-r2": "npx tsx scripts/fetch-data-from-r2.ts",
-    "diff-data-vs-r2": "npx tsx scripts/diff-data-vs-r2.ts"
+    "diff-data-vs-r2": "npx tsx scripts/diff-data-vs-r2.ts",
+    "fetch-col-counts": "npx tsx scripts/fetch-col-counts.ts",
+    "diff-col-vs-estimates": "npx tsx scripts/diff-col-vs-estimates.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1020.0",

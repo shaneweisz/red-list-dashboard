@@ -1,0 +1,714 @@
+{
+  "generatedAt": "2026-06-09T17:44:04.048Z",
+  "source": "Catalogue of Life (via GBIF mirror)",
+  "datasetKey": "7ddf754f-d193-4cc9-b351-99906754a03b",
+  "datasetTitle": "Catalogue of Life",
+  "datasetModified": "2026-05-28T05:23:15.427+00:00",
+  "all": 2208918,
+  "taxa": {
+    "mammalia": {
+      "taxonId": "mammalia",
+      "name": "Mammals",
+      "count": 8991,
+      "summedSubtrees": 1,
+      "unresolvedNames": [],
+      "names": [
+        {
+          "name": "MAMMALIA",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 302160612,
+          "matchedName": "Mammalia",
+          "speciesCount": 8991
+        }
+      ]
+    },
+    "aves": {
+      "taxonId": "aves",
+      "name": "Birds",
+      "count": 12352,
+      "summedSubtrees": 1,
+      "unresolvedNames": [],
+      "names": [
+        {
+          "name": "AVES",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 299343440,
+          "matchedName": "Aves",
+          "speciesCount": 12352
+        }
+      ]
+    },
+    "reptilia": {
+      "taxonId": "reptilia",
+      "name": "Reptiles",
+      "count": 14311,
+      "summedSubtrees": 1,
+      "unresolvedNames": [],
+      "names": [
+        {
+          "name": "REPTILIA",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 307423189,
+          "matchedName": "Reptilia",
+          "speciesCount": 14311
+        }
+      ]
+    },
+    "amphibia": {
+      "taxonId": "amphibia",
+      "name": "Amphibians",
+      "count": 9152,
+      "summedSubtrees": 1,
+      "unresolvedNames": [],
+      "names": [
+        {
+          "name": "AMPHIBIA",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 299398299,
+          "matchedName": "Amphibia",
+          "speciesCount": 9152
+        }
+      ]
+    },
+    "fishes": {
+      "taxonId": "fishes",
+      "name": "Fishes",
+      "count": 43840,
+      "summedSubtrees": 5,
+      "unresolvedNames": [],
+      "names": [
+        {
+          "name": "ACTINOPTERYGII",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 299479955,
+          "matchedName": "Actinopterygii",
+          "speciesCount": 41813
+        },
+        {
+          "name": "CHONDRICHTHYES",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 299342634,
+          "matchedName": "Chondrichthyes",
+          "speciesCount": 1843
+        },
+        {
+          "name": "MYXINI",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 299341658,
+          "matchedName": "Myxini",
+          "speciesCount": 95
+        },
+        {
+          "name": "PETROMYZONTI",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 299341102,
+          "matchedName": "Petromyzonti",
+          "speciesCount": 54
+        },
+        {
+          "name": "SARCOPTERYGII",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 299479905,
+          "matchedName": "Sarcopterygii",
+          "speciesCount": 35
+        }
+      ]
+    },
+    "insecta": {
+      "taxonId": "insecta",
+      "name": "Insects",
+      "count": 1114994,
+      "summedSubtrees": 1,
+      "unresolvedNames": [],
+      "names": [
+        {
+          "name": "INSECTA",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 296434567,
+          "matchedName": "Insecta",
+          "speciesCount": 1114994
+        }
+      ]
+    },
+    "mollusca": {
+      "taxonId": "mollusca",
+      "name": "Molluscs",
+      "count": 156039,
+      "summedSubtrees": 1,
+      "unresolvedNames": [],
+      "names": [
+        {
+          "name": "MOLLUSCA",
+          "rank": "PHYLUM",
+          "resolved": true,
+          "colKey": 298785287,
+          "matchedName": "Mollusca",
+          "speciesCount": 156039
+        }
+      ]
+    },
+    "crustacea": {
+      "taxonId": "crustacea",
+      "name": "Crustaceans",
+      "count": 71891,
+      "summedSubtrees": 3,
+      "unresolvedNames": [
+        "MAXILLOPODA",
+        "HEXANAUPLIA"
+      ],
+      "names": [
+        {
+          "name": "MALACOSTRACA",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 298413191,
+          "matchedName": "Malacostraca",
+          "speciesCount": 51281
+        },
+        {
+          "name": "MAXILLOPODA",
+          "rank": "CLASS",
+          "resolved": false,
+          "colKey": null,
+          "matchedName": null,
+          "speciesCount": null
+        },
+        {
+          "name": "BRANCHIOPODA",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 298534222,
+          "matchedName": "Branchiopoda",
+          "speciesCount": 1943
+        },
+        {
+          "name": "OSTRACODA",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 304149981,
+          "matchedName": "Ostracoda",
+          "speciesCount": 18667
+        },
+        {
+          "name": "HEXANAUPLIA",
+          "rank": "CLASS",
+          "resolved": false,
+          "colKey": null,
+          "matchedName": null,
+          "speciesCount": null
+        }
+      ]
+    },
+    "arachnida": {
+      "taxonId": "arachnida",
+      "name": "Arachnids",
+      "count": 113059,
+      "summedSubtrees": 1,
+      "unresolvedNames": [],
+      "names": [
+        {
+          "name": "ARACHNIDA",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 298554736,
+          "matchedName": "Arachnida",
+          "speciesCount": 113059
+        }
+      ]
+    },
+    "corals": {
+      "taxonId": "corals",
+      "name": "Corals",
+      "count": 7923,
+      "summedSubtrees": 1,
+      "unresolvedNames": [
+        "ALCYONACEA",
+        "PENNATULACEA"
+      ],
+      "names": [
+        {
+          "name": "SCLERACTINIA",
+          "rank": "ORDER",
+          "resolved": true,
+          "colKey": 299605119,
+          "matchedName": "Scleractinia",
+          "speciesCount": 7923
+        },
+        {
+          "name": "ALCYONACEA",
+          "rank": "ORDER",
+          "resolved": false,
+          "colKey": null,
+          "matchedName": null,
+          "speciesCount": null
+        },
+        {
+          "name": "PENNATULACEA",
+          "rank": "ORDER",
+          "resolved": false,
+          "colKey": null,
+          "matchedName": null,
+          "speciesCount": null
+        }
+      ]
+    },
+    "velvet_worms": {
+      "taxonId": "velvet_worms",
+      "name": "Velvet Worms",
+      "count": 0,
+      "summedSubtrees": 0,
+      "unresolvedNames": [
+        "UDEONYCHOPHORA"
+      ],
+      "names": [
+        {
+          "name": "UDEONYCHOPHORA",
+          "rank": "CLASS",
+          "resolved": false,
+          "colKey": null,
+          "matchedName": null,
+          "speciesCount": null
+        }
+      ]
+    },
+    "horseshoe_crabs": {
+      "taxonId": "horseshoe_crabs",
+      "name": "Horseshoe Crabs",
+      "count": 13,
+      "summedSubtrees": 1,
+      "unresolvedNames": [],
+      "names": [
+        {
+          "name": "MEROSTOMATA",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 304150091,
+          "matchedName": "Merostomata",
+          "speciesCount": 13
+        }
+      ]
+    },
+    "other_invertebrates": {
+      "taxonId": "other_invertebrates",
+      "name": "Other Invertebrates",
+      "count": 78678,
+      "summedSubtrees": 18,
+      "unresolvedNames": [
+        "MALACALCYONCAEA"
+      ],
+      "names": [
+        {
+          "name": "ACTINIARIA",
+          "rank": "ORDER",
+          "resolved": true,
+          "colKey": 299657054,
+          "matchedName": "Actiniaria",
+          "speciesCount": 1213
+        },
+        {
+          "name": "ZOANTHARIA",
+          "rank": "ORDER",
+          "resolved": true,
+          "colKey": 299600746,
+          "matchedName": "Zoantharia",
+          "speciesCount": 315
+        },
+        {
+          "name": "PENICILLARIA",
+          "rank": "ORDER",
+          "resolved": true,
+          "colKey": 297775497,
+          "matchedName": "Penicillaria",
+          "speciesCount": 18
+        },
+        {
+          "name": "MALACALCYONCAEA",
+          "rank": "ORDER",
+          "resolved": false,
+          "colKey": null,
+          "matchedName": null,
+          "speciesCount": null
+        },
+        {
+          "name": "SCLERALCYONACEA",
+          "rank": "ORDER",
+          "resolved": true,
+          "colKey": 299640498,
+          "matchedName": "Scleralcyonacea",
+          "speciesCount": 1305
+        },
+        {
+          "name": "HOLOTHUROIDEA",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 302168024,
+          "matchedName": "Holothuroidea",
+          "speciesCount": 1911
+        },
+        {
+          "name": "CLITELLATA",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 298707920,
+          "matchedName": "Clitellata",
+          "speciesCount": 9005
+        },
+        {
+          "name": "DIPLOPODA",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 304076127,
+          "matchedName": "Diplopoda",
+          "speciesCount": 14053
+        },
+        {
+          "name": "COLLEMBOLA",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 296403171,
+          "matchedName": "Collembola",
+          "speciesCount": 9175
+        },
+        {
+          "name": "CHILOPODA",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 296395782,
+          "matchedName": "Chilopoda",
+          "speciesCount": 3556
+        },
+        {
+          "name": "DEMOSPONGIAE",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 302141011,
+          "matchedName": "Demospongiae",
+          "speciesCount": 8425
+        },
+        {
+          "name": "HEXACTINELLIDA",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 302141777,
+          "matchedName": "Hexactinellida",
+          "speciesCount": 759
+        },
+        {
+          "name": "HYDROZOA",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 299604251,
+          "matchedName": "Hydrozoa",
+          "speciesCount": 4402
+        },
+        {
+          "name": "NEMERTEA",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 302139304,
+          "matchedName": "Nemertea",
+          "speciesCount": 1453
+        },
+        {
+          "name": "ASTEROIDEA",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 302168769,
+          "matchedName": "Asteroidea",
+          "speciesCount": 2633
+        },
+        {
+          "name": "CALCAREA",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 302140947,
+          "matchedName": "Calcarea",
+          "speciesCount": 929
+        },
+        {
+          "name": "POLYCHAETA",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 302117878,
+          "matchedName": "Polychaeta",
+          "speciesCount": 15157
+        },
+        {
+          "name": "TURBELLARIA",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 299296200,
+          "matchedName": "Turbellaria",
+          "speciesCount": 14
+        },
+        {
+          "name": "ECHINOIDEA",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 299593133,
+          "matchedName": "Echinoidea",
+          "speciesCount": 4355
+        }
+      ]
+    },
+    "mosses": {
+      "taxonId": "mosses",
+      "name": "Mosses",
+      "count": 20472,
+      "summedSubtrees": 3,
+      "unresolvedNames": [],
+      "names": [
+        {
+          "name": "BRYOPHYTA",
+          "rank": "PHYLUM",
+          "resolved": true,
+          "colKey": 294860278,
+          "matchedName": "Bryophyta",
+          "speciesCount": 12463
+        },
+        {
+          "name": "ANTHOCEROTOPHYTA",
+          "rank": "PHYLUM",
+          "resolved": true,
+          "colKey": 294893443,
+          "matchedName": "Anthocerotophyta",
+          "speciesCount": 312
+        },
+        {
+          "name": "MARCHANTIOPHYTA",
+          "rank": "PHYLUM",
+          "resolved": true,
+          "colKey": 301762485,
+          "matchedName": "Marchantiophyta",
+          "speciesCount": 7697
+        }
+      ]
+    },
+    "ferns_and_allies": {
+      "taxonId": "ferns_and_allies",
+      "name": "Ferns and Allies",
+      "count": 14358,
+      "summedSubtrees": 2,
+      "unresolvedNames": [
+        "ISOETOPSIDA",
+        "EQUISETOPSIDA",
+        "MARATTIOPSIDA",
+        "PSILOTOPSIDA"
+      ],
+      "names": [
+        {
+          "name": "LYCOPODIOPSIDA",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 296003274,
+          "matchedName": "Lycopodiopsida",
+          "speciesCount": 1533
+        },
+        {
+          "name": "ISOETOPSIDA",
+          "rank": "CLASS",
+          "resolved": false,
+          "colKey": null,
+          "matchedName": null,
+          "speciesCount": null
+        },
+        {
+          "name": "EQUISETOPSIDA",
+          "rank": "CLASS",
+          "resolved": false,
+          "colKey": null,
+          "matchedName": null,
+          "speciesCount": null
+        },
+        {
+          "name": "MARATTIOPSIDA",
+          "rank": "CLASS",
+          "resolved": false,
+          "colKey": null,
+          "matchedName": null,
+          "speciesCount": null
+        },
+        {
+          "name": "POLYPODIOPSIDA",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 296010258,
+          "matchedName": "Polypodiopsida",
+          "speciesCount": 12825
+        },
+        {
+          "name": "PSILOTOPSIDA",
+          "rank": "CLASS",
+          "resolved": false,
+          "colKey": null,
+          "matchedName": null,
+          "speciesCount": null
+        }
+      ]
+    },
+    "gymnosperms": {
+      "taxonId": "gymnosperms",
+      "name": "Gymnosperms",
+      "count": 1687,
+      "summedSubtrees": 3,
+      "unresolvedNames": [
+        "GNETOPSIDA"
+      ],
+      "names": [
+        {
+          "name": "PINOPSIDA",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 296006795,
+          "matchedName": "Pinopsida",
+          "speciesCount": 905
+        },
+        {
+          "name": "CYCADOPSIDA",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 296007012,
+          "matchedName": "Cycadopsida",
+          "speciesCount": 393
+        },
+        {
+          "name": "GINKGOOPSIDA",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 296005603,
+          "matchedName": "Ginkgoopsida",
+          "speciesCount": 389
+        },
+        {
+          "name": "GNETOPSIDA",
+          "rank": "CLASS",
+          "resolved": false,
+          "colKey": null,
+          "matchedName": null,
+          "speciesCount": null
+        }
+      ]
+    },
+    "flowering_plants": {
+      "taxonId": "flowering_plants",
+      "name": "Flowering Plants",
+      "count": 363964,
+      "summedSubtrees": 2,
+      "unresolvedNames": [],
+      "names": [
+        {
+          "name": "MAGNOLIOPSIDA",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 294955398,
+          "matchedName": "Magnoliopsida",
+          "speciesCount": 276973
+        },
+        {
+          "name": "LILIOPSIDA",
+          "rank": "CLASS",
+          "resolved": true,
+          "colKey": 296020989,
+          "matchedName": "Liliopsida",
+          "speciesCount": 86991
+        }
+      ]
+    },
+    "green_algae": {
+      "taxonId": "green_algae",
+      "name": "Green Algae",
+      "count": 4838,
+      "summedSubtrees": 2,
+      "unresolvedNames": [],
+      "names": [
+        {
+          "name": "CHLOROPHYTA",
+          "rank": "PHYLUM",
+          "resolved": true,
+          "colKey": 294898322,
+          "matchedName": "Chlorophyta",
+          "speciesCount": 3040
+        },
+        {
+          "name": "CHAROPHYTA",
+          "rank": "PHYLUM",
+          "resolved": true,
+          "colKey": 294009707,
+          "matchedName": "Charophyta",
+          "speciesCount": 1798
+        }
+      ]
+    },
+    "red_algae": {
+      "taxonId": "red_algae",
+      "name": "Red Algae",
+      "count": 3568,
+      "summedSubtrees": 1,
+      "unresolvedNames": [],
+      "names": [
+        {
+          "name": "RHODOPHYTA",
+          "rank": "PHYLUM",
+          "resolved": true,
+          "colKey": 294004390,
+          "matchedName": "Rhodophyta",
+          "speciesCount": 3568
+        }
+      ]
+    },
+    "mushrooms": {
+      "taxonId": "mushrooms",
+      "name": "Mushrooms, etc.",
+      "count": 168788,
+      "summedSubtrees": 2,
+      "unresolvedNames": [],
+      "names": [
+        {
+          "name": "ASCOMYCOTA",
+          "rank": "PHYLUM",
+          "resolved": true,
+          "colKey": 299629951,
+          "matchedName": "Ascomycota",
+          "speciesCount": 111727
+        },
+        {
+          "name": "BASIDIOMYCOTA",
+          "rank": "PHYLUM",
+          "resolved": true,
+          "colKey": 299863690,
+          "matchedName": "Basidiomycota",
+          "speciesCount": 57061
+        }
+      ]
+    },
+    "brown_algae": {
+      "taxonId": "brown_algae",
+      "name": "Brown Algae",
+      "count": 0,
+      "summedSubtrees": 0,
+      "unresolvedNames": [
+        "HETEROKONTOPHYTA"
+      ],
+      "names": [
+        {
+          "name": "HETEROKONTOPHYTA",
+          "rank": "PHYLUM",
+          "resolved": false,
+          "colKey": null,
+          "matchedName": null,
+          "speciesCount": null
+        }
+      ]
+    }
+  }
+}
