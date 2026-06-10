@@ -39,7 +39,7 @@ describe("resolveWhere", () => {
 });
 
 describe("toSpeciesRow", () => {
-  it("maps an assessed row: splits ';' arrays, numifies BigInts, parses history", () => {
+  it("maps an assessed row: splits ';' arrays, numifies BigInts, carries latest assessors", () => {
     const row = toSpeciesRow({
       id: BigInt(18),
       scientific_name: "Aotus lemurinus",
@@ -64,9 +64,8 @@ describe("toSpeciesRow", () => {
       criteria: "A2c",
       threat_codes: "1.1;2.2.1",
       has_map: true,
-      previous_assessments: JSON.stringify([
-        { id: 100, year: "2016", category: "VU", date: "2016-03-01", assessors: "X", reviewers: "Y" },
-      ]),
+      latest_assessors: "X, Y.",
+      latest_reviewers: "Z, A.",
     });
     expect(row.sis_taxon_id).toBe(18);
     expect(row.countries).toEqual(["CO", "EC"]);
@@ -77,9 +76,10 @@ describe("toSpeciesRow", () => {
     expect(row.gbif_observations_after_assessment_year).toBe(42);
     expect(row.taxon_id).toBe("mammals"); // mapTaxonId fallthrough (display root)
     expect(row.has_map).toBe(true);
-    expect(row.previous_assessments).toEqual([
-      { id: 100, year: "2016", category: "VU", date: "2016-03-01", assessors: "X", reviewers: "Y" },
-    ]);
+    // latest assessors/reviewers are inline; full history is lazy (empty here).
+    expect(row.latest_assessors).toBe("X, Y.");
+    expect(row.latest_reviewers).toBe("Z, A.");
+    expect(row.previous_assessments).toEqual([]);
   });
 
   it("maps an NE row: negative id → null sis_taxon_id, no history, group → invertebrates", () => {
