@@ -57,3 +57,24 @@ export const DB_GROUP_TO_TAXON_ID: Record<string, string> = {
 export function mapTaxonId(group: string): string {
   return DB_GROUP_TO_TAXON_ID[group] ?? group;
 }
+
+/**
+ * Back-compat aliases: legacy taxon/group identifiers (the scientific class
+ * names used as IDs before the 2026-06 rename) → their current IDs. Lets old
+ * shared/bookmarked URLs (e.g. ?taxa=mammalia) and direct API calls keep
+ * resolving. Single source of truth — extend here to add more synonyms.
+ */
+export const TAXON_ID_ALIASES: Record<string, string> = {
+  mammalia: "mammals",
+  aves: "birds",
+  reptilia: "reptiles",
+  amphibia: "amphibians",
+  arachnida: "arachnids",
+  mollusca: "molluscs",
+  crustacea: "crustaceans",
+};
+
+/** Resolve a possibly-legacy taxon/group identifier to its current ID. */
+export function canonicalizeTaxonId(id: string): string {
+  return TAXON_ID_ALIASES[id] ?? id;
+}

@@ -33,6 +33,24 @@ describe("parseParams", () => {
     expect(result.taxa).toEqual(new Set(["mammals", "birds"]));
   });
 
+  it("maps legacy taxa IDs to current ones (back-compat for old URLs)", () => {
+    const result = parseParams("?taxa=mammalia,aves,reptilia,amphibia,arachnida,mollusca,crustacea");
+    expect(result.taxa).toEqual(
+      new Set(["mammals", "birds", "reptiles", "amphibians", "arachnids", "molluscs", "crustaceans"])
+    );
+  });
+
+  it("leaves unchanged and unknown taxa IDs as-is, and dedupes legacy+current", () => {
+    // insecta is still a valid node ID; beetles unchanged; mammalia → mammals collapses with mammals
+    const result = parseParams("?taxa=mammalia,mammals,insecta,beetles,unknownthing");
+    expect(result.taxa).toEqual(new Set(["mammals", "insecta", "beetles", "unknownthing"]));
+  });
+
+  it("maps legacy IDs in the subgroups param too", () => {
+    const result = parseParams("?subgroups=mollusca,arachnida");
+    expect(result.subgroups).toEqual(new Set(["molluscs", "arachnids"]));
+  });
+
   it("parses categories", () => {
     const result = parseParams("?categories=CR,EN,VU");
     expect(result.categories).toEqual(new Set(["CR", "EN", "VU"]));

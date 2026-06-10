@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
+import { canonicalizeTaxonId } from "@/lib/data/taxonomy-constants";
 
 // --- URL parsing helpers ---
 
@@ -12,11 +13,12 @@ export function parseParams(search: string) {
   const viewParam = p.get("view");
   return {
     viewMode: (viewParam === "new-assessments" ? "new-assessments" : "reassessments") as ViewMode,
+    // Map legacy IDs (e.g. mammalia → mammals) so old shared/bookmarked URLs keep working.
     taxa: p.get("taxa")
-      ? new Set(p.get("taxa")!.split(",").filter(Boolean))
+      ? new Set(p.get("taxa")!.split(",").filter(Boolean).map(canonicalizeTaxonId))
       : new Set<string>(),
     subgroups: p.get("subgroups")
-      ? new Set(p.get("subgroups")!.split(",").filter(Boolean))
+      ? new Set(p.get("subgroups")!.split(",").filter(Boolean).map(canonicalizeTaxonId))
       : new Set<string>(),
     categories: p.get("categories")
       ? new Set(p.get("categories")!.split(",").filter(Boolean))
