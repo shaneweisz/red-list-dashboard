@@ -51,6 +51,17 @@ describe("parseParams", () => {
     expect(result.subgroups).toEqual(new Set(["molluscs", "arachnids"]));
   });
 
+  it("maps legacy prefixed virtual-node IDs (e.g. inv-crustacea → inv-crustaceans)", () => {
+    const result = parseParams("?taxa=invertebrates&subgroups=inv-crustacea,inv-mollusca,inv-arachnida");
+    expect(result.taxa).toEqual(new Set(["invertebrates"])); // virtual root unchanged
+    expect(result.subgroups).toEqual(new Set(["inv-crustaceans", "inv-molluscs", "inv-arachnids"]));
+  });
+
+  it("leaves unchanged prefixed IDs alone (e.g. inv-insecta, inv-beetles)", () => {
+    const result = parseParams("?subgroups=inv-insecta,inv-beetles");
+    expect(result.subgroups).toEqual(new Set(["inv-insecta", "inv-beetles"]));
+  });
+
   it("parses categories", () => {
     const result = parseParams("?categories=CR,EN,VU");
     expect(result.categories).toEqual(new Set(["CR", "EN", "VU"]));

@@ -74,7 +74,18 @@ export const TAXON_ID_ALIASES: Record<string, string> = {
   crustacea: "crustaceans",
 };
 
-/** Resolve a possibly-legacy taxon/group identifier to its current ID. */
+// Virtual grouping roots (invertebrates/plants/fungi) clone their children with
+// these prefixes to keep node IDs unique, so the subgroups param can carry e.g.
+// "inv-crustacea". Alias the base after stripping the prefix, then re-attach.
+const NODE_ID_PREFIXES = ["inv-", "pl-", "fu-"];
+
+/** Resolve a possibly-legacy taxon/group identifier (bare or prefixed) to its current ID. */
 export function canonicalizeTaxonId(id: string): string {
+  for (const prefix of NODE_ID_PREFIXES) {
+    if (id.startsWith(prefix)) {
+      const base = id.slice(prefix.length);
+      return prefix + (TAXON_ID_ALIASES[base] ?? base);
+    }
+  }
   return TAXON_ID_ALIASES[id] ?? id;
 }
