@@ -21,10 +21,10 @@ import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import AssessorCandidatesTable from "../AssessorCandidatesTable";
 import { getLastSearchResult, clearLastSearchResult } from "../SpeciesSearchBar";
 
-// #261: flip the species fetch to the DuckDB/Parquet route when enabled
-// (default off → no change). Drop-in: same params + response.
-const SPECIES_API =
-  process.env.NEXT_PUBLIC_USE_DUCKDB_SPECIES === "true" ? "/api/v2/species" : "/api/redlist/species";
+// #261: species list is served by the DuckDB/Parquet route. The v1
+// /api/redlist/species route is kept as a fallback (revert this constant to
+// switch back) until Phase 2 removes the CSV path.
+const SPECIES_API = "/api/v2/species";
 
 // Dynamically import OccurrenceMapRow to avoid SSR issues with Leaflet
 const OccurrenceMapRow = dynamic(
