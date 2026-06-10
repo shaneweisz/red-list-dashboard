@@ -8,7 +8,8 @@ const nextConfig: NextConfig = {
   // .so isn't bundled into every function. Vercel runs linux-x64.
   serverExternalPackages: ["@duckdb/node-api"],
   outputFileTracingIncludes: {
-    "/api/v2/**": ["./node_modules/@duckdb/node-bindings-linux-x64/**"],
+    // libduckdb.so (dlopen'd) + the version pointer used to build the R2 path.
+    "/api/v2/**": ["./node_modules/@duckdb/node-bindings-linux-x64/**", "./latest-sync.txt"],
   },
 
   // The API routes import a shared species-store module that references every
@@ -27,6 +28,9 @@ const nextConfig: NextConfig = {
     // These read only the small precomputed summary JSONs.
     "/api/redlist/taxa-summary": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv"],
     "/api/redlist/taxa-subgroups": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv"],
+    // v2 reads parquets from R2 (httpfs) — needs NO local data bundled. Without
+    // this, species-duckdb's DATA_DIR fs refs drag the whole data/ dir in (316MB).
+    "/api/v2/species": ["**/data/**"],
   },
 };
 
