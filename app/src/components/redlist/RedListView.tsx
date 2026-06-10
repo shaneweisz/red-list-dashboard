@@ -21,6 +21,11 @@ import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import AssessorCandidatesTable from "../AssessorCandidatesTable";
 import { getLastSearchResult, clearLastSearchResult } from "../SpeciesSearchBar";
 
+// #261: species list is served by the DuckDB/Parquet route. The v1
+// /api/redlist/species route is kept as a fallback (revert this constant to
+// switch back) until Phase 2 removes the CSV path.
+const SPECIES_API = "/api/v2/species";
+
 // Dynamically import OccurrenceMapRow to avoid SSR issues with Leaflet
 const OccurrenceMapRow = dynamic(
   () => import("../OccurrenceMapRow"),
@@ -537,7 +542,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       setLoadingTaxa(prev => new Set(prev).add(taxonId));
 
       const categoryParam = isNewAssessments ? "&category=NE" : "";
-      fetch(`/api/redlist/species?taxon=${encodeURIComponent(taxonId)}${categoryParam}`, { signal: controller.signal })
+      fetch(`${SPECIES_API}?taxon=${encodeURIComponent(taxonId)}${categoryParam}`, { signal: controller.signal })
         .then(async res => {
           if (!res.ok) {
             const body = await res.json().catch(() => ({}));
@@ -568,7 +573,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   useEffect(() => {
     if (isNewAssessments) return;
     const controller = new AbortController();
-    const promise = fetch("/api/redlist/species?taxon=all", { signal: controller.signal })
+    const promise = fetch(`${SPECIES_API}?taxon=all`, { signal: controller.signal })
       .then(res => res.ok ? res.json() : null)
       .then(data => {
         if (data && !controller.signal.aborted) {
@@ -611,7 +616,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     // Skip NE lazy-load in new-assessments mode — main path already fetches NE species
     if (isNewAssessments) return;
     if (!selectedCategories.has("NE") || neSpeciesFetched || neFetchTaxon === null) return;
-    fetch(`/api/redlist/species?taxon=${encodeURIComponent(neFetchTaxon)}&category=NE`)
+    fetch(`${SPECIES_API}?taxon=${encodeURIComponent(neFetchTaxon)}&category=NE`)
       .then(res => res.ok ? res.json() : null)
       .then(data => { if (data?.species) setNeSpecies(data.species); setNeSpeciesFetched(true); })
       .catch(() => {});
@@ -628,7 +633,17 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const taxaFilteredSpecies = useMemo(() => {
     let filtered = species;
     if (selectedTaxa.size > 0 && !selectedTaxa.has("all")) {
-      filtered = filtered.filter(s => s.taxon_id && selectedTaxa.has(s.taxon_id));
+      // Display-root entries (the 8 taxa) match by taxon_id. Any selected taxon
+      // that isn't a taxonomy node — an arbitrary rank like ?taxa=turdidae — is
+      // matched against the species' own class/order/family (#261).
+      const arbitrary = [...selectedTaxa].filter((t) => t !== "all" && !findNode(t)).map((t) => t.toLowerCase());
+      filtered = filtered.filter((s) =>
+        (s.taxon_id != null && selectedTaxa.has(s.taxon_id)) ||
+        (arbitrary.length > 0 && arbitrary.some((v) =>
+          (s.class_name ?? "").toLowerCase() === v ||
+          (s.order_name ?? "").toLowerCase() === v ||
+          (s.family ?? "").toLowerCase() === v)),
+      );
     }
     if (selectedSubgroups.size > 0) {
       filtered = filtered.filter(s =>
