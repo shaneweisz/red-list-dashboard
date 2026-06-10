@@ -16,6 +16,9 @@ import { canonicalizeTaxonId, mapTaxonId } from "@/lib/data/taxonomy-constants";
 const DATA_DIR = path.join(process.cwd(), "data");
 // Dev has the parquets on disk; on Vercel they aren't bundled → read from R2.
 const USE_R2 = !fs.existsSync(path.join(DATA_DIR, "assessed.parquet"));
+// httpfs vendored at build time (scripts/fetch-duckdb-ext.ts) + traced into the
+// v2 function (next.config). LOAD by path avoids the cold-start network INSTALL.
+const HTTPFS_EXT = path.join(process.cwd(), "duckdb-ext", "httpfs.duckdb_extension");
 
 function parquetUri(name: string): string {
   if (!USE_R2) return path.join(DATA_DIR, name);
@@ -27,13 +30,10 @@ let connPromise: Promise<DuckDBConnection> | null = null;
 async function getConn(): Promise<DuckDBConnection> {
   if (!connPromise) {
     connPromise = (async () => {
-      const inst = await DuckDBInstance.create(
-        ":memory:",
-        USE_R2 ? { extension_directory: "/tmp/duckdb_ext", home_directory: "/tmp" } : {},
-      );
+      const inst = await DuckDBInstance.create(":memory:");
       const conn = await inst.connect();
       if (USE_R2) {
-        await conn.run("INSTALL httpfs; LOAD httpfs;");
+        await conn.run(`LOAD '${HTTPFS_EXT}'`);
         await conn.run(`
           SET s3_region='auto';
           SET s3_endpoint='${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com';
@@ -146,21 +146,31 @@ export async function querySpecies(opts: {
   const conn = await getConn();
   const where = resolveWhere(opts.taxon);
   const whereSql = where.clauses.length ? `WHERE ${where.clauses.join(" AND ")}` : "";
+  const assessedUri = parquetUri("assessed.parquet");
 
   // Assessed: join the per-species history (rebuilt in original array order via
   // seq; index 0 = latest) into previous_assessments. Run NE as a second query
   // (avoids UNION-ing the nested struct list) and concat — order doesn't matter
   // (the client sorts).
+  //
+  // Correlate the history aggregation to just the filtered species (the IN
+  // subquery) so the GROUP BY scans only the result set's rows, not all of
+  // assessments.parquet — ~3× faster on a cold R2 read for a taxon filter, never
+  // slower. Skipped for the unfiltered "all" case (the subquery would be every id).
+  const histFilter = where.clauses.length
+    ? `WHERE sis_taxon_id IN (SELECT id FROM '${assessedUri}' ${whereSql})`
+    : "";
   const assessedSql = `
     WITH hist AS (
       SELECT sis_taxon_id,
              to_json(list({'id': id, 'year': "year", 'category': category, 'date': "date",
                    'assessors': assessors, 'reviewers': reviewers} ORDER BY seq)) AS previous_assessments
       FROM '${parquetUri("assessments.parquet")}'
+      ${histFilter}
       GROUP BY sis_taxon_id
     )
     SELECT ${ASSESSED_SELECT}, h.previous_assessments
-    FROM '${parquetUri("assessed.parquet")}' a
+    FROM '${assessedUri}' a
     LEFT JOIN hist h ON h.sis_taxon_id = a.id
     ${whereSql}`;
   let rows = (await conn.runAndReadAll(assessedSql, where.params)).getRowObjects();
