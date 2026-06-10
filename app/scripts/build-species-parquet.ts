@@ -58,6 +58,15 @@ export async function run(): Promise<void> {
       WHERE gbif_species_key IS NOT NULL;
   `);
 
+  // sis_taxon_id → its Red List group (one per species). Used to restrict GBIF
+  // enrichment to the species' OWN group, matching species-store's per-group
+  // gbifMap lookup (cross-group linked keys are not counted).
+  await conn.run(`
+    CREATE TEMP TABLE rl AS
+      SELECT DISTINCT CAST(sis_taxon_id AS BIGINT) AS sis_taxon_id, taxon_group_table1a AS taxon_group
+      FROM read_csv_auto('${redlistGlob}', union_by_name=true);
+  `);
+
   // Per-assessment GBIF enrichment: sum occurrence counts across all linked
   // GBIF rows that exist; representative key prefers a canonical-source match.
   await conn.run(`
@@ -66,8 +75,13 @@ export async function run(): Promise<void> {
         m.sis_taxon_id,
         sum(g.total_count)  AS gbif_occurrence_count,
         sum(g.count_after)  AS gbif_observations_after_assessment_year,
-        arg_min(m.gbif_species_key, CASE WHEN m.name_source='canonical' THEN 0 ELSE 1 END) AS gbif_species_key
-      FROM map m JOIN gbif_all g USING (gbif_species_key)
+        -- representative key: canonical-source preferred, then smallest key
+        -- (deterministic; for multi-match species this may differ from v1's
+        -- file-order pick, but is an equally-valid GBIF match for the species)
+        arg_min(m.gbif_species_key, (CASE WHEN m.name_source='canonical' THEN 0 ELSE 1 END) * 1000000000 + m.gbif_species_key) AS gbif_species_key
+      FROM map m
+      JOIN rl ON rl.sis_taxon_id = m.sis_taxon_id
+      JOIN gbif_all g ON g.gbif_species_key = m.gbif_species_key AND g.taxon_group = rl.taxon_group
       GROUP BY m.sis_taxon_id;
   `);
 
