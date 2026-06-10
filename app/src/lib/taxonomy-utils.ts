@@ -8,6 +8,7 @@
 
 import { TAXONOMY_TREE, type TaxonomyNode, type SpeciesFilter } from "@/config/taxonomy-tree";
 import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
+import { canonicalizeTaxonId } from "@/lib/data/taxonomy-constants";
 
 // ─── Indexes (built once at import) ──────────────────────────────────
 
@@ -75,8 +76,9 @@ export function getViewRootForNode(nodeId: string): string | null {
 
 /** Get the CSV groups needed to load data for a node. */
 export function getCsvGroupsForNode(nodeId: string): string[] {
-  const node = NODE_INDEX.get(nodeId);
-  if (!node) return [nodeId]; // Fallback: treat as CSV group name
+  const id = canonicalizeTaxonId(nodeId); // map legacy IDs (e.g. mammalia → mammals)
+  const node = NODE_INDEX.get(id);
+  if (!node) return [id]; // Fallback: treat as CSV group name
   return node.filter.csvGroups;
 }
 
