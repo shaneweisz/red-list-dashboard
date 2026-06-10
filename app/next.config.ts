@@ -2,7 +2,23 @@ import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // The API routes import a shared species-store module that references every
+  // file under data/ (search-index.json ~95MB, redlist/ ~82MB, gbif/ ~62MB),
+  // so Next traces the whole dataset into every serverless function — ~248MB,
+  // over Vercel's 250MB uncompressed limit. Prune per route to what each
+  // actually reads at runtime. Globs use **/ so they match whether the tracing
+  // root is app/ (local) or the repo root (Vercel, where paths are app/data/…).
+  outputFileTracingExcludes: {
+    // Search only reads the prebuilt index — never the CSVs/mapping.
+    "/api/search": ["**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv"],
+    "/api/search/warm": ["**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv"],
+    // These read the Red List / GBIF CSVs (+ mapping) but never the search index.
+    "/api/redlist/species": ["**/data/search-index.json"],
+    "/api/redlist/assessor-candidates-by-country": ["**/data/search-index.json"],
+    // These read only the small precomputed summary JSONs.
+    "/api/redlist/taxa-summary": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv"],
+    "/api/redlist/taxa-subgroups": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv"],
+  },
 };
 
 export default withSentryConfig(nextConfig, {
