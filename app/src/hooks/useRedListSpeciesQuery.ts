@@ -2,11 +2,6 @@
 
 import { useState, useEffect, useRef } from "react";
 
-// #261: flip to the DuckDB/Parquet-backed route when enabled (default off → no
-// change). Drop-in: same params + response, plus arbitrary-rank filtering.
-const SPECIES_API =
-  process.env.NEXT_PUBLIC_USE_DUCKDB_SPECIES === "true" ? "/api/v2/species" : "/api/redlist/species";
-
 // ── Types ────────────────────────────────────────────────────────────────
 
 export interface RedListSpecies {
@@ -74,7 +69,7 @@ export function useRedListSpecies(taxonId: string | null) {
     setIsLoading(true);  
     setError(null);
 
-    fetch(`${SPECIES_API}?taxon=${encodeURIComponent(taxonId)}`, {
+    fetch(`/api/redlist/species?taxon=${encodeURIComponent(taxonId)}`, {
       signal: controller.signal,
     })
       .then(async (res) => {
