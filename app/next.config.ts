@@ -2,6 +2,15 @@ import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // #261: DuckDB-backed read routes query Parquet in R2. Keep the native addon
+  // out of the bundler, and force-include the 68MB libduckdb.so it dlopens at
+  // runtime (file-tracing misses dlopen deps). Scoped to the v2 routes so the
+  // .so isn't bundled into every function. Vercel runs linux-x64.
+  serverExternalPackages: ["@duckdb/node-api"],
+  outputFileTracingIncludes: {
+    "/api/v2/**": ["./node_modules/@duckdb/node-bindings-linux-x64/**"],
+  },
+
   // The API routes import a shared species-store module that references every
   // file under data/ (search-index.json ~95MB, redlist/ ~82MB, gbif/ ~62MB),
   // so Next traces the whole dataset into every serverless function — ~248MB,
