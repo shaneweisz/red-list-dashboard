@@ -63,10 +63,10 @@ import {
 const ICON_MAP: Record<string, React.ComponentType<IconBaseProps>> = {
   // Top-level taxa
   all: FaGlobeAmericas,
-  mammalia: FaPaw,
-  aves: FaDove,
-  reptilia: GiSnake,
-  amphibia: FaFrog,
+  mammals: FaPaw,
+  birds: FaDove,
+  reptiles: GiSnake,
+  amphibians: FaFrog,
   fishes: FaFish,
   invertebrates: FaBug,
   plantae: FaLeaf,
@@ -115,9 +115,9 @@ const ICON_MAP: Record<string, React.ComponentType<IconBaseProps>> = {
   "other-insects": FaBug,
 
   // Other invertebrate subgroups
-  arachnida: GiSpiderAlt,
-  mollusca: GiNautilusShell,
-  crustacea: GiCrab,
+  arachnids: GiSpiderAlt,
+  molluscs: GiNautilusShell,
+  crustaceans: GiCrab,
   corals: GiCoral,
   other_invertebrates: FaBug,
   echinoderms: GiSeaStar,

@@ -78,10 +78,10 @@ const MAMMAL_NAMED_ORDERS = [
   "perissodactyla", "pholidota",
 ];
 
-// Insect named orders
-const INSECT_NAMED_ORDERS = [
-  "coleoptera", "lepidoptera", "diptera", "hymenoptera",
-  "hemiptera", "orthoptera", "odonata",
+// Insect base CSV groups (the Table 1a "Insects" row, split by order)
+const ALL_INSECT_GROUPS = [
+  "beetles", "butterflies_and_moths", "flies_and_mosquitoes", "bees_wasps_and_ants",
+  "true_bugs", "grasshoppers_crickets_locusts", "dragonflies_and_damselflies", "other_insects",
 ];
 
 // ─── Plant taxonomy ──────────────────────────────────────────────────
@@ -101,10 +101,11 @@ const ASCOMYCOTA_ORDERS = [
   "cyttariales", "coryneliales", "trypetheliales",
 ];
 
-// All 21 Table 1a CSV groups
+// All 28 Table 1a CSV groups (Insects split into 8 order-based groups)
 export const ALL_CSV_GROUPS = [
-  "mammalia", "aves", "reptilia", "amphibia", "fishes",
-  "insecta", "arachnida", "mollusca", "crustacea", "corals",
+  "mammals", "birds", "reptiles", "amphibians", "fishes",
+  ...ALL_INSECT_GROUPS,
+  "arachnids", "molluscs", "crustaceans", "corals",
   "other_invertebrates", "velvet_worms", "horseshoe_crabs",
   "flowering_plants", "gymnosperms", "ferns_and_allies", "mosses",
   "green_algae", "red_algae", "brown_algae",
@@ -112,7 +113,8 @@ export const ALL_CSV_GROUPS = [
 ];
 
 const ALL_INVERTEBRATE_GROUPS = [
-  "insecta", "arachnida", "mollusca", "crustacea", "corals",
+  ...ALL_INSECT_GROUPS,
+  "arachnids", "molluscs", "crustaceans", "corals",
   "other_invertebrates", "velvet_worms", "horseshoe_crabs",
 ];
 
@@ -137,44 +139,44 @@ function prefixTree(node: TaxonomyNode, prefix: string): TaxonomyNode {
 const INSECTA_NODE: TaxonomyNode = {
   id: "insecta",
   name: "Insects",
-  filter: { csvGroups: ["insecta"] },
+  filter: { csvGroups: ALL_INSECT_GROUPS },
   estimatedDescribed: 1_003_469,
   estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ")",
   estimatedSourceUrl: IUCN_SOURCE_URL,
   children: [
-    { id: "beetles", name: "Beetles", filter: { csvGroups: ["insecta"], orderNames: ["coleoptera"] }, estimatedDescribed: 392_000, estimatedSource: ZHANG_2011, estimatedSourceUrl: ZHANG_2011_URL },
-    { id: "butterflies-moths", name: "Butterflies & Moths", filter: { csvGroups: ["insecta"], orderNames: ["lepidoptera"] }, estimatedDescribed: 160_000, estimatedSource: ZHANG_2011, estimatedSourceUrl: ZHANG_2011_URL },
-    { id: "flies-mosquitoes", name: "Flies & Mosquitoes", filter: { csvGroups: ["insecta"], orderNames: ["diptera"] }, estimatedDescribed: 155_000, estimatedSource: ZHANG_2011, estimatedSourceUrl: ZHANG_2011_URL },
-    { id: "bees-wasps-ants", name: "Bees, Wasps & Ants", filter: { csvGroups: ["insecta"], orderNames: ["hymenoptera"] }, estimatedDescribed: 153_000, estimatedSource: ZHANG_2011, estimatedSourceUrl: ZHANG_2011_URL },
-    { id: "true-bugs", name: "True Bugs", filter: { csvGroups: ["insecta"], orderNames: ["hemiptera"] }, estimatedDescribed: 82_000, estimatedSource: ZHANG_2011, estimatedSourceUrl: ZHANG_2011_URL },
-    { id: "grasshoppers-crickets", name: "Grasshoppers, Crickets & Locusts", filter: { csvGroups: ["insecta"], orderNames: ["orthoptera"] }, estimatedDescribed: 26_000, estimatedSource: "Orthoptera Species File, 2025", estimatedSourceUrl: "https://orthoptera.speciesfile.org/" },
-    { id: "dragonflies-damselflies", name: "Dragonflies & Damselflies", filter: { csvGroups: ["insecta"], orderNames: ["odonata"] }, estimatedDescribed: 6_400, estimatedSource: "World Odonata List, 2025", estimatedSourceUrl: "https://www.pugetsound.edu/puget-sound-museum-natural-history/biodiversity-resources/insects/dragonflies/world-odonata-list" },
-    { id: "other-insects", name: "Other Insects", filter: { csvGroups: ["insecta"], excludeOrders: INSECT_NAMED_ORDERS }, estimatedDescribed: 29_069, estimatedSource: "Remainder from IUCN Table 1a total of 1,003,469 (" + COL_2025 + ")", estimatedSourceUrl: COL_2025_URL },
+    { id: "beetles", name: "Beetles", filter: { csvGroups: ["beetles"] }, estimatedDescribed: 392_000, estimatedSource: ZHANG_2011, estimatedSourceUrl: ZHANG_2011_URL },
+    { id: "butterflies-moths", name: "Butterflies & Moths", filter: { csvGroups: ["butterflies_and_moths"] }, estimatedDescribed: 160_000, estimatedSource: ZHANG_2011, estimatedSourceUrl: ZHANG_2011_URL },
+    { id: "flies-mosquitoes", name: "Flies & Mosquitoes", filter: { csvGroups: ["flies_and_mosquitoes"] }, estimatedDescribed: 155_000, estimatedSource: ZHANG_2011, estimatedSourceUrl: ZHANG_2011_URL },
+    { id: "bees-wasps-ants", name: "Bees, Wasps & Ants", filter: { csvGroups: ["bees_wasps_and_ants"] }, estimatedDescribed: 153_000, estimatedSource: ZHANG_2011, estimatedSourceUrl: ZHANG_2011_URL },
+    { id: "true-bugs", name: "True Bugs", filter: { csvGroups: ["true_bugs"] }, estimatedDescribed: 82_000, estimatedSource: ZHANG_2011, estimatedSourceUrl: ZHANG_2011_URL },
+    { id: "grasshoppers-crickets", name: "Grasshoppers, Crickets & Locusts", filter: { csvGroups: ["grasshoppers_crickets_locusts"] }, estimatedDescribed: 26_000, estimatedSource: "Orthoptera Species File, 2025", estimatedSourceUrl: "https://orthoptera.speciesfile.org/" },
+    { id: "dragonflies-damselflies", name: "Dragonflies & Damselflies", filter: { csvGroups: ["dragonflies_and_damselflies"] }, estimatedDescribed: 6_400, estimatedSource: "World Odonata List, 2025", estimatedSourceUrl: "https://www.pugetsound.edu/puget-sound-museum-natural-history/biodiversity-resources/insects/dragonflies/world-odonata-list" },
+    { id: "other-insects", name: "Other Insects", filter: { csvGroups: ["other_insects"] }, estimatedDescribed: 29_069, estimatedSource: "Remainder from IUCN Table 1a total of 1,003,469 (" + COL_2025 + ")", estimatedSourceUrl: COL_2025_URL },
   ],
 };
 
 const ARACHNIDA_NODE: TaxonomyNode = {
-  id: "arachnida",
+  id: "arachnids",
   name: "Arachnids",
-  filter: { csvGroups: ["arachnida"] },
+  filter: { csvGroups: ["arachnids"] },
   estimatedDescribed: 97_085,
   estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ")",
   estimatedSourceUrl: COL_2025_URL,
 };
 
 const MOLLUSCA_NODE: TaxonomyNode = {
-  id: "mollusca",
+  id: "molluscs",
   name: "Molluscs",
-  filter: { csvGroups: ["mollusca"] },
+  filter: { csvGroups: ["molluscs"] },
   estimatedDescribed: 88_244,
   estimatedSource: IUCN_SOURCE + " (MolluscaBase 2025)",
   estimatedSourceUrl: "http://www.molluscabase.org",
 };
 
 const CRUSTACEA_NODE: TaxonomyNode = {
-  id: "crustacea",
+  id: "crustaceans",
   name: "Crustaceans",
-  filter: { csvGroups: ["crustacea"] },
+  filter: { csvGroups: ["crustaceans"] },
   estimatedDescribed: 83_263,
   estimatedSource: IUCN_SOURCE + " (" + COL_2025 + "; World Ostracoda Database)",
   estimatedSourceUrl: COL_2025_URL,
@@ -354,11 +356,11 @@ export const TAXONOMY_TREE: TaxonomyNode = {
   estimatedSourceUrl: IUCN_SOURCE_URL,
   color: "#dc2626",
   children: [
-    // ─── MAMMALIA ──────────────────────────────────────────────────────
+    // ─── MAMMALS ───────────────────────────────────────────────────────
     {
-      id: "mammalia",
+      id: "mammals",
       name: "Mammals",
-      filter: { csvGroups: ["mammalia"] },
+      filter: { csvGroups: ["mammals"] },
       estimatedDescribed: 6_819,
       estimatedSource: IUCN_SOURCE,
       estimatedSourceUrl: IUCN_SOURCE_URL,
@@ -367,7 +369,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         {
           id: "rodents",
           name: "Rodents",
-          filter: { csvGroups: ["mammalia"], orderNames: ["rodentia"] },
+          filter: { csvGroups: ["mammals"], orderNames: ["rodentia"] },
           estimatedDescribed: 2_747,
           estimatedSource: MDD + " — Rodentia",
           estimatedSourceUrl: MDD_URL,
@@ -375,7 +377,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         {
           id: "bats",
           name: "Bats",
-          filter: { csvGroups: ["mammalia"], orderNames: ["chiroptera"] },
+          filter: { csvGroups: ["mammals"], orderNames: ["chiroptera"] },
           estimatedDescribed: 1_485,
           estimatedSource: MDD + " — Chiroptera",
           estimatedSourceUrl: MDD_URL,
@@ -383,7 +385,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         {
           id: "eulipotyphla",
           name: "Eulipotyphla",
-          filter: { csvGroups: ["mammalia"], orderNames: ["eulipotyphla"] },
+          filter: { csvGroups: ["mammals"], orderNames: ["eulipotyphla"] },
           estimatedDescribed: 599,
           estimatedSource: MDD + " — Eulipotyphla (hedgehogs, shrews, moles, solenodons)",
           estimatedSourceUrl: MDD_URL,
@@ -391,7 +393,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         {
           id: "primates",
           name: "Primates",
-          filter: { csvGroups: ["mammalia"], orderNames: ["primates"] },
+          filter: { csvGroups: ["mammals"], orderNames: ["primates"] },
           estimatedDescribed: 522,
           estimatedSource: MDD + " — Primates",
           estimatedSourceUrl: MDD_URL,
@@ -400,7 +402,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           id: "marsupials",
           name: "Marsupials",
           filter: {
-            csvGroups: ["mammalia"],
+            csvGroups: ["mammals"],
             orderNames: [
               "diprotodontia", "dasyuromorphia", "didelphimorphia",
               "peramelemorphia", "paucituberculata", "notoryctemorphia", "microbiotheria",
@@ -413,7 +415,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         {
           id: "carnivores",
           name: "Carnivores",
-          filter: { csvGroups: ["mammalia"], orderNames: ["carnivora"] },
+          filter: { csvGroups: ["mammals"], orderNames: ["carnivora"] },
           estimatedDescribed: 319,
           estimatedSource: MDD + " — Carnivora",
           estimatedSourceUrl: MDD_URL,
@@ -421,7 +423,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         {
           id: "artiodactyls",
           name: "Artiodactyls",
-          filter: { csvGroups: ["mammalia"], orderNames: ["artiodactyla"] },
+          filter: { csvGroups: ["mammals"], orderNames: ["artiodactyla"] },
           estimatedDescribed: 371,
           estimatedSource: MDD + " — Artiodactyla (includes cetaceans under Cetartiodactyla)",
           estimatedSourceUrl: MDD_URL,
@@ -429,7 +431,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         {
           id: "rabbits-hares",
           name: "Rabbits & Hares",
-          filter: { csvGroups: ["mammalia"], orderNames: ["lagomorpha"] },
+          filter: { csvGroups: ["mammals"], orderNames: ["lagomorpha"] },
           estimatedDescribed: 112,
           estimatedSource: MDD + " — Lagomorpha",
           estimatedSourceUrl: MDD_URL,
@@ -437,7 +439,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         {
           id: "sirenians",
           name: "Sirenians",
-          filter: { csvGroups: ["mammalia"], orderNames: ["sirenia"] },
+          filter: { csvGroups: ["mammals"], orderNames: ["sirenia"] },
           estimatedDescribed: 5,
           estimatedSource: MDD + " — Sirenia (manatees + dugong)",
           estimatedSourceUrl: MDD_URL,
@@ -445,7 +447,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         {
           id: "odd-toed-ungulates",
           name: "Odd-toed Ungulates",
-          filter: { csvGroups: ["mammalia"], orderNames: ["perissodactyla"] },
+          filter: { csvGroups: ["mammals"], orderNames: ["perissodactyla"] },
           estimatedDescribed: 18,
           estimatedSource: MDD + " — Perissodactyla",
           estimatedSourceUrl: MDD_URL,
@@ -453,7 +455,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         {
           id: "pangolins",
           name: "Pangolins",
-          filter: { csvGroups: ["mammalia"], orderNames: ["pholidota"] },
+          filter: { csvGroups: ["mammals"], orderNames: ["pholidota"] },
           estimatedDescribed: 8,
           estimatedSource: MDD + " — Pholidota",
           estimatedSourceUrl: MDD_URL,
@@ -462,7 +464,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           id: "other-mammals",
           name: "Other Mammals",
           filter: {
-            csvGroups: ["mammalia"],
+            csvGroups: ["mammals"],
             excludeOrders: MAMMAL_NAMED_ORDERS,
           },
           estimatedDescribed: 217,
@@ -472,22 +474,22 @@ export const TAXONOMY_TREE: TaxonomyNode = {
       ],
     },
 
-    // ─── AVES ──────────────────────────────────────────────────────────
+    // ─── BIRDS ─────────────────────────────────────────────────────────
     {
-      id: "aves",
+      id: "birds",
       name: "Birds",
-      filter: { csvGroups: ["aves"] },
+      filter: { csvGroups: ["birds"] },
       estimatedDescribed: 11_185,
       estimatedSource: IUCN_SOURCE,
       estimatedSourceUrl: IUCN_SOURCE_URL,
       color: "#3b82f6",
     },
 
-    // ─── REPTILIA ──────────────────────────────────────────────────────
+    // ─── REPTILES ──────────────────────────────────────────────────────
     {
-      id: "reptilia",
+      id: "reptiles",
       name: "Reptiles",
-      filter: { csvGroups: ["reptilia"] },
+      filter: { csvGroups: ["reptiles"] },
       estimatedDescribed: 12_502,
       estimatedSource: IUCN_SOURCE,
       estimatedSourceUrl: IUCN_SOURCE_URL,
@@ -496,7 +498,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         {
           id: "squamates",
           name: "Squamates",
-          filter: { csvGroups: ["reptilia"], orderNames: ["squamata"] },
+          filter: { csvGroups: ["reptiles"], orderNames: ["squamata"] },
           estimatedDescribed: 12_108,
           estimatedSource: "Reptile Database, Sep 2025 — Squamata (lizards, snakes, amphisbaenians)",
           estimatedSourceUrl: REPTILE_DB_URL,
@@ -504,7 +506,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         {
           id: "turtles-tortoises",
           name: "Turtles & Tortoises",
-          filter: { csvGroups: ["reptilia"], orderNames: ["testudines"] },
+          filter: { csvGroups: ["reptiles"], orderNames: ["testudines"] },
           estimatedDescribed: 366,
           estimatedSource: REPTILE_DB,
           estimatedSourceUrl: REPTILE_DB_URL,
@@ -512,7 +514,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         {
           id: "crocodilians",
           name: "Crocodilians",
-          filter: { csvGroups: ["reptilia"], orderNames: ["crocodylia"] },
+          filter: { csvGroups: ["reptiles"], orderNames: ["crocodylia"] },
           estimatedDescribed: 27,
           estimatedSource: REPTILE_DB,
           estimatedSourceUrl: REPTILE_DB_URL,
@@ -520,7 +522,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         {
           id: "tuataras",
           name: "Tuataras",
-          filter: { csvGroups: ["reptilia"], orderNames: ["rhynchocephalia"] },
+          filter: { csvGroups: ["reptiles"], orderNames: ["rhynchocephalia"] },
           estimatedDescribed: 1,
           estimatedSource: REPTILE_DB + " — Rhynchocephalia (Sphenodon punctatus)",
           estimatedSourceUrl: REPTILE_DB_URL,
@@ -528,11 +530,11 @@ export const TAXONOMY_TREE: TaxonomyNode = {
       ],
     },
 
-    // ─── AMPHIBIA ──────────────────────────────────────────────────────
+    // ─── AMPHIBIANS ────────────────────────────────────────────────────
     {
-      id: "amphibia",
+      id: "amphibians",
       name: "Amphibians",
-      filter: { csvGroups: ["amphibia"] },
+      filter: { csvGroups: ["amphibians"] },
       estimatedDescribed: 8_918,
       estimatedSource: IUCN_SOURCE,
       estimatedSourceUrl: IUCN_SOURCE_URL,
@@ -541,7 +543,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         {
           id: "frogs-toads",
           name: "Frogs & Toads",
-          filter: { csvGroups: ["amphibia"], orderNames: ["anura"] },
+          filter: { csvGroups: ["amphibians"], orderNames: ["anura"] },
           estimatedDescribed: 7_948,
           estimatedSource: AMPHIBIAWEB,
           estimatedSourceUrl: AMPHIBIAWEB_URL,
@@ -549,7 +551,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         {
           id: "salamanders-newts",
           name: "Salamanders & Newts",
-          filter: { csvGroups: ["amphibia"], orderNames: ["caudata"] },
+          filter: { csvGroups: ["amphibians"], orderNames: ["caudata"] },
           estimatedDescribed: 829,
           estimatedSource: AMPHIBIAWEB,
           estimatedSourceUrl: AMPHIBIAWEB_URL,
@@ -557,7 +559,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         {
           id: "caecilians",
           name: "Caecilians",
-          filter: { csvGroups: ["amphibia"], orderNames: ["gymnophiona"] },
+          filter: { csvGroups: ["amphibians"], orderNames: ["gymnophiona"] },
           estimatedDescribed: 231,
           estimatedSource: AMPHIBIAWEB,
           estimatedSourceUrl: AMPHIBIAWEB_URL,

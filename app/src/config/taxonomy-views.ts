@@ -19,7 +19,7 @@ export const TAXONOMY_VIEWS: Record<string, TaxonomyView> = {
     id: "default",
     name: "Default",
     roots: [
-      "mammalia", "aves", "reptilia", "amphibia", "fishes",
+      "mammals", "birds", "reptiles", "amphibians", "fishes",
       "invertebrates", "plantae", "fungi",
     ],
   },
@@ -28,8 +28,8 @@ export const TAXONOMY_VIEWS: Record<string, TaxonomyView> = {
     id: "table1a",
     name: "Table 1a",
     roots: [
-      "mammalia", "aves", "reptilia", "amphibia", "fishes",
-      "insecta", "mollusca", "crustacea", "corals", "arachnida",
+      "mammals", "birds", "reptiles", "amphibians", "fishes",
+      "insecta", "molluscs", "crustaceans", "corals", "arachnids",
       "velvet_worms", "horseshoe_crabs", "other_invertebrates",
       "mosses", "ferns_and_allies", "gymnosperms", "flowering_plants",
       "green_algae", "red_algae",
@@ -38,12 +38,12 @@ export const TAXONOMY_VIEWS: Record<string, TaxonomyView> = {
     sections: [
       {
         title: "VERTEBRATES",
-        nodeIds: ["mammalia", "aves", "reptilia", "amphibia", "fishes"],
+        nodeIds: ["mammals", "birds", "reptiles", "amphibians", "fishes"],
       },
       {
         title: "INVERTEBRATES",
         nodeIds: [
-          "insecta", "mollusca", "crustacea", "corals", "arachnida",
+          "insecta", "molluscs", "crustaceans", "corals", "arachnids",
           "velvet_worms", "horseshoe_crabs", "other_invertebrates",
         ],
       },

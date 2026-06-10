@@ -133,7 +133,7 @@ export function buildQs(state: {
  * history.replaceState/pushState to sync the URL — no Next.js
  * router overhead.
  *
- * Example URL: /?taxa=mammalia&categories=CR,EN&years=11-20+years&search=shrew
+ * Example URL: /?taxa=mammals&categories=CR,EN&years=11-20+years&search=shrew
  */
 export function useFilterParams() {
   // Initialize with empty state (SSR-safe), hydrate from URL in effect

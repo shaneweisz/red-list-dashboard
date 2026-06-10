@@ -172,7 +172,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   // Set to true only when the user Cmd/Ctrl+clicks a taxon row;
   // cleared when the modifier key is released.
   const [taxaExpanded, setTaxaExpanded] = useState(false);
-  // Which taxa are expanded to show subgroups (e.g., "reptilia", "fishes")
+  // Which taxa are expanded to show subgroups (e.g., "reptiles", "fishes")
   const [expandedTaxa, setExpandedTaxa] = useState<Set<string>>(new Set());
   // Fetched subgroup data keyed by taxonId
   const [subgroupData, setSubgroupData] = useState<Record<string, SubGroupSummary[]>>({});
@@ -1359,19 +1359,24 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                             setTable1aMode(false);
                             const defaultRoots = new Set(TAXONOMY_VIEWS.default.roots);
                             if (defaultRoots.has(row.group)) {
-                              // Direct view root (e.g. mammalia, aves) — select it
+                              // Direct view root (e.g. mammals, birds) — select it
                               onToggleTaxon(row.group, e);
                             } else if (onNavigateToSubgroup) {
-                              // Table 1a group under a virtual root (e.g. insecta → invertebrates)
-                              // Find which view root has a child matching this group's CSV
+                              // Table 1a group under a virtual root (e.g. molluscs → invertebrates).
+                              // row.group is a tree node id. Aggregating parent rows (e.g. "insecta",
+                              // which spans 8 order CSV groups) match a child by node id; single-group
+                              // rows match by CSV group.
+                              const stripPrefix = (id: string) => id.replace(/^(inv-|pl-|fu-)/, "");
                               for (const rootId of defaultRoots) {
                                 const rootNode = findNode(rootId);
-                                // Prefer exact match (single CSV group), fall back to includes
-                                const matchingChild = rootNode?.children?.find(c =>
-                                  c.filter.csvGroups.length === 1 && c.filter.csvGroups[0] === row.group
-                                ) ?? rootNode?.children?.find(c =>
-                                  c.filter.csvGroups.includes(row.group)
-                                );
+                                const matchingChild =
+                                  rootNode?.children?.find(c => stripPrefix(c.id) === row.group)
+                                  ?? rootNode?.children?.find(c =>
+                                    c.filter.csvGroups.length === 1 && c.filter.csvGroups[0] === row.group
+                                  )
+                                  ?? rootNode?.children?.find(c =>
+                                    c.filter.csvGroups.includes(row.group)
+                                  );
                                 if (matchingChild) {
                                   onNavigateToSubgroup(rootId, matchingChild.id);
                                   break;

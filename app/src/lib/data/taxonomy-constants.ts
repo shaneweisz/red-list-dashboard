@@ -24,14 +24,21 @@ export const EXCLUDED_DOMESTICATED_GBIF_KEYS = new Set([
 
 /**
  * Maps CSV group names (IUCN Table 1a) to display taxon IDs.
- * Groups not listed here map to themselves (e.g., "mammalia" → "mammalia").
+ * Groups not listed here map to themselves (e.g., "mammals" → "mammals").
  */
 export const DB_GROUP_TO_TAXON_ID: Record<string, string> = {
   fishes: "fishes",
-  insecta: "invertebrates",
-  arachnida: "invertebrates",
-  mollusca: "invertebrates",
-  crustacea: "invertebrates",
+  beetles: "invertebrates",
+  butterflies_and_moths: "invertebrates",
+  flies_and_mosquitoes: "invertebrates",
+  bees_wasps_and_ants: "invertebrates",
+  true_bugs: "invertebrates",
+  grasshoppers_crickets_locusts: "invertebrates",
+  dragonflies_and_damselflies: "invertebrates",
+  other_insects: "invertebrates",
+  arachnids: "invertebrates",
+  molluscs: "invertebrates",
+  crustaceans: "invertebrates",
   corals: "invertebrates",
   other_invertebrates: "invertebrates",
   velvet_worms: "invertebrates",

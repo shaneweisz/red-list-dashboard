@@ -29,8 +29,8 @@ describe("parseParams", () => {
   });
 
   it("parses taxa from comma-separated list", () => {
-    const result = parseParams("?taxa=mammalia,aves");
-    expect(result.taxa).toEqual(new Set(["mammalia", "aves"]));
+    const result = parseParams("?taxa=mammals,birds");
+    expect(result.taxa).toEqual(new Set(["mammals", "birds"]));
   });
 
   it("parses categories", () => {
@@ -100,9 +100,9 @@ describe("parseParams", () => {
 
   it("parses a complex URL with multiple params", () => {
     const result = parseParams(
-      "?taxa=mammalia&categories=CR,EN&years=11-20+years&search=shrew&sort=year&dir=asc"
+      "?taxa=mammals&categories=CR,EN&years=11-20+years&search=shrew&sort=year&dir=asc"
     );
-    expect(result.taxa).toEqual(new Set(["mammalia"]));
+    expect(result.taxa).toEqual(new Set(["mammals"]));
     expect(result.categories).toEqual(new Set(["CR", "EN"]));
     expect(result.yearRanges).toEqual(new Set(["11-20 years"]));
     expect(result.search).toBe("shrew");
@@ -111,8 +111,8 @@ describe("parseParams", () => {
   });
 
   it("filters out empty strings from comma-split", () => {
-    const result = parseParams("?taxa=,mammalia,,aves,");
-    expect(result.taxa).toEqual(new Set(["mammalia", "aves"]));
+    const result = parseParams("?taxa=,mammals,,birds,");
+    expect(result.taxa).toEqual(new Set(["mammals", "birds"]));
   });
 
   it("parses single subgroup", () => {
@@ -198,13 +198,13 @@ describe("buildQs", () => {
   });
 
   it("includes taxa when set", () => {
-    const qs = buildQs({ ...emptyState, taxa: new Set(["mammalia", "aves"]) });
+    const qs = buildQs({ ...emptyState, taxa: new Set(["mammals", "birds"]) });
     expect(qs).toContain("taxa=");
     // Both values present (order may vary)
     const params = new URLSearchParams(qs);
     const taxa = params.get("taxa")!.split(",");
-    expect(taxa).toContain("mammalia");
-    expect(taxa).toContain("aves");
+    expect(taxa).toContain("mammals");
+    expect(taxa).toContain("birds");
   });
 
   it("includes categories", () => {
@@ -329,7 +329,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
   it("round-trips a complex state", () => {
     const original = {
       viewMode: "reassessments" as const,
-      taxa: new Set(["mammalia"]),
+      taxa: new Set(["mammals"]),
       subgroups: new Set<string>(),
       categories: new Set(["CR", "EN"]),
       yearRanges: new Set(["11-20 years"]),

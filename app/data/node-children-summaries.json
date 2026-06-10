@@ -1,7 +1,7 @@
 {
   "all": [
     {
-      "id": "mammalia",
+      "id": "mammals",
       "name": "Mammals",
       "estimatedDescribed": 6819,
       "totalAssessed": 6036,
@@ -20,7 +20,7 @@
       }
     },
     {
-      "id": "aves",
+      "id": "birds",
       "name": "Birds",
       "estimatedDescribed": 11185,
       "totalAssessed": 11185,
@@ -38,7 +38,7 @@
       }
     },
     {
-      "id": "reptilia",
+      "id": "reptiles",
       "name": "Reptiles",
       "estimatedDescribed": 12502,
       "totalAssessed": 10368,
@@ -59,7 +59,7 @@
       }
     },
     {
-      "id": "amphibia",
+      "id": "amphibians",
       "name": "Amphibians",
       "estimatedDescribed": 8918,
       "totalAssessed": 8051,
@@ -104,21 +104,21 @@
       "outdated": 5186,
       "gbifNeSpeciesCount": 244447,
       "byCategory": {
-        "EN": 1132,
-        "EX": 58,
         "VU": 1028,
-        "DD": 3255,
+        "EN": 1132,
+        "LR/nt": 45,
         "CR": 520,
         "LC": 6786,
-        "LR/nt": 45,
+        "EX": 58,
         "NT": 852,
+        "DD": 3255,
         "LR/lc": 16,
         "EW": 1,
         "LR/cd": 3
       }
     },
     {
-      "id": "arachnida",
+      "id": "arachnids",
       "name": "Arachnids",
       "estimatedDescribed": 97085,
       "totalAssessed": 1053,
@@ -135,7 +135,7 @@
       }
     },
     {
-      "id": "mollusca",
+      "id": "molluscs",
       "name": "Molluscs",
       "estimatedDescribed": 88244,
       "totalAssessed": 9502,
@@ -155,7 +155,7 @@
       }
     },
     {
-      "id": "crustacea",
+      "id": "crustaceans",
       "name": "Crustaceans",
       "estimatedDescribed": 83263,
       "totalAssessed": 3361,
@@ -377,14 +377,14 @@
       "outdated": 15050,
       "gbifNeSpeciesCount": 333201,
       "byCategory": {
-        "EN": 2518,
-        "EX": 380,
         "VU": 2784,
-        "DD": 7496,
+        "EN": 2518,
+        "LR/nt": 166,
         "CR": 1685,
         "LC": 12781,
-        "LR/nt": 166,
+        "EX": 380,
         "NT": 1812,
+        "DD": 7496,
         "LR/lc": 34,
         "EW": 14,
         "LR/cd": 12
@@ -428,7 +428,7 @@
       }
     }
   ],
-  "mammalia": [
+  "mammals": [
     {
       "id": "rodents",
       "name": "Rodents",
@@ -624,7 +624,7 @@
       }
     }
   ],
-  "reptilia": [
+  "reptiles": [
     {
       "id": "squamates",
       "name": "Squamates",
@@ -689,7 +689,7 @@
       }
     }
   ],
-  "amphibia": [
+  "amphibians": [
     {
       "id": "frogs-toads",
       "name": "Frogs & Toads",
@@ -1052,21 +1052,21 @@
       "outdated": 5186,
       "gbifNeSpeciesCount": 244447,
       "byCategory": {
-        "EN": 1132,
-        "EX": 58,
         "VU": 1028,
-        "DD": 3255,
+        "EN": 1132,
+        "LR/nt": 45,
         "CR": 520,
         "LC": 6786,
-        "LR/nt": 45,
+        "EX": 58,
         "NT": 852,
+        "DD": 3255,
         "LR/lc": 16,
         "EW": 1,
         "LR/cd": 3
       }
     },
     {
-      "id": "inv-arachnida",
+      "id": "inv-arachnids",
       "name": "Arachnids",
       "estimatedDescribed": 97085,
       "totalAssessed": 1053,
@@ -1083,7 +1083,7 @@
       }
     },
     {
-      "id": "inv-mollusca",
+      "id": "inv-molluscs",
       "name": "Molluscs",
       "estimatedDescribed": 88244,
       "totalAssessed": 9502,
@@ -1103,7 +1103,7 @@
       }
     },
     {
-      "id": "inv-crustacea",
+      "id": "inv-crustaceans",
       "name": "Crustaceans",
       "estimatedDescribed": 83263,
       "totalAssessed": 3361,
