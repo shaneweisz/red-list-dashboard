@@ -1,9 +1,13 @@
 /**
  * build-species-parquet (#261): unify the per-group Red List + GBIF CSVs into a
  * single lineage-sorted species.parquet — the query substrate for the DuckDB
- * read layer. Mirrors build-search-index's union: assessed Red List species +
- * GBIF "NE" species (those not linked to any assessment, minus domesticated).
+ * read layer. Mirrors species-store.getSpecies + build-search-index:
  *
+ *  - assessed = Red List species, enriched with GBIF occurrence counts summed
+ *    across ALL their mapping links (canonical-preferred representative key),
+ *  - NE = GBIF species not linked to any assessment (minus domesticated).
+ *
+ * Column names match SpeciesRow so the query layer is a thin pass-through.
  * Sorted by lineage so DuckDB row-group min/max prunes any taxonomic filter.
  *
  *   npx tsx scripts/build-species-parquet.ts
@@ -23,66 +27,74 @@ export async function run(): Promise<void> {
   const inst = await DuckDBInstance.create(":memory:");
   const conn = await inst.connect();
 
-  // Representative GBIF key per assessment (for detail links).
+  // GBIF rows keyed by species key (globally unique across group files).
   await conn.run(`
-    CREATE TEMP TABLE linked AS
-      SELECT sis_taxon_id, min(gbif_species_key) AS gbif_species_key
-      FROM read_csv_auto('${mappingCsv}')
-      WHERE gbif_species_key IS NOT NULL
-      GROUP BY sis_taxon_id;
+    CREATE TEMP TABLE gbif_all AS
+      SELECT
+        CAST(gbif_species_key AS BIGINT)         AS gbif_species_key,
+        scientific_name, common_name,
+        taxon_group_table1a                      AS taxon_group,
+        lower(class_name) AS class_name, lower(order_name) AS order_name, lower(family) AS family,
+        CAST(total_count AS BIGINT)              AS total_count,
+        CAST(count_after_assessment_year AS BIGINT) AS count_after,
+        countries
+      FROM read_csv_auto('${gbifGlob}', union_by_name=true);
   `);
 
-  // The full set of linked GBIF keys (a species can map to several), used to
-  // exclude assessed species from the NE/GBIF side. Must be ALL keys, not the
-  // per-assessment representative — else multi-mapped keys leak into NE.
   await conn.run(`
-    CREATE TEMP TABLE linked_keys AS
-      SELECT DISTINCT gbif_species_key
+    CREATE TEMP TABLE map AS
+      SELECT CAST(sis_taxon_id AS BIGINT) AS sis_taxon_id,
+             CAST(gbif_species_key AS BIGINT) AS gbif_species_key,
+             name_source
       FROM read_csv_auto('${mappingCsv}')
       WHERE gbif_species_key IS NOT NULL;
+  `);
+
+  // Per-assessment GBIF enrichment: sum occurrence counts across all linked
+  // GBIF rows that exist; representative key prefers a canonical-source match.
+  await conn.run(`
+    CREATE TEMP TABLE enrich AS
+      SELECT
+        m.sis_taxon_id,
+        sum(g.total_count)  AS gbif_occurrence_count,
+        sum(g.count_after)  AS gbif_observations_after_assessment_year,
+        arg_min(m.gbif_species_key, CASE WHEN m.name_source='canonical' THEN 0 ELSE 1 END) AS gbif_species_key
+      FROM map m JOIN gbif_all g USING (gbif_species_key)
+      GROUP BY m.sis_taxon_id;
   `);
 
   await conn.run(`
     COPY (
       WITH assessed AS (
         SELECT
-          CAST(r.sis_taxon_id AS BIGINT)        AS id,
-          'assessed'                            AS source,
-          r.scientific_name,
-          r.common_name,
-          r.taxon_group_table1a                 AS taxon_group,
-          lower(r.class_name)                   AS class_name,
-          lower(r.order_name)                   AS order_name,
-          lower(r.family)                       AS family,
+          CAST(r.sis_taxon_id AS BIGINT)   AS id,
+          'assessed'                       AS source,
+          r.scientific_name, r.common_name,
+          r.taxon_group_table1a            AS taxon_group,
+          lower(r.class_name) AS class_name, lower(r.order_name) AS order_name, lower(r.family) AS family,
           r.iucn_category,
-          CAST(r.assessment_id AS BIGINT)       AS assessment_id,
-          r.assessment_date,
-          r.year_published,
-          r.countries,
-          l.gbif_species_key                    AS gbif_species_key,
-          NULL::BIGINT                          AS total_count
+          CAST(r.assessment_id AS BIGINT)  AS assessment_id,
+          r.assessment_date, r.year_published, r.countries,
+          e.gbif_species_key,
+          e.gbif_occurrence_count,
+          e.gbif_observations_after_assessment_year
         FROM read_csv_auto('${redlistGlob}', union_by_name=true) r
-        LEFT JOIN linked l ON l.sis_taxon_id = r.sis_taxon_id
+        LEFT JOIN enrich e ON e.sis_taxon_id = r.sis_taxon_id
       ),
       ne AS (
         SELECT
-          -CAST(g.gbif_species_key AS BIGINT)   AS id,
-          'ne'                                  AS source,
-          g.scientific_name,
-          g.common_name,
-          g.taxon_group_table1a                 AS taxon_group,
-          lower(g.class_name)                   AS class_name,
-          lower(g.order_name)                   AS order_name,
-          lower(g.family)                       AS family,
-          'NE'                                  AS iucn_category,
-          NULL::BIGINT                          AS assessment_id,
-          NULL                                  AS assessment_date,
-          NULL                                  AS year_published,
-          g.countries,
-          CAST(g.gbif_species_key AS BIGINT)    AS gbif_species_key,
-          CAST(g.total_count AS BIGINT)         AS total_count
-        FROM read_csv_auto('${gbifGlob}', union_by_name=true) g
-        WHERE g.gbif_species_key NOT IN (SELECT gbif_species_key FROM linked_keys)
+          -g.gbif_species_key              AS id,
+          'ne'                             AS source,
+          g.scientific_name, g.common_name,
+          g.taxon_group, g.class_name, g.order_name, g.family,
+          'NE'                             AS iucn_category,
+          NULL::BIGINT                     AS assessment_id,
+          NULL AS assessment_date, NULL AS year_published, g.countries,
+          g.gbif_species_key,
+          g.total_count                    AS gbif_occurrence_count,
+          g.count_after                    AS gbif_observations_after_assessment_year
+        FROM gbif_all g
+        WHERE g.gbif_species_key NOT IN (SELECT DISTINCT gbif_species_key FROM map)
           AND g.gbif_species_key NOT IN (${domesticated})
       )
       SELECT * FROM assessed
@@ -93,11 +105,19 @@ export async function run(): Promise<void> {
   `);
 
   const q = async (sql: string) => (await (await conn.run(sql)).getRowObjects());
-  const total = (await q(`SELECT count(*) c FROM '${outPath}'`))[0].c;
-  const assessed = (await q(`SELECT count(*) c FROM '${outPath}' WHERE source='assessed'`))[0].c;
-  const ne = (await q(`SELECT count(*) c FROM '${outPath}' WHERE source='ne'`))[0].c;
+  const stats = (await q(`
+    SELECT count(*) total,
+           count(*) FILTER (source='assessed') assessed,
+           count(*) FILTER (source='ne') ne,
+           count(*) FILTER (source='assessed' AND gbif_occurrence_count IS NOT NULL) assessed_with_obs,
+           count(*) FILTER (source='assessed' AND gbif_observations_after_assessment_year IS NOT NULL) assessed_with_caa
+    FROM '${outPath}'`))[0];
   console.log(`Wrote ${outPath}`);
-  console.log(`  total ${total}  (assessed ${assessed}, NE ${ne})`);
+  console.log(`  total ${stats.total} (assessed ${stats.assessed}, NE ${stats.ne})`);
+  console.log(`  assessed with occurrence_count: ${stats.assessed_with_obs}; with count-after-assessment: ${stats.assessed_with_caa}`);
+  // GBIF key uniqueness sanity (would double-count if a key spanned group files)
+  const dup = (await q(`SELECT count(*) c FROM (SELECT gbif_species_key FROM gbif_all GROUP BY 1 HAVING count(*)>1)`))[0].c;
+  console.log(`  duplicate GBIF keys across group files: ${dup}`);
 }
 
 const isDirectRun = process.argv[1]?.endsWith("build-species-parquet.ts") || process.argv[1]?.endsWith("build-species-parquet.js");
