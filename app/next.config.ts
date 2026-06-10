@@ -8,8 +8,13 @@ const nextConfig: NextConfig = {
   // .so isn't bundled into every function. Vercel runs linux-x64.
   serverExternalPackages: ["@duckdb/node-api"],
   outputFileTracingIncludes: {
-    // libduckdb.so (dlopen'd) + the version pointer used to build the R2 path.
-    "/api/v2/**": ["./node_modules/@duckdb/node-bindings-linux-x64/**", "./latest-sync.txt"],
+    // libduckdb.so (dlopen'd) + the version pointer used to build the R2 path +
+    // the vendored httpfs extension (LOAD'd by path, avoiding a cold-start INSTALL).
+    "/api/v2/**": [
+      "./node_modules/@duckdb/node-bindings-linux-x64/**",
+      "./latest-sync.txt",
+      "./duckdb-ext/**",
+    ],
   },
 
   // The API routes import a shared species-store module that references every
