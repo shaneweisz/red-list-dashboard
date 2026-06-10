@@ -36,6 +36,7 @@ const nextConfig: NextConfig = {
     // v2 reads parquets from R2 (httpfs) — needs NO local data bundled. Without
     // this, species-duckdb's DATA_DIR fs refs drag the whole data/ dir in (316MB).
     "/api/v2/species": ["**/data/**"],
+    "/api/v2/species/history": ["**/data/**"],
   },
 };
 

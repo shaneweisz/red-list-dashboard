@@ -7,6 +7,8 @@
  *  - assessed.parquet     = Red List assessed species, enriched with GBIF
  *      occurrence counts summed across ALL their mapping links (canonical-
  *      preferred representative key). Rich schema; columns match SpeciesRow.
+ *      Includes denormalized latest_assessors/latest_reviewers (history seq 0)
+ *      so the species list needs no history join (full history is lazy).
  *  - unassessed.parquet   = GBIF species not linked to any assessment (minus
  *      domesticated), category 'NE'. Lean schema — taxonomy + occurrence count
  *      only (no assessment-only columns, no obs-after-assessment-year).
@@ -87,6 +89,40 @@ export async function run(): Promise<void> {
       GROUP BY m.sis_taxon_id;
   `);
 
+  // History, loaded first so the latest assessors/reviewers can be denormalized
+  // into assessed.parquet below. Flatten the map-shaped history/*.json into rows
+  // (one per past assessment), preserving array order via `seq` (index 0 =
+  // latest) so the lazy per-species history query can rebuild it in order.
+  const ndjson = path.join(DATA_DIR, "_assessments.ndjson");
+  const ws = fs.createWriteStream(ndjson);
+  if (fs.existsSync(historyDir)) {
+    for (const file of fs.readdirSync(historyDir).filter((f) => f.endsWith(".json"))) {
+      const data = JSON.parse(fs.readFileSync(path.join(historyDir, file), "utf-8")) as
+        Record<string, Array<{ id: number; year: string; category: string; date: string | null; assessors: string | null; reviewers: string | null }>>;
+      for (const [sis, arr] of Object.entries(data)) {
+        arr.forEach((x, seq) => ws.write(JSON.stringify({ sis_taxon_id: Number(sis), seq, id: x.id, year: x.year, category: x.category, date: x.date, assessors: x.assessors, reviewers: x.reviewers }) + "\n"));
+      }
+    }
+  }
+  await new Promise<void>((res) => ws.end(res));
+  await conn.run(`
+    CREATE TEMP TABLE hist AS
+      SELECT CAST(sis_taxon_id AS BIGINT) sis_taxon_id, CAST(seq AS INTEGER) seq,
+             CAST(id AS BIGINT) id, CAST("year" AS VARCHAR) AS "year", category,
+             CAST("date" AS VARCHAR) AS "date", assessors, reviewers
+      FROM read_json_auto('${ndjson}', format='newline_delimited');
+  `);
+  fs.unlinkSync(ndjson);
+  // Latest (seq 0 = most recent) assessors/reviewers per species. Denormalized
+  // into assessed.parquet so the species list needs NO history join — the list
+  // view's assessor/reviewer filter reads these scalars; the full history array
+  // is fetched lazily (getAssessmentHistory) only when a detail panel opens.
+  await conn.run(`
+    CREATE TEMP TABLE latest_assess AS
+      SELECT sis_taxon_id, assessors AS latest_assessors, reviewers AS latest_reviewers
+      FROM hist WHERE seq = 0;
+  `);
+
   // Assessed (IUCN Red List) — the hot, bounded, rich dataset.
   await conn.run(`
     COPY (
@@ -113,9 +149,11 @@ export async function run(): Promise<void> {
         coalesce(CAST(r.possibly_extinct_in_the_wild AS VARCHAR), '') = 'true' AS possibly_extinct_in_the_wild,
         nullif(r.criteria, '')            AS criteria,
         r.threat_codes,
-        coalesce(CAST(r.has_map AS VARCHAR), '') = 'true'                      AS has_map
+        coalesce(CAST(r.has_map AS VARCHAR), '') = 'true'                      AS has_map,
+        la.latest_assessors, la.latest_reviewers
       FROM read_csv_auto('${redlistGlob}', union_by_name=true) r
       LEFT JOIN enrich e ON e.sis_taxon_id = r.sis_taxon_id
+      LEFT JOIN latest_assess la ON la.sis_taxon_id = r.sis_taxon_id
       ORDER BY class_name, order_name, family, scientific_name
     ) TO '${assessedOut}' (FORMAT PARQUET, COMPRESSION ZSTD);
   `);
@@ -139,31 +177,15 @@ export async function run(): Promise<void> {
     ) TO '${unassessedOut}' (FORMAT PARQUET, COMPRESSION ZSTD);
   `);
 
-  // Assessments (history) — flatten the map-shaped history/*.json into rows
-  // (one per past assessment), preserving array order via `seq` so the species
-  // join can rebuild previous_assessments in the same order (index 0 = latest).
-  const ndjson = path.join(DATA_DIR, "_assessments.ndjson");
-  const ws = fs.createWriteStream(ndjson);
-  if (fs.existsSync(historyDir)) {
-    for (const file of fs.readdirSync(historyDir).filter((f) => f.endsWith(".json"))) {
-      const data = JSON.parse(fs.readFileSync(path.join(historyDir, file), "utf-8")) as
-        Record<string, Array<{ id: number; year: string; category: string; date: string | null; assessors: string | null; reviewers: string | null }>>;
-      for (const [sis, arr] of Object.entries(data)) {
-        arr.forEach((x, seq) => ws.write(JSON.stringify({ sis_taxon_id: Number(sis), seq, id: x.id, year: x.year, category: x.category, date: x.date, assessors: x.assessors, reviewers: x.reviewers }) + "\n"));
-      }
-    }
-  }
-  await new Promise<void>((res) => ws.end(res));
+  // Assessments (history) — persist the flattened rows (built above) sorted by
+  // sis_taxon_id so a single-species lazy lookup prunes to one row group.
   await conn.run(`
     COPY (
-      SELECT CAST(sis_taxon_id AS BIGINT) sis_taxon_id, CAST(seq AS INTEGER) seq,
-             CAST(id AS BIGINT) id, CAST("year" AS VARCHAR) AS "year", category,
-             CAST("date" AS VARCHAR) AS "date", assessors, reviewers
-      FROM read_json_auto('${ndjson}', format='newline_delimited')
+      SELECT sis_taxon_id, seq, id, "year", category, "date", assessors, reviewers
+      FROM hist
       ORDER BY sis_taxon_id, seq
     ) TO '${assessmentsOut}' (FORMAT PARQUET, COMPRESSION ZSTD);
   `);
-  fs.unlinkSync(ndjson);
 
   const q = async (sql: string) => (await (await conn.run(sql)).getRowObjects());
   const a = (await q(`

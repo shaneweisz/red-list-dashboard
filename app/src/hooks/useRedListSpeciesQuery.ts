@@ -23,6 +23,11 @@ export interface RedListSpecies {
   gbif_species_key: number | null;
   gbif_occurrence_count: number | null;
   gbif_observations_after_assessment_year: number | null;
+  // Latest assessment's assessors/reviewers, inline in the species list (drives
+  // the assessor/reviewer filter). The full history array is fetched lazily into
+  // previous_assessments when a detail panel opens — empty in the list response.
+  latest_assessors: string | null;
+  latest_reviewers: string | null;
   previous_assessments: { id: number; year: string; category: string; date: string | null; assessors: string | null; reviewers: string | null }[];
   systems: string[];
   growth_forms: string[];

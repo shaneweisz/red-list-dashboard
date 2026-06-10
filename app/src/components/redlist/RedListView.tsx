@@ -696,19 +696,15 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     return false;
   }, [selectedObsRanges]);
 
-  // Helper to get assessors from a species' most recent previous assessment
+  // Assessors/reviewers from the latest assessment. These are denormalized inline
+  // on the species list (latest_assessors/latest_reviewers) so the filter works
+  // without the full history array (which is fetched lazily for the detail panel).
   const getSpeciesAssessors = useCallback((s: Species): string[] => {
-    if (s.previous_assessments.length === 0) return [];
-    // Use the most recent assessment (first in array)
-    const latest = s.previous_assessments[0];
-    return parseAssessors(latest.assessors);
+    return parseAssessors(s.latest_assessors);
   }, []);
 
-  // Helper to get reviewers from a species' most recent previous assessment
   const getSpeciesReviewers = useCallback((s: Species): string[] => {
-    if (s.previous_assessments.length === 0) return [];
-    const latest = s.previous_assessments[0];
-    return parseAssessors(latest.reviewers);
+    return parseAssessors(s.latest_reviewers);
   }, []);
 
   // Track which tab is active in the assessors/reviewers chart
@@ -743,6 +739,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
 
   // Species details cache (images, criteria, common names)
   const [speciesDetails, setSpeciesDetails] = useState<Record<number, SpeciesDetails>>({});
+  // Lazy assessment-history cache, keyed by sis_taxon_id. The species list no
+  // longer carries the full history array; it's fetched when a detail row opens.
+  const [assessmentHistory, setAssessmentHistory] = useState<Record<number, Species["previous_assessments"]>>({});
 
   // Row expansion state (initialized from URL params if present)
   const [selectedSpeciesKey, setSelectedSpeciesKeyRaw] = useState<number | null>(urlSpecies != null && isNewAssessments ? Math.abs(urlSpecies) : urlSpecies);
@@ -828,6 +827,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         gbif_species_key: cached.gbif_species_key,
         gbif_occurrence_count: null,
         gbif_observations_after_assessment_year: null,
+        latest_assessors: null,
+        latest_reviewers: null,
         previous_assessments: [],
         systems: [],
         growth_forms: [],
@@ -1673,6 +1674,29 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
 
     fetchCriteria();
   }, [selectedSpeciesKey, paginatedSpecies, speciesDetails]);
+
+  // Lazily fetch the full assessment history for the open species (the list
+  // carries only the latest assessors/reviewers; the history array is fetched
+  // here on demand for the Red List Assessments tab).
+  useEffect(() => {
+    if (!selectedSpeciesKey) return;
+    const s = paginatedSpecies.find((sp) => sp.id === selectedSpeciesKey);
+    const sis = s?.sis_taxon_id;
+    if (!s || s.category === "NE" || !sis || assessmentHistory[sis]) return;
+    let aborted = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/v2/species/history?id=${sis}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (!aborted) setAssessmentHistory((prev) => ({ ...prev, [sis]: data.previous_assessments ?? [] }));
+        }
+      } catch {
+        // Ignore — the panel falls back to an empty history.
+      }
+    })();
+    return () => { aborted = true; };
+  }, [selectedSpeciesKey, paginatedSpecies, assessmentHistory]);
 
   // Handle category bar click (Cmd/Ctrl+click for multi-select, regular click replaces)
   const handleCategoryClick = (data: { payload?: { code?: string } }, event: React.MouseEvent) => {
@@ -3213,7 +3237,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                 currentAssessmentId={s.assessment_id ?? 0}
                                 currentCategory={s.category}
                                 currentAssessmentDate={s.assessment_date}
-                                previousAssessments={(s.previous_assessments ?? []).map((a) => ({ year: a.year, assessment_id: a.id, category: a.category, assessors: a.assessors, reviewers: a.reviewers }))}
+                                previousAssessments={((s.sis_taxon_id ? assessmentHistory[s.sis_taxon_id] : null) ?? s.previous_assessments ?? []).map((a) => ({ year: a.year, assessment_id: a.id, category: a.category, assessors: a.assessors, reviewers: a.reviewers }))}
                                 speciesUrl={`https://www.iucnredlist.org/species/${s.sis_taxon_id}/${s.assessment_id}`}
                               />
                             </div>
