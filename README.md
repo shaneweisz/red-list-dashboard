@@ -56,17 +56,10 @@ Charts support multi-select filtering (Cmd/Ctrl+click to select multiple) and cr
 
 ### Expandable Species Rows
 Click any species row to see a tabbed (or stacked) detail view:
-- **GBIF Map** — occurrence points on a Leaflet map + iNaturalist photo gallery
-- **Literature** — papers published since the last assessment (from OpenAlex and Nosible)
+- **GBIF Map** — occurrence points on a MapLibre GL map + iNaturalist photo gallery
+- **Literature** — papers published since the last assessment (from OpenAlex)
 - **Red List** — full assessment details including criteria, population trend, threats, conservation actions, and rationale
 - **CITES** — trade status, suspensions, quotas, and trade flow map
-
-### Assessment Criteria Estimation
-Interactive IUCN Criterion B calculator using GBIF occurrence data:
-- Computes EOO (Extent of Occurrence), AOO (Area of Occupancy), and number of locations
-- Temporal trend analysis
-- Adjustable parameters (min year, max uncertainty, grid size, cluster distance)
-- Visualizes convex hull and grid cells on the map
 
 ### GBIF Match Status Indicators
 Shows data quality warnings when GBIF species matching is imperfect:
@@ -84,7 +77,7 @@ Light, dark, and system theme modes.
 
 ```
 Frontend: Next.js 16 + React 19 + Tailwind CSS 4
-Maps:     React-Leaflet + react-simple-maps
+Maps:     MapLibre GL (react-map-gl) + react-simple-maps
 Charts:   Recharts
 Data:     SWR for client-side fetching
 Hosting:  Vercel
@@ -99,7 +92,7 @@ Data Flow:
 Live external APIs:
   GBIF REST API     → occurrence points, record breakdowns, iNaturalist photos
   Species+ API      → CITES listings, trade data
-  OpenAlex / Nosible → scientific literature since last assessment
+  OpenAlex          → scientific literature since last assessment
 ```
 
 ## Data Sync Pipeline
@@ -191,7 +184,7 @@ See `app/.env.example` for the full list including database and analytics keys.
 - **TypeScript 5** — Type safety
 - **Tailwind CSS 4** — Styling
 - **Recharts** — Charts and graphs
-- **React-Leaflet** / **react-simple-maps** — Maps
+- **MapLibre GL** (react-map-gl) / **react-simple-maps** — Maps
 - **SWR** — Client-side data fetching
 - **Vitest** — Testing
 - **Vercel** — Hosting and deployment
