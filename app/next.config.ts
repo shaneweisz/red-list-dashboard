@@ -2,6 +2,10 @@ import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // POC (#260): keep the DuckDB native addon out of the bundler so its .node
+  // binary is loaded at runtime rather than webpack/turbopack-bundled.
+  serverExternalPackages: ["@duckdb/node-api"],
+
   // The API routes import a shared species-store module that references every
   // file under data/ (search-index.json ~95MB, redlist/ ~82MB, gbif/ ~62MB),
   // so Next traces the whole dataset into every serverless function — ~248MB,
