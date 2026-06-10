@@ -6,6 +6,13 @@ const nextConfig: NextConfig = {
   // binary is loaded at runtime rather than webpack/turbopack-bundled.
   serverExternalPackages: ["@duckdb/node-api"],
 
+  // ...but file-tracing then misses libduckdb.so (dlopen'd by duckdb.node at
+  // runtime, not statically required), so force-include the linux-x64 bindings
+  // (the .so + .node) into the POC function. Vercel runs linux-x64.
+  outputFileTracingIncludes: {
+    "/api/duckdb-poc": ["./node_modules/@duckdb/node-bindings-linux-x64/**"],
+  },
+
   // The API routes import a shared species-store module that references every
   // file under data/ (search-index.json ~95MB, redlist/ ~82MB, gbif/ ~62MB),
   // so Next traces the whole dataset into every serverless function — ~248MB,
