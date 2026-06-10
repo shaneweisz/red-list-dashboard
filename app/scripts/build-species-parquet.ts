@@ -4,11 +4,12 @@
  * assessed-vs-unassessed scale/schema asymmetry — assessed is bounded ~172k,
  * unassessed balloons under CoL):
  *
- *  - redlist.parquet     = Red List assessed species, enriched with GBIF
+ *  - assessed.parquet    = Red List assessed species, enriched with GBIF
  *      occurrence counts summed across ALL their mapping links (canonical-
  *      preferred representative key). Rich schema; columns match SpeciesRow.
  *  - unassessed.parquet  = GBIF species not linked to any assessment (minus
- *      domesticated), category 'NE'. Lean schema (no assessment-only columns).
+ *      domesticated), category 'NE'. Lean schema — taxonomy + occurrence count
+ *      only (no assessment-only columns, no obs-after-assessment-year).
  *
  * Mirrors species-store.getSpecies + build-search-index. Sorted by lineage so
  * DuckDB row-group min/max prunes any taxonomic filter.
@@ -24,7 +25,7 @@ export async function run(): Promise<void> {
   const redlistGlob = path.join(REDLIST_DIR, "*.csv");
   const gbifGlob = path.join(GBIF_DIR, "*.csv");
   const mappingCsv = path.join(DATA_DIR, "mapping.csv");
-  const redlistOut = path.join(DATA_DIR, "redlist.parquet");
+  const assessedOut = path.join(DATA_DIR, "assessed.parquet");
   const unassessedOut = path.join(DATA_DIR, "unassessed.parquet");
   const domesticated = [...EXCLUDED_DOMESTICATED_GBIF_KEYS].join(",");
 
@@ -97,7 +98,7 @@ export async function run(): Promise<void> {
       FROM read_csv_auto('${redlistGlob}', union_by_name=true) r
       LEFT JOIN enrich e ON e.sis_taxon_id = r.sis_taxon_id
       ORDER BY class_name, order_name, family, scientific_name
-    ) TO '${redlistOut}' (FORMAT PARQUET, COMPRESSION ZSTD);
+    ) TO '${assessedOut}' (FORMAT PARQUET, COMPRESSION ZSTD);
   `);
 
   // Unassessed (GBIF species with no IUCN assessment) — cold, huge under CoL,
@@ -111,8 +112,7 @@ export async function run(): Promise<void> {
         'NE'                             AS iucn_category,
         g.countries,
         g.gbif_species_key,
-        g.total_count                    AS gbif_occurrence_count,
-        g.count_after                    AS gbif_observations_after_assessment_year
+        g.total_count                    AS gbif_occurrence_count
       FROM gbif_all g
       WHERE g.gbif_species_key NOT IN (SELECT DISTINCT gbif_species_key FROM map)
         AND g.gbif_species_key NOT IN (${domesticated})
@@ -125,9 +125,9 @@ export async function run(): Promise<void> {
     SELECT count(*) n,
            count(*) FILTER (gbif_occurrence_count IS NOT NULL) with_obs,
            count(*) FILTER (gbif_observations_after_assessment_year IS NOT NULL) with_caa
-    FROM '${redlistOut}'`))[0];
+    FROM '${assessedOut}'`))[0];
   const ne = (await q(`SELECT count(*) n FROM '${unassessedOut}'`))[0];
-  console.log(`Wrote ${redlistOut}: ${a.n} assessed (with occurrence_count ${a.with_obs}, with count-after ${a.with_caa})`);
+  console.log(`Wrote ${assessedOut}: ${a.n} assessed (with occurrence_count ${a.with_obs}, with count-after ${a.with_caa})`);
   console.log(`Wrote ${unassessedOut}: ${ne.n} unassessed (NE)`);
   const dup = (await q(`SELECT count(*) c FROM (SELECT gbif_species_key FROM gbif_all GROUP BY 1 HAVING count(*)>1)`))[0].c;
   console.log(`  duplicate GBIF keys across group files: ${dup}`);
