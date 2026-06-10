@@ -74,10 +74,23 @@ export async function run(): Promise<void> {
           lower(r.class_name) AS class_name, lower(r.order_name) AS order_name, lower(r.family) AS family,
           r.iucn_category,
           CAST(r.assessment_id AS BIGINT)  AS assessment_id,
-          r.assessment_date, r.year_published, r.countries,
+          -- keep as raw strings (read_csv may infer DATE/INT) to match the CSV path
+          CAST(r.assessment_date AS VARCHAR) AS assessment_date,
+          CAST(r.year_published AS VARCHAR)  AS year_published,
+          r.countries,
           e.gbif_species_key,
           e.gbif_occurrence_count,
-          e.gbif_observations_after_assessment_year
+          e.gbif_observations_after_assessment_year,
+          -- remaining SpeciesRow fields. Arrays kept as raw ';'-joined strings
+          -- (query layer splits, matching loadRedlistForGroup); booleans as 'true'.
+          nullif(r.population_trend, '')    AS population_trend,
+          r.systems, r.growth_forms,
+          nullif(r.movement_pattern, '')    AS movement_pattern,
+          coalesce(CAST(r.possibly_extinct AS VARCHAR), '') = 'true'                 AS possibly_extinct,
+          coalesce(CAST(r.possibly_extinct_in_the_wild AS VARCHAR), '') = 'true'     AS possibly_extinct_in_the_wild,
+          nullif(r.criteria, '')            AS criteria,
+          r.threat_codes,
+          coalesce(CAST(r.has_map AS VARCHAR), '') = 'true'                          AS has_map
         FROM read_csv_auto('${redlistGlob}', union_by_name=true) r
         LEFT JOIN enrich e ON e.sis_taxon_id = r.sis_taxon_id
       ),
@@ -92,7 +105,16 @@ export async function run(): Promise<void> {
           NULL AS assessment_date, NULL AS year_published, g.countries,
           g.gbif_species_key,
           g.total_count                    AS gbif_occurrence_count,
-          g.count_after                    AS gbif_observations_after_assessment_year
+          g.count_after                    AS gbif_observations_after_assessment_year,
+          -- NE species have no assessment → trend/systems/etc. empty/false
+          NULL AS population_trend,
+          '' AS systems, '' AS growth_forms,
+          NULL AS movement_pattern,
+          FALSE AS possibly_extinct,
+          FALSE AS possibly_extinct_in_the_wild,
+          NULL AS criteria,
+          '' AS threat_codes,
+          FALSE AS has_map
         FROM gbif_all g
         WHERE g.gbif_species_key NOT IN (SELECT DISTINCT gbif_species_key FROM map)
           AND g.gbif_species_key NOT IN (${domesticated})
