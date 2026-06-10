@@ -16,6 +16,7 @@
  *
  *   npx tsx scripts/build-species-parquet.ts
  */
+import * as fs from "fs";
 import * as path from "path";
 import { DuckDBInstance } from "@duckdb/node-api";
 import { loadEnvFiles, DATA_DIR, REDLIST_DIR, GBIF_DIR } from "./utils";
@@ -25,6 +26,8 @@ export async function run(): Promise<void> {
   const redlistGlob = path.join(REDLIST_DIR, "*.csv");
   const gbifGlob = path.join(GBIF_DIR, "*.csv");
   const mappingCsv = path.join(DATA_DIR, "mapping.csv");
+  const historyDir = path.join(REDLIST_DIR, "history");
+  const assessmentsOut = path.join(DATA_DIR, "assessments.parquet");
   const assessedOut = path.join(DATA_DIR, "assessed.parquet");
   const unassessedOut = path.join(DATA_DIR, "unassessed.parquet");
   const domesticated = [...EXCLUDED_DOMESTICATED_GBIF_KEYS].join(",");
@@ -120,6 +123,32 @@ export async function run(): Promise<void> {
     ) TO '${unassessedOut}' (FORMAT PARQUET, COMPRESSION ZSTD);
   `);
 
+  // Assessments (history) — flatten the map-shaped history/*.json into rows
+  // (one per past assessment), preserving array order via `seq` so the species
+  // join can rebuild previous_assessments in the same order (index 0 = latest).
+  const ndjson = path.join(DATA_DIR, "_assessments.ndjson");
+  const ws = fs.createWriteStream(ndjson);
+  if (fs.existsSync(historyDir)) {
+    for (const file of fs.readdirSync(historyDir).filter((f) => f.endsWith(".json"))) {
+      const data = JSON.parse(fs.readFileSync(path.join(historyDir, file), "utf-8")) as
+        Record<string, Array<{ id: number; year: string; category: string; date: string | null; assessors: string | null; reviewers: string | null }>>;
+      for (const [sis, arr] of Object.entries(data)) {
+        arr.forEach((x, seq) => ws.write(JSON.stringify({ sis_taxon_id: Number(sis), seq, id: x.id, year: x.year, category: x.category, date: x.date, assessors: x.assessors, reviewers: x.reviewers }) + "\n"));
+      }
+    }
+  }
+  await new Promise<void>((res) => ws.end(res));
+  await conn.run(`
+    COPY (
+      SELECT CAST(sis_taxon_id AS BIGINT) sis_taxon_id, CAST(seq AS INTEGER) seq,
+             CAST(id AS BIGINT) id, CAST("year" AS VARCHAR) AS "year", category,
+             CAST("date" AS VARCHAR) AS "date", assessors, reviewers
+      FROM read_json_auto('${ndjson}', format='newline_delimited')
+      ORDER BY sis_taxon_id, seq
+    ) TO '${assessmentsOut}' (FORMAT PARQUET, COMPRESSION ZSTD);
+  `);
+  fs.unlinkSync(ndjson);
+
   const q = async (sql: string) => (await (await conn.run(sql)).getRowObjects());
   const a = (await q(`
     SELECT count(*) n,
@@ -129,6 +158,8 @@ export async function run(): Promise<void> {
   const ne = (await q(`SELECT count(*) n FROM '${unassessedOut}'`))[0];
   console.log(`Wrote ${assessedOut}: ${a.n} assessed (with occurrence_count ${a.with_obs}, with count-after ${a.with_caa})`);
   console.log(`Wrote ${unassessedOut}: ${ne.n} unassessed (NE)`);
+  const h = (await q(`SELECT count(*) nrows, count(DISTINCT sis_taxon_id) species FROM '${assessmentsOut}'`))[0];
+  console.log(`Wrote ${assessmentsOut}: ${h.nrows} assessment events across ${h.species} species`);
   const dup = (await q(`SELECT count(*) c FROM (SELECT gbif_species_key FROM gbif_all GROUP BY 1 HAVING count(*)>1)`))[0].c;
   console.log(`  duplicate GBIF keys across group files: ${dup}`);
 }

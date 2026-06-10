@@ -113,7 +113,17 @@ function toSpeciesRow(r: Record<string, unknown>) {
     gbif_species_key: num(r.gbif_species_key),
     gbif_occurrence_count: num(r.gbif_occurrence_count),
     gbif_observations_after_assessment_year: num(r.gbif_observations_after_assessment_year),
-    previous_assessments: [], // history is a separate parquet (task 18)
+    // DuckDB emits the history as a JSON string (to_json) — parse to plain objects.
+    previous_assessments: typeof r.previous_assessments === "string"
+      ? (JSON.parse(r.previous_assessments) as Array<Record<string, unknown>>).map((pa) => ({
+          id: Number(pa.id),
+          year: String(pa.year ?? ""),
+          category: String(pa.category ?? ""),
+          date: (pa.date as string) ?? null,
+          assessors: (pa.assessors as string) ?? null,
+          reviewers: (pa.reviewers as string) ?? null,
+        }))
+      : [],
     systems: splitList(r.systems),
     growth_forms: splitList(r.growth_forms),
     movement_pattern: r.movement_pattern ?? null,
@@ -137,18 +147,31 @@ export async function querySpecies(opts: {
   const where = resolveWhere(opts.taxon);
   const whereSql = where.clauses.length ? `WHERE ${where.clauses.join(" AND ")}` : "";
 
-  let sql = `SELECT ${ASSESSED_SELECT} FROM '${parquetUri("assessed.parquet")}' ${whereSql}`;
-  if (opts.includeNE) {
-    // unassessed has no assessment columns / no excludeOrders fallback differences;
-    // reuse the same predicate (only references taxonomy + taxon_group columns).
-    sql = `${sql}
-      UNION ALL
-      SELECT ${UNASSESSED_SELECT} FROM '${parquetUri("unassessed.parquet")}' ${whereSql}`;
-  }
-  sql += ` ORDER BY scientific_name`;
-  if (opts.limit != null) sql += ` LIMIT ${Number(opts.limit)}`;
-  if (opts.offset != null) sql += ` OFFSET ${Number(opts.offset)}`;
+  // Assessed: join the per-species history (rebuilt in original array order via
+  // seq; index 0 = latest) into previous_assessments. Run NE as a second query
+  // (avoids UNION-ing the nested struct list) and concat — order doesn't matter
+  // (the client sorts).
+  const assessedSql = `
+    WITH hist AS (
+      SELECT sis_taxon_id,
+             to_json(list({'id': id, 'year': "year", 'category': category, 'date': "date",
+                   'assessors': assessors, 'reviewers': reviewers} ORDER BY seq)) AS previous_assessments
+      FROM '${parquetUri("assessments.parquet")}'
+      GROUP BY sis_taxon_id
+    )
+    SELECT ${ASSESSED_SELECT}, h.previous_assessments
+    FROM '${parquetUri("assessed.parquet")}' a
+    LEFT JOIN hist h ON h.sis_taxon_id = a.id
+    ${whereSql}`;
+  let rows = (await conn.runAndReadAll(assessedSql, where.params)).getRowObjects();
 
-  const reader = await conn.runAndReadAll(sql, where.params);
-  return reader.getRowObjects().map(toSpeciesRow);
+  if (opts.includeNE) {
+    const neSql = `SELECT ${UNASSESSED_SELECT} FROM '${parquetUri("unassessed.parquet")}' ${whereSql}`;
+    rows = rows.concat((await conn.runAndReadAll(neSql, where.params)).getRowObjects());
+  }
+
+  let result = rows.map(toSpeciesRow);
+  if (opts.offset) result = result.slice(opts.offset);
+  if (opts.limit != null) result = result.slice(0, opts.limit);
+  return result;
 }
