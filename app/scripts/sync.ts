@@ -26,6 +26,7 @@ import { run as fetchGbifNewCounts } from "./fetch-gbif-new-counts";
 import { run as fetchGbifCountryData } from "./fetch-gbif-country-data";
 import { run as buildTaxaSummary } from "./build-taxa-summary";
 import { run as buildSearchIndex } from "./build-search-index";
+import { run as buildSpeciesParquet } from "./build-species-parquet";
 
 async function main() {
   loadEnvFiles();
@@ -79,6 +80,11 @@ async function main() {
     console.log("\nPhase 7: build-search-index");
     console.log("═".repeat(60));
     await buildSearchIndex();
+
+    // Phase 8: Build DuckDB read-layer parquets (#261)
+    console.log("\nPhase 8: build-species-parquet");
+    console.log("═".repeat(60));
+    await buildSpeciesParquet();
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
     const minutes = Math.floor(Number(elapsed) / 60);
