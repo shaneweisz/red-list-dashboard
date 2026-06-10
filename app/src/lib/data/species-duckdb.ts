@@ -56,9 +56,9 @@ async function getConn(): Promise<DuckDBConnection> {
 // as parameters; the '|'-joined string is split in SQL (DuckDB can't bind a raw
 // JS array).
 
-interface WhereParts { clauses: string[]; params: Record<string, string>; }
+export interface WhereParts { clauses: string[]; params: Record<string, string>; }
 
-function resolveWhere(taxonId: string): WhereParts {
+export function resolveWhere(taxonId: string): WhereParts {
   const id = canonicalizeTaxonId(taxonId);
   if (id === "all") return { clauses: [], params: {} };
   if (NODE_INDEX.has(id)) {
@@ -92,7 +92,7 @@ const UNASSESSED_SELECT = `
 const splitList = (s: unknown): string[] => (typeof s === "string" && s ? s.split(";").filter(Boolean) : []);
 const num = (v: unknown): number | null => (v == null ? null : Number(v));
 
-function toSpeciesRow(r: Record<string, unknown>) {
+export function toSpeciesRow(r: Record<string, unknown>) {
   const id = Number(r.id);
   const taxonGroup = String(r.taxon_group);
   return {

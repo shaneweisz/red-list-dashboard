@@ -26,7 +26,7 @@ import { run as fetchGbifNewCounts } from "./fetch-gbif-new-counts";
 import { run as fetchGbifCountryData } from "./fetch-gbif-country-data";
 import { run as buildTaxaSummary } from "./build-taxa-summary";
 import { run as buildSearchIndex } from "./build-search-index";
-import { run as buildSpeciesParquet } from "./build-species-parquet";
+import { run as buildSpeciesParquet } from "./build-parquet";
 
 async function main() {
   loadEnvFiles();
@@ -82,7 +82,7 @@ async function main() {
     await buildSearchIndex();
 
     // Phase 8: Build DuckDB read-layer parquets (#261)
-    console.log("\nPhase 8: build-species-parquet");
+    console.log("\nPhase 8: build-parquet");
     console.log("═".repeat(60));
     await buildSpeciesParquet();
 

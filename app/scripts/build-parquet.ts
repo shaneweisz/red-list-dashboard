@@ -1,20 +1,22 @@
 /**
- * build-species-parquet (#261): build the DuckDB read substrate from the
- * per-group Red List + GBIF CSVs. Two lineage-sorted parquets (split by the
+ * build-parquet (#261): build the DuckDB read substrate from the per-group
+ * Red List + GBIF CSVs + history. Three lineage-sorted parquets (split by the
  * assessed-vs-unassessed scale/schema asymmetry — assessed is bounded ~172k,
  * unassessed balloons under CoL):
  *
- *  - assessed.parquet    = Red List assessed species, enriched with GBIF
+ *  - assessed.parquet     = Red List assessed species, enriched with GBIF
  *      occurrence counts summed across ALL their mapping links (canonical-
  *      preferred representative key). Rich schema; columns match SpeciesRow.
- *  - unassessed.parquet  = GBIF species not linked to any assessment (minus
+ *  - unassessed.parquet   = GBIF species not linked to any assessment (minus
  *      domesticated), category 'NE'. Lean schema — taxonomy + occurrence count
  *      only (no assessment-only columns, no obs-after-assessment-year).
+ *  - assessments.parquet  = flattened assessment history (one row per past
+ *      assessment, seq-ordered) for the species detail panel.
  *
  * Mirrors species-store.getSpecies + build-search-index. Sorted by lineage so
  * DuckDB row-group min/max prunes any taxonomic filter.
  *
- *   npx tsx scripts/build-species-parquet.ts
+ *   npx tsx scripts/build-parquet.ts
  */
 import * as fs from "fs";
 import * as path from "path";
@@ -178,7 +180,7 @@ export async function run(): Promise<void> {
   console.log(`  duplicate GBIF keys across group files: ${dup}`);
 }
 
-const isDirectRun = process.argv[1]?.endsWith("build-species-parquet.ts") || process.argv[1]?.endsWith("build-species-parquet.js");
+const isDirectRun = process.argv[1]?.endsWith("build-parquet.ts") || process.argv[1]?.endsWith("build-parquet.js");
 if (isDirectRun) {
   loadEnvFiles();
   run().catch((err) => { console.error("Fatal error:", err); process.exit(1); });
