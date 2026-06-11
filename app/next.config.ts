@@ -19,8 +19,9 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     // libduckdb.so (dlopen'd) + the version pointer used to build the R2 path +
     // the vendored httpfs extension (LOAD'd by path, avoiding a cold-start INSTALL).
-    // Applies to every DuckDB-backed route: v2 species + cross-taxa search.
-    "/api/v2/**": DUCKDB_TRACE,
+    // Applies to every DuckDB-backed route: species list + history + search.
+    "/api/redlist/species": DUCKDB_TRACE,
+    "/api/redlist/species/history": DUCKDB_TRACE,
     "/api/search": DUCKDB_TRACE,
     "/api/search/warm": DUCKDB_TRACE,
   },
@@ -35,16 +36,14 @@ const nextConfig: NextConfig = {
     // Search now queries the parquets in R2 (httpfs) — no local data bundled.
     "/api/search": ["**/data/**"],
     "/api/search/warm": ["**/data/**"],
-    // These read the Red List / GBIF CSVs (+ mapping) but never the search index.
-    "/api/redlist/species": ["**/data/search-index.json"],
+    // Species list + history query the parquets in R2 (httpfs) — no local data.
+    "/api/redlist/species": ["**/data/**"],
+    "/api/redlist/species/history": ["**/data/**"],
+    // Reads the Red List / GBIF CSVs (+ mapping) but never the search index.
     "/api/redlist/assessor-candidates-by-country": ["**/data/search-index.json"],
     // These read only the small precomputed summary JSONs.
     "/api/redlist/taxa-summary": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv"],
     "/api/redlist/taxa-subgroups": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv"],
-    // v2 reads parquets from R2 (httpfs) — needs NO local data bundled. Without
-    // this, species-duckdb's DATA_DIR fs refs drag the whole data/ dir in (316MB).
-    "/api/v2/species": ["**/data/**"],
-    "/api/v2/species/history": ["**/data/**"],
   },
 };
 

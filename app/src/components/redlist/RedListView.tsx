@@ -21,10 +21,8 @@ import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import AssessorCandidatesTable from "../AssessorCandidatesTable";
 import { getLastSearchResult, clearLastSearchResult } from "../SpeciesSearchBar";
 
-// #261: species list is served by the DuckDB/Parquet route. The v1
-// /api/redlist/species route is kept as a fallback (revert this constant to
-// switch back) until Phase 2 removes the CSV path.
-const SPECIES_API = "/api/v2/species";
+// Species list is served by the DuckDB/Parquet-backed /api/redlist/species route.
+const SPECIES_API = "/api/redlist/species";
 
 // Dynamically import OccurrenceMapRow to avoid SSR issues with Leaflet
 const OccurrenceMapRow = dynamic(
@@ -1686,7 +1684,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     let aborted = false;
     (async () => {
       try {
-        const res = await fetch(`/api/v2/species/history?id=${sis}`);
+        const res = await fetch(`/api/redlist/species/history?id=${sis}`);
         if (res.ok) {
           const data = await res.json();
           if (!aborted) setAssessmentHistory((prev) => ({ ...prev, [sis]: data.previous_assessments ?? [] }));
