@@ -74,6 +74,23 @@ export function resolveWhere(taxonId: string): WhereParts {
   };
 }
 
+// Map a taxon (node id or arbitrary rank) to the CoL lineage VALUE to match in
+// species/ — i.e. its scientific name. Our common-name node ids need translating
+// (mammals→mammalia, beetles→coleoptera); arbitrary ranks (turdidae, odonata)
+// already are CoL values, so they fall through. Unmapped nodes (fishes, the
+// virtual roots, plant/fungi groups) return a value that won't match → no CoL
+// species added (graceful). This is a seed of the node→CoL editorial mapping.
+const COMMON_TO_COL_LINEAGE: Record<string, string> = {
+  mammals: "mammalia", birds: "aves", reptiles: "reptilia", amphibians: "amphibia",
+  beetles: "coleoptera", butterflies_and_moths: "lepidoptera", flies_and_mosquitoes: "diptera",
+  bees_wasps_and_ants: "hymenoptera", true_bugs: "hemiptera", grasshoppers_crickets_locusts: "orthoptera",
+  dragonflies_and_damselflies: "odonata", arachnids: "arachnida", molluscs: "mollusca",
+};
+export function colLineageValue(taxonId: string): string {
+  const id = canonicalizeTaxonId(taxonId).toLowerCase();
+  return COMMON_TO_COL_LINEAGE[id] ?? id;
+}
+
 // ─── SpeciesRow projection ─────────────────────────────────────────────────
 
 export interface PreviousAssessment {
@@ -165,6 +182,40 @@ export async function querySpecies(opts: {
   }
 
   let result = rows.map(toSpeciesRow);
+
+  // CoL-only species (#271, Phase 3): on an NE fetch, add the CoL accepted species
+  // under this taxon that we DON'T already have (by name) — the "tree of life"
+  // beyond the GBIF-observed set. Matched at any rank against the species/ universe
+  // (lineage); deduped vs our assessed+unassessed; emitted as NE rows with the
+  // requested taxon_id so the client's taxon filter keeps them. (Safety-capped;
+  // a per-node size gate for the giants is a follow-up.)
+  if (opts.includeNE && whereSql) {
+    const cv = colLineageValue(opts.taxon);
+    const taxonId = canonicalizeTaxonId(opts.taxon);
+    const colSql = `
+      SELECT col_id, scientific_name, class_name, order_name, family
+      FROM read_parquet('${parquetUri("species/**/*.parquet")}', hive_partitioning=true)
+      WHERE $cv IN (kingdom, phylum, class_name, order_name, family, genus)
+        AND lower(scientific_name) NOT IN (
+          SELECT lower(scientific_name) FROM '${assessedUri}' a ${whereSql}
+          UNION SELECT lower(scientific_name) FROM '${parquetUri("unassessed.parquet")}' ${whereSql}
+        )
+      LIMIT 600000`;
+    const colRows = (await conn.runAndReadAll(colSql, { ...where.params, cv })).getRowObjects();
+    let synthId = -2_000_000_000;
+    for (const r of colRows) {
+      // Build via toSpeciesRow for the correct shape + NE defaults; synthetic
+      // negative id (display-only — no IUCN/GBIF detail), taxon_id forced to the
+      // requested taxon so the client's taxon filter keeps these rows.
+      const row = toSpeciesRow({
+        id: synthId--, scientific_name: r.scientific_name, family: r.family, category: "NE",
+        class_name: r.class_name, order_name: r.order_name, taxon_group: taxonId,
+      });
+      row.taxon_id = taxonId;
+      result.push(row);
+    }
+  }
+
   if (opts.offset) result = result.slice(opts.offset);
   if (opts.limit != null) result = result.slice(0, opts.limit);
   return result;
