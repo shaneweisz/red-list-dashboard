@@ -8,14 +8,20 @@
  *  1. accepted-name match → a CoL accepted species. Homonyms (same name, >1
  *     accepted id) are broken by our own family then class_name.
  *  2. synonym-name match → resolve to the accepted taxon via backbone.parent_id.
- *  3. else unmatched.
+ *  3. IUCN-synonym match → if neither of the above hit on the canonical name, try
+ *     the species's own IUCN-recorded synonyms (taxon_synonyms, carried in the
+ *     redlist CSVs) against CoL accepted names then CoL synonyms. This catches the
+ *     reverse of (2): where CoL's synonymy is incomplete but IUCN lists the
+ *     CoL-accepted name (e.g. a genus reassignment IUCN knows but CoL doesn't).
+ *  4. else unmatched.
  *
  * Name-join only (no GBIF resolver exists yet — see #271); kingdom/rank tie-break
- * approximated here by family/class. IUCN synonyms as extra match keys are a
- * later refinement (they aren't carried into assessed.parquet yet).
+ * approximated here by family/class. Canonical wins over synonym; an accepted hit
+ * wins over a CoL-synonym hit; the canonical name wins over IUCN synonyms.
  *
  * Inputs (all from earlier sync steps): data/species/ + data/backbone.parquet
- * (build-backbone), data/assessed.parquet + data/unassessed.parquet (build-parquet).
+ * (build-backbone), data/assessed.parquet + data/unassessed.parquet (build-parquet),
+ * data/redlist/*.csv (fetch-redlist-species — the IUCN synonym source).
  *
  *   npx tsx scripts/build-matching.ts
  */
@@ -23,12 +29,14 @@ import * as path from "path";
 import { DuckDBInstance } from "@duckdb/node-api";
 import { loadEnvFiles, DATA_DIR } from "./utils";
 
-export async function run(): Promise<void> {
-  const speciesGlob = path.join(DATA_DIR, "species", "**", "*.parquet");
-  const backbone = path.join(DATA_DIR, "backbone.parquet");
-  const assessed = path.join(DATA_DIR, "assessed.parquet");
-  const unassessed = path.join(DATA_DIR, "unassessed.parquet");
-  const out = path.join(DATA_DIR, "species_link.parquet");
+export async function run(opts: { dataDir?: string } = {}): Promise<void> {
+  const dir = opts.dataDir || DATA_DIR;
+  const speciesGlob = path.join(dir, "species", "**", "*.parquet");
+  const backbone = path.join(dir, "backbone.parquet");
+  const assessed = path.join(dir, "assessed.parquet");
+  const unassessed = path.join(dir, "unassessed.parquet");
+  const redlistGlob = path.join(dir, "redlist", "*.csv");
+  const out = path.join(dir, "species_link.parquet");
 
   const inst = await DuckDBInstance.create(":memory:");
   const conn = await inst.connect();
@@ -60,6 +68,21 @@ export async function run(): Promise<void> {
              lower(scientific_name) AS nm, class_name, family, scientific_name
       FROM read_parquet('${unassessed}');
   `);
+  // IUCN-recorded synonyms (redlist only): sis_taxon_id → synonym name. The redlist
+  // CSV encodes them as ';'-joined `name:status` pairs (encodeSynonyms); take the
+  // names, lowercased. These are already ambiguity-filtered upstream.
+  await conn.run(`
+    CREATE TEMP TABLE syn_keys AS
+      SELECT DISTINCT id, nm FROM (
+        SELECT CAST(sis_taxon_id AS BIGINT) AS id,
+               lower(trim(split_part(p, ':', 1))) AS nm
+        FROM (
+          SELECT sis_taxon_id, unnest(string_split(synonyms, ';')) AS p
+          FROM read_csv('${redlistGlob}', header=true, all_varchar=true, union_by_name=true)
+          WHERE synonyms IS NOT NULL AND synonyms <> ''
+        )
+      ) WHERE nm <> '';
+  `);
 
   // (1) accepted match, homonym tie-break by family > class_name.
   await conn.run(`
@@ -73,18 +96,38 @@ export async function run(): Promise<void> {
       ) WHERE rn = 1;
   `);
 
-  // Assemble: accepted (or accepted_homonym), else synonym, else unmatched.
+  // (3) IUCN-synonym match: best CoL hit across a species's IUCN synonyms — an
+  // accepted hit (kind 0, family/class tie-break) beats a CoL-synonym hit (kind 1).
+  await conn.run(`
+    CREATE TEMP TABLE iucn_match AS
+      SELECT id, col_id FROM (
+        SELECT sk.id, m.col_id,
+               row_number() OVER (PARTITION BY sk.id ORDER BY m.kind,
+                 (CASE WHEN o.family = m.family THEN 3 WHEN o.class_name = m.class_name THEN 2 ELSE 1 END) DESC, m.col_id) AS rn
+        FROM syn_keys sk
+        JOIN ours o ON o.id = sk.id AND o.src = 'redlist'
+        JOIN (
+          SELECT nm, col_id, class_name, family, 0 AS kind FROM col_acc
+          UNION ALL SELECT nm, col_id, NULL AS class_name, NULL AS family, 1 AS kind FROM col_syn
+        ) m ON m.nm = sk.nm
+      ) WHERE rn = 1;
+  `);
+
+  // Assemble: accepted (or accepted_homonym), else canonical synonym, else IUCN
+  // synonym, else unmatched.
   await conn.run(`
     COPY (
       SELECT o.src, o.id, o.sis_taxon_id, o.gbif_species_key, o.scientific_name,
-             coalesce(a.col_id, s.col_id) AS col_id,
+             coalesce(a.col_id, s.col_id, i.col_id) AS col_id,
              CASE WHEN a.col_id IS NOT NULL AND a.ncand = 1 THEN 'accepted'
                   WHEN a.col_id IS NOT NULL THEN 'accepted_homonym'
                   WHEN s.col_id IS NOT NULL THEN 'synonym'
+                  WHEN i.col_id IS NOT NULL THEN 'iucn_synonym'
                   ELSE 'unmatched' END AS match_method
       FROM ours o
       LEFT JOIN acc_match a ON a.id = o.id
       LEFT JOIN col_syn s ON s.nm = o.nm AND a.col_id IS NULL
+      LEFT JOIN iucn_match i ON i.id = o.id AND a.col_id IS NULL AND s.col_id IS NULL
     ) TO '${out}' (FORMAT PARQUET, COMPRESSION ZSTD);
   `);
 
@@ -97,11 +140,12 @@ export async function run(): Promise<void> {
              count(*) FILTER (WHERE match_method = 'accepted') AS acc,
              count(*) FILTER (WHERE match_method = 'accepted_homonym') AS hom,
              count(*) FILTER (WHERE match_method = 'synonym') AS syn,
+             count(*) FILTER (WHERE match_method = 'iucn_synonym') AS isyn,
              count(*) FILTER (WHERE match_method = 'unmatched') AS un
       FROM '${out}' WHERE src = '${src}'`))[0];
     const t = Number(r.total), m = Number(r.matched);
     console.log(`${src}: ${t.toLocaleString()} | matched ${(100 * m / t).toFixed(1)}% ` +
-      `(accepted ${Number(r.acc).toLocaleString()}, via-synonym ${Number(r.syn).toLocaleString()}, homonym-resolved ${Number(r.hom).toLocaleString()}, unmatched ${Number(r.un).toLocaleString()})`);
+      `(accepted ${Number(r.acc).toLocaleString()}, via-CoL-synonym ${Number(r.syn).toLocaleString()}, via-IUCN-synonym ${Number(r.isyn).toLocaleString()}, homonym-resolved ${Number(r.hom).toLocaleString()}, unmatched ${Number(r.un).toLocaleString()})`);
   }
   const ex = await q(`SELECT scientific_name FROM '${out}' WHERE src='redlist' AND match_method='unmatched' LIMIT 6`);
   console.log("  redlist unmatched examples:", ex.map((x) => x.scientific_name).join(" | "));
