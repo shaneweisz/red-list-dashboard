@@ -82,7 +82,13 @@ export async function run(opts: { tsv?: string; outDir?: string; baseSourceIds?:
     CREATE TEMP TABLE nu AS
       SELECT
         "col:ID" AS col_id, "col:parentID" AS parent_id, "col:status" AS status,
-        "col:rank" AS rank, "col:scientificName" AS scientific_name, "col:authorship" AS authorship,
+        "col:rank" AS rank,
+        -- Normalize to the canonical binomial: XR writes a subgenus parenthetical
+        -- in some names ("Diclidurus (Diclidurus) albus"). Strip it so names match
+        -- our plain-binomial Red List/GBIF data (the NE-union dedup + build-matching
+        -- both join on name) and display cleanly.
+        trim(regexp_replace(regexp_replace("col:scientificName", '\\([^)]*\\)', '', 'g'), '\\s+', ' ', 'g')) AS scientific_name,
+        "col:authorship" AS authorship,
         "col:kingdom" AS kingdom, "col:phylum" AS phylum, "col:class" AS class_name,
         "col:order" AS order_name, "col:family" AS family, "col:genus" AS genus,
         "col:sourceID" AS source_id,

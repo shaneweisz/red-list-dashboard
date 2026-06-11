@@ -31,6 +31,8 @@ const ROWS: string[][] = [
   ["1", "F", "accepted", "species", "Panthera leo", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "Panthera", "100", "false"],
   ["2", "F", "accepted", "species", "Smilodon fatalis", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "Smilodon", "100", "true"],
   ["3", "F", "accepted", "species", "Felis incognita", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "Felis", "200", ""],
+  // Subgenus parenthetical: must be normalized to the binomial "Peropteryx leucoptera".
+  ["7", "F", "accepted", "species", "Peropteryx (Peronymus) leucoptera", "L.", "Animalia", "Chordata", "Mammalia", "Chiroptera", "Emballonuridae", "Peropteryx", "200", "false"],
   // Unflagged fossil from a non-Base paleo source: extinct is null, so only in_base drops it.
   ["6", "F", "accepted", "species", "Cimexomys testus", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "Cimexomys", "999", ""],
   ["4", "F", "provisionally accepted", "species", "Felis dubia", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "Felis", "100", "false"],
@@ -64,8 +66,15 @@ describe("build-backbone species universe", () => {
     // Felis dubia (provisionally accepted) excluded. The fossil + non-Base species
     // are KEPT in the parquet (carried with flags) and filtered at query time.
     expect(rows.map((r) => r.scientific_name)).toEqual([
-      "Cimexomys testus", "Felis incognita", "Panthera leo", "Smilodon fatalis",
+      "Cimexomys testus", "Felis incognita", "Panthera leo", "Peropteryx leucoptera", "Smilodon fatalis",
     ]);
+  });
+
+  it("normalizes a subgenus parenthetical to the canonical binomial (dedup + display)", async () => {
+    const rows = await query(`SELECT scientific_name FROM read_parquet('${speciesGlob}', hive_partitioning=true) WHERE scientific_name LIKE 'Peropteryx%'`);
+    // "Peropteryx (Peronymus) leucoptera" → "Peropteryx leucoptera" so it matches
+    // the plain binomial in our assessed/GBIF data and doesn't reappear as "new".
+    expect(rows.map((r) => r.scientific_name)).toEqual(["Peropteryx leucoptera"]);
   });
 
   it("derives col:extinct as a tri-state boolean: true→TRUE, false→FALSE, empty→NULL", async () => {
@@ -89,7 +98,7 @@ describe("build-backbone species universe", () => {
     const rows = await query(`SELECT scientific_name FROM read_parquet('${speciesGlob}', hive_partitioning=true) WHERE in_base AND extinct IS NOT TRUE ORDER BY scientific_name`);
     // Smilodon (flagged fossil) and Cimexomys (unflagged, non-Base) both excluded.
     expect(rows.map((r) => r.scientific_name)).toEqual([
-      "Felis incognita", "Panthera leo",
+      "Felis incognita", "Panthera leo", "Peropteryx leucoptera",
     ]);
   });
 
@@ -102,7 +111,7 @@ describe("build-backbone species universe", () => {
 describe("build-backbone backbone.parquet", () => {
   it("carries every usage (all ranks + synonyms) for tree + synonym resolution", async () => {
     const rows = await query(`SELECT count(*) n, count(*) FILTER (status LIKE '%synonym%') syn FROM read_parquet('${backbone}')`);
-    expect(Number(rows[0].n)).toBe(7);   // all rows, including the family + synonym
+    expect(Number(rows[0].n)).toBe(8);   // all rows, including the family + synonym
     expect(Number(rows[0].syn)).toBe(1);
   });
 });
