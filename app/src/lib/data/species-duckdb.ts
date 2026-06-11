@@ -189,7 +189,7 @@ export async function querySpecies(opts: {
   // via getAssessmentHistory when a detail panel opens. This reads a single file
   // and drops ≈40% of the payload (history was ~half the bytes for large taxa).
   const assessedSql = `SELECT ${ASSESSED_SELECT} FROM '${assessedUri}' a ${whereSql}`;
-  let rows = (await conn.runAndReadAll(assessedSql, where.params)).getRowObjects();
+  const rows = (await conn.runAndReadAll(assessedSql, where.params)).getRowObjects();
 
   let result = rows.map(toSpeciesRow);
 
