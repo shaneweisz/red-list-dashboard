@@ -4,8 +4,10 @@
  * path in species-store. Filters translate the taxonomy SpeciesFilter to SQL,
  * faithfully mirroring matchesFilter (incl. the order_name→class_name fallback).
  *
- * Phase-1 scope: species lists (assessed, optional NE union) + arbitrary-rank
- * filtering. Search / history / summaries land in later steps.
+ * Species lists (assessed, optional NE union) + arbitrary-rank filtering. The
+ * list carries denormalized latest_assessors/latest_reviewers but NOT the full
+ * history array — that's fetched lazily per species (getAssessmentHistory) when
+ * a detail panel opens. Search / summaries land in later steps.
  */
 import * as fs from "fs";
 import * as path from "path";
@@ -74,20 +76,25 @@ export function resolveWhere(taxonId: string): WhereParts {
 
 // ─── SpeciesRow projection ─────────────────────────────────────────────────
 
+export interface PreviousAssessment {
+  id: number; year: string; category: string;
+  date: string | null; assessors: string | null; reviewers: string | null;
+}
+
 const ASSESSED_SELECT = `
-  id, scientific_name, common_name, family, iucn_category AS category,
+  id, assessment_id, scientific_name, common_name, family, iucn_category AS category,
   assessment_date, year_published, population_trend, countries, class_name, order_name,
   taxon_group, gbif_species_key, gbif_occurrence_count, gbif_observations_after_assessment_year,
   systems, growth_forms, movement_pattern, possibly_extinct, possibly_extinct_in_the_wild,
-  criteria, threat_codes, has_map`;
+  criteria, threat_codes, has_map, latest_assessors, latest_reviewers`;
 
 // unassessed.parquet lacks the assessment-only columns → fill SpeciesRow defaults
 const UNASSESSED_SELECT = `
-  id, scientific_name, common_name, family, iucn_category AS category,
+  id, NULL AS assessment_id, scientific_name, common_name, family, iucn_category AS category,
   NULL AS assessment_date, NULL AS year_published, NULL AS population_trend, countries, class_name, order_name,
   taxon_group, gbif_species_key, gbif_occurrence_count, NULL AS gbif_observations_after_assessment_year,
   '' AS systems, '' AS growth_forms, NULL AS movement_pattern, FALSE AS possibly_extinct, FALSE AS possibly_extinct_in_the_wild,
-  NULL AS criteria, '' AS threat_codes, FALSE AS has_map`;
+  NULL AS criteria, '' AS threat_codes, FALSE AS has_map, NULL AS latest_assessors, NULL AS latest_reviewers`;
 
 const splitList = (s: unknown): string[] => (typeof s === "string" && s ? s.split(";").filter(Boolean) : []);
 const num = (v: unknown): number | null => (v == null ? null : Number(v));
@@ -98,6 +105,7 @@ export function toSpeciesRow(r: Record<string, unknown>) {
   return {
     id,
     sis_taxon_id: id > 0 ? id : null,
+    assessment_id: num(r.assessment_id),
     scientific_name: r.scientific_name ?? "",
     common_name: r.common_name ?? null,
     family: r.family ?? null,
@@ -113,17 +121,13 @@ export function toSpeciesRow(r: Record<string, unknown>) {
     gbif_species_key: num(r.gbif_species_key),
     gbif_occurrence_count: num(r.gbif_occurrence_count),
     gbif_observations_after_assessment_year: num(r.gbif_observations_after_assessment_year),
-    // DuckDB emits the history as a JSON string (to_json) — parse to plain objects.
-    previous_assessments: typeof r.previous_assessments === "string"
-      ? (JSON.parse(r.previous_assessments) as Array<Record<string, unknown>>).map((pa) => ({
-          id: Number(pa.id),
-          year: String(pa.year ?? ""),
-          category: String(pa.category ?? ""),
-          date: (pa.date as string) ?? null,
-          assessors: (pa.assessors as string) ?? null,
-          reviewers: (pa.reviewers as string) ?? null,
-        }))
-      : [],
+    // Latest (most recent) assessment's assessors/reviewers, denormalized into
+    // assessed.parquet — the list view's assessor/reviewer filter reads these.
+    latest_assessors: (r.latest_assessors as string) ?? null,
+    latest_reviewers: (r.latest_reviewers as string) ?? null,
+    // Full history is fetched lazily (getAssessmentHistory) when a detail panel
+    // opens; the species list no longer carries it (≈40% smaller payload).
+    previous_assessments: [] as PreviousAssessment[],
     systems: splitList(r.systems),
     growth_forms: splitList(r.growth_forms),
     movement_pattern: r.movement_pattern ?? null,
@@ -148,31 +152,11 @@ export async function querySpecies(opts: {
   const whereSql = where.clauses.length ? `WHERE ${where.clauses.join(" AND ")}` : "";
   const assessedUri = parquetUri("assessed.parquet");
 
-  // Assessed: join the per-species history (rebuilt in original array order via
-  // seq; index 0 = latest) into previous_assessments. Run NE as a second query
-  // (avoids UNION-ing the nested struct list) and concat — order doesn't matter
-  // (the client sorts).
-  //
-  // Correlate the history aggregation to just the filtered species (the IN
-  // subquery) so the GROUP BY scans only the result set's rows, not all of
-  // assessments.parquet — ~3× faster on a cold R2 read for a taxon filter, never
-  // slower. Skipped for the unfiltered "all" case (the subquery would be every id).
-  const histFilter = where.clauses.length
-    ? `WHERE sis_taxon_id IN (SELECT id FROM '${assessedUri}' ${whereSql})`
-    : "";
-  const assessedSql = `
-    WITH hist AS (
-      SELECT sis_taxon_id,
-             to_json(list({'id': id, 'year': "year", 'category': category, 'date': "date",
-                   'assessors': assessors, 'reviewers': reviewers} ORDER BY seq)) AS previous_assessments
-      FROM '${parquetUri("assessments.parquet")}'
-      ${histFilter}
-      GROUP BY sis_taxon_id
-    )
-    SELECT ${ASSESSED_SELECT}, h.previous_assessments
-    FROM '${assessedUri}' a
-    LEFT JOIN hist h ON h.sis_taxon_id = a.id
-    ${whereSql}`;
+  // No history join — the list carries only the latest assessors/reviewers
+  // (denormalized columns). The full per-species history array is fetched lazily
+  // via getAssessmentHistory when a detail panel opens. This reads a single file
+  // and drops ≈40% of the payload (history was ~half the bytes for large taxa).
+  const assessedSql = `SELECT ${ASSESSED_SELECT} FROM '${assessedUri}' a ${whereSql}`;
   let rows = (await conn.runAndReadAll(assessedSql, where.params)).getRowObjects();
 
   if (opts.includeNE) {
@@ -184,4 +168,25 @@ export async function querySpecies(opts: {
   if (opts.offset) result = result.slice(opts.offset);
   if (opts.limit != null) result = result.slice(0, opts.limit);
   return result;
+}
+
+// Lazy per-species assessment history (index 0 = latest), fetched when a detail
+// panel opens. assessments.parquet is sorted by sis_taxon_id, so this prunes to
+// a single row group.
+export async function getAssessmentHistory(sisTaxonId: number): Promise<PreviousAssessment[]> {
+  const conn = await getConn();
+  const sql = `
+    SELECT id, "year", category, "date", assessors, reviewers
+    FROM '${parquetUri("assessments.parquet")}'
+    WHERE sis_taxon_id = $id
+    ORDER BY seq`;
+  const rows = (await conn.runAndReadAll(sql, { id: sisTaxonId })).getRowObjects();
+  return rows.map((pa) => ({
+    id: Number(pa.id),
+    year: String(pa.year ?? ""),
+    category: String(pa.category ?? ""),
+    date: (pa.date as string) ?? null,
+    assessors: (pa.assessors as string) ?? null,
+    reviewers: (pa.reviewers as string) ?? null,
+  }));
 }

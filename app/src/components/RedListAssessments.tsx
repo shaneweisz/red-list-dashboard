@@ -371,6 +371,13 @@ export default function RedListAssessments({
       ].sort((a, b) => (a.year || "0").localeCompare(b.year || "0"));
 
   const [selectedIndex, setSelectedIndex] = useState(allAssessments.length - 1);
+  // History is fetched lazily, so allAssessments can grow from 1 → N after mount
+  // (and changes when switching species). Default the selection to the newest
+  // assessment whenever the set size changes; manual timeline clicks (which don't
+  // change the size) are preserved.
+  useEffect(() => {
+    setSelectedIndex(allAssessments.length - 1);
+  }, [allAssessments.length]);
   const [compareMode, setCompareMode] = useState(false);
   const [assessmentDetails, setAssessmentDetails] = useState<Record<number, AssessmentDetail>>({});
   const [loadingIds, setLoadingIds] = useState<Set<number>>(new Set());
