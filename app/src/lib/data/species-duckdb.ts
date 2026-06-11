@@ -250,3 +250,38 @@ export async function getAssessmentHistory(sisTaxonId: number): Promise<Previous
     reviewers: (pa.reviewers as string) ?? null,
   }));
 }
+
+// ─── CoL backbone: arbitrary-rank species listing (#271, Phase 3) ────────────
+
+export interface BackboneSpecies { col_id: string; scientific_name: string; }
+
+// All CoL accepted species under any taxon, matched at ANY rank (kingdom →
+// genus) against the denormalized lineage — e.g. ?taxon=Felidae lists every cat
+// species in the tree of life, most of them Not Evaluated. The hand-curated tree
+// can only drill into predefined nodes; this works for any taxon CoL knows.
+// (Uses the denormalized lineage columns, not the parent_id chain — the raw CoL
+// parent tree skips/collapses ranks, so lineage is the reliable basis.)
+export async function getSpeciesUnder(taxon: string, limit = 50): Promise<{
+  taxon: string; matched_rank: string | null; total: number; sample: BackboneSpecies[];
+}> {
+  const conn = await getConn();
+  const sp = `read_parquet('${parquetUri("species/**/*.parquet")}', hive_partitioning=true)`;
+  const where = `$t IN (kingdom, phylum, class_name, order_name, family, genus)`;
+  const lim = Math.min(Math.max(limit, 1), 200);
+  const t = taxon.toLowerCase();
+  const head = (await conn.runAndReadAll(
+    `SELECT count(*) AS total,
+            min(CASE WHEN genus=$t THEN 'genus' WHEN family=$t THEN 'family' WHEN order_name=$t THEN 'order'
+                     WHEN class_name=$t THEN 'class' WHEN phylum=$t THEN 'phylum' WHEN kingdom=$t THEN 'kingdom' END) AS matched_rank
+     FROM ${sp} WHERE ${where}`, { t },
+  )).getRowObjects();
+  const total = Number(head[0].total);
+  if (total === 0) return { taxon, matched_rank: null, total: 0, sample: [] };
+  const rows = (await conn.runAndReadAll(
+    `SELECT col_id, scientific_name FROM ${sp} WHERE ${where} ORDER BY scientific_name LIMIT ${lim}`, { t },
+  )).getRowObjects();
+  return {
+    taxon, matched_rank: (head[0].matched_rank as string) ?? null, total,
+    sample: rows.map((r) => ({ col_id: String(r.col_id), scientific_name: String(r.scientific_name) })),
+  };
+}

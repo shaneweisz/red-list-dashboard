@@ -24,6 +24,7 @@ const nextConfig: NextConfig = {
     "/api/redlist/species/history": DUCKDB_TRACE,
     "/api/search": DUCKDB_TRACE,
     "/api/search/warm": DUCKDB_TRACE,
+    "/api/taxa/species": DUCKDB_TRACE,
   },
 
   // The API routes import a shared species-store module that references every
@@ -44,6 +45,8 @@ const nextConfig: NextConfig = {
     // These read only the small precomputed summary JSONs.
     "/api/redlist/taxa-summary": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv"],
     "/api/redlist/taxa-subgroups": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv"],
+    // Backbone tree navigation queries backbone.parquet in R2 (httpfs) — no local data.
+    "/api/taxa/species": ["**/data/**"],
   },
 };
 
