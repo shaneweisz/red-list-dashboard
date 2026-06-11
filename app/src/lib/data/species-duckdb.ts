@@ -91,6 +91,21 @@ export function colLineageValue(taxonId: string): string {
   return COMMON_TO_COL_LINEAGE[id] ?? id;
 }
 
+// species/ is Hive-partitioned by `part` (= phylum within Animalia, else kingdom).
+// A query filtering by class_name/order/family does NOT prune partitions, so it
+// full-scans all ~2.4M rows across 58 R2 files (the new-assessments hang). Map a
+// CoL lineage VALUE to its partition so the query reads one file. Only the common
+// animal clades need this (the giant partitions); unmapped values skip pruning.
+const COL_LINEAGE_TO_PART: Record<string, string> = {
+  mammalia: "Chordata", aves: "Chordata", reptilia: "Chordata", amphibia: "Chordata",
+  coleoptera: "Arthropoda", lepidoptera: "Arthropoda", diptera: "Arthropoda",
+  hymenoptera: "Arthropoda", hemiptera: "Arthropoda", orthoptera: "Arthropoda",
+  odonata: "Arthropoda", arachnida: "Arthropoda", mollusca: "Mollusca",
+};
+export function colPartFor(lineageValue: string): string | null {
+  return COL_LINEAGE_TO_PART[lineageValue.toLowerCase()] ?? null;
+}
+
 // ─── SpeciesRow projection ─────────────────────────────────────────────────
 
 export interface PreviousAssessment {
@@ -192,17 +207,25 @@ export async function querySpecies(opts: {
   if (opts.includeNE && whereSql) {
     const cv = colLineageValue(opts.taxon);
     const taxonId = canonicalizeTaxonId(opts.taxon);
+    // Extant universe = in_base AND NOT fossil. The CoL extinct flag is sparse, so
+    // in_base (sourced from a curated Base GSD) catches the unflagged paleo tail
+    // the flag misses. Prune to the taxon's partition when known so we read one R2
+    // file instead of full-scanning all 58 (the new-assessments hang).
+    const part = colPartFor(cv);
+    const partClause = part ? "part = $part AND " : "";
     const colSql = `
       SELECT col_id, scientific_name, class_name, order_name, family
       FROM read_parquet('${parquetUri("species/**/*.parquet")}', hive_partitioning=true)
-      WHERE $cv IN (kingdom, phylum, class_name, order_name, family, genus)
-        AND extinct IS NOT TRUE  -- drop CoL fossils so the universe tracks IUCN Table 1a (extant)
+      WHERE ${partClause}$cv IN (kingdom, phylum, class_name, order_name, family, genus)
+        AND in_base AND extinct IS NOT TRUE
         AND lower(scientific_name) NOT IN (
           SELECT lower(scientific_name) FROM '${assessedUri}' a ${whereSql}
           UNION SELECT lower(scientific_name) FROM '${parquetUri("unassessed.parquet")}' ${whereSql}
         )
       LIMIT 600000`;
-    const colRows = (await conn.runAndReadAll(colSql, { ...where.params, cv })).getRowObjects();
+    const colParams: Record<string, string> = { ...where.params, cv };
+    if (part) colParams.part = part;
+    const colRows = (await conn.runAndReadAll(colSql, colParams)).getRowObjects();
     let synthId = -2_000_000_000;
     for (const r of colRows) {
       // Build via toSpeciesRow for the correct shape + NE defaults; synthetic
@@ -318,20 +341,24 @@ export async function getSpeciesUnder(taxon: string, limit = 50): Promise<{
 }> {
   const conn = await getConn();
   const sp = `read_parquet('${parquetUri("species/**/*.parquet")}', hive_partitioning=true)`;
-  // Fossils excluded (extinct IS NOT TRUE) so counts track the extant universe.
-  const where = `$t IN (kingdom, phylum, class_name, order_name, family, genus) AND extinct IS NOT TRUE`;
-  const lim = Math.min(Math.max(limit, 1), 200);
   const t = taxon.toLowerCase();
+  // Extant universe = in_base AND NOT fossil (in_base catches the sparse-flag paleo
+  // tail). Prune to the partition when the taxon is a known clade (else full-scan).
+  const part = colPartFor(t);
+  const partClause = part ? "part = $part AND " : "";
+  const where = `${partClause}$t IN (kingdom, phylum, class_name, order_name, family, genus) AND in_base AND extinct IS NOT TRUE`;
+  const params: Record<string, string> = part ? { t, part } : { t };
+  const lim = Math.min(Math.max(limit, 1), 200);
   const head = (await conn.runAndReadAll(
     `SELECT count(*) AS total,
             min(CASE WHEN genus=$t THEN 'genus' WHEN family=$t THEN 'family' WHEN order_name=$t THEN 'order'
                      WHEN class_name=$t THEN 'class' WHEN phylum=$t THEN 'phylum' WHEN kingdom=$t THEN 'kingdom' END) AS matched_rank
-     FROM ${sp} WHERE ${where}`, { t },
+     FROM ${sp} WHERE ${where}`, params,
   )).getRowObjects();
   const total = Number(head[0].total);
   if (total === 0) return { taxon, matched_rank: null, total: 0, sample: [] };
   const rows = (await conn.runAndReadAll(
-    `SELECT col_id, scientific_name FROM ${sp} WHERE ${where} ORDER BY scientific_name LIMIT ${lim}`, { t },
+    `SELECT col_id, scientific_name FROM ${sp} WHERE ${where} ORDER BY scientific_name LIMIT ${lim}`, params,
   )).getRowObjects();
   return {
     taxon, matched_rank: (head[0].matched_rank as string) ?? null, total,

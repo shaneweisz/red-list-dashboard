@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveWhere, toSpeciesRow } from "@/lib/data/species-duckdb";
+import { resolveWhere, toSpeciesRow, colPartFor } from "@/lib/data/species-duckdb";
 
 // Unit tests for the parity-critical pure logic of the DuckDB read layer (#261):
 // the taxon→SQL resolver and the row→SpeciesRow mapping. (Full v1-vs-v2 parity is
@@ -35,6 +35,24 @@ describe("resolveWhere", () => {
 
   it("lowercases arbitrary values", () => {
     expect(resolveWhere("Turdidae").params.arv).toBe("turdidae");
+  });
+});
+
+describe("colPartFor", () => {
+  it("maps known animal clades to their species/ partition (for pruning)", () => {
+    expect(colPartFor("mammalia")).toBe("Chordata");
+    expect(colPartFor("aves")).toBe("Chordata");
+    expect(colPartFor("coleoptera")).toBe("Arthropoda");
+    expect(colPartFor("mollusca")).toBe("Mollusca");
+  });
+
+  it("is case-insensitive", () => {
+    expect(colPartFor("Arachnida")).toBe("Arthropoda");
+  });
+
+  it("returns null for unmapped values (query falls back to a full scan)", () => {
+    expect(colPartFor("felidae")).toBeNull();
+    expect(colPartFor("plantae")).toBeNull();
   });
 });
 
