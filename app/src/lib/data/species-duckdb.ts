@@ -82,7 +82,7 @@ export interface PreviousAssessment {
 }
 
 const ASSESSED_SELECT = `
-  id, scientific_name, common_name, family, iucn_category AS category,
+  id, assessment_id, scientific_name, common_name, family, iucn_category AS category,
   assessment_date, year_published, population_trend, countries, class_name, order_name,
   taxon_group, gbif_species_key, gbif_occurrence_count, gbif_observations_after_assessment_year,
   systems, growth_forms, movement_pattern, possibly_extinct, possibly_extinct_in_the_wild,
@@ -90,7 +90,7 @@ const ASSESSED_SELECT = `
 
 // unassessed.parquet lacks the assessment-only columns → fill SpeciesRow defaults
 const UNASSESSED_SELECT = `
-  id, scientific_name, common_name, family, iucn_category AS category,
+  id, NULL AS assessment_id, scientific_name, common_name, family, iucn_category AS category,
   NULL AS assessment_date, NULL AS year_published, NULL AS population_trend, countries, class_name, order_name,
   taxon_group, gbif_species_key, gbif_occurrence_count, NULL AS gbif_observations_after_assessment_year,
   '' AS systems, '' AS growth_forms, NULL AS movement_pattern, FALSE AS possibly_extinct, FALSE AS possibly_extinct_in_the_wild,
@@ -105,6 +105,7 @@ export function toSpeciesRow(r: Record<string, unknown>) {
   return {
     id,
     sis_taxon_id: id > 0 ? id : null,
+    assessment_id: num(r.assessment_id),
     scientific_name: r.scientific_name ?? "",
     common_name: r.common_name ?? null,
     family: r.family ?? null,

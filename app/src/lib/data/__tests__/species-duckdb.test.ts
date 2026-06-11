@@ -42,6 +42,7 @@ describe("toSpeciesRow", () => {
   it("maps an assessed row: splits ';' arrays, numifies BigInts, carries latest assessors", () => {
     const row = toSpeciesRow({
       id: BigInt(18),
+      assessment_id: BigInt(123456),
       scientific_name: "Aotus lemurinus",
       common_name: "Lemurine Night Monkey",
       family: "aotidae",
@@ -68,6 +69,7 @@ describe("toSpeciesRow", () => {
       latest_reviewers: "Z, A.",
     });
     expect(row.sis_taxon_id).toBe(18);
+    expect(row.assessment_id).toBe(123456);
     expect(row.countries).toEqual(["CO", "EC"]);
     expect(row.systems).toEqual(["Terrestrial"]);
     expect(row.growth_forms).toEqual([]);
