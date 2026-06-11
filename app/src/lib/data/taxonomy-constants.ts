@@ -1,6 +1,6 @@
 /**
- * Shared constants used by both species-store.ts (runtime) and
- * build-search-index.ts (build time).
+ * Shared constants used by species-store.ts (runtime) and build-parquet.ts
+ * (build time).
  */
 
 /** GBIF species keys for domesticated species excluded from new assessments. */

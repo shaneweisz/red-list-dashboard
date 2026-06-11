@@ -1,6 +1,15 @@
 import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
 
+// Runtime deps every DuckDB-backed route needs traced in: the dlopen'd
+// libduckdb.so (file-tracing misses dlopen deps), the sync pointer used to build
+// the R2 path, and the vendored httpfs extension (LOAD'd by path).
+const DUCKDB_TRACE = [
+  "./node_modules/@duckdb/node-bindings-linux-x64/**",
+  "./latest-sync.txt",
+  "./duckdb-ext/**",
+];
+
 const nextConfig: NextConfig = {
   // #261: DuckDB-backed read routes query Parquet in R2. Keep the native addon
   // out of the bundler, and force-include the 68MB libduckdb.so it dlopens at
@@ -10,11 +19,10 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     // libduckdb.so (dlopen'd) + the version pointer used to build the R2 path +
     // the vendored httpfs extension (LOAD'd by path, avoiding a cold-start INSTALL).
-    "/api/v2/**": [
-      "./node_modules/@duckdb/node-bindings-linux-x64/**",
-      "./latest-sync.txt",
-      "./duckdb-ext/**",
-    ],
+    // Applies to every DuckDB-backed route: v2 species + cross-taxa search.
+    "/api/v2/**": DUCKDB_TRACE,
+    "/api/search": DUCKDB_TRACE,
+    "/api/search/warm": DUCKDB_TRACE,
   },
 
   // The API routes import a shared species-store module that references every
@@ -24,9 +32,9 @@ const nextConfig: NextConfig = {
   // actually reads at runtime. Globs use **/ so they match whether the tracing
   // root is app/ (local) or the repo root (Vercel, where paths are app/data/…).
   outputFileTracingExcludes: {
-    // Search only reads the prebuilt index — never the CSVs/mapping.
-    "/api/search": ["**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv"],
-    "/api/search/warm": ["**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv"],
+    // Search now queries the parquets in R2 (httpfs) — no local data bundled.
+    "/api/search": ["**/data/**"],
+    "/api/search/warm": ["**/data/**"],
     // These read the Red List / GBIF CSVs (+ mapping) but never the search index.
     "/api/redlist/species": ["**/data/search-index.json"],
     "/api/redlist/assessor-candidates-by-country": ["**/data/search-index.json"],

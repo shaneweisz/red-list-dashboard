@@ -170,6 +170,66 @@ export async function querySpecies(opts: {
   return result;
 }
 
+// ─── Cross-taxa search ──────────────────────────────────────────────────────
+
+export interface SearchResult {
+  id: number;
+  scientific_name: string;
+  common_name: string | null;
+  taxon_id: string;
+  taxon_group: string;
+  category: string;
+  gbif_species_key: number | null;
+  assessment_id: number | null;
+  assessment_date: string | null;
+  countries: string[];
+}
+
+// Substring search over both parquets (replaces the in-memory search-index.json).
+// ILIKE can't use row-group pruning, but with column projection it scans only the
+// name columns from R2 — ~200ms warm over both files. Ranking mirrors the old
+// JSON path: exact common-name > common-name prefix > scientific prefix > alpha.
+export async function searchSpecies(query: string, limit = 10): Promise<SearchResult[]> {
+  if (query.length < 2) return [];
+  const conn = await getConn();
+  const lim = Math.min(Math.max(limit, 1), 50);
+  const proj = (src: string, assessed: boolean) => `
+    SELECT id, scientific_name, common_name, taxon_group, iucn_category AS category, gbif_species_key,
+           ${assessed ? "assessment_id, CAST(assessment_date AS VARCHAR) AS assessment_date" : "NULL AS assessment_id, NULL AS assessment_date"},
+           countries
+    FROM '${parquetUri(src)}'
+    WHERE scientific_name ILIKE '%' || $q || '%'
+       OR (common_name IS NOT NULL AND common_name ILIKE '%' || $q || '%')`;
+  const sql = `
+    WITH hits AS (${proj("assessed.parquet", true)} UNION ALL ${proj("unassessed.parquet", false)})
+    SELECT * FROM hits
+    ORDER BY (lower(common_name) = $q) DESC,
+             (lower(common_name) LIKE $q || '%') DESC,
+             (lower(scientific_name) LIKE $q || '%') DESC,
+             lower(scientific_name)
+    LIMIT ${lim}`;
+  const rows = (await conn.runAndReadAll(sql, { q: query.toLowerCase() })).getRowObjects();
+  return rows.map((r) => ({
+    id: Number(r.id),
+    scientific_name: String(r.scientific_name ?? ""),
+    common_name: (r.common_name as string) ?? null,
+    taxon_id: mapTaxonId(String(r.taxon_group)),
+    taxon_group: String(r.taxon_group),
+    category: String(r.category ?? ""),
+    gbif_species_key: num(r.gbif_species_key),
+    assessment_id: num(r.assessment_id),
+    assessment_date: (r.assessment_date as string) ?? null,
+    countries: splitList(r.countries),
+  }));
+}
+
+// Prime the cached connection (httpfs load + S3 config) so the first search
+// isn't paying cold-start init. Called by /api/search/warm on page load.
+export async function warmConnection(): Promise<void> {
+  const conn = await getConn();
+  await conn.run("SELECT 1");
+}
+
 // Lazy per-species assessment history (index 0 = latest), fetched when a detail
 // panel opens. assessments.parquet is sorted by sis_taxon_id, so this prunes to
 // a single row group.
