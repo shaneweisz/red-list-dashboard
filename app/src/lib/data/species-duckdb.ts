@@ -191,52 +191,75 @@ export async function querySpecies(opts: {
   const assessedSql = `SELECT ${ASSESSED_SELECT} FROM '${assessedUri}' a ${whereSql}`;
   let rows = (await conn.runAndReadAll(assessedSql, where.params)).getRowObjects();
 
-  if (opts.includeNE) {
-    const neSql = `SELECT ${UNASSESSED_SELECT} FROM '${parquetUri("unassessed.parquet")}' ${whereSql}`;
-    rows = rows.concat((await conn.runAndReadAll(neSql, where.params)).getRowObjects());
-  }
-
   let result = rows.map(toSpeciesRow);
 
-  // CoL-only species (#271, Phase 3): on an NE fetch, add the CoL accepted species
-  // under this taxon that we DON'T already have (by name) — the "tree of life"
-  // beyond the GBIF-observed set. Matched at any rank against the species/ universe
-  // (lineage); deduped vs our assessed+unassessed; emitted as NE rows with the
-  // requested taxon_id so the client's taxon filter keeps them. (Safety-capped;
-  // a per-node size gate for the giants is a follow-up.)
+  // Not-Evaluated species (#271, Phase 3): on an NE fetch, add every species under
+  // this taxon that is NOT IUCN-assessed — keyed by CoL `col_id`, not by name. Name
+  // de-duping double-counted: IUCN assesses Hipposideros X while CoL's accepted name
+  // is Doryrhina X (a genus reassignment), so the same animal showed once as assessed
+  // and again as "new". species_link bridges both names to one col_id, so de-duping by
+  // col_id collapses them. Two parts: (A) the CoL extant universe under the taxon minus
+  // already-assessed col_ids, with GBIF occurrences overlaid; (B) GBIF-observed species
+  // not represented in that universe (orphans). Safety-capped.
   if (opts.includeNE && whereSql) {
-    const cv = colLineageValue(opts.taxon);
+    const linkUri = parquetUri("species_link.parquet");
+    const unassessedUri = parquetUri("unassessed.parquet");
     const taxonId = canonicalizeTaxonId(opts.taxon);
-    // Extant universe = in_base AND NOT fossil. The CoL extinct flag is sparse, so
-    // in_base (sourced from a curated Base GSD) catches the unflagged paleo tail
-    // the flag misses. Prune to the taxon's partition when known so we read one R2
-    // file instead of full-scanning all 58 (the new-assessments hang).
+    // CoL nodes that already carry an IUCN assessment — the de-dup key.
+    const assessedColIds = `(SELECT col_id FROM read_parquet('${linkUri}') WHERE src = 'redlist' AND col_id IS NOT NULL)`;
+    // GBIF occurrence data keyed by col_id, to overlay onto universe NE rows.
+    const gbifByCol = `(SELECT sl.col_id AS col_id, any_value(un.gbif_species_key) AS gbif_species_key, max(un.gbif_occurrence_count) AS gbif_occurrence_count
+       FROM read_parquet('${linkUri}') sl JOIN read_parquet('${unassessedUri}') un ON un.id = sl.id
+       WHERE sl.src = 'gbif' AND sl.col_id IS NOT NULL GROUP BY sl.col_id)`;
+
+    // (A) CoL extant universe under the taxon (in_base AND NOT fossil), minus the
+    // col_ids that are already assessed. Partition-pruned when the clade is known so
+    // we read one R2 file instead of full-scanning all 58.
+    const cv = colLineageValue(opts.taxon);
     const part = colPartFor(cv);
     const partClause = part ? "part = $part AND " : "";
-    const colSql = `
-      SELECT col_id, scientific_name, class_name, order_name, family
-      FROM read_parquet('${parquetUri("species/**/*.parquet")}', hive_partitioning=true)
-      WHERE ${partClause}$cv IN (kingdom, phylum, class_name, order_name, family, genus)
-        AND in_base AND extinct IS NOT TRUE
-        AND lower(scientific_name) NOT IN (
-          SELECT lower(scientific_name) FROM '${assessedUri}' a ${whereSql}
-          UNION SELECT lower(scientific_name) FROM '${parquetUri("unassessed.parquet")}' ${whereSql}
-        )
+    const univSql = `
+      SELECT u.col_id, u.scientific_name, u.class_name, u.order_name, u.family,
+             g.gbif_species_key, g.gbif_occurrence_count
+      FROM (
+        SELECT col_id, scientific_name, class_name, order_name, family
+        FROM read_parquet('${parquetUri("species/**/*.parquet")}', hive_partitioning=true)
+        WHERE ${partClause}$cv IN (kingdom, phylum, class_name, order_name, family, genus)
+          AND in_base AND extinct IS NOT TRUE
+          AND col_id NOT IN ${assessedColIds}
+      ) u
+      LEFT JOIN ${gbifByCol} g ON g.col_id = u.col_id
       LIMIT 600000`;
-    const colParams: Record<string, string> = { ...where.params, cv };
-    if (part) colParams.part = part;
-    const colRows = (await conn.runAndReadAll(colSql, colParams)).getRowObjects();
+    const univParams: Record<string, string> = part ? { cv, part } : { cv };
+    const univRows = (await conn.runAndReadAll(univSql, univParams)).getRowObjects();
+    const emitted = new Set<string>();
     let synthId = -2_000_000_000;
-    for (const r of colRows) {
-      // Build via toSpeciesRow for the correct shape + NE defaults; synthetic
-      // negative id (display-only — no IUCN/GBIF detail), taxon_id forced to the
-      // requested taxon so the client's taxon filter keeps these rows.
+    for (const r of univRows) {
+      emitted.add(String(r.col_id));
+      // Synthetic negative id (no IUCN sis); GBIF key/count overlaid when observed so
+      // the new-assessments sort-by-occurrences works. taxon_id forced to the requested
+      // taxon so the client's taxon filter keeps these rows.
       const row = toSpeciesRow({
         id: synthId--, scientific_name: r.scientific_name, family: r.family, category: "NE",
         class_name: r.class_name, order_name: r.order_name, taxon_group: taxonId,
+        gbif_species_key: r.gbif_species_key, gbif_occurrence_count: r.gbif_occurrence_count,
       });
       row.taxon_id = taxonId;
       result.push(row);
+    }
+
+    // (B) GBIF-observed NE species NOT in the universe above (orphans — CoL has them in
+    // a non-Base source, as a synonym, or not at all). De-duped vs assessed (SQL) and
+    // vs the universe rows (JS, by col_id). Emitted with their real GBIF data as before.
+    const orphanSql = `
+      SELECT x.*, sl.col_id AS _col_id
+      FROM (SELECT ${UNASSESSED_SELECT} FROM read_parquet('${unassessedUri}') a ${whereSql}) x
+      LEFT JOIN read_parquet('${linkUri}') sl ON sl.src = 'gbif' AND sl.id = x.id
+      WHERE sl.col_id IS NULL OR sl.col_id NOT IN ${assessedColIds}`;
+    const orphanRows = (await conn.runAndReadAll(orphanSql, where.params)).getRowObjects();
+    for (const r of orphanRows) {
+      if (r._col_id != null && emitted.has(String(r._col_id))) continue;
+      result.push(toSpeciesRow(r));
     }
   }
 
