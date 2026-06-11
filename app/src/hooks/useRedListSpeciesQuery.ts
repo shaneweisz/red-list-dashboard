@@ -1,8 +1,6 @@
-"use client";
-
-import { useState, useEffect, useRef } from "react";
-
-// ── Types ────────────────────────────────────────────────────────────────
+// Shared shape of a species row as returned by /api/redlist/species and rendered
+// by RedListView. (The data is fetched inline in RedListView; this module is the
+// canonical type definition imported across the app.)
 
 export interface RedListSpecies {
   id: number;
@@ -37,71 +35,4 @@ export interface RedListSpecies {
   criteria: string | null;
   threat_codes: string[];
   has_map: boolean;
-}
-
-interface SpeciesResponse {
-  species: RedListSpecies[];
-  total: number;
-  error?: string;
-}
-
-// ── Hook ─────────────────────────────────────────────────────────────────
-
-/**
- * Fetches all species for a given taxon from the API.
- * Only re-fetches when taxonId changes.
- */
-export function useRedListSpecies(taxonId: string | null) {
-  const [species, setSpecies] = useState<RedListSpecies[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    abortRef.current?.abort();
-
-    // null means "don't fetch" — return empty state
-    if (taxonId === null) {
-      setSpecies([]); // eslint-disable-line react-hooks/set-state-in-effect -- reset on null taxon
-      setIsLoading(false);  
-      setError(null);  
-      return;
-    }
-
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    setIsLoading(true);  
-    setError(null);
-
-    fetch(`/api/redlist/species?taxon=${encodeURIComponent(taxonId)}`, {
-      signal: controller.signal,
-    })
-      .then(async (res) => {
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          throw new Error(body.error || `Species API returned ${res.status}`);
-        }
-        return res.json() as Promise<SpeciesResponse>;
-      })
-      .then((data) => {
-        if (!controller.signal.aborted) {
-          setSpecies(data.species);
-        }
-      })
-      .catch((err) => {
-        if (!controller.signal.aborted) {
-          setError(err instanceof Error ? err.message : "Unknown error");
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setIsLoading(false);
-        }
-      });
-
-    return () => controller.abort();
-  }, [taxonId]);
-
-  return { species, isLoading, error };
 }

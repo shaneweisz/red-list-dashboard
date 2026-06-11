@@ -15,8 +15,8 @@
  *  - assessments.parquet  = flattened assessment history (one row per past
  *      assessment, seq-ordered) for the species detail panel.
  *
- * Mirrors species-store.getSpecies; also the source for cross-taxa search.
- * Sorted by lineage so
+ * The canonical species read substrate: powers the species list, lazy history,
+ * and cross-taxa search. Sorted by lineage so
  * DuckDB row-group min/max prunes any taxonomic filter.
  *
  *   npx tsx scripts/build-parquet.ts
