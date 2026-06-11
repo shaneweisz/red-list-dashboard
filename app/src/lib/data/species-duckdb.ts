@@ -196,6 +196,7 @@ export async function querySpecies(opts: {
       SELECT col_id, scientific_name, class_name, order_name, family
       FROM read_parquet('${parquetUri("species/**/*.parquet")}', hive_partitioning=true)
       WHERE $cv IN (kingdom, phylum, class_name, order_name, family, genus)
+        AND extinct IS NOT TRUE  -- drop CoL fossils so the universe tracks IUCN Table 1a (extant)
         AND lower(scientific_name) NOT IN (
           SELECT lower(scientific_name) FROM '${assessedUri}' a ${whereSql}
           UNION SELECT lower(scientific_name) FROM '${parquetUri("unassessed.parquet")}' ${whereSql}
@@ -317,7 +318,8 @@ export async function getSpeciesUnder(taxon: string, limit = 50): Promise<{
 }> {
   const conn = await getConn();
   const sp = `read_parquet('${parquetUri("species/**/*.parquet")}', hive_partitioning=true)`;
-  const where = `$t IN (kingdom, phylum, class_name, order_name, family, genus)`;
+  // Fossils excluded (extinct IS NOT TRUE) so counts track the extant universe.
+  const where = `$t IN (kingdom, phylum, class_name, order_name, family, genus) AND extinct IS NOT TRUE`;
   const lim = Math.min(Math.max(limit, 1), 200);
   const t = taxon.toLowerCase();
   const head = (await conn.runAndReadAll(
