@@ -11,6 +11,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { DuckDBInstance } from "@duckdb/node-api";
 import { loadEnvFiles, DATA_DIR, REDLIST_DIR, GBIF_DIR } from "./utils";
 import { TAXA } from "./taxa";
 import { readRedlistCsv } from "./fetch-redlist-species";
@@ -23,6 +24,10 @@ import type { NodeSummary } from "../src/lib/data/species-store";
 const CURRENT_YEAR = new Date().getFullYear();
 const OUTDATED_THRESHOLD_YEARS = 10;
 
+// CoL species kept out of the universe (like the domesticated-GBIF exclusion). Homo sapiens
+// — IUCN omits humans from its Red List export. Keep in sync with species-duckdb.ts.
+const EXCLUDED_COL_IDS_SQL = `('6MB3T')`; // Homo sapiens
+
 export interface TaxonSummaryRow {
   table1a_taxon_group: string;
   total_assessed: number;
@@ -33,6 +38,12 @@ export interface TaxonSummaryRow {
   total_gbif_observations: number;
   mean_gbif_obs: number;
   median_gbif_obs: number | null;
+  // Catalogue of Life backbone (#271): the extant accepted-species universe in this
+  // group (col_described) and how many of those IUCN hasn't evaluated (col_ne =
+  // universe minus assessed, by col_id). Filled after the per-taxon loop; 0 if the
+  // CoL artifacts aren't present.
+  col_described?: number;
+  col_ne?: number;
 }
 
 function median(values: number[]): number | null {
@@ -42,6 +53,108 @@ function median(values: number[]): number | null {
   return sorted.length % 2 !== 0
     ? sorted[mid]
     : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+// Per-taxon_group CoL counts from the backbone artifacts: col_described = extant
+// accepted universe; col_ne = that minus the col_ids IUCN has assessed. species/ is
+// partitioned by taxon_group, so this is a single grouped scan. Returns empty (→ 0s)
+// when the CoL artifacts aren't present (e.g. a sync that hasn't built them yet).
+async function colCountsByGroup(): Promise<Map<string, { col_described: number; col_ne: number }>> {
+  const out = new Map<string, { col_described: number; col_ne: number }>();
+  const link = path.join(DATA_DIR, "species_link.parquet");
+  const speciesGlob = path.join(DATA_DIR, "species", "**", "*.parquet");
+  if (!fs.existsSync(path.join(DATA_DIR, "species")) || !fs.existsSync(link)) {
+    console.log("  CoL counts: species/ or species_link.parquet missing — skipping (col_described/col_ne = 0)");
+    return out;
+  }
+  const conn = await (await DuckDBInstance.create(":memory:")).connect();
+  const rows = await (await conn.run(`
+    SELECT taxon_group,
+           count(*) FILTER (in_base AND extinct IS NOT TRUE AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL}) AS col_described,
+           count(*) FILTER (in_base AND extinct IS NOT TRUE AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL} AND col_id NOT IN (
+             SELECT col_id FROM read_parquet('${link}') WHERE src = 'redlist' AND col_id IS NOT NULL
+           )) AS col_ne
+    FROM read_parquet('${speciesGlob}', hive_partitioning=true)
+    GROUP BY taxon_group`)).getRowObjects();
+  for (const r of rows) out.set(String(r.taxon_group), { col_described: Number(r.col_described), col_ne: Number(r.col_ne) });
+  return out;
+}
+
+type NodeFilter = TaxonomyNode["filter"];
+
+// The display tree classifies fishes by the traditional GBIF/IUCN classes, but CoL XR
+// uses finer classes — so a node filtering on `actinopterygii` matches zero CoL rows
+// (which are `teleostei`, `holostei`, …). Expand those display classes to the CoL
+// classes they contain so the four fish sub-groups count correctly. Identity for any
+// class name that already exists in CoL (orders are unaffected).
+const COL_CLASS_ALIASES: Record<string, string[]> = {
+  actinopterygii: ["teleostei", "chondrostei", "cladistii", "holostei"],
+  sarcopterygii: ["dipneusti", "coelacanthi"],
+  chondrichthyes: ["elasmobranchii", "holocephali"],
+};
+function expandClasses(names: string[]): string[] {
+  return names.flatMap((n) => COL_CLASS_ALIASES[n.toLowerCase()] ?? [n]);
+}
+
+function sqlStrList(vals: string[]): string {
+  return vals.map((v) => `'${v.toLowerCase().replace(/'/g, "''")}'`).join(", ");
+}
+
+// Translate a taxonomy node filter into a SQL predicate over species/, mirroring
+// matchesFilter() exactly — including its `?? ""` null handling (so a null order_name
+// behaves like an empty string, not SQL NULL, which would otherwise drop such rows from
+// both an include and its complementary exclude). Children partition a group by
+// class/order, which is exclusive in the CoL universe — so no claim-tracking needed.
+function filterToSql(filter: NodeFilter): string {
+  const cls = "coalesce(lower(class_name), '')";
+  const ord = "coalesce(lower(order_name), '')";
+  const fam = "coalesce(lower(family), '')";
+  const conds: string[] = [`taxon_group IN (${sqlStrList(filter.csvGroups)})`];
+  if (filter.classNames?.length) conds.push(`${cls} IN (${sqlStrList(expandClasses(filter.classNames))})`);
+  if (filter.excludeClasses?.length) conds.push(`${cls} NOT IN (${sqlStrList(expandClasses(filter.excludeClasses))})`);
+  if (filter.orderNames?.length) {
+    const l = sqlStrList(filter.orderNames);
+    conds.push(`(${ord} IN (${l}) OR (${ord} = '' AND ${cls} IN (${l})))`);
+  }
+  if (filter.excludeOrders?.length) {
+    const l = sqlStrList(filter.excludeOrders);
+    conds.push(`NOT (${ord} IN (${l}) OR (${ord} = '' AND ${cls} IN (${l})))`);
+  }
+  if (filter.families?.length) conds.push(`${fam} IN (${sqlStrList(filter.families)})`);
+  if (filter.excludeFamilies?.length) conds.push(`${fam} NOT IN (${sqlStrList(filter.excludeFamilies)})`);
+  return conds.join(" AND ");
+}
+
+// Attach CoL counts (colDescribed / colNe) to every node-children summary — same
+// universe + assessed-by-col_id logic as the per-group counts, filtered per node so
+// sub-groups (e.g. mammals → rodents) get real numbers instead of "—".
+async function attachColCounts(summaries: Record<string, NodeSummary[]>): Promise<void> {
+  const link = path.join(DATA_DIR, "species_link.parquet");
+  const speciesGlob = path.join(DATA_DIR, "species", "**", "*.parquet");
+  if (!fs.existsSync(path.join(DATA_DIR, "species")) || !fs.existsSync(link)) {
+    console.log("  CoL node counts: species/ or species_link.parquet missing — skipping.");
+    return;
+  }
+  const conn = await (await DuckDBInstance.create(":memory:")).connect();
+  await conn.run(
+    `CREATE TEMP TABLE assessed_cids AS SELECT DISTINCT col_id FROM read_parquet('${link}') WHERE src = 'redlist' AND col_id IS NOT NULL`
+  );
+  let n = 0;
+  for (const children of Object.values(summaries)) {
+    for (const child of children) {
+      const node = NODE_INDEX.get(child.id);
+      if (!node) continue;
+      const rows = await (await conn.run(`
+        SELECT count(*) FILTER (in_base AND extinct IS NOT TRUE AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL}) AS col_described,
+               count(*) FILTER (in_base AND extinct IS NOT TRUE AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL} AND col_id NOT IN (SELECT col_id FROM assessed_cids)) AS col_ne
+        FROM read_parquet('${speciesGlob}', hive_partitioning=true)
+        WHERE ${filterToSql(node.filter)}`)).getRowObjects();
+      child.colDescribed = Number(rows[0].col_described);
+      child.colNe = Number(rows[0].col_ne);
+      n++;
+    }
+  }
+  console.log(`  CoL node counts: attached to ${n} node summaries.`);
 }
 
 export async function run(): Promise<void> {
@@ -122,6 +235,16 @@ export async function run(): Promise<void> {
     });
 
     console.log(`  ${taxon.id}: ${totalAssessed} assessed, ${gbifNeSpeciesCount} unassessed, ${outdated} outdated, ${gbifSpeciesCount} GBIF species`);
+  }
+
+  // Catalogue of Life per-group counts: extant universe (col_described) and the
+  // not-evaluated slice (col_ne = universe minus assessed col_ids). species/ is
+  // partitioned by taxon_group, so this is one grouped scan. 0s if CoL not built yet.
+  const colCounts = await colCountsByGroup();
+  for (const s of summaries) {
+    const c = colCounts.get(s.table1a_taxon_group);
+    s.col_described = c?.col_described ?? 0;
+    s.col_ne = c?.col_ne ?? 0;
   }
 
   const outputPath = path.join(DATA_DIR, "taxa-summary.json");
@@ -299,6 +422,8 @@ export async function run(): Promise<void> {
     childCount += childSummaries.length;
     console.log(`  ${nodeId}: ${childSummaries.length} children`);
   }
+
+  await attachColCounts(nodeChildrenSummaries);
 
   const childrenOutputPath = path.join(DATA_DIR, "node-children-summaries.json");
   fs.writeFileSync(childrenOutputPath, JSON.stringify(nodeChildrenSummaries, null, 2) + "\n");

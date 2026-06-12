@@ -14,6 +14,7 @@ import * as path from "path";
 import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
 import { NODE_INDEX, getCsvGroupsForNode } from "@/lib/taxonomy-utils";
 import { canonicalizeTaxonId, mapTaxonId } from "@/lib/data/taxonomy-constants";
+import { getTaxaSummary } from "@/lib/data/species-store";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 // Dev has the parquets on disk; on Vercel they aren't bundled → read from R2.
@@ -50,6 +51,28 @@ async function getConn(): Promise<DuckDBConnection> {
   return connPromise;
 }
 
+// The NE de-dup set (assessed col_ids) and the GBIF-by-col_id overlay map are GLOBAL
+// (taxon-independent) but were rebuilt on every NE query — and the assessed set was
+// scanned twice. Materialize both once per warm container as temp tables; large
+// groups (plants ~280k) stop paying for the ~557k-row GBIF aggregation + the 173k
+// anti-set on each request. Reset on failure so a transient R2 error can retry.
+let neHelpersPromise: Promise<void> | null = null;
+function ensureNeHelpers(conn: DuckDBConnection): Promise<void> {
+  if (!neHelpersPromise) {
+    neHelpersPromise = (async () => {
+      const linkUri = parquetUri("species_link.parquet");
+      const unassessedUri = parquetUri("unassessed.parquet");
+      await conn.run(`CREATE TEMP TABLE ne_assessed_col_ids AS
+        SELECT DISTINCT col_id FROM read_parquet('${linkUri}') WHERE src = 'redlist' AND col_id IS NOT NULL`);
+      await conn.run(`CREATE TEMP TABLE ne_gbif_by_col AS
+        SELECT sl.col_id AS col_id, any_value(un.gbif_species_key) AS gbif_species_key, max(un.gbif_occurrence_count) AS gbif_occurrence_count, any_value(un.countries) AS countries, any_value(un.common_name) AS common_name
+        FROM read_parquet('${linkUri}') sl JOIN read_parquet('${unassessedUri}') un ON un.id = sl.id
+        WHERE sl.src = 'gbif' AND sl.col_id IS NOT NULL GROUP BY sl.col_id`);
+    })().catch((e) => { neHelpersPromise = null; throw e; });
+  }
+  return neHelpersPromise;
+}
+
 // ─── Resolve a taxon identifier to a SQL predicate ──────────────────────────
 //
 // Parity with /api/redlist/species: a taxonomy node filters by its csvGroups
@@ -74,6 +97,12 @@ export function resolveWhere(taxonId: string): WhereParts {
   };
 }
 
+// species/ is Hive-partitioned by `taxon_group` (the IUCN Table 1a group, assigned at
+// build time from the lineage — see build-backbone's TAXON_GROUP_CASE). So the NE
+// universe is filtered with the SAME `whereSql` resolveWhere() builds for the
+// assessed/unassessed parquets, and the partition prunes to the queried group(s). No
+// separate node→CoL lineage mapping or per-query partition logic is needed.
+
 // ─── SpeciesRow projection ─────────────────────────────────────────────────
 
 export interface PreviousAssessment {
@@ -87,14 +116,6 @@ const ASSESSED_SELECT = `
   taxon_group, gbif_species_key, gbif_occurrence_count, gbif_observations_after_assessment_year,
   systems, growth_forms, movement_pattern, possibly_extinct, possibly_extinct_in_the_wild,
   criteria, threat_codes, has_map, latest_assessors, latest_reviewers`;
-
-// unassessed.parquet lacks the assessment-only columns → fill SpeciesRow defaults
-const UNASSESSED_SELECT = `
-  id, NULL AS assessment_id, scientific_name, common_name, family, iucn_category AS category,
-  NULL AS assessment_date, NULL AS year_published, NULL AS population_trend, countries, class_name, order_name,
-  taxon_group, gbif_species_key, gbif_occurrence_count, NULL AS gbif_observations_after_assessment_year,
-  '' AS systems, '' AS growth_forms, NULL AS movement_pattern, FALSE AS possibly_extinct, FALSE AS possibly_extinct_in_the_wild,
-  NULL AS criteria, '' AS threat_codes, FALSE AS has_map, NULL AS latest_assessors, NULL AS latest_reviewers`;
 
 const splitList = (s: unknown): string[] => (typeof s === "string" && s ? s.split(";").filter(Boolean) : []);
 const num = (v: unknown): number | null => (v == null ? null : Number(v));
@@ -139,6 +160,22 @@ export function toSpeciesRow(r: Record<string, unknown>) {
   };
 }
 
+// CoL species deliberately kept out of the universe (analogous to the domesticated-GBIF
+// exclusion). Homo sapiens — IUCN omits humans from its Red List export, so it would
+// otherwise surface as "not evaluated". Keep in sync with build-taxa-summary.
+const EXCLUDED_COL_IDS_SQL = `('6MB3T')`; // Homo sapiens
+
+// Per-taxon_group not-evaluated counts from the precomputed taxa-summary (in memory),
+// used to decide tooLarge instantly without scanning species/ on R2.
+let neByGroupCache: Map<string, number> | null = null;
+function neByGroup(): Map<string, number> {
+  if (neByGroupCache) return neByGroupCache;
+  const m = new Map<string, number>();
+  for (const row of getTaxaSummary()) m.set(row.table1a_taxon_group, Number(row.col_ne ?? 0));
+  neByGroupCache = m;
+  return m;
+}
+
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 export async function querySpecies(opts: {
@@ -146,28 +183,124 @@ export async function querySpecies(opts: {
   includeNE?: boolean;
   limit?: number;
   offset?: number;
-}): Promise<ReturnType<typeof toSpeciesRow>[]> {
+}): Promise<{ species: ReturnType<typeof toSpeciesRow>[]; truncated: boolean; tooLarge: boolean; neTotal: number | null }> {
   const conn = await getConn();
   const where = resolveWhere(opts.taxon);
   const whereSql = where.clauses.length ? `WHERE ${where.clauses.join(" AND ")}` : "";
   const assessedUri = parquetUri("assessed.parquet");
+  // Cap the Not-Evaluated additions: a giant aggregate (insects ~1M, invertebrates
+  // ~1.3M) can't be serialized in one response (it 500s / times out). Return up to
+  // NE_CAP, flag `truncated`, and report `neTotal` so the UI can say "showing N of M
+  // — drill into a sub-group". Every species stays reachable via its leaf node.
+  const NE_CAP = 400_000;
+  // The NE list is never partially truncated now: a group over the cap returns no rows
+  // with tooLarge=true (UI prompts a drill-down); groups under the cap load in full.
+  const truncated = false;
+  let tooLarge = false;
+  let neTotal: number | null = null;
+
+  // Fast tooLarge path: decide from the precomputed per-group col_ne (in memory) before any
+  // R2 work, so the drill-down prompt for a giant aggregate (insects, invertebrates) is
+  // instant instead of waiting on a ~2M-row count + the cold ensureNeHelpers build. The
+  // per-group sum is an upper bound for any sub-group, so it never falsely blocks a
+  // manageable one (only the two aggregates exceed the cap). Best-effort: if taxa-summary
+  // isn't bundled in this function, fall through to the live count below (still correct).
+  if (opts.includeNE) {
+    try {
+      const groups = getCsvGroupsForNode(canonicalizeTaxonId(opts.taxon));
+      const neEstimate = groups.reduce((sum, g) => sum + (neByGroup().get(g) ?? 0), 0);
+      if (neEstimate > NE_CAP) {
+        return { species: [], truncated, tooLarge: true, neTotal: neEstimate };
+      }
+    } catch {
+      // taxa-summary unavailable — the live count in the NE branch still enforces the cap.
+    }
+  }
 
   // No history join — the list carries only the latest assessors/reviewers
   // (denormalized columns). The full per-species history array is fetched lazily
   // via getAssessmentHistory when a detail panel opens. This reads a single file
   // and drops ≈40% of the payload (history was ~half the bytes for large taxa).
   const assessedSql = `SELECT ${ASSESSED_SELECT} FROM '${assessedUri}' a ${whereSql}`;
-  let rows = (await conn.runAndReadAll(assessedSql, where.params)).getRowObjects();
-
-  if (opts.includeNE) {
-    const neSql = `SELECT ${UNASSESSED_SELECT} FROM '${parquetUri("unassessed.parquet")}' ${whereSql}`;
-    rows = rows.concat((await conn.runAndReadAll(neSql, where.params)).getRowObjects());
-  }
+  const rows = (await conn.runAndReadAll(assessedSql, where.params)).getRowObjects();
 
   let result = rows.map(toSpeciesRow);
+
+  // Not-Evaluated species (#271, Phase 3): on an NE fetch, add every species under
+  // this taxon that is NOT IUCN-assessed — keyed by CoL `col_id`, not by name. Name
+  // de-duping double-counted: IUCN assesses Hipposideros X while CoL's accepted name
+  // is Doryrhina X (a genus reassignment), so the same animal showed once as assessed
+  // and again as "new". species_link bridges both names to one col_id, so de-duping by
+  // col_id collapses them. Two parts: (A) the CoL extant universe under the taxon minus
+  // already-assessed col_ids, with GBIF occurrences overlaid; (B) GBIF-observed species
+  // not represented in that universe (orphans). Safety-capped.
+  if (opts.includeNE && whereSql) {
+    const taxonId = canonicalizeTaxonId(opts.taxon);
+    // Build (once per warm container) the global de-dup set + GBIF overlay map.
+    await ensureNeHelpers(conn);
+    const assessedColIds = "(SELECT col_id FROM ne_assessed_col_ids)"; // assessed col_ids (de-dup key)
+    const speciesUri = parquetUri("species/**/*.parquet");
+
+    // The NE list IS the CoL extant universe under the taxon, not already assessed
+    // (minus the small EXCLUDED_COL_IDS denylist). species/ is partitioned by taxon_group,
+    // so the SAME `whereSql` used for the assessed parquet filters + prunes it.
+    const univFilter = `${whereSql} AND in_base AND extinct IS NOT TRUE AND col_id NOT IN ${assessedColIds} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL}`;
+
+    // Count first (cheap). A giant aggregate (insects ~935k, invertebrates ~1.3M) exceeds
+    // the cap — serializing it is a 250MB+ payload the browser can't load. Flag `tooLarge`
+    // and return no rows so the UI prompts a drill-down into a sub-group instead. Every
+    // group under the cap (beetles ~262k and smaller) loads in full (never truncated).
+    const univCount = Number((await conn.runAndReadAll(
+      `SELECT count(*) AS c FROM read_parquet('${speciesUri}', hive_partitioning=true) ${univFilter}`,
+      where.params)).getRowObjects()[0].c);
+    if (univCount > NE_CAP) {
+      tooLarge = true;
+      neTotal = univCount;
+    } else {
+      // GBIF orphans (species GBIF knows but CoL's Base universe doesn't) were dropped: the
+      // NE list equals the col_ne count exactly and excludes fossils CoL keeps out of the
+      // universe (woolly mammoth in_base=false; American mastodon CoL-unmatched).
+      const univSql = `
+        SELECT u.col_id, u.scientific_name, u.class_name, u.order_name, u.family, u.taxon_group,
+               g.gbif_species_key, g.gbif_occurrence_count, g.countries, g.common_name
+        FROM (
+          SELECT col_id, scientific_name, class_name, order_name, family, taxon_group
+          FROM read_parquet('${speciesUri}', hive_partitioning=true) ${univFilter}
+        ) u
+        LEFT JOIN ne_gbif_by_col g ON g.col_id = u.col_id`;
+      const univRows = (await conn.runAndReadAll(univSql, where.params)).getRowObjects();
+      let synthId = -2_000_000_000;
+      for (const r of univRows) {
+        // Slim NE row — only the 12 populated fields. The other 17 (assessment-only:
+        // assessment_id/date, trend, criteria, threats, systems, assessors, …) are always
+        // null/empty/false for NE, so omitting them ~halves the payload + server
+        // serialization (beetles ~262k rows: 178MB → ~90MB). The client handles their
+        // absence exactly as the nulls it receives today (audited: every access is
+        // optional-chained, falsy-checked, or NE-skipped). Synthetic negative id (no IUCN
+        // sis); taxon_group is the REAL CoL group (sub-group filter), taxon_id forced to
+        // the requested taxon (top-level filter); GBIF key/count/countries/common_name
+        // overlaid when the species is GBIF-observed.
+        result.push({
+          id: synthId--,
+          scientific_name: r.scientific_name ?? "",
+          common_name: r.common_name ?? null,
+          family: r.family ?? null,
+          category: "NE",
+          countries: splitList(r.countries),
+          class_name: r.class_name ?? null,
+          order_name: r.order_name ?? null,
+          taxon_group: String(r.taxon_group),
+          taxon_id: taxonId,
+          gbif_species_key: num(r.gbif_species_key),
+          gbif_occurrence_count: num(r.gbif_occurrence_count),
+        } as unknown as ReturnType<typeof toSpeciesRow>);
+      }
+    }
+  }
+
   if (opts.offset) result = result.slice(opts.offset);
   if (opts.limit != null) result = result.slice(0, opts.limit);
-  return result;
+  return { species: result, truncated, tooLarge, neTotal };
 }
 
 // ─── Cross-taxa search ──────────────────────────────────────────────────────
@@ -249,4 +382,43 @@ export async function getAssessmentHistory(sisTaxonId: number): Promise<Previous
     assessors: (pa.assessors as string) ?? null,
     reviewers: (pa.reviewers as string) ?? null,
   }));
+}
+
+// ─── CoL backbone: arbitrary-rank species listing (#271, Phase 3) ────────────
+
+export interface BackboneSpecies { col_id: string; scientific_name: string; }
+
+// All CoL accepted species under any taxon, matched at ANY rank (kingdom →
+// genus) against the denormalized lineage — e.g. ?taxon=Felidae lists every cat
+// species in the tree of life, most of them Not Evaluated. The hand-curated tree
+// can only drill into predefined nodes; this works for any taxon CoL knows.
+// (Uses the denormalized lineage columns, not the parent_id chain — the raw CoL
+// parent tree skips/collapses ranks, so lineage is the reliable basis.)
+export async function getSpeciesUnder(taxon: string, limit = 50): Promise<{
+  taxon: string; matched_rank: string | null; total: number; sample: BackboneSpecies[];
+}> {
+  const conn = await getConn();
+  const sp = `read_parquet('${parquetUri("species/**/*.parquet")}', hive_partitioning=true)`;
+  const t = taxon.toLowerCase();
+  // Arbitrary-rank lineage match over the extant universe. species/ is partitioned by
+  // taxon_group, not by clade, so an arbitrary rank can't prune — it full-scans. (This
+  // is a power-user endpoint not wired into the UI; the hot path is querySpecies.)
+  const where = `$t IN (kingdom, phylum, class_name, order_name, family, genus) AND in_base AND extinct IS NOT TRUE`;
+  const params: Record<string, string> = { t };
+  const lim = Math.min(Math.max(limit, 1), 200);
+  const head = (await conn.runAndReadAll(
+    `SELECT count(*) AS total,
+            min(CASE WHEN genus=$t THEN 'genus' WHEN family=$t THEN 'family' WHEN order_name=$t THEN 'order'
+                     WHEN class_name=$t THEN 'class' WHEN phylum=$t THEN 'phylum' WHEN kingdom=$t THEN 'kingdom' END) AS matched_rank
+     FROM ${sp} WHERE ${where}`, params,
+  )).getRowObjects();
+  const total = Number(head[0].total);
+  if (total === 0) return { taxon, matched_rank: null, total: 0, sample: [] };
+  const rows = (await conn.runAndReadAll(
+    `SELECT col_id, scientific_name FROM ${sp} WHERE ${where} ORDER BY scientific_name LIMIT ${lim}`, params,
+  )).getRowObjects();
+  return {
+    taxon, matched_rank: (head[0].matched_rank as string) ?? null, total,
+    sample: rows.map((r) => ({ col_id: String(r.col_id), scientific_name: String(r.scientific_name) })),
+  };
 }

@@ -10,6 +10,17 @@ const DUCKDB_TRACE = [
   "./duckdb-ext/**",
 ];
 
+// The CoL backbone artifacts (#271) are read ONLY from R2 via httpfs at runtime —
+// no serverless function bundles them. But fetch-data-from-r2 pulls the whole
+// sync into app/data/ at build time, so any function that traces data/ would bundle
+// backbone.parquet (~170MB) and blow Vercel's 250MB function cap. Exclude them from
+// the species-store routes (the DuckDB routes already exclude all of data/).
+const COL_ARTIFACTS = [
+  "**/data/backbone.parquet",
+  "**/data/species/**",
+  "**/data/species_link.parquet",
+];
+
 const nextConfig: NextConfig = {
   // #261: DuckDB-backed read routes query Parquet in R2. Keep the native addon
   // out of the bundler, and force-include the 68MB libduckdb.so it dlopens at
@@ -24,6 +35,7 @@ const nextConfig: NextConfig = {
     "/api/redlist/species/history": DUCKDB_TRACE,
     "/api/search": DUCKDB_TRACE,
     "/api/search/warm": DUCKDB_TRACE,
+    "/api/taxa/species": DUCKDB_TRACE,
   },
 
   // The API routes import a shared species-store module that references every
@@ -36,14 +48,21 @@ const nextConfig: NextConfig = {
     // Search now queries the parquets in R2 (httpfs) — no local data bundled.
     "/api/search": ["**/data/**"],
     "/api/search/warm": ["**/data/**"],
-    // Species list + history query the parquets in R2 (httpfs) — no local data.
-    "/api/redlist/species": ["**/data/**"],
+    // Species list queries the parquets in R2 (httpfs); it also reads the small
+    // taxa-summary.json for the instant tooLarge check, so exclude the heavy data but
+    // keep that one file. CRITICAL: keep ALL parquets out — USE_R2 is gated on
+    // assessed.parquet NOT existing locally, so bundling any parquet flips the route to
+    // local mode and the R2-only files (species_link) then 404.
+    "/api/redlist/species": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", "**/data/node-children-summaries.json", "**/data/*.parquet", ...COL_ARTIFACTS],
     "/api/redlist/species/history": ["**/data/**"],
-    // Reads the Red List / GBIF CSVs (+ mapping) but never the search index.
-    "/api/redlist/assessor-candidates-by-country": ["**/data/search-index.json"],
+    // Reads the Red List / GBIF CSVs (+ mapping) but never the search index or
+    // the R2-only CoL artifacts.
+    "/api/redlist/assessor-candidates-by-country": ["**/data/search-index.json", ...COL_ARTIFACTS],
     // These read only the small precomputed summary JSONs.
-    "/api/redlist/taxa-summary": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv"],
-    "/api/redlist/taxa-subgroups": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv"],
+    "/api/redlist/taxa-summary": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", ...COL_ARTIFACTS],
+    "/api/redlist/taxa-subgroups": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", ...COL_ARTIFACTS],
+    // Backbone tree navigation queries backbone.parquet in R2 (httpfs) — no local data.
+    "/api/taxa/species": ["**/data/**"],
   },
 };
 

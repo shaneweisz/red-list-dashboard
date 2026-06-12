@@ -373,6 +373,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     prevViewModeRef.current = viewMode;
     // Same taxon key maps to different data per mode — clear cache
     setSpeciesByTaxon({});
+    setTruncationByTaxon({});
     setNeSpecies([]);
     setNeSpeciesFetched(false);
     // Clear assessment-specific filters (preserve search + species so search-bar navigation survives mode switch)
@@ -496,6 +497,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // Cache of fetched species per taxon ID. When "all" is fetched, it supersedes
   // individual taxa caches. Each taxon is fetched at most once.
   const [speciesByTaxon, setSpeciesByTaxon] = useState<Record<string, RedListSpecies[]>>({});
+  // Per-taxon NE-list truncation (giant aggregates are capped at 400k server-side).
+  const [truncationByTaxon, setTruncationByTaxon] = useState<Record<string, { truncated: boolean; tooLarge: boolean; neTotal: number | null; shown: number }>>({});
   const [loadingTaxa, setLoadingTaxa] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const abortRefs = useRef<Record<string, AbortController>>({});
@@ -505,8 +508,14 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   useEffect(() => {
     if (selectedTaxa.size === 0) return;
 
-    // In new-assessments mode, skip "all" — NE dataset too large for serverless
-    const taxaToFetch = [...selectedTaxa].filter(t => {
+    // In new-assessments mode, a drill-down fetches the SUB-GROUP directly so a sub-group of
+    // a too-large aggregate (e.g. crustaceans under invertebrates, beetles under insects)
+    // loads on its own instead of being filtered out of the parent's empty (tooLarge) result.
+    // Skip "all" — NE dataset too large for serverless.
+    const fetchSet = isNewAssessments && selectedSubgroups.size > 0
+      ? [...selectedSubgroups]
+      : [...selectedTaxa];
+    const taxaToFetch = fetchSet.filter(t => {
       if (isNewAssessments && t === "all") return false;
       return !speciesByTaxon[t] && !loadingTaxa.has(t);
     });
@@ -551,6 +560,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         .then(data => {
           if (!controller.signal.aborted) {
             setSpeciesByTaxon(prev => ({ ...prev, [taxonId]: data.species }));
+            setTruncationByTaxon(prev => ({ ...prev, [taxonId]: { truncated: !!data.truncated, tooLarge: !!data.tooLarge, neTotal: data.neTotal ?? null, shown: data.species.length } }));
           }
         })
         .catch(err => {
@@ -565,7 +575,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
           delete abortRefs.current[taxonId];
         });
     }
-  }, [selectedTaxa, speciesByTaxon, loadingTaxa, isNewAssessments]);
+  }, [selectedTaxa, selectedSubgroups, speciesByTaxon, loadingTaxa, isNewAssessments]);
 
   // Prefetch all species on mount so taxa clicks feel instant (skip for new-assessments — NE dataset too large)
   useEffect(() => {
@@ -591,13 +601,15 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     if (selectedTaxa.size === 0) return [];
     // If "all" is cached, use it directly
     if (speciesByTaxon["all"]) return speciesByTaxon["all"];
-    // Otherwise merge per-taxon caches
+    // In new-assessments mode a drill-down is fetched per sub-group, so merge those caches
+    // when sub-groups are selected; otherwise merge the per-taxon caches.
+    const sourceIds = isNewAssessments && selectedSubgroups.size > 0 ? [...selectedSubgroups] : [...selectedTaxa];
     let merged: RedListSpecies[] = [];
-    for (const taxonId of selectedTaxa) {
+    for (const taxonId of sourceIds) {
       if (speciesByTaxon[taxonId]) merged = merged.concat(speciesByTaxon[taxonId]);
     }
     return merged;
-  }, [selectedTaxa, speciesByTaxon]);
+  }, [selectedTaxa, selectedSubgroups, speciesByTaxon, isNewAssessments]);
 
   // NE species lazy loading (only fetched when NE category is selected)
   const [neSpecies, setNeSpecies] = useState<RedListSpecies[]>([]);
@@ -630,7 +642,10 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // Filter by selected taxa + subgroup
   const taxaFilteredSpecies = useMemo(() => {
     let filtered = species;
-    if (selectedTaxa.size > 0 && !selectedTaxa.has("all")) {
+    // In new-assessments mode with a sub-group selected, species were fetched per sub-group
+    // (taxon_id = the sub-group), so the speciesMatchesNode filter below is authoritative —
+    // skip the parent taxon_id filter, which would otherwise drop them.
+    if (selectedTaxa.size > 0 && !selectedTaxa.has("all") && !(isNewAssessments && selectedSubgroups.size > 0)) {
       // Display-root entries (the 8 taxa) match by taxon_id. Any selected taxon
       // that isn't a taxonomy node — an arbitrary rank like ?taxa=turdidae — is
       // matched against the species' own class/order/family (#261).
@@ -649,7 +664,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       );
     }
     return filtered;
-  }, [species, selectedTaxa, selectedSubgroups]);
+  }, [species, selectedTaxa, selectedSubgroups, isNewAssessments]);
 
   // Helper to check if species matches year range filter
   const matchesYearRangeFilter = useCallback((assessmentDate: string | null, yearRanges: Set<string> = selectedYearRanges): boolean => {
@@ -1440,6 +1455,36 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     return { filteredSpecies: filtered, sortedSpecies: sorted };
   }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, hasMapFilter, selectedGrowthForms, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection, matchesAssessorsFilter, matchesReviewersFilter, isNewAssessments, matchesObsRangeFilter, matchesYearRangeFilter, matchesAssessmentYearFilter]);
 
+  // Giant aggregates (insects, invertebrates…) are capped at 400k server-side; surface
+  // a banner so the list reads as "showing N of M — drill into a sub-group for the rest".
+  const neTruncation = useMemo(() => {
+    if (!isNewAssessments) return null;
+    let truncated = false; let neTotal = 0; let shown = 0;
+    for (const t of selectedTaxa) {
+      const info = truncationByTaxon[t];
+      if (info?.truncated) { truncated = true; neTotal += info.neTotal ?? 0; shown += info.shown; }
+    }
+    return truncated ? { neTotal, shown } : null;
+  }, [isNewAssessments, selectedTaxa, truncationByTaxon]);
+
+  // A giant aggregate (insects, invertebrates) exceeds the cap — the API returns no rows
+  // and flags tooLarge. Don't render the charts/list; prompt a drill-down into a sub-group.
+  // Only applies with no sub-group selected (sub-groups are always under the cap).
+  const neTooLarge = useMemo(() => {
+    if (!isNewAssessments) return null;
+    // Reflect the actually-fetched target: a selected sub-group (e.g. insects under
+    // invertebrates) if any, otherwise the top-level taxon. So a too-large sub-group shows
+    // the drill-down prompt while a manageable sibling (crustaceans, beetles) loads.
+    const targets = selectedSubgroups.size > 0 ? [...selectedSubgroups] : [...selectedTaxa];
+    const names: string[] = [];
+    let neTotal = 0;
+    for (const t of targets) {
+      const info = truncationByTaxon[t];
+      if (info?.tooLarge) { names.push(findNode(t)?.name ?? t); neTotal += info.neTotal ?? 0; }
+    }
+    return names.length > 0 ? { names, neTotal } : null;
+  }, [isNewAssessments, selectedTaxa, selectedSubgroups, truncationByTaxon]);
+
   // ── Client-side pagination ─────────────────────────────────────────
   const totalFiltered = filteredSpecies.length;
   const totalPages = Math.ceil(sortedSpecies.length / PAGE_SIZE);
@@ -1862,6 +1907,16 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
 
       {/* Charts, search, and species table - only visible after a taxon is selected */}
       {selectedTaxa.size > 0 && (
+      neTooLarge ? (
+        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-amber-200 dark:border-amber-900/40 px-6 py-10 text-center">
+          <p className="text-base font-medium text-zinc-700 dark:text-zinc-200">
+            {neTooLarge.names.join(" & ")} has {neTooLarge.neTotal.toLocaleString()} not-evaluated species — too many to load at once.
+          </p>
+          <p className="mt-1.5 text-sm text-zinc-500 dark:text-zinc-400">
+            Open a sub-group (a class or order — e.g. Beetles, Crustaceans) above to view its charts and species list.
+          </p>
+        </div>
+      ) : (
       <div className="space-y-3">
 
           {/* Single species header — skeleton while loading */}
@@ -2823,6 +2878,12 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
               <Spinner className="h-6 w-6" />
             </div>
           )}
+        {neTruncation && (
+          <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-700/50 dark:bg-amber-900/20 px-4 py-2.5 text-sm text-amber-800 dark:text-amber-200">
+            This group is very large — showing the first <strong>{neTruncation.shown.toLocaleString()}</strong>
+            {neTruncation.neTotal > neTruncation.shown ? <> of {neTruncation.neTotal.toLocaleString()}</> : null} not-evaluated species. Open a sub-group (e.g. a class or order) to browse the rest.
+          </div>
+        )}
         <div
           className={`bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-x-auto transition-opacity duration-150 ${speciesLoading && !singleSpeciesPreview ? "opacity-50 pointer-events-none" : ""}`}
           onScroll={(e) => {
@@ -3310,7 +3371,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         )}
       </div>
       </div>
-      )}
+      ))}
 
       {/* Fixed image preview portal */}
       <img

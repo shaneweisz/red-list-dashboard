@@ -66,6 +66,8 @@ export interface TaxaSummaryRow {
   total_gbif_observations: number;
   mean_gbif_obs: number;
   median_gbif_obs: number | null;
+  col_described?: number; // CoL extant universe in this group (#271)
+  col_ne?: number;        // CoL universe not yet IUCN-assessed
 }
 
 // =============================================================================
@@ -488,6 +490,11 @@ export interface NodeSummary {
   outdated: number;
   gbifNeSpeciesCount: number;
   byCategory: Record<string, number>;
+  // Catalogue of Life backbone (#272): extant accepted universe under this node and
+  // the not-evaluated slice (universe − assessed, by col_id). Undefined when the CoL
+  // artifacts weren't present at build time.
+  colDescribed?: number;
+  colNe?: number;
 }
 
 const CURRENT_YEAR = new Date().getFullYear();

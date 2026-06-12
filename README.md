@@ -83,9 +83,10 @@ Data:     SWR for client-side fetching
 Hosting:  Vercel
 
 Data Flow:
-┌─────────────────┐  scripts/sync.ts   ┌──────────────────┐  prebuild fetch   ┌───────────────┐
-│  IUCN Red List   │───────────────────▶│  Per-taxon CSVs  │──────────────────▶│  app/data/     │──▶ API Routes ──▶ UI
-│  GBIF API        │  (offline pipeline)│  in private R2   │  (at build time)  │  (local copy)  │
+┌─────────────────┐  scripts/sync.ts   ┌──────────────────┐  httpfs / prebuild ┌───────────────┐
+│  IUCN Red List   │───────────────────▶│  CSVs + parquets │───────────────────▶│  app/data/     │──▶ API Routes ──▶ UI
+│  GBIF API        │  (offline pipeline)│  in private R2   │  (DuckDB at runtime│  (local copy)  │
+│  Catalogue of Life│                    │                  │   / build-time)    │                │
 └─────────────────┘                    └──────────────────┘                   └───────────────┘
                           version pinned by app/latest-sync.txt (git-tracked)
 
@@ -111,7 +112,12 @@ npx tsx scripts/sync.ts mammalia aves    # Specific taxa only
 4. `fetch-gbif-country-data` — GBIF API → per-species country occurrence counts
 5. `fetch-gbif-new-counts` — GBIF API → updates GBIF CSVs with temporal splits
 6. `build-taxa-summary` — aggregates per-taxon CSVs → `data/taxa-summary.json` and `data/node-children-summaries.json`
-7. `build-search-index` — builds `data/search-index.json` for fast species search
+7. `build-parquet` — CSVs → `assessed.parquet` / `unassessed.parquet` (the DuckDB read layer; also powers cross-taxa search)
+
+Phases 8–10 build the **Catalogue of Life backbone** (run on a full sync only) — the described-species universe behind the new-assessments view, which surfaces species CoL knows about that IUCN hasn't yet evaluated:
+8. `fetch-coldp` — CoL eXtended Release ColDP archive → `NameUsage.tsv` (downloaded to a temp dir, not `data/`)
+9. `build-backbone` — `NameUsage.tsv` → `backbone.parquet` (tree + synonyms) + `species/` (accepted-species universe, partitioned; tagged `extinct`/`in_base`)
+10. `build-matching` — reconciles IUCN/GBIF species to CoL → `species_link.parquet` (`{sis_taxon_id, gbif_species_key} → col_id`, via accepted-name + CoL/IUCN synonym matching)
 
 **Publishing a refresh.** `app/data/` lives in a private R2 bucket; the active version is pinned via `app/latest-sync.txt`. To publish a fresh sync:
 
