@@ -23,12 +23,15 @@ beforeAll(async () => {
   const conn = await (await DuckDBInstance.create(":memory:")).connect();
   const copy = (sql: string, file: string) => conn.run(`COPY (${sql}) TO '${path.join(tmp, file)}' (FORMAT PARQUET);`);
 
-  // CoL accepted species (col_acc source).
+  // CoL accepted species (col_acc source). VE + SA are the same bird as two accepted
+  // concepts (the Verreauxia/Sasia africana case).
   await copy(`SELECT * FROM (VALUES
       ('C1','Panthera leo','mammalia','felidae'),
       ('C2','Macronycteris vittatus','mammalia','hipposideridae'),
       ('C3','Felis catus','mammalia','felidae'),
-      ('C4','Apis mellifera','insecta','apidae')
+      ('C4','Apis mellifera','insecta','apidae'),
+      ('VE','Verreauxia africana','aves','picidae'),
+      ('SA','Sasia africana','aves','picidae')
     ) v(col_id, scientific_name, class_name, family)`, "species/data_0.parquet");
 
   // CoL backbone (col_syn source): one species-rank synonym → accepted parent C3.
@@ -42,7 +45,8 @@ beforeAll(async () => {
       (1::BIGINT, 'Panthera leo', 'mammalia', 'felidae', NULL::BIGINT),
       (2::BIGINT, 'Felis silvestris catus', 'mammalia', 'felidae', NULL::BIGINT),
       (3::BIGINT, 'Hipposideros vittatus', 'mammalia', 'hipposideridae', NULL::BIGINT),
-      (4::BIGINT, 'Gone extinctus', 'mammalia', 'nowhere', NULL::BIGINT)
+      (4::BIGINT, 'Gone extinctus', 'mammalia', 'nowhere', NULL::BIGINT),
+      (5::BIGINT, 'Verreauxia africana', 'aves', 'picidae', NULL::BIGINT)
     ) v(id, scientific_name, class_name, family, gbif_species_key)`, "assessed.parquet");
 
   // GBIF-only species (no IUCN synonyms).
@@ -53,7 +57,7 @@ beforeAll(async () => {
   // Redlist CSV with the IUCN synonym source: sis 3 (Hipposideros vittatus) records
   // the synonym "Macronycteris vittatus" — which is CoL's accepted name (C2).
   fs.writeFileSync(path.join(tmp, "redlist", "mammals.csv"),
-    "sis_taxon_id,synonyms\n1,\n2,\n3,Macronycteris vittatus:NEW\n4,\n");
+    "sis_taxon_id,synonyms\n1,\n2,\n3,Macronycteris vittatus:NEW\n4,\n5,Sasia africana:NEW\n");
 
   await run({ dataDir: tmp });
   link = path.join(tmp, "species_link.parquet");
@@ -92,5 +96,17 @@ describe("build-matching ladder", () => {
   it("matches GBIF-only species too (no IUCN synonyms involved)", async () => {
     const r = (await rows()).find((x) => Number(x.id) === 101)!;
     expect([r.col_id, r.match_method]).toEqual(["C4", "accepted"]);
+  });
+
+  it("covers BOTH accepted concepts of a species split across CoL sources (no false NE)", async () => {
+    // IUCN Verreauxia africana matches CoL accepted 'Verreauxia africana' (VE), but its
+    // IUCN synonym 'Sasia africana' is a second CoL accepted concept (SA) for the same
+    // bird. Both must be recorded so neither resurfaces as a new candidate.
+    const r5 = (await rows()).filter((x) => Number(x.id) === 5);
+    const byCol = new Map(r5.map((x) => [x.col_id, x.match_method]));
+    expect(byCol.get("VE")).toBe("accepted");            // primary
+    expect(byCol.get("SA")).toBe("iucn_synonym_covered"); // the in-universe duplicate, covered
+    // The NE de-dup keys on DISTINCT redlist col_id — both VE and SA are excluded.
+    expect(new Set(r5.map((x) => x.col_id))).toEqual(new Set(["VE", "SA"]));
   });
 });

@@ -113,10 +113,9 @@ export async function run(opts: { dataDir?: string } = {}): Promise<void> {
       ) WHERE rn = 1;
   `);
 
-  // Assemble: accepted (or accepted_homonym), else canonical synonym, else IUCN
-  // synonym, else unmatched.
+  // Primary link — one row per species (its single best match).
   await conn.run(`
-    COPY (
+    CREATE TEMP TABLE primary_link AS
       SELECT o.src, o.id, o.sis_taxon_id, o.gbif_species_key, o.scientific_name,
              coalesce(a.col_id, s.col_id, i.col_id) AS col_id,
              CASE WHEN a.col_id IS NOT NULL AND a.ncand = 1 THEN 'accepted'
@@ -127,13 +126,35 @@ export async function run(opts: { dataDir?: string } = {}): Promise<void> {
       FROM ours o
       LEFT JOIN acc_match a ON a.id = o.id
       LEFT JOIN col_syn s ON s.nm = o.nm AND a.col_id IS NULL
-      LEFT JOIN iucn_match i ON i.id = o.id AND a.col_id IS NULL AND s.col_id IS NULL
-    ) TO '${out}' (FORMAT PARQUET, COMPRESSION ZSTD);
+      LEFT JOIN iucn_match i ON i.id = o.id AND a.col_id IS NULL AND s.col_id IS NULL;
+  `);
+  // Covered col_ids — a Red List species's OTHER names (its IUCN synonyms) can each
+  // resolve to a CoL accepted concept beyond its primary match. This matters when CoL
+  // carries the same species as two accepted concepts from different sources: IUCN
+  // Verreauxia africana matched CoL's (non-Base) "Verreauxia africana", but its synonym
+  // "Sasia africana" is CoL's in-Base accepted name. Recording every covered col_id as
+  // an extra row (match_method 'iucn_synonym_covered') lets the NE de-dup exclude BOTH,
+  // so an assessed species never resurfaces as a new candidate under CoL's alternate
+  // name. Read layer de-dups on DISTINCT redlist col_id, so these rows are picked up
+  // automatically; the spine/overlay (later) filters to the primary rows.
+  await conn.run(`
+    CREATE TEMP TABLE covered AS
+      SELECT DISTINCT 'redlist' AS src, o.id, o.sis_taxon_id, o.gbif_species_key, o.scientific_name,
+             m.col_id, 'iucn_synonym_covered' AS match_method
+      FROM syn_keys sk
+      JOIN ours o ON o.id = sk.id AND o.src = 'redlist'
+      JOIN (SELECT nm, col_id FROM col_acc UNION SELECT nm, col_id FROM col_syn) m ON m.nm = sk.nm
+      WHERE NOT EXISTS (SELECT 1 FROM primary_link p WHERE p.id = o.id AND p.col_id = m.col_id);
+  `);
+  await conn.run(`
+    COPY (SELECT * FROM primary_link UNION ALL SELECT * FROM covered)
+    TO '${out}' (FORMAT PARQUET, COMPRESSION ZSTD);
   `);
 
   // ── verification ───────────────────────────────────────────────────────────
   const q = async (sql: string) => (await (await conn.run(sql)).getRowObjects());
   for (const src of ["redlist", "gbif"]) {
+    // Primary rows only (one per species) for the match rate; covered rows are extra.
     const r = (await q(`
       SELECT count(*) AS total,
              count(*) FILTER (WHERE match_method <> 'unmatched') AS matched,
@@ -142,11 +163,13 @@ export async function run(opts: { dataDir?: string } = {}): Promise<void> {
              count(*) FILTER (WHERE match_method = 'synonym') AS syn,
              count(*) FILTER (WHERE match_method = 'iucn_synonym') AS isyn,
              count(*) FILTER (WHERE match_method = 'unmatched') AS un
-      FROM '${out}' WHERE src = '${src}'`))[0];
+      FROM '${out}' WHERE src = '${src}' AND match_method <> 'iucn_synonym_covered'`))[0];
     const t = Number(r.total), m = Number(r.matched);
     console.log(`${src}: ${t.toLocaleString()} | matched ${(100 * m / t).toFixed(1)}% ` +
       `(accepted ${Number(r.acc).toLocaleString()}, via-CoL-synonym ${Number(r.syn).toLocaleString()}, via-IUCN-synonym ${Number(r.isyn).toLocaleString()}, homonym-resolved ${Number(r.hom).toLocaleString()}, unmatched ${Number(r.un).toLocaleString()})`);
   }
+  const cov = Number((await q(`SELECT count(*) c FROM '${out}' WHERE match_method = 'iucn_synonym_covered'`))[0].c);
+  console.log(`  + ${cov.toLocaleString()} extra col_ids covered via IUCN synonyms (NE-dedup only — e.g. Sasia/Verreauxia africana)`);
   const ex = await q(`SELECT scientific_name FROM '${out}' WHERE src='redlist' AND match_method='unmatched' LIMIT 6`);
   console.log("  redlist unmatched examples:", ex.map((x) => x.scientific_name).join(" | "));
 }
