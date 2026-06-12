@@ -116,14 +116,6 @@ const ASSESSED_SELECT = `
   systems, growth_forms, movement_pattern, possibly_extinct, possibly_extinct_in_the_wild,
   criteria, threat_codes, has_map, latest_assessors, latest_reviewers`;
 
-// unassessed.parquet lacks the assessment-only columns → fill SpeciesRow defaults
-const UNASSESSED_SELECT = `
-  id, NULL AS assessment_id, scientific_name, common_name, family, iucn_category AS category,
-  NULL AS assessment_date, NULL AS year_published, NULL AS population_trend, countries, class_name, order_name,
-  taxon_group, gbif_species_key, gbif_occurrence_count, NULL AS gbif_observations_after_assessment_year,
-  '' AS systems, '' AS growth_forms, NULL AS movement_pattern, FALSE AS possibly_extinct, FALSE AS possibly_extinct_in_the_wild,
-  NULL AS criteria, '' AS threat_codes, FALSE AS has_map, NULL AS latest_assessors, NULL AS latest_reviewers`;
-
 const splitList = (s: unknown): string[] => (typeof s === "string" && s ? s.split(";").filter(Boolean) : []);
 const num = (v: unknown): number | null => (v == null ? null : Number(v));
 
@@ -205,18 +197,15 @@ export async function querySpecies(opts: {
   // already-assessed col_ids, with GBIF occurrences overlaid; (B) GBIF-observed species
   // not represented in that universe (orphans). Safety-capped.
   if (opts.includeNE && whereSql) {
-    const linkUri = parquetUri("species_link.parquet");
-    const unassessedUri = parquetUri("unassessed.parquet");
     const taxonId = canonicalizeTaxonId(opts.taxon);
     // Build (once per warm container) the global de-dup set + GBIF overlay map.
     await ensureNeHelpers(conn);
     const assessedColIds = "(SELECT col_id FROM ne_assessed_col_ids)"; // assessed col_ids (de-dup key)
     const speciesUri = parquetUri("species/**/*.parquet");
 
-    // (A) CoL extant universe under the taxon, not already assessed. species/ is
-    // partitioned by taxon_group, so the SAME `whereSql` used for the assessed parquet
-    // filters + prunes it (no separate node→CoL mapping). GBIF occurrences overlaid.
-    const neStart = result.length; // NE additions are capped at NE_CAP on top of assessed
+    // The NE list IS the CoL extant universe under the taxon, not already assessed.
+    // species/ is partitioned by taxon_group, so the SAME `whereSql` used for the assessed
+    // parquet filters + prunes it (no separate node→CoL mapping). GBIF occurrences overlaid.
     const univSql = `
       SELECT u.col_id, u.scientific_name, u.class_name, u.order_name, u.family,
              g.gbif_species_key, g.gbif_occurrence_count
@@ -243,37 +232,15 @@ export async function querySpecies(opts: {
       result.push(row);
     }
 
-    // (B) GBIF-observed orphans: species GBIF knows that are NOT in the CoL universe and
-    // not assessed. De-dup vs the universe IN SQL (not JS) so the budget applies to
-    // genuinely-new orphans — otherwise the orphan read fills with universe duplicates
-    // and falsely trips `truncated` (the plants banner bug).
-    const univNe = `(SELECT col_id FROM read_parquet('${speciesUri}', hive_partitioning=true) ${whereSql} AND in_base AND extinct IS NOT TRUE AND col_id NOT IN ${assessedColIds})`;
-    const orphanWhere = `(sl.col_id IS NULL OR (sl.col_id NOT IN ${assessedColIds} AND sl.col_id NOT IN ${univNe}))`;
-    const remaining = NE_CAP - (result.length - neStart);
-    if (remaining <= 0) {
-      truncated = true; // universe alone filled the cap
-    } else {
-      const orphanSql = `
-        SELECT x.*
-        FROM (SELECT ${UNASSESSED_SELECT} FROM read_parquet('${unassessedUri}') a ${whereSql}) x
-        LEFT JOIN read_parquet('${linkUri}') sl ON sl.src = 'gbif' AND sl.id = x.id
-        WHERE ${orphanWhere}
-        LIMIT ${remaining + 1}`; // +1 to detect overflow
-      const orphanRows = (await conn.runAndReadAll(orphanSql, where.params)).getRowObjects();
-      if (orphanRows.length > remaining) truncated = true;
-      for (const r of orphanRows.slice(0, remaining)) result.push(toSpeciesRow(r));
-    }
-
-    // When capped, report the true total NE (universe-NE + genuine orphans) so the UI
-    // can show "showing N of M" — cheap COUNTs, no serialization.
+    // GBIF orphans (species GBIF knows but CoL's Base universe doesn't) were intentionally
+    // dropped: the NE list now equals the col_ne count exactly and excludes fossils CoL
+    // keeps out of the universe (woolly mammoth has in_base=false; American mastodon is
+    // CoL-unmatched). A GBIF-observed species only appears here if it's an accepted,
+    // in-base, extant CoL species under the taxon.
     if (truncated) {
-      const univCount = Number((await conn.runAndReadAll(`SELECT count(*) AS c FROM ${univNe}`, where.params)).getRowObjects()[0].c);
-      const orphanCount = Number((await conn.runAndReadAll(
-        `SELECT count(*) AS c
-         FROM (SELECT id FROM read_parquet('${unassessedUri}') a ${whereSql}) x
-         LEFT JOIN read_parquet('${linkUri}') sl ON sl.src = 'gbif' AND sl.id = x.id
-         WHERE ${orphanWhere}`, where.params)).getRowObjects()[0].c);
-      neTotal = univCount + orphanCount;
+      // Universe alone hit the cap — report its true total for the "showing N of M" banner.
+      const univNe = `(SELECT col_id FROM read_parquet('${speciesUri}', hive_partitioning=true) ${whereSql} AND in_base AND extinct IS NOT TRUE AND col_id NOT IN ${assessedColIds})`;
+      neTotal = Number((await conn.runAndReadAll(`SELECT count(*) AS c FROM ${univNe}`, where.params)).getRowObjects()[0].c);
     }
   }
 
