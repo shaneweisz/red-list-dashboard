@@ -318,10 +318,21 @@ export interface SearchResult {
   countries: string[];
 }
 
+// Stable negative int id for a CoL-only species (no IUCN sis id / GBIF key). Used as the
+// search result's id — the URL `species=` param + the cached-preview key — and never
+// collides with real positive sis/gbif ids. (The NE list itself assigns its own per-query
+// synthetic ids; the cached preview, built from this result, is what renders on click.)
+function colIdToSearchId(colId: string): number {
+  let h = 0;
+  for (let i = 0; i < colId.length; i++) h = (Math.imul(h, 31) + colId.charCodeAt(i)) | 0;
+  return -(Math.abs(h) || 1);
+}
+
 // Substring search over both parquets (replaces the in-memory search-index.json).
 // ILIKE can't use row-group pruning, but with column projection it scans only the
 // name columns from R2 — ~200ms warm over both files. Ranking mirrors the old
 // JSON path: exact common-name > common-name prefix > scientific prefix > alpha.
+// Falls back to the CoL universe (species/) only when the fast path is sparse — see below.
 export async function searchSpecies(query: string, limit = 10): Promise<SearchResult[]> {
   if (query.length < 2) return [];
   const conn = await getConn();
@@ -342,7 +353,7 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
              lower(scientific_name)
     LIMIT ${lim}`;
   const rows = (await conn.runAndReadAll(sql, { q: query.toLowerCase() })).getRowObjects();
-  return rows.map((r) => ({
+  const fast: SearchResult[] = rows.map((r) => ({
     id: Number(r.id),
     scientific_name: String(r.scientific_name ?? ""),
     common_name: (r.common_name as string) ?? null,
@@ -354,6 +365,43 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
     assessment_date: (r.assessment_date as string) ?? null,
     countries: splitList(r.countries),
   }));
+  if (fast.length >= lim) return fast;
+
+  // CoL-only fallback: universe species (species/) that are neither IUCN-assessed nor
+  // GBIF-observed, to fill the remaining slots. species/ has no common name and can't
+  // partition-prune on name, so this full-scans the name column — only run it when the
+  // fast path returned fewer than `limit` hits (it then holds ALL assessed+GBIF matches,
+  // so any species/ match not already listed is genuinely CoL-only — name-dedup suffices,
+  // no species_link anti-join needed). These render as NE and navigate to their leaf taxon.
+  const seen = new Set(fast.map((r) => r.scientific_name.toLowerCase()));
+  const colSql = `
+    SELECT col_id, scientific_name, taxon_group
+    FROM read_parquet('${parquetUri("species/**/*.parquet")}', hive_partitioning=true)
+    WHERE scientific_name ILIKE '%' || $q || '%' AND in_base AND extinct IS NOT TRUE
+      AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL}
+    ORDER BY (lower(scientific_name) LIKE $q || '%') DESC, lower(scientific_name)
+    LIMIT ${(lim - fast.length) * 3 + 5}`;
+  const colRows = (await conn.runAndReadAll(colSql, { q: query.toLowerCase() })).getRowObjects();
+  for (const r of colRows) {
+    const name = String(r.scientific_name ?? "");
+    if (seen.has(name.toLowerCase())) continue;
+    seen.add(name.toLowerCase());
+    const tg = String(r.taxon_group);
+    fast.push({
+      id: colIdToSearchId(String(r.col_id)),
+      scientific_name: name,
+      common_name: null,
+      taxon_id: mapTaxonId(tg),
+      taxon_group: tg,
+      category: "NE",
+      gbif_species_key: null,
+      assessment_id: null,
+      assessment_date: null,
+      countries: [],
+    });
+    if (fast.length >= lim) break;
+  }
+  return fast;
 }
 
 // Prime the cached connection (httpfs load + S3 config) so the first search

@@ -1496,7 +1496,13 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // Include single-species preview at the top of the page when bulk data hasn't loaded yet
   const paginatedSpecies = useMemo(() => {
     if (!singleSpeciesPreview) return paginatedSpeciesBase;
-    if (paginatedSpeciesBase.some(s => s.id === singleSpeciesPreview.id)) return paginatedSpeciesBase;
+    // De-dupe by id, and (for NE search results, whose cached-preview id differs from the
+    // loaded NE row's synthetic id) also by scientific name — so a searched CoL species
+    // shows the loaded row once the list arrives, not a duplicate alongside the preview.
+    if (paginatedSpeciesBase.some(s =>
+      s.id === singleSpeciesPreview.id ||
+      (singleSpeciesPreview.category === "NE" && s.scientific_name === singleSpeciesPreview.scientific_name)
+    )) return paginatedSpeciesBase;
     return [singleSpeciesPreview, ...paginatedSpeciesBase];
   }, [paginatedSpeciesBase, singleSpeciesPreview]);
 
