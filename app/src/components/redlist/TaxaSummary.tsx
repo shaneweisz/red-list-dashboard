@@ -70,6 +70,8 @@ interface SubGroupSummary {
   outdated: number;
   gbifNeSpeciesCount: number;
   byCategory: Record<string, number>;
+  colDescribed?: number;
+  colNe?: number;
 }
 
 interface Props {
@@ -873,7 +875,8 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
 
   // Render an ancestor context row with full data — clicking navigates to that level.
   const renderAncestorRow = (sg: SubGroupSummary, color: string, depth: number, topTaxonId: string, isViewRoot: boolean) => {
-    const sgPctAssessed = sg.estimatedDescribed > 0 ? (sg.totalAssessed / sg.estimatedDescribed) * 100 : 0;
+    const sgDescribed = describedSource === "col" && sg.colDescribed != null ? sg.colDescribed : sg.estimatedDescribed;
+    const sgPctAssessed = sgDescribed > 0 ? (sg.totalAssessed / sgDescribed) * 100 : 0;
     const sgPctOutdated = sg.totalAssessed > 0 ? (sg.outdated / sg.totalAssessed) * 100 : 0;
     return (
       <tr
@@ -891,10 +894,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         </td>
         {isVisible("described") && (
           <td className={numericTdNoDividerClasses}>
-            <span className="text-sm text-zinc-700 dark:text-zinc-300 tabular-nums">{sg.estimatedDescribed.toLocaleString()}</span>
+            <span className="text-sm text-zinc-700 dark:text-zinc-300 tabular-nums">{sgDescribed.toLocaleString()}</span>
           </td>
         )}
-        {colDescribedCell(undefined)}
+        {colDescribedCell(sg.colDescribed)}
         {isVisible("assessed") && (
           <td className={flexTdClasses}>
             {renderBar(sgPctAssessed, getAssessedBarColor(sgPctAssessed), false, sg.totalAssessed)}
@@ -909,12 +912,12 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         )}
         {isVisible("gbifUnassessed") && (
           <td className={flexTdClasses}>
-            {sg.gbifNeSpeciesCount > 0 && sg.estimatedDescribed > 0
-              ? renderBar((sg.gbifNeSpeciesCount / sg.estimatedDescribed) * 100, "#3b82f6", false, sg.gbifNeSpeciesCount)
+            {sg.gbifNeSpeciesCount > 0 && sgDescribed > 0
+              ? renderBar((sg.gbifNeSpeciesCount / sgDescribed) * 100, "#3b82f6", false, sg.gbifNeSpeciesCount)
               : <span className="text-sm text-zinc-400">—</span>}
           </td>
         )}
-        {colNeCell(undefined, undefined)}
+        {colNeCell(sg.colNe, sg.colDescribed)}
         {isVisible("totalGbifObs") && (
           <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
         )}
@@ -938,7 +941,8 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
 
   // Render a standalone subgroup row (used when table is collapsed to a selected subgroup)
   const renderCollapsedSubgroupRow = (taxon: TaxonSummary, sg: SubGroupSummary) => {
-    const sgPctAssessed = sg.estimatedDescribed > 0 ? (sg.totalAssessed / sg.estimatedDescribed) * 100 : 0;
+    const sgDescribed = describedSource === "col" && sg.colDescribed != null ? sg.colDescribed : sg.estimatedDescribed;
+    const sgPctAssessed = sgDescribed > 0 ? (sg.totalAssessed / sgDescribed) * 100 : 0;
     const sgPctOutdated = sg.totalAssessed > 0 ? (sg.outdated / sg.totalAssessed) * 100 : 0;
     return (
       <tr
@@ -959,7 +963,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         {isVisible("described") && (
           <td className={numericTdNoDividerClasses}>
             <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums inline-flex items-center gap-1">
-              {sg.estimatedDescribed.toLocaleString()}
+              {sgDescribed.toLocaleString()}
               {(() => {
                 const sgNode = findNode(sg.id);
                 if (!sgNode?.estimatedSource) return null;
@@ -983,7 +987,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             </span>
           </td>
         )}
-        {colDescribedCell(undefined)}
+        {colDescribedCell(sg.colDescribed)}
         {isVisible("assessed") && (
           <td className={flexTdClasses}>
             {renderBar(sgPctAssessed, getAssessedBarColor(sgPctAssessed), false, sg.totalAssessed)}
@@ -998,12 +1002,12 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         )}
         {isVisible("gbifUnassessed") && (
           <td className={flexTdClasses}>
-            {sg.gbifNeSpeciesCount > 0 && sg.estimatedDescribed > 0
-              ? renderBar((sg.gbifNeSpeciesCount / sg.estimatedDescribed) * 100, "#3b82f6", false, sg.gbifNeSpeciesCount)
+            {sg.gbifNeSpeciesCount > 0 && sgDescribed > 0
+              ? renderBar((sg.gbifNeSpeciesCount / sgDescribed) * 100, "#3b82f6", false, sg.gbifNeSpeciesCount)
               : <span className="text-sm text-zinc-400">—</span>}
           </td>
         )}
-        {colNeCell(undefined, undefined)}
+        {colNeCell(sg.colNe, sg.colDescribed)}
         {isVisible("totalGbifObs") && (
           <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
         )}
@@ -1027,7 +1031,8 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
 
   // Render a subgroup row, recursively expandable if it has children
   const renderSubgroupRow = (sg: SubGroupSummary, parentColor: string, depth: number, topTaxonId: string): React.ReactNode => {
-    const sgPctAssessed = sg.estimatedDescribed > 0 ? (sg.totalAssessed / sg.estimatedDescribed) * 100 : 0;
+    const sgDescribed = describedSource === "col" && sg.colDescribed != null ? sg.colDescribed : sg.estimatedDescribed;
+    const sgPctAssessed = sgDescribed > 0 ? (sg.totalAssessed / sgDescribed) * 100 : 0;
     const sgPctOutdated = sg.totalAssessed > 0 ? (sg.outdated / sg.totalAssessed) * 100 : 0;
     const isSgSelected = selectedSubgroups.has(sg.id);
     const sgHasChildren = isExpandable(sg.id);
@@ -1070,7 +1075,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           {isVisible("described") && (
             <td className={numericTdNoDividerClasses}>
               <span className="text-sm text-zinc-600 dark:text-zinc-400 tabular-nums inline-flex items-center gap-1">
-                {sg.estimatedDescribed.toLocaleString()}
+                {sgDescribed.toLocaleString()}
                 {(() => {
                   const sgNode = findNode(sg.id);
                   if (!sgNode?.estimatedSource) return null;
@@ -1094,7 +1099,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               </span>
             </td>
           )}
-          {colDescribedCell(undefined)}
+          {colDescribedCell(sg.colDescribed)}
           {isVisible("assessed") && (
             <td className={flexTdClasses}>
               {renderBar(sgPctAssessed, getAssessedBarColor(sgPctAssessed), false, sg.totalAssessed)}
@@ -1109,12 +1114,12 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           )}
           {isVisible("gbifUnassessed") && (
             <td className={flexTdClasses}>
-              {sg.gbifNeSpeciesCount > 0 && sg.estimatedDescribed > 0
-                ? renderBar((sg.gbifNeSpeciesCount / sg.estimatedDescribed) * 100, "#3b82f6", false, sg.gbifNeSpeciesCount)
+              {sg.gbifNeSpeciesCount > 0 && sgDescribed > 0
+                ? renderBar((sg.gbifNeSpeciesCount / sgDescribed) * 100, "#3b82f6", false, sg.gbifNeSpeciesCount)
                 : <span className="text-sm text-zinc-400">—</span>}
             </td>
           )}
-          {colNeCell(undefined, undefined)}
+          {colNeCell(sg.colNe, sg.colDescribed)}
           {isVisible("totalGbifObs") && (
             <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
           )}
@@ -1694,6 +1699,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                           totalAssessed: parentTaxon.totalAssessed, outdated: parentTaxon.outdated,
                           gbifNeSpeciesCount: parentTaxon.gbifNeSpeciesCount ?? 0,
                           byCategory: parentTaxon.byCategory,
+                          colDescribed: parentTaxon.colDescribed, colNe: parentTaxon.colNe,
                         };
                         rows.push(renderAncestorRow(viewRootSummary, parentTaxon.color, 0, parentTaxon.id, true));
 

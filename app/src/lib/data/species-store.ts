@@ -490,6 +490,11 @@ export interface NodeSummary {
   outdated: number;
   gbifNeSpeciesCount: number;
   byCategory: Record<string, number>;
+  // Catalogue of Life backbone (#272): extant accepted universe under this node and
+  // the not-evaluated slice (universe − assessed, by col_id). Undefined when the CoL
+  // artifacts weren't present at build time.
+  colDescribed?: number;
+  colNe?: number;
 }
 
 const CURRENT_YEAR = new Date().getFullYear();
