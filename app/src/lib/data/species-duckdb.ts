@@ -74,22 +74,43 @@ export function resolveWhere(taxonId: string): WhereParts {
   };
 }
 
-// Map a taxon (node id or arbitrary rank) to the CoL lineage VALUE to match in
-// species/ — i.e. its scientific name. Our common-name node ids need translating
-// (mammals→mammalia, beetles→coleoptera); arbitrary ranks (turdidae, odonata)
-// already are CoL values, so they fall through. Unmapped nodes (fishes, the
-// virtual roots, plant/fungi groups) return a value that won't match → no CoL
-// species added (graceful). This is a seed of the node→CoL editorial mapping.
-const COMMON_TO_COL_LINEAGE: Record<string, string> = {
-  mammals: "mammalia", birds: "aves", reptiles: "reptilia", amphibians: "amphibia",
-  beetles: "coleoptera", butterflies_and_moths: "lepidoptera", flies_and_mosquitoes: "diptera",
-  bees_wasps_and_ants: "hymenoptera", true_bugs: "hemiptera", grasshoppers_crickets_locusts: "orthoptera",
-  dragonflies_and_damselflies: "odonata", arachnids: "arachnida", molluscs: "mollusca",
+// node→CoL editorial mapping: each surfaced display node → the CoL lineage value(s)
+// that define it + the species/ partition they live in. Multi-value where a node
+// spans several CoL classes/phyla (flowering_plants = magnoliopsida + liliopsida).
+// Values match rank-agnostically against the denormalized lineage (kingdom…genus),
+// pruned to the partition so the scan reads one R2 file. Derived from the CoL
+// lineage breakdown (stock-take 2026-06-12). Groups NOT listed (corals, crustaceans,
+// velvet_worms, horseshoe_crabs, other_*) skip the universe scan → GBIF-NE only,
+// until their (subset/subphylum) lineage is mapped.
+const COL_NODE_TARGET: Record<string, { values: string[]; part: string }> = {
+  // Vertebrates (Chordata). fishes = the true-fish classes (excludes tunicates/lancelets).
+  mammals: { values: ["mammalia"], part: "Chordata" },
+  birds: { values: ["aves"], part: "Chordata" },
+  reptiles: { values: ["reptilia"], part: "Chordata" },
+  amphibians: { values: ["amphibia"], part: "Chordata" },
+  fishes: { values: ["teleostei", "elasmobranchii", "holocephali", "myxini", "petromyzonti", "chondrostei", "cladistii", "holostei", "dipneusti", "coelacanthi"], part: "Chordata" },
+  // Insects + arachnids (Arthropoda).
+  beetles: { values: ["coleoptera"], part: "Arthropoda" },
+  butterflies_and_moths: { values: ["lepidoptera"], part: "Arthropoda" },
+  flies_and_mosquitoes: { values: ["diptera"], part: "Arthropoda" },
+  bees_wasps_and_ants: { values: ["hymenoptera"], part: "Arthropoda" },
+  true_bugs: { values: ["hemiptera"], part: "Arthropoda" },
+  grasshoppers_crickets_locusts: { values: ["orthoptera"], part: "Arthropoda" },
+  dragonflies_and_damselflies: { values: ["odonata"], part: "Arthropoda" },
+  arachnids: { values: ["arachnida"], part: "Arthropoda" },
+  molluscs: { values: ["mollusca"], part: "Mollusca" },
+  // Plants (Plantae).
+  flowering_plants: { values: ["magnoliopsida", "liliopsida"], part: "Plantae" },
+  gymnosperms: { values: ["pinopsida", "cycadopsida", "ginkgoopsida", "gnetopsida"], part: "Plantae" },
+  ferns_and_allies: { values: ["polypodiopsida", "lycopodiopsida"], part: "Plantae" },
+  mosses: { values: ["bryophyta", "marchantiophyta", "anthocerotophyta"], part: "Plantae" },
+  green_algae: { values: ["chlorophyta", "charophyta"], part: "Plantae" },
+  red_algae: { values: ["rhodophyta"], part: "Plantae" },
+  // Fungi & protists. mushrooms = all Fungi; brown_algae = phaeophyceae (in Chromista,
+  // NOT all ochrophyta — that includes diatoms).
+  mushrooms: { values: ["fungi"], part: "Fungi" },
+  brown_algae: { values: ["phaeophyceae"], part: "Chromista" },
 };
-export function colLineageValue(taxonId: string): string {
-  const id = canonicalizeTaxonId(taxonId).toLowerCase();
-  return COMMON_TO_COL_LINEAGE[id] ?? id;
-}
 
 // species/ is Hive-partitioned by `part` (= phylum within Animalia, else kingdom).
 // A query filtering by class_name/order/family does NOT prune partitions, so it
@@ -107,20 +128,19 @@ export function colPartFor(lineageValue: string): string | null {
 }
 
 // Resolve a taxon to the CoL-universe scan target — or null to SKIP the scan:
-//  - a mapped display node (animals) → its CoL lineage + partition (prune to 1 file);
-//  - a display node we can't yet map to a single CoL term (plants, fungi, fishes…) →
-//    null: skip entirely. Such a value matches no lineage column, so the query would
-//    full-scan all 58 partitions to return nothing — the cause of the 30s plants
-//    hang. These groups get the GBIF-orphan NE list only until their node→CoL lineage
-//    is added (a Phase-4 editorial task);
+//  - a mapped display node → its CoL lineage value(s) + partition (prune to 1 file);
+//  - a surfaced node we haven't mapped yet (corals, crustaceans, other_*) → null:
+//    skip the scan. Its node id matches no lineage column, so scanning would
+//    full-scan every partition to return nothing (the 30s hang). These get the
+//    GBIF-orphan NE list only until mapped;
 //  - an arbitrary CoL rank (not a node) → the value itself + best-effort partition.
-export function colUniverseTarget(taxonId: string): { lineage: string; part: string | null } | null {
+export function colUniverseTarget(taxonId: string): { values: string[]; part: string | null } | null {
   const id = canonicalizeTaxonId(taxonId);
-  const mapped = COMMON_TO_COL_LINEAGE[id.toLowerCase()];
-  if (mapped) return { lineage: mapped, part: colPartFor(mapped) };
+  const node = COL_NODE_TARGET[id.toLowerCase()];
+  if (node) return { values: node.values, part: node.part };
   if (NODE_INDEX.has(id)) return null;
   const v = id.toLowerCase();
-  return { lineage: v, part: colPartFor(v) };
+  return { values: [v], part: colPartFor(v) };
 }
 
 // ─── SpeciesRow projection ─────────────────────────────────────────────────
@@ -238,20 +258,24 @@ export async function querySpecies(opts: {
     const target = colUniverseTarget(opts.taxon);
     if (target) {
       const partClause = target.part ? "part = $part AND " : "";
+      // Match if any of the target lineage value(s) appears at any rank of the
+      // denormalized lineage — rank-agnostic + multi-value (a node can span several
+      // CoL classes, e.g. flowering_plants = magnoliopsida + liliopsida).
       const univSql = `
         SELECT u.col_id, u.scientific_name, u.class_name, u.order_name, u.family,
                g.gbif_species_key, g.gbif_occurrence_count
         FROM (
           SELECT col_id, scientific_name, class_name, order_name, family
           FROM read_parquet('${parquetUri("species/**/*.parquet")}', hive_partitioning=true)
-          WHERE ${partClause}$cv IN (kingdom, phylum, class_name, order_name, family, genus)
+          WHERE ${partClause}len(list_intersect([kingdom, phylum, class_name, order_name, family, genus], string_split($vals, '|'))) > 0
             AND in_base AND extinct IS NOT TRUE
             AND col_id NOT IN ${assessedColIds}
         ) u
         LEFT JOIN ${gbifByCol} g ON g.col_id = u.col_id
         LIMIT 600000`;
+      const vals = target.values.join("|");
       const univParams: Record<string, string> = target.part
-        ? { cv: target.lineage, part: target.part } : { cv: target.lineage };
+        ? { vals, part: target.part } : { vals };
       const univRows = (await conn.runAndReadAll(univSql, univParams)).getRowObjects();
       let synthId = -2_000_000_000;
       for (const r of univRows) {

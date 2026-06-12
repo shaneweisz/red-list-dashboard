@@ -57,19 +57,24 @@ describe("colPartFor", () => {
 });
 
 describe("colUniverseTarget", () => {
-  it("maps an animal node to its CoL lineage + partition (prune)", () => {
-    expect(colUniverseTarget("mammals")).toEqual({ lineage: "mammalia", part: "Chordata" });
-    expect(colUniverseTarget("beetles")).toEqual({ lineage: "coleoptera", part: "Arthropoda" });
+  it("maps an animal node to its CoL lineage value(s) + partition (prune)", () => {
+    expect(colUniverseTarget("mammals")).toEqual({ values: ["mammalia"], part: "Chordata" });
+    expect(colUniverseTarget("beetles")).toEqual({ values: ["coleoptera"], part: "Arthropoda" });
   });
 
-  it("returns null for a display node with no CoL lineage mapping (skip the scan)", () => {
-    // The 30s plants hang: scanning every partition to match nothing. Skip instead.
-    expect(colUniverseTarget("flowering_plants")).toBeNull();
-    expect(colUniverseTarget("mushrooms")).toBeNull();
+  it("maps a multi-class plant node + a kingdom-level fungi node to their CoL classes", () => {
+    expect(colUniverseTarget("flowering_plants")).toEqual({ values: ["magnoliopsida", "liliopsida"], part: "Plantae" });
+    expect(colUniverseTarget("mushrooms")).toEqual({ values: ["fungi"], part: "Fungi" });
+  });
+
+  it("returns null for a surfaced node with no CoL mapping yet (skip the scan)", () => {
+    // corals (subset of Cnidaria) + crustaceans (a subphylum) aren't mapped yet → GBIF-NE only.
+    expect(colUniverseTarget("corals")).toBeNull();
+    expect(colUniverseTarget("crustaceans")).toBeNull();
   });
 
   it("treats an arbitrary rank as its own CoL value (best-effort partition)", () => {
-    expect(colUniverseTarget("turdidae")).toEqual({ lineage: "turdidae", part: null });
+    expect(colUniverseTarget("turdidae")).toEqual({ values: ["turdidae"], part: null });
   });
 });
 
