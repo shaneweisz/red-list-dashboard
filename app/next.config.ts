@@ -19,6 +19,7 @@ const COL_ARTIFACTS = [
   "**/data/backbone.parquet",
   "**/data/species/**",
   "**/data/species_link.parquet",
+  "**/data/synonym-index.parquet",
 ];
 
 const nextConfig: NextConfig = {

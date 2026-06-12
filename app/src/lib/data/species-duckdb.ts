@@ -316,6 +316,9 @@ export interface SearchResult {
   assessment_id: number | null;
   assessment_date: string | null;
   countries: string[];
+  // Set when the result was matched via a synonym (the old name the user typed) rather than
+  // its accepted name — the dropdown shows "(syn. <name>)". scientific_name is the accepted name.
+  matched_synonym?: string | null;
 }
 
 // taxon_group → its representative *leaf* display node (csvGroups===[group], no class/order
@@ -424,6 +427,51 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
     });
     if (fast.length >= lim) break;
   }
+  if (fast.length >= lim) return fast;
+
+  // Synonym tier: resolve an old/synonym name to its accepted species via synonym-index.parquet
+  // (name-sorted → prefix-range prunes to ~1 row group; substring backstop when sparse). Runs
+  // only when the accepted-name search above is still short. The accepted species routes like a
+  // direct hit — assessed → reassessments (sis id), NE → new-assessments/leaf node — and carries
+  // the matched synonym for the UI. Graceful no-op if the index isn't in this sync prefix.
+  const synUri = parquetUri("synonym-index.parquet");
+  const synLo = `'${query.toLowerCase().replace(/'/g, "''")}'`;
+  const need = lim - fast.length;
+  const synCols = `synonym_name, accepted_name, accepted_col_id, taxon_group, sis_id, category`;
+  try {
+    let synRows = (await conn.runAndReadAll(
+      `SELECT ${synCols} FROM read_parquet('${synUri}')
+       WHERE synonym_name_lower >= ${synLo} AND synonym_name_lower < ${synLo} || chr(1114111)
+       ORDER BY synonym_name_lower LIMIT ${need * 3 + 5}`, {})).getRowObjects();
+    if (synRows.length < need) {
+      synRows = synRows.concat((await conn.runAndReadAll(
+        `SELECT ${synCols} FROM read_parquet('${synUri}')
+         WHERE synonym_name_lower LIKE '%' || ${synLo} || '%' AND synonym_name_lower NOT LIKE ${synLo} || '%'
+         ORDER BY synonym_name_lower LIMIT ${need * 3 + 5}`, {})).getRowObjects());
+    }
+    for (const r of synRows) {
+      const accName = String(r.accepted_name ?? "");
+      if (seen.has(accName.toLowerCase())) continue; // accepted already listed (direct hit, or another synonym of it)
+      seen.add(accName.toLowerCase());
+      const tg = String(r.taxon_group);
+      const cat = String(r.category ?? "NE");
+      const sis = r.sis_id == null ? null : Number(r.sis_id);
+      fast.push({
+        id: sis ?? colIdToSearchId(String(r.accepted_col_id)),
+        scientific_name: accName,
+        common_name: null,
+        taxon_id: cat === "NE" ? (GROUP_TO_LEAF_NODE.get(tg) ?? mapTaxonId(tg)) : mapTaxonId(tg),
+        taxon_group: tg,
+        category: cat,
+        gbif_species_key: null,
+        assessment_id: null,
+        assessment_date: null,
+        countries: [],
+        matched_synonym: String(r.synonym_name ?? ""),
+      });
+      if (fast.length >= lim) break;
+    }
+  } catch { /* synonym index not in this sync prefix — skip */ }
   return fast;
 }
 
