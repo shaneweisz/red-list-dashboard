@@ -109,6 +109,7 @@ export function SpeciesSearchBar() {
         categories: new Set(),
         yearRanges: new Set(),
         assessmentYears: new Set(),
+        describedYears: new Set(),
         countries: new Set(),
         obsRanges: new Set(),
         systems: new Set(),

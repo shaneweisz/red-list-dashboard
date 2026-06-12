@@ -139,6 +139,10 @@ export function toSpeciesRow(r: Record<string, unknown>) {
     order_name: r.order_name ?? null,
     taxon_group: taxonGroup,
     taxon_id: mapTaxonId(taxonGroup),
+    // Species description year from CoL (NE rows only; null for assessed species,
+    // whose parquet has no such column). Coalesced upstream from the author-year
+    // columns with a cited-reference-year fallback — see build-backbone.
+    described_year: num(r.described_year),
     gbif_species_key: num(r.gbif_species_key),
     gbif_occurrence_count: num(r.gbif_occurrence_count),
     gbif_observations_after_assessment_year: num(r.gbif_observations_after_assessment_year),
@@ -261,17 +265,17 @@ export async function querySpecies(opts: {
       // NE list equals the col_ne count exactly and excludes fossils CoL keeps out of the
       // universe (woolly mammoth in_base=false; American mastodon CoL-unmatched).
       const univSql = `
-        SELECT u.col_id, u.scientific_name, u.class_name, u.order_name, u.family, u.taxon_group,
+        SELECT u.col_id, u.scientific_name, u.class_name, u.order_name, u.family, u.taxon_group, u.described_year,
                g.gbif_species_key, g.gbif_occurrence_count, g.countries, g.common_name
         FROM (
-          SELECT col_id, scientific_name, class_name, order_name, family, taxon_group
+          SELECT col_id, scientific_name, class_name, order_name, family, taxon_group, described_year
           FROM read_parquet('${speciesUri}', hive_partitioning=true) ${univFilter}
         ) u
         LEFT JOIN ne_gbif_by_col g ON g.col_id = u.col_id`;
       const univRows = (await conn.runAndReadAll(univSql, where.params)).getRowObjects();
       let synthId = -2_000_000_000;
       for (const r of univRows) {
-        // Slim NE row — only the 12 populated fields. The other 17 (assessment-only:
+        // Slim NE row — only the 13 populated fields. The other 16 (assessment-only:
         // assessment_id/date, trend, criteria, threats, systems, assessors, …) are always
         // null/empty/false for NE, so omitting them ~halves the payload + server
         // serialization (beetles ~262k rows: 178MB → ~90MB). The client handles their
@@ -291,6 +295,7 @@ export async function querySpecies(opts: {
           order_name: r.order_name ?? null,
           taxon_group: String(r.taxon_group),
           taxon_id: taxonId,
+          described_year: num(r.described_year),
           gbif_species_key: num(r.gbif_species_key),
           gbif_occurrence_count: num(r.gbif_occurrence_count),
         } as unknown as ReturnType<typeof toSpeciesRow>);
