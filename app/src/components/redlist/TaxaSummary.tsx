@@ -728,12 +728,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       <td className={flexTdClasses}>
         {ne == null ? (
           <span className="text-sm text-zinc-400">—</span>
-        ) : described && described > 0 ? (
-          renderBar((ne / described) * 100, "#f59e0b", opts?.isAllRow ?? false, ne, opts?.bold ? "font-semibold" : undefined)
         ) : (
-          <span className={`text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums ${opts?.bold ? "font-semibold" : ""}`}>
-            {ne.toLocaleString()}
-          </span>
+          // Mirror the Assessed column: a bar over the same (toggled) described
+          // denominator + the count, so flipping IUCN↔CoL moves both bars together.
+          renderBar(described && described > 0 ? (ne / described) * 100 : 0, "#f59e0b", opts?.isAllRow ?? false, ne, opts?.bold ? "font-semibold" : undefined)
         )}
       </td>
     ) : null;
@@ -833,7 +831,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             })()}
           </td>
         )}
-        {colNeCell(gbifObs?.colNe, gbifObs?.colDescribed, { isAllRow })}
+        {colNeCell(gbifObs?.colNe, estimatedDescribed, { isAllRow })}
         {isVisible("totalGbifObs") && (
           <td className={numericTdClasses}>
             <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
@@ -917,7 +915,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               : <span className="text-sm text-zinc-400">—</span>}
           </td>
         )}
-        {colNeCell(sg.colNe, sg.colDescribed)}
+        {colNeCell(sg.colNe, sgDescribed)}
         {isVisible("totalGbifObs") && (
           <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
         )}
@@ -1007,7 +1005,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               : <span className="text-sm text-zinc-400">—</span>}
           </td>
         )}
-        {colNeCell(sg.colNe, sg.colDescribed)}
+        {colNeCell(sg.colNe, sgDescribed)}
         {isVisible("totalGbifObs") && (
           <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
         )}
@@ -1119,7 +1117,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                 : <span className="text-sm text-zinc-400">—</span>}
             </td>
           )}
-          {colNeCell(sg.colNe, sg.colDescribed)}
+          {colNeCell(sg.colNe, sgDescribed)}
           {isVisible("totalGbifObs") && (
             <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
           )}
@@ -1216,7 +1214,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                 : <span className="text-sm text-zinc-400">—</span>}
             </td>
           )}
-          {colNeCell(taxon.available ? taxon.colNe : undefined, taxon.colDescribed)}
+          {colNeCell(taxon.available ? taxon.colNe : undefined, taxon.estimatedDescribed)}
           {isVisible("totalGbifObs") && (
             <td className={numericTdClasses}>
               <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
@@ -1541,7 +1539,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                                 : <span className="text-sm text-zinc-400">—</span>}
                             </td>
                           )}
-                          {colNeCell(row.colNe, row.colDescribed)}
+                          {colNeCell(row.colNe, row.estimatedDescribed)}
                           {isVisible("totalGbifObs") && (
                             <td className={numericTdClasses}>
                               <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
@@ -1601,7 +1599,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                               : <span className="text-sm text-zinc-400">—</span>}
                           </td>
                         )}
-                        {colNeCell(subColNe, subColDescribed, { bold: true })}
+                        {colNeCell(subColNe, subDescribed, { bold: true })}
                         {isVisible("totalGbifObs") && (
                           <td className={numericTdClasses}>
                             <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 tabular-nums">{subGbifObs.toLocaleString()}</span>
