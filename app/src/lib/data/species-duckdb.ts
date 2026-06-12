@@ -156,13 +156,24 @@ export function colPartFor(lineageValue: string): string | null {
 //    full-scan every partition to return nothing (the 30s hang). These get the
 //    GBIF-orphan NE list only until mapped;
 //  - an arbitrary CoL rank (not a node) → the value itself + best-effort partition.
-export function colUniverseTarget(taxonId: string): { values: string[]; part: string | null } | null {
+export function colUniverseTarget(taxonId: string): { values: string[]; parts: string[] | null } | null {
   const id = canonicalizeTaxonId(taxonId);
-  const node = COL_NODE_TARGET[id.toLowerCase()];
-  if (node) return { values: node.values, part: node.part };
-  if (NODE_INDEX.has(id)) return null;
+  const direct = COL_NODE_TARGET[id.toLowerCase()];
+  if (direct) return { values: direct.values, parts: [direct.part] };
+  if (NODE_INDEX.has(id)) {
+    // Aggregate/parent node (e.g. plantae, fungi, invertebrates) — union the CoL
+    // targets of its constituent leaf groups. Unmapped leaves (corals, crustaceans…)
+    // drop out; if none map, skip the scan.
+    const mapped = getCsvGroupsForNode(id).map((g) => COL_NODE_TARGET[g]).filter(Boolean) as { values: string[]; part: string }[];
+    if (mapped.length === 0) return null;
+    return {
+      values: [...new Set(mapped.flatMap((m) => m.values))],
+      parts: [...new Set(mapped.map((m) => m.part))],
+    };
+  }
   const v = id.toLowerCase();
-  return { values: [v], part: colPartFor(v) };
+  const p = colPartFor(v);
+  return { values: [v], parts: p ? [p] : null };
 }
 
 // ─── SpeciesRow projection ─────────────────────────────────────────────────
@@ -277,7 +288,11 @@ export async function querySpecies(opts: {
     const emitted = new Set<string>();
     const target = colUniverseTarget(opts.taxon);
     if (target) {
-      const partClause = target.part ? "part = $part AND " : "";
+      // Prune to the target partition(s) — one for a clade (Chordata), several for a
+      // multi-part aggregate (invertebrates → Arthropoda, Mollusca…). Values are our
+      // own trusted constants, so inline them.
+      const partClause = target.parts
+        ? `part IN (${target.parts.map((p) => `'${p}'`).join(", ")}) AND ` : "";
       // Match if any of the target lineage value(s) appears at any rank of the
       // denormalized lineage — rank-agnostic + multi-value (a node can span several
       // CoL classes, e.g. flowering_plants = magnoliopsida + liliopsida).
@@ -293,10 +308,7 @@ export async function querySpecies(opts: {
         ) u
         LEFT JOIN ${gbifByCol} g ON g.col_id = u.col_id
         LIMIT 600000`;
-      const vals = target.values.join("|");
-      const univParams: Record<string, string> = target.part
-        ? { vals, part: target.part } : { vals };
-      const univRows = (await conn.runAndReadAll(univSql, univParams)).getRowObjects();
+      const univRows = (await conn.runAndReadAll(univSql, { vals: target.values.join("|") })).getRowObjects();
       let synthId = -2_000_000_000;
       for (const r of univRows) {
         emitted.add(String(r.col_id));

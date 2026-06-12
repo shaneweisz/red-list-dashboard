@@ -57,14 +57,17 @@ describe("colPartFor", () => {
 });
 
 describe("colUniverseTarget", () => {
-  it("maps an animal node to its CoL lineage value(s) + partition (prune)", () => {
-    expect(colUniverseTarget("mammals")).toEqual({ values: ["mammalia"], part: "Chordata" });
-    expect(colUniverseTarget("beetles")).toEqual({ values: ["coleoptera"], part: "Arthropoda" });
+  it("maps a leaf node to its CoL lineage value(s) + partition (prune)", () => {
+    expect(colUniverseTarget("mammals")).toEqual({ values: ["mammalia"], parts: ["Chordata"] });
+    expect(colUniverseTarget("beetles")).toEqual({ values: ["coleoptera"], parts: ["Arthropoda"] });
+    expect(colUniverseTarget("flowering_plants")).toEqual({ values: ["magnoliopsida", "liliopsida"], parts: ["Plantae"] });
   });
 
-  it("maps a multi-class plant node + a kingdom-level fungi node to their CoL classes", () => {
-    expect(colUniverseTarget("flowering_plants")).toEqual({ values: ["magnoliopsida", "liliopsida"], part: "Plantae" });
-    expect(colUniverseTarget("mushrooms")).toEqual({ values: ["fungi"], part: "Fungi" });
+  it("expands an aggregate/parent node to the union of its leaf groups' CoL targets", () => {
+    // plantae = flowering_plants + gymnosperms + ferns + mosses + algae → all in Plantae.
+    const t = colUniverseTarget("plantae")!;
+    expect(t.parts).toEqual(["Plantae"]);
+    expect(t.values).toEqual(expect.arrayContaining(["magnoliopsida", "liliopsida", "rhodophyta", "bryophyta"]));
   });
 
   it("returns null for a surfaced node with no CoL mapping yet (skip the scan)", () => {
@@ -74,7 +77,7 @@ describe("colUniverseTarget", () => {
   });
 
   it("treats an arbitrary rank as its own CoL value (best-effort partition)", () => {
-    expect(colUniverseTarget("turdidae")).toEqual({ values: ["turdidae"], part: null });
+    expect(colUniverseTarget("turdidae")).toEqual({ values: ["turdidae"], parts: null });
   });
 });
 
