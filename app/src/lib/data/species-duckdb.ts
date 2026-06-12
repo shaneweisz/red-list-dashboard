@@ -126,6 +126,7 @@ export function toSpeciesRow(r: Record<string, unknown>) {
   return {
     id,
     sis_taxon_id: id > 0 ? id : null,
+    col_id: (r.col_id as string) ?? null, // CoL id — set on NE rows (assessed resolve via sis)
     assessment_id: num(r.assessment_id),
     scientific_name: r.scientific_name ?? "",
     common_name: r.common_name ?? null,
@@ -282,6 +283,7 @@ export async function querySpecies(opts: {
         // overlaid when the species is GBIF-observed.
         result.push({
           id: synthId--,
+          col_id: (r.col_id as string) ?? null,
           scientific_name: r.scientific_name ?? "",
           common_name: r.common_name ?? null,
           family: r.family ?? null,
@@ -473,6 +475,50 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
     }
   } catch { /* synonym index not in this sync prefix — skip */ }
   return fast;
+}
+
+// ─── Catalogue of Life: synonyms for a species ──────────────────────────────
+
+export interface SpeciesSynonyms {
+  col_id: string | null;
+  accepted_name: string | null;
+  accepted_authorship: string | null;
+  synonyms: { name: string; authorship: string | null; status: string }[];
+}
+
+// Synonyms (+ accepted name/authorship) for one species, for the detail panel's CoL tab.
+// Resolve the CoL col_id from either the col_id (NE rows carry it) or the sis id (assessed,
+// via species_link), then one scan of backbone for `col_id = c` (the accepted) OR
+// `parent_id = c` (its synonyms). backbone isn't indexed on these, so it full-scans — fine
+// for a deliberate, cached detail-tab open (not the search hot path).
+export async function getSynonyms(opts: { col?: string | null; sis?: number | null }): Promise<SpeciesSynonyms> {
+  const conn = await getConn();
+  let colId = opts.col ?? null;
+  if (!colId && opts.sis != null) {
+    const linkUri = parquetUri("species_link.parquet");
+    const r = (await conn.runAndReadAll(
+      `SELECT col_id FROM read_parquet('${linkUri}') WHERE src='redlist' AND id=$id AND col_id IS NOT NULL LIMIT 1`,
+      { id: opts.sis })).getRowObjects();
+    colId = r.length ? String(r[0].col_id) : null;
+  }
+  if (!colId) return { col_id: null, accepted_name: null, accepted_authorship: null, synonyms: [] };
+
+  const bbUri = parquetUri("backbone.parquet");
+  const rows = (await conn.runAndReadAll(
+    `SELECT col_id, scientific_name, authorship, status FROM read_parquet('${bbUri}')
+     WHERE col_id=$c OR parent_id=$c`, { c: colId })).getRowObjects();
+  let accepted_name: string | null = null, accepted_authorship: string | null = null;
+  const synonyms: SpeciesSynonyms["synonyms"] = [];
+  for (const r of rows) {
+    if (String(r.col_id) === colId) {
+      accepted_name = String(r.scientific_name ?? "");
+      accepted_authorship = (r.authorship as string) ?? null;
+    } else if (r.status === "synonym" || r.status === "ambiguous synonym") {
+      synonyms.push({ name: String(r.scientific_name ?? ""), authorship: (r.authorship as string) ?? null, status: String(r.status) });
+    }
+  }
+  synonyms.sort((a, b) => a.name.localeCompare(b.name));
+  return { col_id: colId, accepted_name, accepted_authorship, synonyms };
 }
 
 // Prime the cached connection (httpfs load + S3 config) so the first search

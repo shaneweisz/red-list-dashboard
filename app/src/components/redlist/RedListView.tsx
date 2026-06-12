@@ -755,10 +755,13 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // Lazy assessment-history cache, keyed by sis_taxon_id. The species list no
   // longer carries the full history array; it's fetched when a detail row opens.
   const [assessmentHistory, setAssessmentHistory] = useState<Record<number, Species["previous_assessments"]>>({});
+  // Catalogue of Life synonyms for the open species (detail panel's CoL tab), fetched lazily.
+  type SynInfo = { col_id: string | null; accepted_name: string | null; accepted_authorship: string | null; synonyms: { name: string; authorship: string | null; status: string }[] };
+  const [synonymsBySpecies, setSynonymsBySpecies] = useState<Record<string, SynInfo>>({});
 
   // Row expansion state (initialized from URL params if present)
   const [selectedSpeciesKey, setSelectedSpeciesKeyRaw] = useState<number | null>(urlSpecies != null && isNewAssessments ? Math.abs(urlSpecies) : urlSpecies);
-  const [activeDetailTab, setActiveDetailTabRaw] = useState<"gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors">(urlTab ?? "gbif");
+  const [activeDetailTab, setActiveDetailTabRaw] = useState<"gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "col">(urlTab ?? "gbif");
   // Track which tabs have been visited so we only mount (and fetch data for) a tab on first click
   const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set([urlTab ?? "gbif"]));
   const urlSpeciesHandledRef = useRef(false);
@@ -775,7 +778,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     }
   }, [setSpeciesParam]);
 
-  const setActiveDetailTab = useCallback((tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors") => {
+  const setActiveDetailTab = useCallback((tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "col") => {
     setActiveDetailTabRaw(tab);
     programmaticTabChangeRef.current = true;
     setTabParam(tab);
@@ -1746,6 +1749,26 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     })();
     return () => { aborted = true; };
   }, [selectedSpeciesKey, paginatedSpecies, assessmentHistory]);
+
+  // Lazily fetch CoL synonyms for the open species — only once the CoL tab is opened.
+  // Keyed by col_id (NE rows carry it) or sis_taxon_id (assessed, resolved server-side).
+  const synKey = useCallback((s: Species | undefined): string | null =>
+    s?.col_id ? `col:${s.col_id}` : (s?.sis_taxon_id != null ? `sis:${s.sis_taxon_id}` : null), []);
+  useEffect(() => {
+    if (selectedSpeciesKey == null || !visitedTabs.has("col")) return;
+    const s = paginatedSpecies.find((sp) => (isNewAssessments ? Math.abs(sp.id) : sp.id) === selectedSpeciesKey);
+    const key = synKey(s);
+    if (!s || !key || synonymsBySpecies[key]) return;
+    const qs = s.col_id ? `col=${encodeURIComponent(s.col_id)}` : `sis=${s.sis_taxon_id}`;
+    let aborted = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/redlist/synonyms?${qs}`);
+        if (res.ok) { const data = await res.json(); if (!aborted) setSynonymsBySpecies((prev) => ({ ...prev, [key]: data })); }
+      } catch { /* panel falls back to empty */ }
+    })();
+    return () => { aborted = true; };
+  }, [selectedSpeciesKey, visitedTabs, paginatedSpecies, isNewAssessments, synonymsBySpecies, synKey]);
 
   // Handle category bar click (Cmd/Ctrl+click for multi-select, regular click replaces)
   const handleCategoryClick = (data: { payload?: { code?: string } }, event: React.MouseEvent) => {
@@ -3242,6 +3265,12 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                 >
                                   Wikipedia
                                 </button>
+                                <button
+                                  className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "col" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                  onClick={() => setActiveDetailTab("col")}
+                                >
+                                  Catalogue of Life
+                                </button>
                                 {s.category === "NE" && (
                                   <button
                                     className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "assessors" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
@@ -3295,6 +3324,49 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                               />
                             </div>
                           )}
+                          {(stackedDetailView || visitedTabs.has("col")) && (() => {
+                            const syn = synonymsBySpecies[synKey(s) ?? ""];
+                            return (
+                            <div className="p-4 text-sm" style={{ display: stackedDetailView || activeDetailTab === "col" ? undefined : "none" }}>
+                              {!syn ? (
+                                <div className="text-zinc-500 dark:text-zinc-400">Loading Catalogue of Life data…</div>
+                              ) : !syn.col_id ? (
+                                <div className="text-zinc-500 dark:text-zinc-400">No Catalogue of Life match for <span className="italic">{s.scientific_name}</span>.</div>
+                              ) : (
+                                <div className="space-y-3">
+                                  <div>
+                                    <div className="text-xs uppercase tracking-wider text-zinc-400 mb-1">Accepted name (CoL)</div>
+                                    <span className="italic text-zinc-900 dark:text-zinc-100">{syn.accepted_name ?? s.scientific_name}</span>
+                                    {syn.accepted_authorship && <span className="text-zinc-500 dark:text-zinc-400"> {syn.accepted_authorship}</span>}
+                                  </div>
+                                  <div>
+                                    <div className="text-xs uppercase tracking-wider text-zinc-400 mb-1">Synonyms ({syn.synonyms.length})</div>
+                                    {syn.synonyms.length === 0 ? (
+                                      <div className="text-zinc-500 dark:text-zinc-400">No synonyms recorded.</div>
+                                    ) : (
+                                      <ul className="space-y-0.5">
+                                        {syn.synonyms.map((x, i) => (
+                                          <li key={i}>
+                                            <span className="italic text-zinc-700 dark:text-zinc-300">{x.name}</span>
+                                            {x.authorship && <span className="text-zinc-500 dark:text-zinc-400"> {x.authorship}</span>}
+                                            {x.status === "ambiguous synonym" && <span className="ml-1 text-xs text-amber-600 dark:text-amber-500">(ambiguous)</span>}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    )}
+                                  </div>
+                                  <a
+                                    href={`https://www.catalogueoflife.org/data/taxon/${syn.col_id}`}
+                                    target="_blank" rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline"
+                                  >
+                                    View on Catalogue of Life ↗
+                                  </a>
+                                </div>
+                              )}
+                            </div>
+                            );
+                          })()}
                           {s.category !== "NE" && (stackedDetailView || visitedTabs.has("redlist")) && (
                             <div style={{ display: stackedDetailView || activeDetailTab === "redlist" ? undefined : "none" }}>
                               <RedListAssessments
