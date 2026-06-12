@@ -1284,7 +1284,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         </th>
         {isVisible("described") && (
           <th className={`${numericThNoDividerClasses}`}>
-            <div className="flex flex-col items-end gap-1">
+            <div className="flex items-center justify-end gap-2">
               <span className="inline-flex items-center gap-1">
                 # Described
                 <span className="relative group">
