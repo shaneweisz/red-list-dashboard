@@ -390,21 +390,35 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
   });
   if (fast.length >= lim) return fast;
 
-  // CoL-only fallback: universe species (species/) that are neither IUCN-assessed nor
-  // GBIF-observed, to fill the remaining slots. species/ has no common name and can't
-  // partition-prune on name, so this full-scans the name column — only run it when the
-  // fast path returned fewer than `limit` hits (it then holds ALL assessed+GBIF matches,
-  // so any species/ match not already listed is genuinely CoL-only — name-dedup suffices,
-  // no species_link anti-join needed). These render as NE and navigate to their leaf taxon.
+  // CoL-only fallback: universe species that are neither IUCN-assessed nor GBIF-observed,
+  // to fill the remaining slots. Only run when the fast path returned fewer than `limit`
+  // hits (it then holds ALL assessed+GBIF matches, so any universe match not already listed
+  // is genuinely CoL-only — name-dedup suffices). Reads universe-names.parquet (a compact,
+  // name-sorted index): a PREFIX-range query on the sorted name_lower prunes to ~1 row group
+  // via min/max stats (fast even cold); a substring backstop runs only if the prefix is
+  // sparse. Graceful no-op if the index isn't present (older sync prefix).
   const seen = new Set(fast.map((r) => r.scientific_name.toLowerCase()));
-  const colSql = `
-    SELECT col_id, scientific_name, taxon_group
-    FROM read_parquet('${parquetUri("species/**/*.parquet")}', hive_partitioning=true)
-    WHERE scientific_name ILIKE '%' || $q || '%' AND in_base AND extinct IS NOT TRUE
-      AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL}
-    ORDER BY (lower(scientific_name) LIKE $q || '%') DESC, lower(scientific_name)
-    LIMIT ${(lim - fast.length) * 3 + 5}`;
-  const colRows = (await conn.runAndReadAll(colSql, { q: query.toLowerCase() })).getRowObjects();
+  const need = lim - fast.length;
+  const namesUri = parquetUri("universe-names.parquet");
+  const lo = `'${query.toLowerCase().replace(/'/g, "''")}'`;
+  let colRows: Record<string, unknown>[] = [];
+  try {
+    const prefixSql = `
+      SELECT col_id, scientific_name, taxon_group FROM read_parquet('${namesUri}')
+      WHERE name_lower >= ${lo} AND name_lower < ${lo} || chr(1114111)
+      ORDER BY name_lower LIMIT ${need * 3 + 5}`;
+    colRows = (await conn.runAndReadAll(prefixSql, {})).getRowObjects();
+    if (colRows.length < need) {
+      // Substring backstop (full scan of the 1-file index) — only when prefix is sparse.
+      const subSql = `
+        SELECT col_id, scientific_name, taxon_group FROM read_parquet('${namesUri}')
+        WHERE name_lower LIKE '%' || ${lo} || '%' AND name_lower NOT LIKE ${lo} || '%'
+        ORDER BY name_lower LIMIT ${need * 3 + 5}`;
+      colRows = colRows.concat((await conn.runAndReadAll(subSql, {})).getRowObjects());
+    }
+  } catch {
+    return fast; // universe-names index not in this sync prefix — fast path only.
+  }
   for (const r of colRows) {
     const name = String(r.scientific_name ?? "");
     if (seen.has(name.toLowerCase())) continue;
