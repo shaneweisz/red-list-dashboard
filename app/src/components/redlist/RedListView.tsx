@@ -508,8 +508,14 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   useEffect(() => {
     if (selectedTaxa.size === 0) return;
 
-    // In new-assessments mode, skip "all" — NE dataset too large for serverless
-    const taxaToFetch = [...selectedTaxa].filter(t => {
+    // In new-assessments mode, a drill-down fetches the SUB-GROUP directly so a sub-group of
+    // a too-large aggregate (e.g. crustaceans under invertebrates, beetles under insects)
+    // loads on its own instead of being filtered out of the parent's empty (tooLarge) result.
+    // Skip "all" — NE dataset too large for serverless.
+    const fetchSet = isNewAssessments && selectedSubgroups.size > 0
+      ? [...selectedSubgroups]
+      : [...selectedTaxa];
+    const taxaToFetch = fetchSet.filter(t => {
       if (isNewAssessments && t === "all") return false;
       return !speciesByTaxon[t] && !loadingTaxa.has(t);
     });
@@ -569,7 +575,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
           delete abortRefs.current[taxonId];
         });
     }
-  }, [selectedTaxa, speciesByTaxon, loadingTaxa, isNewAssessments]);
+  }, [selectedTaxa, selectedSubgroups, speciesByTaxon, loadingTaxa, isNewAssessments]);
 
   // Prefetch all species on mount so taxa clicks feel instant (skip for new-assessments — NE dataset too large)
   useEffect(() => {
@@ -595,13 +601,15 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     if (selectedTaxa.size === 0) return [];
     // If "all" is cached, use it directly
     if (speciesByTaxon["all"]) return speciesByTaxon["all"];
-    // Otherwise merge per-taxon caches
+    // In new-assessments mode a drill-down is fetched per sub-group, so merge those caches
+    // when sub-groups are selected; otherwise merge the per-taxon caches.
+    const sourceIds = isNewAssessments && selectedSubgroups.size > 0 ? [...selectedSubgroups] : [...selectedTaxa];
     let merged: RedListSpecies[] = [];
-    for (const taxonId of selectedTaxa) {
+    for (const taxonId of sourceIds) {
       if (speciesByTaxon[taxonId]) merged = merged.concat(speciesByTaxon[taxonId]);
     }
     return merged;
-  }, [selectedTaxa, speciesByTaxon]);
+  }, [selectedTaxa, selectedSubgroups, speciesByTaxon, isNewAssessments]);
 
   // NE species lazy loading (only fetched when NE category is selected)
   const [neSpecies, setNeSpecies] = useState<RedListSpecies[]>([]);
@@ -634,7 +642,10 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // Filter by selected taxa + subgroup
   const taxaFilteredSpecies = useMemo(() => {
     let filtered = species;
-    if (selectedTaxa.size > 0 && !selectedTaxa.has("all")) {
+    // In new-assessments mode with a sub-group selected, species were fetched per sub-group
+    // (taxon_id = the sub-group), so the speciesMatchesNode filter below is authoritative —
+    // skip the parent taxon_id filter, which would otherwise drop them.
+    if (selectedTaxa.size > 0 && !selectedTaxa.has("all") && !(isNewAssessments && selectedSubgroups.size > 0)) {
       // Display-root entries (the 8 taxa) match by taxon_id. Any selected taxon
       // that isn't a taxonomy node — an arbitrary rank like ?taxa=turdidae — is
       // matched against the species' own class/order/family (#261).
@@ -653,7 +664,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       );
     }
     return filtered;
-  }, [species, selectedTaxa, selectedSubgroups]);
+  }, [species, selectedTaxa, selectedSubgroups, isNewAssessments]);
 
   // Helper to check if species matches year range filter
   const matchesYearRangeFilter = useCallback((assessmentDate: string | null, yearRanges: Set<string> = selectedYearRanges): boolean => {
@@ -1460,10 +1471,14 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // and flags tooLarge. Don't render the charts/list; prompt a drill-down into a sub-group.
   // Only applies with no sub-group selected (sub-groups are always under the cap).
   const neTooLarge = useMemo(() => {
-    if (!isNewAssessments || selectedSubgroups.size > 0) return null;
+    if (!isNewAssessments) return null;
+    // Reflect the actually-fetched target: a selected sub-group (e.g. insects under
+    // invertebrates) if any, otherwise the top-level taxon. So a too-large sub-group shows
+    // the drill-down prompt while a manageable sibling (crustaceans, beetles) loads.
+    const targets = selectedSubgroups.size > 0 ? [...selectedSubgroups] : [...selectedTaxa];
     const names: string[] = [];
     let neTotal = 0;
-    for (const t of selectedTaxa) {
+    for (const t of targets) {
       const info = truncationByTaxon[t];
       if (info?.tooLarge) { names.push(findNode(t)?.name ?? t); neTotal += info.neTotal ?? 0; }
     }
