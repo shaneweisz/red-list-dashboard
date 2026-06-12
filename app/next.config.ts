@@ -48,8 +48,10 @@ const nextConfig: NextConfig = {
     // Search now queries the parquets in R2 (httpfs) — no local data bundled.
     "/api/search": ["**/data/**"],
     "/api/search/warm": ["**/data/**"],
-    // Species list + history query the parquets in R2 (httpfs) — no local data.
-    "/api/redlist/species": ["**/data/**"],
+    // Species list queries the parquets in R2 (httpfs); it also reads the small
+    // taxa-summary.json for the instant tooLarge check, so exclude the heavy data but
+    // keep that one file (same prune as the summary routes).
+    "/api/redlist/species": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", "**/data/node-children-summaries.json", ...COL_ARTIFACTS],
     "/api/redlist/species/history": ["**/data/**"],
     // Reads the Red List / GBIF CSVs (+ mapping) but never the search index or
     // the R2-only CoL artifacts.

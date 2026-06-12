@@ -14,6 +14,7 @@ import * as path from "path";
 import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
 import { NODE_INDEX, getCsvGroupsForNode } from "@/lib/taxonomy-utils";
 import { canonicalizeTaxonId, mapTaxonId } from "@/lib/data/taxonomy-constants";
+import { getTaxaSummary } from "@/lib/data/species-store";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 // Dev has the parquets on disk; on Vercel they aren't bundled → read from R2.
@@ -164,6 +165,17 @@ export function toSpeciesRow(r: Record<string, unknown>) {
 // otherwise surface as "not evaluated". Keep in sync with build-taxa-summary.
 const EXCLUDED_COL_IDS_SQL = `('6MB3T')`; // Homo sapiens
 
+// Per-taxon_group not-evaluated counts from the precomputed taxa-summary (in memory),
+// used to decide tooLarge instantly without scanning species/ on R2.
+let neByGroupCache: Map<string, number> | null = null;
+function neByGroup(): Map<string, number> {
+  if (neByGroupCache) return neByGroupCache;
+  const m = new Map<string, number>();
+  for (const row of getTaxaSummary()) m.set(row.table1a_taxon_group, Number(row.col_ne ?? 0));
+  neByGroupCache = m;
+  return m;
+}
+
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 export async function querySpecies(opts: {
@@ -186,6 +198,24 @@ export async function querySpecies(opts: {
   const truncated = false;
   let tooLarge = false;
   let neTotal: number | null = null;
+
+  // Fast tooLarge path: decide from the precomputed per-group col_ne (in memory) before any
+  // R2 work, so the drill-down prompt for a giant aggregate (insects, invertebrates) is
+  // instant instead of waiting on a ~2M-row count + the cold ensureNeHelpers build. The
+  // per-group sum is an upper bound for any sub-group, so it never falsely blocks a
+  // manageable one (only the two aggregates exceed the cap). Best-effort: if taxa-summary
+  // isn't bundled in this function, fall through to the live count below (still correct).
+  if (opts.includeNE) {
+    try {
+      const groups = getCsvGroupsForNode(canonicalizeTaxonId(opts.taxon));
+      const neEstimate = groups.reduce((sum, g) => sum + (neByGroup().get(g) ?? 0), 0);
+      if (neEstimate > NE_CAP) {
+        return { species: [], truncated, tooLarge: true, neTotal: neEstimate };
+      }
+    } catch {
+      // taxa-summary unavailable — the live count in the NE branch still enforces the cap.
+    }
+  }
 
   // No history join — the list carries only the latest assessors/reviewers
   // (denormalized columns). The full per-species history array is fetched lazily
