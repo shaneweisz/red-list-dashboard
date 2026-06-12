@@ -498,7 +498,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // individual taxa caches. Each taxon is fetched at most once.
   const [speciesByTaxon, setSpeciesByTaxon] = useState<Record<string, RedListSpecies[]>>({});
   // Per-taxon NE-list truncation (giant aggregates are capped at 400k server-side).
-  const [truncationByTaxon, setTruncationByTaxon] = useState<Record<string, { truncated: boolean; neTotal: number | null; shown: number }>>({});
+  const [truncationByTaxon, setTruncationByTaxon] = useState<Record<string, { truncated: boolean; tooLarge: boolean; neTotal: number | null; shown: number }>>({});
   const [loadingTaxa, setLoadingTaxa] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const abortRefs = useRef<Record<string, AbortController>>({});
@@ -554,7 +554,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         .then(data => {
           if (!controller.signal.aborted) {
             setSpeciesByTaxon(prev => ({ ...prev, [taxonId]: data.species }));
-            setTruncationByTaxon(prev => ({ ...prev, [taxonId]: { truncated: !!data.truncated, neTotal: data.neTotal ?? null, shown: data.species.length } }));
+            setTruncationByTaxon(prev => ({ ...prev, [taxonId]: { truncated: !!data.truncated, tooLarge: !!data.tooLarge, neTotal: data.neTotal ?? null, shown: data.species.length } }));
           }
         })
         .catch(err => {
@@ -1456,6 +1456,20 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     return truncated ? { neTotal, shown } : null;
   }, [isNewAssessments, selectedTaxa, truncationByTaxon]);
 
+  // A giant aggregate (insects, invertebrates) exceeds the cap — the API returns no rows
+  // and flags tooLarge. Don't render the charts/list; prompt a drill-down into a sub-group.
+  // Only applies with no sub-group selected (sub-groups are always under the cap).
+  const neTooLarge = useMemo(() => {
+    if (!isNewAssessments || selectedSubgroups.size > 0) return null;
+    const names: string[] = [];
+    let neTotal = 0;
+    for (const t of selectedTaxa) {
+      const info = truncationByTaxon[t];
+      if (info?.tooLarge) { names.push(findNode(t)?.name ?? t); neTotal += info.neTotal ?? 0; }
+    }
+    return names.length > 0 ? { names, neTotal } : null;
+  }, [isNewAssessments, selectedTaxa, selectedSubgroups, truncationByTaxon]);
+
   // ── Client-side pagination ─────────────────────────────────────────
   const totalFiltered = filteredSpecies.length;
   const totalPages = Math.ceil(sortedSpecies.length / PAGE_SIZE);
@@ -1878,6 +1892,16 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
 
       {/* Charts, search, and species table - only visible after a taxon is selected */}
       {selectedTaxa.size > 0 && (
+      neTooLarge ? (
+        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-amber-200 dark:border-amber-900/40 px-6 py-10 text-center">
+          <p className="text-base font-medium text-zinc-700 dark:text-zinc-200">
+            {neTooLarge.names.join(" & ")} has {neTooLarge.neTotal.toLocaleString()} not-evaluated species — too many to load at once.
+          </p>
+          <p className="mt-1.5 text-sm text-zinc-500 dark:text-zinc-400">
+            Open a sub-group (a class or order — e.g. Beetles, Crustaceans) above to view its charts and species list.
+          </p>
+        </div>
+      ) : (
       <div className="space-y-3">
 
           {/* Single species header — skeleton while loading */}
@@ -3332,7 +3356,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         )}
       </div>
       </div>
-      )}
+      ))}
 
       {/* Fixed image preview portal */}
       <img

@@ -159,6 +159,11 @@ export function toSpeciesRow(r: Record<string, unknown>) {
   };
 }
 
+// CoL species deliberately kept out of the universe (analogous to the domesticated-GBIF
+// exclusion). Homo sapiens — IUCN omits humans from its Red List export, so it would
+// otherwise surface as "not evaluated". Keep in sync with build-taxa-summary.
+const EXCLUDED_COL_IDS_SQL = `('6MB3T')`; // Homo sapiens
+
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 export async function querySpecies(opts: {
@@ -166,7 +171,7 @@ export async function querySpecies(opts: {
   includeNE?: boolean;
   limit?: number;
   offset?: number;
-}): Promise<{ species: ReturnType<typeof toSpeciesRow>[]; truncated: boolean; neTotal: number | null }> {
+}): Promise<{ species: ReturnType<typeof toSpeciesRow>[]; truncated: boolean; tooLarge: boolean; neTotal: number | null }> {
   const conn = await getConn();
   const where = resolveWhere(opts.taxon);
   const whereSql = where.clauses.length ? `WHERE ${where.clauses.join(" AND ")}` : "";
@@ -176,7 +181,10 @@ export async function querySpecies(opts: {
   // NE_CAP, flag `truncated`, and report `neTotal` so the UI can say "showing N of M
   // — drill into a sub-group". Every species stays reachable via its leaf node.
   const NE_CAP = 400_000;
-  let truncated = false;
+  // The NE list is never partially truncated now: a group over the cap returns no rows
+  // with tooLarge=true (UI prompts a drill-down); groups under the cap load in full.
+  const truncated = false;
+  let tooLarge = false;
   let neTotal: number | null = null;
 
   // No history join — the list carries only the latest assessors/reviewers
@@ -203,51 +211,54 @@ export async function querySpecies(opts: {
     const assessedColIds = "(SELECT col_id FROM ne_assessed_col_ids)"; // assessed col_ids (de-dup key)
     const speciesUri = parquetUri("species/**/*.parquet");
 
-    // The NE list IS the CoL extant universe under the taxon, not already assessed.
-    // species/ is partitioned by taxon_group, so the SAME `whereSql` used for the assessed
-    // parquet filters + prunes it (no separate node→CoL mapping). GBIF occurrences overlaid.
-    const univSql = `
-      SELECT u.col_id, u.scientific_name, u.class_name, u.order_name, u.family, u.taxon_group,
-             g.gbif_species_key, g.gbif_occurrence_count
-      FROM (
-        SELECT col_id, scientific_name, class_name, order_name, family, taxon_group
-        FROM read_parquet('${speciesUri}', hive_partitioning=true) ${whereSql}
-          AND in_base AND extinct IS NOT TRUE AND col_id NOT IN ${assessedColIds}
-      ) u
-      LEFT JOIN ne_gbif_by_col g ON g.col_id = u.col_id
-      LIMIT ${NE_CAP}`;
-    const univRows = (await conn.runAndReadAll(univSql, where.params)).getRowObjects();
-    if (univRows.length >= NE_CAP) truncated = true;
-    let synthId = -2_000_000_000;
-    for (const r of univRows) {
-      // Synthetic negative id (no IUCN sis); GBIF key/count overlaid when observed so the
-      // new-assessments sort-by-occurrences works. taxon_group is the REAL CoL group (so
-      // sub-group filtering via speciesMatchesNode works), taxon_id is forced to the
-      // requested taxon so the client's top-level taxon filter keeps these rows.
-      const row = toSpeciesRow({
-        id: synthId--, scientific_name: r.scientific_name, family: r.family, category: "NE",
-        class_name: r.class_name, order_name: r.order_name, taxon_group: r.taxon_group,
-        gbif_species_key: r.gbif_species_key, gbif_occurrence_count: r.gbif_occurrence_count,
-      });
-      row.taxon_id = taxonId;
-      result.push(row);
-    }
+    // The NE list IS the CoL extant universe under the taxon, not already assessed
+    // (minus the small EXCLUDED_COL_IDS denylist). species/ is partitioned by taxon_group,
+    // so the SAME `whereSql` used for the assessed parquet filters + prunes it.
+    const univFilter = `${whereSql} AND in_base AND extinct IS NOT TRUE AND col_id NOT IN ${assessedColIds} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL}`;
 
-    // GBIF orphans (species GBIF knows but CoL's Base universe doesn't) were intentionally
-    // dropped: the NE list now equals the col_ne count exactly and excludes fossils CoL
-    // keeps out of the universe (woolly mammoth has in_base=false; American mastodon is
-    // CoL-unmatched). A GBIF-observed species only appears here if it's an accepted,
-    // in-base, extant CoL species under the taxon.
-    if (truncated) {
-      // Universe alone hit the cap — report its true total for the "showing N of M" banner.
-      const univNe = `(SELECT col_id FROM read_parquet('${speciesUri}', hive_partitioning=true) ${whereSql} AND in_base AND extinct IS NOT TRUE AND col_id NOT IN ${assessedColIds})`;
-      neTotal = Number((await conn.runAndReadAll(`SELECT count(*) AS c FROM ${univNe}`, where.params)).getRowObjects()[0].c);
+    // Count first (cheap). A giant aggregate (insects ~935k, invertebrates ~1.3M) exceeds
+    // the cap — serializing it is a 250MB+ payload the browser can't load. Flag `tooLarge`
+    // and return no rows so the UI prompts a drill-down into a sub-group instead. Every
+    // group under the cap (beetles ~262k and smaller) loads in full (never truncated).
+    const univCount = Number((await conn.runAndReadAll(
+      `SELECT count(*) AS c FROM read_parquet('${speciesUri}', hive_partitioning=true) ${univFilter}`,
+      where.params)).getRowObjects()[0].c);
+    if (univCount > NE_CAP) {
+      tooLarge = true;
+      neTotal = univCount;
+    } else {
+      // GBIF orphans (species GBIF knows but CoL's Base universe doesn't) were dropped: the
+      // NE list equals the col_ne count exactly and excludes fossils CoL keeps out of the
+      // universe (woolly mammoth in_base=false; American mastodon CoL-unmatched).
+      const univSql = `
+        SELECT u.col_id, u.scientific_name, u.class_name, u.order_name, u.family, u.taxon_group,
+               g.gbif_species_key, g.gbif_occurrence_count
+        FROM (
+          SELECT col_id, scientific_name, class_name, order_name, family, taxon_group
+          FROM read_parquet('${speciesUri}', hive_partitioning=true) ${univFilter}
+        ) u
+        LEFT JOIN ne_gbif_by_col g ON g.col_id = u.col_id`;
+      const univRows = (await conn.runAndReadAll(univSql, where.params)).getRowObjects();
+      let synthId = -2_000_000_000;
+      for (const r of univRows) {
+        // Synthetic negative id (no IUCN sis); GBIF key/count overlaid when observed so the
+        // new-assessments sort-by-occurrences works. taxon_group is the REAL CoL group (so
+        // sub-group filtering via speciesMatchesNode works), taxon_id is forced to the
+        // requested taxon so the client's top-level taxon filter keeps these rows.
+        const row = toSpeciesRow({
+          id: synthId--, scientific_name: r.scientific_name, family: r.family, category: "NE",
+          class_name: r.class_name, order_name: r.order_name, taxon_group: r.taxon_group,
+          gbif_species_key: r.gbif_species_key, gbif_occurrence_count: r.gbif_occurrence_count,
+        });
+        row.taxon_id = taxonId;
+        result.push(row);
+      }
     }
   }
 
   if (opts.offset) result = result.slice(opts.offset);
   if (opts.limit != null) result = result.slice(0, opts.limit);
-  return { species: result, truncated, neTotal };
+  return { species: result, truncated, tooLarge, neTotal };
 }
 
 // ─── Cross-taxa search ──────────────────────────────────────────────────────

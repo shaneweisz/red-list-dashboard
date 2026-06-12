@@ -24,6 +24,10 @@ import type { NodeSummary } from "../src/lib/data/species-store";
 const CURRENT_YEAR = new Date().getFullYear();
 const OUTDATED_THRESHOLD_YEARS = 10;
 
+// CoL species kept out of the universe (like the domesticated-GBIF exclusion). Homo sapiens
+// — IUCN omits humans from its Red List export. Keep in sync with species-duckdb.ts.
+const EXCLUDED_COL_IDS_SQL = `('6MB3T')`; // Homo sapiens
+
 export interface TaxonSummaryRow {
   table1a_taxon_group: string;
   total_assessed: number;
@@ -66,8 +70,8 @@ async function colCountsByGroup(): Promise<Map<string, { col_described: number; 
   const conn = await (await DuckDBInstance.create(":memory:")).connect();
   const rows = await (await conn.run(`
     SELECT taxon_group,
-           count(*) FILTER (in_base AND extinct IS NOT TRUE) AS col_described,
-           count(*) FILTER (in_base AND extinct IS NOT TRUE AND col_id NOT IN (
+           count(*) FILTER (in_base AND extinct IS NOT TRUE AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL}) AS col_described,
+           count(*) FILTER (in_base AND extinct IS NOT TRUE AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL} AND col_id NOT IN (
              SELECT col_id FROM read_parquet('${link}') WHERE src = 'redlist' AND col_id IS NOT NULL
            )) AS col_ne
     FROM read_parquet('${speciesGlob}', hive_partitioning=true)
@@ -141,8 +145,8 @@ async function attachColCounts(summaries: Record<string, NodeSummary[]>): Promis
       const node = NODE_INDEX.get(child.id);
       if (!node) continue;
       const rows = await (await conn.run(`
-        SELECT count(*) FILTER (in_base AND extinct IS NOT TRUE) AS col_described,
-               count(*) FILTER (in_base AND extinct IS NOT TRUE AND col_id NOT IN (SELECT col_id FROM assessed_cids)) AS col_ne
+        SELECT count(*) FILTER (in_base AND extinct IS NOT TRUE AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL}) AS col_described,
+               count(*) FILTER (in_base AND extinct IS NOT TRUE AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL} AND col_id NOT IN (SELECT col_id FROM assessed_cids)) AS col_ne
         FROM read_parquet('${speciesGlob}', hive_partitioning=true)
         WHERE ${filterToSql(node.filter)}`)).getRowObjects();
       child.colDescribed = Number(rows[0].col_described);

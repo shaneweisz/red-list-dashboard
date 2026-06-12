@@ -15,10 +15,10 @@ export async function GET(request: NextRequest) {
 
   try {
     const includeNE = category === "NE";
-    const { species: all, truncated, neTotal } = await querySpecies({ taxon, includeNE });
+    const { species: all, truncated, tooLarge, neTotal } = await querySpecies({ taxon, includeNE });
     const species = category === "NE" ? all.filter((s) => s.category === "NE") : all;
 
-    return NextResponse.json({ species, total: species.length, truncated, neTotal }, { headers: CACHE_5M });
+    return NextResponse.json({ species, total: species.length, truncated, tooLarge, neTotal }, { headers: CACHE_5M });
   } catch (error) {
     console.error("species query error:", error);
     const message = error instanceof Error ? error.message : "Unknown error";

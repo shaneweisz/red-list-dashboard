@@ -19,8 +19,8 @@
     "total_gbif_observations": 40337980,
     "mean_gbif_obs": 8249.075664621678,
     "median_gbif_obs": 48,
-    "col_described": 6203,
-    "col_ne": 403
+    "col_described": 6202,
+    "col_ne": 402
   },
   {
     "table1a_taxon_group": "birds",
