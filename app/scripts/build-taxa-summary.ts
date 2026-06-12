@@ -11,6 +11,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { DuckDBInstance } from "@duckdb/node-api";
 import { loadEnvFiles, DATA_DIR, REDLIST_DIR, GBIF_DIR } from "./utils";
 import { TAXA } from "./taxa";
 import { readRedlistCsv } from "./fetch-redlist-species";
@@ -33,6 +34,12 @@ export interface TaxonSummaryRow {
   total_gbif_observations: number;
   mean_gbif_obs: number;
   median_gbif_obs: number | null;
+  // Catalogue of Life backbone (#271): the extant accepted-species universe in this
+  // group (col_described) and how many of those IUCN hasn't evaluated (col_ne =
+  // universe minus assessed, by col_id). Filled after the per-taxon loop; 0 if the
+  // CoL artifacts aren't present.
+  col_described?: number;
+  col_ne?: number;
 }
 
 function median(values: number[]): number | null {
@@ -42,6 +49,31 @@ function median(values: number[]): number | null {
   return sorted.length % 2 !== 0
     ? sorted[mid]
     : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+// Per-taxon_group CoL counts from the backbone artifacts: col_described = extant
+// accepted universe; col_ne = that minus the col_ids IUCN has assessed. species/ is
+// partitioned by taxon_group, so this is a single grouped scan. Returns empty (→ 0s)
+// when the CoL artifacts aren't present (e.g. a sync that hasn't built them yet).
+async function colCountsByGroup(): Promise<Map<string, { col_described: number; col_ne: number }>> {
+  const out = new Map<string, { col_described: number; col_ne: number }>();
+  const link = path.join(DATA_DIR, "species_link.parquet");
+  const speciesGlob = path.join(DATA_DIR, "species", "**", "*.parquet");
+  if (!fs.existsSync(path.join(DATA_DIR, "species")) || !fs.existsSync(link)) {
+    console.log("  CoL counts: species/ or species_link.parquet missing — skipping (col_described/col_ne = 0)");
+    return out;
+  }
+  const conn = await (await DuckDBInstance.create(":memory:")).connect();
+  const rows = await (await conn.run(`
+    SELECT taxon_group,
+           count(*) FILTER (in_base AND extinct IS NOT TRUE) AS col_described,
+           count(*) FILTER (in_base AND extinct IS NOT TRUE AND col_id NOT IN (
+             SELECT col_id FROM read_parquet('${link}') WHERE src = 'redlist' AND col_id IS NOT NULL
+           )) AS col_ne
+    FROM read_parquet('${speciesGlob}', hive_partitioning=true)
+    GROUP BY taxon_group`)).getRowObjects();
+  for (const r of rows) out.set(String(r.taxon_group), { col_described: Number(r.col_described), col_ne: Number(r.col_ne) });
+  return out;
 }
 
 export async function run(): Promise<void> {
@@ -122,6 +154,16 @@ export async function run(): Promise<void> {
     });
 
     console.log(`  ${taxon.id}: ${totalAssessed} assessed, ${gbifNeSpeciesCount} unassessed, ${outdated} outdated, ${gbifSpeciesCount} GBIF species`);
+  }
+
+  // Catalogue of Life per-group counts: extant universe (col_described) and the
+  // not-evaluated slice (col_ne = universe minus assessed col_ids). species/ is
+  // partitioned by taxon_group, so this is one grouped scan. 0s if CoL not built yet.
+  const colCounts = await colCountsByGroup();
+  for (const s of summaries) {
+    const c = colCounts.get(s.table1a_taxon_group);
+    s.col_described = c?.col_described ?? 0;
+    s.col_ne = c?.col_ne ?? 0;
   }
 
   const outputPath = path.join(DATA_DIR, "taxa-summary.json");

@@ -66,6 +66,8 @@ export interface TaxaSummaryRow {
   total_gbif_observations: number;
   mean_gbif_obs: number;
   median_gbif_obs: number | null;
+  col_described?: number; // CoL extant universe in this group (#271)
+  col_ne?: number;        // CoL universe not yet IUCN-assessed
 }
 
 // =============================================================================
