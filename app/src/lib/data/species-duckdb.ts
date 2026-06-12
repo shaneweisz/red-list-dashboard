@@ -50,6 +50,28 @@ async function getConn(): Promise<DuckDBConnection> {
   return connPromise;
 }
 
+// The NE de-dup set (assessed col_ids) and the GBIF-by-col_id overlay map are GLOBAL
+// (taxon-independent) but were rebuilt on every NE query — and the assessed set was
+// scanned twice. Materialize both once per warm container as temp tables; large
+// groups (plants ~280k) stop paying for the ~557k-row GBIF aggregation + the 173k
+// anti-set on each request. Reset on failure so a transient R2 error can retry.
+let neHelpersPromise: Promise<void> | null = null;
+function ensureNeHelpers(conn: DuckDBConnection): Promise<void> {
+  if (!neHelpersPromise) {
+    neHelpersPromise = (async () => {
+      const linkUri = parquetUri("species_link.parquet");
+      const unassessedUri = parquetUri("unassessed.parquet");
+      await conn.run(`CREATE TEMP TABLE ne_assessed_col_ids AS
+        SELECT DISTINCT col_id FROM read_parquet('${linkUri}') WHERE src = 'redlist' AND col_id IS NOT NULL`);
+      await conn.run(`CREATE TEMP TABLE ne_gbif_by_col AS
+        SELECT sl.col_id AS col_id, any_value(un.gbif_species_key) AS gbif_species_key, max(un.gbif_occurrence_count) AS gbif_occurrence_count
+        FROM read_parquet('${linkUri}') sl JOIN read_parquet('${unassessedUri}') un ON un.id = sl.id
+        WHERE sl.src = 'gbif' AND sl.col_id IS NOT NULL GROUP BY sl.col_id`);
+    })().catch((e) => { neHelpersPromise = null; throw e; });
+  }
+  return neHelpersPromise;
+}
+
 // ─── Resolve a taxon identifier to a SQL predicate ──────────────────────────
 //
 // Parity with /api/redlist/species: a taxonomy node filters by its csvGroups
@@ -242,12 +264,10 @@ export async function querySpecies(opts: {
     const linkUri = parquetUri("species_link.parquet");
     const unassessedUri = parquetUri("unassessed.parquet");
     const taxonId = canonicalizeTaxonId(opts.taxon);
-    // CoL nodes that already carry an IUCN assessment — the de-dup key.
-    const assessedColIds = `(SELECT col_id FROM read_parquet('${linkUri}') WHERE src = 'redlist' AND col_id IS NOT NULL)`;
-    // GBIF occurrence data keyed by col_id, to overlay onto universe NE rows.
-    const gbifByCol = `(SELECT sl.col_id AS col_id, any_value(un.gbif_species_key) AS gbif_species_key, max(un.gbif_occurrence_count) AS gbif_occurrence_count
-       FROM read_parquet('${linkUri}') sl JOIN read_parquet('${unassessedUri}') un ON un.id = sl.id
-       WHERE sl.src = 'gbif' AND sl.col_id IS NOT NULL GROUP BY sl.col_id)`;
+    // Build (once per warm container) the global de-dup set + GBIF overlay map.
+    await ensureNeHelpers(conn);
+    const assessedColIds = "(SELECT col_id FROM ne_assessed_col_ids)"; // assessed col_ids (de-dup key)
+    const gbifByCol = "ne_gbif_by_col"; // GBIF occurrences keyed by col_id
 
     // (A) CoL extant universe under the taxon (in_base AND NOT fossil), minus the
     // col_ids that are already assessed. Skipped entirely for taxa with no CoL
