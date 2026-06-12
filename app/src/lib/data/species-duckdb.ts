@@ -269,18 +269,27 @@ export async function querySpecies(opts: {
       }
     }
 
-    // (B) GBIF-observed NE species NOT in the universe above (orphans — CoL has them in
-    // a non-Base source, as a synonym, or not at all). De-duped vs assessed (SQL) and
-    // vs the universe rows (JS, by col_id). Emitted with their real GBIF data as before.
-    const orphanSql = `
-      SELECT x.*, sl.col_id AS _col_id
-      FROM (SELECT ${UNASSESSED_SELECT} FROM read_parquet('${unassessedUri}') a ${whereSql}) x
-      LEFT JOIN read_parquet('${linkUri}') sl ON sl.src = 'gbif' AND sl.id = x.id
-      WHERE sl.col_id IS NULL OR sl.col_id NOT IN ${assessedColIds}`;
-    const orphanRows = (await conn.runAndReadAll(orphanSql, where.params)).getRowObjects();
-    for (const r of orphanRows) {
-      if (r._col_id != null && emitted.has(String(r._col_id))) continue;
-      result.push(toSpeciesRow(r));
+    // (B) GBIF-observed NE species. When the universe WAS scanned (mapped taxon),
+    // de-dup orphans by col_id — vs assessed (SQL) and vs the universe rows (JS) — via
+    // the species_link join. When the universe was SKIPPED (unmapped taxon), there are
+    // no universe rows to double-count against, so use the plain, fast unassessed read
+    // and avoid the species_link join over huge groups (the 138k-row plants slowness;
+    // this is the pre-CoL behaviour for those groups).
+    if (target) {
+      const orphanSql = `
+        SELECT x.*, sl.col_id AS _col_id
+        FROM (SELECT ${UNASSESSED_SELECT} FROM read_parquet('${unassessedUri}') a ${whereSql}) x
+        LEFT JOIN read_parquet('${linkUri}') sl ON sl.src = 'gbif' AND sl.id = x.id
+        WHERE sl.col_id IS NULL OR sl.col_id NOT IN ${assessedColIds}`;
+      const orphanRows = (await conn.runAndReadAll(orphanSql, where.params)).getRowObjects();
+      for (const r of orphanRows) {
+        if (r._col_id != null && emitted.has(String(r._col_id))) continue;
+        result.push(toSpeciesRow(r));
+      }
+    } else {
+      const orphanSql = `SELECT ${UNASSESSED_SELECT} FROM read_parquet('${unassessedUri}') a ${whereSql}`;
+      const orphanRows = (await conn.runAndReadAll(orphanSql, where.params)).getRowObjects();
+      for (const r of orphanRows) result.push(toSpeciesRow(r));
     }
   }
 
