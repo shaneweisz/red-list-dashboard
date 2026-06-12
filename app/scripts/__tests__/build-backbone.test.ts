@@ -102,9 +102,10 @@ describe("build-backbone species universe", () => {
     ]);
   });
 
-  it("lowercases the denormalized lineage and partitions Animalia by phylum", async () => {
-    const rows = await query(`SELECT DISTINCT class_name, part FROM read_parquet('${speciesGlob}', hive_partitioning=true)`);
-    expect(rows).toEqual([{ class_name: "mammalia", part: "Chordata" }]);
+  it("lowercases the denormalized lineage and partitions by taxon_group (Table 1a group)", async () => {
+    const rows = await query(`SELECT DISTINCT class_name, taxon_group FROM read_parquet('${speciesGlob}', hive_partitioning=true)`);
+    // All fixture species are class Mammalia → taxon_group 'mammals' (TAXON_GROUP_CASE).
+    expect(rows).toEqual([{ class_name: "mammalia", taxon_group: "mammals" }]);
   });
 });
 

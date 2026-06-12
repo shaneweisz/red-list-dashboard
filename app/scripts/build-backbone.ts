@@ -47,6 +47,47 @@ const SPECIES_STATUS = "('accepted')";
 // keys are global + version-stable, so a current Base release is a valid allowlist.
 const COL_BASE_DATASET = process.env.COL_BASE_DATASET || "315149";
 
+// CoL lineage → IUCN Table 1a group, per Table 1a's footnote definitions (2025-2):
+// crustaceans = note 6's 7 classes (Maxillopoda split into CoL's copepoda/thecostraca/
+// hexanauplia/ichthyostraca); corals = Octocorallia + orders Antipatharia/Corallimorpharia/
+// Scleractinia; mosses = note 8; ferns&allies = note 9 (CoL lumps most into polypodiopsida/
+// lycopodiopsida); brown_algae = Phaeophyceae (the actual brown seaweeds, not all
+// Ochrophytina which includes diatoms). Evaluated top-down: specific groups before the
+// `animalia`/kingdom catch-alls. Anything outside the 28 groups → 'other' (not surfaced).
+// Lineage columns are already lowercased in the subquery this is applied over.
+const TAXON_GROUP_CASE = `
+  CASE
+    WHEN class_name = 'mammalia' THEN 'mammals'
+    WHEN class_name = 'aves' THEN 'birds'
+    WHEN class_name = 'reptilia' THEN 'reptiles'
+    WHEN class_name = 'amphibia' THEN 'amphibians'
+    WHEN class_name IN ('teleostei','elasmobranchii','holocephali','myxini','petromyzonti','chondrostei','cladistii','holostei','dipneusti','coelacanthi') THEN 'fishes'
+    WHEN order_name = 'coleoptera' THEN 'beetles'
+    WHEN order_name = 'lepidoptera' THEN 'butterflies_and_moths'
+    WHEN order_name = 'diptera' THEN 'flies_and_mosquitoes'
+    WHEN order_name = 'hymenoptera' THEN 'bees_wasps_and_ants'
+    WHEN order_name = 'hemiptera' THEN 'true_bugs'
+    WHEN order_name = 'orthoptera' THEN 'grasshoppers_crickets_locusts'
+    WHEN order_name = 'odonata' THEN 'dragonflies_and_damselflies'
+    WHEN class_name = 'insecta' THEN 'other_insects'
+    WHEN class_name = 'arachnida' THEN 'arachnids'
+    WHEN phylum = 'mollusca' THEN 'molluscs'
+    WHEN class_name IN ('malacostraca','branchiopoda','ostracoda','copepoda','thecostraca','hexanauplia','ichthyostraca','remipedia','cephalocarida','mystacocarida','tantulocarida') THEN 'crustaceans'
+    WHEN class_name = 'octocorallia' OR order_name IN ('scleractinia','antipatharia','corallimorpharia') THEN 'corals'
+    WHEN phylum = 'onychophora' THEN 'velvet_worms'
+    WHEN class_name = 'merostomata' THEN 'horseshoe_crabs'
+    WHEN kingdom = 'animalia' THEN 'other_invertebrates'
+    WHEN class_name IN ('magnoliopsida','liliopsida') THEN 'flowering_plants'
+    WHEN class_name IN ('pinopsida','cycadopsida','ginkgoopsida','gnetopsida') THEN 'gymnosperms'
+    WHEN class_name IN ('polypodiopsida','lycopodiopsida','isoetopsida','equisetopsida','marattiopsida','psilotopsida') THEN 'ferns_and_allies'
+    WHEN phylum IN ('bryophyta','marchantiophyta','anthocerotophyta') THEN 'mosses'
+    WHEN phylum IN ('chlorophyta','charophyta') THEN 'green_algae'
+    WHEN phylum = 'rhodophyta' THEN 'red_algae'
+    WHEN kingdom = 'fungi' THEN 'mushrooms'
+    WHEN class_name = 'phaeophyceae' THEN 'brown_algae'
+    ELSE 'other'
+  END`;
+
 async function fetchBaseSourceIds(): Promise<string[]> {
   const res = await fetch(`https://api.checklistbank.org/dataset/${COL_BASE_DATASET}/source`);
   if (!res.ok) throw new Error(`Base source list fetch failed (${COL_BASE_DATASET}): ${res.status}`);
@@ -109,22 +150,26 @@ export async function run(opts: { tsv?: string; outDir?: string; baseSourceIds?:
   `);
 
   // species/ — accepted species only, lineage from XR's denormalized columns,
-  // partitioned by `part` and lineage-sorted within. Small row groups so the
-  // class/order/family filters prune finely (the single-file layout did not).
+  // partitioned by `taxon_group` (the IUCN Table 1a group) so the read layer filters
+  // species/ with the SAME predicate it uses for assessed/unassessed (taxon_group),
+  // and the partition prunes to the group(s). taxon_group is derived from the lineage
+  // per Table 1a's footnote definitions (TAXON_GROUP_CASE); species outside the 28
+  // groups (microbes, viruses, unplaced) fall to 'other' and aren't surfaced.
   fs.rmSync(speciesDir, { recursive: true, force: true });
   await conn.run(`
     COPY (
-      SELECT
-        col_id, scientific_name, authorship,
-        lower(kingdom) AS kingdom, lower(phylum) AS phylum, lower(class_name) AS class_name,
-        lower(order_name) AS order_name, lower(family) AS family, lower(genus) AS genus,
-        extinct,
-        (source_id IN (SELECT id FROM base_src)) AS in_base,
-        coalesce(nullif(CASE WHEN kingdom = 'Animalia' THEN phylum ELSE kingdom END, ''), 'other') AS part
-      FROM nu
-      WHERE rank = 'species' AND status IN ${SPECIES_STATUS}
-      ORDER BY kingdom, phylum, class_name, order_name, family, scientific_name
-    ) TO '${speciesDir}' (FORMAT PARQUET, PARTITION_BY (part), COMPRESSION ZSTD, ROW_GROUP_SIZE 20000, OVERWRITE_OR_IGNORE);
+      SELECT col_id, scientific_name, authorship, kingdom, phylum, class_name, order_name, family, genus,
+             extinct, in_base, ${TAXON_GROUP_CASE} AS taxon_group
+      FROM (
+        SELECT col_id, scientific_name, authorship,
+               lower(kingdom) AS kingdom, lower(phylum) AS phylum, lower(class_name) AS class_name,
+               lower(order_name) AS order_name, lower(family) AS family, lower(genus) AS genus,
+               extinct, (source_id IN (SELECT id FROM base_src)) AS in_base
+        FROM nu
+        WHERE rank = 'species' AND status IN ${SPECIES_STATUS}
+      )
+      ORDER BY taxon_group, class_name, order_name, family, scientific_name
+    ) TO '${speciesDir}' (FORMAT PARQUET, PARTITION_BY (taxon_group), COMPRESSION ZSTD, ROW_GROUP_SIZE 20000, OVERWRITE_OR_IGNORE);
   `);
 
   // ── verification ───────────────────────────────────────────────────────────
@@ -133,15 +178,16 @@ export async function run(opts: { tsv?: string; outDir?: string; baseSourceIds?:
                               count(*) FILTER (status='provisionally accepted') prov,
                               count(*) FILTER (status LIKE '%synonym%') syn FROM '${backboneOut}'`))[0];
   console.log(`Wrote ${backboneOut}: ${Number(bb.n).toLocaleString()} usages (${Number(bb.acc).toLocaleString()} accepted, ${Number(bb.prov).toLocaleString()} provisionally accepted, ${Number(bb.syn).toLocaleString()} synonyms)`);
-  const sp = (await q(`SELECT count(*) n, count(DISTINCT part) parts,
+  const sp = (await q(`SELECT count(*) n, count(DISTINCT taxon_group) AS ngroups,
                               count(*) FILTER (extinct IS TRUE) AS fossil,
                               count(*) FILTER (NOT in_base) AS non_base,
-                              count(*) FILTER (in_base AND extinct IS NOT TRUE) AS universe
+                              count(*) FILTER (in_base AND extinct IS NOT TRUE) AS universe,
+                              count(*) FILTER (taxon_group = 'other') AS other
                        FROM '${speciesDir}/**/*.parquet'`))[0];
-  console.log(`Wrote ${speciesDir}/: ${Number(sp.n).toLocaleString()} accepted species across ${Number(sp.parts)} partitions (${baseSourceIds.length} Base GSD sources)`);
-  console.log(`  extant universe (in_base AND NOT fossil): ${Number(sp.universe).toLocaleString()} — drops ${Number(sp.fossil).toLocaleString()} flagged fossils + ${Number(sp.non_base).toLocaleString()} non-Base (the unflagged-fossil tail)`);
-  const parts = await q(`SELECT part, count(*) n FROM '${speciesDir}/**/*.parquet' GROUP BY part ORDER BY n DESC LIMIT 6`);
-  console.log("  largest partitions:", parts.map((r) => `${r.part}=${Number(r.n).toLocaleString()}`).join(", "));
+  console.log(`Wrote ${speciesDir}/: ${Number(sp.n).toLocaleString()} accepted species across ${Number(sp.ngroups)} taxon_group partitions (${baseSourceIds.length} Base GSD sources)`);
+  console.log(`  extant universe (in_base AND NOT fossil): ${Number(sp.universe).toLocaleString()} — drops ${Number(sp.fossil).toLocaleString()} flagged fossils + ${Number(sp.non_base).toLocaleString()} non-Base; ${Number(sp.other).toLocaleString()} outside the 28 groups ('other')`);
+  const parts = await q(`SELECT taxon_group, count(*) FILTER (in_base AND extinct IS NOT TRUE) n FROM '${speciesDir}/**/*.parquet' GROUP BY taxon_group ORDER BY n DESC LIMIT 6`);
+  console.log("  largest groups (extant universe):", parts.map((r) => `${r.taxon_group}=${Number(r.n).toLocaleString()}`).join(", "));
 }
 
 const isDirectRun = process.argv[1]?.endsWith("build-backbone.ts") || process.argv[1]?.endsWith("build-backbone.js");

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveWhere, toSpeciesRow, colPartFor, colUniverseTarget } from "@/lib/data/species-duckdb";
+import { resolveWhere, toSpeciesRow } from "@/lib/data/species-duckdb";
 
 // Unit tests for the parity-critical pure logic of the DuckDB read layer (#261):
 // the taxon→SQL resolver and the row→SpeciesRow mapping. (Full v1-vs-v2 parity is
@@ -35,49 +35,6 @@ describe("resolveWhere", () => {
 
   it("lowercases arbitrary values", () => {
     expect(resolveWhere("Turdidae").params.arv).toBe("turdidae");
-  });
-});
-
-describe("colPartFor", () => {
-  it("maps known animal clades to their species/ partition (for pruning)", () => {
-    expect(colPartFor("mammalia")).toBe("Chordata");
-    expect(colPartFor("aves")).toBe("Chordata");
-    expect(colPartFor("coleoptera")).toBe("Arthropoda");
-    expect(colPartFor("mollusca")).toBe("Mollusca");
-  });
-
-  it("is case-insensitive", () => {
-    expect(colPartFor("Arachnida")).toBe("Arthropoda");
-  });
-
-  it("returns null for unmapped values (query falls back to a full scan)", () => {
-    expect(colPartFor("felidae")).toBeNull();
-    expect(colPartFor("plantae")).toBeNull();
-  });
-});
-
-describe("colUniverseTarget", () => {
-  it("maps a leaf node to its CoL lineage value(s) + partition (prune)", () => {
-    expect(colUniverseTarget("mammals")).toEqual({ values: ["mammalia"], parts: ["Chordata"] });
-    expect(colUniverseTarget("beetles")).toEqual({ values: ["coleoptera"], parts: ["Arthropoda"] });
-    expect(colUniverseTarget("flowering_plants")).toEqual({ values: ["magnoliopsida", "liliopsida"], parts: ["Plantae"] });
-  });
-
-  it("expands an aggregate/parent node to the union of its leaf groups' CoL targets", () => {
-    // plantae = flowering_plants + gymnosperms + ferns + mosses + algae → all in Plantae.
-    const t = colUniverseTarget("plantae")!;
-    expect(t.parts).toEqual(["Plantae"]);
-    expect(t.values).toEqual(expect.arrayContaining(["magnoliopsida", "liliopsida", "rhodophyta", "bryophyta"]));
-  });
-
-  it("returns null for a surfaced node with no CoL mapping yet (skip the scan)", () => {
-    // corals (subset of Cnidaria) + crustaceans (a subphylum) aren't mapped yet → GBIF-NE only.
-    expect(colUniverseTarget("corals")).toBeNull();
-    expect(colUniverseTarget("crustaceans")).toBeNull();
-  });
-
-  it("treats an arbitrary rank as its own CoL value (best-effort partition)", () => {
-    expect(colUniverseTarget("turdidae")).toEqual({ values: ["turdidae"], parts: null });
   });
 });
 

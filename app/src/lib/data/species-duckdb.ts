@@ -96,85 +96,11 @@ export function resolveWhere(taxonId: string): WhereParts {
   };
 }
 
-// node→CoL editorial mapping: each surfaced display node → the CoL lineage value(s)
-// that define it + the species/ partition they live in. Multi-value where a node
-// spans several CoL classes/phyla (flowering_plants = magnoliopsida + liliopsida).
-// Values match rank-agnostically against the denormalized lineage (kingdom…genus),
-// pruned to the partition so the scan reads one R2 file. Derived from the CoL
-// lineage breakdown (stock-take 2026-06-12). Groups NOT listed (corals, crustaceans,
-// velvet_worms, horseshoe_crabs, other_*) skip the universe scan → GBIF-NE only,
-// until their (subset/subphylum) lineage is mapped.
-const COL_NODE_TARGET: Record<string, { values: string[]; part: string }> = {
-  // Vertebrates (Chordata). fishes = the true-fish classes (excludes tunicates/lancelets).
-  mammals: { values: ["mammalia"], part: "Chordata" },
-  birds: { values: ["aves"], part: "Chordata" },
-  reptiles: { values: ["reptilia"], part: "Chordata" },
-  amphibians: { values: ["amphibia"], part: "Chordata" },
-  fishes: { values: ["teleostei", "elasmobranchii", "holocephali", "myxini", "petromyzonti", "chondrostei", "cladistii", "holostei", "dipneusti", "coelacanthi"], part: "Chordata" },
-  // Insects + arachnids (Arthropoda).
-  beetles: { values: ["coleoptera"], part: "Arthropoda" },
-  butterflies_and_moths: { values: ["lepidoptera"], part: "Arthropoda" },
-  flies_and_mosquitoes: { values: ["diptera"], part: "Arthropoda" },
-  bees_wasps_and_ants: { values: ["hymenoptera"], part: "Arthropoda" },
-  true_bugs: { values: ["hemiptera"], part: "Arthropoda" },
-  grasshoppers_crickets_locusts: { values: ["orthoptera"], part: "Arthropoda" },
-  dragonflies_and_damselflies: { values: ["odonata"], part: "Arthropoda" },
-  arachnids: { values: ["arachnida"], part: "Arthropoda" },
-  molluscs: { values: ["mollusca"], part: "Mollusca" },
-  // Plants (Plantae).
-  flowering_plants: { values: ["magnoliopsida", "liliopsida"], part: "Plantae" },
-  gymnosperms: { values: ["pinopsida", "cycadopsida", "ginkgoopsida", "gnetopsida"], part: "Plantae" },
-  ferns_and_allies: { values: ["polypodiopsida", "lycopodiopsida"], part: "Plantae" },
-  mosses: { values: ["bryophyta", "marchantiophyta", "anthocerotophyta"], part: "Plantae" },
-  green_algae: { values: ["chlorophyta", "charophyta"], part: "Plantae" },
-  red_algae: { values: ["rhodophyta"], part: "Plantae" },
-  // Fungi & protists. mushrooms = all Fungi; brown_algae = phaeophyceae (in Chromista,
-  // NOT all ochrophyta — that includes diatoms).
-  mushrooms: { values: ["fungi"], part: "Fungi" },
-  brown_algae: { values: ["phaeophyceae"], part: "Chromista" },
-};
-
-// species/ is Hive-partitioned by `part` (= phylum within Animalia, else kingdom).
-// A query filtering by class_name/order/family does NOT prune partitions, so it
-// full-scans all ~2.4M rows across 58 R2 files (the new-assessments hang). Map a
-// CoL lineage VALUE to its partition so the query reads one file. Only the common
-// animal clades need this (the giant partitions); unmapped values skip pruning.
-const COL_LINEAGE_TO_PART: Record<string, string> = {
-  mammalia: "Chordata", aves: "Chordata", reptilia: "Chordata", amphibia: "Chordata",
-  coleoptera: "Arthropoda", lepidoptera: "Arthropoda", diptera: "Arthropoda",
-  hymenoptera: "Arthropoda", hemiptera: "Arthropoda", orthoptera: "Arthropoda",
-  odonata: "Arthropoda", arachnida: "Arthropoda", mollusca: "Mollusca",
-};
-export function colPartFor(lineageValue: string): string | null {
-  return COL_LINEAGE_TO_PART[lineageValue.toLowerCase()] ?? null;
-}
-
-// Resolve a taxon to the CoL-universe scan target — or null to SKIP the scan:
-//  - a mapped display node → its CoL lineage value(s) + partition (prune to 1 file);
-//  - a surfaced node we haven't mapped yet (corals, crustaceans, other_*) → null:
-//    skip the scan. Its node id matches no lineage column, so scanning would
-//    full-scan every partition to return nothing (the 30s hang). These get the
-//    GBIF-orphan NE list only until mapped;
-//  - an arbitrary CoL rank (not a node) → the value itself + best-effort partition.
-export function colUniverseTarget(taxonId: string): { values: string[]; parts: string[] | null } | null {
-  const id = canonicalizeTaxonId(taxonId);
-  const direct = COL_NODE_TARGET[id.toLowerCase()];
-  if (direct) return { values: direct.values, parts: [direct.part] };
-  if (NODE_INDEX.has(id)) {
-    // Aggregate/parent node (e.g. plantae, fungi, invertebrates) — union the CoL
-    // targets of its constituent leaf groups. Unmapped leaves (corals, crustaceans…)
-    // drop out; if none map, skip the scan.
-    const mapped = getCsvGroupsForNode(id).map((g) => COL_NODE_TARGET[g]).filter(Boolean) as { values: string[]; part: string }[];
-    if (mapped.length === 0) return null;
-    return {
-      values: [...new Set(mapped.flatMap((m) => m.values))],
-      parts: [...new Set(mapped.map((m) => m.part))],
-    };
-  }
-  const v = id.toLowerCase();
-  const p = colPartFor(v);
-  return { values: [v], parts: p ? [p] : null };
-}
+// species/ is Hive-partitioned by `taxon_group` (the IUCN Table 1a group, assigned at
+// build time from the lineage — see build-backbone's TAXON_GROUP_CASE). So the NE
+// universe is filtered with the SAME `whereSql` resolveWhere() builds for the
+// assessed/unassessed parquets, and the partition prunes to the queried group(s). No
+// separate node→CoL lineage mapping or per-query partition logic is needed.
 
 // ─── SpeciesRow projection ─────────────────────────────────────────────────
 
@@ -285,65 +211,46 @@ export async function querySpecies(opts: {
     // Build (once per warm container) the global de-dup set + GBIF overlay map.
     await ensureNeHelpers(conn);
     const assessedColIds = "(SELECT col_id FROM ne_assessed_col_ids)"; // assessed col_ids (de-dup key)
-    const gbifByCol = "ne_gbif_by_col"; // GBIF occurrences keyed by col_id
+    const speciesUri = parquetUri("species/**/*.parquet");
 
-    // (A) CoL extant universe under the taxon (in_base AND NOT fossil), minus the
-    // col_ids that are already assessed. Skipped entirely for taxa with no CoL
-    // lineage mapping (plants, fungi, …) — see colUniverseTarget — which would
-    // otherwise full-scan every partition to match nothing (the 30s plants hang).
-    // Pruned to one R2 file when the clade maps to a partition.
+    // (A) CoL extant universe under the taxon, not already assessed. species/ is
+    // partitioned by taxon_group, so the SAME `whereSql` used for the assessed parquet
+    // filters + prunes it (no separate node→CoL mapping). GBIF occurrences overlaid.
     const emitted = new Set<string>();
     const neStart = result.length; // NE additions are capped at NE_CAP on top of assessed
-    const target = colUniverseTarget(opts.taxon);
-    if (target) {
-      // Prune to the target partition(s) — one for a clade (Chordata), several for a
-      // multi-part aggregate (invertebrates → Arthropoda, Mollusca…). Values are our
-      // own trusted constants, so inline them.
-      const partClause = target.parts
-        ? `part IN (${target.parts.map((p) => `'${p}'`).join(", ")}) AND ` : "";
-      // Match if any of the target lineage value(s) appears at any rank of the
-      // denormalized lineage — rank-agnostic + multi-value (a node can span several
-      // CoL classes, e.g. flowering_plants = magnoliopsida + liliopsida).
-      const univSql = `
-        SELECT u.col_id, u.scientific_name, u.class_name, u.order_name, u.family,
-               g.gbif_species_key, g.gbif_occurrence_count
-        FROM (
-          SELECT col_id, scientific_name, class_name, order_name, family
-          FROM read_parquet('${parquetUri("species/**/*.parquet")}', hive_partitioning=true)
-          WHERE ${partClause}len(list_intersect([kingdom, phylum, class_name, order_name, family, genus], string_split($vals, '|'))) > 0
-            AND in_base AND extinct IS NOT TRUE
-            AND col_id NOT IN ${assessedColIds}
-        ) u
-        LEFT JOIN ${gbifByCol} g ON g.col_id = u.col_id
-        LIMIT ${NE_CAP}`;
-      const univRows = (await conn.runAndReadAll(univSql, { vals: target.values.join("|") })).getRowObjects();
-      if (univRows.length >= NE_CAP) truncated = true;
-      let synthId = -2_000_000_000;
-      for (const r of univRows) {
-        emitted.add(String(r.col_id));
-        // Synthetic negative id (no IUCN sis); GBIF key/count overlaid when observed so
-        // the new-assessments sort-by-occurrences works. taxon_id forced to the requested
-        // taxon so the client's taxon filter keeps these rows.
-        const row = toSpeciesRow({
-          id: synthId--, scientific_name: r.scientific_name, family: r.family, category: "NE",
-          class_name: r.class_name, order_name: r.order_name, taxon_group: taxonId,
-          gbif_species_key: r.gbif_species_key, gbif_occurrence_count: r.gbif_occurrence_count,
-        });
-        row.taxon_id = taxonId;
-        result.push(row);
-      }
+    const univSql = `
+      SELECT u.col_id, u.scientific_name, u.class_name, u.order_name, u.family,
+             g.gbif_species_key, g.gbif_occurrence_count
+      FROM (
+        SELECT col_id, scientific_name, class_name, order_name, family
+        FROM read_parquet('${speciesUri}', hive_partitioning=true) ${whereSql}
+          AND in_base AND extinct IS NOT TRUE AND col_id NOT IN ${assessedColIds}
+      ) u
+      LEFT JOIN ne_gbif_by_col g ON g.col_id = u.col_id
+      LIMIT ${NE_CAP}`;
+    const univRows = (await conn.runAndReadAll(univSql, where.params)).getRowObjects();
+    if (univRows.length >= NE_CAP) truncated = true;
+    let synthId = -2_000_000_000;
+    for (const r of univRows) {
+      emitted.add(String(r.col_id));
+      // Synthetic negative id (no IUCN sis); GBIF key/count overlaid when observed so the
+      // new-assessments sort-by-occurrences works. taxon_id forced to the requested taxon
+      // so the client's taxon filter keeps these rows.
+      const row = toSpeciesRow({
+        id: synthId--, scientific_name: r.scientific_name, family: r.family, category: "NE",
+        class_name: r.class_name, order_name: r.order_name, taxon_group: taxonId,
+        gbif_species_key: r.gbif_species_key, gbif_occurrence_count: r.gbif_occurrence_count,
+      });
+      row.taxon_id = taxonId;
+      result.push(row);
     }
 
-    // (B) GBIF-observed NE species. When the universe WAS scanned (mapped taxon),
-    // de-dup orphans by col_id — vs assessed (SQL) and vs the universe rows (JS) — via
-    // the species_link join. When the universe was SKIPPED (unmapped taxon), there are
-    // no universe rows to double-count against, so use the plain, fast unassessed read
-    // and avoid the species_link join over huge groups (the 138k-row plants slowness;
-    // this is the pre-CoL behaviour for those groups).
-    const remaining = NE_CAP - (result.length - neStart); // NE budget left after the universe
+    // (B) GBIF-observed orphans not represented in the universe — de-duped vs assessed
+    // (SQL) and vs the universe rows (JS, by col_id). Bounded by the remaining NE budget.
+    const remaining = NE_CAP - (result.length - neStart);
     if (remaining <= 0) {
       truncated = true; // universe alone filled the cap
-    } else if (target) {
+    } else {
       const orphanSql = `
         SELECT x.*, sl.col_id AS _col_id
         FROM (SELECT ${UNASSESSED_SELECT} FROM read_parquet('${unassessedUri}') a ${whereSql}) x
@@ -356,23 +263,15 @@ export async function querySpecies(opts: {
         if (r._col_id != null && emitted.has(String(r._col_id))) continue;
         result.push(toSpeciesRow(r));
       }
-    } else {
-      const orphanSql = `SELECT ${UNASSESSED_SELECT} FROM read_parquet('${unassessedUri}') a ${whereSql} LIMIT ${remaining}`;
-      const orphanRows = (await conn.runAndReadAll(orphanSql, where.params)).getRowObjects();
-      if (orphanRows.length >= remaining) truncated = true;
-      for (const r of orphanRows) result.push(toSpeciesRow(r));
     }
 
-    // When capped, report the true NE universe size (cheap COUNT, no serialization) so
-    // the UI can show "showing N of M". Only the mapped-universe count — the dominant
-    // term for the giant aggregates that actually truncate.
-    if (truncated && target) {
-      const partClause = target.parts ? `part IN (${target.parts.map((p) => `'${p}'`).join(", ")}) AND ` : "";
+    // When capped, report the true universe size (cheap COUNT, no serialization) so the
+    // UI can show "showing N of M".
+    if (truncated) {
       const cnt = (await conn.runAndReadAll(
-        `SELECT count(*) AS c FROM read_parquet('${parquetUri("species/**/*.parquet")}', hive_partitioning=true)
-         WHERE ${partClause}len(list_intersect([kingdom, phylum, class_name, order_name, family, genus], string_split($vals, '|'))) > 0
+        `SELECT count(*) AS c FROM read_parquet('${speciesUri}', hive_partitioning=true) ${whereSql}
            AND in_base AND extinct IS NOT TRUE AND col_id NOT IN ${assessedColIds}`,
-        { vals: target.values.join("|") },
+        where.params,
       )).getRowObjects();
       neTotal = Number(cnt[0].c);
     }
@@ -480,12 +379,11 @@ export async function getSpeciesUnder(taxon: string, limit = 50): Promise<{
   const conn = await getConn();
   const sp = `read_parquet('${parquetUri("species/**/*.parquet")}', hive_partitioning=true)`;
   const t = taxon.toLowerCase();
-  // Extant universe = in_base AND NOT fossil (in_base catches the sparse-flag paleo
-  // tail). Prune to the partition when the taxon is a known clade (else full-scan).
-  const part = colPartFor(t);
-  const partClause = part ? "part = $part AND " : "";
-  const where = `${partClause}$t IN (kingdom, phylum, class_name, order_name, family, genus) AND in_base AND extinct IS NOT TRUE`;
-  const params: Record<string, string> = part ? { t, part } : { t };
+  // Arbitrary-rank lineage match over the extant universe. species/ is partitioned by
+  // taxon_group, not by clade, so an arbitrary rank can't prune — it full-scans. (This
+  // is a power-user endpoint not wired into the UI; the hot path is querySpecies.)
+  const where = `$t IN (kingdom, phylum, class_name, order_name, family, genus) AND in_base AND extinct IS NOT TRUE`;
+  const params: Record<string, string> = { t };
   const lim = Math.min(Math.max(limit, 1), 200);
   const head = (await conn.runAndReadAll(
     `SELECT count(*) AS total,
