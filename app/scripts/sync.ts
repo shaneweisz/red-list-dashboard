@@ -8,6 +8,10 @@
  *   Phase 4: fetch-gbif-country-data (GBIF API → country occurrences per species)
  *   Phase 5: fetch-gbif-new-counts  (GBIF API → updates GBIF CSVs)
  *   Phase 6: build-taxa-summary     (per-taxon CSVs → taxa-summary.json)
+ *   Phase 7: build-parquet          (CSVs → assessed/unassessed parquets + search)
+ *   Phase 8: fetch-coldp            (CoL XR ColDP archive → NameUsage.tsv, full sync only)
+ *   Phase 9: build-backbone         (NameUsage.tsv → backbone.parquet + species/)
+ *   Phase 10: build-matching        (→ species_link.parquet, IUCN/GBIF → col_id)
  *
  * Prerequisites:
  *   1. DB connectivity to IUCN Postgres (direct via DB_HOST/DB_PORT, or SSH-tunneled to localhost:5433)
@@ -18,6 +22,8 @@
  *   npx tsx scripts/sync.ts mammalia aves        # Specific taxa only
  */
 
+import * as fs from "fs";
+import * as path from "path";
 import { loadEnvFiles, SyncLogger } from "./utils";
 import { run as fetchRedlistSpecies } from "./fetch-redlist-species";
 import { run as fetchGbifSpecies } from "./fetch-gbif-species";
@@ -26,6 +32,9 @@ import { run as fetchGbifNewCounts } from "./fetch-gbif-new-counts";
 import { run as fetchGbifCountryData } from "./fetch-gbif-country-data";
 import { run as buildTaxaSummary } from "./build-taxa-summary";
 import { run as buildSpeciesParquet } from "./build-parquet";
+import { run as fetchColdp } from "./fetch-coldp";
+import { run as buildBackbone } from "./build-backbone";
+import { run as buildMatching } from "./build-matching";
 
 async function main() {
   loadEnvFiles();
@@ -41,6 +50,7 @@ async function main() {
 
   const startTime = Date.now();
   const logger = new SyncLogger("sync");
+  let coldpTsv: string | null = null;
 
   try {
     logger.log("sync_start", { taxa: taxaFilter ?? "all" });
@@ -80,6 +90,25 @@ async function main() {
     console.log("═".repeat(60));
     await buildSpeciesParquet();
 
+    // Phases 8-10: Catalogue of Life backbone (#271). The backbone is the whole tree
+    // (taxon-independent) and matching needs the complete assessed/unassessed parquets,
+    // so only run on a FULL sync; a partial-taxa sync leaves the existing CoL artifacts.
+    if (!taxaFilter) {
+      console.log("\nPhase 8: fetch-coldp (CoL XR ColDP → NameUsage.tsv)");
+      console.log("═".repeat(60));
+      coldpTsv = await fetchColdp();
+
+      console.log("\nPhase 9: build-backbone (→ backbone.parquet + species/)");
+      console.log("═".repeat(60));
+      await buildBackbone({ tsv: coldpTsv });
+
+      console.log("\nPhase 10: build-matching (→ species_link.parquet)");
+      console.log("═".repeat(60));
+      await buildMatching();
+    } else {
+      console.log("\nPhases 8-10 (CoL backbone): skipped on a partial-taxa sync — run a full sync to refresh.");
+    }
+
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
     const minutes = Math.floor(Number(elapsed) / 60);
     const seconds = Number(elapsed) % 60;
@@ -93,6 +122,8 @@ async function main() {
     console.log("  npm run diff-data-vs-r2     # see what changed vs the live R2 sync");
     console.log("  npm run upload-data-to-r2   # publish this sync to R2");
   } finally {
+    // Drop the temp ColDP TSV (~2.8GB) so it's never swept into the R2 upload.
+    if (coldpTsv) fs.rmSync(path.dirname(coldpTsv), { recursive: true, force: true });
     logger.close();
   }
 }
