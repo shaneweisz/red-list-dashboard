@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { FaInfoCircle, FaExpandAlt, FaCompressAlt } from "react-icons/fa";
+import { FaInfoCircle, FaExpandAlt, FaCompressAlt, FaChevronRight } from "react-icons/fa";
 
 import { HiOutlineAdjustmentsHorizontal } from "react-icons/hi2";
 import TaxaIcon from "@/components/TaxaIcon";
@@ -87,6 +87,19 @@ interface Props {
 
 // Dynamic: any tree node with children is expandable
 const isExpandable = (id: string) => hasChildren(id);
+
+// Expand affordance for tree rows: a chevron that points right when collapsed and rotates
+// down when expanded, so it's obvious a row drills into sub-groups. Leaf rows get a
+// same-width spacer to keep names aligned with their expandable siblings.
+const expandToggle = (expandable: boolean, expanded: boolean) =>
+  expandable ? (
+    <FaChevronRight
+      aria-hidden
+      className={`flex-shrink-0 w-2.5 h-2.5 text-zinc-400 dark:text-zinc-500 transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}
+    />
+  ) : (
+    <span aria-hidden className="flex-shrink-0 w-2.5" />
+  );
 
 // Bar color helpers
 const getAssessedBarColor = (percent: number) =>
@@ -790,6 +803,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       >
         <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 ${stickyBg}`}>
           <div className="flex items-center gap-2">
+            {expandToggle(false, false)}
             <TaxaIcon taxonId={id} size={22} className="flex-shrink-0" style={{ color }} />
             <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{name}</span>
             {allDisabled && <DisabledAllTooltip />}
@@ -954,6 +968,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       >
         <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 bg-zinc-100 dark:bg-zinc-800`}>
           <div className="flex items-center gap-2">
+            {expandToggle(isExpandable(sg.id), expandedTaxa.has(sg.id))}
             <TaxaIcon taxonId={sg.id} size={18} className="flex-shrink-0" style={{ color: taxon.color }} />
             <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{sg.name}</span>
           </div>
@@ -1060,6 +1075,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         >
           <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 ${isSgSelected ? "bg-violet-50 dark:bg-violet-900/20" : "bg-white dark:bg-zinc-900"}`}>
             <div className="flex items-center gap-2" style={{ paddingLeft: `${(depth - 1) * 12}px` }}>
+              {expandToggle(sgHasChildren, isSgExpanded)}
               <TaxaIcon taxonId={sg.id} size={depth === 1 ? 16 : 14} className="flex-shrink-0" style={{ color: parentColor, opacity: isSgSelected ? 1 : 0.6 }} />
               <span className={`text-sm ${isSgSelected ? "font-medium text-violet-700 dark:text-violet-300" : "text-zinc-700 dark:text-zinc-300"}`}>{sg.name}</span>
               {isLoadingSgSubs && (
@@ -1175,6 +1191,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         >
           <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 ${isSelected ? "bg-zinc-100 dark:bg-zinc-800" : "bg-white dark:bg-zinc-900"}`}>
             <div className="flex items-center gap-2">
+              {expandToggle(hasSubgroups, isExpanded)}
               <TaxaIcon taxonId={taxon.id} size={22} className="flex-shrink-0" style={{ color: taxon.color }} />
               <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{taxon.name}</span>
               {isLoadingSubs && (
