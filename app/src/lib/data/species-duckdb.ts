@@ -65,7 +65,7 @@ function ensureNeHelpers(conn: DuckDBConnection): Promise<void> {
       await conn.run(`CREATE TEMP TABLE ne_assessed_col_ids AS
         SELECT DISTINCT col_id FROM read_parquet('${linkUri}') WHERE src = 'redlist' AND col_id IS NOT NULL`);
       await conn.run(`CREATE TEMP TABLE ne_gbif_by_col AS
-        SELECT sl.col_id AS col_id, any_value(un.gbif_species_key) AS gbif_species_key, max(un.gbif_occurrence_count) AS gbif_occurrence_count
+        SELECT sl.col_id AS col_id, any_value(un.gbif_species_key) AS gbif_species_key, max(un.gbif_occurrence_count) AS gbif_occurrence_count, any_value(un.countries) AS countries
         FROM read_parquet('${linkUri}') sl JOIN read_parquet('${unassessedUri}') un ON un.id = sl.id
         WHERE sl.src = 'gbif' AND sl.col_id IS NOT NULL GROUP BY sl.col_id`);
     })().catch((e) => { neHelpersPromise = null; throw e; });
@@ -262,7 +262,7 @@ export async function querySpecies(opts: {
       // universe (woolly mammoth in_base=false; American mastodon CoL-unmatched).
       const univSql = `
         SELECT u.col_id, u.scientific_name, u.class_name, u.order_name, u.family, u.taxon_group,
-               g.gbif_species_key, g.gbif_occurrence_count
+               g.gbif_species_key, g.gbif_occurrence_count, g.countries
         FROM (
           SELECT col_id, scientific_name, class_name, order_name, family, taxon_group
           FROM read_parquet('${speciesUri}', hive_partitioning=true) ${univFilter}
@@ -279,6 +279,7 @@ export async function querySpecies(opts: {
           id: synthId--, scientific_name: r.scientific_name, family: r.family, category: "NE",
           class_name: r.class_name, order_name: r.order_name, taxon_group: r.taxon_group,
           gbif_species_key: r.gbif_species_key, gbif_occurrence_count: r.gbif_occurrence_count,
+          countries: r.countries, // GBIF occurrence countries (overlay) → powers the country chart
         });
         row.taxon_id = taxonId;
         result.push(row);
