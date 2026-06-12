@@ -33,6 +33,7 @@ interface Table1aSectionData {
 }
 
 const IUCN_SOURCE_URL = "https://nc.iucnredlist.org/redlist/content/attachment_files/2025-2_RL_Table1a.pdf";
+const COL_SOURCE_URL = "https://www.catalogueoflife.org/";
 
 // Ordered categories for the breakdown bar (most threatened first)
 const BAR_CATEGORIES = Object.keys(CATEGORY_ORDER).sort(
@@ -126,10 +127,13 @@ const DISTRIBUTION_BIN_LABELS = ["1", "2–10", "11–100", "101–1K", "1K–10
 
 type FocusMode = "redlist" | "gbif" | "new-assessments";
 
+// "# Described (CoL)" is hidden by default in every focus — the IUCN/CoL toggle on
+// the "# Described" header flips the primary column's source instead. Enable this
+// column via the cog menu to see IUCN and CoL described counts side by side.
 const FOCUS_HIDDEN: Record<FocusMode, Set<ColumnId>> = {
   redlist: new Set(["colDescribed", "colNe", "gbifUnassessed", "totalGbifObs", "meanGbifObs", "medianGbifObs", "gbifDistribution", "breakdown"]),
-  gbif: new Set(["outdated", "breakdown"]),
-  "new-assessments": new Set(["outdated", "breakdown", "gbifUnassessed", "totalGbifObs", "meanGbifObs", "medianGbifObs", "gbifDistribution"]),
+  gbif: new Set(["colDescribed", "outdated", "breakdown"]),
+  "new-assessments": new Set(["colDescribed", "outdated", "breakdown", "gbifUnassessed", "totalGbifObs", "meanGbifObs", "medianGbifObs", "gbifDistribution"]),
 };
 
 function DisabledAllTooltip() {
@@ -299,9 +303,30 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   const [table1aData, setTable1aData] = useState<Table1aSectionData[] | null>(null);
   const [table1aLoading, setTable1aLoading] = useState(false);
 
+  // "# Described" source toggle (#272/#274): IUCN Table 1a estimates vs the CoL
+  // backbone described count. Flipping to CoL swaps the described value AND
+  // recomputes % Assessed against it. The separate "# Described (CoL)" column
+  // (cog-only) is unaffected. Rows without a CoL count (sub-groups) stay IUCN.
+  const [describedSource, setDescribedSource] = useState<"iucn" | "col">("iucn");
+  const applySource = useCallback(
+    <T extends { estimatedDescribed: number; colDescribed?: number; totalAssessed: number; percentAssessed: number }>(row: T): T => {
+      if (describedSource !== "col" || row.colDescribed == null) return row;
+      const described = row.colDescribed;
+      return {
+        ...row,
+        estimatedDescribed: described,
+        percentAssessed: described > 0 ? (row.totalAssessed / described) * 100 : 0,
+      };
+    },
+    [describedSource]
+  );
+
   // Separate "all" row from per-taxon rows (needed before early returns for hooks)
-  const allTaxon = taxa.find((t) => t.id === "all");
-  const perTaxa = useMemo(() => taxa.filter((t) => t.id !== "all"), [taxa]);
+  const allTaxon = useMemo(() => {
+    const raw = taxa.find((t) => t.id === "all");
+    return raw ? applySource(raw) : undefined;
+  }, [taxa, applySource]);
+  const perTaxa = useMemo(() => taxa.filter((t) => t.id !== "all").map(applySource), [taxa, applySource]);
 
   // Expand all expandable taxa
   const expandAll = useCallback(async () => {
@@ -447,8 +472,12 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           </td>
         )}
         {isVisible("colNe") && (
-          <td className={numericTdClasses}>
-            <div className="h-4 w-16 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
+          <td className={flexTdClasses}>
+            <div className="flex items-center gap-1.5 sm:gap-3 min-w-[140px] md:min-w-[200px]">
+              <div className="h-4 w-[48px] sm:w-[60px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
+              <div className="flex-1 min-w-[40px] h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
+              <div className="h-3 w-[44px] sm:w-[52px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
+            </div>
           </td>
         )}
         {isVisible("totalGbifObs") && (
@@ -506,7 +535,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               {isVisible("assessed") && <th className={centeredThClasses}># Assessed</th>}
               {isVisible("outdated") && <th className={centeredThClasses}># Outdated (10+Y)</th>}
               {isVisible("gbifUnassessed") && <th className={centeredThClasses}># Unassessed, 1+ GBIF Obs</th>}
-              {isVisible("colNe") && <th className={numericThClasses}># Not Evaluated</th>}
+              {isVisible("colNe") && <th className={centeredThClasses}># Not Evaluated</th>}
               {isVisible("totalGbifObs") && <th className={numericThClasses}>Total Obs</th>}
               {isVisible("gbifDistribution") && <th className={flexThClasses}>Obs Distribution</th>}
               {isVisible("meanGbifObs") && <th className={numericThClasses}>Mean Obs</th>}
@@ -689,12 +718,21 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         </span>
       </td>
     ) : null;
-  const colNeCell = (value: number | undefined, bold = false) =>
+  // "# Not Evaluated" renders as a progress bar (ne / col_described) with the count,
+  // mirroring the assessed column. Falls back to a plain count if there's no
+  // denominator, and "—" when the row has no CoL data (sub-groups).
+  const colNeCell = (ne: number | undefined, described: number | undefined, opts?: { bold?: boolean; isAllRow?: boolean }) =>
     isVisible("colNe") ? (
-      <td className={numericTdClasses}>
-        <span className={`text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums ${bold ? "font-semibold" : ""}`}>
-          {value != null ? value.toLocaleString() : "—"}
-        </span>
+      <td className={flexTdClasses}>
+        {ne == null ? (
+          <span className="text-sm text-zinc-400">—</span>
+        ) : described && described > 0 ? (
+          renderBar((ne / described) * 100, "#f59e0b", opts?.isAllRow ?? false, ne, opts?.bold ? "font-semibold" : undefined)
+        ) : (
+          <span className={`text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums ${opts?.bold ? "font-semibold" : ""}`}>
+            {ne.toLocaleString()}
+          </span>
+        )}
       </td>
     ) : null;
 
@@ -793,7 +831,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             })()}
           </td>
         )}
-        {colNeCell(gbifObs?.colNe)}
+        {colNeCell(gbifObs?.colNe, gbifObs?.colDescribed, { isAllRow })}
         {isVisible("totalGbifObs") && (
           <td className={numericTdClasses}>
             <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
@@ -876,7 +914,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               : <span className="text-sm text-zinc-400">—</span>}
           </td>
         )}
-        {colNeCell(undefined)}
+        {colNeCell(undefined, undefined)}
         {isVisible("totalGbifObs") && (
           <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
         )}
@@ -965,7 +1003,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               : <span className="text-sm text-zinc-400">—</span>}
           </td>
         )}
-        {colNeCell(undefined)}
+        {colNeCell(undefined, undefined)}
         {isVisible("totalGbifObs") && (
           <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
         )}
@@ -1076,7 +1114,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                 : <span className="text-sm text-zinc-400">—</span>}
             </td>
           )}
-          {colNeCell(undefined)}
+          {colNeCell(undefined, undefined)}
           {isVisible("totalGbifObs") && (
             <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
           )}
@@ -1173,7 +1211,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                 : <span className="text-sm text-zinc-400">—</span>}
             </td>
           )}
-          {colNeCell(taxon.available ? taxon.colNe : undefined)}
+          {colNeCell(taxon.available ? taxon.colNe : undefined, taxon.colDescribed)}
           {isVisible("totalGbifObs") && (
             <td className={numericTdClasses}>
               <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
@@ -1243,23 +1281,43 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         </th>
         {isVisible("described") && (
           <th className={`${numericThNoDividerClasses}`}>
-            <span className="inline-flex items-center gap-1">
-              # Described
-              <span className="relative group">
-                <a
-                  href={IUCN_SOURCE_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-                >
-                  <FaInfoCircle size={12} />
-                </a>
-                <span className="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible z-50 shadow-lg normal-case">
-                  Estimates from IUCN Red List Table 1a (2025-2)
+            <div className="flex flex-col items-end gap-1">
+              <span className="inline-flex items-center gap-1">
+                # Described
+                <span className="relative group">
+                  <a
+                    href={describedSource === "col" ? COL_SOURCE_URL : IUCN_SOURCE_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                  >
+                    <FaInfoCircle size={12} />
+                  </a>
+                  <span className="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible z-50 shadow-lg normal-case">
+                    {describedSource === "col"
+                      ? "Described species from the Catalogue of Life backbone"
+                      : "Estimates from IUCN Red List Table 1a (2025-2)"}
+                  </span>
                 </span>
               </span>
-            </span>
+              {/* IUCN ↔ CoL source toggle: flips the described count + recomputes % Assessed */}
+              <span className="inline-flex rounded-md overflow-hidden border border-zinc-300 dark:border-zinc-600 text-[10px] font-semibold normal-case" title="Switch # Described between IUCN Table 1a estimates and the Catalogue of Life backbone">
+                {(["iucn", "col"] as const).map((src) => (
+                  <button
+                    key={src}
+                    onClick={(e) => { e.stopPropagation(); setDescribedSource(src); }}
+                    className={`px-1.5 py-0.5 transition-colors ${
+                      describedSource === src
+                        ? "bg-zinc-700 text-white dark:bg-zinc-200 dark:text-zinc-900"
+                        : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                    }`}
+                  >
+                    {src === "iucn" ? "IUCN" : "CoL"}
+                  </button>
+                ))}
+              </span>
+            </div>
           </th>
         )}
         {isVisible("colDescribed") && (
@@ -1275,7 +1333,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           <th className={centeredThClasses}># Unassessed, 1+ GBIF Obs</th>
         )}
         {isVisible("colNe") && (
-          <th className={numericThClasses}># Not Evaluated</th>
+          <th className={centeredThClasses}># Not Evaluated</th>
         )}
         {isVisible("totalGbifObs") && (
           <th className={numericThClasses}>Total Obs</th>
@@ -1376,23 +1434,26 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             ) : table1aData ? (
               <>
                 {table1aData.map((section, si) => {
+                  // Apply the IUCN/CoL described-source toggle to every row first, so the
+                  // per-row cells and the subtotals below all use the effective described.
+                  const rows = section.rows.map(applySource);
                   // Compute section subtotals
-                  const subDescribed = section.rows.reduce((s, r) => s + r.estimatedDescribed, 0);
-                  const subAssessed = section.rows.reduce((s, r) => s + r.totalAssessed, 0);
-                  const subOutdated = section.rows.reduce((s, r) => s + r.outdated, 0);
+                  const subDescribed = rows.reduce((s, r) => s + r.estimatedDescribed, 0);
+                  const subAssessed = rows.reduce((s, r) => s + r.totalAssessed, 0);
+                  const subOutdated = rows.reduce((s, r) => s + r.outdated, 0);
                   const subPctAssessed = subDescribed > 0 ? (subAssessed / subDescribed) * 100 : 0;
                   const subPctOutdated = subAssessed > 0 ? (subOutdated / subAssessed) * 100 : 0;
                   const subByCategory: Record<string, number> = {};
-                  for (const r of section.rows) {
+                  for (const r of rows) {
                     for (const [cat, count] of Object.entries(r.byCategory || {})) {
                       subByCategory[cat] = (subByCategory[cat] || 0) + count;
                     }
                   }
-                  const subGbifSpecies = section.rows.reduce((s, r) => s + (r.gbifSpeciesCount ?? 0), 0);
-                  const subGbifNe = section.rows.reduce((s, r) => s + (r.gbifNeSpeciesCount ?? 0), 0);
-                  const subColDescribed = section.rows.reduce((s, r) => s + (r.colDescribed ?? 0), 0);
-                  const subColNe = section.rows.reduce((s, r) => s + (r.colNe ?? 0), 0);
-                  const subGbifObs = section.rows.reduce((s, r) => s + (r.totalGbifObservations ?? 0), 0);
+                  const subGbifSpecies = rows.reduce((s, r) => s + (r.gbifSpeciesCount ?? 0), 0);
+                  const subGbifNe = rows.reduce((s, r) => s + (r.gbifNeSpeciesCount ?? 0), 0);
+                  const subColDescribed = rows.reduce((s, r) => s + (r.colDescribed ?? 0), 0);
+                  const subColNe = rows.reduce((s, r) => s + (r.colNe ?? 0), 0);
+                  const subGbifObs = rows.reduce((s, r) => s + (r.totalGbifObservations ?? 0), 0);
                   const subMeanGbif = subGbifSpecies > 0 ? Math.round(subGbifObs / subGbifSpecies) : undefined;
 
                   return (
@@ -1409,7 +1470,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                         </td>
                       </tr>
                       {/* Section rows */}
-                      {section.rows.map((row) => (
+                      {rows.map((row) => (
                         <tr
                           key={row.group}
                           className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer"
@@ -1475,7 +1536,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                                 : <span className="text-sm text-zinc-400">—</span>}
                             </td>
                           )}
-                          {colNeCell(row.colNe)}
+                          {colNeCell(row.colNe, row.colDescribed)}
                           {isVisible("totalGbifObs") && (
                             <td className={numericTdClasses}>
                               <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
@@ -1535,7 +1596,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                               : <span className="text-sm text-zinc-400">—</span>}
                           </td>
                         )}
-                        {colNeCell(subColNe, true)}
+                        {colNeCell(subColNe, subColDescribed, { bold: true })}
                         {isVisible("totalGbifObs") && (
                           <td className={numericTdClasses}>
                             <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 tabular-nums">{subGbifObs.toLocaleString()}</span>
@@ -1593,7 +1654,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                 false,
                 true,
                 true,
-                { total: totalGbifObs, mean: totalMeanGbifObs, speciesCount: totalGbifSpecies, gbifNeCount: totalGbifNeSpecies }
+                { total: totalGbifObs, mean: totalMeanGbifObs, speciesCount: totalGbifSpecies, gbifNeCount: totalGbifNeSpecies, colDescribed: totalColDescribed, colNe: totalColNe }
               )}
 
               {/* Separator - hide when only "All Species" is selected */}
