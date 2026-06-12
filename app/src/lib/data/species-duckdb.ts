@@ -248,11 +248,18 @@ export async function querySpecies(opts: {
   includeNE?: boolean;
   limit?: number;
   offset?: number;
-}): Promise<ReturnType<typeof toSpeciesRow>[]> {
+}): Promise<{ species: ReturnType<typeof toSpeciesRow>[]; truncated: boolean; neTotal: number | null }> {
   const conn = await getConn();
   const where = resolveWhere(opts.taxon);
   const whereSql = where.clauses.length ? `WHERE ${where.clauses.join(" AND ")}` : "";
   const assessedUri = parquetUri("assessed.parquet");
+  // Cap the Not-Evaluated additions: a giant aggregate (insects ~1M, invertebrates
+  // ~1.3M) can't be serialized in one response (it 500s / times out). Return up to
+  // NE_CAP, flag `truncated`, and report `neTotal` so the UI can say "showing N of M
+  // — drill into a sub-group". Every species stays reachable via its leaf node.
+  const NE_CAP = 400_000;
+  let truncated = false;
+  let neTotal: number | null = null;
 
   // No history join — the list carries only the latest assessors/reviewers
   // (denormalized columns). The full per-species history array is fetched lazily
@@ -286,6 +293,7 @@ export async function querySpecies(opts: {
     // otherwise full-scan every partition to match nothing (the 30s plants hang).
     // Pruned to one R2 file when the clade maps to a partition.
     const emitted = new Set<string>();
+    const neStart = result.length; // NE additions are capped at NE_CAP on top of assessed
     const target = colUniverseTarget(opts.taxon);
     if (target) {
       // Prune to the target partition(s) — one for a clade (Chordata), several for a
@@ -307,8 +315,9 @@ export async function querySpecies(opts: {
             AND col_id NOT IN ${assessedColIds}
         ) u
         LEFT JOIN ${gbifByCol} g ON g.col_id = u.col_id
-        LIMIT 600000`;
+        LIMIT ${NE_CAP}`;
       const univRows = (await conn.runAndReadAll(univSql, { vals: target.values.join("|") })).getRowObjects();
+      if (univRows.length >= NE_CAP) truncated = true;
       let synthId = -2_000_000_000;
       for (const r of univRows) {
         emitted.add(String(r.col_id));
@@ -331,27 +340,47 @@ export async function querySpecies(opts: {
     // no universe rows to double-count against, so use the plain, fast unassessed read
     // and avoid the species_link join over huge groups (the 138k-row plants slowness;
     // this is the pre-CoL behaviour for those groups).
-    if (target) {
+    const remaining = NE_CAP - (result.length - neStart); // NE budget left after the universe
+    if (remaining <= 0) {
+      truncated = true; // universe alone filled the cap
+    } else if (target) {
       const orphanSql = `
         SELECT x.*, sl.col_id AS _col_id
         FROM (SELECT ${UNASSESSED_SELECT} FROM read_parquet('${unassessedUri}') a ${whereSql}) x
         LEFT JOIN read_parquet('${linkUri}') sl ON sl.src = 'gbif' AND sl.id = x.id
-        WHERE sl.col_id IS NULL OR sl.col_id NOT IN ${assessedColIds}`;
+        WHERE sl.col_id IS NULL OR sl.col_id NOT IN ${assessedColIds}
+        LIMIT ${remaining}`;
       const orphanRows = (await conn.runAndReadAll(orphanSql, where.params)).getRowObjects();
+      if (orphanRows.length >= remaining) truncated = true;
       for (const r of orphanRows) {
         if (r._col_id != null && emitted.has(String(r._col_id))) continue;
         result.push(toSpeciesRow(r));
       }
     } else {
-      const orphanSql = `SELECT ${UNASSESSED_SELECT} FROM read_parquet('${unassessedUri}') a ${whereSql}`;
+      const orphanSql = `SELECT ${UNASSESSED_SELECT} FROM read_parquet('${unassessedUri}') a ${whereSql} LIMIT ${remaining}`;
       const orphanRows = (await conn.runAndReadAll(orphanSql, where.params)).getRowObjects();
+      if (orphanRows.length >= remaining) truncated = true;
       for (const r of orphanRows) result.push(toSpeciesRow(r));
+    }
+
+    // When capped, report the true NE universe size (cheap COUNT, no serialization) so
+    // the UI can show "showing N of M". Only the mapped-universe count — the dominant
+    // term for the giant aggregates that actually truncate.
+    if (truncated && target) {
+      const partClause = target.parts ? `part IN (${target.parts.map((p) => `'${p}'`).join(", ")}) AND ` : "";
+      const cnt = (await conn.runAndReadAll(
+        `SELECT count(*) AS c FROM read_parquet('${parquetUri("species/**/*.parquet")}', hive_partitioning=true)
+         WHERE ${partClause}len(list_intersect([kingdom, phylum, class_name, order_name, family, genus], string_split($vals, '|'))) > 0
+           AND in_base AND extinct IS NOT TRUE AND col_id NOT IN ${assessedColIds}`,
+        { vals: target.values.join("|") },
+      )).getRowObjects();
+      neTotal = Number(cnt[0].c);
     }
   }
 
   if (opts.offset) result = result.slice(opts.offset);
   if (opts.limit != null) result = result.slice(0, opts.limit);
-  return result;
+  return { species: result, truncated, neTotal };
 }
 
 // ─── Cross-taxa search ──────────────────────────────────────────────────────
