@@ -207,10 +207,10 @@ export async function querySpecies(opts: {
     // species/ is partitioned by taxon_group, so the SAME `whereSql` used for the assessed
     // parquet filters + prunes it (no separate node→CoL mapping). GBIF occurrences overlaid.
     const univSql = `
-      SELECT u.col_id, u.scientific_name, u.class_name, u.order_name, u.family,
+      SELECT u.col_id, u.scientific_name, u.class_name, u.order_name, u.family, u.taxon_group,
              g.gbif_species_key, g.gbif_occurrence_count
       FROM (
-        SELECT col_id, scientific_name, class_name, order_name, family
+        SELECT col_id, scientific_name, class_name, order_name, family, taxon_group
         FROM read_parquet('${speciesUri}', hive_partitioning=true) ${whereSql}
           AND in_base AND extinct IS NOT TRUE AND col_id NOT IN ${assessedColIds}
       ) u
@@ -221,11 +221,12 @@ export async function querySpecies(opts: {
     let synthId = -2_000_000_000;
     for (const r of univRows) {
       // Synthetic negative id (no IUCN sis); GBIF key/count overlaid when observed so the
-      // new-assessments sort-by-occurrences works. taxon_id forced to the requested taxon
-      // so the client's taxon filter keeps these rows.
+      // new-assessments sort-by-occurrences works. taxon_group is the REAL CoL group (so
+      // sub-group filtering via speciesMatchesNode works), taxon_id is forced to the
+      // requested taxon so the client's top-level taxon filter keeps these rows.
       const row = toSpeciesRow({
         id: synthId--, scientific_name: r.scientific_name, family: r.family, category: "NE",
-        class_name: r.class_name, order_name: r.order_name, taxon_group: taxonId,
+        class_name: r.class_name, order_name: r.order_name, taxon_group: r.taxon_group,
         gbif_species_key: r.gbif_species_key, gbif_occurrence_count: r.gbif_occurrence_count,
       });
       row.taxon_id = taxonId;
