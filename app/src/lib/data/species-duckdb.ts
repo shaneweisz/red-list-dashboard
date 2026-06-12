@@ -216,7 +216,6 @@ export async function querySpecies(opts: {
     // (A) CoL extant universe under the taxon, not already assessed. species/ is
     // partitioned by taxon_group, so the SAME `whereSql` used for the assessed parquet
     // filters + prunes it (no separate node→CoL mapping). GBIF occurrences overlaid.
-    const emitted = new Set<string>();
     const neStart = result.length; // NE additions are capped at NE_CAP on top of assessed
     const univSql = `
       SELECT u.col_id, u.scientific_name, u.class_name, u.order_name, u.family,
@@ -232,7 +231,6 @@ export async function querySpecies(opts: {
     if (univRows.length >= NE_CAP) truncated = true;
     let synthId = -2_000_000_000;
     for (const r of univRows) {
-      emitted.add(String(r.col_id));
       // Synthetic negative id (no IUCN sis); GBIF key/count overlaid when observed so the
       // new-assessments sort-by-occurrences works. taxon_id forced to the requested taxon
       // so the client's taxon filter keeps these rows.
@@ -245,35 +243,37 @@ export async function querySpecies(opts: {
       result.push(row);
     }
 
-    // (B) GBIF-observed orphans not represented in the universe — de-duped vs assessed
-    // (SQL) and vs the universe rows (JS, by col_id). Bounded by the remaining NE budget.
+    // (B) GBIF-observed orphans: species GBIF knows that are NOT in the CoL universe and
+    // not assessed. De-dup vs the universe IN SQL (not JS) so the budget applies to
+    // genuinely-new orphans — otherwise the orphan read fills with universe duplicates
+    // and falsely trips `truncated` (the plants banner bug).
+    const univNe = `(SELECT col_id FROM read_parquet('${speciesUri}', hive_partitioning=true) ${whereSql} AND in_base AND extinct IS NOT TRUE AND col_id NOT IN ${assessedColIds})`;
+    const orphanWhere = `(sl.col_id IS NULL OR (sl.col_id NOT IN ${assessedColIds} AND sl.col_id NOT IN ${univNe}))`;
     const remaining = NE_CAP - (result.length - neStart);
     if (remaining <= 0) {
       truncated = true; // universe alone filled the cap
     } else {
       const orphanSql = `
-        SELECT x.*, sl.col_id AS _col_id
+        SELECT x.*
         FROM (SELECT ${UNASSESSED_SELECT} FROM read_parquet('${unassessedUri}') a ${whereSql}) x
         LEFT JOIN read_parquet('${linkUri}') sl ON sl.src = 'gbif' AND sl.id = x.id
-        WHERE sl.col_id IS NULL OR sl.col_id NOT IN ${assessedColIds}
-        LIMIT ${remaining}`;
+        WHERE ${orphanWhere}
+        LIMIT ${remaining + 1}`; // +1 to detect overflow
       const orphanRows = (await conn.runAndReadAll(orphanSql, where.params)).getRowObjects();
-      if (orphanRows.length >= remaining) truncated = true;
-      for (const r of orphanRows) {
-        if (r._col_id != null && emitted.has(String(r._col_id))) continue;
-        result.push(toSpeciesRow(r));
-      }
+      if (orphanRows.length > remaining) truncated = true;
+      for (const r of orphanRows.slice(0, remaining)) result.push(toSpeciesRow(r));
     }
 
-    // When capped, report the true universe size (cheap COUNT, no serialization) so the
-    // UI can show "showing N of M".
+    // When capped, report the true total NE (universe-NE + genuine orphans) so the UI
+    // can show "showing N of M" — cheap COUNTs, no serialization.
     if (truncated) {
-      const cnt = (await conn.runAndReadAll(
-        `SELECT count(*) AS c FROM read_parquet('${speciesUri}', hive_partitioning=true) ${whereSql}
-           AND in_base AND extinct IS NOT TRUE AND col_id NOT IN ${assessedColIds}`,
-        where.params,
-      )).getRowObjects();
-      neTotal = Number(cnt[0].c);
+      const univCount = Number((await conn.runAndReadAll(`SELECT count(*) AS c FROM ${univNe}`, where.params)).getRowObjects()[0].c);
+      const orphanCount = Number((await conn.runAndReadAll(
+        `SELECT count(*) AS c
+         FROM (SELECT id FROM read_parquet('${unassessedUri}') a ${whereSql}) x
+         LEFT JOIN read_parquet('${linkUri}') sl ON sl.src = 'gbif' AND sl.id = x.id
+         WHERE ${orphanWhere}`, where.params)).getRowObjects()[0].c);
+      neTotal = univCount + orphanCount;
     }
   }
 

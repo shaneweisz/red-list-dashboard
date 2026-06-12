@@ -498,7 +498,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // individual taxa caches. Each taxon is fetched at most once.
   const [speciesByTaxon, setSpeciesByTaxon] = useState<Record<string, RedListSpecies[]>>({});
   // Per-taxon NE-list truncation (giant aggregates are capped at 400k server-side).
-  const [truncationByTaxon, setTruncationByTaxon] = useState<Record<string, { truncated: boolean; neTotal: number | null }>>({});
+  const [truncationByTaxon, setTruncationByTaxon] = useState<Record<string, { truncated: boolean; neTotal: number | null; shown: number }>>({});
   const [loadingTaxa, setLoadingTaxa] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const abortRefs = useRef<Record<string, AbortController>>({});
@@ -554,7 +554,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         .then(data => {
           if (!controller.signal.aborted) {
             setSpeciesByTaxon(prev => ({ ...prev, [taxonId]: data.species }));
-            setTruncationByTaxon(prev => ({ ...prev, [taxonId]: { truncated: !!data.truncated, neTotal: data.neTotal ?? null } }));
+            setTruncationByTaxon(prev => ({ ...prev, [taxonId]: { truncated: !!data.truncated, neTotal: data.neTotal ?? null, shown: data.species.length } }));
           }
         })
         .catch(err => {
@@ -1448,12 +1448,12 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // a banner so the list reads as "showing N of M — drill into a sub-group for the rest".
   const neTruncation = useMemo(() => {
     if (!isNewAssessments) return null;
-    let truncated = false; let neTotal = 0;
+    let truncated = false; let neTotal = 0; let shown = 0;
     for (const t of selectedTaxa) {
       const info = truncationByTaxon[t];
-      if (info?.truncated) { truncated = true; neTotal += info.neTotal ?? 0; }
+      if (info?.truncated) { truncated = true; neTotal += info.neTotal ?? 0; shown += info.shown; }
     }
-    return truncated ? { neTotal } : null;
+    return truncated ? { neTotal, shown } : null;
   }, [isNewAssessments, selectedTaxa, truncationByTaxon]);
 
   // ── Client-side pagination ─────────────────────────────────────────
@@ -2841,8 +2841,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
           )}
         {neTruncation && (
           <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-700/50 dark:bg-amber-900/20 px-4 py-2.5 text-sm text-amber-800 dark:text-amber-200">
-            This group is very large — showing the first <strong>400,000</strong>
-            {neTruncation.neTotal > 0 ? <> of {neTruncation.neTotal.toLocaleString()}</> : null} not-evaluated species. Open a sub-group (e.g. a class or order) to browse the rest.
+            This group is very large — showing the first <strong>{neTruncation.shown.toLocaleString()}</strong>
+            {neTruncation.neTotal > neTruncation.shown ? <> of {neTruncation.neTotal.toLocaleString()}</> : null} not-evaluated species. Open a sub-group (e.g. a class or order) to browse the rest.
           </div>
         )}
         <div
