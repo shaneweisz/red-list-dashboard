@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveWhere, toSpeciesRow, colPartFor } from "@/lib/data/species-duckdb";
+import { resolveWhere, toSpeciesRow, colPartFor, colUniverseTarget } from "@/lib/data/species-duckdb";
 
 // Unit tests for the parity-critical pure logic of the DuckDB read layer (#261):
 // the taxon→SQL resolver and the row→SpeciesRow mapping. (Full v1-vs-v2 parity is
@@ -53,6 +53,23 @@ describe("colPartFor", () => {
   it("returns null for unmapped values (query falls back to a full scan)", () => {
     expect(colPartFor("felidae")).toBeNull();
     expect(colPartFor("plantae")).toBeNull();
+  });
+});
+
+describe("colUniverseTarget", () => {
+  it("maps an animal node to its CoL lineage + partition (prune)", () => {
+    expect(colUniverseTarget("mammals")).toEqual({ lineage: "mammalia", part: "Chordata" });
+    expect(colUniverseTarget("beetles")).toEqual({ lineage: "coleoptera", part: "Arthropoda" });
+  });
+
+  it("returns null for a display node with no CoL lineage mapping (skip the scan)", () => {
+    // The 30s plants hang: scanning every partition to match nothing. Skip instead.
+    expect(colUniverseTarget("flowering_plants")).toBeNull();
+    expect(colUniverseTarget("mushrooms")).toBeNull();
+  });
+
+  it("treats an arbitrary rank as its own CoL value (best-effort partition)", () => {
+    expect(colUniverseTarget("turdidae")).toEqual({ lineage: "turdidae", part: null });
   });
 });
 

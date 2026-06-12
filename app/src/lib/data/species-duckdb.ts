@@ -106,6 +106,23 @@ export function colPartFor(lineageValue: string): string | null {
   return COL_LINEAGE_TO_PART[lineageValue.toLowerCase()] ?? null;
 }
 
+// Resolve a taxon to the CoL-universe scan target — or null to SKIP the scan:
+//  - a mapped display node (animals) → its CoL lineage + partition (prune to 1 file);
+//  - a display node we can't yet map to a single CoL term (plants, fungi, fishes…) →
+//    null: skip entirely. Such a value matches no lineage column, so the query would
+//    full-scan all 58 partitions to return nothing — the cause of the 30s plants
+//    hang. These groups get the GBIF-orphan NE list only until their node→CoL lineage
+//    is added (a Phase-4 editorial task);
+//  - an arbitrary CoL rank (not a node) → the value itself + best-effort partition.
+export function colUniverseTarget(taxonId: string): { lineage: string; part: string | null } | null {
+  const id = canonicalizeTaxonId(taxonId);
+  const mapped = COMMON_TO_COL_LINEAGE[id.toLowerCase()];
+  if (mapped) return { lineage: mapped, part: colPartFor(mapped) };
+  if (NODE_INDEX.has(id)) return null;
+  const v = id.toLowerCase();
+  return { lineage: v, part: colPartFor(v) };
+}
+
 // ─── SpeciesRow projection ─────────────────────────────────────────────────
 
 export interface PreviousAssessment {
@@ -213,39 +230,43 @@ export async function querySpecies(opts: {
        WHERE sl.src = 'gbif' AND sl.col_id IS NOT NULL GROUP BY sl.col_id)`;
 
     // (A) CoL extant universe under the taxon (in_base AND NOT fossil), minus the
-    // col_ids that are already assessed. Partition-pruned when the clade is known so
-    // we read one R2 file instead of full-scanning all 58.
-    const cv = colLineageValue(opts.taxon);
-    const part = colPartFor(cv);
-    const partClause = part ? "part = $part AND " : "";
-    const univSql = `
-      SELECT u.col_id, u.scientific_name, u.class_name, u.order_name, u.family,
-             g.gbif_species_key, g.gbif_occurrence_count
-      FROM (
-        SELECT col_id, scientific_name, class_name, order_name, family
-        FROM read_parquet('${parquetUri("species/**/*.parquet")}', hive_partitioning=true)
-        WHERE ${partClause}$cv IN (kingdom, phylum, class_name, order_name, family, genus)
-          AND in_base AND extinct IS NOT TRUE
-          AND col_id NOT IN ${assessedColIds}
-      ) u
-      LEFT JOIN ${gbifByCol} g ON g.col_id = u.col_id
-      LIMIT 600000`;
-    const univParams: Record<string, string> = part ? { cv, part } : { cv };
-    const univRows = (await conn.runAndReadAll(univSql, univParams)).getRowObjects();
+    // col_ids that are already assessed. Skipped entirely for taxa with no CoL
+    // lineage mapping (plants, fungi, …) — see colUniverseTarget — which would
+    // otherwise full-scan every partition to match nothing (the 30s plants hang).
+    // Pruned to one R2 file when the clade maps to a partition.
     const emitted = new Set<string>();
-    let synthId = -2_000_000_000;
-    for (const r of univRows) {
-      emitted.add(String(r.col_id));
-      // Synthetic negative id (no IUCN sis); GBIF key/count overlaid when observed so
-      // the new-assessments sort-by-occurrences works. taxon_id forced to the requested
-      // taxon so the client's taxon filter keeps these rows.
-      const row = toSpeciesRow({
-        id: synthId--, scientific_name: r.scientific_name, family: r.family, category: "NE",
-        class_name: r.class_name, order_name: r.order_name, taxon_group: taxonId,
-        gbif_species_key: r.gbif_species_key, gbif_occurrence_count: r.gbif_occurrence_count,
-      });
-      row.taxon_id = taxonId;
-      result.push(row);
+    const target = colUniverseTarget(opts.taxon);
+    if (target) {
+      const partClause = target.part ? "part = $part AND " : "";
+      const univSql = `
+        SELECT u.col_id, u.scientific_name, u.class_name, u.order_name, u.family,
+               g.gbif_species_key, g.gbif_occurrence_count
+        FROM (
+          SELECT col_id, scientific_name, class_name, order_name, family
+          FROM read_parquet('${parquetUri("species/**/*.parquet")}', hive_partitioning=true)
+          WHERE ${partClause}$cv IN (kingdom, phylum, class_name, order_name, family, genus)
+            AND in_base AND extinct IS NOT TRUE
+            AND col_id NOT IN ${assessedColIds}
+        ) u
+        LEFT JOIN ${gbifByCol} g ON g.col_id = u.col_id
+        LIMIT 600000`;
+      const univParams: Record<string, string> = target.part
+        ? { cv: target.lineage, part: target.part } : { cv: target.lineage };
+      const univRows = (await conn.runAndReadAll(univSql, univParams)).getRowObjects();
+      let synthId = -2_000_000_000;
+      for (const r of univRows) {
+        emitted.add(String(r.col_id));
+        // Synthetic negative id (no IUCN sis); GBIF key/count overlaid when observed so
+        // the new-assessments sort-by-occurrences works. taxon_id forced to the requested
+        // taxon so the client's taxon filter keeps these rows.
+        const row = toSpeciesRow({
+          id: synthId--, scientific_name: r.scientific_name, family: r.family, category: "NE",
+          class_name: r.class_name, order_name: r.order_name, taxon_group: taxonId,
+          gbif_species_key: r.gbif_species_key, gbif_occurrence_count: r.gbif_occurrence_count,
+        });
+        row.taxon_id = taxonId;
+        result.push(row);
+      }
     }
 
     // (B) GBIF-observed NE species NOT in the universe above (orphans — CoL has them in
