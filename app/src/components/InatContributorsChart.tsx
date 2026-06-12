@@ -21,6 +21,9 @@ interface Contributor {
 
 interface InatContributorsChartProps {
   speciesKey: number;
+  /** Scientific name used to resolve the iNat taxon directly when `speciesKey`
+   * isn't a GBIF taxon key (CoL-only / not-yet-assessed species). */
+  scientificName?: string;
 }
 
 type ViewMode = "observers" | "identifiers";
@@ -67,6 +70,7 @@ function ClickableYAxisTick({
 
 export default function InatContributorsChart({
   speciesKey,
+  scientificName,
 }: InatContributorsChartProps) {
   const [observers, setObservers] = useState<Contributor[]>([]);
   const [identifiers, setIdentifiers] = useState<Contributor[]>([]);
@@ -79,7 +83,8 @@ export default function InatContributorsChart({
 
   useEffect(() => {
     setLoading(true); // eslint-disable-line react-hooks/set-state-in-effect -- loading state for fetch
-    fetch(`/api/species/${speciesKey}/inat-top-observers`)
+    const qs = scientificName ? `?name=${encodeURIComponent(scientificName)}` : "";
+    fetch(`/api/species/${speciesKey}/inat-top-observers${qs}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.observers) setObservers(data.observers);
@@ -90,7 +95,7 @@ export default function InatContributorsChart({
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [speciesKey]);
+  }, [speciesKey, scientificName]);
 
   const activeData = viewMode === "observers" ? observers : identifiers;
   const activeTotal = viewMode === "observers" ? totalObservers : totalIdentifiers;
