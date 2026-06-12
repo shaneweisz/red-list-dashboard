@@ -442,10 +442,16 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
 }
 
 // Prime the cached connection (httpfs load + S3 config) so the first search
-// isn't paying cold-start init. Called by /api/search/warm on page load.
+// isn't paying cold-start init. Called by /api/search/warm on page load. Also primes
+// the universe-names index (footer + first row group) over R2 so the first CoL-only
+// search hits a warm file — moving that one-time cold read to page-load (background)
+// instead of the user's keystroke. Best-effort; ignore if the index/files aren't there.
 export async function warmConnection(): Promise<void> {
   const conn = await getConn();
   await conn.run("SELECT 1");
+  try {
+    await conn.run(`SELECT col_id FROM read_parquet('${parquetUri("universe-names.parquet")}') LIMIT 1`);
+  } catch { /* index not in this sync prefix — skip */ }
 }
 
 // Lazy per-species assessment history (index 0 = latest), fetched when a detail
