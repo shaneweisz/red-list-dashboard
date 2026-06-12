@@ -271,19 +271,29 @@ export async function querySpecies(opts: {
       const univRows = (await conn.runAndReadAll(univSql, where.params)).getRowObjects();
       let synthId = -2_000_000_000;
       for (const r of univRows) {
-        // Synthetic negative id (no IUCN sis); GBIF key/count overlaid when observed so the
-        // new-assessments sort-by-occurrences works. taxon_group is the REAL CoL group (so
-        // sub-group filtering via speciesMatchesNode works), taxon_id is forced to the
-        // requested taxon so the client's top-level taxon filter keeps these rows.
-        const row = toSpeciesRow({
-          id: synthId--, scientific_name: r.scientific_name, family: r.family, category: "NE",
-          class_name: r.class_name, order_name: r.order_name, taxon_group: r.taxon_group,
-          gbif_species_key: r.gbif_species_key, gbif_occurrence_count: r.gbif_occurrence_count,
-          countries: r.countries, // GBIF occurrence countries (overlay) → powers the country chart
-          common_name: r.common_name, // GBIF vernacular name (overlay), when available
-        });
-        row.taxon_id = taxonId;
-        result.push(row);
+        // Slim NE row — only the 12 populated fields. The other 17 (assessment-only:
+        // assessment_id/date, trend, criteria, threats, systems, assessors, …) are always
+        // null/empty/false for NE, so omitting them ~halves the payload + server
+        // serialization (beetles ~262k rows: 178MB → ~90MB). The client handles their
+        // absence exactly as the nulls it receives today (audited: every access is
+        // optional-chained, falsy-checked, or NE-skipped). Synthetic negative id (no IUCN
+        // sis); taxon_group is the REAL CoL group (sub-group filter), taxon_id forced to
+        // the requested taxon (top-level filter); GBIF key/count/countries/common_name
+        // overlaid when the species is GBIF-observed.
+        result.push({
+          id: synthId--,
+          scientific_name: r.scientific_name ?? "",
+          common_name: r.common_name ?? null,
+          family: r.family ?? null,
+          category: "NE",
+          countries: splitList(r.countries),
+          class_name: r.class_name ?? null,
+          order_name: r.order_name ?? null,
+          taxon_group: String(r.taxon_group),
+          taxon_id: taxonId,
+          gbif_species_key: num(r.gbif_species_key),
+          gbif_occurrence_count: num(r.gbif_occurrence_count),
+        } as unknown as ReturnType<typeof toSpeciesRow>);
       }
     }
   }
