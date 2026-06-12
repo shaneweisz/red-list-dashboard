@@ -50,8 +50,10 @@ const nextConfig: NextConfig = {
     "/api/search/warm": ["**/data/**"],
     // Species list queries the parquets in R2 (httpfs); it also reads the small
     // taxa-summary.json for the instant tooLarge check, so exclude the heavy data but
-    // keep that one file (same prune as the summary routes).
-    "/api/redlist/species": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", "**/data/node-children-summaries.json", ...COL_ARTIFACTS],
+    // keep that one file. CRITICAL: keep ALL parquets out — USE_R2 is gated on
+    // assessed.parquet NOT existing locally, so bundling any parquet flips the route to
+    // local mode and the R2-only files (species_link) then 404.
+    "/api/redlist/species": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", "**/data/node-children-summaries.json", "**/data/*.parquet", ...COL_ARTIFACTS],
     "/api/redlist/species/history": ["**/data/**"],
     // Reads the Red List / GBIF CSVs (+ mapping) but never the search index or
     // the R2-only CoL artifacts.
