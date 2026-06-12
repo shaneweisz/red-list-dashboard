@@ -1191,7 +1191,9 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         >
           <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 ${isSelected ? "bg-zinc-100 dark:bg-zinc-800" : "bg-white dark:bg-zinc-900"}`}>
             <div className="flex items-center gap-2">
-              {expandToggle(hasSubgroups, isExpanded)}
+              {/* Only show the expand chevron once the taxon is selected — on the landing
+                  page a click selects (doesn't expand yet), so a chevron there misleads. */}
+              {expandToggle(hasSubgroups && isSelected, isExpanded)}
               <TaxaIcon taxonId={taxon.id} size={22} className="flex-shrink-0" style={{ color: taxon.color }} />
               <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{taxon.name}</span>
               {isLoadingSubs && (
