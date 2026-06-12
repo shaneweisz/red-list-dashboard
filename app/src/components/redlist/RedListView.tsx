@@ -373,6 +373,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     prevViewModeRef.current = viewMode;
     // Same taxon key maps to different data per mode — clear cache
     setSpeciesByTaxon({});
+    setTruncationByTaxon({});
     setNeSpecies([]);
     setNeSpeciesFetched(false);
     // Clear assessment-specific filters (preserve search + species so search-bar navigation survives mode switch)
@@ -496,6 +497,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // Cache of fetched species per taxon ID. When "all" is fetched, it supersedes
   // individual taxa caches. Each taxon is fetched at most once.
   const [speciesByTaxon, setSpeciesByTaxon] = useState<Record<string, RedListSpecies[]>>({});
+  // Per-taxon NE-list truncation (giant aggregates are capped at 400k server-side).
+  const [truncationByTaxon, setTruncationByTaxon] = useState<Record<string, { truncated: boolean; neTotal: number | null }>>({});
   const [loadingTaxa, setLoadingTaxa] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const abortRefs = useRef<Record<string, AbortController>>({});
@@ -551,6 +554,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         .then(data => {
           if (!controller.signal.aborted) {
             setSpeciesByTaxon(prev => ({ ...prev, [taxonId]: data.species }));
+            setTruncationByTaxon(prev => ({ ...prev, [taxonId]: { truncated: !!data.truncated, neTotal: data.neTotal ?? null } }));
           }
         })
         .catch(err => {
@@ -1439,6 +1443,18 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
 
     return { filteredSpecies: filtered, sortedSpecies: sorted };
   }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, hasMapFilter, selectedGrowthForms, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection, matchesAssessorsFilter, matchesReviewersFilter, isNewAssessments, matchesObsRangeFilter, matchesYearRangeFilter, matchesAssessmentYearFilter]);
+
+  // Giant aggregates (insects, invertebrates…) are capped at 400k server-side; surface
+  // a banner so the list reads as "showing N of M — drill into a sub-group for the rest".
+  const neTruncation = useMemo(() => {
+    if (!isNewAssessments) return null;
+    let truncated = false; let neTotal = 0;
+    for (const t of selectedTaxa) {
+      const info = truncationByTaxon[t];
+      if (info?.truncated) { truncated = true; neTotal += info.neTotal ?? 0; }
+    }
+    return truncated ? { neTotal } : null;
+  }, [isNewAssessments, selectedTaxa, truncationByTaxon]);
 
   // ── Client-side pagination ─────────────────────────────────────────
   const totalFiltered = filteredSpecies.length;
@@ -2823,6 +2839,12 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
               <Spinner className="h-6 w-6" />
             </div>
           )}
+        {neTruncation && (
+          <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-700/50 dark:bg-amber-900/20 px-4 py-2.5 text-sm text-amber-800 dark:text-amber-200">
+            This group is very large — showing the first <strong>400,000</strong>
+            {neTruncation.neTotal > 0 ? <> of {neTruncation.neTotal.toLocaleString()}</> : null} not-evaluated species. Open a sub-group (e.g. a class or order) to browse the rest.
+          </div>
+        )}
         <div
           className={`bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-x-auto transition-opacity duration-150 ${speciesLoading && !singleSpeciesPreview ? "opacity-50 pointer-events-none" : ""}`}
           onScroll={(e) => {
