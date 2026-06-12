@@ -318,6 +318,22 @@ export interface SearchResult {
   countries: string[];
 }
 
+// taxon_group → its representative *leaf* display node (csvGroups===[group], no class/order
+// sub-filter). mapTaxonId maps to the top-level taxon (e.g. invertebrates), which is too
+// large to load in new-assessments; a CoL-only search result must navigate to the leaf node
+// (e.g. dragonflies-damselflies) so its NE list actually loads.
+const GROUP_TO_LEAF_NODE: Map<string, string> = (() => {
+  const m = new Map<string, string>();
+  for (const [id, node] of NODE_INDEX) {
+    const f = node.filter;
+    if (f.csvGroups?.length === 1 && !f.classNames && !f.orderNames && !f.excludeClasses &&
+        !f.excludeOrders && !f.families && !f.excludeFamilies && !m.has(f.csvGroups[0])) {
+      m.set(f.csvGroups[0], id);
+    }
+  }
+  return m;
+})();
+
 // Stable negative int id for a CoL-only species (no IUCN sis id / GBIF key). Used as the
 // search result's id — the URL `species=` param + the cached-preview key — and never
 // collides with real positive sis/gbif ids. (The NE list itself assigns its own per-query
@@ -353,18 +369,25 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
              lower(scientific_name)
     LIMIT ${lim}`;
   const rows = (await conn.runAndReadAll(sql, { q: query.toLowerCase() })).getRowObjects();
-  const fast: SearchResult[] = rows.map((r) => ({
-    id: Number(r.id),
-    scientific_name: String(r.scientific_name ?? ""),
-    common_name: (r.common_name as string) ?? null,
-    taxon_id: mapTaxonId(String(r.taxon_group)),
-    taxon_group: String(r.taxon_group),
-    category: String(r.category ?? ""),
-    gbif_species_key: num(r.gbif_species_key),
-    assessment_id: num(r.assessment_id),
-    assessment_date: (r.assessment_date as string) ?? null,
-    countries: splitList(r.countries),
-  }));
+  const fast: SearchResult[] = rows.map((r) => {
+    const tg = String(r.taxon_group);
+    const cat = String(r.category ?? "");
+    // NE results navigate to the new-assessments view, which can't load a giant aggregate
+    // (mapTaxonId's top-level taxon) — send them to the leaf node so the list loads. Assessed
+    // results go to reassessments (assessed-only, always loadable) via the top-level taxon.
+    return {
+      id: Number(r.id),
+      scientific_name: String(r.scientific_name ?? ""),
+      common_name: (r.common_name as string) ?? null,
+      taxon_id: cat === "NE" ? (GROUP_TO_LEAF_NODE.get(tg) ?? mapTaxonId(tg)) : mapTaxonId(tg),
+      taxon_group: tg,
+      category: cat,
+      gbif_species_key: num(r.gbif_species_key),
+      assessment_id: num(r.assessment_id),
+      assessment_date: (r.assessment_date as string) ?? null,
+      countries: splitList(r.countries),
+    };
+  });
   if (fast.length >= lim) return fast;
 
   // CoL-only fallback: universe species (species/) that are neither IUCN-assessed nor
@@ -391,7 +414,7 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
       id: colIdToSearchId(String(r.col_id)),
       scientific_name: name,
       common_name: null,
-      taxon_id: mapTaxonId(tg),
+      taxon_id: GROUP_TO_LEAF_NODE.get(tg) ?? mapTaxonId(tg),
       taxon_group: tg,
       category: "NE",
       gbif_species_key: null,
