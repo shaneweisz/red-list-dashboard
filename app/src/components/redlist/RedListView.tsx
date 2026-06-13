@@ -30,6 +30,12 @@ const OccurrenceMapRow = dynamic(
   { ssr: false }
 );
 
+// iNat-only observations panel, shown when a species has no GBIF backbone match
+const InatObservationsPanel = dynamic(
+  () => import("../InatObservationsPanel"),
+  { ssr: false }
+);
+
 // Dynamically import WorldMap to avoid SSR issues
 const WorldMap = dynamic(
   () => import("../WorldMap"),
@@ -3209,10 +3215,10 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                             {!stackedDetailView && (
                               <>
                                 <button
-                                  className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "gbif" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"} ${!gbifSpeciesKey ? "opacity-50 cursor-default" : ""}`}
-                                  onClick={() => gbifSpeciesKey && setActiveDetailTab("gbif")}
+                                  className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "gbif" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                  onClick={() => setActiveDetailTab("gbif")}
                                 >
-                                  GBIF + iNat{!gbifSpeciesKey && <span className="ml-1 text-xs text-zinc-400">(no match)</span>}
+                                  {gbifSpeciesKey ? "GBIF + iNat" : "iNaturalist"}
                                 </button>
                                 {(assessmentYear || s.category === "NE") && (
                                   <button
@@ -3282,9 +3288,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                               />
                             </div>
                             )
-                          ) : (stackedDetailView || activeDetailTab === "gbif") && (
-                            <div className="p-6 text-sm text-zinc-500 dark:text-zinc-400">
-                              No GBIF match found for <span className="italic">{s.scientific_name}</span>. Occurrence data is unavailable.
+                          ) : (stackedDetailView || visitedTabs.has("gbif")) && (
+                            <div style={{ display: stackedDetailView || activeDetailTab === "gbif" ? undefined : "none" }}>
+                              <InatObservationsPanel scientificName={s.scientific_name} mounted={mounted} />
                             </div>
                           )}
                           {(assessmentYear || s.category === "NE") && (stackedDetailView || visitedTabs.has("literature")) && (
