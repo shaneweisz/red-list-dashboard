@@ -19,6 +19,7 @@ const COL_ARTIFACTS = [
   "**/data/backbone.parquet",
   "**/data/species/**",
   "**/data/species_link.parquet",
+  "**/data/synonym-index.parquet",
 ];
 
 const nextConfig: NextConfig = {
@@ -36,6 +37,7 @@ const nextConfig: NextConfig = {
     "/api/search": DUCKDB_TRACE,
     "/api/search/warm": DUCKDB_TRACE,
     "/api/taxa/species": DUCKDB_TRACE,
+    "/api/redlist/synonyms": DUCKDB_TRACE,
   },
 
   // The API routes import a shared species-store module that references every
@@ -55,6 +57,8 @@ const nextConfig: NextConfig = {
     // local mode and the R2-only files (species_link) then 404.
     "/api/redlist/species": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", "**/data/node-children-summaries.json", "**/data/*.parquet", ...COL_ARTIFACTS],
     "/api/redlist/species/history": ["**/data/**"],
+    // Queries backbone.parquet + species_link in R2 (httpfs) — no local data.
+    "/api/redlist/synonyms": ["**/data/**"],
     // Reads the Red List / GBIF CSVs (+ mapping) but never the search index or
     // the R2-only CoL artifacts.
     "/api/redlist/assessor-candidates-by-country": ["**/data/search-index.json", ...COL_ARTIFACTS],

@@ -34,6 +34,7 @@ import { run as buildSpeciesParquet } from "./build-parquet";
 import { run as fetchColdp } from "./fetch-coldp";
 import { run as buildBackbone } from "./build-backbone";
 import { run as buildMatching } from "./build-matching";
+import { run as buildSynonymIndex } from "./build-synonym-index";
 
 async function main() {
   loadEnvFiles();
@@ -100,6 +101,10 @@ async function main() {
       console.log("\nPhase 9: build-matching (→ species_link.parquet)");
       console.log("═".repeat(60));
       await buildMatching();
+
+      console.log("\nPhase 9b: build-synonym-index (→ synonym-index.parquet, search)");
+      console.log("═".repeat(60));
+      await buildSynonymIndex();
     } else {
       console.log("\nPhases 7-9 (CoL backbone): skipped on a partial-taxa sync — run a full sync to refresh.");
     }

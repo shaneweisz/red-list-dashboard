@@ -5,6 +5,7 @@
 export interface RedListSpecies {
   id: number;
   sis_taxon_id: number | null;
+  col_id?: string | null; // CoL id (on NE rows); used for the detail panel's synonyms/CoL tab
   assessment_id: number | null;
   scientific_name: string;
   common_name: string | null;

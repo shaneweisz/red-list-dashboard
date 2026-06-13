@@ -126,6 +126,7 @@ export function toSpeciesRow(r: Record<string, unknown>) {
   return {
     id,
     sis_taxon_id: id > 0 ? id : null,
+    col_id: (r.col_id as string) ?? null, // CoL id — set on NE rows (assessed resolve via sis)
     assessment_id: num(r.assessment_id),
     scientific_name: r.scientific_name ?? "",
     common_name: r.common_name ?? null,
@@ -286,6 +287,7 @@ export async function querySpecies(opts: {
         // overlaid when the species is GBIF-observed.
         result.push({
           id: synthId--,
+          col_id: (r.col_id as string) ?? null,
           scientific_name: r.scientific_name ?? "",
           common_name: r.common_name ?? null,
           family: r.family ?? null,
@@ -321,6 +323,9 @@ export interface SearchResult {
   assessment_id: number | null;
   assessment_date: string | null;
   countries: string[];
+  // Set when the result was matched via a synonym (the old name the user typed) rather than
+  // its accepted name — the dropdown shows "(syn. <name>)". scientific_name is the accepted name.
+  matched_synonym?: string | null;
 }
 
 // taxon_group → its representative *leaf* display node (csvGroups===[group], no class/order
@@ -429,7 +434,96 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
     });
     if (fast.length >= lim) break;
   }
+  if (fast.length >= lim) return fast;
+
+  // Synonym tier: resolve an old/synonym name to its accepted species via synonym-index.parquet
+  // (name-sorted → prefix-range prunes to ~1 row group; substring backstop when sparse). Runs
+  // only when the accepted-name search above is still short. The accepted species routes like a
+  // direct hit — assessed → reassessments (sis id), NE → new-assessments/leaf node — and carries
+  // the matched synonym for the UI. Graceful no-op if the index isn't in this sync prefix.
+  const synUri = parquetUri("synonym-index.parquet");
+  const synLo = `'${query.toLowerCase().replace(/'/g, "''")}'`;
+  const need = lim - fast.length;
+  const synCols = `synonym_name, accepted_name, accepted_col_id, taxon_group, sis_id, category`;
+  try {
+    let synRows = (await conn.runAndReadAll(
+      `SELECT ${synCols} FROM read_parquet('${synUri}')
+       WHERE synonym_name_lower >= ${synLo} AND synonym_name_lower < ${synLo} || chr(1114111)
+       ORDER BY synonym_name_lower LIMIT ${need * 3 + 5}`, {})).getRowObjects();
+    if (synRows.length < need) {
+      synRows = synRows.concat((await conn.runAndReadAll(
+        `SELECT ${synCols} FROM read_parquet('${synUri}')
+         WHERE synonym_name_lower LIKE '%' || ${synLo} || '%' AND synonym_name_lower NOT LIKE ${synLo} || '%'
+         ORDER BY synonym_name_lower LIMIT ${need * 3 + 5}`, {})).getRowObjects());
+    }
+    for (const r of synRows) {
+      const accName = String(r.accepted_name ?? "");
+      if (seen.has(accName.toLowerCase())) continue; // accepted already listed (direct hit, or another synonym of it)
+      seen.add(accName.toLowerCase());
+      const tg = String(r.taxon_group);
+      const cat = String(r.category ?? "NE");
+      const sis = r.sis_id == null ? null : Number(r.sis_id);
+      fast.push({
+        id: sis ?? colIdToSearchId(String(r.accepted_col_id)),
+        scientific_name: accName,
+        common_name: null,
+        taxon_id: cat === "NE" ? (GROUP_TO_LEAF_NODE.get(tg) ?? mapTaxonId(tg)) : mapTaxonId(tg),
+        taxon_group: tg,
+        category: cat,
+        gbif_species_key: null,
+        assessment_id: null,
+        assessment_date: null,
+        countries: [],
+        matched_synonym: String(r.synonym_name ?? ""),
+      });
+      if (fast.length >= lim) break;
+    }
+  } catch { /* synonym index not in this sync prefix — skip */ }
   return fast;
+}
+
+// ─── Catalogue of Life: synonyms for a species ──────────────────────────────
+
+export interface SpeciesSynonyms {
+  col_id: string | null;
+  accepted_name: string | null;
+  accepted_authorship: string | null;
+  synonyms: { name: string; authorship: string | null; status: string }[];
+}
+
+// Synonyms (+ accepted name/authorship) for one species, for the detail panel's CoL tab.
+// Resolve the CoL col_id from either the col_id (NE rows carry it) or the sis id (assessed,
+// via species_link), then one scan of backbone for `col_id = c` (the accepted) OR
+// `parent_id = c` (its synonyms). backbone isn't indexed on these, so it full-scans — fine
+// for a deliberate, cached detail-tab open (not the search hot path).
+export async function getSynonyms(opts: { col?: string | null; sis?: number | null }): Promise<SpeciesSynonyms> {
+  const conn = await getConn();
+  let colId = opts.col ?? null;
+  if (!colId && opts.sis != null) {
+    const linkUri = parquetUri("species_link.parquet");
+    const r = (await conn.runAndReadAll(
+      `SELECT col_id FROM read_parquet('${linkUri}') WHERE src='redlist' AND id=$id AND col_id IS NOT NULL LIMIT 1`,
+      { id: opts.sis })).getRowObjects();
+    colId = r.length ? String(r[0].col_id) : null;
+  }
+  if (!colId) return { col_id: null, accepted_name: null, accepted_authorship: null, synonyms: [] };
+
+  const bbUri = parquetUri("backbone.parquet");
+  const rows = (await conn.runAndReadAll(
+    `SELECT col_id, scientific_name, authorship, status FROM read_parquet('${bbUri}')
+     WHERE col_id=$c OR parent_id=$c`, { c: colId })).getRowObjects();
+  let accepted_name: string | null = null, accepted_authorship: string | null = null;
+  const synonyms: SpeciesSynonyms["synonyms"] = [];
+  for (const r of rows) {
+    if (String(r.col_id) === colId) {
+      accepted_name = String(r.scientific_name ?? "");
+      accepted_authorship = (r.authorship as string) ?? null;
+    } else if (r.status === "synonym" || r.status === "ambiguous synonym") {
+      synonyms.push({ name: String(r.scientific_name ?? ""), authorship: (r.authorship as string) ?? null, status: String(r.status) });
+    }
+  }
+  synonyms.sort((a, b) => a.name.localeCompare(b.name));
+  return { col_id: colId, accepted_name, accepted_authorship, synonyms };
 }
 
 // Prime the cached connection (httpfs load + S3 config) so the first search
