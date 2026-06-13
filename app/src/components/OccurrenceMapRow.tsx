@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import type { MapRef, ViewStateChangeEvent, MapLayerMouseEvent } from "react-map-gl/maplibre";
 import type maplibregl from "maplibre-gl";
 import { mapTaxonId } from "@/lib/data/taxonomy-constants";
+import { pointInAnyFeature } from "@/lib/geo/pointInPolygon";
 
 // Fixed page size for iNat photo grid (5 columns x 2 rows)
 const INAT_PAGE_SIZE = 10;
@@ -869,6 +870,14 @@ export default function OccurrenceMapRow({
   // Bounding box from API: [minLon, minLat, maxLon, maxLat]
   const [bbox, setBbox] = useState<[number, number, number, number] | null>(null);
 
+  // Protected-area (WDPA) polygons for the species' occurrence bbox, fetched
+  // lazily the first time the overlay is toggled on. Used both for the visual
+  // overlay and to compute the "% of observations in a protected area" stat.
+  const [paFeatures, setPaFeatures] = useState<GeoJSON.Feature[]>([]);
+  const [paLoading, setPaLoading] = useState(false);
+  const [paTruncated, setPaTruncated] = useState(false);
+  const [paError, setPaError] = useState(false);
+
   // Fetch occurrences (re-fetches when sample size changes)
   useEffect(() => {
     setLoadingOccurrences(true); // eslint-disable-line react-hooks/set-state-in-effect -- loading state for fetch
@@ -914,6 +923,33 @@ export default function OccurrenceMapRow({
       .catch(console.error)
       .finally(() => setLoadingBreakdown(false));
   }, [speciesKey, countryCode]);
+
+  // Fetch protected-area (WDPA) polygons for the current occurrence bbox, but
+  // only once the overlay/stat is switched on. Keyed on the bbox so it follows
+  // the loaded sample (and re-fetches on species change / "load more").
+  useEffect(() => {
+    if (!showProtectedAreas || !bbox) return;
+    const controller = new AbortController();
+    setPaLoading(true); // eslint-disable-line react-hooks/set-state-in-effect -- loading state for fetch
+    setPaError(false);
+    fetch(`/api/protected-areas?bbox=${bbox.join(",")}`, { signal: controller.signal })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Protected areas request failed: ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        setPaFeatures(Array.isArray(data.features) ? data.features : []);
+        setPaTruncated(Boolean(data.metadata?.truncated));
+      })
+      .catch((err) => {
+        if (err?.name === "AbortError") return;
+        console.error("Error fetching protected areas:", err);
+        setPaError(true);
+        setPaFeatures([]);
+      })
+      .finally(() => setPaLoading(false));
+    return () => controller.abort();
+  }, [showProtectedAreas, bbox]);
 
   // Fetch iNat photos for a given page
   const fetchInatPhotos = useCallback((page: number, limit: number) => {
@@ -1054,6 +1090,38 @@ export default function OccurrenceMapRow({
     }
     return filteredBeforeAnimation;
   }, [filteredBeforeAnimation, animatingDate]);
+
+  // Which loaded occurrences fall inside a protected area. Computed once over
+  // the full loaded sample (point-in-polygon is the expensive part), so the
+  // derived stat below stays instant as the basis/year/uncertainty filters
+  // change. Returns a Set of gbifIDs, or null when the overlay is off / no data.
+  const protectedGbifIds = useMemo(() => {
+    if (!showProtectedAreas || paFeatures.length === 0) return null;
+    const ids = new Set<number>();
+    for (const o of occurrences) {
+      if (pointInAnyFeature(o.geometry.coordinates, paFeatures)) {
+        ids.add(o.properties.gbifID);
+      }
+    }
+    return ids;
+  }, [showProtectedAreas, paFeatures, occurrences]);
+
+  // "% of observations in a protected area" over the currently-shown sample,
+  // with a new-since-assessment breakdown (the dashboard's reassessment lens).
+  const protectedAreaStats = useMemo(() => {
+    if (!protectedGbifIds) return null;
+    let total = 0, inPA = 0, newTotal = 0, newInPA = 0;
+    for (const o of filteredBeforeAnimation) {
+      total++;
+      const isIn = protectedGbifIds.has(o.properties.gbifID);
+      if (isIn) inPA++;
+      if (isAfterAssessment(o.properties.eventDate, o.properties.year, assessmentDate, assessmentYear)) {
+        newTotal++;
+        if (isIn) newInPA++;
+      }
+    }
+    return { total, inPA, newTotal, newInPA };
+  }, [protectedGbifIds, filteredBeforeAnimation, assessmentDate, assessmentYear]);
 
   // Bounding box from filtered occurrences
   const filteredBbox = useMemo<[number, number, number, number] | null>(() => {
@@ -1532,6 +1600,41 @@ export default function OccurrenceMapRow({
                 />
                 Protected areas
               </button>
+            </div>
+          )}
+          {/* Protected areas stat — "% of shown obs in a protected area".
+              Single-view only (the stat is over the whole sample, not per panel). */}
+          {!loadingOccurrences && mounted && showProtectedAreas && !label && (
+            <div className="absolute top-2 left-2 z-[1000] bg-white/95 dark:bg-zinc-800/95 px-2.5 py-1.5 rounded-lg shadow-md border border-emerald-200 dark:border-emerald-800 text-[11px] text-zinc-700 dark:text-zinc-200 max-w-[220px]">
+              {paLoading ? (
+                <span className="flex items-center gap-1.5 text-zinc-500 dark:text-zinc-400">
+                  <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Checking protected areas…
+                </span>
+              ) : paError ? (
+                <span className="text-amber-600 dark:text-amber-400">Protected-area data unavailable</span>
+              ) : protectedAreaStats && protectedAreaStats.total > 0 ? (
+                <>
+                  <div className="font-medium text-emerald-700 dark:text-emerald-300">
+                    {Math.round((protectedAreaStats.inPA / protectedAreaStats.total) * 100)}% in protected areas
+                  </div>
+                  <div className="text-zinc-500 dark:text-zinc-400 tabular-nums">
+                    {protectedAreaStats.inPA.toLocaleString()} / {protectedAreaStats.total.toLocaleString()} shown obs.
+                  </div>
+                  {assessmentYear != null && protectedAreaStats.newTotal > 0 && (
+                    <div className="text-zinc-500 dark:text-zinc-400 tabular-nums">
+                      new: {Math.round((protectedAreaStats.newInPA / protectedAreaStats.newTotal) * 100)}%
+                      {" "}({protectedAreaStats.newInPA.toLocaleString()} / {protectedAreaStats.newTotal.toLocaleString()})
+                    </div>
+                  )}
+                  <div className="text-[9px] text-zinc-400 dark:text-zinc-500 mt-0.5 leading-tight">
+                    approx · loaded sample{paTruncated ? " · PA data truncated" : ""}
+                  </div>
+                </>
+              ) : null}
             </div>
           )}
           {/* Basemap toggle */}
