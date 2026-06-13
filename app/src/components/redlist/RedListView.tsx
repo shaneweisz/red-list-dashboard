@@ -3327,13 +3327,18 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                           {(stackedDetailView || visitedTabs.has("col")) && (() => {
                             const syn = synonymsBySpecies[synKey(s) ?? ""];
                             return (
-                            <div className="p-4 text-sm" style={{ display: stackedDetailView || activeDetailTab === "col" ? undefined : "none" }}>
+                            <div style={{ display: stackedDetailView || activeDetailTab === "col" ? undefined : "none" }}>
                               {!syn ? (
-                                <div className="text-zinc-500 dark:text-zinc-400">Loading Catalogue of Life data…</div>
+                                <div className="flex items-center justify-center p-8">
+                                  <svg className="w-5 h-5 animate-spin text-zinc-400" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                  </svg>
+                                </div>
                               ) : !syn.col_id ? (
-                                <div className="text-zinc-500 dark:text-zinc-400">No Catalogue of Life match for <span className="italic">{s.scientific_name}</span>.</div>
+                                <div className="text-sm text-zinc-400 italic p-4">No Catalogue of Life match for <span className="italic">{s.scientific_name}</span>.</div>
                               ) : (
-                                <div className="space-y-3">
+                                <div className="p-4 text-sm space-y-3">
                                   <div>
                                     <div className="text-xs uppercase tracking-wider text-zinc-400 mb-1">Accepted name (CoL)</div>
                                     <span className="italic text-zinc-900 dark:text-zinc-100">{syn.accepted_name ?? s.scientific_name}</span>
