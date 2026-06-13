@@ -128,6 +128,18 @@ const BASEMAP_STYLES: Record<string, { label: string; style: MaplibreStyle }> = 
 };
 type BasemapKey = keyof typeof BASEMAP_STYLES;
 
+// Protected areas overlay — the World Database on Protected Areas (WDPA),
+// UNEP-WCMC & IUCN (the dataset behind protectedplanet.net, refreshed monthly).
+// Served straight from UNEP-WCMC's ArcGIS MapServer `export` endpoint as a
+// transparent PNG, which MapLibre fetches per-tile via the {bbox-epsg-3857}
+// token. Drawn semi-transparently beneath the occurrence points so you can see
+// at a glance which occurrences fall inside a protected area. No API key needed.
+const PROTECTED_AREAS_TILE_URL =
+  "https://data-gis.unep-wcmc.org/server/rest/services/ProtectedSites/The_World_Database_of_Protected_Areas/MapServer/export" +
+  "?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=256,256&dpi=96&format=png32&transparent=true&f=image";
+const PROTECTED_AREAS_ATTRIBUTION =
+  '<a href="https://www.protectedplanet.net" target="_blank" rel="noopener noreferrer">WDPA</a> &copy; UNEP-WCMC &amp; IUCN';
+
 /**
  * Determine whether an occurrence record is "new" (recorded after the assessment date).
  * Uses full date comparison when eventDate is available, falls back to year comparison.
@@ -784,6 +796,7 @@ export default function OccurrenceMapRow({
   const [maxUncertainty, setMaxUncertainty] = useState<number | null>(50000);
   const [colorByDate, setColorByDate] = useState(false);
   const [basemap, setBasemap] = useState<BasemapKey>("streets");
+  const [showProtectedAreas, setShowProtectedAreas] = useState(false);
   const [splitView, setSplitView] = useState(false);
   const [splitDate, setSplitDate] = useState<string>(assessmentDate?.split("T")[0] || "");
   const [sharedViewState, setSharedViewState] = useState({ longitude: 0, latitude: 20, zoom: 1.5 });
@@ -1355,6 +1368,19 @@ export default function OccurrenceMapRow({
               cursor={hoveredFeature && hoveredPanel === panelId ? "pointer" : "grab"}
             >
               <ScaleControl position="bottom-right" />
+              {/* Protected areas overlay (WDPA) — rendered before the occurrence
+                  circles so the points draw on top of the shaded PA polygons */}
+              {showProtectedAreas && (
+                <Source
+                  id={`wdpa-${panelId}`}
+                  type="raster"
+                  tiles={[PROTECTED_AREAS_TILE_URL]}
+                  tileSize={256}
+                  attribution={PROTECTED_AREAS_ATTRIBUTION}
+                >
+                  <Layer id={`wdpa-layer-${panelId}`} type="raster" paint={{ "raster-opacity": 0.5 }} />
+                </Source>
+              )}
               {/* Occurrence circles (GeoJSON source + circle layer) */}
               <Source id={`occurrences-${panelId}`} type="geojson" data={styledGeoJson}>
                 <Layer {...circleLayerStyle} />
@@ -1483,6 +1509,29 @@ export default function OccurrenceMapRow({
           {label && (
             <div className="absolute top-2 left-2 z-[1000] bg-zinc-900/80 text-white text-[11px] font-medium px-2.5 py-1 rounded-full shadow-md">
               {label}
+            </div>
+          )}
+          {/* Protected areas (WDPA) overlay toggle */}
+          {!loadingOccurrences && mounted && (
+            <div className="absolute top-2 right-2 z-[1000]">
+              <button
+                onClick={() => setShowProtectedAreas((v) => !v)}
+                className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg shadow-md border text-[11px] font-medium transition-colors ${
+                  showProtectedAreas
+                    ? "bg-emerald-600 border-emerald-600 text-white"
+                    : "bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                }`}
+                title="Overlay World Database on Protected Areas (WDPA) — UNEP-WCMC & IUCN"
+              >
+                <span
+                  className={`w-3 h-3 rounded-sm border ${
+                    showProtectedAreas
+                      ? "bg-white/30 border-white/70"
+                      : "bg-emerald-500/40 border-emerald-600"
+                  }`}
+                />
+                Protected areas
+              </button>
             </div>
           )}
           {/* Basemap toggle */}
