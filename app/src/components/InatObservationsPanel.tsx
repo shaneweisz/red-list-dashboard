@@ -7,12 +7,18 @@ import { InatObservation, InatPhotoWithPreview } from "./InatPhotoCard";
 const InatContributorsChart = dynamic(() => import("./InatContributorsChart"), {
   ssr: false,
 });
+const InatObservationMap = dynamic(() => import("./InatObservationMap"), {
+  ssr: false,
+});
 
 // 5 columns x 2 rows, matching the GBIF-path iNat grid.
 const PAGE_SIZE = 10;
+// Number of georeferenced observations to plot on the map (iNat caps at 200).
+const MAP_POINTS = 200;
 
 interface InatObservationsPanelProps {
   scientificName: string;
+  mounted: boolean;
 }
 
 /**
@@ -21,13 +27,17 @@ interface InatObservationsPanelProps {
  * GBIF's iNat-dataset occurrence search keyed by a GBIF taxonKey; that returns
  * nothing here, so this panel queries iNaturalist directly by scientific name.
  */
-export default function InatObservationsPanel({ scientificName }: InatObservationsPanelProps) {
+export default function InatObservationsPanel({ scientificName, mounted }: InatObservationsPanelProps) {
   const [observations, setObservations] = useState<InatObservation[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [inatTaxonId, setInatTaxonId] = useState<number | null>(null);
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loaded, setLoaded] = useState(false);
+
+  // Map points are fetched once (georeferenced, photos not required).
+  const [mapObs, setMapObs] = useState<InatObservation[]>([]);
+  const [mapLoaded, setMapLoaded] = useState(false);
 
   const fetchObservations = useCallback(
     (p: number) => {
@@ -58,14 +68,29 @@ export default function InatObservationsPanel({ scientificName }: InatObservatio
     fetchObservations(0);
   }, [fetchObservations]);
 
+  // Fetch the georeferenced points for the map (independent of grid pagination).
+  useEffect(() => {
+    setMapLoaded(false); // eslint-disable-line react-hooks/set-state-in-effect -- reset when species changes
+    const params = new URLSearchParams({
+      name: scientificName,
+      per_page: MAP_POINTS.toString(),
+      geo: "true",
+    });
+    fetch(`/api/inat/observations?${params}`)
+      .then((res) => res.json())
+      .then((data) => setMapObs(data.observations || []))
+      .catch(console.error)
+      .finally(() => setMapLoaded(true));
+  }, [scientificName]);
+
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
-  // Once loaded, if iNaturalist has nothing either, say so plainly.
-  if (loaded && observations.length === 0) {
+  // Once both feeds have loaded, if iNaturalist has nothing either, say so plainly.
+  if (loaded && mapLoaded && observations.length === 0 && mapObs.length === 0) {
     return (
       <div className="p-6 text-sm text-zinc-500 dark:text-zinc-400">
         No GBIF match found for <span className="italic">{scientificName}</span>, and no iNaturalist
-        observations with photos were found either. Occurrence data is unavailable.
+        observations were found either. Occurrence data is unavailable.
       </div>
     );
   }
@@ -157,6 +182,11 @@ export default function InatObservationsPanel({ scientificName }: InatObservatio
 
           {/* Top contributors — resolves the iNat taxon by name (no GBIF key needed) */}
           <InatContributorsChart speciesKey={0} scientificName={scientificName} />
+        </div>
+
+        {/* Map — observation points, takes the remaining width */}
+        <div className="flex-1 min-w-0 flex flex-col">
+          <InatObservationMap observations={mapObs} scientificName={scientificName} mounted={mounted} />
         </div>
       </div>
     </div>

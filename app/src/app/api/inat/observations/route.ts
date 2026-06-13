@@ -52,7 +52,12 @@ export async function GET(request: NextRequest) {
   const name = searchParams.get("name");
   // iNat paginates with 1-based page; the client sends a 0-based page index.
   const page = parseInt(searchParams.get("page") || "0", 10);
-  const perPage = parseInt(searchParams.get("per_page") || "10", 10);
+  // iNat caps per_page at 200.
+  const perPage = Math.min(parseInt(searchParams.get("per_page") || "10", 10), 200);
+  // geo=true returns georeferenced observations (for the map), regardless of
+  // whether they carry a photo; otherwise we return only observations with
+  // media (for the photo grid).
+  const geo = searchParams.get("geo") === "true";
 
   if (!name) {
     return NextResponse.json(
@@ -76,10 +81,10 @@ export async function GET(request: NextRequest) {
     }
     const inatTaxonId: number = taxon.id;
 
-    // Step 2: Fetch observations that have media, newest first.
+    // Step 2: Fetch observations, newest first — georeferenced (map) or with media (grid).
     const obsParams = new URLSearchParams({
       taxon_id: inatTaxonId.toString(),
-      photos: "true",
+      [geo ? "geo" : "photos"]: "true",
       order: "desc",
       order_by: "observed_on",
       per_page: perPage.toString(),
@@ -95,15 +100,13 @@ export async function GET(request: NextRequest) {
     const totalCount: number = obsData.total_results || 0;
 
     const observations: InatObservation[] = (obsData.results || [])
-      .map((obs: InatApiObservation): InatObservation | null => {
+      .map((obs: InatApiObservation): InatObservation => {
         const photo = obs.photos?.[0];
         const sound = obs.sounds?.[0];
         // iNat thumbnails come back as ".../square.jpg"; the app's getThumbUrl
         // rewrites ".../original." → ".../small.", so normalise to original here.
         const imageUrl = photo?.url ? photo.url.replace(/\/square\./, "/original.") : null;
         const audioUrl = sound?.file_url || null;
-        if (!imageUrl && !audioUrl) return null;
-
         const coords = obs.geojson?.coordinates ?? null;
         const licenseCode = photo?.license_code || null;
         return {
@@ -111,7 +114,7 @@ export async function GET(request: NextRequest) {
           date: obs.observed_on || (obs.time_observed_at ? obs.time_observed_at.split("T")[0] : null),
           imageUrl,
           audioUrl,
-          mediaType: imageUrl ? "StillImage" : "Sound",
+          mediaType: imageUrl ? "StillImage" : audioUrl ? "Sound" : null,
           location: obs.place_guess || null,
           observer: obs.user?.name || obs.user?.login || null,
           gbifID: null,
@@ -121,7 +124,13 @@ export async function GET(request: NextRequest) {
           rightsHolder: photo?.attribution || null,
         };
       })
-      .filter((o: InatObservation | null): o is InatObservation => o !== null);
+      // geo mode: keep georeferenced records (the map needs coordinates, not media);
+      // grid mode: keep records that actually carry a photo or sound.
+      .filter((o: InatObservation) =>
+        geo
+          ? o.decimalLatitude != null && o.decimalLongitude != null
+          : o.imageUrl != null || o.audioUrl != null
+      );
 
     return NextResponse.json({ observations, totalCount, inatTaxonId }, { headers: CACHE_5M });
   } catch (error) {

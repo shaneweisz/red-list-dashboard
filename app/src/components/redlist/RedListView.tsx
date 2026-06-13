@@ -3290,7 +3290,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                             )
                           ) : (stackedDetailView || visitedTabs.has("gbif")) && (
                             <div style={{ display: stackedDetailView || activeDetailTab === "gbif" ? undefined : "none" }}>
-                              <InatObservationsPanel scientificName={s.scientific_name} />
+                              <InatObservationsPanel scientificName={s.scientific_name} mounted={mounted} />
                             </div>
                           )}
                           {(assessmentYear || s.category === "NE") && (stackedDetailView || visitedTabs.has("literature")) && (
