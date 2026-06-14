@@ -1207,7 +1207,7 @@
     {
       "id": "other-invertebrates-catch-all",
       "name": "Others",
-      "estimatedDescribed": 0,
+      "estimatedDescribed": 109485,
       "totalAssessed": 47,
       "outdated": 6,
       "gbifNeSpeciesCount": 1972,
@@ -1723,7 +1723,7 @@
     {
       "id": "inv-other-invertebrates-catch-all",
       "name": "Others",
-      "estimatedDescribed": 0,
+      "estimatedDescribed": 109485,
       "totalAssessed": 47,
       "outdated": 6,
       "gbifNeSpeciesCount": 1972,

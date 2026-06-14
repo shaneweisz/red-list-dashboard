@@ -206,6 +206,9 @@ const CORALS_NODE: TaxonomyNode = {
 // (Bryozoa, Echinodermata) or where we use a subset (Cnidaria here excludes corals,
 // which are their own group). Rounded — these populate the "Described (IUCN)" column.
 const WORMS_URL = "https://www.marinespecies.org/";
+// IUCN Table 1a "Others" (invertebrates) described total — the parent estimate the
+// phylum children partition (the catch-all takes the remainder).
+const OTHER_INVERTEBRATES_DESCRIBED = 230_485;
 const OTHER_INVERTEBRATE_PHYLA: { id: string; name: string; classes: string[]; estimatedDescribed?: number; estimatedSource?: string; estimatedSourceUrl?: string }[] = [
   { id: "flatworms", name: "Flatworms", classes: ["trematoda", "monogenea", "cestoda", "turbellaria", "rhabditophora", "catenulida"],
     estimatedDescribed: 29_000, estimatedSource: "~29,285 Platyhelminthes spp. (" + ZHANG_2011 + ")", estimatedSourceUrl: ZHANG_2011_URL },
@@ -235,11 +238,15 @@ function OTHER_INVERTEBRATE_PHYLA_CHILDREN(): TaxonomyNode[] {
     filter: { csvGroups: ["other_invertebrates"], classNames: p.classes },
     ...(p.estimatedDescribed != null ? { estimatedDescribed: p.estimatedDescribed, estimatedSource: p.estimatedSource, estimatedSourceUrl: p.estimatedSourceUrl } : {}),
   }));
+  // Catch-all described estimate = the group total minus the named phyla above, so the
+  // children sum to the parent (mirrors the "Other Insects" remainder approach).
+  const named = OTHER_INVERTEBRATE_PHYLA.reduce((s, p) => s + (p.estimatedDescribed ?? 0), 0);
   children.push({
     id: "other-invertebrates-catch-all",
     name: "Others",
     filter: { csvGroups: ["other_invertebrates"], excludeClasses: allClasses },
-    estimatedSource: "Remainder of IUCN Table 1a 'Others' not in a named phylum group above",
+    estimatedDescribed: Math.max(OTHER_INVERTEBRATES_DESCRIBED - named, 0),
+    estimatedSource: `Remainder of IUCN Table 1a 'Others' (${OTHER_INVERTEBRATES_DESCRIBED.toLocaleString()}) minus the named phyla above`,
     estimatedSourceUrl: COL_2025_URL,
   });
   return children;
@@ -249,7 +256,7 @@ const OTHER_INVERTEBRATES_NODE: TaxonomyNode = {
   id: "other_invertebrates",
   name: "Other Invertebrates",
   filter: { csvGroups: ["other_invertebrates"] },
-  estimatedDescribed: 230_485,
+  estimatedDescribed: OTHER_INVERTEBRATES_DESCRIBED,
   estimatedSource: IUCN_SOURCE,
   estimatedSourceUrl: COL_2025_URL,
   children: OTHER_INVERTEBRATE_PHYLA_CHILDREN(),
