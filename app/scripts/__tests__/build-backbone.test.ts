@@ -36,8 +36,12 @@ const ROWS: string[][] = [
   // Combination year empty → falls back to the basionym author year (1834).
   ["3", "F", "accepted", "species", "Felis incognita", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "Felis", "200", "", "", "1834", ""],
   // Subgenus parenthetical: must be normalized to the binomial "Peropteryx leucoptera".
-  // No author years → described_year falls back to the cited reference's year (R1 → 1867).
+  // No author years → described_year falls back to the cited reference's year. R1 has a
+  // structured col:issued (1867) AND a col:citation year (1850); issued must win → 1867.
   ["7", "F", "accepted", "species", "Peropteryx (Peronymus) leucoptera", "L.", "Animalia", "Chordata", "Mammalia", "Chiroptera", "Emballonuridae", "Peropteryx", "200", "false", "", "", "R1"],
+  // No author years, and its reference (R2) has an EMPTY col:issued — the year is only in
+  // the free-text col:citation → described_year must parse it out (citation fallback → 1888).
+  ["8", "F", "accepted", "species", "Testus citatius", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "Testus", "200", "false", "", "", "R2"],
   // Unflagged fossil from a non-Base paleo source: extinct is null, so only in_base drops it.
   ["6", "F", "accepted", "species", "Cimexomys testus", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "Cimexomys", "999", "", "", "", ""],
   ["4", "F", "provisionally accepted", "species", "Felis dubia", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "Felis", "100", "false", "", "", ""],
@@ -45,10 +49,14 @@ const ROWS: string[][] = [
   ["F", "R", "accepted", "family", "Felidae", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "", "100", "", "", "", ""],
 ];
 
-// Minimal ColDP Reference: id → issued date. R1's date is a full CSL date so the
-// build's 4-digit-year extraction is exercised, not just a bare year.
-const REF_COLS = ["col:ID", "col:issued"];
-const REF_ROWS: string[][] = [["R1", "1867-05-01"]];
+// Minimal ColDP Reference. R1: structured col:issued (full CSL date, exercises the
+// 4-digit extraction) plus a *different* citation year to prove issued wins. R2: empty
+// col:issued, year only in the free-text citation (exercises the citation fallback).
+const REF_COLS = ["col:ID", "col:issued", "col:citation"];
+const REF_ROWS: string[][] = [
+  ["R1", "1867-05-01", "Trans. Imag. Soc. 1: 5 (1850)"],
+  ["R2", "", "Fl. Imag. 3: 77. 1888."],
+];
 
 let tmp: string;
 let speciesGlob: string;
@@ -78,7 +86,7 @@ describe("build-backbone species universe", () => {
     // Felis dubia (provisionally accepted) excluded. The fossil + non-Base species
     // are KEPT in the parquet (carried with flags) and filtered at query time.
     expect(rows.map((r) => r.scientific_name)).toEqual([
-      "Cimexomys testus", "Felis incognita", "Panthera leo", "Peropteryx leucoptera", "Smilodon fatalis",
+      "Cimexomys testus", "Felis incognita", "Panthera leo", "Peropteryx leucoptera", "Smilodon fatalis", "Testus citatius",
     ]);
   });
 
@@ -110,7 +118,7 @@ describe("build-backbone species universe", () => {
     const rows = await query(`SELECT scientific_name FROM read_parquet('${speciesGlob}', hive_partitioning=true) WHERE in_base AND extinct IS NOT TRUE ORDER BY scientific_name`);
     // Smilodon (flagged fossil) and Cimexomys (unflagged, non-Base) both excluded.
     expect(rows.map((r) => r.scientific_name)).toEqual([
-      "Felis incognita", "Panthera leo", "Peropteryx leucoptera",
+      "Felis incognita", "Panthera leo", "Peropteryx leucoptera", "Testus citatius",
     ]);
   });
 
@@ -119,7 +127,8 @@ describe("build-backbone species universe", () => {
     const byName = new Map(rows.map((r) => [r.scientific_name, r.described_year]));
     expect(Number(byName.get("Panthera leo"))).toBe(1758);          // combination author year
     expect(Number(byName.get("Felis incognita"))).toBe(1834);       // basionym fallback
-    expect(Number(byName.get("Peropteryx leucoptera"))).toBe(1867); // reference-year fallback (R1, parsed from "1867-05-01")
+    expect(Number(byName.get("Peropteryx leucoptera"))).toBe(1867); // reference col:issued (1867) beats its citation year (1850)
+    expect(Number(byName.get("Testus citatius"))).toBe(1888);       // reference citation fallback (col:issued empty → parsed from citation)
     expect(byName.get("Cimexomys testus")).toBeNull();              // no year anywhere
   });
 
@@ -133,7 +142,7 @@ describe("build-backbone species universe", () => {
 describe("build-backbone backbone.parquet", () => {
   it("carries every usage (all ranks + synonyms) for tree + synonym resolution", async () => {
     const rows = await query(`SELECT count(*) n, count(*) FILTER (status LIKE '%synonym%') syn FROM read_parquet('${backbone}')`);
-    expect(Number(rows[0].n)).toBe(8);   // all rows, including the family + synonym
+    expect(Number(rows[0].n)).toBe(9);   // all rows, including the family + synonym
     expect(Number(rows[0].syn)).toBe(1);
   });
 });
