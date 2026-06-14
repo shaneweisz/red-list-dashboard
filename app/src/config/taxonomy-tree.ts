@@ -201,18 +201,30 @@ const CORALS_NODE: TaxonomyNode = {
 // IUCN-assessed species, which the reassessments view shows, all carry a class, so
 // only the NE browse is affected). A `phylum` column on the parquets would close that
 // gap but needs a data rebuild.
+// Described-species estimates: Zhang 2011 (Zootaxa 3148) phylum totals where they're
+// extant-dominated; WoRMS extant figures where Zhang includes a large fossil record
+// (Bryozoa, Echinodermata) or where we use a subset (Cnidaria here excludes corals,
+// which are their own group). Rounded — these populate the "Described (IUCN)" column.
+const WORMS_URL = "https://www.marinespecies.org/";
 const OTHER_INVERTEBRATE_PHYLA: { id: string; name: string; classes: string[]; estimatedDescribed?: number; estimatedSource?: string; estimatedSourceUrl?: string }[] = [
-  { id: "flatworms", name: "Flatworms", classes: ["trematoda", "monogenea", "cestoda", "turbellaria", "rhabditophora", "catenulida"] },
-  { id: "roundworms", name: "Roundworms", classes: ["chromadorea", "enoplea"] },
+  { id: "flatworms", name: "Flatworms", classes: ["trematoda", "monogenea", "cestoda", "turbellaria", "rhabditophora", "catenulida"],
+    estimatedDescribed: 29_000, estimatedSource: "~29,285 Platyhelminthes spp. (" + ZHANG_2011 + ")", estimatedSourceUrl: ZHANG_2011_URL },
+  { id: "roundworms", name: "Roundworms", classes: ["chromadorea", "enoplea"],
+    estimatedDescribed: 25_000, estimatedSource: "~24,783 Nematoda spp. (" + ZHANG_2011 + ")", estimatedSourceUrl: ZHANG_2011_URL },
   { id: "annelids", name: "Annelids", classes: ["polychaeta", "clitellata"],
     estimatedDescribed: 22_000, estimatedSource: "~22K Annelida spp. (WoRMS; Catalogue of Life)", estimatedSourceUrl: "https://www.marinespecies.org/aphia.php?p=taxdetails&id=882" },
-  { id: "myriapods", name: "Myriapods (Centipedes & Millipedes)", classes: ["diplopoda", "chilopoda", "symphyla", "pauropoda"] },
-  { id: "sponges", name: "Sponges", classes: ["demospongiae", "calcarea", "hexactinellida", "homoscleromorpha"] },
-  { id: "cnidarians", name: "Cnidarians (non-coral)", classes: ["hydrozoa", "myxozoa", "anthozoa", "scyphozoa", "staurozoa", "cubozoa"] },
+  { id: "myriapods", name: "Myriapods (Centipedes & Millipedes)", classes: ["diplopoda", "chilopoda", "symphyla", "pauropoda"],
+    estimatedDescribed: 12_000, estimatedSource: "~11,885 Myriapoda spp. (" + ZHANG_2011 + ")", estimatedSourceUrl: ZHANG_2011_URL },
+  { id: "sponges", name: "Sponges", classes: ["demospongiae", "calcarea", "hexactinellida", "homoscleromorpha"],
+    estimatedDescribed: 9_000, estimatedSource: "~9,000 extant Porifera spp. (WoRMS)", estimatedSourceUrl: WORMS_URL },
+  { id: "cnidarians", name: "Cnidarians (non-coral)", classes: ["hydrozoa", "myxozoa", "anthozoa", "scyphozoa", "staurozoa", "cubozoa"],
+    estimatedDescribed: 8_000, estimatedSource: "~8,000 non-coral extant spp. (WoRMS; corals counted separately)", estimatedSourceUrl: WORMS_URL },
   { id: "echinoderms", name: "Echinoderms", classes: ["asteroidea", "echinoidea", "holothuroidea", "ophiuroidea", "crinoidea"],
     estimatedDescribed: 7_000, estimatedSource: "~7,000 extant spp. (WoRMS; Animal Diversity Web)", estimatedSourceUrl: "https://www.marinespecies.org/aphia.php?p=taxdetails&id=1806" },
-  { id: "bryozoans", name: "Bryozoans (Moss Animals)", classes: ["gymnolaemata", "stenolaemata", "phylactolaemata"] },
-  { id: "tunicates", name: "Tunicates & Lancelets", classes: ["ascidiacea", "thaliacea", "appendicularia", "leptocardii"] },
+  { id: "bryozoans", name: "Bryozoans (Moss Animals)", classes: ["gymnolaemata", "stenolaemata", "phylactolaemata"],
+    estimatedDescribed: 6_000, estimatedSource: "~6,000 extant spp. (WoRMS; Zhang 2011 total incl. fossils)", estimatedSourceUrl: WORMS_URL },
+  { id: "tunicates", name: "Tunicates & Lancelets", classes: ["ascidiacea", "thaliacea", "appendicularia", "leptocardii"],
+    estimatedDescribed: 3_000, estimatedSource: "~3,000 spp., Tunicata + lancelets (" + ZHANG_2011 + ")", estimatedSourceUrl: ZHANG_2011_URL },
 ];
 
 function OTHER_INVERTEBRATE_PHYLA_CHILDREN(): TaxonomyNode[] {
@@ -225,7 +237,7 @@ function OTHER_INVERTEBRATE_PHYLA_CHILDREN(): TaxonomyNode[] {
   }));
   children.push({
     id: "other-invertebrates-catch-all",
-    name: "Other Invertebrates",
+    name: "Others",
     filter: { csvGroups: ["other_invertebrates"], excludeClasses: allClasses },
     estimatedSource: "Remainder of IUCN Table 1a 'Others' not in a named phylum group above",
     estimatedSourceUrl: COL_2025_URL,
@@ -635,14 +647,14 @@ export const TAXONOMY_TREE: TaxonomyNode = {
     // ─── CORALS (leaf) ─────────────────────────────────────────────────
     CORALS_NODE,
 
-    // ─── OTHER INVERTEBRATES ───────────────────────────────────────────
-    OTHER_INVERTEBRATES_NODE,
-
     // ─── VELVET WORMS (leaf) ───────────────────────────────────────────
     VELVET_WORMS_NODE,
 
     // ─── HORSESHOE CRABS (leaf) ────────────────────────────────────────
     HORSESHOE_CRABS_NODE,
+
+    // ─── OTHER INVERTEBRATES (catch-all — kept last) ───────────────────
+    OTHER_INVERTEBRATES_NODE,
 
     // ─── FLOWERING PLANTS ──────────────────────────────────────────────
     FLOWERING_PLANTS_NODE,
@@ -685,9 +697,9 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         prefixTree(MOLLUSCA_NODE, "inv-"),
         prefixTree(CRUSTACEA_NODE, "inv-"),
         prefixTree(CORALS_NODE, "inv-"),
-        prefixTree(OTHER_INVERTEBRATES_NODE, "inv-"),
         prefixTree(VELVET_WORMS_NODE, "inv-"),
         prefixTree(HORSESHOE_CRABS_NODE, "inv-"),
+        prefixTree(OTHER_INVERTEBRATES_NODE, "inv-"),
       ],
     },
 

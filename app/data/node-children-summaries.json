@@ -212,26 +212,6 @@
       "colNe": 4764
     },
     {
-      "id": "other_invertebrates",
-      "name": "Other Invertebrates",
-      "estimatedDescribed": 230485,
-      "totalAssessed": 1139,
-      "outdated": 585,
-      "gbifNeSpeciesCount": 19187,
-      "byCategory": {
-        "CR": 60,
-        "VU": 47,
-        "LC": 295,
-        "DD": 555,
-        "EN": 76,
-        "LR/nt": 2,
-        "EX": 6,
-        "NT": 98
-      },
-      "colDescribed": 139776,
-      "colNe": 138927
-    },
-    {
       "id": "velvet_worms",
       "name": "Velvet Worms",
       "estimatedDescribed": 220,
@@ -262,6 +242,26 @@
       },
       "colDescribed": 4,
       "colNe": 0
+    },
+    {
+      "id": "other_invertebrates",
+      "name": "Other Invertebrates",
+      "estimatedDescribed": 230485,
+      "totalAssessed": 1139,
+      "outdated": 585,
+      "gbifNeSpeciesCount": 19187,
+      "byCategory": {
+        "CR": 60,
+        "VU": 47,
+        "LC": 295,
+        "DD": 555,
+        "EN": 76,
+        "LR/nt": 2,
+        "EX": 6,
+        "NT": 98
+      },
+      "colDescribed": 139776,
+      "colNe": 138927
     },
     {
       "id": "flowering_plants",
@@ -1070,7 +1070,7 @@
     {
       "id": "flatworms",
       "name": "Flatworms",
-      "estimatedDescribed": 0,
+      "estimatedDescribed": 29000,
       "totalAssessed": 2,
       "outdated": 0,
       "gbifNeSpeciesCount": 315,
@@ -1084,7 +1084,7 @@
     {
       "id": "roundworms",
       "name": "Roundworms",
-      "estimatedDescribed": 0,
+      "estimatedDescribed": 25000,
       "totalAssessed": 0,
       "outdated": 0,
       "gbifNeSpeciesCount": 0,
@@ -1115,7 +1115,7 @@
     {
       "id": "myriapods",
       "name": "Myriapods (Centipedes & Millipedes)",
-      "estimatedDescribed": 0,
+      "estimatedDescribed": 12000,
       "totalAssessed": 276,
       "outdated": 177,
       "gbifNeSpeciesCount": 2288,
@@ -1134,7 +1134,7 @@
     {
       "id": "sponges",
       "name": "Sponges",
-      "estimatedDescribed": 0,
+      "estimatedDescribed": 9000,
       "totalAssessed": 44,
       "outdated": 0,
       "gbifNeSpeciesCount": 3521,
@@ -1150,7 +1150,7 @@
     {
       "id": "cnidarians",
       "name": "Cnidarians (non-coral)",
-      "estimatedDescribed": 0,
+      "estimatedDescribed": 8000,
       "totalAssessed": 37,
       "outdated": 20,
       "gbifNeSpeciesCount": 1863,
@@ -1185,7 +1185,7 @@
     {
       "id": "bryozoans",
       "name": "Bryozoans (Moss Animals)",
-      "estimatedDescribed": 0,
+      "estimatedDescribed": 6000,
       "totalAssessed": 0,
       "outdated": 0,
       "gbifNeSpeciesCount": 0,
@@ -1196,7 +1196,7 @@
     {
       "id": "tunicates",
       "name": "Tunicates & Lancelets",
-      "estimatedDescribed": 0,
+      "estimatedDescribed": 3000,
       "totalAssessed": 0,
       "outdated": 0,
       "gbifNeSpeciesCount": 0,
@@ -1206,7 +1206,7 @@
     },
     {
       "id": "other-invertebrates-catch-all",
-      "name": "Other Invertebrates",
+      "name": "Others",
       "estimatedDescribed": 0,
       "totalAssessed": 47,
       "outdated": 6,
@@ -1369,26 +1369,6 @@
       "colNe": 4764
     },
     {
-      "id": "inv-other_invertebrates",
-      "name": "Other Invertebrates",
-      "estimatedDescribed": 230485,
-      "totalAssessed": 1139,
-      "outdated": 585,
-      "gbifNeSpeciesCount": 19187,
-      "byCategory": {
-        "CR": 60,
-        "VU": 47,
-        "LC": 295,
-        "DD": 555,
-        "EN": 76,
-        "LR/nt": 2,
-        "EX": 6,
-        "NT": 98
-      },
-      "colDescribed": 139776,
-      "colNe": 138927
-    },
-    {
       "id": "inv-velvet_worms",
       "name": "Velvet Worms",
       "estimatedDescribed": 220,
@@ -1419,6 +1399,26 @@
       },
       "colDescribed": 4,
       "colNe": 0
+    },
+    {
+      "id": "inv-other_invertebrates",
+      "name": "Other Invertebrates",
+      "estimatedDescribed": 230485,
+      "totalAssessed": 1139,
+      "outdated": 585,
+      "gbifNeSpeciesCount": 19187,
+      "byCategory": {
+        "CR": 60,
+        "VU": 47,
+        "LC": 295,
+        "DD": 555,
+        "EN": 76,
+        "LR/nt": 2,
+        "EX": 6,
+        "NT": 98
+      },
+      "colDescribed": 139776,
+      "colNe": 138927
     }
   ],
   "inv-insecta": [
@@ -1586,7 +1586,7 @@
     {
       "id": "inv-flatworms",
       "name": "Flatworms",
-      "estimatedDescribed": 0,
+      "estimatedDescribed": 29000,
       "totalAssessed": 2,
       "outdated": 0,
       "gbifNeSpeciesCount": 315,
@@ -1600,7 +1600,7 @@
     {
       "id": "inv-roundworms",
       "name": "Roundworms",
-      "estimatedDescribed": 0,
+      "estimatedDescribed": 25000,
       "totalAssessed": 0,
       "outdated": 0,
       "gbifNeSpeciesCount": 0,
@@ -1631,7 +1631,7 @@
     {
       "id": "inv-myriapods",
       "name": "Myriapods (Centipedes & Millipedes)",
-      "estimatedDescribed": 0,
+      "estimatedDescribed": 12000,
       "totalAssessed": 276,
       "outdated": 177,
       "gbifNeSpeciesCount": 2288,
@@ -1650,7 +1650,7 @@
     {
       "id": "inv-sponges",
       "name": "Sponges",
-      "estimatedDescribed": 0,
+      "estimatedDescribed": 9000,
       "totalAssessed": 44,
       "outdated": 0,
       "gbifNeSpeciesCount": 3521,
@@ -1666,7 +1666,7 @@
     {
       "id": "inv-cnidarians",
       "name": "Cnidarians (non-coral)",
-      "estimatedDescribed": 0,
+      "estimatedDescribed": 8000,
       "totalAssessed": 37,
       "outdated": 20,
       "gbifNeSpeciesCount": 1863,
@@ -1701,7 +1701,7 @@
     {
       "id": "inv-bryozoans",
       "name": "Bryozoans (Moss Animals)",
-      "estimatedDescribed": 0,
+      "estimatedDescribed": 6000,
       "totalAssessed": 0,
       "outdated": 0,
       "gbifNeSpeciesCount": 0,
@@ -1712,7 +1712,7 @@
     {
       "id": "inv-tunicates",
       "name": "Tunicates & Lancelets",
-      "estimatedDescribed": 0,
+      "estimatedDescribed": 3000,
       "totalAssessed": 0,
       "outdated": 0,
       "gbifNeSpeciesCount": 0,
@@ -1722,7 +1722,7 @@
     },
     {
       "id": "inv-other-invertebrates-catch-all",
-      "name": "Other Invertebrates",
+      "name": "Others",
       "estimatedDescribed": 0,
       "totalAssessed": 47,
       "outdated": 6,
