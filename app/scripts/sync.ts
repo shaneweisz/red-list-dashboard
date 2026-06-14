@@ -9,6 +9,7 @@
  *   Phase 5: fetch-gbif-new-counts  (GBIF API → updates GBIF CSVs)
  *   Phase 6: build-parquet          (CSVs → assessed/unassessed parquets + search)
  *   Phase 7: fetch-coldp            (CoL XR ColDP archive → NameUsage.tsv, full sync only)
+ *   Phase 7b: fetch-col-checklist   (curated CoL Checklist ColDP → demotion overlay, full sync only)
  *   Phase 8: build-backbone         (NameUsage.tsv → backbone.parquet + species/)
  *   Phase 9: build-matching         (→ species_link.parquet, IUCN/GBIF → col_id)
  *   Phase 10: build-taxa-summary    (CSVs + CoL artifacts → taxa-summary.json, incl. col counts)
@@ -33,6 +34,7 @@ import { run as fetchGbifCountryData } from "./fetch-gbif-country-data";
 import { run as buildTaxaSummary } from "./build-taxa-summary";
 import { run as buildSpeciesParquet } from "./build-parquet";
 import { run as fetchColdp } from "./fetch-coldp";
+import { run as fetchColChecklist } from "./fetch-col-checklist";
 import { run as buildBackbone } from "./build-backbone";
 import { run as buildMatching } from "./build-matching";
 import { run as buildSynonymIndex } from "./build-synonym-index";
@@ -52,6 +54,7 @@ async function main() {
   const startTime = Date.now();
   const logger = new SyncLogger("sync");
   let coldpTsv: string | null = null;
+  let checklistTsv: string | null = null;
 
   try {
     logger.log("sync_start", { taxa: taxaFilter ?? "all" });
@@ -94,9 +97,13 @@ async function main() {
       console.log("═".repeat(60));
       coldpTsv = await fetchColdp();
 
+      console.log("\nPhase 7b: fetch-col-checklist (curated CoL Checklist → demotion overlay)");
+      console.log("═".repeat(60));
+      checklistTsv = await fetchColChecklist();
+
       console.log("\nPhase 8: build-backbone (→ backbone.parquet + species/)");
       console.log("═".repeat(60));
-      await buildBackbone({ tsv: coldpTsv });
+      await buildBackbone({ tsv: coldpTsv, demotionsTsv: checklistTsv });
 
       console.log("\nPhase 9: build-matching (→ species_link.parquet)");
       console.log("═".repeat(60));
@@ -128,8 +135,10 @@ async function main() {
     console.log("  npm run diff-data-vs-r2     # see what changed vs the live R2 sync");
     console.log("  npm run upload-data-to-r2   # publish this sync to R2");
   } finally {
-    // Drop the temp ColDP TSV (~2.8GB) so it's never swept into the R2 upload.
+    // Drop the temp ColDP TSVs (XR ~2.8GB + curated checklist) so they're never swept
+    // into the R2 upload.
     if (coldpTsv) fs.rmSync(path.dirname(coldpTsv), { recursive: true, force: true });
+    if (checklistTsv) fs.rmSync(path.dirname(checklistTsv), { recursive: true, force: true });
     logger.close();
   }
 }

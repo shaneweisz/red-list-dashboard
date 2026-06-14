@@ -6,9 +6,11 @@
  *  - in_base = (col:sourceID is one of the Base GSD source keys), which catches
  *    the unflagged-fossil tail (paleo papers that never set col:extinct).
  * The read layer's universe predicate is `in_base AND extinct IS NOT TRUE`. Also
- * pins the universe to status='accepted' (provisionally accepted excluded). The
- * Base source list is injected (opts.baseSourceIds) so the test never hits the
- * network. Self-contained (local fixture + DuckDB) — no R2 data needed.
+ * pins the universe to status='accepted' (provisionally accepted excluded), and
+ * verifies the curated-checklist demotion overlay (opts.demotedColIds) drops an
+ * XR-accepted species the curated checklist demotes to a synonym. The Base source
+ * list + demotion set are injected so the test never hits the network. Self-contained
+ * (local fixture + DuckDB) — no R2 data needed.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import * as fs from "fs";
@@ -38,7 +40,12 @@ const ROWS: string[][] = [
   ["4", "F", "provisionally accepted", "species", "Felis dubia", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "Felis", "100", "false"],
   ["5", "1", "synonym", "species", "Felis leo", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "Felis", "100", ""],
   ["F", "R", "accepted", "family", "Felidae", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "", "100", ""],
+  // An XR over-split: accepted species + in_base + extant, but the curated checklist
+  // demotes col_id "8" to a synonym (injected via demotedColIds) → dropped from species/.
+  ["8", "F", "accepted", "species", "Felis splitta", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "Felis", "100", "false"],
 ];
+// Curated-checklist demotion set (injected, no network): "8" = Felis splitta.
+const DEMOTED_COL_IDS = ["8"];
 
 let tmp: string;
 let speciesGlob: string;
@@ -48,7 +55,7 @@ beforeAll(async () => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), "backbone-test-"));
   const tsv = path.join(tmp, "NameUsage.tsv");
   fs.writeFileSync(tsv, [COLS.join("\t"), ...ROWS.map((r) => r.join("\t"))].join("\n") + "\n");
-  await run({ tsv, outDir: tmp, baseSourceIds: BASE_SOURCE_IDS });
+  await run({ tsv, outDir: tmp, baseSourceIds: BASE_SOURCE_IDS, demotedColIds: DEMOTED_COL_IDS });
   speciesGlob = path.join(tmp, "species", "**", "*.parquet");
   backbone = path.join(tmp, "backbone.parquet");
 });
@@ -61,13 +68,25 @@ async function query(sql: string): Promise<Record<string, unknown>[]> {
 }
 
 describe("build-backbone species universe", () => {
-  it("keeps every status='accepted' species (drops provisionally accepted, synonyms, higher ranks)", async () => {
+  it("keeps every status='accepted' species (drops provisionally accepted, synonyms, higher ranks, demoted)", async () => {
     const rows = await query(`SELECT scientific_name FROM read_parquet('${speciesGlob}', hive_partitioning=true) ORDER BY scientific_name`);
-    // Felis dubia (provisionally accepted) excluded. The fossil + non-Base species
-    // are KEPT in the parquet (carried with flags) and filtered at query time.
+    // Felis dubia (provisionally accepted) and Felis splitta (curated-checklist-demoted)
+    // excluded. The fossil + non-Base species are KEPT in the parquet (carried with
+    // flags) and filtered at query time.
     expect(rows.map((r) => r.scientific_name)).toEqual([
       "Cimexomys testus", "Felis incognita", "Panthera leo", "Peropteryx leucoptera", "Smilodon fatalis",
     ]);
+  });
+
+  it("drops XR over-splits the curated checklist demotes (col_id in the demotion set)", async () => {
+    // Felis splitta (col_id "8") is an accepted, in_base, extant species in the XR
+    // fixture — but the curated checklist demotes it, so it must NOT reach species/.
+    const rows = await query(`SELECT scientific_name FROM read_parquet('${speciesGlob}', hive_partitioning=true) WHERE col_id = '8'`);
+    expect(rows).toEqual([]);
+    // …yet it's still carried in backbone.parquet (the demotion only prunes the universe,
+    // never the tree — the name stays resolvable).
+    const bb = await query(`SELECT scientific_name FROM read_parquet('${backbone}') WHERE col_id = '8'`);
+    expect(bb.map((r) => r.scientific_name)).toEqual(["Felis splitta"]);
   });
 
   it("normalizes a subgenus parenthetical to the canonical binomial (dedup + display)", async () => {
@@ -112,7 +131,7 @@ describe("build-backbone species universe", () => {
 describe("build-backbone backbone.parquet", () => {
   it("carries every usage (all ranks + synonyms) for tree + synonym resolution", async () => {
     const rows = await query(`SELECT count(*) n, count(*) FILTER (status LIKE '%synonym%') syn FROM read_parquet('${backbone}')`);
-    expect(Number(rows[0].n)).toBe(8);   // all rows, including the family + synonym
+    expect(Number(rows[0].n)).toBe(9);   // all rows, including the family, synonym + demoted species
     expect(Number(rows[0].syn)).toBe(1);
   });
 });

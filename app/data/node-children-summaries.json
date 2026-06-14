@@ -18,8 +18,8 @@
         "EW": 1,
         "LR/nt": 1
       },
-      "colDescribed": 6202,
-      "colNe": 402
+      "colDescribed": 6163,
+      "colNe": 394
     },
     {
       "id": "birds",
@@ -38,8 +38,8 @@
         "EX": 164,
         "DD": 36
       },
-      "colDescribed": 10752,
-      "colNe": 309
+      "colDescribed": 10582,
+      "colNe": 284
     },
     {
       "id": "reptiles",
@@ -61,8 +61,8 @@
         "EW": 2,
         "LR/cd": 1
       },
-      "colDescribed": 12786,
-      "colNe": 2354
+      "colDescribed": 12777,
+      "colNe": 2352
     },
     {
       "id": "amphibians",
@@ -103,8 +103,8 @@
         "LR/lc": 1,
         "LR/nt": 2
       },
-      "colDescribed": 37040,
-      "colNe": 8081
+      "colDescribed": 36799,
+      "colNe": 8008
     },
     {
       "id": "insecta",
@@ -126,8 +126,8 @@
         "EW": 1,
         "LR/cd": 3
       },
-      "colDescribed": 935049,
-      "colNe": 922267
+      "colDescribed": 933789,
+      "colNe": 921030
     },
     {
       "id": "arachnids",
@@ -145,8 +145,8 @@
         "CR": 121,
         "EX": 9
       },
-      "colDescribed": 98782,
-      "colNe": 97751
+      "colDescribed": 98713,
+      "colNe": 97683
     },
     {
       "id": "molluscs",
@@ -167,8 +167,8 @@
         "LR/lc": 16,
         "EW": 12
       },
-      "colDescribed": 88822,
-      "colNe": 79940
+      "colDescribed": 88226,
+      "colNe": 79407
     },
     {
       "id": "crustaceans",
@@ -190,8 +190,8 @@
         "LR/nt": 1,
         "EW": 1
       },
-      "colDescribed": 68764,
-      "colNe": 65544
+      "colDescribed": 68654,
+      "colNe": 65438
     },
     {
       "id": "corals",
@@ -208,8 +208,8 @@
         "EN": 245,
         "NT": 24
       },
-      "colDescribed": 5695,
-      "colNe": 4783
+      "colDescribed": 5676,
+      "colNe": 4764
     },
     {
       "id": "other_invertebrates",
@@ -228,8 +228,8 @@
         "EX": 6,
         "NT": 98
       },
-      "colDescribed": 140190,
-      "colNe": 139339
+      "colDescribed": 139776,
+      "colNe": 138927
     },
     {
       "id": "velvet_worms",
@@ -283,8 +283,8 @@
         "EX": 134,
         "LR/lc": 125
       },
-      "colDescribed": 355717,
-      "colNe": 282279
+      "colDescribed": 354863,
+      "colNe": 281496
     },
     {
       "id": "gymnosperms",
@@ -322,8 +322,8 @@
         "EX": 2,
         "EW": 1
       },
-      "colDescribed": 14036,
-      "colNe": 13177
+      "colDescribed": 13961,
+      "colNe": 13107
     },
     {
       "id": "mosses",
@@ -342,8 +342,8 @@
         "LR/lc": 3,
         "DD": 37
       },
-      "colDescribed": 19254,
-      "colNe": 18930
+      "colDescribed": 19189,
+      "colNe": 18867
     },
     {
       "id": "green_algae",
@@ -431,8 +431,8 @@
         "EW": 14,
         "LR/cd": 12
       },
-      "colDescribed": 1337541,
-      "colNe": 1309848
+      "colDescribed": 1335073,
+      "colNe": 1307473
     },
     {
       "id": "plantae",
@@ -454,8 +454,8 @@
         "EX": 141,
         "LR/lc": 128
       },
-      "colDescribed": 394045,
-      "colNe": 318344
+      "colDescribed": 393051,
+      "colNe": 317428
     },
     {
       "id": "fungi",
@@ -493,8 +493,8 @@
         "VU": 137,
         "EX": 37
       },
-      "colDescribed": 2357,
-      "colNe": 81
+      "colDescribed": 2337,
+      "colNe": 78
     },
     {
       "id": "bats",
@@ -609,8 +609,8 @@
         "EW": 1,
         "DD": 25
       },
-      "colDescribed": 245,
-      "colNe": 26
+      "colDescribed": 230,
+      "colNe": 24
     },
     {
       "id": "rabbits-hares",
@@ -659,8 +659,8 @@
         "LC": 1,
         "VU": 3
       },
-      "colDescribed": 23,
-      "colNe": 5
+      "colDescribed": 19,
+      "colNe": 2
     },
     {
       "id": "pangolins",
@@ -714,8 +714,8 @@
         "DD": 1489,
         "EW": 2
       },
-      "colDescribed": 12392,
-      "colNe": 2246
+      "colDescribed": 12383,
+      "colNe": 2244
     },
     {
       "id": "turtles-tortoises",
@@ -848,8 +848,8 @@
         "LR/lc": 1,
         "LR/nt": 2
       },
-      "colDescribed": 35543,
-      "colNe": 7999
+      "colDescribed": 35308,
+      "colNe": 7926
     },
     {
       "id": "lobe-finned-fishes",
@@ -883,7 +883,7 @@
         "DD": 151,
         "EX": 1
       },
-      "colDescribed": 1349,
+      "colDescribed": 1343,
       "colNe": 66
     },
     {
@@ -923,8 +923,8 @@
         "NT": 215,
         "DD": 803
       },
-      "colDescribed": 264290,
-      "colNe": 262168
+      "colDescribed": 263966,
+      "colNe": 261849
     },
     {
       "id": "butterflies-moths",
@@ -944,8 +944,8 @@
         "DD": 109,
         "LR/lc": 15
       },
-      "colDescribed": 167555,
-      "colNe": 166136
+      "colDescribed": 167413,
+      "colNe": 165994
     },
     {
       "id": "flies-mosquitoes",
@@ -963,8 +963,8 @@
         "DD": 75,
         "CR": 23
       },
-      "colDescribed": 169543,
-      "colNe": 169126
+      "colDescribed": 169204,
+      "colNe": 168787
     },
     {
       "id": "bees-wasps-ants",
@@ -983,8 +983,8 @@
         "NT": 90,
         "EN": 49
       },
-      "colDescribed": 131888,
-      "colNe": 131040
+      "colDescribed": 131822,
+      "colNe": 130974
     },
     {
       "id": "true-bugs",
@@ -1003,8 +1003,8 @@
         "NT": 5,
         "DD": 8
       },
-      "colDescribed": 101256,
-      "colNe": 101181
+      "colDescribed": 101059,
+      "colNe": 100984
     },
     {
       "id": "grasshoppers-crickets",
@@ -1024,8 +1024,8 @@
         "LR/cd": 3,
         "NT": 166
       },
-      "colDescribed": 29629,
-      "colNe": 28139
+      "colDescribed": 29533,
+      "colNe": 28047
     },
     {
       "id": "dragonflies-damselflies",
@@ -1043,7 +1043,7 @@
         "NT": 236,
         "EX": 1
       },
-      "colDescribed": 6464,
+      "colDescribed": 6450,
       "colNe": 343
     },
     {
@@ -1062,8 +1062,8 @@
         "DD": 50,
         "NT": 26
       },
-      "colDescribed": 64424,
-      "colNe": 64134
+      "colDescribed": 64342,
+      "colNe": 64052
     }
   ],
   "other_invertebrates": [
@@ -1082,8 +1082,8 @@
         "EN": 7,
         "CR": 2
       },
-      "colDescribed": 4844,
-      "colNe": 4499
+      "colDescribed": 4839,
+      "colNe": 4494
     },
     {
       "id": "annelids",
@@ -1102,8 +1102,8 @@
         "EX": 2,
         "LC": 108
       },
-      "colDescribed": 18044,
-      "colNe": 17939
+      "colDescribed": 17972,
+      "colNe": 17869
     },
     {
       "id": "other-invertebrates-catch-all",
@@ -1121,8 +1121,8 @@
         "EX": 4,
         "NT": 79
       },
-      "colDescribed": 117302,
-      "colNe": 116901
+      "colDescribed": 116965,
+      "colNe": 116564
     }
   ],
   "mushrooms": [
@@ -1184,8 +1184,8 @@
         "EW": 1,
         "LR/cd": 3
       },
-      "colDescribed": 935049,
-      "colNe": 922267
+      "colDescribed": 933789,
+      "colNe": 921030
     },
     {
       "id": "inv-arachnids",
@@ -1203,8 +1203,8 @@
         "CR": 121,
         "EX": 9
       },
-      "colDescribed": 98782,
-      "colNe": 97751
+      "colDescribed": 98713,
+      "colNe": 97683
     },
     {
       "id": "inv-molluscs",
@@ -1225,8 +1225,8 @@
         "LR/lc": 16,
         "EW": 12
       },
-      "colDescribed": 88822,
-      "colNe": 79940
+      "colDescribed": 88226,
+      "colNe": 79407
     },
     {
       "id": "inv-crustaceans",
@@ -1248,8 +1248,8 @@
         "LR/nt": 1,
         "EW": 1
       },
-      "colDescribed": 68764,
-      "colNe": 65544
+      "colDescribed": 68654,
+      "colNe": 65438
     },
     {
       "id": "inv-corals",
@@ -1266,8 +1266,8 @@
         "EN": 245,
         "NT": 24
       },
-      "colDescribed": 5695,
-      "colNe": 4783
+      "colDescribed": 5676,
+      "colNe": 4764
     },
     {
       "id": "inv-other_invertebrates",
@@ -1286,8 +1286,8 @@
         "EX": 6,
         "NT": 98
       },
-      "colDescribed": 140190,
-      "colNe": 139339
+      "colDescribed": 139776,
+      "colNe": 138927
     },
     {
       "id": "inv-velvet_worms",
@@ -1340,8 +1340,8 @@
         "NT": 215,
         "DD": 803
       },
-      "colDescribed": 264290,
-      "colNe": 262168
+      "colDescribed": 263966,
+      "colNe": 261849
     },
     {
       "id": "inv-butterflies-moths",
@@ -1361,8 +1361,8 @@
         "DD": 109,
         "LR/lc": 15
       },
-      "colDescribed": 167555,
-      "colNe": 166136
+      "colDescribed": 167413,
+      "colNe": 165994
     },
     {
       "id": "inv-flies-mosquitoes",
@@ -1380,8 +1380,8 @@
         "DD": 75,
         "CR": 23
       },
-      "colDescribed": 169543,
-      "colNe": 169126
+      "colDescribed": 169204,
+      "colNe": 168787
     },
     {
       "id": "inv-bees-wasps-ants",
@@ -1400,8 +1400,8 @@
         "NT": 90,
         "EN": 49
       },
-      "colDescribed": 131888,
-      "colNe": 131040
+      "colDescribed": 131822,
+      "colNe": 130974
     },
     {
       "id": "inv-true-bugs",
@@ -1420,8 +1420,8 @@
         "NT": 5,
         "DD": 8
       },
-      "colDescribed": 101256,
-      "colNe": 101181
+      "colDescribed": 101059,
+      "colNe": 100984
     },
     {
       "id": "inv-grasshoppers-crickets",
@@ -1441,8 +1441,8 @@
         "LR/cd": 3,
         "NT": 166
       },
-      "colDescribed": 29629,
-      "colNe": 28139
+      "colDescribed": 29533,
+      "colNe": 28047
     },
     {
       "id": "inv-dragonflies-damselflies",
@@ -1460,7 +1460,7 @@
         "NT": 236,
         "EX": 1
       },
-      "colDescribed": 6464,
+      "colDescribed": 6450,
       "colNe": 343
     },
     {
@@ -1479,8 +1479,8 @@
         "DD": 50,
         "NT": 26
       },
-      "colDescribed": 64424,
-      "colNe": 64134
+      "colDescribed": 64342,
+      "colNe": 64052
     }
   ],
   "inv-other_invertebrates": [
@@ -1499,8 +1499,8 @@
         "EN": 7,
         "CR": 2
       },
-      "colDescribed": 4844,
-      "colNe": 4499
+      "colDescribed": 4839,
+      "colNe": 4494
     },
     {
       "id": "inv-annelids",
@@ -1519,8 +1519,8 @@
         "EX": 2,
         "LC": 108
       },
-      "colDescribed": 18044,
-      "colNe": 17939
+      "colDescribed": 17972,
+      "colNe": 17869
     },
     {
       "id": "inv-other-invertebrates-catch-all",
@@ -1538,8 +1538,8 @@
         "EX": 4,
         "NT": 79
       },
-      "colDescribed": 117302,
-      "colNe": 116901
+      "colDescribed": 116965,
+      "colNe": 116564
     }
   ],
   "plantae": [
@@ -1563,8 +1563,8 @@
         "EX": 134,
         "LR/lc": 125
       },
-      "colDescribed": 355717,
-      "colNe": 282279
+      "colDescribed": 354863,
+      "colNe": 281496
     },
     {
       "id": "pl-gymnosperms",
@@ -1602,8 +1602,8 @@
         "EX": 2,
         "EW": 1
       },
-      "colDescribed": 14036,
-      "colNe": 13177
+      "colDescribed": 13961,
+      "colNe": 13107
     },
     {
       "id": "pl-mosses",
@@ -1622,8 +1622,8 @@
         "LR/lc": 3,
         "DD": 37
       },
-      "colDescribed": 19254,
-      "colNe": 18930
+      "colDescribed": 19189,
+      "colNe": 18867
     },
     {
       "id": "pl-green_algae",
