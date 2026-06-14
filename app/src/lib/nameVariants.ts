@@ -64,3 +64,28 @@ export function generateNameVariants(scientificName: string): string[] {
     return [genus, variant, ...rest].join(" ");
   });
 }
+
+/**
+ * Expand an accepted scientific name plus any taxonomic synonyms into the full,
+ * de-duplicated list of names to search for in the literature.
+ *
+ * Each input name (the accepted name and every synonym) is run through
+ * {@link generateNameVariants} so that Latin gender variants of both the
+ * accepted name and the synonyms are included. The accepted name's variants are
+ * kept first; duplicates are removed case-insensitively.
+ */
+export function expandSearchNames(scientificName: string, synonyms: string[] = []): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const name of [scientificName, ...synonyms]) {
+    if (!name || !name.trim()) continue;
+    for (const variant of generateNameVariants(name)) {
+      const key = variant.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        out.push(variant);
+      }
+    }
+  }
+  return out;
+}

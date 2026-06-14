@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { generateNameVariants } from "../nameVariants";
+import { generateNameVariants, expandSearchNames } from "../nameVariants";
 
 describe("generateNameVariants", () => {
   it("returns the original name for single-word input", () => {
@@ -86,5 +86,47 @@ describe("generateNameVariants", () => {
     const variants = generateNameVariants("  Rana  capensis  ");
     expect(variants).toContain("Rana capensis");
     expect(variants).toContain("Rana capense");
+  });
+});
+
+describe("expandSearchNames", () => {
+  it("returns the accepted name's gender variants when there are no synonyms", () => {
+    expect(expandSearchNames("Stenocephalemys albocaudatus")).toEqual(
+      generateNameVariants("Stenocephalemys albocaudatus")
+    );
+  });
+
+  it("includes gender variants of both the accepted name and the synonyms", () => {
+    const names = expandSearchNames("Stenocephalemys albocaudatus", [
+      "Praomys albocaudatus",
+    ]);
+    // Accepted name variants
+    expect(names).toContain("Stenocephalemys albocaudatus");
+    expect(names).toContain("Stenocephalemys albocaudata");
+    expect(names).toContain("Stenocephalemys albocaudatum");
+    // Synonym variants
+    expect(names).toContain("Praomys albocaudatus");
+    expect(names).toContain("Praomys albocaudata");
+    expect(names).toContain("Praomys albocaudatum");
+  });
+
+  it("keeps the accepted name's variants first", () => {
+    const names = expandSearchNames("Panthera leo", ["Felis leo"]);
+    expect(names[0]).toBe("Panthera leo");
+    expect(names).toContain("Felis leo");
+  });
+
+  it("de-duplicates names case-insensitively", () => {
+    const names = expandSearchNames("Rana capensis", [
+      "Rana capensis",
+      "rana CAPENSE",
+    ]);
+    const lower = names.map((n) => n.toLowerCase());
+    expect(new Set(lower).size).toBe(lower.length);
+  });
+
+  it("ignores empty or whitespace-only synonyms", () => {
+    const names = expandSearchNames("Panthera leo", ["", "   "]);
+    expect(names).toEqual(["Panthera leo"]);
   });
 });

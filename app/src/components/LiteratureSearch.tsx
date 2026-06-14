@@ -119,6 +119,10 @@ interface LiteratureResponse {
   scientificName: string;
   assessmentYear: number;
   mode: string;
+  // Full list of names searched: the accepted name's gender variants plus the
+  // species' taxonomic synonyms (and their gender variants). May be absent on
+  // older cached responses, in which case the client falls back to gender variants.
+  searchNames?: string[];
   totalPapersSinceAssessment: number;
   papersAtAssessment: number;
   totalPapers: number;
@@ -128,29 +132,32 @@ interface LiteratureResponse {
 interface NewLiteratureSinceAssessmentProps {
   scientificName: string;
   assessmentYear: number;
+  colId?: string | null;
+  sisTaxonId?: number | null;
   className?: string;
 }
 
 // Build encoded search terms with quoted name variants for OpenAlex URL
-function buildSearchTerms(scientificName: string): string {
-  const variants = generateNameVariants(scientificName);
-  return variants.map((v) => `%22${encodeURIComponent(v)}%22`).join("%7C");
+function encodeSearchTerms(searchNames: string[]): string {
+  return searchNames.map((v) => `%22${encodeURIComponent(v)}%22`).join("%7C");
 }
 
 // Build OpenAlex search URL for papers after a given year (sorted by most recent)
-function buildOpenAlexUrlAfter(scientificName: string, sinceYear: number): string {
-  return `https://openalex.org/works?page=1&filter=default.search%3A${buildSearchTerms(scientificName)},publication_year%3A%3E${sinceYear},type%3A%21dataset&sort=publication_date%3Adesc`;
+function buildOpenAlexUrlAfter(searchTerms: string, sinceYear: number): string {
+  return `https://openalex.org/works?page=1&filter=default.search%3A${searchTerms},publication_year%3A%3E${sinceYear},type%3A%21dataset&sort=publication_date%3Adesc`;
 }
 
 // Build OpenAlex search URL for papers up to a given year (sorted by most cited)
 // Use < (year+1) instead of <= year to avoid encoding issues that cause OpenAlex to hang
-function buildOpenAlexUrlBefore(scientificName: string, upToYear: number): string {
-  return `https://openalex.org/works?page=1&filter=default.search%3A${buildSearchTerms(scientificName)},publication_year%3A%3C${upToYear + 1},type%3A%21dataset&sort=cited_by_count%3Adesc`;
+function buildOpenAlexUrlBefore(searchTerms: string, upToYear: number): string {
+  return `https://openalex.org/works?page=1&filter=default.search%3A${searchTerms},publication_year%3A%3C${upToYear + 1},type%3A%21dataset&sort=cited_by_count%3Adesc`;
 }
 
 export default function NewLiteratureSinceAssessment({
   scientificName,
   assessmentYear,
+  colId,
+  sisTaxonId,
   className = "",
 }: NewLiteratureSinceAssessmentProps) {
   const [mode, setMode] = useState<"after" | "before">("after");
@@ -161,17 +168,23 @@ export default function NewLiteratureSinceAssessment({
 
   const isAllTime = assessmentYear === 0;
 
-  const nameVariants = generateNameVariants(scientificName);
-  const hasVariants = nameVariants.length > 1;
-  const searchDisplay = hasVariants
-    ? `${scientificName} (+ ${nameVariants.length - 1} name variant${nameVariants.length > 2 ? "s" : ""})`
+  // Names actually searched: prefer the full list the API returns (accepted-name
+  // gender variants + taxonomic synonyms); before data loads, fall back to the
+  // accepted name's gender variants so the link/description are still sensible.
+  const searchNames = data?.searchNames && data.searchNames.length > 0
+    ? data.searchNames
+    : generateNameVariants(scientificName);
+  const encodedTerms = encodeSearchTerms(searchNames);
+  const otherNameCount = searchNames.length - 1;
+  const searchDisplay = otherNameCount > 0
+    ? `${scientificName} (+ ${otherNameCount} synonym${otherNameCount > 1 ? "s" : ""} & name variant${otherNameCount > 1 ? "s" : ""})`
     : scientificName;
 
   const openAlexUrl = isAllTime
-    ? `https://openalex.org/works?page=1&filter=default.search%3A${buildSearchTerms(scientificName)},type%3A%21dataset&sort=publication_date%3Adesc`
+    ? `https://openalex.org/works?page=1&filter=default.search%3A${encodedTerms},type%3A%21dataset&sort=publication_date%3Adesc`
     : mode === "after"
-    ? buildOpenAlexUrlAfter(scientificName, assessmentYear)
-    : buildOpenAlexUrlBefore(scientificName, assessmentYear);
+    ? buildOpenAlexUrlAfter(encodedTerms, assessmentYear)
+    : buildOpenAlexUrlBefore(encodedTerms, assessmentYear);
 
   // Human-readable query description
   const queryDescription = isAllTime
@@ -192,6 +205,9 @@ export default function NewLiteratureSinceAssessment({
           mode: isAllTime ? "after" : mode,
           limit: "5",
         });
+        // Pass CoL identifiers so the API can fold in taxonomic synonyms.
+        if (colId) params.set("col", colId);
+        if (sisTaxonId != null) params.set("sis", sisTaxonId.toString());
 
         const response = await fetch(`/api/literature?${params}`);
         if (!response.ok) {
@@ -209,7 +225,7 @@ export default function NewLiteratureSinceAssessment({
     if (scientificName && assessmentYear != null) {
       fetchLiterature();
     }
-  }, [scientificName, assessmentYear, mode, isAllTime]);
+  }, [scientificName, assessmentYear, mode, isAllTime, colId, sisTaxonId]);
 
   // Reset expanded row when switching modes
   useEffect(() => {
@@ -339,7 +355,7 @@ export default function NewLiteratureSinceAssessment({
       {/* Subtle note at bottom */}
       {!loading && data && (
         <p className="text-[10px] text-zinc-400 mt-2">
-          {mode === "before" ? "Sorted by most cited" : "Sorted by most recent"} — includes Latin gender variants of species name · Data from OpenAlex (CC0)
+          {mode === "before" ? "Sorted by most cited" : "Sorted by most recent"} — includes taxonomic synonyms and Latin gender variants of species name · Data from OpenAlex (CC0)
         </p>
       )}
     </div>

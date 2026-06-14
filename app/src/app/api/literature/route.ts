@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateNameVariants } from "@/lib/nameVariants";
+import { expandSearchNames } from "@/lib/nameVariants";
+import { getSynonyms } from "@/lib/data/species-duckdb";
 import { CACHE_1H } from "@/lib/cache-headers";
 
 /**
@@ -58,6 +59,26 @@ interface LiteratureResult {
 const literatureCache = new Map<string, { data: object; timestamp: number }>();
 const CACHE_DURATION = 60 * 60 * 1000; // 1 hour
 
+// Cap on how many synonyms we fold into the OpenAlex query. Some taxa carry
+// dozens of synonyms; ORing them all would bloat the query URL with little
+// marginal recall, so we take the first (alphabetical) batch.
+const MAX_SYNONYM_NAMES = 30;
+
+// Fetch a species' taxonomic synonyms (Catalogue of Life) so they can be folded
+// into the literature search alongside the accepted name. Returns [] when no
+// CoL identifier is available or the lookup fails — the search then falls back
+// to just the accepted name and its gender variants.
+async function fetchSynonymNames(col: string | null, sis: number | null): Promise<string[]> {
+  if (!col && sis == null) return [];
+  try {
+    const data = await getSynonyms({ col, sis });
+    return data.synonyms.map((s) => s.name).filter(Boolean).slice(0, MAX_SYNONYM_NAMES);
+  } catch (error) {
+    console.error("Literature synonym lookup error:", error);
+    return [];
+  }
+}
+
 // Reconstruct abstract from OpenAlex inverted index
 function reconstructAbstract(invertedIndex: Record<string, number[]> | undefined, maxWords = 100): string | null {
   if (!invertedIndex) return null;
@@ -76,17 +97,17 @@ function reconstructAbstract(invertedIndex: Record<string, number[]> | undefined
 
 // Search OpenAlex for papers published after a given year
 async function searchOpenAlexSinceYear(
-  scientificName: string,
+  searchNames: string[],
   sinceYear: number,
   limit: number = 5
 ): Promise<{ count: number; results: LiteratureResult[] }> {
   // OpenAlex filter: use quoted default.search for exact phrase matching
-  // OR together gender variants of the species epithet (e.g. "albocaudata"|"albocaudatus"|"albocaudatum")
+  // OR together the accepted name's gender variants and the species' synonyms
+  // (e.g. "albocaudata"|"albocaudatus"|"albocaudatum"|"<synonym>")
   // publication_year > sinceYear, exclude datasets (GBIF occurrence downloads)
   // Sorted by most recent first
   // Note: per_page must be >= 1 for the API to work, even for count-only requests
-  const nameVariants = generateNameVariants(scientificName);
-  const searchTerms = nameVariants.map(v => `"${v}"`).join("|");
+  const searchTerms = searchNames.map(v => `"${v}"`).join("|");
   const filter = encodeURIComponent(`default.search:${searchTerms},publication_year:>${sinceYear},type:!dataset`);
   const url = `https://api.openalex.org/works?filter=${filter}&sort=publication_date:desc&per_page=${Math.max(1, limit)}&mailto=sw984@cam.ac.uk`;
 
@@ -116,16 +137,15 @@ async function searchOpenAlexSinceYear(
 
 // Search OpenAlex for papers published up to and including a given year
 async function searchOpenAlexUpToYear(
-  scientificName: string,
+  searchNames: string[],
   upToYear: number,
   limit: number = 5
 ): Promise<{ count: number; results: LiteratureResult[] }> {
   // Use quoted default.search for exact phrase matching
-  // OR together gender variants of the species epithet
+  // OR together the accepted name's gender variants and the species' synonyms
   // Use < (year+1) instead of <= year to avoid encoding issues
   // Sorted by most cited first for pre-assessment papers
-  const nameVariants = generateNameVariants(scientificName);
-  const searchTerms = nameVariants.map(v => `"${v}"`).join("|");
+  const searchTerms = searchNames.map(v => `"${v}"`).join("|");
   const filter = encodeURIComponent(`default.search:${searchTerms},publication_year:<${upToYear + 1},type:!dataset`);
   const url = `https://api.openalex.org/works?filter=${filter}&sort=cited_by_count:desc&per_page=${Math.max(1, limit)}&mailto=sw984@cam.ac.uk`;
 
@@ -159,6 +179,10 @@ export async function GET(request: NextRequest) {
   const assessmentYear = searchParams.get("assessmentYear");
   const limit = Math.min(parseInt(searchParams.get("limit") || "5"), 20);
   const mode = searchParams.get("mode") || "after"; // "after" or "before"
+  // Optional CoL identifiers used to pull taxonomic synonyms into the search.
+  const col = searchParams.get("col");
+  const sisRaw = searchParams.get("sis");
+  const sis = sisRaw != null && !Number.isNaN(parseInt(sisRaw, 10)) ? parseInt(sisRaw, 10) : null;
 
   if (!scientificName) {
     return NextResponse.json(
@@ -182,30 +206,35 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Check cache
-  const cacheKey = `${scientificName.toLowerCase()}-${sinceYear}-${limit}-${mode}`;
+  // Check cache (keyed also by col/sis since they change the synonym set used)
+  const cacheKey = `${scientificName.toLowerCase()}-${sinceYear}-${limit}-${mode}-${col ?? ""}-${sis ?? ""}`;
   const cached = literatureCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
     return NextResponse.json({ ...cached.data, cached: true }, { headers: CACHE_1H });
   }
 
   try {
+    // Fold the accepted name's gender variants together with the species'
+    // taxonomic synonyms (and their gender variants) into one search-name list.
+    const synonymNames = await fetchSynonymNames(col, sis);
+    const searchNames = expandSearchNames(scientificName, synonymNames);
+
     let papers: { count: number; results: LiteratureResult[] };
     let otherCount: number;
 
     if (mode === "before") {
       // Pre-assessment: fetch papers up to assessment year, and count of post-assessment
       const [prePapers, postPapers] = await Promise.all([
-        searchOpenAlexUpToYear(scientificName, sinceYear, limit),
-        searchOpenAlexSinceYear(scientificName, sinceYear, 1),
+        searchOpenAlexUpToYear(searchNames, sinceYear, limit),
+        searchOpenAlexSinceYear(searchNames, sinceYear, 1),
       ]);
       papers = prePapers;
       otherCount = postPapers.count;
     } else {
       // Post-assessment (default): fetch papers after assessment year, and count of pre-assessment
       const [postPapers, prePapers] = await Promise.all([
-        searchOpenAlexSinceYear(scientificName, sinceYear, limit),
-        searchOpenAlexUpToYear(scientificName, sinceYear, 1),
+        searchOpenAlexSinceYear(searchNames, sinceYear, limit),
+        searchOpenAlexUpToYear(searchNames, sinceYear, 1),
       ]);
       papers = postPapers;
       otherCount = prePapers.count;
@@ -215,6 +244,7 @@ export async function GET(request: NextRequest) {
       scientificName,
       assessmentYear: sinceYear,
       mode,
+      searchNames,
       totalPapersSinceAssessment: mode === "after" ? papers.count : otherCount,
       papersAtAssessment: mode === "before" ? papers.count : otherCount,
       totalPapers: papers.count,

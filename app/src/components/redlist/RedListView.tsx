@@ -3327,6 +3327,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                               <NewLiteratureSinceAssessment
                                 scientificName={s.scientific_name}
                                 assessmentYear={assessmentYear ?? 0}
+                                colId={s.col_id ?? null}
+                                sisTaxonId={s.sis_taxon_id ?? null}
                               />
                             </div>
                           )}
