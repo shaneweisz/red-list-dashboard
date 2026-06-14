@@ -6,9 +6,11 @@
  *  - in_base = (col:sourceID is one of the Base GSD source keys), which catches
  *    the unflagged-fossil tail (paleo papers that never set col:extinct).
  * The read layer's universe predicate is `in_base AND extinct IS NOT TRUE`. Also
- * pins the universe to status='accepted' (provisionally accepted excluded). The
- * Base source list is injected (opts.baseSourceIds) so the test never hits the
- * network. Self-contained (local fixture + DuckDB) — no R2 data needed.
+ * pins the universe to status='accepted' (provisionally accepted excluded), and
+ * verifies the curated-checklist demotion overlay (opts.demotedColIds) drops an
+ * XR-accepted species the curated checklist demotes to a synonym. The Base source
+ * list + demotion set are injected so the test never hits the network. Self-contained
+ * (local fixture + DuckDB) — no R2 data needed.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import * as fs from "fs";
@@ -50,17 +52,23 @@ const ROWS: string[][] = [
   ["4", "F", "provisionally accepted", "species", "Felis dubia", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "Felis", "100", "false", "", "", ""],
   ["5", "1", "synonym", "species", "Felis leo", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "Felis", "100", "", "", "", ""],
   ["F", "R", "accepted", "family", "Felidae", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "", "100", "", "", "", ""],
+  // An XR over-split: accepted species + in_base + extant, but the curated checklist
+  // demotes col_id "10" to a synonym (injected via demotedColIds) → dropped from species/.
+  ["10", "F", "accepted", "species", "Felis splitta", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "Felis", "100", "false", "", "", ""],
 ];
 
 // Minimal ColDP Reference. R1: structured col:issued (full CSL date, exercises the
 // 4-digit extraction) plus a *different* citation year to prove issued wins. R2: empty
 // col:issued, year only in the free-text citation (exercises the citation fallback).
+// R3: plate number 2038 precedes the real year 1890 (Bulbophyllum regression).
 const REF_COLS = ["col:ID", "col:issued", "col:citation"];
 const REF_ROWS: string[][] = [
   ["R1", "1867-05-01", "Trans. Imag. Soc. 1: 5 (1850)"],
   ["R2", "", "Fl. Imag. 3: 77. 1888."],
-  ["R3", "", "Hooker's Icon. Pl. 21: t. 2038a (1890)"], // plate number 2038 precedes the year 1890
+  ["R3", "", "Hooker's Icon. Pl. 21: t. 2038a (1890)"],
 ];
+// Curated-checklist demotion set (injected, no network): "10" = Felis splitta.
+const DEMOTED_COL_IDS = ["10"];
 
 let tmp: string;
 let speciesGlob: string;
@@ -72,7 +80,7 @@ beforeAll(async () => {
   fs.writeFileSync(tsv, [COLS.join("\t"), ...ROWS.map((r) => r.join("\t"))].join("\n") + "\n");
   const referenceTsv = path.join(tmp, "Reference.tsv");
   fs.writeFileSync(referenceTsv, [REF_COLS.join("\t"), ...REF_ROWS.map((r) => r.join("\t"))].join("\n") + "\n");
-  await run({ tsv, referenceTsv, outDir: tmp, baseSourceIds: BASE_SOURCE_IDS });
+  await run({ tsv, referenceTsv, outDir: tmp, baseSourceIds: BASE_SOURCE_IDS, demotedColIds: DEMOTED_COL_IDS });
   speciesGlob = path.join(tmp, "species", "**", "*.parquet");
   backbone = path.join(tmp, "backbone.parquet");
 });
@@ -85,13 +93,25 @@ async function query(sql: string): Promise<Record<string, unknown>[]> {
 }
 
 describe("build-backbone species universe", () => {
-  it("keeps every status='accepted' species (drops provisionally accepted, synonyms, higher ranks)", async () => {
+  it("keeps every status='accepted' species (drops provisionally accepted, synonyms, higher ranks, demoted)", async () => {
     const rows = await query(`SELECT scientific_name FROM read_parquet('${speciesGlob}', hive_partitioning=true) ORDER BY scientific_name`);
-    // Felis dubia (provisionally accepted) excluded. The fossil + non-Base species
-    // are KEPT in the parquet (carried with flags) and filtered at query time.
+    // Felis dubia (provisionally accepted) and Felis splitta (curated-checklist-demoted)
+    // excluded. The fossil + non-Base species are KEPT in the parquet (carried with
+    // flags) and filtered at query time.
     expect(rows.map((r) => r.scientific_name)).toEqual([
       "Cimexomys testus", "Felis incognita", "Panthera leo", "Peropteryx leucoptera", "Smilodon fatalis", "Testus citatius", "Testus platius",
     ]);
+  });
+
+  it("drops XR over-splits the curated checklist demotes (col_id in the demotion set)", async () => {
+    // Felis splitta (col_id "10") is an accepted, in_base, extant species in the XR
+    // fixture — but the curated checklist demotes it, so it must NOT reach species/.
+    const rows = await query(`SELECT scientific_name FROM read_parquet('${speciesGlob}', hive_partitioning=true) WHERE col_id = '10'`);
+    expect(rows).toEqual([]);
+    // …yet it's still carried in backbone.parquet (the demotion only prunes the universe,
+    // never the tree — the name stays resolvable).
+    const bb = await query(`SELECT scientific_name FROM read_parquet('${backbone}') WHERE col_id = '10'`);
+    expect(bb.map((r) => r.scientific_name)).toEqual(["Felis splitta"]);
   });
 
   it("normalizes a subgenus parenthetical to the canonical binomial (dedup + display)", async () => {
@@ -147,7 +167,7 @@ describe("build-backbone species universe", () => {
 describe("build-backbone backbone.parquet", () => {
   it("carries every usage (all ranks + synonyms) for tree + synonym resolution", async () => {
     const rows = await query(`SELECT count(*) n, count(*) FILTER (status LIKE '%synonym%') syn FROM read_parquet('${backbone}')`);
-    expect(Number(rows[0].n)).toBe(10);  // all rows, including the family + synonym
+    expect(Number(rows[0].n)).toBe(11);  // all rows: family, synonym, demoted species + the rest
     expect(Number(rows[0].syn)).toBe(1);
   });
 });

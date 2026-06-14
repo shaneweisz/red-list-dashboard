@@ -18,11 +18,24 @@
  *      paleo-paper tail). The read layer's universe = `in_base AND extinct IS NOT
  *      TRUE`, which tracks IUCN Table 1a "described" (= extant) counts.
  *
+ * Curated-checklist demotion overlay: XR maximizes coverage but does NOT reconcile
+ * conflicting source taxonomies, so it over-splits — surfacing contested splits as
+ * accepted species that become spurious "Not Evaluated" rows (e.g. Pycnonotus
+ * tricolor: accepted species in XR, but a synonym of the assessed P. barbatus in the
+ * curated CoL Checklist). We correct this by dropping from species/ any col_id the
+ * curated checklist DEMOTES (to synonym / infraspecific). The principle is
+ * asymmetric: curated CONTRADICTION removes a species, but curated SILENCE never
+ * does — so groups XR has and the checklist lacks (e.g. macroalgae, whose AlgaeBase
+ * GSD isn't in the curated assembly) are preserved. col_ids are shared across both
+ * datasets so the join is exact. The demotion set comes from fetch-col-checklist
+ * (the simple 3LR ColDP); when absent (e.g. a partial run), no demotions are applied.
+ *
  * Input: NameUsage.tsv from the XR ColDP archive (env COLDP_TSV, else
  * data/_coldp_xr.tsv). A companion fetch step downloads the export.zip
  * (api.checklistbank.org/dataset/313100/export.zip?format=ColDP&extended=true)
  * and extracts NameUsage.tsv; this script is the transform. XR ≈ ChecklistBank
- * dataset 313100 ("COL25.11 XR"), a swappable pinned dep.
+ * dataset 313100 ("COL25.11 XR"), a swappable pinned dep. The demotion overlay reads
+ * the curated checklist NameUsage (env COL_CHECKLIST_TSV / opts.demotionsTsv).
  *
  *   COLDP_TSV=/path/to/NameUsage.tsv npx tsx scripts/build-backbone.ts
  */
@@ -47,6 +60,16 @@ const SPECIES_STATUS = "('accepted')";
 // extant universe filters to in_base, dropping that unflagged-fossil tail. Source
 // keys are global + version-stable, so a current Base release is a valid allowlist.
 const COL_BASE_DATASET = process.env.COL_BASE_DATASET || "315149";
+
+// A curated-checklist usage "demotes" an XR-accepted species when the checklist does
+// NOT recognize that col_id as an accepted species — i.e. it's a synonym (incl.
+// ambiguous synonym), misapplied, or accepted only at an infraspecific rank. Such
+// col_ids are dropped from the XR species universe (see the demotion overlay above).
+const DEMOTED_PREDICATE = `
+  lower("col:status") LIKE '%synonym%'
+  OR lower("col:status") = 'misapplied'
+  OR (lower("col:status") IN ('accepted', 'provisionally accepted')
+      AND lower("col:rank") IN ('subspecies','variety','form','subvariety','subform','natio','aberration'))`;
 
 // CoL lineage → IUCN Table 1a group, per Table 1a's footnote definitions (2025-2):
 // crustaceans = note 6's 7 classes (Maxillopoda split into CoL's copepoda/thecostraca/
@@ -98,7 +121,9 @@ async function fetchBaseSourceIds(): Promise<string[]> {
   return ids;
 }
 
-export async function run(opts: { tsv?: string; referenceTsv?: string; outDir?: string; baseSourceIds?: string[] } = {}): Promise<void> {
+export async function run(
+  opts: { tsv?: string; referenceTsv?: string; outDir?: string; baseSourceIds?: string[]; demotionsTsv?: string; demotedColIds?: string[] } = {},
+): Promise<void> {
   const tsv = opts.tsv || process.env.COLDP_TSV || path.join(DATA_DIR, "_coldp_xr.tsv");
   if (!fs.existsSync(tsv)) {
     throw new Error(`ColDP TSV not found: ${tsv}. Set COLDP_TSV or run the XR fetch step.`);
@@ -112,6 +137,7 @@ export async function run(opts: { tsv?: string; referenceTsv?: string; outDir?: 
   if (!hasReferences) {
     console.warn(`build-backbone: Reference.tsv not found (${referenceTsv}); described_year will use author-year columns only (botanical/fungal years will be null).`);
   }
+  const demotionsTsv = opts.demotionsTsv || process.env.COL_CHECKLIST_TSV;
   const outDir = opts.outDir || DATA_DIR;
   const backboneOut = path.join(outDir, "backbone.parquet");
   const speciesDir = path.join(outDir, "species");
@@ -124,6 +150,22 @@ export async function run(opts: { tsv?: string; referenceTsv?: string; outDir?: 
   // The Base-GSD source allowlist as a temp table for the in_base tag below.
   await conn.run(`CREATE TEMP TABLE base_src(id VARCHAR);`);
   await conn.run(`INSERT INTO base_src VALUES ${baseSourceIds.map((i) => `('${i.replace(/'/g, "''")}')`).join(",")};`);
+
+  // Curated-checklist demotion denylist (col_ids the curated checklist demotes — see
+  // header). Injected directly (tests), else read from the checklist NameUsage, else
+  // empty (no demotions). col_ids are shared with XR, so this is an exact anti-join.
+  await conn.run(`CREATE TEMP TABLE demoted(col_id VARCHAR);`);
+  if (opts.demotedColIds) {
+    if (opts.demotedColIds.length) {
+      await conn.run(`INSERT INTO demoted VALUES ${opts.demotedColIds.map((i) => `('${i.replace(/'/g, "''")}')`).join(",")};`);
+    }
+  } else if (demotionsTsv) {
+    if (!fs.existsSync(demotionsTsv)) throw new Error(`Checklist demotions TSV not found: ${demotionsTsv}`);
+    await conn.run(`
+      INSERT INTO demoted
+      SELECT DISTINCT "col:ID" FROM read_csv('${demotionsTsv}', delim='\t', header=true, quote='', ignore_errors=true, all_varchar=true)
+      WHERE "col:ID" IS NOT NULL AND (${DEMOTED_PREDICATE});`);
+  }
 
   // Load the full NameUsage once. all_varchar avoids type-sniffing surprises on
   // the ~9.4M-row / ~70-col ColDP TSV; we only need a handful of columns. The
@@ -225,6 +267,9 @@ export async function run(opts: { tsv?: string; referenceTsv?: string; outDir?: 
         FROM nu n
         LEFT JOIN ref r ON r.rid = n.name_reference_id
         WHERE n.rank = 'species' AND n.status IN ${SPECIES_STATUS}
+          -- Drop XR over-splits the curated checklist demotes (e.g. Pycnonotus tricolor).
+          AND n.col_id NOT IN (SELECT col_id FROM demoted)
+
       )
       ORDER BY taxon_group, class_name, order_name, family, scientific_name
     ) TO '${speciesDir}' (FORMAT PARQUET, PARTITION_BY (taxon_group), COMPRESSION ZSTD, ROW_GROUP_SIZE 20000, OVERWRITE_OR_IGNORE);
@@ -242,7 +287,8 @@ export async function run(opts: { tsv?: string; referenceTsv?: string; outDir?: 
                               count(*) FILTER (in_base AND extinct IS NOT TRUE) AS universe,
                               count(*) FILTER (taxon_group = 'other') AS other
                        FROM '${speciesDir}/**/*.parquet'`))[0];
-  console.log(`Wrote ${speciesDir}/: ${Number(sp.n).toLocaleString()} accepted species across ${Number(sp.ngroups)} taxon_group partitions (${baseSourceIds.length} Base GSD sources)`);
+  const demotedN = Number((await q(`SELECT count(*) n FROM demoted`))[0].n);
+  console.log(`Wrote ${speciesDir}/: ${Number(sp.n).toLocaleString()} accepted species across ${Number(sp.ngroups)} taxon_group partitions (${baseSourceIds.length} Base GSD sources; ${demotedN.toLocaleString()} curated-checklist demotions applied)`);
   console.log(`  extant universe (in_base AND NOT fossil): ${Number(sp.universe).toLocaleString()} — drops ${Number(sp.fossil).toLocaleString()} flagged fossils + ${Number(sp.non_base).toLocaleString()} non-Base; ${Number(sp.other).toLocaleString()} outside the 28 groups ('other')`);
   const dy = (await q(`SELECT count(*) FILTER (in_base AND extinct IS NOT TRUE) AS universe,
                               count(*) FILTER (in_base AND extinct IS NOT TRUE AND described_year IS NOT NULL) AS with_year
