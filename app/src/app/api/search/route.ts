@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { searchSpecies } from "@/lib/data/species-store";
+import { searchSpecies } from "@/lib/data/species-duckdb";
 import { CACHE_5M } from "@/lib/cache-headers";
 
 export async function GET(request: NextRequest) {
@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const results = searchSpecies(query, limit);
+    const results = await searchSpecies(query, limit);
     return NextResponse.json({ results }, { headers: CACHE_5M });
   } catch (error) {
     console.error("Search error:", error);

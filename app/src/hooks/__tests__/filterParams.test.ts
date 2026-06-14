@@ -29,8 +29,37 @@ describe("parseParams", () => {
   });
 
   it("parses taxa from comma-separated list", () => {
-    const result = parseParams("?taxa=mammalia,aves");
-    expect(result.taxa).toEqual(new Set(["mammalia", "aves"]));
+    const result = parseParams("?taxa=mammals,birds");
+    expect(result.taxa).toEqual(new Set(["mammals", "birds"]));
+  });
+
+  it("maps legacy taxa IDs to current ones (back-compat for old URLs)", () => {
+    const result = parseParams("?taxa=mammalia,aves,reptilia,amphibia,arachnida,mollusca,crustacea");
+    expect(result.taxa).toEqual(
+      new Set(["mammals", "birds", "reptiles", "amphibians", "arachnids", "molluscs", "crustaceans"])
+    );
+  });
+
+  it("leaves unchanged and unknown taxa IDs as-is, and dedupes legacy+current", () => {
+    // insecta is still a valid node ID; beetles unchanged; mammalia → mammals collapses with mammals
+    const result = parseParams("?taxa=mammalia,mammals,insecta,beetles,unknownthing");
+    expect(result.taxa).toEqual(new Set(["mammals", "insecta", "beetles", "unknownthing"]));
+  });
+
+  it("maps legacy IDs in the subgroups param too", () => {
+    const result = parseParams("?subgroups=mollusca,arachnida");
+    expect(result.subgroups).toEqual(new Set(["molluscs", "arachnids"]));
+  });
+
+  it("maps legacy prefixed virtual-node IDs (e.g. inv-crustacea → inv-crustaceans)", () => {
+    const result = parseParams("?taxa=invertebrates&subgroups=inv-crustacea,inv-mollusca,inv-arachnida");
+    expect(result.taxa).toEqual(new Set(["invertebrates"])); // virtual root unchanged
+    expect(result.subgroups).toEqual(new Set(["inv-crustaceans", "inv-molluscs", "inv-arachnids"]));
+  });
+
+  it("leaves unchanged prefixed IDs alone (e.g. inv-insecta, inv-beetles)", () => {
+    const result = parseParams("?subgroups=inv-insecta,inv-beetles");
+    expect(result.subgroups).toEqual(new Set(["inv-insecta", "inv-beetles"]));
   });
 
   it("parses categories", () => {
@@ -100,9 +129,9 @@ describe("parseParams", () => {
 
   it("parses a complex URL with multiple params", () => {
     const result = parseParams(
-      "?taxa=mammalia&categories=CR,EN&years=11-20+years&search=shrew&sort=year&dir=asc"
+      "?taxa=mammals&categories=CR,EN&years=11-20+years&search=shrew&sort=year&dir=asc"
     );
-    expect(result.taxa).toEqual(new Set(["mammalia"]));
+    expect(result.taxa).toEqual(new Set(["mammals"]));
     expect(result.categories).toEqual(new Set(["CR", "EN"]));
     expect(result.yearRanges).toEqual(new Set(["11-20 years"]));
     expect(result.search).toBe("shrew");
@@ -111,8 +140,8 @@ describe("parseParams", () => {
   });
 
   it("filters out empty strings from comma-split", () => {
-    const result = parseParams("?taxa=,mammalia,,aves,");
-    expect(result.taxa).toEqual(new Set(["mammalia", "aves"]));
+    const result = parseParams("?taxa=,mammals,,birds,");
+    expect(result.taxa).toEqual(new Set(["mammals", "birds"]));
   });
 
   it("parses single subgroup", () => {
@@ -165,6 +194,7 @@ describe("buildQs", () => {
     categories: new Set<string>(),
     yearRanges: new Set<string>(),
     assessmentYears: new Set<string>(),
+    describedYears: new Set<string>(),
     countries: new Set<string>(),
     obsRanges: new Set<string>(),
     systems: new Set<string>(),
@@ -198,13 +228,13 @@ describe("buildQs", () => {
   });
 
   it("includes taxa when set", () => {
-    const qs = buildQs({ ...emptyState, taxa: new Set(["mammalia", "aves"]) });
+    const qs = buildQs({ ...emptyState, taxa: new Set(["mammals", "birds"]) });
     expect(qs).toContain("taxa=");
     // Both values present (order may vary)
     const params = new URLSearchParams(qs);
     const taxa = params.get("taxa")!.split(",");
-    expect(taxa).toContain("mammalia");
-    expect(taxa).toContain("aves");
+    expect(taxa).toContain("mammals");
+    expect(taxa).toContain("birds");
   });
 
   it("includes categories", () => {
@@ -329,11 +359,12 @@ describe("parseParams ↔ buildQs round-trip", () => {
   it("round-trips a complex state", () => {
     const original = {
       viewMode: "reassessments" as const,
-      taxa: new Set(["mammalia"]),
+      taxa: new Set(["mammals"]),
       subgroups: new Set<string>(),
       categories: new Set(["CR", "EN"]),
       yearRanges: new Set(["11-20 years"]),
       assessmentYears: new Set(["2023", "2024"]),
+      describedYears: new Set<string>(),
       countries: new Set(["ZA"]),
       obsRanges: new Set<string>(),
       systems: new Set<string>(),
@@ -372,6 +403,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
       categories: new Set<string>(),
       yearRanges: new Set<string>(),
       assessmentYears: new Set<string>(),
+      describedYears: new Set<string>(),
       countries: new Set<string>(),
       obsRanges: new Set<string>(),
       systems: new Set<string>(),
@@ -407,6 +439,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
       categories: new Set<string>(),
       yearRanges: new Set<string>(),
       assessmentYears: new Set<string>(),
+      describedYears: new Set<string>(),
       countries: new Set<string>(),
       obsRanges: new Set<string>(),
       systems: new Set<string>(),
@@ -438,6 +471,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
       categories: new Set<string>(),
       yearRanges: new Set<string>(),
       assessmentYears: new Set<string>(),
+      describedYears: new Set<string>(),
       countries: new Set<string>(),
       obsRanges: new Set<string>(),
       systems: new Set<string>(),
@@ -468,6 +502,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
       categories: new Set<string>(),
       yearRanges: new Set<string>(),
       assessmentYears: new Set<string>(),
+      describedYears: new Set<string>(),
       countries: new Set<string>(),
       obsRanges: new Set<string>(),
       systems: new Set<string>(),

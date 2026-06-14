@@ -1,12 +1,11 @@
-"use client";
-
-import { useState, useEffect, useRef } from "react";
-
-// ── Types ────────────────────────────────────────────────────────────────
+// Shared shape of a species row as returned by /api/redlist/species and rendered
+// by RedListView. (The data is fetched inline in RedListView; this module is the
+// canonical type definition imported across the app.)
 
 export interface RedListSpecies {
   id: number;
   sis_taxon_id: number | null;
+  col_id?: string | null; // CoL id (on NE rows); used for the detail panel's synonyms/CoL tab
   assessment_id: number | null;
   scientific_name: string;
   common_name: string | null;
@@ -20,9 +19,17 @@ export interface RedListSpecies {
   order_name: string | null;
   taxon_group: string;
   taxon_id: string;
+  // CoL species description year — populated for Not Evaluated (NE) rows only;
+  // null for assessed species and for NE names with no datable CoL source.
+  described_year: number | null;
   gbif_species_key: number | null;
   gbif_occurrence_count: number | null;
   gbif_observations_after_assessment_year: number | null;
+  // Latest assessment's assessors/reviewers, inline in the species list (drives
+  // the assessor/reviewer filter). The full history array is fetched lazily into
+  // previous_assessments when a detail panel opens — empty in the list response.
+  latest_assessors: string | null;
+  latest_reviewers: string | null;
   previous_assessments: { id: number; year: string; category: string; date: string | null; assessors: string | null; reviewers: string | null }[];
   systems: string[];
   growth_forms: string[];
@@ -32,71 +39,4 @@ export interface RedListSpecies {
   criteria: string | null;
   threat_codes: string[];
   has_map: boolean;
-}
-
-interface SpeciesResponse {
-  species: RedListSpecies[];
-  total: number;
-  error?: string;
-}
-
-// ── Hook ─────────────────────────────────────────────────────────────────
-
-/**
- * Fetches all species for a given taxon from the API.
- * Only re-fetches when taxonId changes.
- */
-export function useRedListSpecies(taxonId: string | null) {
-  const [species, setSpecies] = useState<RedListSpecies[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    abortRef.current?.abort();
-
-    // null means "don't fetch" — return empty state
-    if (taxonId === null) {
-      setSpecies([]); // eslint-disable-line react-hooks/set-state-in-effect -- reset on null taxon
-      setIsLoading(false);  
-      setError(null);  
-      return;
-    }
-
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    setIsLoading(true);  
-    setError(null);
-
-    fetch(`/api/redlist/species?taxon=${encodeURIComponent(taxonId)}`, {
-      signal: controller.signal,
-    })
-      .then(async (res) => {
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          throw new Error(body.error || `Species API returned ${res.status}`);
-        }
-        return res.json() as Promise<SpeciesResponse>;
-      })
-      .then((data) => {
-        if (!controller.signal.aborted) {
-          setSpecies(data.species);
-        }
-      })
-      .catch((err) => {
-        if (!controller.signal.aborted) {
-          setError(err instanceof Error ? err.message : "Unknown error");
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setIsLoading(false);
-        }
-      });
-
-    return () => controller.abort();
-  }, [taxonId]);
-
-  return { species, isLoading, error };
 }

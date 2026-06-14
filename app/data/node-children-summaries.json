@@ -1,12 +1,12 @@
 {
   "all": [
     {
-      "id": "mammalia",
+      "id": "mammals",
       "name": "Mammals",
       "estimatedDescribed": 6819,
       "totalAssessed": 6036,
       "outdated": 1099,
-      "gbifNeSpeciesCount": 312,
+      "gbifNeSpeciesCount": 314,
       "byCategory": {
         "CR": 238,
         "VU": 567,
@@ -17,10 +17,12 @@
         "EX": 90,
         "EW": 1,
         "LR/nt": 1
-      }
+      },
+      "colDescribed": 6163,
+      "colNe": 394
     },
     {
-      "id": "aves",
+      "id": "birds",
       "name": "Birds",
       "estimatedDescribed": 11185,
       "totalAssessed": 11185,
@@ -35,15 +37,17 @@
         "EW": 5,
         "EX": 164,
         "DD": 36
-      }
+      },
+      "colDescribed": 10582,
+      "colNe": 284
     },
     {
-      "id": "reptilia",
+      "id": "reptiles",
       "name": "Reptiles",
       "estimatedDescribed": 12502,
       "totalAssessed": 10368,
       "outdated": 5560,
-      "gbifNeSpeciesCount": 1074,
+      "gbifNeSpeciesCount": 1078,
       "byCategory": {
         "EN": 800,
         "LR/nt": 16,
@@ -56,15 +60,17 @@
         "LR/lc": 6,
         "EW": 2,
         "LR/cd": 1
-      }
+      },
+      "colDescribed": 12777,
+      "colNe": 2352
     },
     {
-      "id": "amphibia",
+      "id": "amphibians",
       "name": "Amphibians",
       "estimatedDescribed": 8918,
       "totalAssessed": 8051,
       "outdated": 862,
-      "gbifNeSpeciesCount": 231,
+      "gbifNeSpeciesCount": 229,
       "byCategory": {
         "LC": 3733,
         "EN": 1291,
@@ -74,7 +80,9 @@
         "NT": 453,
         "EX": 37,
         "EW": 2
-      }
+      },
+      "colDescribed": 8916,
+      "colNe": 977
     },
     {
       "id": "fishes",
@@ -82,7 +90,7 @@
       "estimatedDescribed": 37288,
       "totalAssessed": 29114,
       "outdated": 11266,
-      "gbifNeSpeciesCount": 3768,
+      "gbifNeSpeciesCount": 3771,
       "byCategory": {
         "CR": 881,
         "EX": 91,
@@ -94,7 +102,9 @@
         "DD": 5422,
         "LR/lc": 1,
         "LR/nt": 2
-      }
+      },
+      "colDescribed": 36799,
+      "colNe": 8008
     },
     {
       "id": "insecta",
@@ -102,28 +112,30 @@
       "estimatedDescribed": 1003469,
       "totalAssessed": 13696,
       "outdated": 5186,
-      "gbifNeSpeciesCount": 244447,
+      "gbifNeSpeciesCount": 245346,
       "byCategory": {
-        "EN": 1132,
-        "EX": 58,
         "VU": 1028,
-        "DD": 3255,
+        "EN": 1132,
+        "LR/nt": 45,
         "CR": 520,
         "LC": 6786,
-        "LR/nt": 45,
+        "EX": 58,
         "NT": 852,
+        "DD": 3255,
         "LR/lc": 16,
         "EW": 1,
         "LR/cd": 3
-      }
+      },
+      "colDescribed": 933789,
+      "colNe": 921030
     },
     {
-      "id": "arachnida",
+      "id": "arachnids",
       "name": "Arachnids",
       "estimatedDescribed": 97085,
       "totalAssessed": 1053,
       "outdated": 209,
-      "gbifNeSpeciesCount": 21744,
+      "gbifNeSpeciesCount": 21842,
       "byCategory": {
         "EN": 165,
         "VU": 104,
@@ -132,15 +144,17 @@
         "LC": 488,
         "CR": 121,
         "EX": 9
-      }
+      },
+      "colDescribed": 98713,
+      "colNe": 97683
     },
     {
-      "id": "mollusca",
+      "id": "molluscs",
       "name": "Molluscs",
       "estimatedDescribed": 88244,
       "totalAssessed": 9502,
       "outdated": 5977,
-      "gbifNeSpeciesCount": 25228,
+      "gbifNeSpeciesCount": 25243,
       "byCategory": {
         "CR": 785,
         "EN": 708,
@@ -152,15 +166,17 @@
         "LR/nt": 117,
         "LR/lc": 16,
         "EW": 12
-      }
+      },
+      "colDescribed": 88226,
+      "colNe": 79407
     },
     {
-      "id": "crustacea",
+      "id": "crustaceans",
       "name": "Crustaceans",
       "estimatedDescribed": 83263,
       "totalAssessed": 3361,
       "outdated": 3062,
-      "gbifNeSpeciesCount": 18001,
+      "gbifNeSpeciesCount": 18019,
       "byCategory": {
         "VU": 420,
         "CR": 165,
@@ -173,7 +189,9 @@
         "NT": 80,
         "LR/nt": 1,
         "EW": 1
-      }
+      },
+      "colDescribed": 68654,
+      "colNe": 65438
     },
     {
       "id": "corals",
@@ -189,25 +207,9 @@
         "LC": 428,
         "EN": 245,
         "NT": 24
-      }
-    },
-    {
-      "id": "other_invertebrates",
-      "name": "Other Invertebrates",
-      "estimatedDescribed": 230485,
-      "totalAssessed": 1139,
-      "outdated": 585,
-      "gbifNeSpeciesCount": 19133,
-      "byCategory": {
-        "CR": 60,
-        "VU": 47,
-        "LC": 295,
-        "DD": 555,
-        "EN": 76,
-        "LR/nt": 2,
-        "EX": 6,
-        "NT": 98
-      }
+      },
+      "colDescribed": 5676,
+      "colNe": 4764
     },
     {
       "id": "velvet_worms",
@@ -215,14 +217,16 @@
       "estimatedDescribed": 220,
       "totalAssessed": 11,
       "outdated": 11,
-      "gbifNeSpeciesCount": 70,
+      "gbifNeSpeciesCount": 69,
       "byCategory": {
         "EN": 2,
         "DD": 1,
         "CR": 3,
         "VU": 4,
         "LR/nt": 1
-      }
+      },
+      "colDescribed": 235,
+      "colNe": 224
     },
     {
       "id": "horseshoe_crabs",
@@ -235,7 +239,29 @@
         "DD": 2,
         "VU": 1,
         "EN": 1
-      }
+      },
+      "colDescribed": 4,
+      "colNe": 0
+    },
+    {
+      "id": "other_invertebrates",
+      "name": "Other Invertebrates",
+      "estimatedDescribed": 230485,
+      "totalAssessed": 1139,
+      "outdated": 585,
+      "gbifNeSpeciesCount": 19187,
+      "byCategory": {
+        "CR": 60,
+        "VU": 47,
+        "LC": 295,
+        "DD": 555,
+        "EN": 76,
+        "LR/nt": 2,
+        "EX": 6,
+        "NT": 98
+      },
+      "colDescribed": 139776,
+      "colNe": 138927
     },
     {
       "id": "flowering_plants",
@@ -243,7 +269,7 @@
       "estimatedDescribed": 369000,
       "totalAssessed": 74545,
       "outdated": 17488,
-      "gbifNeSpeciesCount": 138385,
+      "gbifNeSpeciesCount": 138584,
       "byCategory": {
         "LR/cd": 108,
         "VU": 10255,
@@ -256,7 +282,9 @@
         "EW": 40,
         "EX": 134,
         "LR/lc": 125
-      }
+      },
+      "colDescribed": 354863,
+      "colNe": 281496
     },
     {
       "id": "gymnosperms",
@@ -273,7 +301,9 @@
         "NT": 142,
         "DD": 18,
         "EW": 5
-      }
+      },
+      "colDescribed": 1216,
+      "colNe": 148
     },
     {
       "id": "ferns_and_allies",
@@ -281,7 +311,7 @@
       "estimatedDescribed": 11800,
       "totalAssessed": 834,
       "outdated": 447,
-      "gbifNeSpeciesCount": 6293,
+      "gbifNeSpeciesCount": 6303,
       "byCategory": {
         "DD": 110,
         "NT": 53,
@@ -291,7 +321,9 @@
         "LC": 341,
         "EX": 2,
         "EW": 1
-      }
+      },
+      "colDescribed": 13961,
+      "colNe": 13107
     },
     {
       "id": "mosses",
@@ -299,7 +331,7 @@
       "estimatedDescribed": 21925,
       "totalAssessed": 327,
       "outdated": 86,
-      "gbifNeSpeciesCount": 7384,
+      "gbifNeSpeciesCount": 7387,
       "byCategory": {
         "CR": 48,
         "NT": 35,
@@ -309,7 +341,9 @@
         "LC": 67,
         "LR/lc": 3,
         "DD": 37
-      }
+      },
+      "colDescribed": 19189,
+      "colNe": 18867
     },
     {
       "id": "green_algae",
@@ -317,12 +351,14 @@
       "estimatedDescribed": 14550,
       "totalAssessed": 18,
       "outdated": 13,
-      "gbifNeSpeciesCount": 2775,
+      "gbifNeSpeciesCount": 2782,
       "byCategory": {
         "DD": 6,
         "LC": 11,
         "NT": 1
-      }
+      },
+      "colDescribed": 2322,
+      "colNe": 2317
     },
     {
       "id": "red_algae",
@@ -337,7 +373,9 @@
         "LC": 8,
         "VU": 3,
         "CR": 6
-      }
+      },
+      "colDescribed": 1500,
+      "colNe": 1493
     },
     {
       "id": "brown_algae",
@@ -345,13 +383,15 @@
       "estimatedDescribed": 5005,
       "totalAssessed": 18,
       "outdated": 15,
-      "gbifNeSpeciesCount": 6375,
+      "gbifNeSpeciesCount": 6378,
       "byCategory": {
         "CR": 4,
         "DD": 12,
         "EN": 1,
         "VU": 1
-      }
+      },
+      "colDescribed": 377,
+      "colNe": 377
     },
     {
       "id": "mushrooms",
@@ -359,7 +399,7 @@
       "estimatedDescribed": 157648,
       "totalAssessed": 1302,
       "outdated": 45,
-      "gbifNeSpeciesCount": 52423,
+      "gbifNeSpeciesCount": 52708,
       "byCategory": {
         "EN": 129,
         "CR": 48,
@@ -367,7 +407,9 @@
         "NT": 110,
         "LC": 491,
         "DD": 290
-      }
+      },
+      "colDescribed": 156543,
+      "colNe": 155365
     },
     {
       "id": "invertebrates",
@@ -375,20 +417,22 @@
       "estimatedDescribed": 1508442,
       "totalAssessed": 29682,
       "outdated": 15050,
-      "gbifNeSpeciesCount": 333201,
+      "gbifNeSpeciesCount": 334284,
       "byCategory": {
-        "EN": 2518,
-        "EX": 380,
         "VU": 2784,
-        "DD": 7496,
+        "EN": 2518,
+        "LR/nt": 166,
         "CR": 1685,
         "LC": 12781,
-        "LR/nt": 166,
+        "EX": 380,
         "NT": 1812,
+        "DD": 7496,
         "LR/lc": 34,
         "EW": 14,
         "LR/cd": 12
-      }
+      },
+      "colDescribed": 1335073,
+      "colNe": 1307473
     },
     {
       "id": "plantae",
@@ -396,7 +440,7 @@
       "estimatedDescribed": 426132,
       "totalAssessed": 76864,
       "outdated": 18718,
-      "gbifNeSpeciesCount": 157552,
+      "gbifNeSpeciesCount": 157771,
       "byCategory": {
         "LR/cd": 108,
         "VU": 10596,
@@ -409,7 +453,9 @@
         "EW": 46,
         "EX": 141,
         "LR/lc": 128
-      }
+      },
+      "colDescribed": 393051,
+      "colNe": 317428
     },
     {
       "id": "fungi",
@@ -417,7 +463,7 @@
       "estimatedDescribed": 162653,
       "totalAssessed": 1320,
       "outdated": 60,
-      "gbifNeSpeciesCount": 58798,
+      "gbifNeSpeciesCount": 59086,
       "byCategory": {
         "EN": 130,
         "CR": 52,
@@ -425,17 +471,19 @@
         "NT": 110,
         "LC": 491,
         "DD": 302
-      }
+      },
+      "colDescribed": 156920,
+      "colNe": 155742
     }
   ],
-  "mammalia": [
+  "mammals": [
     {
       "id": "rodents",
       "name": "Rodents",
       "estimatedDescribed": 2747,
       "totalAssessed": 2386,
       "outdated": 32,
-      "gbifNeSpeciesCount": 70,
+      "gbifNeSpeciesCount": 71,
       "byCategory": {
         "CR": 67,
         "LC": 1525,
@@ -444,7 +492,9 @@
         "EN": 142,
         "VU": 137,
         "EX": 37
-      }
+      },
+      "colDescribed": 2337,
+      "colNe": 78
     },
     {
       "id": "bats",
@@ -452,7 +502,7 @@
       "estimatedDescribed": 1485,
       "totalAssessed": 1336,
       "outdated": 203,
-      "gbifNeSpeciesCount": 97,
+      "gbifNeSpeciesCount": 98,
       "byCategory": {
         "VU": 109,
         "EN": 88,
@@ -462,7 +512,9 @@
         "DD": 235,
         "EX": 9,
         "LR/nt": 1
-      }
+      },
+      "colDescribed": 1433,
+      "colNe": 136
     },
     {
       "id": "eulipotyphla",
@@ -479,7 +531,9 @@
         "VU": 31,
         "CR": 10,
         "EX": 8
-      }
+      },
+      "colDescribed": 582,
+      "colNe": 75
     },
     {
       "id": "primates",
@@ -496,7 +550,9 @@
         "CR": 88,
         "DD": 14,
         "EX": 2
-      }
+      },
+      "colDescribed": 527,
+      "colNe": 6
     },
     {
       "id": "marsupials",
@@ -513,7 +569,9 @@
         "EX": 18,
         "VU": 41,
         "DD": 19
-      }
+      },
+      "colDescribed": 373,
+      "colNe": 42
     },
     {
       "id": "carnivores",
@@ -530,7 +588,9 @@
         "CR": 4,
         "EX": 6,
         "DD": 6
-      }
+      },
+      "colDescribed": 303,
+      "colNe": 17
     },
     {
       "id": "artiodactyls",
@@ -548,7 +608,9 @@
         "EX": 8,
         "EW": 1,
         "DD": 25
-      }
+      },
+      "colDescribed": 230,
+      "colNe": 24
     },
     {
       "id": "rabbits-hares",
@@ -565,7 +627,9 @@
         "NT": 2,
         "DD": 6,
         "EX": 1
-      }
+      },
+      "colDescribed": 97,
+      "colNe": 5
     },
     {
       "id": "sirenians",
@@ -577,7 +641,9 @@
       "byCategory": {
         "VU": 4,
         "EX": 1
-      }
+      },
+      "colDescribed": 4,
+      "colNe": 0
     },
     {
       "id": "odd-toed-ungulates",
@@ -592,7 +658,9 @@
         "EN": 5,
         "LC": 1,
         "VU": 3
-      }
+      },
+      "colDescribed": 19,
+      "colNe": 2
     },
     {
       "id": "pangolins",
@@ -605,7 +673,9 @@
         "EN": 3,
         "CR": 3,
         "VU": 2
-      }
+      },
+      "colDescribed": 10,
+      "colNe": 2
     },
     {
       "id": "other-mammals",
@@ -621,17 +691,19 @@
         "DD": 20,
         "VU": 15,
         "CR": 5
-      }
+      },
+      "colDescribed": 248,
+      "colNe": 7
     }
   ],
-  "reptilia": [
+  "reptiles": [
     {
       "id": "squamates",
       "name": "Squamates",
       "estimatedDescribed": 12108,
       "totalAssessed": 10067,
       "outdated": 5419,
-      "gbifNeSpeciesCount": 983,
+      "gbifNeSpeciesCount": 987,
       "byCategory": {
         "EN": 752,
         "NT": 528,
@@ -641,7 +713,9 @@
         "EX": 24,
         "DD": 1489,
         "EW": 2
-      }
+      },
+      "colDescribed": 12383,
+      "colNe": 2244
     },
     {
       "id": "turtles-tortoises",
@@ -661,7 +735,9 @@
         "LR/lc": 6,
         "DD": 13,
         "LR/cd": 1
-      }
+      },
+      "colDescribed": 366,
+      "colNe": 104
     },
     {
       "id": "crocodilians",
@@ -675,7 +751,9 @@
         "VU": 3,
         "LC": 12,
         "EN": 1
-      }
+      },
+      "colDescribed": 27,
+      "colNe": 4
     },
     {
       "id": "tuataras",
@@ -686,17 +764,19 @@
       "gbifNeSpeciesCount": 0,
       "byCategory": {
         "LC": 1
-      }
+      },
+      "colDescribed": 0,
+      "colNe": 0
     }
   ],
-  "amphibia": [
+  "amphibians": [
     {
       "id": "frogs-toads",
       "name": "Frogs & Toads",
       "estimatedDescribed": 7948,
       "totalAssessed": 7085,
       "outdated": 797,
-      "gbifNeSpeciesCount": 205,
+      "gbifNeSpeciesCount": 203,
       "byCategory": {
         "LC": 3429,
         "EN": 1092,
@@ -706,7 +786,9 @@
         "NT": 380,
         "EX": 34,
         "EW": 2
-      }
+      },
+      "colDescribed": 7862,
+      "colNe": 876
     },
     {
       "id": "salamanders-newts",
@@ -723,7 +805,9 @@
         "LC": 216,
         "EX": 3,
         "DD": 45
-      }
+      },
+      "colDescribed": 827,
+      "colNe": 81
     },
     {
       "id": "caecilians",
@@ -739,7 +823,9 @@
         "VU": 4,
         "NT": 4,
         "CR": 7
-      }
+      },
+      "colDescribed": 227,
+      "colNe": 20
     }
   ],
   "fishes": [
@@ -761,7 +847,9 @@
         "DD": 5236,
         "LR/lc": 1,
         "LR/nt": 2
-      }
+      },
+      "colDescribed": 35308,
+      "colNe": 7926
     },
     {
       "id": "lobe-finned-fishes",
@@ -775,7 +863,9 @@
         "VU": 1,
         "LC": 5,
         "EN": 1
-      }
+      },
+      "colDescribed": 8,
+      "colNe": 0
     },
     {
       "id": "sharks-rays",
@@ -792,7 +882,9 @@
         "NT": 134,
         "DD": 151,
         "EX": 1
-      }
+      },
+      "colDescribed": 1343,
+      "colNe": 66
     },
     {
       "id": "jawless-fish",
@@ -808,7 +900,9 @@
         "EN": 8,
         "DD": 35,
         "CR": 5
-      }
+      },
+      "colDescribed": 140,
+      "colNe": 16
     }
   ],
   "insecta": [
@@ -818,7 +912,7 @@
       "estimatedDescribed": 392000,
       "totalAssessed": 2521,
       "outdated": 951,
-      "gbifNeSpeciesCount": 62848,
+      "gbifNeSpeciesCount": 63059,
       "byCategory": {
         "VU": 151,
         "EN": 248,
@@ -828,7 +922,9 @@
         "EX": 16,
         "NT": 215,
         "DD": 803
-      }
+      },
+      "colDescribed": 263966,
+      "colNe": 261849
     },
     {
       "id": "butterflies-moths",
@@ -836,7 +932,7 @@
       "estimatedDescribed": 160000,
       "totalAssessed": 1689,
       "outdated": 651,
-      "gbifNeSpeciesCount": 73759,
+      "gbifNeSpeciesCount": 73834,
       "byCategory": {
         "EN": 121,
         "CR": 63,
@@ -847,7 +943,9 @@
         "NT": 77,
         "DD": 109,
         "LR/lc": 15
-      }
+      },
+      "colDescribed": 167413,
+      "colNe": 165994
     },
     {
       "id": "flies-mosquitoes",
@@ -855,7 +953,7 @@
       "estimatedDescribed": 155000,
       "totalAssessed": 431,
       "outdated": 7,
-      "gbifNeSpeciesCount": 31501,
+      "gbifNeSpeciesCount": 31803,
       "byCategory": {
         "VU": 37,
         "EX": 4,
@@ -864,7 +962,9 @@
         "NT": 37,
         "DD": 75,
         "CR": 23
-      }
+      },
+      "colDescribed": 169204,
+      "colNe": 168787
     },
     {
       "id": "bees-wasps-ants",
@@ -872,7 +972,7 @@
       "estimatedDescribed": 153000,
       "totalAssessed": 935,
       "outdated": 236,
-      "gbifNeSpeciesCount": 32081,
+      "gbifNeSpeciesCount": 32193,
       "byCategory": {
         "VU": 193,
         "CR": 19,
@@ -882,7 +982,9 @@
         "DD": 178,
         "NT": 90,
         "EN": 49
-      }
+      },
+      "colDescribed": 131822,
+      "colNe": 130974
     },
     {
       "id": "true-bugs",
@@ -890,7 +992,7 @@
       "estimatedDescribed": 82000,
       "totalAssessed": 83,
       "outdated": 9,
-      "gbifNeSpeciesCount": 22085,
+      "gbifNeSpeciesCount": 22182,
       "byCategory": {
         "EX": 2,
         "LR/nt": 3,
@@ -900,7 +1002,9 @@
         "LC": 20,
         "NT": 5,
         "DD": 8
-      }
+      },
+      "colDescribed": 101059,
+      "colNe": 100984
     },
     {
       "id": "grasshoppers-crickets",
@@ -908,7 +1012,7 @@
       "estimatedDescribed": 26000,
       "totalAssessed": 1501,
       "outdated": 836,
-      "gbifNeSpeciesCount": 7517,
+      "gbifNeSpeciesCount": 7553,
       "byCategory": {
         "VU": 215,
         "EN": 195,
@@ -919,7 +1023,9 @@
         "LC": 600,
         "LR/cd": 3,
         "NT": 166
-      }
+      },
+      "colDescribed": 29533,
+      "colNe": 28047
     },
     {
       "id": "dragonflies-damselflies",
@@ -936,7 +1042,9 @@
         "VU": 304,
         "NT": 236,
         "EX": 1
-      }
+      },
+      "colDescribed": 6450,
+      "colNe": 343
     },
     {
       "id": "other-insects",
@@ -944,7 +1052,7 @@
       "estimatedDescribed": 29069,
       "totalAssessed": 307,
       "outdated": 68,
-      "gbifNeSpeciesCount": 14533,
+      "gbifNeSpeciesCount": 14599,
       "byCategory": {
         "EX": 12,
         "LC": 109,
@@ -953,25 +1061,36 @@
         "EN": 50,
         "DD": 50,
         "NT": 26
-      }
+      },
+      "colDescribed": 64342,
+      "colNe": 64052
     }
   ],
   "other_invertebrates": [
     {
-      "id": "echinoderms",
-      "name": "Echinoderms",
-      "estimatedDescribed": 7000,
-      "totalAssessed": 374,
-      "outdated": 372,
-      "gbifNeSpeciesCount": 2307,
+      "id": "flatworms",
+      "name": "Flatworms",
+      "estimatedDescribed": 29000,
+      "totalAssessed": 2,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 315,
       "byCategory": {
-        "LR/nt": 1,
-        "DD": 244,
-        "VU": 9,
-        "LC": 111,
-        "EN": 7,
-        "CR": 2
-      }
+        "NT": 1,
+        "DD": 1
+      },
+      "colDescribed": 20857,
+      "colNe": 20857
+    },
+    {
+      "id": "roundworms",
+      "name": "Roundworms",
+      "estimatedDescribed": 25000,
+      "totalAssessed": 0,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 0,
+      "byCategory": {},
+      "colDescribed": 20904,
+      "colNe": 20904
     },
     {
       "id": "annelids",
@@ -979,7 +1098,7 @@
       "estimatedDescribed": 22000,
       "totalAssessed": 359,
       "outdated": 10,
-      "gbifNeSpeciesCount": 6918,
+      "gbifNeSpeciesCount": 6919,
       "byCategory": {
         "VU": 12,
         "EN": 16,
@@ -989,24 +1108,120 @@
         "CR": 8,
         "EX": 2,
         "LC": 108
-      }
+      },
+      "colDescribed": 17972,
+      "colNe": 17869
+    },
+    {
+      "id": "myriapods",
+      "name": "Myriapods (Centipedes & Millipedes)",
+      "estimatedDescribed": 12000,
+      "totalAssessed": 276,
+      "outdated": 177,
+      "gbifNeSpeciesCount": 2288,
+      "byCategory": {
+        "VU": 19,
+        "NT": 66,
+        "EN": 40,
+        "DD": 49,
+        "LC": 58,
+        "CR": 41,
+        "EX": 3
+      },
+      "colDescribed": 17462,
+      "colNe": 17189
+    },
+    {
+      "id": "sponges",
+      "name": "Sponges",
+      "estimatedDescribed": 9000,
+      "totalAssessed": 44,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 3521,
+      "byCategory": {
+        "LC": 6,
+        "DD": 35,
+        "NT": 2,
+        "VU": 1
+      },
+      "colDescribed": 9885,
+      "colNe": 9841
+    },
+    {
+      "id": "cnidarians",
+      "name": "Cnidarians (non-coral)",
+      "estimatedDescribed": 8000,
+      "totalAssessed": 37,
+      "outdated": 20,
+      "gbifNeSpeciesCount": 1863,
+      "byCategory": {
+        "CR": 5,
+        "VU": 3,
+        "LC": 3,
+        "DD": 18,
+        "EN": 8
+      },
+      "colDescribed": 8931,
+      "colNe": 8894
+    },
+    {
+      "id": "echinoderms",
+      "name": "Echinoderms",
+      "estimatedDescribed": 7000,
+      "totalAssessed": 374,
+      "outdated": 372,
+      "gbifNeSpeciesCount": 2309,
+      "byCategory": {
+        "LR/nt": 1,
+        "DD": 244,
+        "VU": 9,
+        "LC": 111,
+        "EN": 7,
+        "CR": 2
+      },
+      "colDescribed": 7646,
+      "colNe": 7301
+    },
+    {
+      "id": "bryozoans",
+      "name": "Bryozoans (Moss Animals)",
+      "estimatedDescribed": 6000,
+      "totalAssessed": 0,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 0,
+      "byCategory": {},
+      "colDescribed": 5479,
+      "colNe": 5479
+    },
+    {
+      "id": "tunicates",
+      "name": "Tunicates & Lancelets",
+      "estimatedDescribed": 3000,
+      "totalAssessed": 0,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 0,
+      "byCategory": {},
+      "colDescribed": 3144,
+      "colNe": 3144
     },
     {
       "id": "other-invertebrates-catch-all",
-      "name": "Other Invertebrates",
-      "estimatedDescribed": 201485,
-      "totalAssessed": 406,
-      "outdated": 203,
-      "gbifNeSpeciesCount": 9908,
+      "name": "Others",
+      "estimatedDescribed": 109485,
+      "totalAssessed": 47,
+      "outdated": 6,
+      "gbifNeSpeciesCount": 1972,
       "byCategory": {
-        "CR": 50,
-        "VU": 26,
-        "LC": 76,
-        "DD": 118,
-        "EN": 53,
-        "EX": 4,
-        "NT": 79
-      }
+        "EN": 5,
+        "LC": 9,
+        "DD": 15,
+        "EX": 1,
+        "VU": 3,
+        "CR": 4,
+        "NT": 10
+      },
+      "colDescribed": 27496,
+      "colNe": 27449
     }
   ],
   "mushrooms": [
@@ -1016,7 +1231,7 @@
       "estimatedDescribed": 98000,
       "totalAssessed": 179,
       "outdated": 8,
-      "gbifNeSpeciesCount": 20977,
+      "gbifNeSpeciesCount": 21108,
       "byCategory": {
         "EN": 34,
         "CR": 25,
@@ -1024,7 +1239,9 @@
         "NT": 10,
         "LC": 54,
         "DD": 25
-      }
+      },
+      "colDescribed": 47977,
+      "colNe": 47839
     },
     {
       "id": "other-fungi",
@@ -1032,7 +1249,7 @@
       "estimatedDescribed": 59648,
       "totalAssessed": 1123,
       "outdated": 37,
-      "gbifNeSpeciesCount": 31446,
+      "gbifNeSpeciesCount": 31600,
       "byCategory": {
         "LC": 437,
         "NT": 100,
@@ -1040,7 +1257,9 @@
         "EN": 95,
         "DD": 265,
         "CR": 23
-      }
+      },
+      "colDescribed": 108566,
+      "colNe": 107526
     }
   ],
   "invertebrates": [
@@ -1050,28 +1269,30 @@
       "estimatedDescribed": 1003469,
       "totalAssessed": 13696,
       "outdated": 5186,
-      "gbifNeSpeciesCount": 244447,
+      "gbifNeSpeciesCount": 245346,
       "byCategory": {
-        "EN": 1132,
-        "EX": 58,
         "VU": 1028,
-        "DD": 3255,
+        "EN": 1132,
+        "LR/nt": 45,
         "CR": 520,
         "LC": 6786,
-        "LR/nt": 45,
+        "EX": 58,
         "NT": 852,
+        "DD": 3255,
         "LR/lc": 16,
         "EW": 1,
         "LR/cd": 3
-      }
+      },
+      "colDescribed": 933789,
+      "colNe": 921030
     },
     {
-      "id": "inv-arachnida",
+      "id": "inv-arachnids",
       "name": "Arachnids",
       "estimatedDescribed": 97085,
       "totalAssessed": 1053,
       "outdated": 209,
-      "gbifNeSpeciesCount": 21744,
+      "gbifNeSpeciesCount": 21842,
       "byCategory": {
         "EN": 165,
         "VU": 104,
@@ -1080,15 +1301,17 @@
         "LC": 488,
         "CR": 121,
         "EX": 9
-      }
+      },
+      "colDescribed": 98713,
+      "colNe": 97683
     },
     {
-      "id": "inv-mollusca",
+      "id": "inv-molluscs",
       "name": "Molluscs",
       "estimatedDescribed": 88244,
       "totalAssessed": 9502,
       "outdated": 5977,
-      "gbifNeSpeciesCount": 25228,
+      "gbifNeSpeciesCount": 25243,
       "byCategory": {
         "CR": 785,
         "EN": 708,
@@ -1100,15 +1323,17 @@
         "LR/nt": 117,
         "LR/lc": 16,
         "EW": 12
-      }
+      },
+      "colDescribed": 88226,
+      "colNe": 79407
     },
     {
-      "id": "inv-crustacea",
+      "id": "inv-crustaceans",
       "name": "Crustaceans",
       "estimatedDescribed": 83263,
       "totalAssessed": 3361,
       "outdated": 3062,
-      "gbifNeSpeciesCount": 18001,
+      "gbifNeSpeciesCount": 18019,
       "byCategory": {
         "VU": 420,
         "CR": 165,
@@ -1121,7 +1346,9 @@
         "NT": 80,
         "LR/nt": 1,
         "EW": 1
-      }
+      },
+      "colDescribed": 68654,
+      "colNe": 65438
     },
     {
       "id": "inv-corals",
@@ -1137,25 +1364,9 @@
         "LC": 428,
         "EN": 245,
         "NT": 24
-      }
-    },
-    {
-      "id": "inv-other_invertebrates",
-      "name": "Other Invertebrates",
-      "estimatedDescribed": 230485,
-      "totalAssessed": 1139,
-      "outdated": 585,
-      "gbifNeSpeciesCount": 19133,
-      "byCategory": {
-        "CR": 60,
-        "VU": 47,
-        "LC": 295,
-        "DD": 555,
-        "EN": 76,
-        "LR/nt": 2,
-        "EX": 6,
-        "NT": 98
-      }
+      },
+      "colDescribed": 5676,
+      "colNe": 4764
     },
     {
       "id": "inv-velvet_worms",
@@ -1163,14 +1374,16 @@
       "estimatedDescribed": 220,
       "totalAssessed": 11,
       "outdated": 11,
-      "gbifNeSpeciesCount": 70,
+      "gbifNeSpeciesCount": 69,
       "byCategory": {
         "EN": 2,
         "DD": 1,
         "CR": 3,
         "VU": 4,
         "LR/nt": 1
-      }
+      },
+      "colDescribed": 235,
+      "colNe": 224
     },
     {
       "id": "inv-horseshoe_crabs",
@@ -1183,7 +1396,29 @@
         "DD": 2,
         "VU": 1,
         "EN": 1
-      }
+      },
+      "colDescribed": 4,
+      "colNe": 0
+    },
+    {
+      "id": "inv-other_invertebrates",
+      "name": "Other Invertebrates",
+      "estimatedDescribed": 230485,
+      "totalAssessed": 1139,
+      "outdated": 585,
+      "gbifNeSpeciesCount": 19187,
+      "byCategory": {
+        "CR": 60,
+        "VU": 47,
+        "LC": 295,
+        "DD": 555,
+        "EN": 76,
+        "LR/nt": 2,
+        "EX": 6,
+        "NT": 98
+      },
+      "colDescribed": 139776,
+      "colNe": 138927
     }
   ],
   "inv-insecta": [
@@ -1193,7 +1428,7 @@
       "estimatedDescribed": 392000,
       "totalAssessed": 2521,
       "outdated": 951,
-      "gbifNeSpeciesCount": 62848,
+      "gbifNeSpeciesCount": 63059,
       "byCategory": {
         "VU": 151,
         "EN": 248,
@@ -1203,7 +1438,9 @@
         "EX": 16,
         "NT": 215,
         "DD": 803
-      }
+      },
+      "colDescribed": 263966,
+      "colNe": 261849
     },
     {
       "id": "inv-butterflies-moths",
@@ -1211,7 +1448,7 @@
       "estimatedDescribed": 160000,
       "totalAssessed": 1689,
       "outdated": 651,
-      "gbifNeSpeciesCount": 73759,
+      "gbifNeSpeciesCount": 73834,
       "byCategory": {
         "EN": 121,
         "CR": 63,
@@ -1222,7 +1459,9 @@
         "NT": 77,
         "DD": 109,
         "LR/lc": 15
-      }
+      },
+      "colDescribed": 167413,
+      "colNe": 165994
     },
     {
       "id": "inv-flies-mosquitoes",
@@ -1230,7 +1469,7 @@
       "estimatedDescribed": 155000,
       "totalAssessed": 431,
       "outdated": 7,
-      "gbifNeSpeciesCount": 31501,
+      "gbifNeSpeciesCount": 31803,
       "byCategory": {
         "VU": 37,
         "EX": 4,
@@ -1239,7 +1478,9 @@
         "NT": 37,
         "DD": 75,
         "CR": 23
-      }
+      },
+      "colDescribed": 169204,
+      "colNe": 168787
     },
     {
       "id": "inv-bees-wasps-ants",
@@ -1247,7 +1488,7 @@
       "estimatedDescribed": 153000,
       "totalAssessed": 935,
       "outdated": 236,
-      "gbifNeSpeciesCount": 32081,
+      "gbifNeSpeciesCount": 32193,
       "byCategory": {
         "VU": 193,
         "CR": 19,
@@ -1257,7 +1498,9 @@
         "DD": 178,
         "NT": 90,
         "EN": 49
-      }
+      },
+      "colDescribed": 131822,
+      "colNe": 130974
     },
     {
       "id": "inv-true-bugs",
@@ -1265,7 +1508,7 @@
       "estimatedDescribed": 82000,
       "totalAssessed": 83,
       "outdated": 9,
-      "gbifNeSpeciesCount": 22085,
+      "gbifNeSpeciesCount": 22182,
       "byCategory": {
         "EX": 2,
         "LR/nt": 3,
@@ -1275,7 +1518,9 @@
         "LC": 20,
         "NT": 5,
         "DD": 8
-      }
+      },
+      "colDescribed": 101059,
+      "colNe": 100984
     },
     {
       "id": "inv-grasshoppers-crickets",
@@ -1283,7 +1528,7 @@
       "estimatedDescribed": 26000,
       "totalAssessed": 1501,
       "outdated": 836,
-      "gbifNeSpeciesCount": 7517,
+      "gbifNeSpeciesCount": 7553,
       "byCategory": {
         "VU": 215,
         "EN": 195,
@@ -1294,7 +1539,9 @@
         "LC": 600,
         "LR/cd": 3,
         "NT": 166
-      }
+      },
+      "colDescribed": 29533,
+      "colNe": 28047
     },
     {
       "id": "inv-dragonflies-damselflies",
@@ -1311,7 +1558,9 @@
         "VU": 304,
         "NT": 236,
         "EX": 1
-      }
+      },
+      "colDescribed": 6450,
+      "colNe": 343
     },
     {
       "id": "inv-other-insects",
@@ -1319,7 +1568,7 @@
       "estimatedDescribed": 29069,
       "totalAssessed": 307,
       "outdated": 68,
-      "gbifNeSpeciesCount": 14533,
+      "gbifNeSpeciesCount": 14599,
       "byCategory": {
         "EX": 12,
         "LC": 109,
@@ -1328,25 +1577,36 @@
         "EN": 50,
         "DD": 50,
         "NT": 26
-      }
+      },
+      "colDescribed": 64342,
+      "colNe": 64052
     }
   ],
   "inv-other_invertebrates": [
     {
-      "id": "inv-echinoderms",
-      "name": "Echinoderms",
-      "estimatedDescribed": 7000,
-      "totalAssessed": 374,
-      "outdated": 372,
-      "gbifNeSpeciesCount": 2307,
+      "id": "inv-flatworms",
+      "name": "Flatworms",
+      "estimatedDescribed": 29000,
+      "totalAssessed": 2,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 315,
       "byCategory": {
-        "LR/nt": 1,
-        "DD": 244,
-        "VU": 9,
-        "LC": 111,
-        "EN": 7,
-        "CR": 2
-      }
+        "NT": 1,
+        "DD": 1
+      },
+      "colDescribed": 20857,
+      "colNe": 20857
+    },
+    {
+      "id": "inv-roundworms",
+      "name": "Roundworms",
+      "estimatedDescribed": 25000,
+      "totalAssessed": 0,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 0,
+      "byCategory": {},
+      "colDescribed": 20904,
+      "colNe": 20904
     },
     {
       "id": "inv-annelids",
@@ -1354,7 +1614,7 @@
       "estimatedDescribed": 22000,
       "totalAssessed": 359,
       "outdated": 10,
-      "gbifNeSpeciesCount": 6918,
+      "gbifNeSpeciesCount": 6919,
       "byCategory": {
         "VU": 12,
         "EN": 16,
@@ -1364,24 +1624,120 @@
         "CR": 8,
         "EX": 2,
         "LC": 108
-      }
+      },
+      "colDescribed": 17972,
+      "colNe": 17869
+    },
+    {
+      "id": "inv-myriapods",
+      "name": "Myriapods (Centipedes & Millipedes)",
+      "estimatedDescribed": 12000,
+      "totalAssessed": 276,
+      "outdated": 177,
+      "gbifNeSpeciesCount": 2288,
+      "byCategory": {
+        "VU": 19,
+        "NT": 66,
+        "EN": 40,
+        "DD": 49,
+        "LC": 58,
+        "CR": 41,
+        "EX": 3
+      },
+      "colDescribed": 17462,
+      "colNe": 17189
+    },
+    {
+      "id": "inv-sponges",
+      "name": "Sponges",
+      "estimatedDescribed": 9000,
+      "totalAssessed": 44,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 3521,
+      "byCategory": {
+        "LC": 6,
+        "DD": 35,
+        "NT": 2,
+        "VU": 1
+      },
+      "colDescribed": 9885,
+      "colNe": 9841
+    },
+    {
+      "id": "inv-cnidarians",
+      "name": "Cnidarians (non-coral)",
+      "estimatedDescribed": 8000,
+      "totalAssessed": 37,
+      "outdated": 20,
+      "gbifNeSpeciesCount": 1863,
+      "byCategory": {
+        "CR": 5,
+        "VU": 3,
+        "LC": 3,
+        "DD": 18,
+        "EN": 8
+      },
+      "colDescribed": 8931,
+      "colNe": 8894
+    },
+    {
+      "id": "inv-echinoderms",
+      "name": "Echinoderms",
+      "estimatedDescribed": 7000,
+      "totalAssessed": 374,
+      "outdated": 372,
+      "gbifNeSpeciesCount": 2309,
+      "byCategory": {
+        "LR/nt": 1,
+        "DD": 244,
+        "VU": 9,
+        "LC": 111,
+        "EN": 7,
+        "CR": 2
+      },
+      "colDescribed": 7646,
+      "colNe": 7301
+    },
+    {
+      "id": "inv-bryozoans",
+      "name": "Bryozoans (Moss Animals)",
+      "estimatedDescribed": 6000,
+      "totalAssessed": 0,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 0,
+      "byCategory": {},
+      "colDescribed": 5479,
+      "colNe": 5479
+    },
+    {
+      "id": "inv-tunicates",
+      "name": "Tunicates & Lancelets",
+      "estimatedDescribed": 3000,
+      "totalAssessed": 0,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 0,
+      "byCategory": {},
+      "colDescribed": 3144,
+      "colNe": 3144
     },
     {
       "id": "inv-other-invertebrates-catch-all",
-      "name": "Other Invertebrates",
-      "estimatedDescribed": 201485,
-      "totalAssessed": 406,
-      "outdated": 203,
-      "gbifNeSpeciesCount": 9908,
+      "name": "Others",
+      "estimatedDescribed": 109485,
+      "totalAssessed": 47,
+      "outdated": 6,
+      "gbifNeSpeciesCount": 1972,
       "byCategory": {
-        "CR": 50,
-        "VU": 26,
-        "LC": 76,
-        "DD": 118,
-        "EN": 53,
-        "EX": 4,
-        "NT": 79
-      }
+        "EN": 5,
+        "LC": 9,
+        "DD": 15,
+        "EX": 1,
+        "VU": 3,
+        "CR": 4,
+        "NT": 10
+      },
+      "colDescribed": 27496,
+      "colNe": 27449
     }
   ],
   "plantae": [
@@ -1391,7 +1747,7 @@
       "estimatedDescribed": 369000,
       "totalAssessed": 74545,
       "outdated": 17488,
-      "gbifNeSpeciesCount": 138385,
+      "gbifNeSpeciesCount": 138584,
       "byCategory": {
         "LR/cd": 108,
         "VU": 10255,
@@ -1404,7 +1760,9 @@
         "EW": 40,
         "EX": 134,
         "LR/lc": 125
-      }
+      },
+      "colDescribed": 354863,
+      "colNe": 281496
     },
     {
       "id": "pl-gymnosperms",
@@ -1421,7 +1779,9 @@
         "NT": 142,
         "DD": 18,
         "EW": 5
-      }
+      },
+      "colDescribed": 1216,
+      "colNe": 148
     },
     {
       "id": "pl-ferns_and_allies",
@@ -1429,7 +1789,7 @@
       "estimatedDescribed": 11800,
       "totalAssessed": 834,
       "outdated": 447,
-      "gbifNeSpeciesCount": 6293,
+      "gbifNeSpeciesCount": 6303,
       "byCategory": {
         "DD": 110,
         "NT": 53,
@@ -1439,7 +1799,9 @@
         "LC": 341,
         "EX": 2,
         "EW": 1
-      }
+      },
+      "colDescribed": 13961,
+      "colNe": 13107
     },
     {
       "id": "pl-mosses",
@@ -1447,7 +1809,7 @@
       "estimatedDescribed": 21925,
       "totalAssessed": 327,
       "outdated": 86,
-      "gbifNeSpeciesCount": 7384,
+      "gbifNeSpeciesCount": 7387,
       "byCategory": {
         "CR": 48,
         "NT": 35,
@@ -1457,7 +1819,9 @@
         "LC": 67,
         "LR/lc": 3,
         "DD": 37
-      }
+      },
+      "colDescribed": 19189,
+      "colNe": 18867
     },
     {
       "id": "pl-green_algae",
@@ -1465,12 +1829,14 @@
       "estimatedDescribed": 14550,
       "totalAssessed": 18,
       "outdated": 13,
-      "gbifNeSpeciesCount": 2775,
+      "gbifNeSpeciesCount": 2782,
       "byCategory": {
         "DD": 6,
         "LC": 11,
         "NT": 1
-      }
+      },
+      "colDescribed": 2322,
+      "colNe": 2317
     },
     {
       "id": "pl-red_algae",
@@ -1485,7 +1851,9 @@
         "LC": 8,
         "VU": 3,
         "CR": 6
-      }
+      },
+      "colDescribed": 1500,
+      "colNe": 1493
     }
   ],
   "fungi": [
@@ -1495,7 +1863,7 @@
       "estimatedDescribed": 157648,
       "totalAssessed": 1302,
       "outdated": 45,
-      "gbifNeSpeciesCount": 52423,
+      "gbifNeSpeciesCount": 52708,
       "byCategory": {
         "EN": 129,
         "CR": 48,
@@ -1503,7 +1871,9 @@
         "NT": 110,
         "LC": 491,
         "DD": 290
-      }
+      },
+      "colDescribed": 156543,
+      "colNe": 155365
     },
     {
       "id": "fu-brown_algae",
@@ -1511,13 +1881,15 @@
       "estimatedDescribed": 5005,
       "totalAssessed": 18,
       "outdated": 15,
-      "gbifNeSpeciesCount": 6375,
+      "gbifNeSpeciesCount": 6378,
       "byCategory": {
         "CR": 4,
         "DD": 12,
         "EN": 1,
         "VU": 1
-      }
+      },
+      "colDescribed": 377,
+      "colNe": 377
     }
   ],
   "fu-mushrooms": [
@@ -1527,7 +1899,7 @@
       "estimatedDescribed": 98000,
       "totalAssessed": 179,
       "outdated": 8,
-      "gbifNeSpeciesCount": 20977,
+      "gbifNeSpeciesCount": 21108,
       "byCategory": {
         "EN": 34,
         "CR": 25,
@@ -1535,7 +1907,9 @@
         "NT": 10,
         "LC": 54,
         "DD": 25
-      }
+      },
+      "colDescribed": 47977,
+      "colNe": 47839
     },
     {
       "id": "fu-other-fungi",
@@ -1543,7 +1917,7 @@
       "estimatedDescribed": 59648,
       "totalAssessed": 1123,
       "outdated": 37,
-      "gbifNeSpeciesCount": 31446,
+      "gbifNeSpeciesCount": 31600,
       "byCategory": {
         "LC": 437,
         "NT": 100,
@@ -1551,7 +1925,9 @@
         "EN": 95,
         "DD": 265,
         "CR": 23
-      }
+      },
+      "colDescribed": 108566,
+      "colNe": 107526
     }
   ]
 }

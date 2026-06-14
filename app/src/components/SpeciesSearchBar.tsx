@@ -16,6 +16,7 @@ interface SearchResult {
   assessment_id: number | null;
   assessment_date: string | null;
   countries: string[];
+  matched_synonym?: string | null;
 }
 
 /**
@@ -109,6 +110,7 @@ export function SpeciesSearchBar() {
         categories: new Set(),
         yearRanges: new Set(),
         assessmentYears: new Set(),
+        describedYears: new Set(),
         countries: new Set(),
         obsRanges: new Set(),
         systems: new Set(),
@@ -236,6 +238,11 @@ export function SpeciesSearchBar() {
                   {result.common_name && (
                     <span className="text-zinc-500 dark:text-zinc-400 ml-1">
                       ({result.common_name})
+                    </span>
+                  )}
+                  {result.matched_synonym && (
+                    <span className="text-xs text-zinc-400 dark:text-zinc-500 ml-1">
+                      syn. <span className="italic">{result.matched_synonym}</span>
                     </span>
                   )}
                   <span className="text-xs text-zinc-400 dark:text-zinc-500 ml-2">

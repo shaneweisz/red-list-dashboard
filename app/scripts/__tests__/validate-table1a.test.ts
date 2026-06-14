@@ -10,17 +10,27 @@ import * as path from "path";
 
 const DATA_DIR = path.join(__dirname, "../../data");
 
+// Assessed-species counts per CSV group. The IUCN Table 1a "Insects" row
+// (13,696) is split across the 8 order-based groups; they sum back to 13,696.
 const TABLE_1A_2025_2: Record<string, number> = {
-  mammalia: 6036,
-  aves: 11185,
-  reptilia: 10368,
-  amphibia: 8051,
+  mammals: 6036,
+  birds: 11185,
+  reptiles: 10368,
+  amphibians: 8051,
   fishes: 29114,
-  insecta: 13696,
-  mollusca: 9502,
-  crustacea: 3361,
+  // Insects (Table 1a row = 13,696), split by order:
+  beetles: 2521,
+  butterflies_and_moths: 1689,
+  flies_and_mosquitoes: 431,
+  bees_wasps_and_ants: 935,
+  true_bugs: 83,
+  grasshoppers_crickets_locusts: 1501,
+  dragonflies_and_damselflies: 6229,
+  other_insects: 307,
+  molluscs: 9502,
+  crustaceans: 3361,
   corals: 916,
-  arachnida: 1053,
+  arachnids: 1053,
   velvet_worms: 11,
   horseshoe_crabs: 4,
   other_invertebrates: 1139,

@@ -103,7 +103,7 @@ describe("Taxonomy tree integrity", () => {
 // =============================================================================
 
 describe("Default view roots", () => {
-  const defaultRoots = ["mammalia", "aves", "reptilia", "amphibia", "fishes", "invertebrates", "plantae", "fungi"];
+  const defaultRoots = ["mammals", "birds", "reptiles", "amphibians", "fishes", "invertebrates", "plantae", "fungi"];
 
   it("all default view roots exist in the tree", () => {
     for (const id of defaultRoots) {
@@ -125,15 +125,15 @@ describe("Default view roots", () => {
 
 describe("Table 1a groups", () => {
   const table1aGroups = [
-    "mammalia", "aves", "reptilia", "amphibia", "fishes",
-    "insecta", "arachnida", "mollusca", "crustacea", "corals",
+    "mammals", "birds", "reptiles", "amphibians", "fishes",
+    "insecta", "arachnids", "molluscs", "crustaceans", "corals",
     "other_invertebrates", "velvet_worms", "horseshoe_crabs",
     "flowering_plants", "gymnosperms", "ferns_and_allies", "mosses",
     "green_algae", "red_algae",
     "mushrooms", "brown_algae",
   ];
 
-  it("all 21 Table 1a groups exist as nodes", () => {
+  it("all 21 Table 1a group nodes exist (Insects is one node aggregating 8 order groups)", () => {
     for (const id of table1aGroups) {
       expect(findNode(id), `${id} not found`).toBeDefined();
     }
@@ -145,7 +145,7 @@ describe("Table 1a groups", () => {
 // =============================================================================
 
 describe("New mammal subgroups", () => {
-  const mammalNode = findNode("mammalia");
+  const mammalNode = findNode("mammals");
 
   it("mammalia has children", () => {
     expect(mammalNode?.children?.length).toBeGreaterThan(0);
@@ -153,7 +153,7 @@ describe("New mammal subgroups", () => {
 
   it("all mammal subgroups use mammalia csvGroup", () => {
     for (const child of mammalNode?.children ?? []) {
-      expect(child.filter.csvGroups).toEqual(["mammalia"]);
+      expect(child.filter.csvGroups).toEqual(["mammals"]);
     }
   });
 
@@ -179,7 +179,7 @@ describe("New mammal subgroups", () => {
 
 describe("Aves is a leaf (no drill-down)", () => {
   it("aves has no children", () => {
-    const avesNode = findNode("aves");
+    const avesNode = findNode("birds");
     expect(avesNode).toBeDefined();
     expect(avesNode?.children).toBeUndefined();
   });
@@ -191,7 +191,7 @@ describe("Aves is a leaf (no drill-down)", () => {
 
 describe("Existing subgroups preserved", () => {
   it("reptilia has squamates, turtles-tortoises, crocodilians, tuataras", () => {
-    const node = findNode("reptilia")!;
+    const node = findNode("reptiles")!;
     const ids = node.children!.map(c => c.id);
     expect(ids).toContain("squamates");
     expect(ids).toContain("turtles-tortoises");
@@ -200,7 +200,7 @@ describe("Existing subgroups preserved", () => {
   });
 
   it("amphibia has frogs-toads, salamanders-newts, caecilians", () => {
-    const node = findNode("amphibia")!;
+    const node = findNode("amphibians")!;
     const ids = node.children!.map(c => c.id);
     expect(ids).toContain("frogs-toads");
     expect(ids).toContain("salamanders-newts");
@@ -260,16 +260,16 @@ describe("getNodeDef", () => {
 
 describe("hasChildren", () => {
   it("returns true for expandable nodes", () => {
-    expect(hasChildren("mammalia")).toBe(true);
-    expect(hasChildren("reptilia")).toBe(true);
+    expect(hasChildren("mammals")).toBe(true);
+    expect(hasChildren("reptiles")).toBe(true);
     expect(hasChildren("insecta")).toBe(true);
     expect(hasChildren("invertebrates")).toBe(true);
     expect(hasChildren("plantae")).toBe(true);
   });
 
   it("returns false for leaf nodes", () => {
-    expect(hasChildren("aves")).toBe(false);
-    expect(hasChildren("arachnida")).toBe(false);
+    expect(hasChildren("birds")).toBe(false);
+    expect(hasChildren("arachnids")).toBe(false);
     expect(hasChildren("velvet_worms")).toBe(false);
     expect(hasChildren("horseshoe_crabs")).toBe(false);
   });
@@ -297,20 +297,27 @@ describe("getNodePath", () => {
 });
 
 describe("getCsvGroupsForNode", () => {
-  it("returns single group for Table 1a node", () => {
-    expect(getCsvGroupsForNode("mammalia")).toEqual(["mammalia"]);
-    expect(getCsvGroupsForNode("insecta")).toEqual(["insecta"]);
+  it("returns single group for Table 1a leaf node", () => {
+    expect(getCsvGroupsForNode("mammals")).toEqual(["mammals"]);
+    expect(getCsvGroupsForNode("beetles")).toEqual(["beetles"]);
+  });
+
+  it("returns the 8 order groups for the insecta parent node", () => {
+    const groups = getCsvGroupsForNode("insecta");
+    expect(groups).toContain("beetles");
+    expect(groups).toContain("other_insects");
+    expect(groups.length).toBe(8);
   });
 
   it("returns multiple groups for virtual node", () => {
     const groups = getCsvGroupsForNode("invertebrates");
-    expect(groups).toContain("insecta");
-    expect(groups).toContain("mollusca");
-    expect(groups).toContain("crustacea");
+    expect(groups).toContain("beetles");
+    expect(groups).toContain("molluscs");
+    expect(groups).toContain("crustaceans");
   });
 
-  it("returns all 21 groups for 'all'", () => {
-    expect(getCsvGroupsForNode("all").length).toBe(21);
+  it("returns all 28 groups for 'all'", () => {
+    expect(getCsvGroupsForNode("all").length).toBe(28);
   });
 });
 
@@ -320,27 +327,27 @@ describe("getCsvGroupsForNode", () => {
 
 describe("speciesMatchesNode – orderNames filter", () => {
   it("matches reptile in squamata to squamates", () => {
-    const species = { taxon_group: "reptilia", class_name: null, order_name: "Squamata" };
+    const species = { taxon_group: "reptiles", class_name: null, order_name: "Squamata" };
     expect(speciesMatchesNode(species, "squamates")).toBe(true);
   });
 
   it("rejects reptile in testudines from squamates", () => {
-    const species = { taxon_group: "reptilia", class_name: null, order_name: "Testudines" };
+    const species = { taxon_group: "reptiles", class_name: null, order_name: "Testudines" };
     expect(speciesMatchesNode(species, "squamates")).toBe(false);
   });
 
   it("matches reptile in testudines to turtles-tortoises", () => {
-    const species = { taxon_group: "reptilia", class_name: null, order_name: "Testudines" };
+    const species = { taxon_group: "reptiles", class_name: null, order_name: "Testudines" };
     expect(speciesMatchesNode(species, "turtles-tortoises")).toBe(true);
   });
 
   it("matches amphibian anura to frogs-toads", () => {
-    const species = { taxon_group: "amphibia", class_name: null, order_name: "Anura" };
+    const species = { taxon_group: "amphibians", class_name: null, order_name: "Anura" };
     expect(speciesMatchesNode(species, "frogs-toads")).toBe(true);
   });
 
   it("rejects amphibian from reptilia subgroup (wrong group)", () => {
-    const species = { taxon_group: "amphibia", class_name: null, order_name: "Squamata" };
+    const species = { taxon_group: "amphibians", class_name: null, order_name: "Squamata" };
     expect(speciesMatchesNode(species, "squamates")).toBe(false);
   });
 });
@@ -376,15 +383,22 @@ describe("speciesMatchesNode – classNames filter", () => {
 // speciesMatchesNode — excludeOrders filter
 // =============================================================================
 
-describe("speciesMatchesNode – excludeOrders filter", () => {
-  it("matches insect with unlisted order to other-insects", () => {
-    const species = { taxon_group: "insecta", class_name: null, order_name: "Neuroptera" };
+describe("speciesMatchesNode – insect subgroups (csvGroup-based)", () => {
+  // Insects are split into per-order CSV groups, so subgroup matching is by
+  // taxon_group (the CSV group), not an order_name filter.
+  it("matches species in the other_insects group to other-insects", () => {
+    const species = { taxon_group: "other_insects", class_name: null, order_name: "Neuroptera" };
     expect(speciesMatchesNode(species, "other-insects")).toBe(true);
   });
 
-  it("rejects insect with excluded order from other-insects", () => {
-    const species = { taxon_group: "insecta", class_name: null, order_name: "Coleoptera" };
+  it("rejects a beetle from other-insects", () => {
+    const species = { taxon_group: "beetles", class_name: null, order_name: "Coleoptera" };
     expect(speciesMatchesNode(species, "other-insects")).toBe(false);
+  });
+
+  it("matches a beetle to the beetles node", () => {
+    const species = { taxon_group: "beetles", class_name: null, order_name: "Coleoptera" };
+    expect(speciesMatchesNode(species, "beetles")).toBe(true);
   });
 });
 
@@ -394,67 +408,67 @@ describe("speciesMatchesNode – excludeOrders filter", () => {
 
 describe("speciesMatchesNode – mammal subgroups", () => {
   it("matches rodent to rodents", () => {
-    const species = { taxon_group: "mammalia", class_name: "Mammalia", order_name: "Rodentia" };
+    const species = { taxon_group: "mammals", class_name: "Mammalia", order_name: "Rodentia" };
     expect(speciesMatchesNode(species, "rodents")).toBe(true);
   });
 
   it("rejects rodent from bats", () => {
-    const species = { taxon_group: "mammalia", class_name: "Mammalia", order_name: "Rodentia" };
+    const species = { taxon_group: "mammals", class_name: "Mammalia", order_name: "Rodentia" };
     expect(speciesMatchesNode(species, "bats")).toBe(false);
   });
 
   it("matches bat to bats", () => {
-    const species = { taxon_group: "mammalia", class_name: "Mammalia", order_name: "Chiroptera" };
+    const species = { taxon_group: "mammals", class_name: "Mammalia", order_name: "Chiroptera" };
     expect(speciesMatchesNode(species, "bats")).toBe(true);
   });
 
   it("matches primate to primates", () => {
-    const species = { taxon_group: "mammalia", class_name: "Mammalia", order_name: "Primates" };
+    const species = { taxon_group: "mammals", class_name: "Mammalia", order_name: "Primates" };
     expect(speciesMatchesNode(species, "primates")).toBe(true);
   });
 
   it("matches eulipotyphlan (shrew) to eulipotyphla, not other-mammals", () => {
-    const species = { taxon_group: "mammalia", class_name: "Mammalia", order_name: "Eulipotyphla" };
+    const species = { taxon_group: "mammals", class_name: "Mammalia", order_name: "Eulipotyphla" };
     expect(speciesMatchesNode(species, "eulipotyphla")).toBe(true);
     expect(speciesMatchesNode(species, "other-mammals")).toBe(false);
   });
 
   it("matches tenrec (Afrosoricida) to other-mammals (no longer lumped with Eulipotyphla)", () => {
-    const species = { taxon_group: "mammalia", class_name: "Mammalia", order_name: "Afrosoricida" };
+    const species = { taxon_group: "mammals", class_name: "Mammalia", order_name: "Afrosoricida" };
     expect(speciesMatchesNode(species, "other-mammals")).toBe(true);
     expect(speciesMatchesNode(species, "eulipotyphla")).toBe(false);
   });
 
   it("matches elephant shrew (Macroscelidea) to other-mammals", () => {
-    const species = { taxon_group: "mammalia", class_name: "Mammalia", order_name: "Macroscelidea" };
+    const species = { taxon_group: "mammals", class_name: "Mammalia", order_name: "Macroscelidea" };
     expect(speciesMatchesNode(species, "other-mammals")).toBe(true);
   });
 
   it("matches cetacean to artiodactyls (Cetartiodactyla) and not sirenians", () => {
-    const species = { taxon_group: "mammalia", class_name: "Mammalia", order_name: "Artiodactyla", family: "Delphinidae" };
+    const species = { taxon_group: "mammals", class_name: "Mammalia", order_name: "Artiodactyla", family: "Delphinidae" };
     expect(speciesMatchesNode(species, "artiodactyls")).toBe(true);
     expect(speciesMatchesNode(species, "sirenians")).toBe(false);
   });
 
   it("matches cow (Artiodactyla, Bovidae) to artiodactyls", () => {
-    const species = { taxon_group: "mammalia", class_name: "Mammalia", order_name: "Artiodactyla", family: "Bovidae" };
+    const species = { taxon_group: "mammals", class_name: "Mammalia", order_name: "Artiodactyla", family: "Bovidae" };
     expect(speciesMatchesNode(species, "artiodactyls")).toBe(true);
   });
 
   it("matches manatee (Sirenia) to sirenians, not artiodactyls or other-mammals", () => {
-    const species = { taxon_group: "mammalia", class_name: "Mammalia", order_name: "Sirenia" };
+    const species = { taxon_group: "mammals", class_name: "Mammalia", order_name: "Sirenia" };
     expect(speciesMatchesNode(species, "sirenians")).toBe(true);
     expect(speciesMatchesNode(species, "artiodactyls")).toBe(false);
     expect(speciesMatchesNode(species, "other-mammals")).toBe(false);
   });
 
   it("matches rare order to other-mammals", () => {
-    const species = { taxon_group: "mammalia", class_name: "Mammalia", order_name: "Dermoptera" };
+    const species = { taxon_group: "mammals", class_name: "Mammalia", order_name: "Dermoptera" };
     expect(speciesMatchesNode(species, "other-mammals")).toBe(true);
   });
 
   it("rejects named order from other-mammals", () => {
-    const species = { taxon_group: "mammalia", class_name: "Mammalia", order_name: "Carnivora" };
+    const species = { taxon_group: "mammals", class_name: "Mammalia", order_name: "Carnivora" };
     expect(speciesMatchesNode(species, "other-mammals")).toBe(false);
   });
 });
@@ -465,7 +479,7 @@ describe("speciesMatchesNode – mammal subgroups", () => {
 
 describe("speciesMatchesNode – edge cases", () => {
   it("returns true for unknown node id (no filtering)", () => {
-    const species = { taxon_group: "reptilia", class_name: null, order_name: null };
+    const species = { taxon_group: "reptiles", class_name: null, order_name: null };
     expect(speciesMatchesNode(species, "nonexistent-subgroup")).toBe(true);
   });
 
@@ -480,7 +494,7 @@ describe("speciesMatchesNode – edge cases", () => {
   });
 
   it("case-insensitive matching on order_name", () => {
-    const species = { taxon_group: "reptilia", class_name: null, order_name: "SQUAMATA" };
+    const species = { taxon_group: "reptiles", class_name: null, order_name: "SQUAMATA" };
     expect(speciesMatchesNode(species, "squamates")).toBe(true);
   });
 });
@@ -491,35 +505,19 @@ describe("speciesMatchesNode – edge cases", () => {
 
 describe("speciesMatchesNode – class_name fallback when order_name is empty", () => {
   it("matches reptile with class_name=squamata and empty order_name to squamates", () => {
-    const species = { taxon_group: "reptilia", class_name: "squamata", order_name: "" };
+    const species = { taxon_group: "reptiles", class_name: "squamata", order_name: "" };
     expect(speciesMatchesNode(species, "squamates")).toBe(true);
   });
 
   it("matches reptile with class_name=testudines and empty order_name to turtles-tortoises", () => {
-    const species = { taxon_group: "reptilia", class_name: "testudines", order_name: "" };
+    const species = { taxon_group: "reptiles", class_name: "testudines", order_name: "" };
     expect(speciesMatchesNode(species, "turtles-tortoises")).toBe(true);
   });
 
   it("does not use fallback when order_name is populated", () => {
-    const species = { taxon_group: "reptilia", class_name: "testudines", order_name: "squamata" };
+    const species = { taxon_group: "reptiles", class_name: "testudines", order_name: "squamata" };
     expect(speciesMatchesNode(species, "squamates")).toBe(true);
     expect(speciesMatchesNode(species, "turtles-tortoises")).toBe(false);
-  });
-});
-
-// =============================================================================
-// speciesMatchesNode — class_name fallback for excludeOrders
-// =============================================================================
-
-describe("speciesMatchesNode – class_name fallback for excludeOrders", () => {
-  it("excludes species when class_name matches an excluded order and order_name is empty", () => {
-    const species = { taxon_group: "insecta", class_name: "coleoptera", order_name: "" };
-    expect(speciesMatchesNode(species, "other-insects")).toBe(false);
-  });
-
-  it("does not exclude when class_name is not in the exclude list", () => {
-    const species = { taxon_group: "insecta", class_name: "some-class", order_name: "" };
-    expect(speciesMatchesNode(species, "other-insects")).toBe(true);
   });
 });
 
@@ -530,25 +528,25 @@ describe("speciesMatchesNode – class_name fallback for excludeOrders", () => {
 describe("matchesFilter – families filter", () => {
   it("matches species with family in include list", () => {
     const row = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Delphinidae" };
-    const filter = { csvGroups: ["mammalia"], orderNames: ["artiodactyla", "sirenia"], families: ["delphinidae", "trichechidae", "dugongidae"] };
+    const filter = { csvGroups: ["mammals"], orderNames: ["artiodactyla", "sirenia"], families: ["delphinidae", "trichechidae", "dugongidae"] };
     expect(matchesFilter(row, filter)).toBe(true);
   });
 
   it("rejects species with family not in include list", () => {
     const row = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Bovidae" };
-    const filter = { csvGroups: ["mammalia"], orderNames: ["artiodactyla", "sirenia"], families: ["delphinidae", "trichechidae", "dugongidae"] };
+    const filter = { csvGroups: ["mammals"], orderNames: ["artiodactyla", "sirenia"], families: ["delphinidae", "trichechidae", "dugongidae"] };
     expect(matchesFilter(row, filter)).toBe(false);
   });
 
   it("excludeFamilies rejects matching family", () => {
     const row = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Delphinidae" };
-    const filter = { csvGroups: ["mammalia"], orderNames: ["artiodactyla"], excludeFamilies: ["delphinidae", "ziphiidae"] };
+    const filter = { csvGroups: ["mammals"], orderNames: ["artiodactyla"], excludeFamilies: ["delphinidae", "ziphiidae"] };
     expect(matchesFilter(row, filter)).toBe(false);
   });
 
   it("excludeFamilies passes non-matching family", () => {
     const row = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Bovidae" };
-    const filter = { csvGroups: ["mammalia"], orderNames: ["artiodactyla"], excludeFamilies: ["delphinidae", "ziphiidae"] };
+    const filter = { csvGroups: ["mammals"], orderNames: ["artiodactyla"], excludeFamilies: ["delphinidae", "ziphiidae"] };
     expect(matchesFilter(row, filter)).toBe(true);
   });
 });
@@ -583,13 +581,13 @@ describe("matchesFilter – excludeClasses filter", () => {
 
 describe("Subgroup partition coverage", () => {
   it("reptilia subgroups cover all common orders without overlap", () => {
-    const subs = findNode("reptilia")!.children!;
+    const subs = findNode("reptiles")!.children!;
     const allOrders = subs.flatMap(sg => sg.filter.orderNames ?? []);
     expect(new Set(allOrders).size).toBe(allOrders.length);
   });
 
   it("amphibia subgroups cover all common orders without overlap", () => {
-    const subs = findNode("amphibia")!.children!;
+    const subs = findNode("amphibians")!.children!;
     const allOrders = subs.flatMap(sg => sg.filter.orderNames ?? []);
     expect(new Set(allOrders).size).toBe(allOrders.length);
   });
@@ -600,13 +598,19 @@ describe("Subgroup partition coverage", () => {
     expect(new Set(allClasses).size).toBe(allClasses.length);
   });
 
-  it("insect subgroups: named orders match other-insects excludeOrders", () => {
-    const subs = findNode("insecta")!.children!;
-    const otherInsects = subs.find(sg => sg.id === "other-insects")!;
-    const namedOrders = subs
-      .filter(sg => sg.id !== "other-insects")
-      .flatMap(sg => sg.filter.orderNames ?? []);
-    expect([...namedOrders].sort()).toEqual([...otherInsects.filter.excludeOrders!].sort());
+  it("insect subgroups: each maps to one distinct CSV group, covering the parent", () => {
+    const parent = findNode("insecta")!;
+    const subs = parent.children!;
+    // Every insect subgroup is a CSV-group leaf (no order/class filter).
+    for (const sg of subs) {
+      expect(sg.filter.csvGroups.length, `${sg.id} should map to a single CSV group`).toBe(1);
+      expect(sg.filter.orderNames, `${sg.id} should not use an order filter`).toBeUndefined();
+      expect(sg.filter.excludeOrders, `${sg.id} should not use excludeOrders`).toBeUndefined();
+    }
+    const childGroups = subs.map(sg => sg.filter.csvGroups[0]);
+    // Distinct, and exactly the parent's aggregated groups.
+    expect(new Set(childGroups).size).toBe(childGroups.length);
+    expect([...childGroups].sort()).toEqual([...parent.filter.csvGroups].sort());
   });
 
   it("all plant Table 1a groups are leaves (no drill-down)", () => {
@@ -641,7 +645,7 @@ describe("Subgroup partition coverage", () => {
   });
 
   it("mammal subgroups: named orders match other-mammals excludeOrders", () => {
-    const subs = findNode("mammalia")!.children!;
+    const subs = findNode("mammals")!.children!;
     const otherMammals = subs.find(sg => sg.id === "other-mammals")!;
     const namedOrders = subs
       .filter(sg => sg.id !== "other-mammals")
@@ -676,14 +680,14 @@ describe("default view CSV group coverage", () => {
     }
   });
 
-  it("all 21 Table 1a CSV groups are covered by exactly one default view root", () => {
+  it("all 28 Table 1a CSV groups are covered by exactly one default view root", () => {
     const allCsvGroups = new Set<string>();
     for (const rootId of defaultRoots) {
       for (const csv of findNode(rootId)!.filter.csvGroups) {
         allCsvGroups.add(csv);
       }
     }
-    expect(allCsvGroups.size).toBe(21);
+    expect(allCsvGroups.size).toBe(28);
   });
 
   it("brown_algae is in fungi, not plantae", () => {
@@ -697,7 +701,7 @@ describe("default view CSV group coverage", () => {
 describe("prefixTree virtual nodes", () => {
   const prefixPairs: [string, string][] = [
     ["insecta", "inv-insecta"],
-    ["mollusca", "inv-mollusca"],
+    ["molluscs", "inv-molluscs"],
     ["flowering_plants", "pl-flowering_plants"],
     ["mushrooms", "fu-mushrooms"],
     ["brown_algae", "fu-brown_algae"],
@@ -734,6 +738,8 @@ describe("Table 1a → default view mapping", () => {
   const defaultRoots = new Set(TAXONOMY_VIEWS.default.roots);
   const table1aGroups = TAXONOMY_VIEWS.table1a.roots;
 
+  const stripPrefix = (id: string) => id.replace(/^(inv-|pl-|fu-)/, "");
+
   for (const group of table1aGroups) {
     it(`${group} maps to a default view root or its child`, () => {
       if (defaultRoots.has(group)) return; // direct root, fine
@@ -741,11 +747,16 @@ describe("Table 1a → default view mapping", () => {
       let found = false;
       for (const rootId of defaultRoots) {
         const rootNode = findNode(rootId)!;
-        const match = rootNode.children?.find(c =>
-          c.filter.csvGroups.length === 1 && c.filter.csvGroups[0] === group
-        ) ?? rootNode.children?.find(c =>
-          c.filter.csvGroups.includes(group)
-        );
+        // Mirror TaxaSummary navigation: match by node id (aggregating parents
+        // like "insecta"), then by single CSV group, then by CSV-group membership.
+        const match =
+          rootNode.children?.find(c => stripPrefix(c.id) === group)
+          ?? rootNode.children?.find(c =>
+            c.filter.csvGroups.length === 1 && c.filter.csvGroups[0] === group
+          )
+          ?? rootNode.children?.find(c =>
+            c.filter.csvGroups.includes(group)
+          );
         if (match) { found = true; break; }
       }
       expect(found, `${group} has no matching child under any default view root`).toBe(true);

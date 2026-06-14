@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "prebuild": "npm run fetch-data-from-r2",
+    "prebuild": "npm run fetch-data-from-r2 && npm run fetch-duckdb-ext",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -12,10 +12,12 @@
     "test:watch": "vitest",
     "upload-data-to-r2": "npx tsx scripts/upload-data-to-r2.ts",
     "fetch-data-from-r2": "npx tsx scripts/fetch-data-from-r2.ts",
-    "diff-data-vs-r2": "npx tsx scripts/diff-data-vs-r2.ts"
+    "diff-data-vs-r2": "npx tsx scripts/diff-data-vs-r2.ts",
+    "fetch-duckdb-ext": "npx tsx scripts/fetch-duckdb-ext.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1020.0",
+    "@duckdb/node-api": "^1.5.3-r.3",
     "@sentry/nextjs": "^10.43.0",
     "@vercel/analytics": "^1.6.1",
     "@vercel/speed-insights": "^2.0.0",
@@ -28,8 +30,7 @@
     "react-icons": "^5.5.0",
     "react-map-gl": "^8.1.0",
     "react-simple-maps": "^3.0.0",
-    "recharts": "^3.5.1",
-    "swr": "^2.4.0"
+    "recharts": "^3.5.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

@@ -44,7 +44,7 @@ export const TAXA: TaxonConfig[] = [
     color: "#dc2626", // red-600
   },
   {
-    id: "mammalia",
+    id: "mammals",
     name: "Mammals",
     apiEndpoint: "class/Mammalia",
     estimatedDescribed: 6819,
@@ -55,7 +55,7 @@ export const TAXA: TaxonConfig[] = [
     color: "#f97316", // orange-500
   },
   {
-    id: "aves",
+    id: "birds",
     name: "Birds",
     apiEndpoint: "class/Aves",
     estimatedDescribed: 11185,
@@ -66,7 +66,7 @@ export const TAXA: TaxonConfig[] = [
     color: "#3b82f6", // blue-500
   },
   {
-    id: "reptilia",
+    id: "reptiles",
     name: "Reptiles",
     apiEndpoint: "class/Reptilia",
     estimatedDescribed: 12502,
@@ -78,7 +78,7 @@ export const TAXA: TaxonConfig[] = [
     color: "#84cc16", // lime-500
   },
   {
-    id: "amphibia",
+    id: "amphibians",
     name: "Amphibians",
     apiEndpoint: "class/Amphibia",
     estimatedDescribed: 8918,

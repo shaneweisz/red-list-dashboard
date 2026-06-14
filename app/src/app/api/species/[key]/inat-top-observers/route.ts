@@ -9,19 +9,26 @@ interface InatContributor {
 }
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ key: string }> }
 ) {
   const { key } = await params;
+  // Species without a GBIF backbone match (CoL-only / not-yet-assessed) pass their
+  // scientific name directly, since the GBIF species lookup below can't resolve them.
+  const nameParam = request.nextUrl.searchParams.get("name");
 
   try {
-    // Step 1: Get canonical name from GBIF species API
-    const gbifResp = await fetch(`https://api.gbif.org/v1/species/${key}`);
-    if (!gbifResp.ok) {
-      return NextResponse.json({ observers: [], identifiers: [] }, { headers: CACHE_1H });
+    // Step 1: Determine the canonical scientific name — from the `name` param when
+    // provided, otherwise from the GBIF species API keyed by the GBIF taxon key.
+    let canonicalName: string | undefined = nameParam || undefined;
+    if (!canonicalName) {
+      const gbifResp = await fetch(`https://api.gbif.org/v1/species/${key}`);
+      if (!gbifResp.ok) {
+        return NextResponse.json({ observers: [], identifiers: [] }, { headers: CACHE_1H });
+      }
+      const gbifData = await gbifResp.json();
+      canonicalName = gbifData.canonicalName;
     }
-    const gbifData = await gbifResp.json();
-    const canonicalName: string | undefined = gbifData.canonicalName;
     if (!canonicalName) {
       return NextResponse.json({ observers: [], identifiers: [] }, { headers: CACHE_1H });
     }

@@ -143,7 +143,7 @@ function formatNumber(num: number): string {
 
 type ColorMode = "species" | "occurrences";
 
-const ALL_TAXA_IDS = ["mammalia", "aves", "reptilia", "amphibia", "fishes", "invertebrates", "plantae", "fungi"];
+const ALL_TAXA_IDS = ["mammals", "birds", "reptiles", "amphibians", "fishes", "invertebrates", "plantae", "fungi"];
 
 interface WorldMapProps {
   selectedCountries: Set<string>;

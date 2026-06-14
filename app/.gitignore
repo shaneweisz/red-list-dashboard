@@ -45,6 +45,10 @@ yarn-error.log*
 !/data/taxa-summary.json
 !/data/node-children-summaries.json
 
+# DuckDB httpfs extension — vendored at build time by scripts/fetch-duckdb-ext.ts
+# (downloaded, not committed; traced into the v2 function via next.config).
+/duckdb-ext/
+
 # vercel
 .vercel
 

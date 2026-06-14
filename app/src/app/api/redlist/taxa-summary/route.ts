@@ -22,6 +22,10 @@ interface TaxonSummary {
   gbifSpeciesCount?: number;
   gbifNeSpeciesCount?: number;
   gbifObsDistribution?: Record<string, number>;
+  // Catalogue of Life backbone (#271): extant accepted universe in this group and the
+  // not-evaluated slice (universe − assessed). 0 if CoL artifacts aren't present.
+  colDescribed?: number;
+  colNe?: number;
 }
 
 function mergeByCategory(
@@ -72,6 +76,8 @@ export async function GET(request: NextRequest) {
           const totalGbifObservations = matchedRows.reduce(
             (sum, r) => sum + Number(r.total_gbif_observations ?? 0), 0
           );
+          const colDescribed = matchedRows.reduce((sum, r) => sum + Number(r.col_described ?? 0), 0);
+          const colNe = matchedRows.reduce((sum, r) => sum + Number(r.col_ne ?? 0), 0);
           const estimatedDescribed = node?.estimatedDescribed ?? 0;
           return {
             group: nodeId,
@@ -84,6 +90,8 @@ export async function GET(request: NextRequest) {
             byCategory: matchedRows.length > 0 ? mergeByCategory(matchedRows.map((r) => ({ by_category: r.by_category ?? {} }))) : {},
             gbifSpeciesCount,
             gbifNeSpeciesCount,
+            colDescribed,
+            colNe,
             totalGbifObservations,
             meanGbifObsPerSpecies: gbifSpeciesCount > 0 ? totalGbifObservations / gbifSpeciesCount : undefined,
             medianGbifObsPerSpecies: matchedRows.length === 1 && matchedRows[0].median_gbif_obs != null
@@ -158,6 +166,8 @@ export async function GET(request: NextRequest) {
         const gbifNeSpeciesCount = matchedRows.reduce(
           (sum, r) => sum + Number(r.gbif_ne_species_count ?? 0), 0
         );
+        const colDescribed = matchedRows.reduce((sum, r) => sum + Number(r.col_described ?? 0), 0);
+        const colNe = matchedRows.reduce((sum, r) => sum + Number(r.col_ne ?? 0), 0);
         const meanGbifObsPerSpecies =
           gbifSpeciesCount > 0 ? totalGbifObservations / gbifSpeciesCount : undefined;
 
@@ -189,6 +199,8 @@ export async function GET(request: NextRequest) {
           medianGbifObsPerSpecies: available ? medianGbifObsPerSpecies : undefined,
           gbifSpeciesCount: available ? gbifSpeciesCount : undefined,
           gbifNeSpeciesCount: available ? gbifNeSpeciesCount : undefined,
+          colDescribed: available ? colDescribed : undefined,
+          colNe: available ? colNe : undefined,
         };
       }),
     ];
@@ -215,6 +227,8 @@ export async function GET(request: NextRequest) {
       allEntry.gbifSpeciesCount = gbifCount;
       allEntry.gbifNeSpeciesCount = gbifNeCount;
       allEntry.meanGbifObsPerSpecies = gbifCount > 0 ? totalGbif / gbifCount : undefined;
+      allEntry.colDescribed = perTaxonRows.reduce((s, t) => s + (t.colDescribed ?? 0), 0);
+      allEntry.colNe = perTaxonRows.reduce((s, t) => s + (t.colNe ?? 0), 0);
     }
 
     return NextResponse.json({ taxa }, { headers: CACHE_1H });

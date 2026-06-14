@@ -56,17 +56,10 @@ Charts support multi-select filtering (Cmd/Ctrl+click to select multiple) and cr
 
 ### Expandable Species Rows
 Click any species row to see a tabbed (or stacked) detail view:
-- **GBIF Map** — occurrence points on a Leaflet map + iNaturalist photo gallery
-- **Literature** — papers published since the last assessment (from OpenAlex and Nosible)
+- **GBIF Map** — occurrence points on a MapLibre GL map + iNaturalist photo gallery
+- **Literature** — papers published since the last assessment (from OpenAlex)
 - **Red List** — full assessment details including criteria, population trend, threats, conservation actions, and rationale
 - **CITES** — trade status, suspensions, quotas, and trade flow map
-
-### Assessment Criteria Estimation
-Interactive IUCN Criterion B calculator using GBIF occurrence data:
-- Computes EOO (Extent of Occurrence), AOO (Area of Occupancy), and number of locations
-- Temporal trend analysis
-- Adjustable parameters (min year, max uncertainty, grid size, cluster distance)
-- Visualizes convex hull and grid cells on the map
 
 ### GBIF Match Status Indicators
 Shows data quality warnings when GBIF species matching is imperfect:
@@ -84,22 +77,23 @@ Light, dark, and system theme modes.
 
 ```
 Frontend: Next.js 16 + React 19 + Tailwind CSS 4
-Maps:     React-Leaflet + react-simple-maps
+Maps:     MapLibre GL (react-map-gl) + react-simple-maps
 Charts:   Recharts
 Data:     SWR for client-side fetching
 Hosting:  Vercel
 
 Data Flow:
-┌─────────────────┐  scripts/sync.ts   ┌──────────────────┐  prebuild fetch   ┌───────────────┐
-│  IUCN Red List   │───────────────────▶│  Per-taxon CSVs  │──────────────────▶│  app/data/     │──▶ API Routes ──▶ UI
-│  GBIF API        │  (offline pipeline)│  in private R2   │  (at build time)  │  (local copy)  │
+┌─────────────────┐  scripts/sync.ts   ┌──────────────────┐  httpfs / prebuild ┌───────────────┐
+│  IUCN Red List   │───────────────────▶│  CSVs + parquets │───────────────────▶│  app/data/     │──▶ API Routes ──▶ UI
+│  GBIF API        │  (offline pipeline)│  in private R2   │  (DuckDB at runtime│  (local copy)  │
+│  Catalogue of Life│                    │                  │   / build-time)    │                │
 └─────────────────┘                    └──────────────────┘                   └───────────────┘
                           version pinned by app/latest-sync.txt (git-tracked)
 
 Live external APIs:
   GBIF REST API     → occurrence points, record breakdowns, iNaturalist photos
   Species+ API      → CITES listings, trade data
-  OpenAlex / Nosible → scientific literature since last assessment
+  OpenAlex          → scientific literature since last assessment
 ```
 
 ## Data Sync Pipeline
@@ -118,7 +112,12 @@ npx tsx scripts/sync.ts mammalia aves    # Specific taxa only
 4. `fetch-gbif-country-data` — GBIF API → per-species country occurrence counts
 5. `fetch-gbif-new-counts` — GBIF API → updates GBIF CSVs with temporal splits
 6. `build-taxa-summary` — aggregates per-taxon CSVs → `data/taxa-summary.json` and `data/node-children-summaries.json`
-7. `build-search-index` — builds `data/search-index.json` for fast species search
+7. `build-parquet` — CSVs → `assessed.parquet` / `unassessed.parquet` (the DuckDB read layer; also powers cross-taxa search)
+
+Phases 8–10 build the **Catalogue of Life backbone** (run on a full sync only) — the described-species universe behind the new-assessments view, which surfaces species CoL knows about that IUCN hasn't yet evaluated:
+8. `fetch-coldp` — CoL eXtended Release ColDP archive → `NameUsage.tsv` (downloaded to a temp dir, not `data/`)
+9. `build-backbone` — `NameUsage.tsv` → `backbone.parquet` (tree + synonyms) + `species/` (accepted-species universe, partitioned; tagged `extinct`/`in_base`)
+10. `build-matching` — reconciles IUCN/GBIF species to CoL → `species_link.parquet` (`{sis_taxon_id, gbif_species_key} → col_id`, via accepted-name + CoL/IUCN synonym matching)
 
 **Publishing a refresh.** `app/data/` lives in a private R2 bucket; the active version is pinned via `app/latest-sync.txt`. To publish a fresh sync:
 
@@ -191,7 +190,7 @@ See `app/.env.example` for the full list including database and analytics keys.
 - **TypeScript 5** — Type safety
 - **Tailwind CSS 4** — Styling
 - **Recharts** — Charts and graphs
-- **React-Leaflet** / **react-simple-maps** — Maps
+- **MapLibre GL** (react-map-gl) / **react-simple-maps** — Maps
 - **SWR** — Client-side data fetching
 - **Vitest** — Testing
 - **Vercel** — Hosting and deployment
