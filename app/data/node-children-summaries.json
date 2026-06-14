@@ -1068,22 +1068,29 @@
   ],
   "other_invertebrates": [
     {
-      "id": "echinoderms",
-      "name": "Echinoderms",
-      "estimatedDescribed": 7000,
-      "totalAssessed": 374,
-      "outdated": 372,
-      "gbifNeSpeciesCount": 2309,
+      "id": "flatworms",
+      "name": "Flatworms",
+      "estimatedDescribed": 0,
+      "totalAssessed": 2,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 315,
       "byCategory": {
-        "LR/nt": 1,
-        "DD": 244,
-        "VU": 9,
-        "LC": 111,
-        "EN": 7,
-        "CR": 2
+        "NT": 1,
+        "DD": 1
       },
-      "colDescribed": 4839,
-      "colNe": 4494
+      "colDescribed": 20857,
+      "colNe": 20857
+    },
+    {
+      "id": "roundworms",
+      "name": "Roundworms",
+      "estimatedDescribed": 0,
+      "totalAssessed": 0,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 0,
+      "byCategory": {},
+      "colDescribed": 20904,
+      "colNe": 20904
     },
     {
       "id": "annelids",
@@ -1106,23 +1113,115 @@
       "colNe": 17869
     },
     {
+      "id": "myriapods",
+      "name": "Myriapods (Centipedes & Millipedes)",
+      "estimatedDescribed": 0,
+      "totalAssessed": 276,
+      "outdated": 177,
+      "gbifNeSpeciesCount": 2288,
+      "byCategory": {
+        "VU": 19,
+        "NT": 66,
+        "EN": 40,
+        "DD": 49,
+        "LC": 58,
+        "CR": 41,
+        "EX": 3
+      },
+      "colDescribed": 17462,
+      "colNe": 17189
+    },
+    {
+      "id": "sponges",
+      "name": "Sponges",
+      "estimatedDescribed": 0,
+      "totalAssessed": 44,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 3521,
+      "byCategory": {
+        "LC": 6,
+        "DD": 35,
+        "NT": 2,
+        "VU": 1
+      },
+      "colDescribed": 9885,
+      "colNe": 9841
+    },
+    {
+      "id": "cnidarians",
+      "name": "Cnidarians (non-coral)",
+      "estimatedDescribed": 0,
+      "totalAssessed": 37,
+      "outdated": 20,
+      "gbifNeSpeciesCount": 1863,
+      "byCategory": {
+        "CR": 5,
+        "VU": 3,
+        "LC": 3,
+        "DD": 18,
+        "EN": 8
+      },
+      "colDescribed": 8931,
+      "colNe": 8894
+    },
+    {
+      "id": "echinoderms",
+      "name": "Echinoderms",
+      "estimatedDescribed": 7000,
+      "totalAssessed": 374,
+      "outdated": 372,
+      "gbifNeSpeciesCount": 2309,
+      "byCategory": {
+        "LR/nt": 1,
+        "DD": 244,
+        "VU": 9,
+        "LC": 111,
+        "EN": 7,
+        "CR": 2
+      },
+      "colDescribed": 7646,
+      "colNe": 7301
+    },
+    {
+      "id": "bryozoans",
+      "name": "Bryozoans (Moss Animals)",
+      "estimatedDescribed": 0,
+      "totalAssessed": 0,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 0,
+      "byCategory": {},
+      "colDescribed": 5479,
+      "colNe": 5479
+    },
+    {
+      "id": "tunicates",
+      "name": "Tunicates & Lancelets",
+      "estimatedDescribed": 0,
+      "totalAssessed": 0,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 0,
+      "byCategory": {},
+      "colDescribed": 3144,
+      "colNe": 3144
+    },
+    {
       "id": "other-invertebrates-catch-all",
       "name": "Other Invertebrates",
-      "estimatedDescribed": 201485,
-      "totalAssessed": 406,
-      "outdated": 203,
-      "gbifNeSpeciesCount": 9959,
+      "estimatedDescribed": 0,
+      "totalAssessed": 47,
+      "outdated": 6,
+      "gbifNeSpeciesCount": 1972,
       "byCategory": {
-        "CR": 50,
-        "VU": 26,
-        "LC": 76,
-        "DD": 118,
-        "EN": 53,
-        "EX": 4,
-        "NT": 79
+        "EN": 5,
+        "LC": 9,
+        "DD": 15,
+        "EX": 1,
+        "VU": 3,
+        "CR": 4,
+        "NT": 10
       },
-      "colDescribed": 116965,
-      "colNe": 116564
+      "colDescribed": 27496,
+      "colNe": 27449
     }
   ],
   "mushrooms": [
@@ -1485,22 +1584,29 @@
   ],
   "inv-other_invertebrates": [
     {
-      "id": "inv-echinoderms",
-      "name": "Echinoderms",
-      "estimatedDescribed": 7000,
-      "totalAssessed": 374,
-      "outdated": 372,
-      "gbifNeSpeciesCount": 2309,
+      "id": "inv-flatworms",
+      "name": "Flatworms",
+      "estimatedDescribed": 0,
+      "totalAssessed": 2,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 315,
       "byCategory": {
-        "LR/nt": 1,
-        "DD": 244,
-        "VU": 9,
-        "LC": 111,
-        "EN": 7,
-        "CR": 2
+        "NT": 1,
+        "DD": 1
       },
-      "colDescribed": 4839,
-      "colNe": 4494
+      "colDescribed": 20857,
+      "colNe": 20857
+    },
+    {
+      "id": "inv-roundworms",
+      "name": "Roundworms",
+      "estimatedDescribed": 0,
+      "totalAssessed": 0,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 0,
+      "byCategory": {},
+      "colDescribed": 20904,
+      "colNe": 20904
     },
     {
       "id": "inv-annelids",
@@ -1523,23 +1629,115 @@
       "colNe": 17869
     },
     {
+      "id": "inv-myriapods",
+      "name": "Myriapods (Centipedes & Millipedes)",
+      "estimatedDescribed": 0,
+      "totalAssessed": 276,
+      "outdated": 177,
+      "gbifNeSpeciesCount": 2288,
+      "byCategory": {
+        "VU": 19,
+        "NT": 66,
+        "EN": 40,
+        "DD": 49,
+        "LC": 58,
+        "CR": 41,
+        "EX": 3
+      },
+      "colDescribed": 17462,
+      "colNe": 17189
+    },
+    {
+      "id": "inv-sponges",
+      "name": "Sponges",
+      "estimatedDescribed": 0,
+      "totalAssessed": 44,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 3521,
+      "byCategory": {
+        "LC": 6,
+        "DD": 35,
+        "NT": 2,
+        "VU": 1
+      },
+      "colDescribed": 9885,
+      "colNe": 9841
+    },
+    {
+      "id": "inv-cnidarians",
+      "name": "Cnidarians (non-coral)",
+      "estimatedDescribed": 0,
+      "totalAssessed": 37,
+      "outdated": 20,
+      "gbifNeSpeciesCount": 1863,
+      "byCategory": {
+        "CR": 5,
+        "VU": 3,
+        "LC": 3,
+        "DD": 18,
+        "EN": 8
+      },
+      "colDescribed": 8931,
+      "colNe": 8894
+    },
+    {
+      "id": "inv-echinoderms",
+      "name": "Echinoderms",
+      "estimatedDescribed": 7000,
+      "totalAssessed": 374,
+      "outdated": 372,
+      "gbifNeSpeciesCount": 2309,
+      "byCategory": {
+        "LR/nt": 1,
+        "DD": 244,
+        "VU": 9,
+        "LC": 111,
+        "EN": 7,
+        "CR": 2
+      },
+      "colDescribed": 7646,
+      "colNe": 7301
+    },
+    {
+      "id": "inv-bryozoans",
+      "name": "Bryozoans (Moss Animals)",
+      "estimatedDescribed": 0,
+      "totalAssessed": 0,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 0,
+      "byCategory": {},
+      "colDescribed": 5479,
+      "colNe": 5479
+    },
+    {
+      "id": "inv-tunicates",
+      "name": "Tunicates & Lancelets",
+      "estimatedDescribed": 0,
+      "totalAssessed": 0,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 0,
+      "byCategory": {},
+      "colDescribed": 3144,
+      "colNe": 3144
+    },
+    {
       "id": "inv-other-invertebrates-catch-all",
       "name": "Other Invertebrates",
-      "estimatedDescribed": 201485,
-      "totalAssessed": 406,
-      "outdated": 203,
-      "gbifNeSpeciesCount": 9959,
+      "estimatedDescribed": 0,
+      "totalAssessed": 47,
+      "outdated": 6,
+      "gbifNeSpeciesCount": 1972,
       "byCategory": {
-        "CR": 50,
-        "VU": 26,
-        "LC": 76,
-        "DD": 118,
-        "EN": 53,
-        "EX": 4,
-        "NT": 79
+        "EN": 5,
+        "LC": 9,
+        "DD": 15,
+        "EX": 1,
+        "VU": 3,
+        "CR": 4,
+        "NT": 10
       },
-      "colDescribed": 116965,
-      "colNe": 116564
+      "colDescribed": 27496,
+      "colNe": 27449
     }
   ],
   "plantae": [

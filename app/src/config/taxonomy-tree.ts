@@ -191,6 +191,48 @@ const CORALS_NODE: TaxonomyNode = {
   estimatedSourceUrl: "https://www.marinespecies.org",
 };
 
+// The "Other Invertebrates" Table 1a group is a grab-bag of animal phyla with no
+// group of their own. We carve it into recognizable phylum sub-groups by their CoL
+// classes (the read layer filters by taxon_group; class sub-filtering is client-side
+// via matchesFilter, so this needs no data change). Class lists are derived from the
+// CoL universe (species/) so they're complete per phylum. Caveat: species with a NULL
+// class — notably ~6k flatworms (Platyhelminthes) and all gastrotrichs — can't be
+// routed by class, so they land in the catch-all rather than their phylum node (the
+// IUCN-assessed species, which the reassessments view shows, all carry a class, so
+// only the NE browse is affected). A `phylum` column on the parquets would close that
+// gap but needs a data rebuild.
+const OTHER_INVERTEBRATE_PHYLA: { id: string; name: string; classes: string[]; estimatedDescribed?: number; estimatedSource?: string; estimatedSourceUrl?: string }[] = [
+  { id: "flatworms", name: "Flatworms", classes: ["trematoda", "monogenea", "cestoda", "turbellaria", "rhabditophora", "catenulida"] },
+  { id: "roundworms", name: "Roundworms", classes: ["chromadorea", "enoplea"] },
+  { id: "annelids", name: "Annelids", classes: ["polychaeta", "clitellata"],
+    estimatedDescribed: 22_000, estimatedSource: "~22K Annelida spp. (WoRMS; Catalogue of Life)", estimatedSourceUrl: "https://www.marinespecies.org/aphia.php?p=taxdetails&id=882" },
+  { id: "myriapods", name: "Myriapods (Centipedes & Millipedes)", classes: ["diplopoda", "chilopoda", "symphyla", "pauropoda"] },
+  { id: "sponges", name: "Sponges", classes: ["demospongiae", "calcarea", "hexactinellida", "homoscleromorpha"] },
+  { id: "cnidarians", name: "Cnidarians (non-coral)", classes: ["hydrozoa", "myxozoa", "anthozoa", "scyphozoa", "staurozoa", "cubozoa"] },
+  { id: "echinoderms", name: "Echinoderms", classes: ["asteroidea", "echinoidea", "holothuroidea", "ophiuroidea", "crinoidea"],
+    estimatedDescribed: 7_000, estimatedSource: "~7,000 extant spp. (WoRMS; Animal Diversity Web)", estimatedSourceUrl: "https://www.marinespecies.org/aphia.php?p=taxdetails&id=1806" },
+  { id: "bryozoans", name: "Bryozoans (Moss Animals)", classes: ["gymnolaemata", "stenolaemata", "phylactolaemata"] },
+  { id: "tunicates", name: "Tunicates & Lancelets", classes: ["ascidiacea", "thaliacea", "appendicularia", "leptocardii"] },
+];
+
+function OTHER_INVERTEBRATE_PHYLA_CHILDREN(): TaxonomyNode[] {
+  const allClasses = OTHER_INVERTEBRATE_PHYLA.flatMap((p) => p.classes);
+  const children: TaxonomyNode[] = OTHER_INVERTEBRATE_PHYLA.map((p) => ({
+    id: p.id,
+    name: p.name,
+    filter: { csvGroups: ["other_invertebrates"], classNames: p.classes },
+    ...(p.estimatedDescribed != null ? { estimatedDescribed: p.estimatedDescribed, estimatedSource: p.estimatedSource, estimatedSourceUrl: p.estimatedSourceUrl } : {}),
+  }));
+  children.push({
+    id: "other-invertebrates-catch-all",
+    name: "Other Invertebrates",
+    filter: { csvGroups: ["other_invertebrates"], excludeClasses: allClasses },
+    estimatedSource: "Remainder of IUCN Table 1a 'Others' not in a named phylum group above",
+    estimatedSourceUrl: COL_2025_URL,
+  });
+  return children;
+}
+
 const OTHER_INVERTEBRATES_NODE: TaxonomyNode = {
   id: "other_invertebrates",
   name: "Other Invertebrates",
@@ -198,41 +240,7 @@ const OTHER_INVERTEBRATES_NODE: TaxonomyNode = {
   estimatedDescribed: 230_485,
   estimatedSource: IUCN_SOURCE,
   estimatedSourceUrl: COL_2025_URL,
-  children: [
-    {
-      id: "echinoderms",
-      name: "Echinoderms",
-      filter: {
-        csvGroups: ["other_invertebrates"],
-        classNames: ["asteroidea", "echinoidea", "holothuroidea"],
-      },
-      estimatedDescribed: 7_000,
-      estimatedSource: "~7,000 extant spp. (WoRMS; Animal Diversity Web)",
-      estimatedSourceUrl: "https://www.marinespecies.org/aphia.php?p=taxdetails&id=1806",
-    },
-    {
-      id: "annelids",
-      name: "Annelids",
-      filter: {
-        csvGroups: ["other_invertebrates"],
-        classNames: ["clitellata", "polychaeta"],
-      },
-      estimatedDescribed: 22_000,
-      estimatedSource: "~22K Annelida spp. (WoRMS; Catalogue of Life)",
-      estimatedSourceUrl: "https://www.marinespecies.org/aphia.php?p=taxdetails&id=882",
-    },
-    {
-      id: "other-invertebrates-catch-all",
-      name: "Other Invertebrates",
-      filter: {
-        csvGroups: ["other_invertebrates"],
-        excludeClasses: ["asteroidea", "echinoidea", "holothuroidea", "clitellata", "polychaeta"],
-      },
-      estimatedDescribed: 201_485,
-      estimatedSource: "Remainder from IUCN Table 1a 'Others', minus Echinoderms & Worms",
-      estimatedSourceUrl: COL_2025_URL,
-    },
-  ],
+  children: OTHER_INVERTEBRATE_PHYLA_CHILDREN(),
 };
 
 const VELVET_WORMS_NODE: TaxonomyNode = {
