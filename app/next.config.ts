@@ -38,6 +38,8 @@ const nextConfig: NextConfig = {
     "/api/search/warm": DUCKDB_TRACE,
     "/api/taxa/species": DUCKDB_TRACE,
     "/api/redlist/synonyms": DUCKDB_TRACE,
+    // /browse runs querySpecies/searchSpecies (DuckDB over R2) at request time.
+    "/browse": DUCKDB_TRACE,
   },
 
   // The API routes import a shared species-store module that references every
@@ -67,6 +69,11 @@ const nextConfig: NextConfig = {
     "/api/redlist/taxa-subgroups": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", ...COL_ARTIFACTS],
     // Backbone tree navigation queries backbone.parquet in R2 (httpfs) — no local data.
     "/api/taxa/species": ["**/data/**"],
+    // /browse mirrors /api/redlist/species (same querySpecies): keep taxa-summary.json
+    // for the instant NE tooLarge check, drop the heavy data + ALL parquets (the USE_R2
+    // gate keys on assessed.parquet being absent locally). /llms.txt reads no data.
+    "/browse": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", "**/data/node-children-summaries.json", "**/data/*.parquet", ...COL_ARTIFACTS],
+    "/llms.txt": ["**/data/**"],
   },
 };
 
