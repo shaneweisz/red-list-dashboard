@@ -40,6 +40,12 @@ export default function RootLayout({
         <PostHogProvider>
           <ThemeProvider>{children}</ThemeProvider>
         </PostHogProvider>
+        {/* Crawler-visible discoverability for the agent/LLM data surface — the app
+            itself is client-rendered, so this static footer is the only link a
+            fetcher sees to /browse + /llms.txt. */}
+        <footer style={{ position: "absolute", width: 1, height: 1, padding: 0, margin: -1, overflow: "hidden", clip: "rect(0,0,0,0)", whiteSpace: "nowrap", border: 0 }}>
+          <a href="/browse">Browse the data</a> · <a href="/llms.txt">llms.txt</a>
+        </footer>
         <Analytics />
         <SpeedInsights />
       </body>

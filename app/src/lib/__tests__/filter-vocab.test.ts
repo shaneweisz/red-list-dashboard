@@ -43,9 +43,13 @@ describe("resolveTaxa", () => {
     expect(resolveTaxa(["mammals"]).ids).toEqual(["mammals"]);
     expect(resolveTaxa(["sharks"]).ids).toEqual(["sharks-rays"]);
   });
-  it("treats 'all' and unknowns as unresolved", () => {
+  it("treats 'all' as unresolved; passes single-word scientific names through as arbitrary-rank ids", () => {
     expect(resolveTaxa(["all"]).ids).toEqual([]);
-    expect(resolveTaxa(["dinosaurs"]).unresolved).toEqual(["dinosaurs"]);
+    // a class/order/family with no curated node resolves to an arbitrary-rank id
+    // (matched by rank in the read layer; a non-taxon just yields zero results).
+    expect(resolveTaxa(["felidae"]).ids).toEqual(["felidae"]);
+    // multi-word / punctuated values aren't taxa (species names go to `search`).
+    expect(resolveTaxa(["not a taxon"]).unresolved).toEqual(["not a taxon"]);
   });
 });
 
