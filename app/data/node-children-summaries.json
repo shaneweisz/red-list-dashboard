@@ -107,7 +107,7 @@
       "colNe": 8008
     },
     {
-      "id": "insecta",
+      "id": "insects",
       "name": "Insects",
       "estimatedDescribed": 1003469,
       "totalAssessed": 13696,
@@ -905,7 +905,7 @@
       "colNe": 16
     }
   ],
-  "insecta": [
+  "insects": [
     {
       "id": "beetles",
       "name": "Beetles",
@@ -1264,7 +1264,7 @@
   ],
   "invertebrates": [
     {
-      "id": "inv-insecta",
+      "id": "inv-insects",
       "name": "Insects",
       "estimatedDescribed": 1003469,
       "totalAssessed": 13696,
@@ -1421,7 +1421,7 @@
       "colNe": 138927
     }
   ],
-  "inv-insecta": [
+  "inv-insects": [
     {
       "id": "inv-beetles",
       "name": "Beetles",

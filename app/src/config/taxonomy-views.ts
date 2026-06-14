@@ -29,7 +29,7 @@ export const TAXONOMY_VIEWS: Record<string, TaxonomyView> = {
     name: "Table 1a",
     roots: [
       "mammals", "birds", "reptiles", "amphibians", "fishes",
-      "insecta", "molluscs", "crustaceans", "corals", "arachnids",
+      "insects", "molluscs", "crustaceans", "corals", "arachnids",
       "velvet_worms", "horseshoe_crabs", "other_invertebrates",
       "mosses", "ferns_and_allies", "gymnosperms", "flowering_plants",
       "green_algae", "red_algae",
@@ -43,7 +43,7 @@ export const TAXONOMY_VIEWS: Record<string, TaxonomyView> = {
       {
         title: "INVERTEBRATES",
         nodeIds: [
-          "insecta", "molluscs", "crustaceans", "corals", "arachnids",
+          "insects", "molluscs", "crustaceans", "corals", "arachnids",
           "velvet_worms", "horseshoe_crabs", "other_invertebrates",
         ],
       },

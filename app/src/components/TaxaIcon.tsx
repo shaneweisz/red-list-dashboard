@@ -104,7 +104,7 @@ const ICON_MAP: Record<string, React.ComponentType<IconBaseProps>> = {
   "jawless-fish": FaFish,
 
   // Insect subgroups
-  insecta: FaBug,
+  insects: FaBug,
   beetles: GiScarabBeetle,
   "butterflies-moths": GiButterfly,
   "flies-mosquitoes": GiFly,

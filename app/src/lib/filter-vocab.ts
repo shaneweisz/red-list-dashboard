@@ -177,7 +177,7 @@ export function categoryLabel(code: string): string {
 // mammals, not mammalia). Kept in sync with the display tree.
 export const FEATURED_TAXA: string[] = [
   "mammals", "birds", "reptiles", "amphibians", "fishes",
-  "insecta", "arachnids", "molluscs", "crustaceans", "corals",
+  "insects", "arachnids", "molluscs", "crustaceans", "corals",
   "other_invertebrates", "velvet_worms", "horseshoe_crabs",
   "flowering_plants", "gymnosperms", "ferns_and_allies", "mosses",
   "green_algae", "red_algae", "brown_algae", "mushrooms",
@@ -191,7 +191,7 @@ const TAXA_ALIASES: Record<string, string> = {
   "amphibians": "amphibia", "amphibian": "amphibia", "frogs": "amphibia", "frog": "amphibia", "toads": "amphibia",
   "fish": "fishes",
   "sharks": "sharks-rays", "rays": "sharks-rays", "sharks-and-rays": "sharks-rays",
-  "insects": "insecta", "insect": "insecta",
+  "insect": "insects",
   "beetles": "beetles", "butterflies": "butterflies-moths", "moths": "butterflies-moths", "bees": "bees-wasps-ants", "wasps": "bees-wasps-ants", "ants": "bees-wasps-ants",
   "spiders": "arachnida", "arachnids": "arachnida",
   "molluscs": "mollusca", "mollusks": "mollusca", "snails": "mollusca", "slugs": "mollusca",

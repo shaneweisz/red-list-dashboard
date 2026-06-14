@@ -41,9 +41,10 @@ describe("parseParams", () => {
   });
 
   it("leaves unchanged and unknown taxa IDs as-is, and dedupes legacy+current", () => {
-    // insecta is still a valid node ID; beetles unchanged; mammalia → mammals collapses with mammals
+    // legacy latin ids collapse to current ones (mammalia → mammals, dedup; insecta →
+    // insects); beetles unchanged; unknown passes through.
     const result = parseParams("?taxa=mammalia,mammals,insecta,beetles,unknownthing");
-    expect(result.taxa).toEqual(new Set(["mammals", "insecta", "beetles", "unknownthing"]));
+    expect(result.taxa).toEqual(new Set(["mammals", "insects", "beetles", "unknownthing"]));
   });
 
   it("maps legacy IDs in the subgroups param too", () => {
@@ -57,9 +58,9 @@ describe("parseParams", () => {
     expect(result.subgroups).toEqual(new Set(["inv-crustaceans", "inv-molluscs", "inv-arachnids"]));
   });
 
-  it("leaves unchanged prefixed IDs alone (e.g. inv-insecta, inv-beetles)", () => {
+  it("canonicalizes the base of a prefixed ID while preserving the prefix (inv-insecta → inv-insects); non-aliased pass through", () => {
     const result = parseParams("?subgroups=inv-insecta,inv-beetles");
-    expect(result.subgroups).toEqual(new Set(["inv-insecta", "inv-beetles"]));
+    expect(result.subgroups).toEqual(new Set(["inv-insects", "inv-beetles"]));
   });
 
   it("parses categories", () => {

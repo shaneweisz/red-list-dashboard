@@ -126,7 +126,7 @@ describe("Default view roots", () => {
 describe("Table 1a groups", () => {
   const table1aGroups = [
     "mammals", "birds", "reptiles", "amphibians", "fishes",
-    "insecta", "arachnids", "molluscs", "crustaceans", "corals",
+    "insects", "arachnids", "molluscs", "crustaceans", "corals",
     "other_invertebrates", "velvet_worms", "horseshoe_crabs",
     "flowering_plants", "gymnosperms", "ferns_and_allies", "mosses",
     "green_algae", "red_algae",
@@ -216,8 +216,8 @@ describe("Existing subgroups preserved", () => {
     expect(ids).toContain("jawless-fish");
   });
 
-  it("insecta has beetles, butterflies-moths, other-insects", () => {
-    const node = findNode("insecta")!;
+  it("insects has beetles, butterflies-moths, other-insects", () => {
+    const node = findNode("insects")!;
     const ids = node.children!.map(c => c.id);
     expect(ids).toContain("beetles");
     expect(ids).toContain("butterflies-moths");
@@ -262,7 +262,7 @@ describe("hasChildren", () => {
   it("returns true for expandable nodes", () => {
     expect(hasChildren("mammals")).toBe(true);
     expect(hasChildren("reptiles")).toBe(true);
-    expect(hasChildren("insecta")).toBe(true);
+    expect(hasChildren("insects")).toBe(true);
     expect(hasChildren("invertebrates")).toBe(true);
     expect(hasChildren("plantae")).toBe(true);
   });
@@ -278,7 +278,7 @@ describe("hasChildren", () => {
 describe("getAncestors", () => {
   it("returns ancestors for deeply nested node", () => {
     const ancestors = getAncestors("beetles");
-    expect(ancestors).toContain("insecta");
+    expect(ancestors).toContain("insects");
     expect(ancestors).toContain("all");
   });
 
@@ -292,7 +292,7 @@ describe("getNodePath", () => {
     const path = getNodePath("beetles");
     expect(path[0]).toBe("all");
     expect(path[path.length - 1]).toBe("beetles");
-    expect(path).toContain("insecta");
+    expect(path).toContain("insects");
   });
 });
 
@@ -302,8 +302,8 @@ describe("getCsvGroupsForNode", () => {
     expect(getCsvGroupsForNode("beetles")).toEqual(["beetles"]);
   });
 
-  it("returns the 8 order groups for the insecta parent node", () => {
-    const groups = getCsvGroupsForNode("insecta");
+  it("returns the 8 order groups for the insects parent node", () => {
+    const groups = getCsvGroupsForNode("insects");
     expect(groups).toContain("beetles");
     expect(groups).toContain("other_insects");
     expect(groups.length).toBe(8);
@@ -599,7 +599,7 @@ describe("Subgroup partition coverage", () => {
   });
 
   it("insect subgroups: each maps to one distinct CSV group, covering the parent", () => {
-    const parent = findNode("insecta")!;
+    const parent = findNode("insects")!;
     const subs = parent.children!;
     // Every insect subgroup is a CSV-group leaf (no order/class filter).
     for (const sg of subs) {
@@ -700,7 +700,7 @@ describe("default view CSV group coverage", () => {
 
 describe("prefixTree virtual nodes", () => {
   const prefixPairs: [string, string][] = [
-    ["insecta", "inv-insecta"],
+    ["insects", "inv-insects"],
     ["molluscs", "inv-molluscs"],
     ["flowering_plants", "pl-flowering_plants"],
     ["mushrooms", "fu-mushrooms"],
@@ -718,7 +718,7 @@ describe("prefixTree virtual nodes", () => {
   }
 
   it("prefixed children have prefixed IDs recursively", () => {
-    const invInsecta = findNode("inv-insecta")!;
+    const invInsecta = findNode("inv-insects")!;
     expect(invInsecta.children).toBeDefined();
     for (const child of invInsecta.children!) {
       expect(child.id).toMatch(/^inv-/);
@@ -748,7 +748,7 @@ describe("Table 1a → default view mapping", () => {
       for (const rootId of defaultRoots) {
         const rootNode = findNode(rootId)!;
         // Mirror TaxaSummary navigation: match by node id (aggregating parents
-        // like "insecta"), then by single CSV group, then by CSV-group membership.
+        // like "insects"), then by single CSV group, then by CSV-group membership.
         const match =
           rootNode.children?.find(c => stripPrefix(c.id) === group)
           ?? rootNode.children?.find(c =>
