@@ -367,10 +367,10 @@ export async function run(opts: {
 } = {}): Promise<void> {
   const logger = opts.logger ?? new SyncLogger("upload-aoh-maps");
   const r2 = getR2Client();
-  const bucket = process.env.R2_BUCKET_NAME;
+  const bucket = process.env.R2_MAPS_BUCKET_NAME;
 
   if (!bucket) {
-    throw new Error("Missing R2_BUCKET_NAME");
+    throw new Error("Missing R2_MAPS_BUCKET_NAME");
   }
 
   let existingKeys: Set<string>;
@@ -439,7 +439,7 @@ async function main() {
     }
 
     const r2 = getR2Client();
-    const bucket = process.env.R2_BUCKET_NAME!;
+    const bucket = process.env.R2_MAPS_BUCKET_NAME!;
     const logger = new SyncLogger("upload-aoh-maps");
 
     console.log("Listing existing R2 keys...");

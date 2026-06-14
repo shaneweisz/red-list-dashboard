@@ -70,7 +70,7 @@ export async function GET(
 
   try {
     const client = getR2Client();
-    const bucket = process.env.R2_BUCKET_NAME;
+    const bucket = process.env.R2_MAPS_BUCKET_NAME;
 
     if (!bucket) {
       return NextResponse.json(
