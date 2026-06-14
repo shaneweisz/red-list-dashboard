@@ -2871,7 +2871,11 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
               </button>
             )}
             <span className="ml-auto text-sm md:text-base font-semibold text-zinc-700 dark:text-zinc-300 tabular-nums flex items-center gap-2">
-              {totalFiltered.toLocaleString()} species
+              {speciesLoading && totalFiltered === 0 && !singleSpeciesPreview ? (
+                <Spinner className="h-4 w-4" />
+              ) : (
+                <>{totalFiltered.toLocaleString()} species</>
+              )}
             </span>
             {!isNewAssessments && neCount > 0 && (
               <button
