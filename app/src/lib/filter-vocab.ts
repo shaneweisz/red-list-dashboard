@@ -68,15 +68,23 @@ export const THREAT_LABEL: Record<string, string> = (() => {
 /** Human label for a threat code, walking up to the nearest known parent for
  *  deep sub-codes (e.g. "5.4.1" → "Fishing & harvesting"). Never returns a bare
  *  number when a labelled ancestor exists. */
+// Render a threat code with its top-level category for context, e.g.
+// "11.4" → "Climate change: Storms & flooding", "5.4.1" → "Harvesting: Fishing &
+// harvesting", "11" → "Climate change". Without the parent, a leaf like "Droughts"
+// loses which of the 12 IUCN threat categories it belongs to.
 export function threatDisplay(code: string): string {
-  if (THREAT_LABEL[code]) return THREAT_LABEL[code];
-  const parts = code.split(".");
-  while (parts.length > 1) {
-    parts.pop();
-    const parent = parts.join(".");
-    if (THREAT_LABEL[parent]) return THREAT_LABEL[parent];
+  const top = THREAT_LABEL[code.split(".")[0]];
+  // Most specific known label: exact, else the nearest known ancestor.
+  let specific = THREAT_LABEL[code];
+  if (!specific) {
+    const parts = code.split(".");
+    while (parts.length > 1 && !specific) {
+      parts.pop();
+      specific = THREAT_LABEL[parts.join(".")];
+    }
   }
-  return code;
+  if (top && specific && specific !== top) return `${top}: ${specific}`;
+  return top ?? specific ?? code;
 }
 
 const slugify = (v: string) => v.trim().toLowerCase().replace(/[\s_]+/g, "-");
@@ -165,9 +173,11 @@ export function categoryLabel(code: string): string {
 
 /** Featured top-level groups, shown in the index/llms.txt. Each id is a real
  *  taxonomy-tree node; display names come from the tree at runtime. */
+// Current canonical node ids (post-CoL the vertebrate groups use common-name ids:
+// mammals, not mammalia). Kept in sync with the display tree.
 export const FEATURED_TAXA: string[] = [
-  "mammalia", "aves", "reptilia", "amphibia", "fishes",
-  "insecta", "arachnida", "mollusca", "crustacea", "corals",
+  "mammals", "birds", "reptiles", "amphibians", "fishes",
+  "insecta", "arachnids", "molluscs", "crustaceans", "corals",
   "other_invertebrates", "velvet_worms", "horseshoe_crabs",
   "flowering_plants", "gymnosperms", "ferns_and_allies", "mosses",
   "green_algae", "red_algae", "brown_algae", "mushrooms",

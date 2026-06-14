@@ -70,9 +70,10 @@ describe("labels", () => {
     expect(THREAT_LABEL["11"]).toBe("Climate change");
     expect(categoryLabel("EN")).toContain("Endangered");
     expect(taxonLabel("corals")).toMatch(/coral/i);
-    // deep sub-codes walk up to the nearest known label (no bare numbers)
-    expect(threatDisplay("11.4")).toBe("Storms & flooding");
-    expect(threatDisplay("5.4.1")).toBe("Fishing & harvesting");
+    // threat codes render with their top-level category for context; deep sub-codes
+    // walk up to the nearest known label (no bare numbers)
+    expect(threatDisplay("11.4")).toBe("Climate change: Storms & flooding");
+    expect(threatDisplay("5.4.1")).toBe("Harvesting: Fishing & harvesting");
     expect(threatDisplay("11")).toBe("Climate change");
   });
 });
