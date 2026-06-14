@@ -53,7 +53,7 @@ async function main() {
 
   const startTime = Date.now();
   const logger = new SyncLogger("sync");
-  let coldpTsv: string | null = null;
+  let coldpDir: string | null = null;
   let checklistTsv: string | null = null;
 
   try {
@@ -93,9 +93,10 @@ async function main() {
     // (taxon-independent) and matching needs the complete assessed/unassessed parquets,
     // so only run on a FULL sync; a partial-taxa sync leaves the existing CoL artifacts.
     if (!taxaFilter) {
-      console.log("\nPhase 7: fetch-coldp (CoL XR ColDP → NameUsage.tsv)");
+      console.log("\nPhase 7: fetch-coldp (CoL XR ColDP → NameUsage.tsv + Reference.tsv)");
       console.log("═".repeat(60));
-      coldpTsv = await fetchColdp();
+      const coldp = await fetchColdp();
+      coldpDir = coldp.dir;
 
       console.log("\nPhase 7b: fetch-col-checklist (curated CoL Checklist → demotion overlay)");
       console.log("═".repeat(60));
@@ -103,7 +104,7 @@ async function main() {
 
       console.log("\nPhase 8: build-backbone (→ backbone.parquet + species/)");
       console.log("═".repeat(60));
-      await buildBackbone({ tsv: coldpTsv, demotionsTsv: checklistTsv });
+      await buildBackbone({ tsv: coldp.nameUsage, referenceTsv: coldp.reference, demotionsTsv: checklistTsv });
 
       console.log("\nPhase 9: build-matching (→ species_link.parquet)");
       console.log("═".repeat(60));
@@ -135,9 +136,9 @@ async function main() {
     console.log("  npm run diff-data-vs-r2     # see what changed vs the live R2 sync");
     console.log("  npm run upload-data-to-r2   # publish this sync to R2");
   } finally {
-    // Drop the temp ColDP TSVs (XR ~2.8GB + curated checklist) so they're never swept
+    // Drop the temp ColDP TSVs (XR ~3.4GB + curated checklist) so they're never swept
     // into the R2 upload.
-    if (coldpTsv) fs.rmSync(path.dirname(coldpTsv), { recursive: true, force: true });
+    if (coldpDir) fs.rmSync(coldpDir, { recursive: true, force: true });
     if (checklistTsv) fs.rmSync(path.dirname(checklistTsv), { recursive: true, force: true });
     logger.close();
   }
