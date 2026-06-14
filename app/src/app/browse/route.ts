@@ -23,6 +23,8 @@ import { isOutdated } from "@/lib/data/species-store";
 import { findNode, speciesMatchesNode } from "@/lib/taxonomy-utils";
 import { matchesSpeciesFilter, type SpeciesFilterCriteria, type FilterableSpecies } from "@/lib/species-filter";
 import type { RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
+import { parseAssessors } from "@/lib/parseAssessors";
+import { IUCN_REGION_ORDER, iucnRegionCountries } from "@/lib/regions";
 import { CATEGORY_ORDER } from "@/config/taxa";
 import { CACHE_1H } from "@/lib/cache-headers";
 import {
@@ -44,8 +46,25 @@ type Row = FilterableSpecies & {
   class_name?: string | null;
   order_name?: string | null;
   family?: string | null;
+  latest_assessors?: string | null;
+  latest_reviewers?: string | null;
+  described_year?: number | null;
   matched_synonym?: string | null;
 };
+
+// Resolve IUCN region names (case-insensitive, hyphen/space tolerant) to their
+// country codes — the dashboard's region dropdown expands to countries the same way.
+function resolveRegions(values: string[]): { codes: string[]; unresolved: string[] } {
+  const codes = new Set<string>();
+  const unresolved: string[] = [];
+  const norm = (s: string) => s.toLowerCase().replace(/[\s_-]+/g, " ").trim();
+  for (const v of values) {
+    const hit = IUCN_REGION_ORDER.find((r) => norm(r) === norm(v));
+    if (hit) iucnRegionCountries(hit).forEach((c) => codes.add(c));
+    else unresolved.push(v);
+  }
+  return { codes: [...codes], unresolved };
+}
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 
@@ -91,6 +110,9 @@ function searchHitToRow(h: SearchResult): Row {
     gbif_occurrence_count: null,
     assessment_date: h.assessment_date,
     taxon_group: h.taxon_group,
+    latest_assessors: null,
+    latest_reviewers: null,
+    described_year: null,
     matched_synonym: h.matched_synonym ?? null,
   };
 }
@@ -105,6 +127,10 @@ export async function GET(req: NextRequest) {
   const threats = resolveThreats(parseList(sp, "threats"));
   const categories = resolveCategories(parseList(sp, "categories"));
   const countries = resolveCountries(parseList(sp, "countries"));
+  const regionRaw = parseList(sp, "region");
+  const regions = resolveRegions(regionRaw);
+  const assessors = parseList(sp, "assessors");
+  const reviewers = parseList(sp, "reviewers");
   const systems = normalizeOneOf(parseList(sp, "systems"), SYSTEMS);
   const trends = normalizeOneOf(parseList(sp, "trends"), POPULATION_TRENDS);
   const movement = parseList(sp, "movement");
@@ -123,6 +149,8 @@ export async function GET(req: NextRequest) {
   const maxObs = intParam("maxObs");
   const minAssessmentYear = intParam("minAssessmentYear");
   const maxAssessmentYear = intParam("maxAssessmentYear");
+  const minDescribedYear = intParam("minDescribedYear");
+  const maxDescribedYear = intParam("maxDescribedYear");
   const outdatedRaw = sp.get("outdated");
   const outdated: "yes" | "no" | null = outdatedRaw === "yes" ? "yes" : outdatedRaw === "no" ? "no" : null;
 
@@ -131,6 +159,7 @@ export async function GET(req: NextRequest) {
     ...threats.unresolved.map((v) => `threats=${v}`),
     ...categories.unresolved.map((v) => `categories=${v}`),
     ...countries.unresolved.map((v) => `countries=${v}`),
+    ...regions.unresolved.map((v) => `region=${v}`),
     ...systems.unresolved.map((v) => `systems=${v}`),
     ...trends.unresolved.map((v) => `trends=${v}`),
   ];
@@ -145,7 +174,7 @@ export async function GET(req: NextRequest) {
   const criteria: SpeciesFilterCriteria = {
     categories: setOrUndef(categories.codes),
     threats: setOrUndef(threats.codes),
-    countries: setOrUndef(countries.codes),
+    countries: setOrUndef([...countries.codes, ...regions.codes]),
     systems: setOrUndef(systems.values),
     populationTrends: setOrUndef(trends.values),
     movementPatterns: setOrUndef(movement),
@@ -182,6 +211,22 @@ export async function GET(req: NextRequest) {
       }
     });
     if (outdated) matched = matched.filter((r) => isOutdated(r.assessment_date ?? null) === (outdated === "yes"));
+    // Assessor / reviewer of the latest assessment (denormalized on the row).
+    // Case-insensitive substring so an agent needn't supply the exact recorded name.
+    if (assessors.length) {
+      const q = assessors.map((a) => a.toLowerCase());
+      matched = matched.filter((r) => parseAssessors(r.latest_assessors).some((a) => q.some((x) => a.toLowerCase().includes(x))));
+    }
+    if (reviewers.length) {
+      const q = reviewers.map((a) => a.toLowerCase());
+      matched = matched.filter((r) => parseAssessors(r.latest_reviewers).some((a) => q.some((x) => a.toLowerCase().includes(x))));
+    }
+    // Described-year (NE rows carry the CoL year): inclusive bounds.
+    if (minDescribedYear != null || maxDescribedYear != null) {
+      matched = matched.filter((r) => r.described_year != null
+        && (minDescribedYear == null || r.described_year >= minDescribedYear)
+        && (maxDescribedYear == null || r.described_year <= maxDescribedYear));
+    }
   } else {
     // Search mode: synonym-aware species lookup. Rich base filters aren't applied
     // here (the lean hit shape lacks them); steer filtered queries to ?taxa=.
@@ -206,6 +251,11 @@ export async function GET(req: NextRequest) {
   const stats = { assessed: assessed.length, outdated: outdatedCount, outdated_pct: outdatedPct };
 
   const interpreted = describeFilters({ taxa, threats, categories, countries, systems, trends, movement, growthForms, hasMap, search });
+  if (regions.codes.length) interpreted.push(`Region: ${regionRaw.filter((v) => !regions.unresolved.includes(v)).join(", ")}`);
+  if (assessors.length) interpreted.push(`Assessor: ${assessors.join(", ")}`);
+  if (reviewers.length) interpreted.push(`Reviewer: ${reviewers.join(", ")}`);
+  if (minDescribedYear != null) interpreted.push(`Described in or after ${minDescribedYear}`);
+  if (maxDescribedYear != null) interpreted.push(`Described in or before ${maxDescribedYear}`);
   if (minObs != null) interpreted.push(`GBIF observations ≥ ${minObs.toLocaleString()}`);
   if (maxObs != null) interpreted.push(`GBIF observations ≤ ${maxObs.toLocaleString()}`);
   if (minAssessmentYear != null) interpreted.push(`Assessed in or after ${minAssessmentYear}`);
@@ -354,15 +404,20 @@ function indexData(unresolved: string[]) {
       taxa: FEATURED_TAXA.map((id) => ({ id, label: taxonLabel(id) })),
       threats: THREAT_CATEGORIES.map((t) => ({ code: t.code, label: t.label })),
       categories: ALL_CATEGORIES.map((c) => ({ code: c, label: categoryLabel(c) })),
+      region: IUCN_REGION_ORDER,
       systems: SYSTEMS,
       trends: POPULATION_TRENDS,
       hasMap: ["yes", "no"],
       search: "free-text scientific or common name (incl. synonyms / old names)",
+      assessors: "latest-assessment assessor name (substring, e.g. Smith)",
+      reviewers: "latest-assessment reviewer name (substring)",
       outdated: "yes | no (assessment >10 years old)",
       minObs: "min GBIF occurrence count (e.g. 100)",
       maxObs: "max GBIF occurrence count",
       minAssessmentYear: "earliest assessment year (e.g. 2015)",
       maxAssessmentYear: "latest assessment year",
+      minDescribedYear: "earliest CoL year-described (NE species)",
+      maxDescribedYear: "latest CoL year-described",
     },
     note: "taxa accepts any taxonomic rank — a curated group (birds, corals), a sub-group (sharks-rays, flatworms), or a scientific name (felidae, odonata). Every response includes a `stats` object (assessed/outdated/outdated_pct) for percentage questions.",
     examples: EXAMPLES,
@@ -374,6 +429,7 @@ const EXAMPLES: { url: string; desc: string }[] = [
   { url: `${BASE}?taxa=corals&threats=11&categories=CR,EN`, desc: "Critically endangered / endangered corals hit by climate change" },
   { url: `${BASE}?taxa=mammals`, desc: "All mammals — read stats.outdated_pct for % of outdated assessments" },
   { url: `${BASE}?taxa=mammals&categories=critically-endangered&trends=Decreasing`, desc: "Critically endangered mammals with declining populations" },
+  { url: `${BASE}?taxa=amphibians&region=Sub-Saharan+Africa&categories=threatened`, desc: "Threatened amphibians in Sub-Saharan Africa (IUCN region)" },
   { url: `${BASE}?search=tiger`, desc: "Look up a species by name" },
   { url: `${BASE}?search=Felis+jubata`, desc: "Look up by an old name — resolves to the accepted species" },
 ];
@@ -396,8 +452,10 @@ ${unresolvedBlock(unresolved)}
 <p><strong>taxa</strong>: ${taxaList} — or any sub-group / scientific name.</p>
 <p><strong>threats</strong>: ${threatList} — plus aliases like <code>climate-change</code>, <code>pollution</code>, <code>overfishing</code>.</p>
 <p><strong>categories</strong>: ${catList} — plus <code>threatened</code> (= CR, EN, VU).</p>
-<p><strong>systems</strong>: ${SYSTEMS.map((s) => `<code>${s}</code>`).join(", ")}. <strong>trends</strong>: ${POPULATION_TRENDS.map((s) => `<code>${s}</code>`).join(", ")}. <strong>hasMap</strong>: <code>yes</code>/<code>no</code>. <strong>countries</strong>: ISO code or name.</p>
-<p><strong>outdated</strong>: <code>yes</code>/<code>no</code> (assessment &gt;10 yrs old). <strong>minObs</strong>/<strong>maxObs</strong>, <strong>minAssessmentYear</strong>/<strong>maxAssessmentYear</strong>: numeric bounds.</p>
+<p><strong>systems</strong>: ${SYSTEMS.map((s) => `<code>${s}</code>`).join(", ")}. <strong>trends</strong>: ${POPULATION_TRENDS.map((s) => `<code>${s}</code>`).join(", ")}. <strong>hasMap</strong>: <code>yes</code>/<code>no</code>.</p>
+<p><strong>countries</strong>: ISO code or name. <strong>region</strong> (IUCN): ${IUCN_REGION_ORDER.map((r) => `<code>${esc(r)}</code>`).join(", ")}.</p>
+<p><strong>assessors</strong> / <strong>reviewers</strong>: name of the latest-assessment assessor/reviewer (substring match).</p>
+<p><strong>outdated</strong>: <code>yes</code>/<code>no</code> (assessment &gt;10 yrs old). <strong>minObs</strong>/<strong>maxObs</strong>, <strong>minAssessmentYear</strong>/<strong>maxAssessmentYear</strong>, <strong>minDescribedYear</strong>/<strong>maxDescribedYear</strong>: numeric bounds.</p>
 <p>Every response leads with a total, a by-category breakdown, and an outdated count + %, so percentage questions are answered in one request.</p>
 <h2>Examples</h2><ul>${examples}</ul>
 ${PAGE_FOOT}`;

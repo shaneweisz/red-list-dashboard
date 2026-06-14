@@ -11,6 +11,7 @@ import {
   THREAT_CATEGORIES, FEATURED_TAXA, ALL_CATEGORIES,
   SYSTEMS, POPULATION_TRENDS, taxonLabel, categoryLabel,
 } from "@/lib/filter-vocab";
+import { IUCN_REGION_ORDER } from "@/lib/regions";
 
 export const revalidate = 3600;
 
@@ -61,10 +62,13 @@ systems: ${SYSTEMS.join(", ")}
 trends:  ${POPULATION_TRENDS.join(", ")}
 hasMap:  yes | no
 countries: ISO alpha-2 code or name (e.g. IN or India)
+region (IUCN region — expands to its countries): ${IUCN_REGION_ORDER.join(", ")}
+assessors / reviewers: name of the latest-assessment assessor/reviewer (substring, e.g. assessors=Smith)
 search:  scientific or common name (incl. synonyms)
 outdated: yes | no  (assessment more than 10 years old)
 minObs / maxObs: GBIF occurrence-count bounds
 minAssessmentYear / maxAssessmentYear: assessment-year bounds
+minDescribedYear / maxDescribedYear: year-described bounds (NE species)
 
 ## Examples
 - ${base}/browse?taxa=corals&threats=climate-change
@@ -73,6 +77,8 @@ minAssessmentYear / maxAssessmentYear: assessment-year bounds
     All mammals — read stats.outdated_pct for % of outdated assessments
 - ${base}/browse?taxa=felidae&categories=threatened
     Threatened cats (arbitrary rank: a family name)
+- ${base}/browse?taxa=amphibians&region=Sub-Saharan+Africa&categories=threatened
+    Threatened amphibians in a region (IUCN region expands to its countries)
 - ${base}/browse?search=tiger
     Look up a species by name
 - ${base}/browse?search=Felis+jubata
