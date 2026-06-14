@@ -321,6 +321,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     selectedCategories, setSelectedCategories,
     selectedYearRanges, setSelectedYearRanges,
     selectedAssessmentYears, setSelectedAssessmentYears,
+    selectedDescribedYears, setSelectedDescribedYears,
     selectedCountries, setSelectedCountries,
     selectedObsRanges, setSelectedObsRanges,
     selectedSystems, setSelectedSystems,
@@ -387,6 +388,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     setSelectedCategories(new Set());
     setSelectedYearRanges(new Set());
     setSelectedAssessmentYears(new Set());
+    setSelectedDescribedYears(new Set());
     setSelectedCountries(new Set());
     setSelectedObsRanges(new Set());
     setSelectedSystems(new Set());
@@ -403,7 +405,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     if (viewMode === "new-assessments") {
       setSelectedTaxa(prev => prev.has("all") ? new Set<string>() : prev);
     }
-  }, [viewMode, setSelectedTaxa, setSelectedSubgroups, setSelectedCategories, setSelectedYearRanges, setSelectedAssessmentYears, setSelectedCountries, setSelectedObsRanges, setSelectedSystems, setSelectedPopulationTrends, setSelectedMovementPatterns, setSelectedThreats, setHasMapFilter, setSelectedGrowthForms, setSelectedAssessors, setSelectedReviewers, setSort]);
+  }, [viewMode, setSelectedTaxa, setSelectedSubgroups, setSelectedCategories, setSelectedYearRanges, setSelectedAssessmentYears, setSelectedDescribedYears, setSelectedCountries, setSelectedObsRanges, setSelectedSystems, setSelectedPopulationTrends, setSelectedMovementPatterns, setSelectedThreats, setHasMapFilter, setSelectedGrowthForms, setSelectedAssessors, setSelectedReviewers, setSort]);
 
   // Taxon toggle handler (used by TaxaSummary)
   // Regular click: select only that taxon (or deselect if already sole selection)
@@ -715,6 +717,25 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     return false;
   }, [selectedObsRanges]);
 
+  // CoL description-year range bucket for a species (NE/new-assessments only).
+  // "Unknown" covers names CoL has no datable source for (chiefly plants/fungi,
+  // whose author citations omit the year and lack a dated reference).
+  const describedYearBucket = useCallback((year: number | null | undefined): string => {
+    if (year == null) return "Unknown";
+    if (year < 1900) return "pre-1900";
+    if (year < 1950) return "1900-1949";
+    if (year < 2000) return "1950-1999";
+    if (year < 2010) return "2000-2009";
+    if (year < 2020) return "2010-2019";
+    return "2020+";
+  }, []);
+
+  // Helper to check if species matches the described-year bucket filter
+  const matchesDescribedYearFilter = useCallback((year: number | null | undefined, buckets: Set<string> = selectedDescribedYears): boolean => {
+    if (buckets.size === 0) return true;
+    return buckets.has(describedYearBucket(year));
+  }, [selectedDescribedYears, describedYearBucket]);
+
   // Assessors/reviewers from the latest assessment. These are denormalized inline
   // on the species list (latest_assessors/latest_reviewers) so the filter works
   // without the full history array (which is fetched lazily for the detail panel).
@@ -846,6 +867,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         order_name: null,
         taxon_group: cached.taxon_group,
         taxon_id: cached.taxon_id,
+        described_year: null,
         gbif_species_key: cached.gbif_species_key,
         gbif_occurrence_count: null,
         gbif_observations_after_assessment_year: null,
@@ -1161,6 +1183,30 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     }));
   }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, hasMapFilter, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
+  // Year Described chart (NE / new-assessments only): per-bucket counts, cross-filtered
+  // by every OTHER active filter (search, country, GBIF obs) but NOT the described-year
+  // selection itself. Only NE rows carry described_year; in new-assessments all rows are NE.
+  const describedYearData = useMemo(() => {
+    const buckets = ["pre-1900", "1900-1949", "1950-1999", "2000-2009", "2010-2019", "2020+", "Unknown"];
+    const counts: Record<string, number> = Object.fromEntries(buckets.map(b => [b, 0]));
+    taxaFilteredSpecies.forEach(s => {
+      if (s.category !== "NE") return;
+      if (!matchesSearch(s)) return;
+      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
+      if (!matchesObsRangeFilter(s.gbif_occurrence_count)) return;
+      counts[describedYearBucket(s.described_year)]++;
+    });
+    const total = buckets.reduce((sum, b) => sum + counts[b], 0);
+    return buckets
+      .map(b => ({
+        range: b,
+        shortRange: b,
+        count: counts[b],
+        label: `${counts[b].toLocaleString()} (${total > 0 ? ((counts[b] / total) * 100).toFixed(1) : 0}%)`,
+      }))
+      .filter(d => d.count > 0);
+  }, [taxaFilteredSpecies, selectedCountries, matchesSearch, matchesObsRangeFilter, describedYearBucket]);
+
   // Country chart: apply all filters EXCEPT country
   const { countryStatsForMap } = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -1397,6 +1443,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     const filtered = taxaFilteredSpecies.filter((s) => {
       const matchesCategory = selectedCategories.size === 0 || selectedCategories.has(s.category);
       const matchesYear = s.category === "NE" || (matchesYearRangeFilter(s.assessment_date) && matchesAssessmentYearFilter(s.assessment_date));
+      // Described-year applies to NE rows only (the only ones carrying described_year).
+      const matchesDescribed = s.category !== "NE" || matchesDescribedYearFilter(s.described_year);
       const matchesObs = matchesObsRangeFilter(s.gbif_occurrence_count);
       const matchesCountry = selectedCountries.size === 0 || s.countries.some(c => selectedCountries.has(c));
       const matchesSystem = selectedSystems.size === 0 || s.systems?.some(sys => selectedSystems.has(sys));
@@ -1413,7 +1461,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       const matchesReviewer = matchesReviewersFilter(s);
       const pinnedKey = isNewAssessments ? Math.abs(s.id) : s.sis_taxon_id;
       const matchesStarred = !showOnlyStarred || (pinnedKey != null && pinnedSet.has(pinnedKey));
-      return matchesCategory && matchesYear && matchesObs && matchesCountry && matchesSystem && matchesTrend && matchesMovement && matchesThreat && matchesMap && matchesGrowth && matchesSearch && matchesAssessor && matchesReviewer && matchesStarred;
+      return matchesCategory && matchesYear && matchesDescribed && matchesObs && matchesCountry && matchesSystem && matchesTrend && matchesMovement && matchesThreat && matchesMap && matchesGrowth && matchesSearch && matchesAssessor && matchesReviewer && matchesStarred;
     });
 
     const sorted = [...filtered].sort((a, b) => {
@@ -1447,6 +1495,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         const pctB = (b.gbif_occurrence_count && b.gbif_occurrence_count > 0 && b.gbif_observations_after_assessment_year != null)
           ? b.gbif_observations_after_assessment_year / b.gbif_occurrence_count : -1;
         comparison = pctA - pctB;
+      } else if (sortField === "describedYear") {
+        // Nulls (no known year) sort to the bottom regardless of direction below.
+        comparison = (a.described_year ?? -1) - (b.described_year ?? -1);
       }
 
       // Apply primary sort direction
@@ -1462,7 +1513,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     });
 
     return { filteredSpecies: filtered, sortedSpecies: sorted };
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, hasMapFilter, selectedGrowthForms, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection, matchesAssessorsFilter, matchesReviewersFilter, isNewAssessments, matchesObsRangeFilter, matchesYearRangeFilter, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, hasMapFilter, selectedGrowthForms, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection, matchesAssessorsFilter, matchesReviewersFilter, isNewAssessments, matchesObsRangeFilter, matchesYearRangeFilter, matchesAssessmentYearFilter, matchesDescribedYearFilter]);
 
   // Giant aggregates (insects, invertebrates…) are capped at 400k server-side; surface
   // a banner so the list reads as "showing N of M — drill into a sub-group for the rest".
@@ -1546,7 +1597,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
 
 
   // Handle sort toggle
-  const handleSort = (field: "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif") => {
+  const handleSort = (field: "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear") => {
     const currentField = sortField === null ? "year" : sortField;
     if (currentField === field) {
       if (sortDirection === "desc") {
@@ -1563,7 +1614,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedTaxa, selectedCategories, selectedYearRanges, selectedAssessmentYears, selectedObsRanges, selectedAssessors, selectedReviewers, searchFilter, selectedCountries, showOnlyStarred]);
+  }, [selectedTaxa, selectedCategories, selectedYearRanges, selectedAssessmentYears, selectedDescribedYears, selectedObsRanges, selectedAssessors, selectedReviewers, searchFilter, selectedCountries, showOnlyStarred]);
 
   // Auto-navigate to the page containing the URL-selected species
   useEffect(() => {
@@ -1847,6 +1898,24 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     if (!range) return;
     const isMultiSelect = event.metaKey || event.ctrlKey;
     setSelectedObsRanges(prev => {
+      if (isMultiSelect) {
+        const next = new Set(prev);
+        if (next.has(range)) next.delete(range);
+        else next.add(range);
+        return next;
+      } else {
+        if (prev.size === 1 && prev.has(range)) return new Set();
+        return new Set([range]);
+      }
+    });
+  };
+
+  // Handle Year Described bucket bar click
+  const handleDescribedYearClick = (data: { payload?: { range?: string } }, event: React.MouseEvent) => {
+    const range = data.payload?.range;
+    if (!range) return;
+    const isMultiSelect = event.metaKey || event.ctrlKey;
+    setSelectedDescribedYears(prev => {
       if (isMultiSelect) {
         const next = new Set(prev);
         if (next.has(range)) next.delete(range);
@@ -2337,6 +2406,42 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
             )}
           </div>
 
+          {/* Charts row 3 (new-assessments only): Year Described (CoL) */}
+          {isNewAssessments && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">
+                    Year Described
+                    <HoverTooltip text="Year the species was scientifically described, from the Catalogue of Life. Available for ~99% of animals; many plants, fungi and algae have no datable record in CoL and fall under 'Unknown'.">
+                      <svg className="w-3 h-3 text-zinc-400 dark:text-zinc-500 cursor-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M12 16v-4M12 8h.01" />
+                      </svg>
+                    </HoverTooltip>
+                  </span>
+                </div>
+                <div style={{ height: 180 }} className="flex items-center justify-center">
+                  {speciesLoading && assessedSpecies.length === 0 ? (
+                    <Spinner />
+                  ) : describedYearData.length > 0 ? (
+                    <FilterBarChart
+                      data={describedYearData}
+                      dataKey="shortRange"
+                      selectedItems={selectedDescribedYears}
+                      onBarClick={handleDescribedYearClick}
+                      barColor="#8b5cf6"
+                      yAxisWidth={64}
+                      rightMargin={85}
+                    />
+                  ) : (
+                    <span className="text-sm text-zinc-400 dark:text-zinc-500">No description-year data</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* More Filters (collapsible) - hidden for New Assessments */}
           {!isNewAssessments && <div>
             <button
@@ -2730,6 +2835,16 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 <span className="text-xs">×</span>
               </button>
             ))}
+            {isNewAssessments && Array.from(selectedDescribedYears).map(range => (
+              <button
+                key={`dy-${range}`}
+                onClick={() => setSelectedDescribedYears(prev => { const next = new Set(prev); next.delete(range); return next; })}
+                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
+              >
+                Described {range}
+                <span className="text-xs">×</span>
+              </button>
+            ))}
             {Array.from(selectedObsRanges).map(range => (
               <button
                 key={range}
@@ -2862,7 +2977,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 <span className="text-xs">×</span>
               </button>
             ))}
-            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || hasMapFilter || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred) && (
+            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || hasMapFilter || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred) && (
               <button
                 onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setSelectedSubgroups(new Set()); setSelectedObsRanges(new Set()); setSelectedSystems(new Set()); setHasMapFilter(null); setSelectedGrowthForms(new Set()); setSelectedPopulationTrends(new Set()); setSelectedMovementPatterns(new Set()); setSelectedThreats(new Set()); setSelectedAssessors(new Set()); setSelectedReviewers(new Set()); setShowOnlyStarred(false); }}
                 className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 underline"
@@ -2962,6 +3077,19 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                     Assess. Date
                     {(sortField === "year" || sortField === null) && (
                       <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
+                    )}
+                  </span>
+                </th>
+                )}
+                {isNewAssessments && (
+                <th
+                  className="px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
+                  onClick={() => handleSort("describedYear")}
+                >
+                  <span className="flex items-center gap-1">
+                    Year Described
+                    {sortField === "describedYear" && (
+                      <span className="text-emerald-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
                     )}
                   </span>
                 </th>
@@ -3162,6 +3290,12 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                       )}
                     </td>
                     )}
+                    {/* Year Described (CoL) */}
+                    {isNewAssessments && (
+                    <td className="px-2 md:px-4 py-3 text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
+                      {s.described_year ?? <span className="text-zinc-400">—</span>}
+                    </td>
+                    )}
                     {/* Total GBIF */}
                     <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
                       {details?.gbifOccurrences != null && details?.gbifUrl ? (
@@ -3235,7 +3369,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   </tr>
                   {selectedSpeciesKey === speciesKey && (
                     <tr>
-                      <td colSpan={isNewAssessments ? 3 : 8} className="p-0 bg-zinc-50 dark:bg-zinc-800/30" style={{ width: 0 }}>
+                      <td colSpan={isNewAssessments ? 4 : 8} className="p-0 bg-zinc-50 dark:bg-zinc-800/30" style={{ width: 0 }}>
                         <div style={{ minWidth: '100%', maxWidth: 'calc(100vw - 2rem)', transform: 'translateX(var(--scroll-left, 0px))' }}>
                           {/* Tab bar */}
                           <div className="flex items-center border-b border-zinc-200 dark:border-zinc-700 overflow-x-auto flex-nowrap" onClick={(e) => e.stopPropagation()}>
@@ -3423,7 +3557,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
               })}
               {totalFiltered === 0 && !speciesLoading && (
                 <tr>
-                  <td colSpan={isNewAssessments ? 3 : 8} className="px-4 py-8 text-center text-zinc-500">
+                  <td colSpan={isNewAssessments ? 4 : 8} className="px-4 py-8 text-center text-zinc-500">
                     No species found
                   </td>
                 </tr>

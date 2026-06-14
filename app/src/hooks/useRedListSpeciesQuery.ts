@@ -19,6 +19,9 @@ export interface RedListSpecies {
   order_name: string | null;
   taxon_group: string;
   taxon_id: string;
+  // CoL species description year — populated for Not Evaluated (NE) rows only;
+  // null for assessed species and for NE names with no datable CoL source.
+  described_year: number | null;
   gbif_species_key: number | null;
   gbif_occurrence_count: number | null;
   gbif_observations_after_assessment_year: number | null;

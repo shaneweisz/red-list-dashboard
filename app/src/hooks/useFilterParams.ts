@@ -29,6 +29,10 @@ export function parseParams(search: string) {
     assessmentYears: p.get("assessmentYears")
       ? new Set(p.get("assessmentYears")!.split(",").filter(Boolean))
       : new Set<string>(),
+    // CoL description-year range buckets (NE/new-assessments view only).
+    describedYears: p.get("describedYears")
+      ? new Set(p.get("describedYears")!.split(",").filter(Boolean))
+      : new Set<string>(),
     countries: p.get("countries")
       ? new Set(p.get("countries")!.split(",").filter(Boolean))
       : new Set<string>(),
@@ -64,8 +68,9 @@ export function parseParams(search: string) {
       sortParam === "totalGbif" ? "totalGbif" :
       sortParam === "newGbif" ? "newGbif" :
       sortParam === "pctNewGbif" ? "pctNewGbif" :
+      sortParam === "describedYear" ? "describedYear" :
       null
-    ) as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
+    ) as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear" | null,
     sortDirection: (p.get("dir") === "asc" ? "asc" : "desc") as "asc" | "desc",
     species: p.get("species") ? Number(p.get("species")) : null,
     tab: (p.get("tab") || null) as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "col" | null,
@@ -79,6 +84,7 @@ export function buildQs(state: {
   categories: Set<string>;
   yearRanges: Set<string>;
   assessmentYears: Set<string>;
+  describedYears: Set<string>;
   countries: Set<string>;
   obsRanges: Set<string>;
   systems: Set<string>;
@@ -90,7 +96,7 @@ export function buildQs(state: {
   assessors: Set<string>;
   reviewers: Set<string>;
   search: string;
-  sortField: "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null;
+  sortField: "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear" | null;
   sortDirection: "asc" | "desc";
   species: number | null;
   tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "col" | null;
@@ -102,6 +108,7 @@ export function buildQs(state: {
   if (state.categories.size > 0) p.set("categories", [...state.categories].join(","));
   if (state.yearRanges.size > 0) p.set("years", [...state.yearRanges].join(","));
   if (state.assessmentYears.size > 0) p.set("assessmentYears", [...state.assessmentYears].join(","));
+  if (state.describedYears.size > 0) p.set("describedYears", [...state.describedYears].join(","));
   if (state.countries.size > 0) p.set("countries", [...state.countries].join(","));
   if (state.obsRanges.size > 0) p.set("obsRanges", [...state.obsRanges].join(","));
   if (state.systems.size > 0) p.set("systems", [...state.systems].join(","));
@@ -210,6 +217,18 @@ export function useFilterParams() {
       setState(prev => {
         const nextYears = typeof updater === "function" ? updater(prev.assessmentYears) : updater;
         const next = { ...prev, assessmentYears: nextYears };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
+  const setSelectedDescribedYears = useCallback(
+    (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+      setState(prev => {
+        const nextYears = typeof updater === "function" ? updater(prev.describedYears) : updater;
+        const next = { ...prev, describedYears: nextYears };
         queueMicrotask(() => syncUrl(next, false));
         return next;
       });
@@ -371,7 +390,7 @@ export function useFilterParams() {
   );
 
   const setSort = useCallback(
-    (field: "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null, direction: "asc" | "desc") => {
+    (field: "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear" | null, direction: "asc" | "desc") => {
       setState(prev => {
         const next = { ...prev, sortField: field, sortDirection: direction };
         queueMicrotask(() => syncUrl(next, false));
@@ -412,6 +431,7 @@ export function useFilterParams() {
         categories: new Set<string>(),
         yearRanges: new Set<string>(),
         assessmentYears: new Set<string>(),
+        describedYears: new Set<string>(),
         countries: new Set<string>(),
         obsRanges: new Set<string>(),
         systems: new Set<string>(),
@@ -442,6 +462,7 @@ export function useFilterParams() {
         categories: new Set<string>(),
         yearRanges: new Set<string>(),
         assessmentYears: new Set<string>(),
+        describedYears: new Set<string>(),
         countries: new Set<string>(),
         obsRanges: new Set<string>(),
         systems: new Set<string>(),
@@ -470,6 +491,7 @@ export function useFilterParams() {
     selectedCategories: state.categories,
     selectedYearRanges: state.yearRanges,
     selectedAssessmentYears: state.assessmentYears,
+    selectedDescribedYears: state.describedYears,
     selectedCountries: state.countries,
     selectedObsRanges: state.obsRanges,
     selectedSystems: state.systems,
@@ -490,6 +512,7 @@ export function useFilterParams() {
     setSelectedCategories,
     setSelectedYearRanges,
     setSelectedAssessmentYears,
+    setSelectedDescribedYears,
     setSelectedCountries,
     setSelectedObsRanges,
     setSelectedSystems,
