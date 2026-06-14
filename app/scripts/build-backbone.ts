@@ -166,13 +166,19 @@ export async function run(opts: { tsv?: string; referenceTsv?: string; outDir?: 
     TO '${backboneOut}' (FORMAT PARQUET, COMPRESSION ZSTD);
   `);
 
+  // Upper bound for a plausible publication year (next calendar year, to tolerate
+  // early-release dates). Also excludes 4-digit plate/figure numbers that exceed it.
+  const maxYear = new Date().getUTCFullYear() + 1;
+
   // ref — reference_id → publication year. Preferred from the structured col:issued
   // (a CSL date: bare year, "1875-03", "[1875]", or a range — take the first 4-digit
   // run); but col:issued is unpopulated for most botanical/fungal references, so fall
-  // back to the year embedded in the free-text col:citation ("… Sp. Pl. 2: 753. 1753.").
-  // The citation pattern is bounded to 1[5-9]xx / 20xx so it can't grab a page or
-  // volume number; this recovers a described year for ~94% more higher-plant names than
-  // col:issued alone (verified: the recovered years spike at 1753 = Species Plantarum).
+  // back to the year in the free-text col:citation ("… Sp. Pl. 2: 753. 1753.").
+  // CRITICAL: take the LAST in-range 4-digit token, not the first. The publication
+  // year always trails the volume/page/PLATE numbers in a citation, and those can be
+  // 4 digits too ("Icon. Pl. 21: t. 2038a (1890)" → must yield 1890, not the plate
+  // 2038). So we collect every 4-digit run, keep the ones in [1500, maxYear] (drops
+  // plate numbers like 2038), and take the last — the trailing year.
   // Empty table when Reference.tsv is absent so the join below is a harmless no-op.
   await conn.run(`
     CREATE TEMP TABLE ref AS
@@ -181,11 +187,14 @@ export async function run(opts: { tsv?: string; referenceTsv?: string; outDir?: 
         SELECT "col:ID" AS rid,
                coalesce(
                  TRY_CAST(regexp_extract("col:issued", '(\\d{4})', 1) AS INTEGER),
-                 TRY_CAST(regexp_extract("col:citation", '(1[5-9][0-9][0-9]|20[0-9][0-9])', 1) AS INTEGER)
+                 list_last(list_filter(
+                   list_transform(regexp_extract_all("col:citation", '\\d{4}'), x -> TRY_CAST(x AS INTEGER)),
+                   y -> y >= 1500 AND y <= ${maxYear}
+                 ))
                ) AS ryr
         FROM read_csv('${referenceTsv}', delim='\t', header=true, quote='', ignore_errors=true, all_varchar=true)
         ` : `SELECT NULL::VARCHAR AS rid, NULL::INTEGER AS ryr`}
-      ) WHERE rid IS NOT NULL AND ryr BETWEEN 1500 AND 2100;
+      ) WHERE rid IS NOT NULL AND ryr BETWEEN 1500 AND ${maxYear};
   `);
 
   // species/ — accepted species only, lineage from XR's denormalized columns,
@@ -208,7 +217,7 @@ export async function run(opts: { tsv?: string; referenceTsv?: string; outDir?: 
              extinct, in_base, ${TAXON_GROUP_CASE} AS taxon_group
       FROM (
         SELECT n.col_id, n.scientific_name, n.authorship,
-               CASE WHEN coalesce(n.combination_year, n.basionym_year, r.ryr) BETWEEN 1500 AND 2100
+               CASE WHEN coalesce(n.combination_year, n.basionym_year, r.ryr) BETWEEN 1500 AND ${maxYear}
                     THEN coalesce(n.combination_year, n.basionym_year, r.ryr) END AS described_year,
                lower(n.kingdom) AS kingdom, lower(n.phylum) AS phylum, lower(n.class_name) AS class_name,
                lower(n.order_name) AS order_name, lower(n.family) AS family, lower(n.genus) AS genus,

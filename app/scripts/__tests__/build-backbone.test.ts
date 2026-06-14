@@ -42,6 +42,9 @@ const ROWS: string[][] = [
   // No author years, and its reference (R2) has an EMPTY col:issued — the year is only in
   // the free-text col:citation → described_year must parse it out (citation fallback → 1888).
   ["8", "F", "accepted", "species", "Testus citatius", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "Testus", "200", "false", "", "", "R2"],
+  // Regression (Bulbophyllum concinnum bug): its citation has a 4-digit PLATE number
+  // ("t. 2038a") before the real year (1890). Must yield 1890, not 2038.
+  ["9", "F", "accepted", "species", "Testus platius", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "Testus", "200", "false", "", "", "R3"],
   // Unflagged fossil from a non-Base paleo source: extinct is null, so only in_base drops it.
   ["6", "F", "accepted", "species", "Cimexomys testus", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "Cimexomys", "999", "", "", "", ""],
   ["4", "F", "provisionally accepted", "species", "Felis dubia", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "Felis", "100", "false", "", "", ""],
@@ -56,6 +59,7 @@ const REF_COLS = ["col:ID", "col:issued", "col:citation"];
 const REF_ROWS: string[][] = [
   ["R1", "1867-05-01", "Trans. Imag. Soc. 1: 5 (1850)"],
   ["R2", "", "Fl. Imag. 3: 77. 1888."],
+  ["R3", "", "Hooker's Icon. Pl. 21: t. 2038a (1890)"], // plate number 2038 precedes the year 1890
 ];
 
 let tmp: string;
@@ -86,7 +90,7 @@ describe("build-backbone species universe", () => {
     // Felis dubia (provisionally accepted) excluded. The fossil + non-Base species
     // are KEPT in the parquet (carried with flags) and filtered at query time.
     expect(rows.map((r) => r.scientific_name)).toEqual([
-      "Cimexomys testus", "Felis incognita", "Panthera leo", "Peropteryx leucoptera", "Smilodon fatalis", "Testus citatius",
+      "Cimexomys testus", "Felis incognita", "Panthera leo", "Peropteryx leucoptera", "Smilodon fatalis", "Testus citatius", "Testus platius",
     ]);
   });
 
@@ -118,7 +122,7 @@ describe("build-backbone species universe", () => {
     const rows = await query(`SELECT scientific_name FROM read_parquet('${speciesGlob}', hive_partitioning=true) WHERE in_base AND extinct IS NOT TRUE ORDER BY scientific_name`);
     // Smilodon (flagged fossil) and Cimexomys (unflagged, non-Base) both excluded.
     expect(rows.map((r) => r.scientific_name)).toEqual([
-      "Felis incognita", "Panthera leo", "Peropteryx leucoptera", "Testus citatius",
+      "Felis incognita", "Panthera leo", "Peropteryx leucoptera", "Testus citatius", "Testus platius",
     ]);
   });
 
@@ -129,6 +133,7 @@ describe("build-backbone species universe", () => {
     expect(Number(byName.get("Felis incognita"))).toBe(1834);       // basionym fallback
     expect(Number(byName.get("Peropteryx leucoptera"))).toBe(1867); // reference col:issued (1867) beats its citation year (1850)
     expect(Number(byName.get("Testus citatius"))).toBe(1888);       // reference citation fallback (col:issued empty → parsed from citation)
+    expect(Number(byName.get("Testus platius"))).toBe(1890);        // citation has plate "t. 2038a" before year — must pick 1890, not 2038
     expect(byName.get("Cimexomys testus")).toBeNull();              // no year anywhere
   });
 
@@ -142,7 +147,7 @@ describe("build-backbone species universe", () => {
 describe("build-backbone backbone.parquet", () => {
   it("carries every usage (all ranks + synonyms) for tree + synonym resolution", async () => {
     const rows = await query(`SELECT count(*) n, count(*) FILTER (status LIKE '%synonym%') syn FROM read_parquet('${backbone}')`);
-    expect(Number(rows[0].n)).toBe(9);   // all rows, including the family + synonym
+    expect(Number(rows[0].n)).toBe(10);  // all rows, including the family + synonym
     expect(Number(rows[0].syn)).toBe(1);
   });
 });
