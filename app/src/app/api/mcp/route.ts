@@ -10,10 +10,12 @@
  * against `${basePath}/mcp`, so a static `api/mcp` route is all that's needed — no
  * dynamic `[transport]` segment (its brackets are a glob char-class that breaks the
  * next.config tracing keys, bundling all of data/ and blowing the function-size cap).
- * Gated by a bearer token (env MCP_TOKEN); clients send `Authorization: Bearer <token>`.
+ *
+ * Unauthenticated — the same read-only data is already public via /browse, so a token
+ * would guard nothing it doesn't, while blocking claude.ai web connectors (which speak
+ * OAuth, not static bearers). If abuse becomes a concern, rate-limit instead.
  */
-import { createMcpHandler, withMcpAuth } from "mcp-handler";
-import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
+import { createMcpHandler } from "mcp-handler";
 import { z } from "zod";
 import { runBrowseQuery, type BrowseInput } from "@/lib/browse-query";
 import {
@@ -96,13 +98,4 @@ const handler = createMcpHandler(
   { basePath: "/api" },
 );
 
-// Bearer-token gate (env MCP_TOKEN). Clients send `Authorization: Bearer <token>`.
-const verifyToken = async (_req: Request, bearer?: string): Promise<AuthInfo | undefined> => {
-  const expected = process.env.MCP_TOKEN;
-  if (!expected || !bearer || bearer !== expected) return undefined;
-  return { token: bearer, scopes: [], clientId: "redlist-dashboard", extra: {} };
-};
-
-const authed = withMcpAuth(handler, verifyToken, { required: true });
-
-export { authed as GET, authed as POST, authed as DELETE };
+export { handler as GET, handler as POST, handler as DELETE };
