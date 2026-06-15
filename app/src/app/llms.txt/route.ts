@@ -40,6 +40,12 @@ including synonyms / old names (they resolve to the accepted species).
 
 ## Rules
 - Browsing needs one \`taxa\` value; looking up a species needs \`search\`.
+- **Prefer \`&format=json\`** — it's the machine-readable response; the HTML view is
+  for humans. The JSON always includes the query you sent (\`query\`) and an
+  \`interpreted\` list, so you can confirm the result matches your request.
+- The first request after a quiet period may take a few seconds (cold start). If a
+  request times out, retry once. A genuine failure returns a **non-200 status with an
+  \`error\` field — never another species' data**, so trust the status code.
 - Within one filter, comma-separated values are OR; across filters they are AND.
 - Threats match by prefix: threats=11 covers 11.1, 11.4, ... ("Climate change").
 - Results cap at 200 rows; the total + a by-category breakdown are always shown.

@@ -194,6 +194,7 @@ export async function GET(req: NextRequest) {
   let matched: Row[] = [];
   let tooLarge = false;
 
+  try {
   if (taxa.ids.length) {
     // Browse mode: query each taxon, narrow curated sub-nodes client-side (the read
     // layer filters only by taxon_group), then apply the shared base predicate.
@@ -235,6 +236,15 @@ export async function GET(req: NextRequest) {
     // here (the lean hit shape lacks them); steer filtered queries to ?taxa=.
     const hits = await searchSpecies(search, RESULT_CAP);
     matched = hits.map(searchHitToRow);
+  }
+  } catch {
+    // Fail loudly: a query error/timeout (e.g. cold DuckDB container still warming)
+    // returns 503 with a clear message — never a 200 with unrelated data.
+    const msg = "The data service failed or timed out (it may be warming up on a cold start). Please retry shortly — this is a real failure, not a result.";
+    return format === "json"
+      ? NextResponse.json({ error: msg, retryable: true }, { status: 503, headers: { ...NOINDEX } })
+      : new NextResponse(`<!doctype html><meta charset="utf-8"><title>Temporarily unavailable</title><h1>Temporarily unavailable</h1><p>${msg}</p>`,
+          { status: 503, headers: { "Content-Type": "text/html; charset=utf-8", ...NOINDEX } });
   }
 
   matched.sort((a, b) => {
