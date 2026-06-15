@@ -9,6 +9,8 @@ import {
   CATEGORY_ORDER,
 } from "@/config/taxa";
 import type { RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
+import { matchesSpeciesFilter, type SpeciesFilterCriteria } from "@/lib/species-filter";
+import { POPULATION_TRENDS, THREAT_LABEL } from "@/lib/filter-vocab";
 
 const SPECIES_API = "/api/redlist/species";
 
@@ -20,28 +22,14 @@ const FILTER_CATEGORIES = Object.keys(CATEGORY_ORDER)
 // Threatened = CR + EN + VU (the IUCN "threatened" grouping).
 const THREATENED = new Set(["CR", "EN", "VU"]);
 
-const TREND_OPTIONS = ["Increasing", "Stable", "Decreasing", "Unknown"] as const;
+// Population-trend values come from the shared filter vocabulary so this panel
+// stays in lockstep with the dashboard / browse endpoint.
+const TREND_OPTIONS = POPULATION_TRENDS;
 const TREND_GLYPH: Record<string, string> = {
   Increasing: "↑",
   Stable: "→",
   Decreasing: "↓",
   Unknown: "?",
-};
-
-// Top-level IUCN threat classification labels (codes 1–12).
-const THREAT_LABELS: Record<string, string> = {
-  "1": "Residential & commercial development",
-  "2": "Agriculture & aquaculture",
-  "3": "Energy production & mining",
-  "4": "Transportation & service corridors",
-  "5": "Biological resource use",
-  "6": "Human intrusions & disturbance",
-  "7": "Natural system modifications",
-  "8": "Invasive species & disease",
-  "9": "Pollution",
-  "10": "Geological events",
-  "11": "Climate change & severe weather",
-  "12": "Other",
 };
 
 // The 8 real taxon groups (exclude the giant "all" aggregate for a snappy POC).
@@ -102,20 +90,16 @@ export default function ComparePanel({ side, state, onChange }: ComparePanelProp
   const allSpecies = useMemo(() => cache[taxonId] ?? [], [cache, taxonId]);
 
   // ── Apply this panel's filters independently ───────────────────────────────
+  // Uses the SHARED predicate (lib/species-filter) so the comparison can never
+  // drift from the dashboard's filter semantics. Adding a new filter there makes
+  // it available here too — just surface a control and pass the criterion below.
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return allSpecies.filter((s) => {
-      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return false;
-      if (selectedTrends.size > 0) {
-        const trend = s.population_trend || "Unknown";
-        if (!selectedTrends.has(trend)) return false;
-      }
-      if (q) {
-        const hay = `${s.scientific_name} ${s.common_name ?? ""}`.toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
-      return true;
-    });
+    const criteria: SpeciesFilterCriteria = {
+      categories: selectedCategories,
+      populationTrends: selectedTrends,
+      search: search.trim().toLowerCase(),
+    };
+    return allSpecies.filter((s) => matchesSpeciesFilter(s, criteria));
   }, [allSpecies, selectedCategories, selectedTrends, search]);
 
   // ── Derived insights ───────────────────────────────────────────────────────
@@ -141,7 +125,7 @@ export default function ComparePanel({ side, state, onChange }: ComparePanelProp
     const topThreats = Object.entries(byThreat)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
-      .map(([code, count]) => ({ code, count, label: THREAT_LABELS[code] ?? `Threat ${code}` }));
+      .map(([code, count]) => ({ code, count, label: THREAT_LABEL[code] ?? `Threat ${code}` }));
 
     return {
       total,
