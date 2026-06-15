@@ -78,6 +78,13 @@ describe("/browse", () => {
     expect(d.unresolved).toContain("threats=asteroids");
   });
 
+  it("sets X-Robots-Tag noindex (unlisted to crawlers)", async () => {
+    const r = await GET(req("?taxa=corals&format=json"));
+    expect(r.headers.get("X-Robots-Tag")).toContain("noindex");
+    const idx = await GET(req(""));
+    expect(idx.headers.get("X-Robots-Tag")).toContain("noindex");
+  });
+
   it("expands an IUCN region to its countries (country filter)", async () => {
     const euCode = iucnRegionCountries("Europe")[0];
     querySpecies.mockResolvedValue({ species: [row({ id: 1, countries: [euCode] }), row({ id: 2, countries: ["ZZ"] })], truncated: false, tooLarge: false, neTotal: null });

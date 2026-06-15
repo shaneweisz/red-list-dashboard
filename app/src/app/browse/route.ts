@@ -38,6 +38,9 @@ export const revalidate = 3600;
 
 const RESULT_CAP = 200;
 const BASE = "/browse";
+// Unlisted, not gated: agents fetch it fine when given the URL, but crawlers
+// don't index it (and there are no inbound links to it from the app).
+const NOINDEX = { "X-Robots-Tag": "noindex, nofollow" };
 
 // The fields /browse reads for filtering + rendering. querySpecies rows
 // (toSpeciesRow) satisfy this; search hits are mapped into it.
@@ -167,7 +170,7 @@ export async function GET(req: NextRequest) {
   // No actionable selector → self-describing index.
   if (taxa.ids.length === 0 && !search) {
     return format === "json"
-      ? NextResponse.json(indexData(unresolved), { headers: CACHE_1H })
+      ? NextResponse.json(indexData(unresolved), { headers: { ...CACHE_1H, ...NOINDEX } })
       : html(indexHtml(unresolved));
   }
 
@@ -289,7 +292,7 @@ export async function GET(req: NextRequest) {
           gbif_occurrence_count: s.gbif_occurrence_count,
         })),
       },
-      { headers: CACHE_1H },
+      { headers: { ...CACHE_1H, ...NOINDEX } },
     );
   }
 
@@ -300,7 +303,7 @@ export async function GET(req: NextRequest) {
 
 function html(body: string): NextResponse {
   return new NextResponse(body, {
-    headers: { "Content-Type": "text/html; charset=utf-8", ...CACHE_1H },
+    headers: { "Content-Type": "text/html; charset=utf-8", ...CACHE_1H, ...NOINDEX },
   });
 }
 

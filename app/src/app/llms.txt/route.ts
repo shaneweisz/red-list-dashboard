@@ -86,6 +86,8 @@ minDescribedYear / maxDescribedYear: year-described bounds (NE species)
 `;
 
   return new NextResponse(body, {
-    headers: { "Content-Type": "text/plain; charset=utf-8", ...CACHE_1H },
+    // Unlisted: keep it out of crawler indexes; it's meant to be fetched only when
+    // a user points an agent at this URL, not auto-discovered.
+    headers: { "Content-Type": "text/plain; charset=utf-8", ...CACHE_1H, "X-Robots-Tag": "noindex, nofollow" },
   });
 }
