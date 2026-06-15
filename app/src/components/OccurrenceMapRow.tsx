@@ -552,7 +552,7 @@ export default function OccurrenceMapRow({
   });
 
   // Advanced filter state
-  const [maxUncertainty, setMaxUncertainty] = useState<number | null>(50000);
+  const [maxUncertainty, setMaxUncertainty] = useState<number | null>(null);
   const [colorByDate, setColorByDate] = useState(false);
   const [basemap, setBasemap] = useState<BasemapKey>("streets");
   const [showProtectedAreas, setShowProtectedAreas] = useState(false);
