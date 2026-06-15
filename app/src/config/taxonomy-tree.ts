@@ -136,8 +136,8 @@ function prefixTree(node: TaxonomyNode, prefix: string): TaxonomyNode {
 
 // ─── Canonical Table 1a nodes (reused in virtual grouping nodes) ─────
 
-const INSECTA_NODE: TaxonomyNode = {
-  id: "insecta",
+const INSECTS_NODE: TaxonomyNode = {
+  id: "insects",
   name: "Insects",
   filter: { csvGroups: ALL_INSECT_GROUPS },
   estimatedDescribed: 1_003_469,
@@ -640,7 +640,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
     },
 
     // ─── INSECTA ───────────────────────────────────────────────────────
-    INSECTA_NODE,
+    INSECTS_NODE,
 
     // ─── ARACHNIDA (leaf) ──────────────────────────────────────────────
     ARACHNIDA_NODE,
@@ -699,7 +699,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
       estimatedSourceUrl: IUCN_SOURCE_URL,
       color: "#78716c",
       children: [
-        prefixTree(INSECTA_NODE, "inv-"),
+        prefixTree(INSECTS_NODE, "inv-"),
         prefixTree(ARACHNIDA_NODE, "inv-"),
         prefixTree(MOLLUSCA_NODE, "inv-"),
         prefixTree(CRUSTACEA_NODE, "inv-"),

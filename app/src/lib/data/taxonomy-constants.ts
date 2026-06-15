@@ -72,6 +72,7 @@ export const TAXON_ID_ALIASES: Record<string, string> = {
   arachnida: "arachnids",
   mollusca: "molluscs",
   crustacea: "crustaceans",
+  insecta: "insects", // node id renamed insecta → insects; keep old links resolving
 };
 
 // Virtual grouping roots (invertebrates/plants/fungi) clone their children with
