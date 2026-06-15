@@ -13,7 +13,7 @@
  *       2026-05-20T10-30-00Z/
  *         gbif/amphibia.csv
  *         redlist/...
- *         search-index.json
+ *         backbone.parquet
  *         ...
  *
  * Active sync pointer lives in app/latest-sync.txt (version-controlled).
@@ -34,6 +34,12 @@ import { loadEnvFiles, SyncLogger, DATA_DIR, mapConcurrent } from "./utils";
 
 const UPLOAD_CONCURRENCY = 16;
 const LATEST_SYNC_FILE = path.join(__dirname, "..", "latest-sync.txt");
+
+// Legacy artifacts to leave out of new syncs. search-index.json (~95MB) backed the old
+// in-memory search; live search now queries Parquet over R2 (searchSpecies in
+// species-duckdb.ts) and nothing reads the JSON. Excluding it here stops it propagating
+// (fetch → data/ → re-upload) into future syncs. Relative-to-DATA_DIR, forward-slashed.
+const EXCLUDE_FROM_SYNC = new Set(["search-index.json"]);
 
 function getR2Client(): S3Client {
   const accountId = process.env.R2_ACCOUNT_ID;
@@ -96,7 +102,9 @@ async function main(): Promise<void> {
   const timestamp = makeTimestamp();
   const syncPrefix = `syncs/${timestamp}/`;
 
-  const localPaths = walkFiles(DATA_DIR);
+  const localPaths = walkFiles(DATA_DIR).filter(
+    (p) => !EXCLUDE_FROM_SYNC.has(path.relative(DATA_DIR, p).split(path.sep).join("/"))
+  );
   if (localPaths.length === 0) {
     throw new Error(`No files found under ${DATA_DIR}`);
   }
