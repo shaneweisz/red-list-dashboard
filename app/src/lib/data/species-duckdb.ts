@@ -398,14 +398,20 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
       countries: splitList(r.countries),
     };
   });
-  if (fast.length >= lim) return fast;
+  // Return as soon as the direct search (assessed ∪ unassessed, ~16MB) finds anything.
+  // The CoL-only and synonym tiers below each full-scan a large parquet over R2 (species/
+  // ~36MB, synonym-index ~77MB) with no pruning — ~10s on a cold function. They exist to
+  // *answer* queries the direct search can't (an old/synonym name, or a CoL-only species),
+  // not to pad results, so only run them when the direct search came up empty. A precise
+  // hit like "Panthera leo" returns here after one cheap scan instead of falling through
+  // both heavy tiers.
+  if (fast.length > 0) return fast;
 
   // CoL-only fallback: universe species (species/) that are neither IUCN-assessed nor
-  // GBIF-observed, to fill the remaining slots. species/ has no common name and can't
-  // partition-prune on name, so this full-scans the name column — only run it when the
-  // fast path returned fewer than `limit` hits (it then holds ALL assessed+GBIF matches,
-  // so any species/ match not already listed is genuinely CoL-only — name-dedup suffices,
-  // no species_link anti-join needed). These render as NE and navigate to their leaf taxon.
+  // GBIF-observed. species/ has no common name and can't partition-prune on name, so this
+  // full-scans the name column — gated above on the direct search returning nothing, so it
+  // holds ALL assessed+GBIF matches (none), and any species/ match is genuinely CoL-only
+  // (name-dedup suffices, no species_link anti-join needed). Render as NE → leaf taxon.
   const seen = new Set(fast.map((r) => r.scientific_name.toLowerCase()));
   const colSql = `
     SELECT col_id, scientific_name, taxon_group
@@ -437,10 +443,10 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
   if (fast.length >= lim) return fast;
 
   // Synonym tier: resolve an old/synonym name to its accepted species via synonym-index.parquet
-  // (name-sorted → prefix-range prunes to ~1 row group; substring backstop when sparse). Runs
-  // only when the accepted-name search above is still short. The accepted species routes like a
-  // direct hit — assessed → reassessments (sis id), NE → new-assessments/leaf node — and carries
-  // the matched synonym for the UI. Graceful no-op if the index isn't in this sync prefix.
+  // (name-sorted → prefix-range prunes to ~1 row group). Reached only when the direct search
+  // found nothing (gated above). The accepted species routes like a direct hit — assessed →
+  // reassessments (sis id), NE → new-assessments/leaf node — and carries the matched synonym
+  // for the UI. Graceful no-op if the index isn't in this sync prefix.
   const synUri = parquetUri("synonym-index.parquet");
   const synLo = `'${query.toLowerCase().replace(/'/g, "''")}'`;
   const need = lim - fast.length;
@@ -450,11 +456,14 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
       `SELECT ${synCols} FROM read_parquet('${synUri}')
        WHERE synonym_name_lower >= ${synLo} AND synonym_name_lower < ${synLo} || chr(1114111)
        ORDER BY synonym_name_lower LIMIT ${need * 3 + 5}`, {})).getRowObjects();
-    if (synRows.length < need) {
-      synRows = synRows.concat((await conn.runAndReadAll(
+    // Substring backstop (the query appears mid-name, not as a prefix) full-scans the whole
+    // 77MB index over R2 with no pruning, so only fall back to it when the prefix-range found
+    // nothing at all — not merely when it returned fewer than `need`.
+    if (synRows.length === 0) {
+      synRows = (await conn.runAndReadAll(
         `SELECT ${synCols} FROM read_parquet('${synUri}')
          WHERE synonym_name_lower LIKE '%' || ${synLo} || '%' AND synonym_name_lower NOT LIKE ${synLo} || '%'
-         ORDER BY synonym_name_lower LIMIT ${need * 3 + 5}`, {})).getRowObjects());
+         ORDER BY synonym_name_lower LIMIT ${need * 3 + 5}`, {})).getRowObjects();
     }
     for (const r of synRows) {
       const accName = String(r.accepted_name ?? "");

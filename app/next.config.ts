@@ -50,6 +50,11 @@ const nextConfig: NextConfig = {
   // over Vercel's 250MB uncompressed limit. Prune per route to what each
   // actually reads at runtime. Globs use **/ so they match whether the tracing
   // root is app/ (local) or the repo root (Vercel, where paths are app/data/…).
+  // NOTE: search-index.json is now legacy (no code reads it; live search queries
+  // Parquet over R2) and is excluded from new syncs (upload-data-to-r2.ts). The
+  // search-index.json entries below are retained only because the active sync still
+  // ships the file into data/ at build time; drop them once a sync without it reaches
+  // production.
   outputFileTracingExcludes: {
     // Search now queries the parquets in R2 (httpfs) — no local data bundled.
     "/api/search": ["**/data/**"],
