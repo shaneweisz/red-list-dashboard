@@ -220,8 +220,10 @@ export async function run(
   // year always trails the volume/page/PLATE numbers in a citation, and those can be
   // 4 digits too ("Icon. Pl. 21: t. 2038a (1890)" → must yield 1890, not the plate
   // 2038). So we collect every 4-digit run, keep the ones in [1500, maxYear] (drops
-  // plate numbers like 2038), and take the last — the trailing year.
-  // Empty table when Reference.tsv is absent so the join below is a harmless no-op.
+  // plate numbers like 2038), and take the last — the trailing year. But first strip any
+  // DOI/URL: those usually trail the real year and carry in-range 4-digit runs (#295:
+  // Calandrinia villaroelii's "…/phytotaxa.1543…" → was picked as 1543), so they'd win
+  // "take the last". Empty table when Reference.tsv is absent (join below is a no-op).
   await conn.run(`
     CREATE TEMP TABLE ref AS
       SELECT rid, ryr FROM (
@@ -230,7 +232,11 @@ export async function run(
                coalesce(
                  TRY_CAST(regexp_extract("col:issued", '(\\d{4})', 1) AS INTEGER),
                  list_last(list_filter(
-                   list_transform(regexp_extract_all("col:citation", '\\d{4}'), x -> TRY_CAST(x AS INTEGER)),
+                   list_transform(
+                     regexp_extract_all(
+                       regexp_replace("col:citation", 'https?://\\S+|10\\.\\d{4,9}/\\S+', ' ', 'g'),
+                       '\\d{4}'),
+                     x -> TRY_CAST(x AS INTEGER)),
                    y -> y >= 1500 AND y <= ${maxYear}
                  ))
                ) AS ryr
