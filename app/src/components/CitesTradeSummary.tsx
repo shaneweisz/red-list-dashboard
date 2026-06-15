@@ -25,9 +25,11 @@ interface CompactRecord {
   s: string;
   p: string;
   t: string;
+  u: string;
   q: number;
   e: string;
   i: string;
+  o: string;
 }
 
 interface YearData {
@@ -38,6 +40,7 @@ interface YearData {
 
 interface TermData {
   term: string;
+  unit?: string;
   quantity: number;
   records: number;
 }
@@ -82,6 +85,19 @@ interface TradeData {
   allSources?: CodedData[];
   allPurposes?: CodedData[];
   allTerms?: TermCount[];
+}
+
+interface FilteredData {
+  byYear: YearData[];
+  totalRecords: number;
+  totalQty: number;
+  topTerms: TermData[];
+  topSources: CodedData[];
+  topPurposes: CodedData[];
+  topExporters: CountryData[];
+  topImporters: CountryData[];
+  topFlows: FlowData[];
+  reExportFlows: FlowData[];
 }
 
 // Sources that indicate wild take — key concern for assessors
@@ -397,6 +413,13 @@ export default function CitesTradeSummary({
   const [checkedTerms, setCheckedTerms] = useState<Record<string, boolean>>({});
   const [filtersInitialized, setFiltersInitialized] = useState(false);
 
+  // Commodity search for the filter sidebar
+  const [termSearch, setTermSearch] = useState("");
+
+  // Year range filter
+  const [yearFrom, setYearFrom] = useState<number | null>(null);
+  const [yearTo, setYearTo] = useState<number | null>(null);
+
   // Use prefetched data from parent when available; fall back to own fetch
   const data = (prefetchedData as TradeData | null) ?? ownData;
   const loading = prefetchedLoading ?? ownLoading;
@@ -447,6 +470,10 @@ export default function CitesTradeSummary({
       for (const t of data.allTerms) init[t.term] = true;
       setCheckedTerms(init);
     }
+    if (data.yearRange) {
+      setYearFrom(data.yearRange[0]);
+      setYearTo(data.yearRange[1]);
+    }
     setFiltersInitialized(true);
   }, [data, filtersInitialized]);
 
@@ -461,15 +488,47 @@ export default function CitesTradeSummary({
     setCheckedTerms((prev) => ({ ...prev, [term]: !prev[term] }));
   }, []);
 
-  // Are any filters active (i.e. something is unchecked)?
+  // Per-section select-all / select-none
+  const selectAllSources = useCallback(() => {
+    if (!data?.allSources) return;
+    setCheckedSources(Object.fromEntries(data.allSources.map((s) => [s.code, true])));
+  }, [data?.allSources]);
+  const selectNoneSources = useCallback(() => {
+    if (!data?.allSources) return;
+    setCheckedSources(Object.fromEntries(data.allSources.map((s) => [s.code, false])));
+  }, [data?.allSources]);
+
+  const selectAllPurposes = useCallback(() => {
+    if (!data?.allPurposes) return;
+    setCheckedPurposes(Object.fromEntries(data.allPurposes.map((p) => [p.code, true])));
+  }, [data?.allPurposes]);
+  const selectNonePurposes = useCallback(() => {
+    if (!data?.allPurposes) return;
+    setCheckedPurposes(Object.fromEntries(data.allPurposes.map((p) => [p.code, false])));
+  }, [data?.allPurposes]);
+
+  const selectAllTerms = useCallback(() => {
+    if (!data?.allTerms) return;
+    setCheckedTerms(Object.fromEntries(data.allTerms.map((t) => [t.term, true])));
+  }, [data?.allTerms]);
+  const selectNoneTerms = useCallback(() => {
+    if (!data?.allTerms) return;
+    setCheckedTerms(Object.fromEntries(data.allTerms.map((t) => [t.term, false])));
+  }, [data?.allTerms]);
+
+  // Are any filters active (i.e. something is unchecked or year range narrowed)?
   const hasActiveFilters = useMemo(() => {
     const anySourceOff = Object.values(checkedSources).some((v) => !v);
     const anyPurposeOff = Object.values(checkedPurposes).some((v) => !v);
     const anyTermOff = Object.values(checkedTerms).some((v) => !v);
-    return anySourceOff || anyPurposeOff || anyTermOff;
-  }, [checkedSources, checkedPurposes, checkedTerms]);
+    const anyYearFiltered = data?.yearRange
+      ? (yearFrom !== null && yearFrom > data.yearRange[0]) ||
+        (yearTo !== null && yearTo < data.yearRange[1])
+      : false;
+    return anySourceOff || anyPurposeOff || anyTermOff || anyYearFiltered;
+  }, [checkedSources, checkedPurposes, checkedTerms, yearFrom, yearTo, data?.yearRange]);
 
-  // Clear all filters (re-check everything)
+  // Clear all filters (re-check everything, reset year range)
   const clearFilters = useCallback(() => {
     setCheckedSources((prev) => {
       const next = { ...prev };
@@ -486,10 +545,15 @@ export default function CitesTradeSummary({
       for (const k of Object.keys(next)) next[k] = true;
       return next;
     });
-  }, []);
+    setTermSearch("");
+    if (data?.yearRange) {
+      setYearFrom(data.yearRange[0]);
+      setYearTo(data.yearRange[1]);
+    }
+  }, [data?.yearRange]);
 
   // Filter shipments and recompute all derived data
-  const filtered = useMemo(() => {
+  const filtered = useMemo((): FilteredData => {
     if (!data?.found || !data.shipments) {
       return {
         byYear: data?.byYear || [],
@@ -501,6 +565,7 @@ export default function CitesTradeSummary({
         topExporters: data?.topExporters || [],
         topImporters: data?.topImporters || [],
         topFlows: data?.topFlows || [],
+        reExportFlows: [],
       };
     }
 
@@ -508,10 +573,12 @@ export default function CitesTradeSummary({
       if (!checkedSources[r.s] && r.s) return false;
       if (!checkedPurposes[r.p] && r.p) return false;
       if (!checkedTerms[r.t]) return false;
+      if (yearFrom !== null && r.y < yearFrom) return false;
+      if (yearTo !== null && r.y > yearTo) return false;
       return true;
     });
 
-    // byYear
+    // byYear — fill gaps so the chart shows a continuous axis
     const yearMap = new Map<number, { quantity: number; records: number }>();
     for (const r of rows) {
       const entry = yearMap.get(r.y) || { quantity: 0, records: 0 };
@@ -519,28 +586,30 @@ export default function CitesTradeSummary({
       entry.quantity += r.q;
       yearMap.set(r.y, entry);
     }
-    // Ensure all years in range are present (even if 0)
-    if (data.yearRange) {
-      for (let y = data.yearRange[0]; y <= data.yearRange[1]; y++) {
-        if (!yearMap.has(y)) yearMap.set(y, { quantity: 0, records: 0 });
-      }
+    const displayFrom = yearFrom ?? data.yearRange[0];
+    const displayTo = yearTo ?? data.yearRange[1];
+    for (let y = displayFrom; y <= displayTo; y++) {
+      if (!yearMap.has(y)) yearMap.set(y, { quantity: 0, records: 0 });
     }
     const byYear = Array.from(yearMap.entries())
       .sort(([a], [b]) => a - b)
       .map(([year, v]) => ({ year, ...v }));
 
-    // terms
-    const termMap = new Map<string, { quantity: number; records: number }>();
+    // terms — group by term+unit so different units aren't aggregated together
+    const termUnitMap = new Map<string, { term: string; unit: string; quantity: number; records: number }>();
     for (const r of rows) {
-      const entry = termMap.get(r.t) || { quantity: 0, records: 0 };
-      entry.records++;
-      entry.quantity += r.q;
-      termMap.set(r.t, entry);
+      const key = `${r.t}\0${r.u}`;
+      const existing = termUnitMap.get(key);
+      if (existing) {
+        existing.records++;
+        existing.quantity += r.q;
+      } else {
+        termUnitMap.set(key, { term: r.t, unit: r.u, quantity: r.q, records: 1 });
+      }
     }
-    const topTerms = Array.from(termMap.entries())
-      .sort(([, a], [, b]) => b.records - a.records)
-      .slice(0, 8)
-      .map(([term, v]) => ({ term, ...v }));
+    const topTerms = Array.from(termUnitMap.values())
+      .sort((a, b) => b.records - a.records)
+      .slice(0, 8);
 
     // sources
     const sourceMap = new Map<string, number>();
@@ -596,7 +665,7 @@ export default function CitesTradeSummary({
       .slice(0, 8)
       .map(([code, v]) => ({ code, ...v }));
 
-    // flows
+    // flows (exporter → importer)
     const flowMap = new Map<string, { records: number; quantity: number }>();
     for (const r of rows) {
       if (!r.e || !r.i) continue;
@@ -614,6 +683,24 @@ export default function CitesTradeSummary({
         return { from, to, ...v };
       });
 
+    // re-export flows: origin → exporter legs where goods passed through an intermediary
+    const reExportFlowMap = new Map<string, { records: number; quantity: number }>();
+    for (const r of rows) {
+      if (!r.o || r.o === r.e || !r.e) continue;
+      const key = `${r.o}->${r.e}`;
+      const entry = reExportFlowMap.get(key) || { records: 0, quantity: 0 };
+      entry.records++;
+      entry.quantity += r.q;
+      reExportFlowMap.set(key, entry);
+    }
+    const reExportFlows = Array.from(reExportFlowMap.entries())
+      .sort(([, a], [, b]) => b.records - a.records)
+      .slice(0, 8)
+      .map(([key, v]) => {
+        const [from, to] = key.split("->");
+        return { from, to, ...v };
+      });
+
     return {
       byYear,
       totalRecords: rows.length,
@@ -624,8 +711,24 @@ export default function CitesTradeSummary({
       topExporters,
       topImporters,
       topFlows,
+      reExportFlows,
     };
-  }, [data, checkedSources, checkedPurposes, checkedTerms]);
+  }, [data, checkedSources, checkedPurposes, checkedTerms, yearFrom, yearTo]);
+
+  // Commodity list filtered by the search input
+  const filteredTermList = useMemo(() => {
+    const terms = data?.allTerms || [];
+    if (!termSearch.trim()) return terms;
+    const q = termSearch.toLowerCase();
+    return terms.filter((t) => t.term.toLowerCase().includes(q));
+  }, [data?.allTerms, termSearch]);
+
+  // Year options derived from the full data range
+  const availableYears = useMemo(() => {
+    if (!data?.yearRange) return [];
+    const [min, max] = data.yearRange;
+    return Array.from({ length: max - min + 1 }, (_, i) => min + i);
+  }, [data?.yearRange]);
 
   /* ---------------------------------------------------------------- */
   /*  Render                                                           */
@@ -679,7 +782,7 @@ export default function CitesTradeSummary({
           </span>{" "}
           reported items
           <span className="text-zinc-400 dark:text-zinc-500 ml-1">
-            {data.yearRange[0]}–{data.yearRange[1]}
+            {yearFrom ?? data.yearRange[0]}–{yearTo ?? data.yearRange[1]}
           </span>
         </span>
         <TrendSummary data={filtered.byYear} metric={metric} />
@@ -699,6 +802,7 @@ export default function CitesTradeSummary({
           <div className="border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden bg-zinc-50 dark:bg-zinc-800/30">
             <TradeFlowMap
               flows={filtered.topFlows}
+              reExportFlows={filtered.reExportFlows}
               suspensionCountries={suspensionCountries}
               countryAnnotations={countryAnnotations}
             />
@@ -716,13 +820,50 @@ export default function CitesTradeSummary({
       <div className={`grid grid-cols-1 gap-4 ${hasShipments ? "md:grid-cols-[220px_1fr]" : ""}`}>
         {/* Filter panel */}
         {hasShipments && (
-          <div className="space-y-3 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 bg-zinc-50/50 dark:bg-zinc-800/20 max-h-[500px] overflow-y-auto">
+          <div className="space-y-3 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 bg-zinc-50/50 dark:bg-zinc-800/20 max-h-[560px] overflow-y-auto">
+            {/* Year range filter */}
+            {availableYears.length > 1 && (
+              <div>
+                <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
+                  Year Range
+                </h5>
+                <div className="flex items-center gap-1 text-xs">
+                  <select
+                    value={yearFrom ?? data.yearRange[0]}
+                    onChange={(e) => setYearFrom(Number(e.target.value))}
+                    className="flex-1 text-xs border border-zinc-200 dark:border-zinc-700 rounded bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 px-1 py-0.5 min-w-0"
+                  >
+                    {availableYears.map((y) => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                  <span className="text-zinc-400 shrink-0">–</span>
+                  <select
+                    value={yearTo ?? data.yearRange[1]}
+                    onChange={(e) => setYearTo(Number(e.target.value))}
+                    className="flex-1 text-xs border border-zinc-200 dark:border-zinc-700 rounded bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 px-1 py-0.5 min-w-0"
+                  >
+                    {availableYears.map((y) => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+
             {/* Source filters */}
             {data.allSources && data.allSources.length > 0 && (
               <div>
-                <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
-                  Source
-                </h5>
+                <div className="flex items-center justify-between mb-1.5">
+                  <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
+                    Source
+                  </h5>
+                  <div className="flex gap-1 text-[10px] text-zinc-400 dark:text-zinc-500">
+                    <button onClick={selectAllSources} className="hover:text-zinc-600 dark:hover:text-zinc-300">All</button>
+                    <span>/</span>
+                    <button onClick={selectNoneSources} className="hover:text-zinc-600 dark:hover:text-zinc-300">None</button>
+                  </div>
+                </div>
                 <div className="space-y-1">
                   {data.allSources.map((s) => (
                     <FilterCheckbox
@@ -742,9 +883,16 @@ export default function CitesTradeSummary({
             {/* Purpose filters */}
             {data.allPurposes && data.allPurposes.length > 0 && (
               <div>
-                <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
-                  Purpose
-                </h5>
+                <div className="flex items-center justify-between mb-1.5">
+                  <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
+                    Purpose
+                  </h5>
+                  <div className="flex gap-1 text-[10px] text-zinc-400 dark:text-zinc-500">
+                    <button onClick={selectAllPurposes} className="hover:text-zinc-600 dark:hover:text-zinc-300">All</button>
+                    <span>/</span>
+                    <button onClick={selectNonePurposes} className="hover:text-zinc-600 dark:hover:text-zinc-300">None</button>
+                  </div>
+                </div>
                 <div className="space-y-1">
                   {data.allPurposes.map((p) => (
                     <FilterCheckbox
@@ -761,27 +909,45 @@ export default function CitesTradeSummary({
               </div>
             )}
 
-            {/* Term/commodity filters */}
+            {/* Term/commodity filters — searchable, shows all */}
             {data.allTerms && data.allTerms.length > 0 && (
               <div>
-                <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
-                  Commodity
-                </h5>
+                <div className="flex items-center justify-between mb-1.5">
+                  <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
+                    Commodity
+                    {data.allTerms.length > 1 && (
+                      <span className="ml-1 font-normal text-zinc-400">({data.allTerms.length})</span>
+                    )}
+                  </h5>
+                  <div className="flex gap-1 text-[10px] text-zinc-400 dark:text-zinc-500">
+                    <button onClick={selectAllTerms} className="hover:text-zinc-600 dark:hover:text-zinc-300">All</button>
+                    <span>/</span>
+                    <button onClick={selectNoneTerms} className="hover:text-zinc-600 dark:hover:text-zinc-300">None</button>
+                  </div>
+                </div>
+                {data.allTerms.length > 5 && (
+                  <input
+                    type="text"
+                    value={termSearch}
+                    onChange={(e) => setTermSearch(e.target.value)}
+                    placeholder="Search commodities…"
+                    className="w-full text-xs border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1 mb-1.5 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 placeholder-zinc-400 dark:placeholder-zinc-500 outline-none focus:border-zinc-400 dark:focus:border-zinc-500"
+                  />
+                )}
                 <div className="space-y-1">
-                  {data.allTerms.slice(0, 10).map((t) => (
-                    <FilterCheckbox
-                      key={t.term}
-                      label={t.term}
-                      count={t.records}
-                      checked={checkedTerms[t.term] ?? true}
-                      onChange={() => toggleTerm(t.term)}
-                      color="#8b5cf6"
-                    />
-                  ))}
-                  {data.allTerms.length > 10 && (
-                    <span className="text-[10px] text-zinc-400 dark:text-zinc-500">
-                      +{data.allTerms.length - 10} more
-                    </span>
+                  {filteredTermList.length === 0 ? (
+                    <p className="text-[10px] text-zinc-400 dark:text-zinc-500 italic">No matching commodities</p>
+                  ) : (
+                    filteredTermList.map((t) => (
+                      <FilterCheckbox
+                        key={t.term}
+                        label={t.term}
+                        count={t.records}
+                        checked={checkedTerms[t.term] ?? true}
+                        onChange={() => toggleTerm(t.term)}
+                        color="#8b5cf6"
+                      />
+                    ))
                   )}
                 </div>
               </div>
@@ -833,7 +999,7 @@ export default function CitesTradeSummary({
             </div>
           )}
 
-          {/* Commodities — table with quantities */}
+          {/* Commodities — table with quantities and units (kept separate since kg ≠ pieces) */}
           {filtered.topTerms.length > 0 && (
             <div>
               <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
@@ -843,26 +1009,28 @@ export default function CitesTradeSummary({
                 <thead>
                   <tr className="text-left text-zinc-400 dark:text-zinc-500">
                     <th className="font-medium pb-1 pr-2">Term</th>
-                    <th className="font-medium pb-1 pr-2 text-right">
-                      Records
-                    </th>
-                    <th className="font-medium pb-1 text-right">Quantity</th>
+                    <th className="font-medium pb-1 pr-1 text-right">Records</th>
+                    <th className="font-medium pb-1 pr-1 text-right">Qty</th>
+                    <th className="font-medium pb-1 text-left text-zinc-300 dark:text-zinc-600">Unit</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.topTerms.slice(0, 6).map((t) => (
+                  {filtered.topTerms.slice(0, 8).map((t) => (
                     <tr
-                      key={t.term}
+                      key={`${t.term}\0${t.unit ?? ""}`}
                       className="border-t border-zinc-100 dark:border-zinc-800/50"
                     >
                       <td className="py-1 pr-2 text-zinc-700 dark:text-zinc-300 capitalize">
                         {t.term}
                       </td>
-                      <td className="py-1 pr-2 text-right text-zinc-500 dark:text-zinc-400 tabular-nums">
+                      <td className="py-1 pr-1 text-right text-zinc-500 dark:text-zinc-400 tabular-nums">
                         {t.records.toLocaleString()}
                       </td>
-                      <td className="py-1 text-right text-zinc-500 dark:text-zinc-400 tabular-nums">
-                        {fmtQty(t.quantity)}
+                      <td className="py-1 pr-1 text-right text-zinc-500 dark:text-zinc-400 tabular-nums">
+                        {t.quantity > 0 ? fmtQty(t.quantity) : "—"}
+                      </td>
+                      <td className="py-1 text-zinc-400 dark:text-zinc-500">
+                        {t.unit || "—"}
                       </td>
                     </tr>
                   ))}

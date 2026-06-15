@@ -61,9 +61,11 @@ interface CompactRecord {
   s: string;   // source code
   p: string;   // purpose code
   t: string;   // term
+  u: string;   // unit (e.g. "kg", "m3" — empty string when unspecified)
   q: number;   // quantity (max of importer/exporter reported)
   e: string;   // exporter country code
   i: string;   // importer country code
+  o: string;   // origin country code (non-empty when this is a re-export)
 }
 
 interface TradeSummary {
@@ -224,12 +226,14 @@ function summarize(rows: TradeRow[]): TradeSummary {
     s: r.Source || "",
     p: r.Purpose || "",
     t: r.Term || "unspecified",
+    u: r.Unit || "",
     q: Math.max(
       parseQty(r["Importer reported quantity"]),
       parseQty(r["Exporter reported quantity"])
     ),
     e: r.Exporter || "",
     i: r.Importer || "",
+    o: r.Origin || "",
   }));
 
   // All unique sources (not just top 6)
@@ -295,9 +299,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Fetch last 10 years of comparative tabulation data
+    // Fetch last 25 years of comparative tabulation data
     const currentYear = new Date().getFullYear();
-    const startYear = currentYear - 10;
+    const startYear = currentYear - 25;
 
     const params = new URLSearchParams({
       "filters[taxon_concepts_ids][]": taxonId,
