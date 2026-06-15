@@ -78,6 +78,23 @@ describe("/browse", () => {
     expect(d.unresolved).toContain("threats=asteroids");
   });
 
+  it("returns 400 for an attempted-but-unresolved query (filters with no taxon), not a 200 index", async () => {
+    const r = await GET(req("?threats=climate-change&format=json"));
+    expect(r.status).toBe(400);
+    const d = await r.json();
+    expect(d.error).toBeTruthy();
+    expect(querySpecies).not.toHaveBeenCalled();
+  });
+
+  it("fails loudly: a data-layer error returns 503 + error, never a misleading 200", async () => {
+    querySpecies.mockRejectedValue(new Error("R2 read timeout"));
+    const r = await GET(req("?taxa=corals&format=json"));
+    expect(r.status).toBe(503);
+    const d = await r.json();
+    expect(d.error).toBeTruthy();
+    expect(d.retryable).toBe(true);
+  });
+
   it("sets X-Robots-Tag noindex (unlisted to crawlers)", async () => {
     const r = await GET(req("?taxa=corals&format=json"));
     expect(r.headers.get("X-Robots-Tag")).toContain("noindex");

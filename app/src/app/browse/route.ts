@@ -167,8 +167,19 @@ export async function GET(req: NextRequest) {
     ...trends.unresolved.map((v) => `trends=${v}`),
   ];
 
-  // No actionable selector → self-describing index.
+  // No actionable selector. Distinguish a bare request (legit "what can I do here?"
+  // → 200 self-describing index) from an attempted-but-unresolved query (params were
+  // sent but nothing resolved → loud 400, so a client can't mistake the help page for
+  // a result or auto-follow one of its example links as the answer).
   if (taxa.ids.length === 0 && !search) {
+    const attempted = [...sp.keys()].some((k) => k !== "format");
+    if (attempted) {
+      const msg = "No taxon or search term resolved from this query. Provide ?taxa=<group, sub-group, or scientific name> or ?search=<species name>. See /llms.txt for the vocabulary.";
+      return format === "json"
+        ? NextResponse.json({ error: msg, unresolved, vocabulary: "/llms.txt" }, { status: 400, headers: { ...NOINDEX } })
+        : new NextResponse(`<!doctype html><meta charset="utf-8"><title>No valid query</title><h1>No valid query</h1><p>${msg}</p>`,
+            { status: 400, headers: { "Content-Type": "text/html; charset=utf-8", ...NOINDEX } });
+    }
     return format === "json"
       ? NextResponse.json(indexData(unresolved), { headers: { ...CACHE_1H, ...NOINDEX } })
       : html(indexHtml(unresolved));
@@ -194,6 +205,7 @@ export async function GET(req: NextRequest) {
   let matched: Row[] = [];
   let tooLarge = false;
 
+  try {
   if (taxa.ids.length) {
     // Browse mode: query each taxon, narrow curated sub-nodes client-side (the read
     // layer filters only by taxon_group), then apply the shared base predicate.
@@ -235,6 +247,15 @@ export async function GET(req: NextRequest) {
     // here (the lean hit shape lacks them); steer filtered queries to ?taxa=.
     const hits = await searchSpecies(search, RESULT_CAP);
     matched = hits.map(searchHitToRow);
+  }
+  } catch {
+    // Fail loudly: a query error/timeout (e.g. cold DuckDB container still warming)
+    // returns 503 with a clear message — never a 200 with unrelated data.
+    const msg = "The data service failed or timed out (it may be warming up on a cold start). Please retry shortly — this is a real failure, not a result.";
+    return format === "json"
+      ? NextResponse.json({ error: msg, retryable: true }, { status: 503, headers: { ...NOINDEX } })
+      : new NextResponse(`<!doctype html><meta charset="utf-8"><title>Temporarily unavailable</title><h1>Temporarily unavailable</h1><p>${msg}</p>`,
+          { status: 503, headers: { "Content-Type": "text/html; charset=utf-8", ...NOINDEX } });
   }
 
   matched.sort((a, b) => {
