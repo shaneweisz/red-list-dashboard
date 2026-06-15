@@ -40,8 +40,8 @@ const nextConfig: NextConfig = {
     "/api/redlist/synonyms": DUCKDB_TRACE,
     // /browse runs querySpecies/searchSpecies (DuckDB over R2) at request time.
     "/browse": DUCKDB_TRACE,
-    // /api/mcp (the [transport] route) runs the same query layer for the MCP tools.
-    "/api/[transport]": DUCKDB_TRACE,
+    // /api/mcp runs the same query layer for the MCP tools.
+    "/api/mcp": DUCKDB_TRACE,
   },
 
   // The API routes import a shared species-store module that references every
@@ -75,7 +75,7 @@ const nextConfig: NextConfig = {
     // for the instant NE tooLarge check, drop the heavy data + ALL parquets (the USE_R2
     // gate keys on assessed.parquet being absent locally). /llms.txt reads no data.
     "/browse": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", "**/data/node-children-summaries.json", "**/data/*.parquet", ...COL_ARTIFACTS],
-    "/api/[transport]": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", "**/data/node-children-summaries.json", "**/data/*.parquet", ...COL_ARTIFACTS],
+    "/api/mcp": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", "**/data/node-children-summaries.json", "**/data/*.parquet", ...COL_ARTIFACTS],
     "/llms.txt": ["**/data/**"],
   },
 };

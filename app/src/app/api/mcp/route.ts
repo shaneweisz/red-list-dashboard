@@ -6,8 +6,11 @@
  * originate off the sandbox (no egress allowlist). Tools call runBrowseQuery directly
  * — the same logic /browse uses, so results are identical.
  *
- * Served at /api/mcp (streamable HTTP) via the [transport] segment. Gated by a bearer
- * token (env MCP_TOKEN); clients send `Authorization: Bearer <token>`.
+ * Served at /api/mcp (streamable HTTP). mcp-handler matches the request pathname
+ * against `${basePath}/mcp`, so a static `api/mcp` route is all that's needed — no
+ * dynamic `[transport]` segment (its brackets are a glob char-class that breaks the
+ * next.config tracing keys, bundling all of data/ and blowing the function-size cap).
+ * Gated by a bearer token (env MCP_TOKEN); clients send `Authorization: Bearer <token>`.
  */
 import { createMcpHandler, withMcpAuth } from "mcp-handler";
 import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
