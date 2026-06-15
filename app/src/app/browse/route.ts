@@ -167,8 +167,19 @@ export async function GET(req: NextRequest) {
     ...trends.unresolved.map((v) => `trends=${v}`),
   ];
 
-  // No actionable selector → self-describing index.
+  // No actionable selector. Distinguish a bare request (legit "what can I do here?"
+  // → 200 self-describing index) from an attempted-but-unresolved query (params were
+  // sent but nothing resolved → loud 400, so a client can't mistake the help page for
+  // a result or auto-follow one of its example links as the answer).
   if (taxa.ids.length === 0 && !search) {
+    const attempted = [...sp.keys()].some((k) => k !== "format");
+    if (attempted) {
+      const msg = "No taxon or search term resolved from this query. Provide ?taxa=<group, sub-group, or scientific name> or ?search=<species name>. See /llms.txt for the vocabulary.";
+      return format === "json"
+        ? NextResponse.json({ error: msg, unresolved, vocabulary: "/llms.txt" }, { status: 400, headers: { ...NOINDEX } })
+        : new NextResponse(`<!doctype html><meta charset="utf-8"><title>No valid query</title><h1>No valid query</h1><p>${msg}</p>`,
+            { status: 400, headers: { "Content-Type": "text/html; charset=utf-8", ...NOINDEX } });
+    }
     return format === "json"
       ? NextResponse.json(indexData(unresolved), { headers: { ...CACHE_1H, ...NOINDEX } })
       : html(indexHtml(unresolved));
