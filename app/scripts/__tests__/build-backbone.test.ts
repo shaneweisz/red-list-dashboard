@@ -51,6 +51,9 @@ const ROWS: string[][] = [
   // holds an in-range 4-digit run ("…/phytotaxa.1543…") trailing the real year (2021).
   // The DOI must be stripped → 2021, not 1543.
   ["11", "F", "accepted", "species", "Testus doicitatius", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "Testus", "200", "false", "", "", "R4"],
+  // Pre-Linnaean floor: a citation year of 1600 predates valid nomenclature (1753), so it's
+  // necessarily a mis-parse — described_year must be null, not 1600.
+  ["12", "F", "accepted", "species", "Testus antiquus", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "Testus", "200", "false", "", "", "R5"],
   // Unflagged fossil from a non-Base paleo source: extinct is null, so only in_base drops it.
   ["6", "F", "accepted", "species", "Cimexomys testus", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "Cimexomys", "999", "", "", "", ""],
   ["4", "F", "provisionally accepted", "species", "Felis dubia", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "Felis", "100", "false", "", "", ""],
@@ -73,6 +76,8 @@ const REF_ROWS: string[][] = [
   ["R2", "", "Fl. Imag. 3: 77. 1888."],
   ["R3", "", "Hooker's Icon. Pl. 21: t. 2038a (1890)"],
   ["R4", "", "Phytotaxa 211: 1-10. 2021. https://doi.org/10.11646/phytotaxa.1543.1.1"],
+  // R5: a pre-Linnaean year (1600) — below the 1753 floor, must be dropped to null.
+  ["R5", "", "Antiqua Fl. 1: 1. 1600."],
 ];
 // Curated-checklist demotion set (injected, no network): "10" = Felis splitta.
 const DEMOTED_COL_IDS = ["10"];
@@ -106,7 +111,7 @@ describe("build-backbone species universe", () => {
     // excluded. The fossil + non-Base species are KEPT in the parquet (carried with
     // flags) and filtered at query time.
     expect(rows.map((r) => r.scientific_name)).toEqual([
-      "Cimexomys testus", "Felis incognita", "Panthera leo", "Peropteryx leucoptera", "Smilodon fatalis", "Testus citatius", "Testus doicitatius", "Testus platius",
+      "Cimexomys testus", "Felis incognita", "Panthera leo", "Peropteryx leucoptera", "Smilodon fatalis", "Testus antiquus", "Testus citatius", "Testus doicitatius", "Testus platius",
     ]);
   });
 
@@ -149,7 +154,7 @@ describe("build-backbone species universe", () => {
     const rows = await query(`SELECT scientific_name FROM read_parquet('${speciesGlob}', hive_partitioning=true) WHERE in_base AND extinct IS NOT TRUE ORDER BY scientific_name`);
     // Smilodon (flagged fossil) and Cimexomys (unflagged, non-Base) both excluded.
     expect(rows.map((r) => r.scientific_name)).toEqual([
-      "Felis incognita", "Panthera leo", "Peropteryx leucoptera", "Testus citatius", "Testus doicitatius", "Testus platius",
+      "Felis incognita", "Panthera leo", "Peropteryx leucoptera", "Testus antiquus", "Testus citatius", "Testus doicitatius", "Testus platius",
     ]);
   });
 
@@ -162,6 +167,7 @@ describe("build-backbone species universe", () => {
     expect(Number(byName.get("Testus citatius"))).toBe(1888);       // reference citation fallback (col:issued empty → parsed from citation)
     expect(Number(byName.get("Testus platius"))).toBe(1890);        // citation has plate "t. 2038a" before year — must pick 1890, not 2038
     expect(Number(byName.get("Testus doicitatius"))).toBe(2021);    // #295: trailing DOI "…/phytotaxa.1543…" stripped — must pick 2021, not 1543
+    expect(byName.get("Testus antiquus")).toBeNull();               // citation year 1600 is pre-Linnaean (< 1753 floor) → null, not 1600
     expect(byName.get("Cimexomys testus")).toBeNull();              // no year anywhere
   });
 
@@ -175,7 +181,7 @@ describe("build-backbone species universe", () => {
 describe("build-backbone backbone.parquet", () => {
   it("carries every usage (all ranks + synonyms) for tree + synonym resolution", async () => {
     const rows = await query(`SELECT count(*) n, count(*) FILTER (status LIKE '%synonym%') syn FROM read_parquet('${backbone}')`);
-    expect(Number(rows[0].n)).toBe(12);  // all rows: family, synonym, demoted species + the rest
+    expect(Number(rows[0].n)).toBe(13);  // all rows: family, synonym, demoted species + the rest
     expect(Number(rows[0].syn)).toBe(1);
   });
 });
