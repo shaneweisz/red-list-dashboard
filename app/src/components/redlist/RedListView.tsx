@@ -1176,9 +1176,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const describedYearData = useMemo(() => {
     const buckets = ["pre-1900", "1900-1949", "1950-1999", "2000-2009", "2010-2019", "2020+", "Unknown"];
     const counts: Record<string, number> = Object.fromEntries(buckets.map(b => [b, 0]));
-    // Described-year chart only surfaces search + country + obs (NE/new-assessments mode);
-    // exclude the other base dimensions to preserve that reduced cross-filter set.
-    const crit = baseCriteria(["category", "system", "trend", "movement", "threat", "map", "growth"]);
+    // Cross-filter on every dimension except the described-year filter itself.
+    const crit = baseCriteria();
     taxaFilteredSpecies.forEach(s => {
       if (s.category !== "NE") return;
       if (!matchesSpeciesFilter(s, crit)) return;
@@ -1300,9 +1299,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // Threat counts: apply all filters EXCEPT threats (count species per prefix, deduplicated)
   const threatCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    // Threat chart historically omits the map + growth-form filters; keep that
-    // reduced cross-filter set by excluding them alongside threat (self).
-    const crit = baseCriteria(["threat", "map", "growth"]);
+    const crit = baseCriteria(["threat"]);
     taxaFilteredSpecies.forEach(s => {
       if (!s.threat_codes?.length) return;
       if (!matchesSpeciesFilter(s, crit)) return;
@@ -1339,9 +1336,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // Assessor chart: apply all filters EXCEPT assessors (include reviewers)
   const assessorChartData = useMemo(() => {
     const counts: Record<string, number> = {};
-    // Assessor chart cross-filters on category/country/system/search only (plus the
-    // date/obs/reviewer filters kept inline) — exclude the rest to preserve that.
-    const crit = baseCriteria(["trend", "movement", "threat", "map", "growth"]);
+    // Cross-filter on every dimension except the assessor filter itself.
+    const crit = baseCriteria();
     taxaFilteredSpecies.forEach(s => {
       if (!matchesSpeciesFilter(s, crit)) return;
       if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
@@ -1365,8 +1361,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // Reviewer chart: apply all filters EXCEPT reviewers (include assessors)
   const reviewerChartData = useMemo(() => {
     const counts: Record<string, number> = {};
-    // Mirror the assessor chart's reduced cross-filter set.
-    const crit = baseCriteria(["trend", "movement", "threat", "map", "growth"]);
+    // Cross-filter on every dimension except the reviewer filter itself.
+    const crit = baseCriteria();
     taxaFilteredSpecies.forEach(s => {
       if (!matchesSpeciesFilter(s, crit)) return;
       if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
