@@ -142,7 +142,7 @@ function endAngle(from: [number, number], to: [number, number], curvature = 0.25
   return (Math.atan2(tdy, tdx) * 180) / Math.PI;
 }
 
-interface TradeFlow {
+export interface TradeFlow {
   from: string;
   to: string;
   records: number;
@@ -156,22 +156,43 @@ export interface CountryAnnotation {
 
 interface TradeFlowMapProps {
   flows: TradeFlow[];
+  /**
+   * Re-export legs: where specimens originally came from before the exporter
+   * (origin → re-exporter). Shown as an opt-in dashed overlay.
+   */
+  reExportFlows?: TradeFlow[];
   /** ISO alpha-2 codes of countries with active trade suspensions */
   suspensionCountries?: Set<string>;
   /** Per-country suspension/quota annotations for hover tooltip */
   countryAnnotations?: Record<string, CountryAnnotation>;
 }
 
-function TradeFlowMap({ flows, suspensionCountries, countryAnnotations }: TradeFlowMapProps) {
+function TradeFlowMap({
+  flows,
+  reExportFlows,
+  suspensionCountries,
+  countryAnnotations,
+}: TradeFlowMapProps) {
   const { resolvedTheme } = useTheme();
   const [hoveredFlow, setHoveredFlow] = useState<number | null>(null);
+  const [hoveredReExport, setHoveredReExport] = useState<number | null>(null);
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
+  const [showReExports, setShowReExports] = useState(false);
 
   // Only render flows where we have centroids for both endpoints
   const renderableFlows = useMemo(
     () => flows.filter((f) => COUNTRY_CENTROIDS[f.from] && COUNTRY_CENTROIDS[f.to]),
     [flows]
+  );
+
+  // Re-export legs (origin → re-exporter) with known centroids
+  const renderableReExports = useMemo(
+    () =>
+      (reExportFlows ?? []).filter(
+        (f) => COUNTRY_CENTROIDS[f.from] && COUNTRY_CENTROIDS[f.to]
+      ),
+    [reExportFlows]
   );
 
   if (renderableFlows.length === 0) return null;
@@ -183,6 +204,16 @@ function TradeFlowMap({ flows, suspensionCountries, countryAnnotations }: TradeF
     ? renderableFlows.filter((f) => f.from === selectedCountry || f.to === selectedCountry)
     : renderableFlows;
 
+  // Re-export legs to show: only when toggled on, respecting any country filter
+  const visibleReExports =
+    showReExports && renderableReExports.length > 0
+      ? selectedCountry
+        ? renderableReExports.filter(
+            (f) => f.from === selectedCountry || f.to === selectedCountry
+          )
+        : renderableReExports
+      : [];
+
   // Collect unique exporter/importer codes from visible flows
   const exporterCodes = new Set(visibleFlows.map((f) => f.from));
   const importerCodes = new Set(visibleFlows.map((f) => f.to));
@@ -191,10 +222,12 @@ function TradeFlowMap({ flows, suspensionCountries, countryAnnotations }: TradeF
 
   // Theme-aware colors for SVG fills (can't use Tailwind classes in SVG)
   const colors = dark
-    ? { base: "#18181b", exporter: "#7f1d1d", importer: "#1e3a5f", both: "#312e81", stroke: "#27272a", suspension: "#991b1b", arcDefault: "#f87171", arcHover: "#fbbf24" }
-    : { base: "#f4f4f5", exporter: "#fee2e2", importer: "#dbeafe", both: "#e0e7ff", stroke: "#d4d4d8", suspension: "#fecaca", arcDefault: "#ef4444", arcHover: "#f59e0b" };
+    ? { base: "#18181b", exporter: "#7f1d1d", importer: "#1e3a5f", both: "#312e81", stroke: "#27272a", suspension: "#991b1b", arcDefault: "#f87171", arcHover: "#fbbf24", reExport: "#d97706" }
+    : { base: "#f4f4f5", exporter: "#fee2e2", importer: "#dbeafe", both: "#e0e7ff", stroke: "#d4d4d8", suspension: "#fecaca", arcDefault: "#ef4444", arcHover: "#f59e0b", reExport: "#d97706" };
 
   const hoveredFlowData = hoveredFlow !== null ? visibleFlows[hoveredFlow] : null;
+  const hoveredReExportData =
+    hoveredReExport !== null ? visibleReExports[hoveredReExport] : null;
 
   return (
     <div className="relative">
@@ -219,8 +252,21 @@ function TradeFlowMap({ flows, suspensionCountries, countryAnnotations }: TradeF
         </div>
       )}
 
+      {/* Re-export pathway tooltip (plain language) */}
+      {hoveredReExportData && !hoveredFlowData && (
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 bg-zinc-800 dark:bg-zinc-700 text-white text-[11px] px-3 py-1.5 rounded-lg shadow-lg pointer-events-none max-w-[300px] text-center">
+          Originated in{" "}
+          <span className="font-medium">{countryName(hoveredReExportData.from)}</span>,
+          re-exported via{" "}
+          <span className="font-medium">{countryName(hoveredReExportData.to)}</span>
+          <span className="text-zinc-400 ml-1.5">
+            {hoveredReExportData.records.toLocaleString()} records
+          </span>
+        </div>
+      )}
+
       {/* Country annotation tooltip (suspensions/quotas) */}
-      {hoveredCountry && !hoveredFlowData && countryAnnotations?.[hoveredCountry] && (
+      {hoveredCountry && !hoveredFlowData && !hoveredReExportData && countryAnnotations?.[hoveredCountry] && (
         <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 bg-zinc-800 dark:bg-zinc-700 text-white text-[11px] px-3 py-2 rounded-lg shadow-lg pointer-events-none max-w-[280px]">
           <div className="font-medium mb-1">{countryName(hoveredCountry)}</div>
           {countryAnnotations[hoveredCountry].suspensions && countryAnnotations[hoveredCountry].suspensions!.length > 0 && (
@@ -304,6 +350,70 @@ function TradeFlowMap({ flows, suspensionCountries, countryAnnotations }: TradeF
             }
           </Geographies>
         </g>
+
+        {/* Re-export legs (origin → re-exporter), drawn underneath the direct
+            flows as dashed amber arcs so they read as the upstream part of the
+            pathway rather than a competing flow. */}
+        {visibleReExports.map((flow, i) => {
+          const from = COUNTRY_CENTROIDS[flow.from];
+          const to = COUNTRY_CENTROIDS[flow.to];
+          const path = arcPath(from, to);
+          if (!path) return null;
+          const isHovered = hoveredReExport === i;
+          const dest = project(to);
+          const angle = endAngle(from, to);
+          return (
+            <g key={`reexport-${flow.from}-${flow.to}`}>
+              <path
+                d={path}
+                fill="none"
+                stroke={colors.reExport}
+                strokeWidth={isHovered ? 2.5 : 1.5}
+                strokeLinecap="round"
+                strokeDasharray="4,3"
+                strokeOpacity={isHovered ? 0.95 : 0.6}
+                onMouseEnter={() => setHoveredReExport(i)}
+                onMouseLeave={() => setHoveredReExport(null)}
+                style={{ cursor: "pointer" }}
+              />
+              {dest && (
+                <polygon
+                  points="-4,-2.5 0,0 -4,2.5"
+                  fill={colors.reExport}
+                  fillOpacity={isHovered ? 0.95 : 0.6}
+                  transform={`translate(${dest[0]},${dest[1]}) rotate(${angle})`}
+                />
+              )}
+            </g>
+          );
+        })}
+
+        {/* Origin markers for re-export legs (hollow amber diamonds) */}
+        {visibleReExports.length > 0 &&
+          (() => {
+            const seen = new Set<string>();
+            const markers: React.ReactNode[] = [];
+            for (const flow of visibleReExports) {
+              if (seen.has(flow.from)) continue;
+              seen.add(flow.from);
+              const p = project(COUNTRY_CENTROIDS[flow.from]);
+              if (!p) continue;
+              markers.push(
+                <rect
+                  key={`origin-${flow.from}`}
+                  x={p[0] - 3}
+                  y={p[1] - 3}
+                  width={6}
+                  height={6}
+                  transform={`rotate(45 ${p[0]} ${p[1]})`}
+                  fill="none"
+                  stroke={colors.reExport}
+                  strokeWidth={1.2}
+                />
+              );
+            }
+            return markers;
+          })()}
 
         {/* Curved flow arcs with arrowheads — rendered outside the offset <g> since we project manually */}
         {visibleFlows.map((flow, i) => {
@@ -416,6 +526,22 @@ function TradeFlowMap({ flows, suspensionCountries, countryAnnotations }: TradeF
             <span className="inline-block w-3 h-2 rounded-sm border border-dashed border-red-500 bg-red-100 dark:bg-red-900/30" />
             Suspension
           </span>
+        )}
+        {renderableReExports.length > 0 && (
+          <label className="flex items-center gap-1 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showReExports}
+              onChange={() => setShowReExports((v) => !v)}
+              className="w-3 h-3 rounded"
+              style={{ accentColor: "#d97706" }}
+            />
+            <svg width="16" height="8" className="inline-block">
+              <line x1="0" y1="4" x2="12" y2="4" stroke="#d97706" strokeWidth="1.5" strokeDasharray="3,2" />
+              <polygon points="12,1.5 16,4 12,6.5" fill="#d97706" />
+            </svg>
+            Show where specimens came from (re-exports)
+          </label>
         )}
         <span className="text-zinc-400 dark:text-zinc-500 italic">click dot to filter</span>
       </div>

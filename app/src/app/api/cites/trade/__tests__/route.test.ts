@@ -189,16 +189,17 @@ describe("/api/cites/trade", () => {
     // shipments (compact records)
     expect(body.shipments).toHaveLength(3);
     expect(body.shipments[0]).toEqual(
-      expect.objectContaining({ y: 2022, s: "W", p: "S", t: "specimens" })
+      expect.objectContaining({ y: 2022, s: "W", p: "S", t: "specimens", u: "", o: "" })
     );
 
-    // allSources / allPurposes / allTerms present
+    // allSources / allPurposes / allTerms / allTermsByUnit present
     expect(body.allSources.length).toBeGreaterThan(0);
     expect(body.allPurposes.length).toBeGreaterThan(0);
     expect(body.allTerms.length).toBeGreaterThan(0);
+    expect(body.allTermsByUnit.length).toBeGreaterThan(0);
   });
 
-  it("uses max of importer/exporter reported quantity", async () => {
+  it("prefers exporter-reported quantity over importer-reported", async () => {
     const rows = [
       makeTradeRow({
         "Importer reported quantity": "20",
@@ -216,7 +217,56 @@ describe("/api/cites/trade", () => {
     const res = await GET(makeRequest({ taxon_id: "11136" }));
     const body = await res.json();
 
-    expect(body.byYear[0].quantity).toBe(20); // max(20, 15)
+    expect(body.byYear[0].quantity).toBe(15); // exporter-preferred, not max(20, 15)
+  });
+
+  it("falls back to importer quantity when the exporter did not report", async () => {
+    const rows = [
+      makeTradeRow({
+        "Importer reported quantity": "20",
+        "Exporter reported quantity": null,
+      }),
+    ];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse({ shipment_comptab_export: { rows } })
+      )
+    );
+    const { GET } = await importRoute();
+    const res = await GET(makeRequest({ taxon_id: "11136" }));
+    const body = await res.json();
+
+    expect(body.byYear[0].quantity).toBe(20);
+  });
+
+  it("groups terms by unit without aggregating across units", async () => {
+    const rows = [
+      makeTradeRow({ Term: "tusks", Unit: "kg", "Exporter reported quantity": "100" }),
+      makeTradeRow({ Term: "tusks", Unit: null, "Exporter reported quantity": "4" }),
+      makeTradeRow({ Term: "leather", Unit: "m", "Exporter reported quantity": "7" }),
+    ];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse({ shipment_comptab_export: { rows } })
+      )
+    );
+    const { GET } = await importRoute();
+    const res = await GET(makeRequest({ taxon_id: "11136" }));
+    const body = await res.json();
+
+    // "tusks / kg" and "tusks / (no unit)" must be separate rows
+    const tusksKg = body.allTermsByUnit.find(
+      (t: { term: string; unit: string }) => t.term === "tusks" && t.unit === "kg"
+    );
+    const tusksNoUnit = body.allTermsByUnit.find(
+      (t: { term: string; unit: string }) => t.term === "tusks" && t.unit === ""
+    );
+    expect(tusksKg?.quantity).toBe(100);
+    expect(tusksNoUnit?.quantity).toBe(4);
   });
 
   it("handles null quantities gracefully", async () => {
