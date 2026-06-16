@@ -10,6 +10,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
+  Brush,
 } from "recharts";
 import { countryName, fmtQty } from "./cites-utils";
 import type { CountryAnnotation } from "./TradeFlowMap";
@@ -84,6 +85,18 @@ interface TradeData {
   allTerms?: TermCount[];
 }
 
+interface AggregatedData {
+  byYear: YearData[];
+  totalRecords: number;
+  totalQty: number;
+  topTerms: TermData[];
+  topSources: CodedData[];
+  topPurposes: CodedData[];
+  topExporters: CountryData[];
+  topImporters: CountryData[];
+  topFlows: FlowData[];
+}
+
 // Sources that indicate wild take — key concern for assessors
 const WILD_SOURCE_CODES = new Set(["W", "X", "R", "U"]);
 
@@ -114,6 +127,129 @@ const PURPOSE_LABELS: Record<string, string> = {
   T: "Commercial",
   Z: "Zoo",
 };
+
+/* ------------------------------------------------------------------ */
+/*  Aggregation helper                                                 */
+/* ------------------------------------------------------------------ */
+
+function aggregateShipments(
+  rows: CompactRecord[],
+  fillYearRange?: [number, number]
+): AggregatedData {
+  // byYear
+  const yearMap = new Map<number, { quantity: number; records: number }>();
+  for (const r of rows) {
+    const entry = yearMap.get(r.y) || { quantity: 0, records: 0 };
+    entry.records++;
+    entry.quantity += r.q;
+    yearMap.set(r.y, entry);
+  }
+  if (fillYearRange) {
+    for (let y = fillYearRange[0]; y <= fillYearRange[1]; y++) {
+      if (!yearMap.has(y)) yearMap.set(y, { quantity: 0, records: 0 });
+    }
+  }
+  const byYear = Array.from(yearMap.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([year, v]) => ({ year, ...v }));
+
+  // terms
+  const termMap = new Map<string, { quantity: number; records: number }>();
+  for (const r of rows) {
+    const entry = termMap.get(r.t) || { quantity: 0, records: 0 };
+    entry.records++;
+    entry.quantity += r.q;
+    termMap.set(r.t, entry);
+  }
+  const topTerms = Array.from(termMap.entries())
+    .sort(([, a], [, b]) => b.records - a.records)
+    .slice(0, 8)
+    .map(([term, v]) => ({ term, ...v }));
+
+  // sources
+  const sourceMap = new Map<string, number>();
+  for (const r of rows) {
+    if (r.s) sourceMap.set(r.s, (sourceMap.get(r.s) || 0) + 1);
+  }
+  const topSources = Array.from(sourceMap.entries())
+    .sort(([, a], [, b]) => b - a)
+    .map(([code, records]) => ({
+      code,
+      label: SOURCE_LABELS[code] || code,
+      records,
+    }));
+
+  // purposes
+  const purposeMap = new Map<string, number>();
+  for (const r of rows) {
+    if (r.p) purposeMap.set(r.p, (purposeMap.get(r.p) || 0) + 1);
+  }
+  const topPurposes = Array.from(purposeMap.entries())
+    .sort(([, a], [, b]) => b - a)
+    .map(([code, records]) => ({
+      code,
+      label: PURPOSE_LABELS[code] || code,
+      records,
+    }));
+
+  // exporters
+  const exporterMap = new Map<string, { records: number; quantity: number }>();
+  for (const r of rows) {
+    if (!r.e) continue;
+    const entry = exporterMap.get(r.e) || { records: 0, quantity: 0 };
+    entry.records++;
+    entry.quantity += r.q;
+    exporterMap.set(r.e, entry);
+  }
+  const topExporters = Array.from(exporterMap.entries())
+    .sort(([, a], [, b]) => b.records - a.records)
+    .slice(0, 8)
+    .map(([code, v]) => ({ code, ...v }));
+
+  // importers
+  const importerMap = new Map<string, { records: number; quantity: number }>();
+  for (const r of rows) {
+    if (!r.i) continue;
+    const entry = importerMap.get(r.i) || { records: 0, quantity: 0 };
+    entry.records++;
+    entry.quantity += r.q;
+    importerMap.set(r.i, entry);
+  }
+  const topImporters = Array.from(importerMap.entries())
+    .sort(([, a], [, b]) => b.records - a.records)
+    .slice(0, 8)
+    .map(([code, v]) => ({ code, ...v }));
+
+  // flows
+  const flowMap = new Map<string, { records: number; quantity: number }>();
+  for (const r of rows) {
+    if (!r.e || !r.i) continue;
+    const key = `${r.e}->${r.i}`;
+    const entry = flowMap.get(key) || { records: 0, quantity: 0 };
+    entry.records++;
+    entry.quantity += r.q;
+    flowMap.set(key, entry);
+  }
+  const topFlows = Array.from(flowMap.entries())
+    .sort(([, a], [, b]) => b.records - a.records)
+    .slice(0, 12)
+    .map(([key, v]) => {
+      const [from, to] = key.split("->");
+      return { from, to, ...v };
+    });
+
+  return {
+    byYear,
+    totalRecords: rows.length,
+    totalQty: rows.reduce((s, r) => s + r.q, 0),
+    topTerms,
+    topSources,
+    topPurposes,
+    topExporters,
+    topImporters,
+    topFlows,
+  };
+}
 
 /* ------------------------------------------------------------------ */
 /*  Filter checkbox row                                                */
@@ -165,20 +301,26 @@ function FilterCheckbox({
 }
 
 /* ------------------------------------------------------------------ */
-/*  Trend line chart                                                   */
+/*  Trend line chart with brush                                        */
 /* ------------------------------------------------------------------ */
 
 function TrendLineChart({
   data,
   metric,
+  brushStartIndex,
+  brushEndIndex,
+  onBrushChange,
 }: {
   data: YearData[];
   metric: "records" | "quantity";
+  brushStartIndex?: number;
+  brushEndIndex?: number;
+  onBrushChange?: (startIndex: number, endIndex: number) => void;
 }) {
   if (data.length === 0) return null;
 
   return (
-    <ResponsiveContainer width="100%" height={160}>
+    <ResponsiveContainer width="100%" height={195}>
       <LineChart data={data} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
         <CartesianGrid
           strokeDasharray="3 3"
@@ -219,6 +361,25 @@ function TrendLineChart({
           strokeWidth={2}
           dot={{ r: 3, fill: "#3b82f6", strokeWidth: 0 }}
           activeDot={{ r: 5, fill: "#3b82f6", strokeWidth: 2, stroke: "#fff" }}
+        />
+        <Brush
+          dataKey="year"
+          height={24}
+          startIndex={brushStartIndex}
+          endIndex={brushEndIndex !== undefined ? brushEndIndex : data.length - 1}
+          onChange={(range) => {
+            if (
+              onBrushChange &&
+              range &&
+              typeof range.startIndex === "number" &&
+              typeof range.endIndex === "number"
+            ) {
+              onBrushChange(range.startIndex, range.endIndex);
+            }
+          }}
+          stroke="#6366f1"
+          fill="#e0e7ff"
+          travellerWidth={8}
         />
       </LineChart>
     </ResponsiveContainer>
@@ -397,6 +558,10 @@ export default function CitesTradeSummary({
   const [checkedTerms, setCheckedTerms] = useState<Record<string, boolean>>({});
   const [filtersInitialized, setFiltersInitialized] = useState(false);
 
+  // Brush year range — indices into filtered.byYear
+  const [brushStartIndex, setBrushStartIndex] = useState<number | undefined>(undefined);
+  const [brushEndIndex, setBrushEndIndex] = useState<number | undefined>(undefined);
+
   // Use prefetched data from parent when available; fall back to own fetch
   const data = (prefetchedData as TradeData | null) ?? ownData;
   const loading = prefetchedLoading ?? ownLoading;
@@ -461,35 +626,8 @@ export default function CitesTradeSummary({
     setCheckedTerms((prev) => ({ ...prev, [term]: !prev[term] }));
   }, []);
 
-  // Are any filters active (i.e. something is unchecked)?
-  const hasActiveFilters = useMemo(() => {
-    const anySourceOff = Object.values(checkedSources).some((v) => !v);
-    const anyPurposeOff = Object.values(checkedPurposes).some((v) => !v);
-    const anyTermOff = Object.values(checkedTerms).some((v) => !v);
-    return anySourceOff || anyPurposeOff || anyTermOff;
-  }, [checkedSources, checkedPurposes, checkedTerms]);
-
-  // Clear all filters (re-check everything)
-  const clearFilters = useCallback(() => {
-    setCheckedSources((prev) => {
-      const next = { ...prev };
-      for (const k of Object.keys(next)) next[k] = true;
-      return next;
-    });
-    setCheckedPurposes((prev) => {
-      const next = { ...prev };
-      for (const k of Object.keys(next)) next[k] = true;
-      return next;
-    });
-    setCheckedTerms((prev) => {
-      const next = { ...prev };
-      for (const k of Object.keys(next)) next[k] = true;
-      return next;
-    });
-  }, []);
-
-  // Filter shipments and recompute all derived data
-  const filtered = useMemo(() => {
+  // Aggregated data from source/purpose/term filters (full year range for chart)
+  const filtered = useMemo((): AggregatedData => {
     if (!data?.found || !data.shipments) {
       return {
         byYear: data?.byYear || [],
@@ -511,121 +649,77 @@ export default function CitesTradeSummary({
       return true;
     });
 
-    // byYear
-    const yearMap = new Map<number, { quantity: number; records: number }>();
-    for (const r of rows) {
-      const entry = yearMap.get(r.y) || { quantity: 0, records: 0 };
-      entry.records++;
-      entry.quantity += r.q;
-      yearMap.set(r.y, entry);
-    }
-    // Ensure all years in range are present (even if 0)
-    if (data.yearRange) {
-      for (let y = data.yearRange[0]; y <= data.yearRange[1]; y++) {
-        if (!yearMap.has(y)) yearMap.set(y, { quantity: 0, records: 0 });
-      }
-    }
-    const byYear = Array.from(yearMap.entries())
-      .sort(([a], [b]) => a - b)
-      .map(([year, v]) => ({ year, ...v }));
+    return aggregateShipments(rows, data.yearRange);
+  }, [data, checkedSources, checkedPurposes, checkedTerms]);
 
-    // terms
-    const termMap = new Map<string, { quantity: number; records: number }>();
-    for (const r of rows) {
-      const entry = termMap.get(r.t) || { quantity: 0, records: 0 };
-      entry.records++;
-      entry.quantity += r.q;
-      termMap.set(r.t, entry);
-    }
-    const topTerms = Array.from(termMap.entries())
-      .sort(([, a], [, b]) => b.records - a.records)
-      .slice(0, 8)
-      .map(([term, v]) => ({ term, ...v }));
+  // Derive the active year range from brush indices
+  const brushYearRange = useMemo<[number, number] | null>(() => {
+    if (brushStartIndex === undefined || brushEndIndex === undefined) return null;
+    const { byYear } = filtered;
+    if (!byYear.length) return null;
+    const si = Math.min(brushStartIndex, byYear.length - 1);
+    const ei = Math.min(brushEndIndex, byYear.length - 1);
+    // If brush covers entire range, treat as inactive
+    if (si === 0 && ei >= byYear.length - 1) return null;
+    const start = byYear[si]?.year;
+    const end = byYear[ei]?.year;
+    if (start === undefined || end === undefined) return null;
+    return [start, end];
+  }, [brushStartIndex, brushEndIndex, filtered]);
 
-    // sources
-    const sourceMap = new Map<string, number>();
-    for (const r of rows) {
-      if (r.s) sourceMap.set(r.s, (sourceMap.get(r.s) || 0) + 1);
-    }
-    const topSources = Array.from(sourceMap.entries())
-      .sort(([, a], [, b]) => b - a)
-      .map(([code, records]) => ({
-        code,
-        label: SOURCE_LABELS[code] || code,
-        records,
-      }));
+  // Data filtered by both source/purpose/term AND the brush year range
+  const display = useMemo((): AggregatedData => {
+    if (!brushYearRange || !data?.found || !data.shipments) return filtered;
+    const [startYear, endYear] = brushYearRange;
 
-    // purposes
-    const purposeMap = new Map<string, number>();
-    for (const r of rows) {
-      if (r.p) purposeMap.set(r.p, (purposeMap.get(r.p) || 0) + 1);
-    }
-    const topPurposes = Array.from(purposeMap.entries())
-      .sort(([, a], [, b]) => b - a)
-      .map(([code, records]) => ({
-        code,
-        label: PURPOSE_LABELS[code] || code,
-        records,
-      }));
-
-    // exporters
-    const exporterMap = new Map<string, { records: number; quantity: number }>();
-    for (const r of rows) {
-      if (!r.e) continue;
-      const entry = exporterMap.get(r.e) || { records: 0, quantity: 0 };
-      entry.records++;
-      entry.quantity += r.q;
-      exporterMap.set(r.e, entry);
-    }
-    const topExporters = Array.from(exporterMap.entries())
-      .sort(([, a], [, b]) => b.records - a.records)
-      .slice(0, 8)
-      .map(([code, v]) => ({ code, ...v }));
-
-    // importers
-    const importerMap = new Map<string, { records: number; quantity: number }>();
-    for (const r of rows) {
-      if (!r.i) continue;
-      const entry = importerMap.get(r.i) || { records: 0, quantity: 0 };
-      entry.records++;
-      entry.quantity += r.q;
-      importerMap.set(r.i, entry);
-    }
-    const topImporters = Array.from(importerMap.entries())
-      .sort(([, a], [, b]) => b.records - a.records)
-      .slice(0, 8)
-      .map(([code, v]) => ({ code, ...v }));
-
-    // flows
-    const flowMap = new Map<string, { records: number; quantity: number }>();
-    for (const r of rows) {
-      if (!r.e || !r.i) continue;
-      const key = `${r.e}->${r.i}`;
-      const entry = flowMap.get(key) || { records: 0, quantity: 0 };
-      entry.records++;
-      entry.quantity += r.q;
-      flowMap.set(key, entry);
-    }
-    const topFlows = Array.from(flowMap.entries())
-      .sort(([, a], [, b]) => b.records - a.records)
-      .slice(0, 12)
-      .map(([key, v]) => {
-        const [from, to] = key.split("->");
-        return { from, to, ...v };
-      });
+    const rows = data.shipments.filter((r) => {
+      if (!checkedSources[r.s] && r.s) return false;
+      if (!checkedPurposes[r.p] && r.p) return false;
+      if (!checkedTerms[r.t]) return false;
+      return r.y >= startYear && r.y <= endYear;
+    });
 
     return {
-      byYear,
-      totalRecords: rows.length,
-      totalQty: rows.reduce((s, r) => s + r.q, 0),
-      topTerms,
-      topSources,
-      topPurposes,
-      topExporters,
-      topImporters,
-      topFlows,
+      ...aggregateShipments(rows, [startYear, endYear]),
+      // Chart always shows the full year range (brush sits on top of it)
+      byYear: filtered.byYear,
     };
-  }, [data, checkedSources, checkedPurposes, checkedTerms]);
+  }, [brushYearRange, filtered, data, checkedSources, checkedPurposes, checkedTerms]);
+
+  // Are any filters active (something unchecked or brush narrowed)?
+  const hasActiveFilters = useMemo(() => {
+    const brushActive = brushYearRange !== null;
+    const anySourceOff = Object.values(checkedSources).some((v) => !v);
+    const anyPurposeOff = Object.values(checkedPurposes).some((v) => !v);
+    const anyTermOff = Object.values(checkedTerms).some((v) => !v);
+    return brushActive || anySourceOff || anyPurposeOff || anyTermOff;
+  }, [brushYearRange, checkedSources, checkedPurposes, checkedTerms]);
+
+  // Clear all filters (re-check everything, reset brush)
+  const clearFilters = useCallback(() => {
+    setBrushStartIndex(undefined);
+    setBrushEndIndex(undefined);
+    setCheckedSources((prev) => {
+      const next = { ...prev };
+      for (const k of Object.keys(next)) next[k] = true;
+      return next;
+    });
+    setCheckedPurposes((prev) => {
+      const next = { ...prev };
+      for (const k of Object.keys(next)) next[k] = true;
+      return next;
+    });
+    setCheckedTerms((prev) => {
+      const next = { ...prev };
+      for (const k of Object.keys(next)) next[k] = true;
+      return next;
+    });
+  }, []);
+
+  const handleBrushChange = useCallback((startIndex: number, endIndex: number) => {
+    setBrushStartIndex(startIndex);
+    setBrushEndIndex(endIndex);
+  }, []);
 
   /* ---------------------------------------------------------------- */
   /*  Render                                                           */
@@ -664,22 +758,27 @@ export default function CitesTradeSummary({
 
   const hasShipments = !!data.shipments && data.shipments.length > 0;
 
+  // Year range label — shows brush range when active
+  const yearRangeLabel = brushYearRange
+    ? `${brushYearRange[0]}–${brushYearRange[1]}`
+    : `${data.yearRange[0]}–${data.yearRange[1]}`;
+
   return (
     <div className="space-y-4">
       {/* Headline + trend */}
       <div className="flex items-baseline gap-3 flex-wrap">
         <span className="text-sm text-zinc-700 dark:text-zinc-200">
           <span className="font-semibold tabular-nums">
-            {filtered.totalRecords.toLocaleString()}
+            {display.totalRecords.toLocaleString()}
           </span>{" "}
           shipments
           <span className="text-zinc-400 dark:text-zinc-500 mx-1">/</span>
           <span className="font-semibold tabular-nums">
-            {fmtQty(filtered.totalQty)}
+            {fmtQty(display.totalQty)}
           </span>{" "}
           reported items
           <span className="text-zinc-400 dark:text-zinc-500 ml-1">
-            {data.yearRange[0]}–{data.yearRange[1]}
+            {yearRangeLabel}
           </span>
         </span>
         <TrendSummary data={filtered.byYear} metric={metric} />
@@ -694,11 +793,11 @@ export default function CitesTradeSummary({
       </div>
 
       {/* Trade flow map */}
-      {filtered.topFlows && filtered.topFlows.length > 0 && (
+      {display.topFlows && display.topFlows.length > 0 && (
         <div>
           <div className="border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden bg-zinc-50 dark:bg-zinc-800/30">
             <TradeFlowMap
-              flows={filtered.topFlows}
+              flows={display.topFlows}
               suspensionCountries={suspensionCountries}
               countryAnnotations={countryAnnotations}
             />
@@ -708,8 +807,8 @@ export default function CitesTradeSummary({
 
       {/* Exporters & Importers */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <CountryTable data={filtered.topExporters} label="Top exporters" />
-        <CountryTable data={filtered.topImporters} label="Top importers" />
+        <CountryTable data={display.topExporters} label="Top exporters" />
+        <CountryTable data={display.topImporters} label="Top importers" />
       </div>
 
       {/* Filters + Chart side by side */}
@@ -791,12 +890,17 @@ export default function CitesTradeSummary({
 
         {/* Chart + details */}
         <div className="space-y-4 min-w-0">
-          {/* Metric toggle + line chart */}
+          {/* Metric toggle + line chart with brush */}
           <div>
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-1">
               <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
                 Trade over time
               </span>
+              {brushYearRange && (
+                <span className="text-[11px] text-indigo-500 dark:text-indigo-400 font-medium">
+                  {brushYearRange[0]}–{brushYearRange[1]}
+                </span>
+              )}
               <div className="flex items-center gap-1 ml-auto bg-zinc-100 dark:bg-zinc-800 rounded-md p-0.5">
                 <button
                   className={`px-2 py-0.5 text-[11px] rounded ${
@@ -820,21 +924,30 @@ export default function CitesTradeSummary({
                 </button>
               </div>
             </div>
-            <TrendLineChart data={filtered.byYear} metric={metric} />
+            <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mb-1.5">
+              Drag the handles below the chart to filter by year range
+            </p>
+            <TrendLineChart
+              data={filtered.byYear}
+              metric={metric}
+              brushStartIndex={brushStartIndex}
+              brushEndIndex={brushEndIndex}
+              onBrushChange={handleBrushChange}
+            />
           </div>
 
           {/* Source breakdown — most important for assessors */}
-          {filtered.topSources.length > 0 && (
+          {display.topSources.length > 0 && (
             <div>
               <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
                 Wild vs. Captive
               </h5>
-              <SourceBreakdown sources={filtered.topSources} />
+              <SourceBreakdown sources={display.topSources} />
             </div>
           )}
 
           {/* Commodities — table with quantities */}
-          {filtered.topTerms.length > 0 && (
+          {display.topTerms.length > 0 && (
             <div>
               <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
                 Commodities
@@ -850,7 +963,7 @@ export default function CitesTradeSummary({
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.topTerms.slice(0, 6).map((t) => (
+                  {display.topTerms.slice(0, 6).map((t) => (
                     <tr
                       key={t.term}
                       className="border-t border-zinc-100 dark:border-zinc-800/50"
@@ -872,13 +985,13 @@ export default function CitesTradeSummary({
           )}
 
           {/* Purpose */}
-          {filtered.topPurposes.length > 0 && (
+          {display.topPurposes.length > 0 && (
             <div>
               <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
                 Purpose
               </h5>
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-600 dark:text-zinc-300">
-                {filtered.topPurposes.map((p) => (
+                {display.topPurposes.map((p) => (
                   <span key={p.code} className="tabular-nums">
                     {p.label}{" "}
                     <span className="text-zinc-400 dark:text-zinc-500">
