@@ -10,6 +10,27 @@ const TRADE_API = "https://trade.cites.org/en/cites_trade/shipments";
 const tradeCache = new Map<string, { data: object; timestamp: number }>();
 const CACHE_DURATION = 60 * 60 * 1000;
 
+// CITES entered into force in 1975, so there is no trade data before then.
+const FETCH_START_YEAR = 1975;
+// The CITES endpoint returns inconsistent / partially-truncated results when a
+// single request spans the full history (a 50-year pull for a heavily-traded
+// species can silently drop thousands of rows, including whole recent years).
+// We therefore fetch in small year-windows and concatenate — each window is
+// small enough to return complete, reproducible data.
+const FETCH_CHUNK_YEARS = 5;
+
+/** Error that carries the upstream HTTP status so the route can propagate it. */
+class CitesTradeError extends Error {
+  status: number;
+  constructor(status: number) {
+    super(`CITES Trade DB error: ${status}`);
+    this.status = status;
+  }
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+
 interface TradeRow {
   Year: number;
   "App.": string;
@@ -298,6 +319,46 @@ function summarize(rows: TradeRow[]): TradeSummary {
 }
 
 /**
+ * Fetch one year-window of comparative-tabulation rows for a taxon, with a few
+ * retries for transient upstream errors.
+ */
+async function fetchTradeChunk(
+  taxonId: string,
+  startYear: number,
+  endYear: number
+): Promise<TradeRow[]> {
+  const params = new URLSearchParams({
+    "filters[taxon_concepts_ids][]": taxonId,
+    "filters[report_type]": "comptab",
+    "filters[time_range_start]": String(startYear),
+    "filters[time_range_end]": String(endYear),
+    "filters[exporters_ids][]": "all_exp",
+    "filters[importers_ids][]": "all_imp",
+    "filters[sources_ids][]": "all_sou",
+    "filters[purposes_ids][]": "all_pur",
+    "filters[terms_ids][]": "all_ter",
+    "filters[selection_taxon]": "taxonomic_cascade",
+  });
+  const url = `${TRADE_API}?${params.toString()}`;
+
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await sleep(300 * attempt);
+    try {
+      const resp = await fetch(url, { headers: { Accept: "application/json" } });
+      if (!resp.ok) throw new CitesTradeError(resp.status);
+      const data = await resp.json();
+      return (data?.shipment_comptab_export?.rows as TradeRow[]) ?? [];
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("CITES Trade DB request failed");
+}
+
+/**
  * GET /api/cites/trade?taxon_id=<citesId>
  *
  * Fetches comparative tabulation data from the CITES Trade Database
@@ -320,39 +381,21 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Fetch the full available history. CITES entered into force in 1975, so
-    // there is no trade data before then. Using a fixed early start (rather
-    // than a rolling N-year window) means early records — e.g. Panthera leo
-    // back to 1977 — are no longer cut off.
+    // Fetch the full available history (1975 → present) in small year-windows.
+    // The upstream endpoint truncates large single-shot pulls non-determinist-
+    // ically, so chunking is what makes the recent years (and the totals)
+    // reliable — e.g. Panthera leo back to 1977 with complete recent data.
     const currentYear = new Date().getFullYear();
-    const startYear = 1975;
 
-    const params = new URLSearchParams({
-      "filters[taxon_concepts_ids][]": taxonId,
-      "filters[report_type]": "comptab",
-      "filters[time_range_start]": String(startYear),
-      "filters[time_range_end]": String(currentYear),
-      "filters[exporters_ids][]": "all_exp",
-      "filters[importers_ids][]": "all_imp",
-      "filters[sources_ids][]": "all_sou",
-      "filters[purposes_ids][]": "all_pur",
-      "filters[terms_ids][]": "all_ter",
-      "filters[selection_taxon]": "taxonomic_cascade",
-    });
-
-    const resp = await fetch(`${TRADE_API}?${params.toString()}`, {
-      headers: { Accept: "application/json" },
-    });
-
-    if (!resp.ok) {
-      return NextResponse.json(
-        { error: `CITES Trade DB error: ${resp.status}` },
-        { status: resp.status }
-      );
+    const ranges: [number, number][] = [];
+    for (let s = FETCH_START_YEAR; s <= currentYear; s += FETCH_CHUNK_YEARS) {
+      ranges.push([s, Math.min(s + FETCH_CHUNK_YEARS - 1, currentYear)]);
     }
 
-    const data = await resp.json();
-    const rows: TradeRow[] = data?.shipment_comptab_export?.rows || [];
+    const chunks = await Promise.all(
+      ranges.map(([a, b]) => fetchTradeChunk(taxonId, a, b))
+    );
+    const rows: TradeRow[] = chunks.flat();
 
     if (rows.length === 0) {
       const result = { found: false, taxonId };
@@ -366,9 +409,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(result, { headers: CACHE_1H });
   } catch (error) {
     console.error("Error fetching CITES trade data:", error);
+    const status = error instanceof CitesTradeError ? error.status : 500;
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 }
+      { status }
     );
   }
 }

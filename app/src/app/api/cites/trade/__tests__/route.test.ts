@@ -41,6 +41,24 @@ function jsonResponse(data: unknown, status = 200): Response {
   } as unknown as Response;
 }
 
+// The route fetches the history in year-windows, so a fetch mock must return
+// only the rows whose Year falls inside the requested time range — otherwise
+// every window would return the full set and rows would be duplicated.
+function rangeAwareFetch(rows: Array<Record<string, unknown>>) {
+  return vi.fn((url: string) => {
+    const params = new URL(url).searchParams;
+    const start = Number(params.get("filters[time_range_start]"));
+    const end = Number(params.get("filters[time_range_end]"));
+    const inRange = rows.filter((r) => {
+      const y = r.Year as number;
+      return y >= start && y <= end;
+    });
+    return Promise.resolve(
+      jsonResponse({ shipment_comptab_export: { rows: inRange } })
+    );
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
@@ -149,12 +167,7 @@ describe("/api/cites/trade", () => {
       makeTradeRow({ Year: 2023, Exporter: "GH", Importer: "US", "Importer reported quantity": "10", Purpose: "S", Source: "W", Term: "specimens" }),
     ];
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        jsonResponse({ shipment_comptab_export: { rows } })
-      )
-    );
+    vi.stubGlobal("fetch", rangeAwareFetch(rows));
     const { GET } = await importRoute();
     const res = await GET(makeRequest({ taxon_id: "11136" }));
     const body = await res.json();
@@ -207,12 +220,7 @@ describe("/api/cites/trade", () => {
       }),
     ];
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        jsonResponse({ shipment_comptab_export: { rows } })
-      )
-    );
+    vi.stubGlobal("fetch", rangeAwareFetch(rows));
     const { GET } = await importRoute();
     const res = await GET(makeRequest({ taxon_id: "11136" }));
     const body = await res.json();
@@ -228,12 +236,7 @@ describe("/api/cites/trade", () => {
       }),
     ];
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        jsonResponse({ shipment_comptab_export: { rows } })
-      )
-    );
+    vi.stubGlobal("fetch", rangeAwareFetch(rows));
     const { GET } = await importRoute();
     const res = await GET(makeRequest({ taxon_id: "11136" }));
     const body = await res.json();
@@ -248,12 +251,7 @@ describe("/api/cites/trade", () => {
       makeTradeRow({ Term: "leather", Unit: "m", "Exporter reported quantity": "7" }),
     ];
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        jsonResponse({ shipment_comptab_export: { rows } })
-      )
-    );
+    vi.stubGlobal("fetch", rangeAwareFetch(rows));
     const { GET } = await importRoute();
     const res = await GET(makeRequest({ taxon_id: "11136" }));
     const body = await res.json();
@@ -277,12 +275,7 @@ describe("/api/cites/trade", () => {
       }),
     ];
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        jsonResponse({ shipment_comptab_export: { rows } })
-      )
-    );
+    vi.stubGlobal("fetch", rangeAwareFetch(rows));
     const { GET } = await importRoute();
     const res = await GET(makeRequest({ taxon_id: "11136" }));
     const body = await res.json();
@@ -297,16 +290,15 @@ describe("/api/cites/trade", () => {
 
   it("caches results on repeated requests", async () => {
     const rows = [makeTradeRow()];
-    const fetchMock = vi.fn().mockResolvedValue(
-      jsonResponse({ shipment_comptab_export: { rows } })
-    );
+    const fetchMock = rangeAwareFetch(rows);
     vi.stubGlobal("fetch", fetchMock);
     const { GET } = await importRoute();
 
     await GET(makeRequest({ taxon_id: "11136" }));
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const callsAfterFirst = fetchMock.mock.calls.length;
+    expect(callsAfterFirst).toBeGreaterThan(0); // one request per year-window
 
     await GET(makeRequest({ taxon_id: "11136" }));
-    expect(fetchMock).toHaveBeenCalledTimes(1); // no new calls
+    expect(fetchMock).toHaveBeenCalledTimes(callsAfterFirst); // served from cache
   });
 });
