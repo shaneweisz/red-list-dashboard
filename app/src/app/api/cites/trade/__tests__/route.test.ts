@@ -186,19 +186,23 @@ describe("/api/cites/trade", () => {
     // topFlows
     expect(body.topFlows.length).toBeGreaterThan(0);
 
-    // shipments (compact records)
+    // shipments (compact records) — now include unit (u) and origin (o)
     expect(body.shipments).toHaveLength(3);
     expect(body.shipments[0]).toEqual(
-      expect.objectContaining({ y: 2022, s: "W", p: "S", t: "specimens" })
+      expect.objectContaining({ y: 2022, s: "W", p: "S", t: "specimens", u: "", o: "" })
     );
 
-    // allSources / allPurposes / allTerms present
+    // allSources / allPurposes / allTerms / allTermsByUnit present
     expect(body.allSources.length).toBeGreaterThan(0);
     expect(body.allPurposes.length).toBeGreaterThan(0);
     expect(body.allTerms.length).toBeGreaterThan(0);
+    expect(body.allTermsByUnit.length).toBeGreaterThan(0);
+    expect(body.allTermsByUnit[0]).toEqual(
+      expect.objectContaining({ term: expect.any(String), unit: expect.any(String) })
+    );
   });
 
-  it("uses max of importer/exporter reported quantity", async () => {
+  it("prefers exporter-reported quantity (per CITES guide)", async () => {
     const rows = [
       makeTradeRow({
         "Importer reported quantity": "20",
@@ -216,7 +220,50 @@ describe("/api/cites/trade", () => {
     const res = await GET(makeRequest({ taxon_id: "11136" }));
     const body = await res.json();
 
-    expect(body.byYear[0].quantity).toBe(20); // max(20, 15)
+    expect(body.byYear[0].quantity).toBe(15); // exporter preferred over importer
+  });
+
+  it("falls back to importer quantity when exporter is absent", async () => {
+    const rows = [
+      makeTradeRow({
+        "Importer reported quantity": "12",
+        "Exporter reported quantity": null,
+      }),
+    ];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse({ shipment_comptab_export: { rows } })
+      )
+    );
+    const { GET } = await importRoute();
+    const res = await GET(makeRequest({ taxon_id: "11136" }));
+    const body = await res.json();
+
+    expect(body.byYear[0].quantity).toBe(12);
+  });
+
+  it("separates term quantities by unit", async () => {
+    const rows = [
+      makeTradeRow({ Term: "tusks", Unit: "kg", "Exporter reported quantity": "100" }),
+      makeTradeRow({ Term: "tusks", Unit: null, "Exporter reported quantity": "3" }),
+    ];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse({ shipment_comptab_export: { rows } })
+      )
+    );
+    const { GET } = await importRoute();
+    const res = await GET(makeRequest({ taxon_id: "11136" }));
+    const body = await res.json();
+
+    const kg = body.allTermsByUnit.find((t: { term: string; unit: string }) => t.term === "tusks" && t.unit === "kg");
+    const items = body.allTermsByUnit.find((t: { term: string; unit: string }) => t.term === "tusks" && t.unit === "");
+    expect(kg.quantity).toBe(100);
+    expect(items.quantity).toBe(3);
   });
 
   it("handles null quantities gracefully", async () => {

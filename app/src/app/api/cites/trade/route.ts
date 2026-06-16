@@ -61,9 +61,11 @@ interface CompactRecord {
   s: string;   // source code
   p: string;   // purpose code
   t: string;   // term
-  q: number;   // quantity (max of importer/exporter reported)
+  u: string;   // unit ("" when reported as a count of items)
+  q: number;   // quantity (exporter-reported, falling back to importer)
   e: string;   // exporter country code
   i: string;   // importer country code
+  o: string;   // origin country code ("" when same as exporter / not a re-export)
 }
 
 interface TradeSummary {
@@ -91,12 +93,30 @@ interface TradeSummary {
   allPurposes: { code: string; label: string; records: number }[];
   /** All unique terms with record counts */
   allTerms: { term: string; records: number }[];
+  /**
+   * All unique term+unit combinations. Per the CITES Trade Database Guide,
+   * quantities of different units (kg, m, items, …) must never be aggregated,
+   * so each term+unit pair is reported as its own row.
+   */
+  allTermsByUnit: { term: string; unit: string; records: number; quantity: number }[];
 }
 
 function parseQty(val: string | null): number {
   if (!val) return 0;
   const n = parseFloat(val);
   return isNaN(n) ? 0 : n;
+}
+
+/**
+ * Quantity for a shipment. The CITES Trade Database Guide treats the
+ * exporter-reported quantity as the authoritative figure, so we prefer it and
+ * fall back to the importer-reported quantity only when the exporter did not
+ * report one.
+ */
+function pickQty(r: TradeRow): number {
+  const exp = parseQty(r["Exporter reported quantity"]);
+  if (exp > 0) return exp;
+  return parseQty(r["Importer reported quantity"]);
 }
 
 function summarize(rows: TradeRow[]): TradeSummary {
@@ -108,32 +128,42 @@ function summarize(rows: TradeRow[]): TradeSummary {
   for (const r of rows) {
     const entry = yearMap.get(r.Year) || { quantity: 0, records: 0 };
     entry.records++;
-    entry.quantity += Math.max(
-      parseQty(r["Importer reported quantity"]),
-      parseQty(r["Exporter reported quantity"])
-    );
+    entry.quantity += pickQty(r);
     yearMap.set(r.Year, entry);
   }
   const byYear = Array.from(yearMap.entries())
     .sort(([a], [b]) => a - b)
     .map(([year, v]) => ({ year, ...v }));
 
-  // By term
+  // By term (record counts only — quantities live in the term+unit breakdown
+  // below, since quantities of different units cannot be aggregated)
   const termMap = new Map<string, { quantity: number; records: number }>();
   for (const r of rows) {
     const term = r.Term || "unspecified";
     const entry = termMap.get(term) || { quantity: 0, records: 0 };
     entry.records++;
-    entry.quantity += Math.max(
-      parseQty(r["Importer reported quantity"]),
-      parseQty(r["Exporter reported quantity"])
-    );
+    entry.quantity += pickQty(r);
     termMap.set(term, entry);
   }
   const topTerms = Array.from(termMap.entries())
     .sort(([, a], [, b]) => b.records - a.records)
     .slice(0, 8)
     .map(([term, v]) => ({ term, ...v }));
+
+  // By term + unit — the CITES-compliant breakdown (never aggregate across units)
+  const termUnitMap = new Map<string, { term: string; unit: string; quantity: number; records: number }>();
+  for (const r of rows) {
+    const term = r.Term || "unspecified";
+    const unit = r.Unit || "";
+    const key = `${term}|${unit}`;
+    const entry = termUnitMap.get(key) || { term, unit, quantity: 0, records: 0 };
+    entry.records++;
+    entry.quantity += pickQty(r);
+    termUnitMap.set(key, entry);
+  }
+  const allTermsByUnit = Array.from(termUnitMap.values()).sort(
+    (a, b) => b.records - a.records
+  );
 
   // By purpose
   const purposeMap = new Map<string, number>();
@@ -169,10 +199,7 @@ function summarize(rows: TradeRow[]): TradeSummary {
     if (!r.Exporter) continue;
     const entry = exporterMap.get(r.Exporter) || { records: 0, quantity: 0 };
     entry.records++;
-    entry.quantity += Math.max(
-      parseQty(r["Importer reported quantity"]),
-      parseQty(r["Exporter reported quantity"])
-    );
+    entry.quantity += pickQty(r);
     exporterMap.set(r.Exporter, entry);
   }
   const topExporters = Array.from(exporterMap.entries())
@@ -186,10 +213,7 @@ function summarize(rows: TradeRow[]): TradeSummary {
     if (!r.Importer) continue;
     const entry = importerMap.get(r.Importer) || { records: 0, quantity: 0 };
     entry.records++;
-    entry.quantity += Math.max(
-      parseQty(r["Importer reported quantity"]),
-      parseQty(r["Exporter reported quantity"])
-    );
+    entry.quantity += pickQty(r);
     importerMap.set(r.Importer, entry);
   }
   const topImporters = Array.from(importerMap.entries())
@@ -204,10 +228,7 @@ function summarize(rows: TradeRow[]): TradeSummary {
     const key = `${r.Exporter}->${r.Importer}`;
     const entry = flowMap.get(key) || { records: 0, quantity: 0 };
     entry.records++;
-    entry.quantity += Math.max(
-      parseQty(r["Importer reported quantity"]),
-      parseQty(r["Exporter reported quantity"])
-    );
+    entry.quantity += pickQty(r);
     flowMap.set(key, entry);
   }
   const topFlows = Array.from(flowMap.entries())
@@ -224,12 +245,11 @@ function summarize(rows: TradeRow[]): TradeSummary {
     s: r.Source || "",
     p: r.Purpose || "",
     t: r.Term || "unspecified",
-    q: Math.max(
-      parseQty(r["Importer reported quantity"]),
-      parseQty(r["Exporter reported quantity"])
-    ),
+    u: r.Unit || "",
+    q: pickQty(r),
     e: r.Exporter || "",
     i: r.Importer || "",
+    o: r.Origin && r.Origin !== r.Exporter ? r.Origin : "",
   }));
 
   // All unique sources (not just top 6)
@@ -269,6 +289,7 @@ function summarize(rows: TradeRow[]): TradeSummary {
     allSources,
     allPurposes,
     allTerms,
+    allTermsByUnit,
   };
 }
 
@@ -295,9 +316,11 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Fetch last 10 years of comparative tabulation data
+    // Fetch the full history of comparative tabulation data. CITES entered into
+    // force in 1975, so there are no records before then; using a fixed start
+    // year avoids cutting off early records (e.g. Panthera leo back to 1977).
     const currentYear = new Date().getFullYear();
-    const startYear = currentYear - 10;
+    const startYear = 1975;
 
     const params = new URLSearchParams({
       "filters[taxon_concepts_ids][]": taxonId,
