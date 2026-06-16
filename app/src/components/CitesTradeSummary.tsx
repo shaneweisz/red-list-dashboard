@@ -788,8 +788,11 @@ export default function CitesTradeSummary({
   );
   const [error, setError] = useState<string | null>(null);
 
-  // Metric toggle: show records (shipments) or quantity (items)
-  const [metric, setMetric] = useState<"records" | "quantity">("records");
+  // Trend is always measured in shipment records. Quantities are NEVER plotted
+  // as a single line because the CITES guide warns they cannot be aggregated
+  // across incompatible units (kg, m, pieces, unit-less) — per-unit quantities
+  // live in the Commodities table instead.
+  const metric = "records" as const;
 
   // Filter state — all checked by default
   const [checkedSources, setCheckedSources] = useState<Record<string, boolean>>({});
@@ -1168,33 +1171,14 @@ export default function CitesTradeSummary({
               <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
                 Trade over time
               </span>
+              <span className="text-[11px] text-zinc-400 dark:text-zinc-500 normal-case">
+                (shipments)
+              </span>
               {brush && (
-                <span className="text-[11px] text-blue-600 dark:text-blue-400 tabular-nums">
+                <span className="text-[11px] text-blue-600 dark:text-blue-400 tabular-nums ml-auto">
                   {brush[0]}–{brush[1]}
                 </span>
               )}
-              <div className="flex items-center gap-1 ml-auto bg-zinc-100 dark:bg-zinc-800 rounded-md p-0.5">
-                <button
-                  className={`px-2 py-0.5 text-[11px] rounded ${
-                    metric === "records"
-                      ? "bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200 shadow-sm font-medium"
-                      : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
-                  }`}
-                  onClick={() => setMetric("records")}
-                >
-                  Shipments
-                </button>
-                <button
-                  className={`px-2 py-0.5 text-[11px] rounded ${
-                    metric === "quantity"
-                      ? "bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200 shadow-sm font-medium"
-                      : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
-                  }`}
-                  onClick={() => setMetric("quantity")}
-                >
-                  Volume
-                </button>
-              </div>
             </div>
             <TrendLineChart
               data={chartByYear}
