@@ -262,6 +262,73 @@ export default function CitesSummary({
         </div>
       )}
 
+      {/* Current listings detail — below trade overview, above suspensions/quotas */}
+      {data.currentListings && data.currentListings.length > 0 && (
+        <div>
+          <h4 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
+            Current Listings
+          </h4>
+          <div className="space-y-2">
+            {data.currentListings.map((listing, i) => (
+              <div
+                key={i}
+                className="flex flex-wrap items-start gap-2 text-sm"
+              >
+                <AppendixBadge appendix={listing.appendix} />
+                <span className="text-zinc-500 dark:text-zinc-400 text-xs mt-0.5">
+                  since{" "}
+                  {new Date(listing.effectiveAt).toLocaleDateString("en-GB", {
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </span>
+                {listing.annotation && (
+                  <p className="w-full text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 pl-0.5">
+                    {listing.annotation}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Reservations — country-specific opt-outs from a listing */}
+      {data.reservations && data.reservations.length > 0 && (
+        <div>
+          <h4 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
+            Reservations ({data.reservations.length})
+          </h4>
+          <div className="space-y-2">
+            {data.reservations.map((r, i) => (
+              <div
+                key={i}
+                className="flex flex-wrap items-start gap-2 text-sm"
+              >
+                <AppendixBadge appendix={r.appendix} />
+                <span className="text-zinc-700 dark:text-zinc-300">
+                  {r.country || r.countryCode || "Unknown party"}
+                </span>
+                <span className="text-zinc-500 dark:text-zinc-400 text-xs mt-0.5">
+                  since{" "}
+                  {new Date(r.effectiveAt).toLocaleDateString("en-GB", {
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </span>
+                {r.annotation && (
+                  <p className="w-full text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 pl-0.5">
+                    {r.annotation}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Trade suspensions */}
       {data.suspensions && data.suspensions.length > 0 && (
         <div>
@@ -387,73 +454,6 @@ export default function CitesSummary({
                   : `Show all ${data.quotas.length} quotas`}
               </button>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* Current listings detail — shown below the trade info */}
-      {data.currentListings && data.currentListings.length > 0 && (
-        <div>
-          <h4 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
-            Current Listings
-          </h4>
-          <div className="space-y-2">
-            {data.currentListings.map((listing, i) => (
-              <div
-                key={i}
-                className="flex flex-wrap items-start gap-2 text-sm"
-              >
-                <AppendixBadge appendix={listing.appendix} />
-                <span className="text-zinc-500 dark:text-zinc-400 text-xs mt-0.5">
-                  since{" "}
-                  {new Date(listing.effectiveAt).toLocaleDateString("en-GB", {
-                    year: "numeric",
-                    month: "short",
-                    day: "numeric",
-                  })}
-                </span>
-                {listing.annotation && (
-                  <p className="w-full text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 pl-0.5">
-                    {listing.annotation}
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Reservations — country-specific opt-outs from a listing */}
-      {data.reservations && data.reservations.length > 0 && (
-        <div>
-          <h4 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
-            Reservations ({data.reservations.length})
-          </h4>
-          <div className="space-y-2">
-            {data.reservations.map((r, i) => (
-              <div
-                key={i}
-                className="flex flex-wrap items-start gap-2 text-sm"
-              >
-                <AppendixBadge appendix={r.appendix} />
-                <span className="text-zinc-700 dark:text-zinc-300">
-                  {r.country || r.countryCode || "Unknown party"}
-                </span>
-                <span className="text-zinc-500 dark:text-zinc-400 text-xs mt-0.5">
-                  since{" "}
-                  {new Date(r.effectiveAt).toLocaleDateString("en-GB", {
-                    year: "numeric",
-                    month: "short",
-                    day: "numeric",
-                  })}
-                </span>
-                {r.annotation && (
-                  <p className="w-full text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 pl-0.5">
-                    {r.annotation}
-                  </p>
-                )}
-              </div>
-            ))}
           </div>
         </div>
       )}
