@@ -189,16 +189,17 @@ describe("/api/cites/trade", () => {
     // shipments (compact records)
     expect(body.shipments).toHaveLength(3);
     expect(body.shipments[0]).toEqual(
-      expect.objectContaining({ y: 2022, s: "W", p: "S", t: "specimens" })
+      expect.objectContaining({ y: 2022, s: "W", p: "S", t: "specimens", u: "", o: "" })
     );
 
-    // allSources / allPurposes / allTerms present
+    // allSources / allPurposes / allTerms / allTermsByUnit present
     expect(body.allSources.length).toBeGreaterThan(0);
     expect(body.allPurposes.length).toBeGreaterThan(0);
     expect(body.allTerms.length).toBeGreaterThan(0);
+    expect(body.allTermsByUnit.length).toBeGreaterThan(0);
   });
 
-  it("uses max of importer/exporter reported quantity", async () => {
+  it("uses exporter-preferred quantity, falling back to importer", async () => {
     const rows = [
       makeTradeRow({
         "Importer reported quantity": "20",
@@ -216,7 +217,28 @@ describe("/api/cites/trade", () => {
     const res = await GET(makeRequest({ taxon_id: "11136" }));
     const body = await res.json();
 
-    expect(body.byYear[0].quantity).toBe(20); // max(20, 15)
+    expect(body.byYear[0].quantity).toBe(15); // exporter-preferred
+  });
+
+  it("falls back to importer quantity when exporter is absent", async () => {
+    const rows = [
+      makeTradeRow({
+        "Importer reported quantity": "20",
+        "Exporter reported quantity": null,
+      }),
+    ];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse({ shipment_comptab_export: { rows } })
+      )
+    );
+    const { GET } = await importRoute();
+    const res = await GET(makeRequest({ taxon_id: "11136" }));
+    const body = await res.json();
+
+    expect(body.byYear[0].quantity).toBe(20); // importer fallback
   });
 
   it("handles null quantities gracefully", async () => {

@@ -61,15 +61,24 @@ interface CompactRecord {
   s: string;   // source code
   p: string;   // purpose code
   t: string;   // term
-  q: number;   // quantity (max of importer/exporter reported)
+  u: string;   // unit (empty string if none)
+  q: number;   // quantity (exporter-preferred, falls back to importer)
+  o: string;   // origin country (empty string if same as exporter or unknown)
   e: string;   // exporter country code
   i: string;   // importer country code
+}
+
+interface TermUnitCount {
+  term: string;
+  unit: string;
+  records: number;
+  quantity: number;
 }
 
 interface TradeSummary {
   totalRecords: number;
   yearRange: [number, number];
-  /** Total quantities by year (max of importer/exporter reported) */
+  /** Total quantities by year (exporter-preferred quantity) */
   byYear: { year: number; quantity: number; records: number }[];
   /** Top traded terms (e.g. "live", "skins", "trophies") */
   topTerms: { term: string; quantity: number; records: number }[];
@@ -91,12 +100,21 @@ interface TradeSummary {
   allPurposes: { code: string; label: string; records: number }[];
   /** All unique terms with record counts */
   allTerms: { term: string; records: number }[];
+  /** All unique term+unit combinations (for unit-aware display) */
+  allTermsByUnit: TermUnitCount[];
 }
 
 function parseQty(val: string | null): number {
   if (!val) return 0;
   const n = parseFloat(val);
   return isNaN(n) ? 0 : n;
+}
+
+/** Exporter-preferred quantity per CITES Trade Database Guide; falls back to importer when exporter absent */
+function preferExporterQty(r: TradeRow): number {
+  const expQ = parseQty(r["Exporter reported quantity"]);
+  if (expQ > 0) return expQ;
+  return parseQty(r["Importer reported quantity"]);
 }
 
 function summarize(rows: TradeRow[]): TradeSummary {
@@ -108,10 +126,7 @@ function summarize(rows: TradeRow[]): TradeSummary {
   for (const r of rows) {
     const entry = yearMap.get(r.Year) || { quantity: 0, records: 0 };
     entry.records++;
-    entry.quantity += Math.max(
-      parseQty(r["Importer reported quantity"]),
-      parseQty(r["Exporter reported quantity"])
-    );
+    entry.quantity += preferExporterQty(r);
     yearMap.set(r.Year, entry);
   }
   const byYear = Array.from(yearMap.entries())
@@ -124,10 +139,7 @@ function summarize(rows: TradeRow[]): TradeSummary {
     const term = r.Term || "unspecified";
     const entry = termMap.get(term) || { quantity: 0, records: 0 };
     entry.records++;
-    entry.quantity += Math.max(
-      parseQty(r["Importer reported quantity"]),
-      parseQty(r["Exporter reported quantity"])
-    );
+    entry.quantity += preferExporterQty(r);
     termMap.set(term, entry);
   }
   const topTerms = Array.from(termMap.entries())
@@ -169,10 +181,7 @@ function summarize(rows: TradeRow[]): TradeSummary {
     if (!r.Exporter) continue;
     const entry = exporterMap.get(r.Exporter) || { records: 0, quantity: 0 };
     entry.records++;
-    entry.quantity += Math.max(
-      parseQty(r["Importer reported quantity"]),
-      parseQty(r["Exporter reported quantity"])
-    );
+    entry.quantity += preferExporterQty(r);
     exporterMap.set(r.Exporter, entry);
   }
   const topExporters = Array.from(exporterMap.entries())
@@ -186,10 +195,7 @@ function summarize(rows: TradeRow[]): TradeSummary {
     if (!r.Importer) continue;
     const entry = importerMap.get(r.Importer) || { records: 0, quantity: 0 };
     entry.records++;
-    entry.quantity += Math.max(
-      parseQty(r["Importer reported quantity"]),
-      parseQty(r["Exporter reported quantity"])
-    );
+    entry.quantity += preferExporterQty(r);
     importerMap.set(r.Importer, entry);
   }
   const topImporters = Array.from(importerMap.entries())
@@ -204,10 +210,7 @@ function summarize(rows: TradeRow[]): TradeSummary {
     const key = `${r.Exporter}->${r.Importer}`;
     const entry = flowMap.get(key) || { records: 0, quantity: 0 };
     entry.records++;
-    entry.quantity += Math.max(
-      parseQty(r["Importer reported quantity"]),
-      parseQty(r["Exporter reported quantity"])
-    );
+    entry.quantity += preferExporterQty(r);
     flowMap.set(key, entry);
   }
   const topFlows = Array.from(flowMap.entries())
@@ -224,10 +227,9 @@ function summarize(rows: TradeRow[]): TradeSummary {
     s: r.Source || "",
     p: r.Purpose || "",
     t: r.Term || "unspecified",
-    q: Math.max(
-      parseQty(r["Importer reported quantity"]),
-      parseQty(r["Exporter reported quantity"])
-    ),
+    u: r.Unit || "",
+    q: preferExporterQty(r),
+    o: (r.Origin && r.Origin !== r.Exporter) ? r.Origin : "",
     e: r.Exporter || "",
     i: r.Importer || "",
   }));
@@ -255,6 +257,20 @@ function summarize(rows: TradeRow[]): TradeSummary {
     .sort(([, a], [, b]) => b.records - a.records)
     .map(([term, v]) => ({ term, records: v.records }));
 
+  // All unique term+unit combinations (no cross-unit aggregation)
+  const termUnitMap = new Map<string, TermUnitCount>();
+  for (const r of rows) {
+    const term = r.Term || "unspecified";
+    const unit = r.Unit || "";
+    const key = `${term}|${unit}`;
+    const entry = termUnitMap.get(key) || { term, unit, records: 0, quantity: 0 };
+    entry.records++;
+    entry.quantity += preferExporterQty(r);
+    termUnitMap.set(key, entry);
+  }
+  const allTermsByUnit = Array.from(termUnitMap.values())
+    .sort((a, b) => b.records - a.records);
+
   return {
     totalRecords: rows.length,
     yearRange,
@@ -269,6 +285,7 @@ function summarize(rows: TradeRow[]): TradeSummary {
     allSources,
     allPurposes,
     allTerms,
+    allTermsByUnit,
   };
 }
 
@@ -295,9 +312,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Fetch last 10 years of comparative tabulation data
+    // Fetch full trade history back to CITES inception (1975)
     const currentYear = new Date().getFullYear();
-    const startYear = currentYear - 10;
+    const startYear = 1975;
 
     const params = new URLSearchParams({
       "filters[taxon_concepts_ids][]": taxonId,
