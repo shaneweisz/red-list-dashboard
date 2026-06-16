@@ -10,6 +10,27 @@ const TRADE_API = "https://trade.cites.org/en/cites_trade/shipments";
 const tradeCache = new Map<string, { data: object; timestamp: number }>();
 const CACHE_DURATION = 60 * 60 * 1000;
 
+// CITES entered into force in 1975, so there is no trade data before then.
+const FETCH_START_YEAR = 1975;
+// The CITES endpoint returns inconsistent / partially-truncated results when a
+// single request spans the full history (a 50-year pull for a heavily-traded
+// species can silently drop thousands of rows, including whole recent years).
+// We therefore fetch in small year-windows and concatenate — each window is
+// small enough to return complete, reproducible data.
+const FETCH_CHUNK_YEARS = 5;
+
+/** Error that carries the upstream HTTP status so the route can propagate it. */
+class CitesTradeError extends Error {
+  status: number;
+  constructor(status: number) {
+    super(`CITES Trade DB error: ${status}`);
+    this.status = status;
+  }
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+
 interface TradeRow {
   Year: number;
   "App.": string;
@@ -61,15 +82,17 @@ interface CompactRecord {
   s: string;   // source code
   p: string;   // purpose code
   t: string;   // term
-  q: number;   // quantity (max of importer/exporter reported)
+  u: string;   // unit (empty string = unit-less / "number of specimens")
+  q: number;   // quantity (exporter-reported preferred, per CITES guide)
   e: string;   // exporter country code
   i: string;   // importer country code
+  o: string;   // origin country code (for re-export pathways; empty if same as exporter)
 }
 
 interface TradeSummary {
   totalRecords: number;
   yearRange: [number, number];
-  /** Total quantities by year (max of importer/exporter reported) */
+  /** Total quantities by year (exporter-reported preferred) */
   byYear: { year: number; quantity: number; records: number }[];
   /** Top traded terms (e.g. "live", "skins", "trophies") */
   topTerms: { term: string; quantity: number; records: number }[];
@@ -91,12 +114,30 @@ interface TradeSummary {
   allPurposes: { code: string; label: string; records: number }[];
   /** All unique terms with record counts */
   allTerms: { term: string; records: number }[];
+  /**
+   * Terms grouped by term + unit. Quantities are NEVER aggregated across
+   * different units (kg, m³, pieces, unit-less) — each term+unit is its own row.
+   */
+  allTermsByUnit: { term: string; unit: string; records: number; quantity: number }[];
 }
 
 function parseQty(val: string | null): number {
   if (!val) return 0;
   const n = parseFloat(val);
   return isNaN(n) ? 0 : n;
+}
+
+/**
+ * Pick the reported quantity for a row. The CITES Trade Database Guide treats
+ * importer- and exporter-reported figures as two independent reports of the
+ * same trade — they must never be summed. We prefer the exporter-reported
+ * quantity (the re-exporter is the authority on what left their territory),
+ * falling back to the importer figure only when the exporter did not report.
+ */
+function pickQty(r: TradeRow): number {
+  const exporter = parseQty(r["Exporter reported quantity"]);
+  if (exporter > 0) return exporter;
+  return parseQty(r["Importer reported quantity"]);
 }
 
 function summarize(rows: TradeRow[]): TradeSummary {
@@ -108,10 +149,7 @@ function summarize(rows: TradeRow[]): TradeSummary {
   for (const r of rows) {
     const entry = yearMap.get(r.Year) || { quantity: 0, records: 0 };
     entry.records++;
-    entry.quantity += Math.max(
-      parseQty(r["Importer reported quantity"]),
-      parseQty(r["Exporter reported quantity"])
-    );
+    entry.quantity += pickQty(r);
     yearMap.set(r.Year, entry);
   }
   const byYear = Array.from(yearMap.entries())
@@ -124,10 +162,7 @@ function summarize(rows: TradeRow[]): TradeSummary {
     const term = r.Term || "unspecified";
     const entry = termMap.get(term) || { quantity: 0, records: 0 };
     entry.records++;
-    entry.quantity += Math.max(
-      parseQty(r["Importer reported quantity"]),
-      parseQty(r["Exporter reported quantity"])
-    );
+    entry.quantity += pickQty(r);
     termMap.set(term, entry);
   }
   const topTerms = Array.from(termMap.entries())
@@ -169,10 +204,7 @@ function summarize(rows: TradeRow[]): TradeSummary {
     if (!r.Exporter) continue;
     const entry = exporterMap.get(r.Exporter) || { records: 0, quantity: 0 };
     entry.records++;
-    entry.quantity += Math.max(
-      parseQty(r["Importer reported quantity"]),
-      parseQty(r["Exporter reported quantity"])
-    );
+    entry.quantity += pickQty(r);
     exporterMap.set(r.Exporter, entry);
   }
   const topExporters = Array.from(exporterMap.entries())
@@ -186,10 +218,7 @@ function summarize(rows: TradeRow[]): TradeSummary {
     if (!r.Importer) continue;
     const entry = importerMap.get(r.Importer) || { records: 0, quantity: 0 };
     entry.records++;
-    entry.quantity += Math.max(
-      parseQty(r["Importer reported quantity"]),
-      parseQty(r["Exporter reported quantity"])
-    );
+    entry.quantity += pickQty(r);
     importerMap.set(r.Importer, entry);
   }
   const topImporters = Array.from(importerMap.entries())
@@ -204,10 +233,7 @@ function summarize(rows: TradeRow[]): TradeSummary {
     const key = `${r.Exporter}->${r.Importer}`;
     const entry = flowMap.get(key) || { records: 0, quantity: 0 };
     entry.records++;
-    entry.quantity += Math.max(
-      parseQty(r["Importer reported quantity"]),
-      parseQty(r["Exporter reported quantity"])
-    );
+    entry.quantity += pickQty(r);
     flowMap.set(key, entry);
   }
   const topFlows = Array.from(flowMap.entries())
@@ -224,12 +250,13 @@ function summarize(rows: TradeRow[]): TradeSummary {
     s: r.Source || "",
     p: r.Purpose || "",
     t: r.Term || "unspecified",
-    q: Math.max(
-      parseQty(r["Importer reported quantity"]),
-      parseQty(r["Exporter reported quantity"])
-    ),
+    u: r.Unit || "",
+    q: pickQty(r),
     e: r.Exporter || "",
     i: r.Importer || "",
+    // Origin only carried when it's a genuine re-export (origin differs from
+    // the exporter); otherwise empty to keep the payload small.
+    o: r.Origin && r.Origin !== r.Exporter ? r.Origin : "",
   }));
 
   // All unique sources (not just top 6)
@@ -255,6 +282,24 @@ function summarize(rows: TradeRow[]): TradeSummary {
     .sort(([, a], [, b]) => b.records - a.records)
     .map(([term, v]) => ({ term, records: v.records }));
 
+  // Terms grouped by term + unit — quantities are never summed across units.
+  const termUnitMap = new Map<
+    string,
+    { term: string; unit: string; quantity: number; records: number }
+  >();
+  for (const r of rows) {
+    const term = r.Term || "unspecified";
+    const unit = r.Unit || "";
+    const key = `${term} ${unit}`;
+    const entry = termUnitMap.get(key) || { term, unit, quantity: 0, records: 0 };
+    entry.records++;
+    entry.quantity += pickQty(r);
+    termUnitMap.set(key, entry);
+  }
+  const allTermsByUnit = Array.from(termUnitMap.values()).sort(
+    (a, b) => b.records - a.records
+  );
+
   return {
     totalRecords: rows.length,
     yearRange,
@@ -269,7 +314,48 @@ function summarize(rows: TradeRow[]): TradeSummary {
     allSources,
     allPurposes,
     allTerms,
+    allTermsByUnit,
   };
+}
+
+/**
+ * Fetch one year-window of comparative-tabulation rows for a taxon, with a few
+ * retries for transient upstream errors.
+ */
+async function fetchTradeChunk(
+  taxonId: string,
+  startYear: number,
+  endYear: number
+): Promise<TradeRow[]> {
+  const params = new URLSearchParams({
+    "filters[taxon_concepts_ids][]": taxonId,
+    "filters[report_type]": "comptab",
+    "filters[time_range_start]": String(startYear),
+    "filters[time_range_end]": String(endYear),
+    "filters[exporters_ids][]": "all_exp",
+    "filters[importers_ids][]": "all_imp",
+    "filters[sources_ids][]": "all_sou",
+    "filters[purposes_ids][]": "all_pur",
+    "filters[terms_ids][]": "all_ter",
+    "filters[selection_taxon]": "taxonomic_cascade",
+  });
+  const url = `${TRADE_API}?${params.toString()}`;
+
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await sleep(300 * attempt);
+    try {
+      const resp = await fetch(url, { headers: { Accept: "application/json" } });
+      if (!resp.ok) throw new CitesTradeError(resp.status);
+      const data = await resp.json();
+      return (data?.shipment_comptab_export?.rows as TradeRow[]) ?? [];
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("CITES Trade DB request failed");
 }
 
 /**
@@ -295,36 +381,21 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Fetch last 10 years of comparative tabulation data
+    // Fetch the full available history (1975 → present) in small year-windows.
+    // The upstream endpoint truncates large single-shot pulls non-determinist-
+    // ically, so chunking is what makes the recent years (and the totals)
+    // reliable — e.g. Panthera leo back to 1977 with complete recent data.
     const currentYear = new Date().getFullYear();
-    const startYear = currentYear - 10;
 
-    const params = new URLSearchParams({
-      "filters[taxon_concepts_ids][]": taxonId,
-      "filters[report_type]": "comptab",
-      "filters[time_range_start]": String(startYear),
-      "filters[time_range_end]": String(currentYear),
-      "filters[exporters_ids][]": "all_exp",
-      "filters[importers_ids][]": "all_imp",
-      "filters[sources_ids][]": "all_sou",
-      "filters[purposes_ids][]": "all_pur",
-      "filters[terms_ids][]": "all_ter",
-      "filters[selection_taxon]": "taxonomic_cascade",
-    });
-
-    const resp = await fetch(`${TRADE_API}?${params.toString()}`, {
-      headers: { Accept: "application/json" },
-    });
-
-    if (!resp.ok) {
-      return NextResponse.json(
-        { error: `CITES Trade DB error: ${resp.status}` },
-        { status: resp.status }
-      );
+    const ranges: [number, number][] = [];
+    for (let s = FETCH_START_YEAR; s <= currentYear; s += FETCH_CHUNK_YEARS) {
+      ranges.push([s, Math.min(s + FETCH_CHUNK_YEARS - 1, currentYear)]);
     }
 
-    const data = await resp.json();
-    const rows: TradeRow[] = data?.shipment_comptab_export?.rows || [];
+    const chunks = await Promise.all(
+      ranges.map(([a, b]) => fetchTradeChunk(taxonId, a, b))
+    );
+    const rows: TradeRow[] = chunks.flat();
 
     if (rows.length === 0) {
       const result = { found: false, taxonId };
@@ -338,9 +409,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(result, { headers: CACHE_1H });
   } catch (error) {
     console.error("Error fetching CITES trade data:", error);
+    const status = error instanceof CitesTradeError ? error.status : 500;
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 }
+      { status }
     );
   }
 }
