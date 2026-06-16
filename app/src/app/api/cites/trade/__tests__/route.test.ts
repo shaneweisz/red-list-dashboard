@@ -171,8 +171,9 @@ describe("/api/cites/trade", () => {
     expect(body.byYear[1].year).toBe(2023);
     expect(body.byYear[1].records).toBe(1);
 
-    // topTerms
+    // topTerms — now includes unit field
     expect(body.topTerms[0].term).toBe("specimens");
+    expect(body.topTerms[0].unit).toBe(""); // null unit maps to ""
     expect(body.topTerms[0].records).toBe(2);
 
     // topExporters
@@ -186,10 +187,10 @@ describe("/api/cites/trade", () => {
     // topFlows
     expect(body.topFlows.length).toBeGreaterThan(0);
 
-    // shipments (compact records)
+    // shipments (compact records) — include unit and origin fields
     expect(body.shipments).toHaveLength(3);
     expect(body.shipments[0]).toEqual(
-      expect.objectContaining({ y: 2022, s: "W", p: "S", t: "specimens" })
+      expect.objectContaining({ y: 2022, s: "W", p: "S", t: "specimens", u: "", o: "" })
     );
 
     // allSources / allPurposes / allTerms present
@@ -198,7 +199,8 @@ describe("/api/cites/trade", () => {
     expect(body.allTerms.length).toBeGreaterThan(0);
   });
 
-  it("uses max of importer/exporter reported quantity", async () => {
+  it("uses exporter reported quantity (preferred per CITES guide), falls back to importer", async () => {
+    // When exporter reports a value, use it
     const rows = [
       makeTradeRow({
         "Importer reported quantity": "20",
@@ -216,7 +218,28 @@ describe("/api/cites/trade", () => {
     const res = await GET(makeRequest({ taxon_id: "11136" }));
     const body = await res.json();
 
-    expect(body.byYear[0].quantity).toBe(20); // max(20, 15)
+    expect(body.byYear[0].quantity).toBe(15); // exporter reported, per CITES guide
+  });
+
+  it("falls back to importer reported quantity when exporter reports zero", async () => {
+    const rows = [
+      makeTradeRow({
+        "Importer reported quantity": "20",
+        "Exporter reported quantity": "0",
+      }),
+    ];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse({ shipment_comptab_export: { rows } })
+      )
+    );
+    const { GET } = await importRoute();
+    const res = await GET(makeRequest({ taxon_id: "11136" }));
+    const body = await res.json();
+
+    expect(body.byYear[0].quantity).toBe(20); // fallback to importer when exporter is 0
   });
 
   it("handles null quantities gracefully", async () => {
