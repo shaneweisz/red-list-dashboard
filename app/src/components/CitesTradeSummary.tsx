@@ -131,8 +131,22 @@ function termUnitKey(term: string, unit: string): string {
   return `${term}|${unit}`;
 }
 
-function unitLabel(unit: string): string {
-  return unit || "no unit";
+/**
+ * "Isolate" a category within a filter dimension: clicking a bar selects only
+ * that one. Clicking the already-isolated category resets the dimension to all
+ * (so a second click un-filters). Returns the next checked-state map.
+ */
+function isolateState(
+  prev: Record<string, boolean>,
+  allKeys: string[],
+  key: string
+): Record<string, boolean> {
+  const onlyThis = allKeys.every((k) =>
+    k === key ? prev[k] !== false : prev[k] === false
+  );
+  const next: Record<string, boolean> = {};
+  for (const k of allKeys) next[k] = onlyThis ? true : k === key;
+  return next;
 }
 
 /* ------------------------------------------------------------------ */
@@ -168,8 +182,9 @@ function aggregateShipments(rows: CompactRecord[]): Aggregated {
     yEntry.quantity += r.q;
     yearMap.set(r.y, yEntry);
 
-    if (r.s) sourceMap.set(r.s, (sourceMap.get(r.s) || 0) + 1);
-    if (r.p) purposeMap.set(r.p, (purposeMap.get(r.p) || 0) + 1);
+    // Count blanks too, under code "" → "Unspecified", so they're filterable.
+    sourceMap.set(r.s, (sourceMap.get(r.s) || 0) + 1);
+    purposeMap.set(r.p, (purposeMap.get(r.p) || 0) + 1);
 
     if (r.e) {
       const e = exporterMap.get(r.e) || { records: 0, quantity: 0 };
@@ -217,20 +232,29 @@ function aggregateShipments(rows: CompactRecord[]): Aggregated {
 
   const topSources = Array.from(sourceMap.entries())
     .sort(([, a], [, b]) => b - a)
-    .map(([code, records]) => ({ code, label: SOURCE_LABELS[code] || code, records }));
+    .map(([code, records]) => ({
+      code,
+      label: code === "" ? "Unspecified" : SOURCE_LABELS[code] || code,
+      records,
+    }));
 
   const topPurposes = Array.from(purposeMap.entries())
     .sort(([, a], [, b]) => b - a)
-    .map(([code, records]) => ({ code, label: PURPOSE_LABELS[code] || code, records }));
+    .map(([code, records]) => ({
+      code,
+      label: code === "" ? "Unspecified" : PURPOSE_LABELS[code] || code,
+      records,
+    }));
 
+  // Full sorted lists (not capped): the map colours every country that traded,
+  // and the lists slice for display. Capping here previously hid genuine
+  // traders (e.g. Cameroon, rank 16) from the map until a filter promoted them.
   const topExporters = Array.from(exporterMap.entries())
     .sort(([, a], [, b]) => b.records - a.records)
-    .slice(0, 8)
     .map(([code, v]) => ({ code, ...v }));
 
   const topImporters = Array.from(importerMap.entries())
     .sort(([, a], [, b]) => b.records - a.records)
-    .slice(0, 8)
     .map(([code, v]) => ({ code, ...v }));
 
   const topFlows = Array.from(flowMap.entries())
@@ -267,84 +291,159 @@ function aggregateShipments(rows: CompactRecord[]): Aggregated {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Filter checkbox row                                                */
+/*  Interactive filter bar chart                                        */
 /* ------------------------------------------------------------------ */
 
-function FilterCheckbox({
-  label,
-  sublabel,
-  count,
-  checked,
-  onChange,
-  color,
-}: {
+interface FilterBar {
+  /** Stable key passed back to onToggle (source/purpose code or term key). */
+  key: string;
   label: string;
   sublabel?: string;
-  count: number;
-  checked: boolean;
-  onChange: () => void;
-  color?: string;
+  records: number;
+  /** Whether this category is currently included by the filter. */
+  active: boolean;
+  /** Tailwind classes for the bar fill. */
+  barClass: string;
+  /** Optional tooltip override (defaults to "label (sublabel) — N records"). */
+  title?: string;
+}
+
+/** Rows shown per page in the paginated bar charts and country lists. */
+const PAGE_SIZE = 5;
+
+/** Prev / "x–y of N" / Next pager, shown only when there is more than one page. */
+function Pager({
+  page,
+  total,
+  onPage,
+}: {
+  page: number;
+  total: number;
+  onPage: (p: number) => void;
 }) {
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  if (totalPages <= 1) return null;
   return (
-    <div
-      className={`flex items-center gap-2 transition-opacity cursor-pointer select-none ${
-        checked ? "" : "opacity-40"
-      }`}
-      onClick={onChange}
-    >
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={onChange}
-        onClick={(e) => e.stopPropagation()}
-        className="w-3.5 h-3.5 rounded shrink-0"
-        style={color ? { accentColor: color } : undefined}
-      />
-      <span className="flex-1 text-xs text-zinc-700 dark:text-zinc-300 truncate capitalize">
-        {label}
-        {sublabel && (
-          <span className="text-zinc-400 dark:text-zinc-500 ml-1 normal-case">
-            ({sublabel})
-          </span>
-        )}
+    <div className="flex items-center justify-between mt-1 text-[10px] text-zinc-400 dark:text-zinc-500">
+      <button
+        onClick={() => onPage(Math.max(0, page - 1))}
+        disabled={page === 0}
+        className="px-1.5 py-0.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
+      >
+        Prev
+      </button>
+      <span className="tabular-nums">
+        {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total}
       </span>
-      <span className="text-xs text-zinc-400 dark:text-zinc-500 tabular-nums shrink-0">
-        {count.toLocaleString()}
-      </span>
+      <button
+        onClick={() => onPage(Math.min(totalPages - 1, page + 1))}
+        disabled={page >= totalPages - 1}
+        className="px-1.5 py-0.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
+      >
+        Next
+      </button>
     </div>
   );
 }
 
-/** Section header with All / None bulk-select buttons. */
-function FilterSectionHeader({
+/**
+ * A paginated horizontal bar chart that doubles as a cross-filter: clicking a
+ * bar calls onToggle(key) to add/remove that category, and de-selected bars are
+ * dimmed but stay visible so they can be toggled back on. Shows PAGE_SIZE rows
+ * at a time with Prev/Next, and an optional search box (used by Commodity).
+ */
+function FilterBarChart({
   title,
-  onAll,
-  onNone,
+  bars,
+  onToggle,
+  search,
+  onSearchChange,
+  searchPlaceholder,
+  emptyHint,
 }: {
   title: string;
-  onAll: () => void;
-  onNone: () => void;
+  bars: FilterBar[];
+  onToggle?: (key: string) => void;
+  search?: string;
+  onSearchChange?: (value: string) => void;
+  searchPlaceholder?: string;
+  emptyHint?: string;
 }) {
+  const [page, setPage] = useState(0);
+  // Reset to the first page whenever the search term changes the result set
+  // (adjusting state during render, per the React docs, rather than in an effect).
+  const [prevSearch, setPrevSearch] = useState(search);
+  if (search !== prevSearch) {
+    setPrevSearch(search);
+    setPage(0);
+  }
+
+  // Scale bars against the global max so widths stay comparable across pages.
+  const max = bars.reduce((m, b) => Math.max(m, b.records), 0);
+  const totalPages = Math.max(1, Math.ceil(bars.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages - 1);
+  const pageBars = bars.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+
   return (
-    <div className="flex items-center justify-between mb-1.5">
-      <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
-        {title}
-      </h5>
-      <div className="flex items-center gap-1 text-[10px]">
-        <button
-          className="text-blue-600 dark:text-blue-400 hover:underline"
-          onClick={onAll}
-        >
-          All
-        </button>
-        <span className="text-zinc-300 dark:text-zinc-600">/</span>
-        <button
-          className="text-blue-600 dark:text-blue-400 hover:underline"
-          onClick={onNone}
-        >
-          None
-        </button>
+    <div className="min-w-0">
+      {/* Fixed-height header row so the bar lists in adjacent charts line up,
+          whether or not a chart has an inline search box. */}
+      <div className="flex items-center gap-2 mb-1.5 h-7">
+        <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider shrink-0">
+          {title}
+        </h5>
+        {onSearchChange && (
+          <input
+            type="text"
+            value={search ?? ""}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder={searchPlaceholder}
+            className="ml-auto w-32 px-2 py-0.5 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 placeholder:text-zinc-400"
+          />
+        )}
       </div>
+      <div className="space-y-1">
+        {pageBars.map((b) => {
+          const pct = max > 0 ? (b.records / max) * 100 : 0;
+          return (
+            <div
+              key={b.key}
+              onClick={onToggle ? () => onToggle(b.key) : undefined}
+              title={
+                b.title ??
+                `${b.label}${b.sublabel ? ` (${b.sublabel})` : ""} — ${b.records.toLocaleString()} records`
+              }
+              className={`flex items-center gap-2 text-xs select-none transition-opacity ${
+                onToggle ? "cursor-pointer" : ""
+              } ${b.active ? "" : "opacity-40"}`}
+            >
+              <span className="w-24 shrink-0 truncate capitalize text-zinc-700 dark:text-zinc-300">
+                {b.label}
+                {b.sublabel && (
+                  <span className="text-zinc-400 dark:text-zinc-500 ml-1 normal-case">
+                    {b.sublabel}
+                  </span>
+                )}
+              </span>
+              <div className="flex-1 h-3.5 bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
+                <div
+                  className={`h-full rounded ${b.barClass}`}
+                  style={{ width: `${Math.max(pct, 1)}%` }}
+                />
+              </div>
+              <span className="w-12 text-right text-zinc-500 dark:text-zinc-400 tabular-nums shrink-0">
+                {b.records.toLocaleString()}
+              </span>
+            </div>
+          );
+        })}
+        {bars.length === 0 && emptyHint && (
+          <span className="text-[11px] text-zinc-400 dark:text-zinc-500">
+            {emptyHint}
+          </span>
+        )}
+      </div>
+      <Pager page={safePage} total={bars.length} onPage={setPage} />
     </div>
   );
 }
@@ -381,11 +480,11 @@ function ChartTooltip({
       <div className="text-zinc-400">{label}</div>
       <div className="text-white tabular-nums">
         {(point.value ?? 0).toLocaleString()}{" "}
-        {metric === "records" ? "shipments" : "items"}
+        {metric === "records" ? "records" : "items"}
       </div>
       {isProvisional && (
         <div className="text-amber-400 text-[10px] mt-0.5">
-          provisional — incomplete reporting
+          provisional
         </div>
       )}
     </div>
@@ -629,138 +728,58 @@ function TrendLineChart({
 }
 
 /* ------------------------------------------------------------------ */
-/*  Trend summary text                                                 */
-/* ------------------------------------------------------------------ */
-
-function TrendSummary({
-  data,
-  metric,
-}: {
-  data: YearData[];
-  metric: "records" | "quantity";
-}) {
-  if (data.length < 4) return null;
-  const mid = Math.floor(data.length / 2);
-  const firstHalf = data.slice(0, mid);
-  const secondHalf = data.slice(mid);
-  const key = metric;
-  const avgFirst = firstHalf.reduce((s, d) => s + d[key], 0) / firstHalf.length;
-  const avgSecond =
-    secondHalf.reduce((s, d) => s + d[key], 0) / secondHalf.length;
-  if (avgFirst === 0 && avgSecond === 0) return null;
-  const pctChange = avgFirst === 0 ? 100 : ((avgSecond - avgFirst) / avgFirst) * 100;
-
-  if (Math.abs(pctChange) < 15) {
-    return (
-      <span className="text-zinc-400 dark:text-zinc-500 text-[11px]" title="Stable trend">
-        Trend: stable
-      </span>
-    );
-  }
-  if (pctChange > 0) {
-    return (
-      <span
-        className="text-red-500 dark:text-red-400 text-[11px] font-medium"
-        title={`Increased ~${Math.round(pctChange)}% (comparing first/second half of period)`}
-      >
-        &#9650; +{Math.round(pctChange)}%
-      </span>
-    );
-  }
-  return (
-    <span
-      className="text-emerald-500 dark:text-emerald-400 text-[11px] font-medium"
-      title={`Decreased ~${Math.round(Math.abs(pctChange))}% (comparing first/second half of period)`}
-    >
-      &#9660; {Math.round(pctChange)}%
-    </span>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Source breakdown (wild vs captive bar)                              */
-/* ------------------------------------------------------------------ */
-
-function SourceBreakdown({ sources }: { sources: CodedData[] }) {
-  const total = sources.reduce((s, d) => s + d.records, 0);
-  if (total === 0) return null;
-
-  const wildSources = sources.filter((s) => WILD_SOURCE_CODES.has(s.code));
-  const captiveSources = sources.filter((s) => !WILD_SOURCE_CODES.has(s.code));
-  const wildRecords = wildSources.reduce((sum, s) => sum + s.records, 0);
-  const captiveRecords = captiveSources.reduce((sum, s) => sum + s.records, 0);
-  const wildPct = Math.round((wildRecords / total) * 100);
-  const captivePct = 100 - wildPct;
-
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-center gap-2 text-xs">
-        <span className="w-16 text-zinc-600 dark:text-zinc-300 shrink-0">Wild</span>
-        <div className="flex-1 h-4 bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
-          <div
-            className="h-full bg-amber-400 dark:bg-amber-500 rounded"
-            style={{ width: `${Math.max(wildPct, 1)}%` }}
-          />
-        </div>
-        <span className="w-20 text-right text-zinc-500 dark:text-zinc-400 tabular-nums shrink-0">
-          {wildPct}% ({wildRecords.toLocaleString()})
-        </span>
-      </div>
-      <div className="flex items-center gap-2 text-xs">
-        <span className="w-16 text-zinc-600 dark:text-zinc-300 shrink-0">Captive</span>
-        <div className="flex-1 h-4 bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
-          <div
-            className="h-full bg-emerald-300 dark:bg-emerald-600 rounded"
-            style={{ width: `${Math.max(captivePct, 1)}%` }}
-          />
-        </div>
-        <span className="w-20 text-right text-zinc-500 dark:text-zinc-400 tabular-nums shrink-0">
-          {captivePct}% ({captiveRecords.toLocaleString()})
-        </span>
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
 /*  Country table                                                      */
 /* ------------------------------------------------------------------ */
 
-function CountryTable({ data, label }: { data: CountryData[]; label: string }) {
+function CountryTable({
+  data,
+  label,
+  selected,
+  onSelect,
+}: {
+  data: CountryData[];
+  label: string;
+  selected?: string | null;
+  onSelect?: (code: string | null) => void;
+}) {
+  const [page, setPage] = useState(0);
   if (data.length === 0) return null;
-  const top = [...data].sort((a, b) => b.records - a.records).slice(0, 5);
+  const sorted = [...data].sort((a, b) => b.records - a.records);
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages - 1);
+  const pageRows = sorted.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
 
   return (
-    <div>
-      <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
+    <div className="min-w-0">
+      <h5 className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-0.5">
         {label}
       </h5>
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="text-left text-zinc-400 dark:text-zinc-500">
-            <th className="font-medium pb-1 pr-2">Country</th>
-            <th className="font-medium pb-1 text-right">Records</th>
-          </tr>
-        </thead>
-        <tbody>
-          {top.map((c) => (
-            <tr
+      <div>
+        {pageRows.map((c) => {
+          const isSel = selected === c.code;
+          return (
+            <div
               key={c.code}
-              className="border-t border-zinc-100 dark:border-zinc-800/50"
+              onClick={onSelect ? () => onSelect(isSel ? null : c.code) : undefined}
+              title={`${countryName(c.code)} — ${c.records.toLocaleString()} records`}
+              className={`flex items-baseline justify-between gap-1.5 text-[11px] py-px px-1 -mx-1 rounded ${
+                onSelect ? "cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/60" : ""
+              } ${isSel ? "bg-amber-100 dark:bg-amber-900/40" : ""}`}
             >
-              <td className="py-1 pr-2 text-zinc-700 dark:text-zinc-300">
+              <span className="truncate text-zinc-700 dark:text-zinc-300">
                 {countryName(c.code)}
                 <span className="text-zinc-400 dark:text-zinc-500 ml-1">
                   ({c.code})
                 </span>
-              </td>
-              <td className="py-1 text-right text-zinc-500 dark:text-zinc-400 tabular-nums">
+              </span>
+              <span className="text-zinc-500 dark:text-zinc-400 tabular-nums shrink-0">
                 {c.records.toLocaleString()}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <Pager page={safePage} total={sorted.length} onPage={setPage} />
     </div>
   );
 }
@@ -804,6 +823,10 @@ export default function CitesTradeSummary({
   // Year-range trim (null = full range)
   const [brush, setBrush] = useState<[number, number] | null>(null);
 
+  // Country highlighted on the map (also set by clicking a Top exporters /
+  // importers row). Filters the map's flows to that country.
+  const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
+
   // Use prefetched data from parent when available; fall back to own fetch
   const data = (prefetchedData as TradeData | null) ?? ownData;
   const loading = prefetchedLoading ?? ownLoading;
@@ -835,18 +858,31 @@ export default function CitesTradeSummary({
     };
   }, [citesId, prefetchedData, prefetchedLoading]);
 
+  // Source / purpose category universes derived from the records, INCLUDING the
+  // blank "" ("Unspecified") category, so it gets initialised and is isolatable.
+  const allSourceCodes = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of data?.shipments ?? []) set.add(r.s);
+    return Array.from(set);
+  }, [data]);
+  const allPurposeCodes = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of data?.shipments ?? []) set.add(r.p);
+    return Array.from(set);
+  }, [data]);
+
   // Initialize filter checkboxes when data arrives
   useEffect(() => {
     if (!data || !data.found || filtersInitialized) return;
 
-    if (data.allSources) {
+    if (allSourceCodes.length > 0) {
       const init: Record<string, boolean> = {};
-      for (const s of data.allSources) init[s.code] = true;
+      for (const c of allSourceCodes) init[c] = true;
       setCheckedSources(init);
     }
-    if (data.allPurposes) {
+    if (allPurposeCodes.length > 0) {
       const init: Record<string, boolean> = {};
-      for (const p of data.allPurposes) init[p.code] = true;
+      for (const c of allPurposeCodes) init[c] = true;
       setCheckedPurposes(init);
     }
     if (data.allTermsByUnit) {
@@ -855,51 +891,56 @@ export default function CitesTradeSummary({
       setCheckedTerms(init);
     }
     setFiltersInitialized(true);
-  }, [data, filtersInitialized]);
+  }, [data, filtersInitialized, allSourceCodes, allPurposeCodes]);
 
-  // Toggle helpers
-  const toggleSource = useCallback((code: string) => {
-    setCheckedSources((prev) => ({ ...prev, [code]: !prev[code] }));
-  }, []);
-  const togglePurpose = useCallback((code: string) => {
-    setCheckedPurposes((prev) => ({ ...prev, [code]: !prev[code] }));
-  }, []);
-  const toggleTerm = useCallback((key: string) => {
-    setCheckedTerms((prev) => ({ ...prev, [key]: !prev[key] }));
-  }, []);
-
-  const setAll = useCallback(
-    (
-      setter: React.Dispatch<React.SetStateAction<Record<string, boolean>>>,
-      keys: string[],
-      value: boolean
-    ) => {
-      setter((prev) => {
-        const next = { ...prev };
-        for (const k of keys) next[k] = value;
-        return next;
-      });
+  // Clicking a bar isolates that category (selects only it); clicking the
+  // already-isolated one resets the dimension to all.
+  const isolateSource = useCallback(
+    (code: string) => {
+      setCheckedSources((prev) => isolateState(prev, allSourceCodes, code));
     },
-    []
+    [allSourceCodes]
+  );
+  const isolatePurpose = useCallback(
+    (code: string) => {
+      setCheckedPurposes((prev) => isolateState(prev, allPurposeCodes, code));
+    },
+    [allPurposeCodes]
+  );
+  const isolateTerm = useCallback(
+    (key: string) => {
+      const keys = (data?.allTermsByUnit ?? []).map((t) =>
+        termUnitKey(t.term, t.unit)
+      );
+      setCheckedTerms((prev) => isolateState(prev, keys, key));
+    },
+    [data]
   );
 
-  // Commodity rows filtered by the search box
-  const visibleTermRows = useMemo(() => {
-    const rows = data?.allTermsByUnit ?? [];
-    const q = termSearch.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((t) =>
-      `${t.term} ${t.unit}`.toLowerCase().includes(q)
-    );
-  }, [data?.allTermsByUnit, termSearch]);
+  // Whether a dimension is actively filtered (some category de-selected). When
+  // it is, rows with a *blank* value for that dimension are excluded too —
+  // otherwise isolating e.g. "Hunting trophy" would also keep the ~10.9k
+  // blank-purpose elephant records (source/purpose can be blank; term can't).
+  const anySourceOff = useMemo(
+    () => Object.values(checkedSources).some((v) => v === false),
+    [checkedSources]
+  );
+  const anyPurposeOff = useMemo(
+    () => Object.values(checkedPurposes).some((v) => v === false),
+    [checkedPurposes]
+  );
 
   // Are any filters active (something unchecked, or a year range trimmed)?
   const hasActiveFilters = useMemo(() => {
-    const anySourceOff = Object.values(checkedSources).some((v) => !v);
-    const anyPurposeOff = Object.values(checkedPurposes).some((v) => !v);
-    const anyTermOff = Object.values(checkedTerms).some((v) => !v);
-    return anySourceOff || anyPurposeOff || anyTermOff || brush !== null;
-  }, [checkedSources, checkedPurposes, checkedTerms, brush]);
+    const anyTermOff = Object.values(checkedTerms).some((v) => v === false);
+    return (
+      anySourceOff ||
+      anyPurposeOff ||
+      anyTermOff ||
+      brush !== null ||
+      selectedCountry !== null
+    );
+  }, [anySourceOff, anyPurposeOff, checkedTerms, brush, selectedCountry]);
 
   // Clear all filters (re-check everything, reset the year trim)
   const clearFilters = useCallback(() => {
@@ -920,18 +961,23 @@ export default function CitesTradeSummary({
     });
     setBrush(null);
     setTermSearch("");
+    setSelectedCountry(null);
   }, []);
 
-  // Shipments passing the checkbox filters (all years) — drives the chart line.
+  // Records passing the active filters (all years) — drives the chart line.
+  // A selected country acts as an extra cross-filter: keep only its trade
+  // (as exporter or importer).
   const checkboxRows = useMemo(() => {
     if (!data?.found || !data.shipments) return [];
     return data.shipments.filter((r) => {
-      if (r.s && checkedSources[r.s] === false) return false;
-      if (r.p && checkedPurposes[r.p] === false) return false;
+      if (checkedSources[r.s] === false) return false;
+      if (checkedPurposes[r.p] === false) return false;
       if (checkedTerms[termUnitKey(r.t, r.u)] === false) return false;
+      if (selectedCountry && r.e !== selectedCountry && r.i !== selectedCountry)
+        return false;
       return true;
     });
-  }, [data, checkedSources, checkedPurposes, checkedTerms]);
+  }, [data, checkedSources, checkedPurposes, checkedTerms, selectedCountry]);
 
   // Chart series (all years, checkbox-filtered)
   const chartAgg = useMemo(() => aggregateShipments(checkboxRows), [checkboxRows]);
@@ -943,6 +989,63 @@ export default function CitesTradeSummary({
       : checkboxRows;
     return aggregateShipments(rows);
   }, [checkboxRows, brush]);
+
+  // Cross-filter views: each interactive chart aggregates rows passing every
+  // active filter EXCEPT its own dimension, so its categories stay visible and
+  // a click can toggle them back on (rather than vanishing once de-selected).
+  const commodityChart = useMemo(() => {
+    if (!data?.found || !data.shipments) return [];
+    const rows = data.shipments.filter((r) => {
+      if (checkedSources[r.s] === false) return false;
+      if (checkedPurposes[r.p] === false) return false;
+      if (brush && (r.y < brush[0] || r.y > brush[1])) return false;
+      if (selectedCountry && r.e !== selectedCountry && r.i !== selectedCountry)
+        return false;
+      return true;
+    });
+    return aggregateShipments(rows).termsByUnit;
+  }, [data, checkedSources, checkedPurposes, brush, selectedCountry]);
+
+  const sourceChart = useMemo(() => {
+    if (!data?.found || !data.shipments) return [];
+    const rows = data.shipments.filter((r) => {
+      if (checkedPurposes[r.p] === false) return false;
+      if (checkedTerms[termUnitKey(r.t, r.u)] === false) return false;
+      if (brush && (r.y < brush[0] || r.y > brush[1])) return false;
+      if (selectedCountry && r.e !== selectedCountry && r.i !== selectedCountry)
+        return false;
+      return true;
+    });
+    return aggregateShipments(rows).topSources;
+  }, [data, checkedPurposes, checkedTerms, brush, selectedCountry]);
+
+  const purposeChart = useMemo(() => {
+    if (!data?.found || !data.shipments) return [];
+    const rows = data.shipments.filter((r) => {
+      if (checkedSources[r.s] === false) return false;
+      if (checkedTerms[termUnitKey(r.t, r.u)] === false) return false;
+      if (brush && (r.y < brush[0] || r.y > brush[1])) return false;
+      if (selectedCountry && r.e !== selectedCountry && r.i !== selectedCountry)
+        return false;
+      return true;
+    });
+    return aggregateShipments(rows).topPurposes;
+  }, [data, checkedSources, checkedTerms, brush, selectedCountry]);
+
+  // Exporter / importer aggregates that DON'T apply the country cross-filter, so
+  // the Top exporters / importers lists stay populated and let you switch
+  // country (the same "exclude your own dimension" rule the bar charts use).
+  const countryAgg = useMemo(() => {
+    if (!data?.found || !data.shipments) return null;
+    const rows = data.shipments.filter((r) => {
+      if (checkedSources[r.s] === false) return false;
+      if (checkedPurposes[r.p] === false) return false;
+      if (checkedTerms[termUnitKey(r.t, r.u)] === false) return false;
+      if (brush && (r.y < brush[0] || r.y > brush[1])) return false;
+      return true;
+    });
+    return aggregateShipments(rows);
+  }, [data, checkedSources, checkedPurposes, checkedTerms, brush]);
 
   const hasShipments = !!data?.shipments && data.shipments.length > 0;
 
@@ -985,296 +1088,232 @@ export default function CitesTradeSummary({
   // Fall back to server-provided byYear when no shipments for client filtering
   const chartByYear =
     hasShipments && chartAgg.byYear.length > 0 ? chartAgg.byYear : data.byYear;
-  const displaySources =
-    hasShipments && display.topSources.length > 0 ? display.topSources : data.topSources;
-  const displayPurposes =
-    hasShipments && display.topPurposes.length > 0 ? display.topPurposes : data.topPurposes;
+  // Full country lists (and the map's colour-by-role) use the country-excluded
+  // aggregate so they stay global while a country is selected. The map colours
+  // every trading country; the Top exporters/importers lists show the leaders.
   const displayExporters =
-    hasShipments && display.topExporters.length > 0 ? display.topExporters : data.topExporters;
+    hasShipments && countryAgg && countryAgg.topExporters.length > 0
+      ? countryAgg.topExporters
+      : data.topExporters;
   const displayImporters =
-    hasShipments && display.topImporters.length > 0 ? display.topImporters : data.topImporters;
+    hasShipments && countryAgg && countryAgg.topImporters.length > 0
+      ? countryAgg.topImporters
+      : data.topImporters;
+  const tableExporters = displayExporters.slice(0, 15);
+  const tableImporters = displayImporters.slice(0, 15);
   const displayFlows =
     hasShipments && display.topFlows.length > 0 ? display.topFlows : data.topFlows ?? [];
 
-  return (
-    <div className="space-y-4">
-      {/* Headline */}
-      <div className="flex items-baseline gap-3 flex-wrap">
-        <span className="text-sm text-zinc-700 dark:text-zinc-200">
-          <span className="font-semibold tabular-nums">
-            {display.totalRecords.toLocaleString()}
-          </span>{" "}
-          shipments
-          <span className="text-zinc-400 dark:text-zinc-500 ml-1">
-            {effectiveRange[0]}–{effectiveRange[1]}
-          </span>
-          {brush && (
-            <span className="text-zinc-400 dark:text-zinc-500 ml-1">
-              (of {minYear}–{maxYear})
-            </span>
-          )}
+  // Build the three interactive filter charts. Source bars keep the
+  // wild (amber) vs captive (emerald) distinction by colour.
+  const sourceBars: FilterBar[] = sourceChart.map((s) => ({
+    key: s.code,
+    label: s.label,
+    sublabel: s.code,
+    records: s.records,
+    active: checkedSources[s.code] !== false,
+    barClass:
+      s.code === ""
+        ? "bg-zinc-400 dark:bg-zinc-500"
+        : WILD_SOURCE_CODES.has(s.code)
+          ? "bg-amber-400 dark:bg-amber-500"
+          : "bg-emerald-300 dark:bg-emerald-600",
+  }));
+
+  const purposeBars: FilterBar[] = purposeChart.map((p) => ({
+    key: p.code,
+    label: p.label,
+    sublabel: p.code,
+    records: p.records,
+    active: checkedPurposes[p.code] !== false,
+    barClass: p.code === "" ? "bg-zinc-400 dark:bg-zinc-500" : "bg-blue-400 dark:bg-blue-500",
+  }));
+
+  const commoditySearch = termSearch.trim().toLowerCase();
+  const commodityBars: FilterBar[] = commodityChart
+    .filter((t) =>
+      commoditySearch
+        ? `${t.term} ${t.unit}`.toLowerCase().includes(commoditySearch)
+        : true
+    )
+    .map((t) => {
+      const key = termUnitKey(t.term, t.unit);
+      return {
+        key,
+        label: t.term,
+        sublabel: t.unit || undefined,
+        records: t.records,
+        active: checkedTerms[key] !== false,
+        barClass: "bg-violet-400 dark:bg-violet-500",
+        title: `${t.term}${t.unit ? ` (${t.unit})` : ""} — ${t.records.toLocaleString()} records / ${fmtQty(t.quantity)} ${t.unit || "items"}`,
+      };
+    });
+
+  const hasFilterCharts =
+    sourceBars.length > 0 || purposeBars.length > 0 || commodityChart.length > 0;
+
+  // Trade-over-time chart, placed in the map's side column (or full width when
+  // there is no map).
+  const trendInfo =
+    "Drag the handles to trim the year range." +
+    (maxYear >= provisionalFromYear
+      ? ` Recent years (dashed, ${provisionalFromYear}+) are provisional — CITES reporting lags by a few years, so they are usually incomplete rather than showing a real drop.`
+      : "");
+  const tradeOverTimeChart = (
+    <div className="flex flex-col">
+      <div className="flex items-center gap-1.5 mb-2">
+        <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
+          Trade over time
         </span>
-        <TrendSummary data={display.byYear} metric={metric} />
-        {hasActiveFilters && (
-          <button
-            className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline ml-auto"
-            onClick={clearFilters}
-          >
-            Clear filters
-          </button>
+        <span className="text-[11px] text-zinc-400 dark:text-zinc-500 normal-case">
+          (records)
+        </span>
+        <span className="relative group inline-flex">
+          <span className="flex items-center justify-center w-3.5 h-3.5 rounded-full border border-zinc-400 dark:border-zinc-500 text-[9px] font-semibold text-zinc-400 dark:text-zinc-500 cursor-help">
+            i
+          </span>
+          <span className="pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 hidden group-hover:block z-20 w-56 bg-zinc-800 dark:bg-zinc-700 text-white text-[10px] leading-snug rounded-md p-2 shadow-lg normal-case font-normal tracking-normal">
+            {trendInfo}
+          </span>
+        </span>
+        {brush && (
+          <span className="text-[11px] text-blue-600 dark:text-blue-400 tabular-nums ml-auto">
+            {brush[0]}–{brush[1]}
+          </span>
         )}
       </div>
+      <TrendLineChart
+        data={chartByYear}
+        metric={metric}
+        minYear={minYear}
+        maxYear={maxYear}
+        brush={brush}
+        onBrushChange={setBrush}
+        provisionalFromYear={provisionalFromYear}
+      />
+    </div>
+  );
 
-      {/* Trade flow map */}
-      {displayFlows.length > 0 && (
-        <div className="border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden bg-zinc-50 dark:bg-zinc-800/30">
-          <TradeFlowMap
-            flows={displayFlows}
-            reExportFlows={display.reExportFlows}
-            exporters={displayExporters}
-            importers={displayImporters}
-            suspensionCountries={suspensionCountries}
-            countryAnnotations={countryAnnotations}
-          />
+  // Record count + year range + clear button. Overlaid on the map (or shown as
+  // a row when there is no map) so it doesn't take a whole dead row of its own.
+  const headline = (
+    <div className="flex items-baseline gap-2">
+      <span className="text-sm text-zinc-700 dark:text-zinc-200">
+        <span className="font-semibold tabular-nums">
+          {display.totalRecords.toLocaleString()}
+        </span>{" "}
+        records
+        <span className="text-zinc-400 dark:text-zinc-500 ml-1 tabular-nums">
+          {effectiveRange[0]}–{effectiveRange[1]}
+        </span>
+        {brush && (
+          <span className="text-zinc-400 dark:text-zinc-500 ml-1 tabular-nums">
+            (of {minYear}–{maxYear})
+          </span>
+        )}
+      </span>
+      {hasActiveFilters && (
+        <button
+          className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline"
+          onClick={clearFilters}
+        >
+          Clear filters
+        </button>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      {/* Trade flow map (with the record count overlaid), and Top exporters /
+          importers + the trade-over-time chart in the side column. */}
+      {displayFlows.length > 0 ? (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2 relative border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden bg-zinc-50 dark:bg-zinc-800/30">
+            <div className="absolute top-2 left-3 z-10 bg-zinc-50/70 dark:bg-zinc-900/40 backdrop-blur-sm rounded-md px-2 py-1">
+              {headline}
+            </div>
+            <TradeFlowMap
+              flows={displayFlows}
+              reExportFlows={display.reExportFlows}
+              exporters={displayExporters}
+              importers={displayImporters}
+              suspensionCountries={suspensionCountries}
+              countryAnnotations={countryAnnotations}
+              selectedCountry={selectedCountry}
+              onSelectCountry={setSelectedCountry}
+            />
+          </div>
+          {/* Side column stretches to the map's height; the trade-over-time
+              chart is pushed to the bottom so it lines up with the map base. */}
+          <div className="flex flex-col gap-3">
+            <div className="grid grid-cols-2 gap-3">
+              <CountryTable
+                data={tableExporters}
+                label="Top exporters"
+                selected={selectedCountry}
+                onSelect={setSelectedCountry}
+              />
+              <CountryTable
+                data={tableImporters}
+                label="Top importers"
+                selected={selectedCountry}
+                onSelect={setSelectedCountry}
+              />
+            </div>
+            <div className="mt-auto">{tradeOverTimeChart}</div>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {headline}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <CountryTable
+              data={tableExporters}
+              label="Top exporters"
+              selected={selectedCountry}
+              onSelect={setSelectedCountry}
+            />
+            <CountryTable
+              data={tableImporters}
+              label="Top importers"
+              selected={selectedCountry}
+              onSelect={setSelectedCountry}
+            />
+          </div>
+          {tradeOverTimeChart}
         </div>
       )}
 
-      {/* Exporters & Importers */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <CountryTable data={displayExporters} label="Top exporters" />
-        <CountryTable data={displayImporters} label="Top importers" />
-      </div>
-
-      {/* Filters + Chart side by side */}
-      <div
-        className={`grid grid-cols-1 gap-4 ${
-          hasShipments ? "md:grid-cols-[230px_1fr]" : ""
-        }`}
-      >
-        {/* Filter panel */}
-        {hasShipments && (
-          <div className="space-y-3 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 bg-zinc-50/50 dark:bg-zinc-800/20 max-h-[520px] overflow-y-auto">
-            {/* Source filters */}
-            {data.allSources && data.allSources.length > 0 && (
-              <div>
-                <FilterSectionHeader
-                  title="Source"
-                  onAll={() =>
-                    setAll(setCheckedSources, data.allSources!.map((s) => s.code), true)
-                  }
-                  onNone={() =>
-                    setAll(setCheckedSources, data.allSources!.map((s) => s.code), false)
-                  }
-                />
-                <div className="space-y-1">
-                  {data.allSources.map((s) => (
-                    <FilterCheckbox
-                      key={s.code}
-                      label={s.label}
-                      sublabel={s.code}
-                      count={s.records}
-                      checked={checkedSources[s.code] ?? true}
-                      onChange={() => toggleSource(s.code)}
-                      color={WILD_SOURCE_CODES.has(s.code) ? "#f59e0b" : "#34d399"}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Purpose filters */}
-            {data.allPurposes && data.allPurposes.length > 0 && (
-              <div>
-                <FilterSectionHeader
-                  title="Purpose"
-                  onAll={() =>
-                    setAll(setCheckedPurposes, data.allPurposes!.map((p) => p.code), true)
-                  }
-                  onNone={() =>
-                    setAll(setCheckedPurposes, data.allPurposes!.map((p) => p.code), false)
-                  }
-                />
-                <div className="space-y-1">
-                  {data.allPurposes.map((p) => (
-                    <FilterCheckbox
-                      key={p.code}
-                      label={p.label}
-                      sublabel={p.code}
-                      count={p.records}
-                      checked={checkedPurposes[p.code] ?? true}
-                      onChange={() => togglePurpose(p.code)}
-                      color="#3b82f6"
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Commodity (term + unit) filters — searchable, no truncation */}
-            {data.allTermsByUnit && data.allTermsByUnit.length > 0 && (
-              <div>
-                <FilterSectionHeader
-                  title="Commodity"
-                  onAll={() =>
-                    setAll(
-                      setCheckedTerms,
-                      visibleTermRows.map((t) => termUnitKey(t.term, t.unit)),
-                      true
-                    )
-                  }
-                  onNone={() =>
-                    setAll(
-                      setCheckedTerms,
-                      visibleTermRows.map((t) => termUnitKey(t.term, t.unit)),
-                      false
-                    )
-                  }
-                />
-                {data.allTermsByUnit.length > 6 && (
-                  <input
-                    type="text"
-                    value={termSearch}
-                    onChange={(e) => setTermSearch(e.target.value)}
-                    placeholder="Search commodities…"
-                    className="w-full mb-1.5 px-2 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 placeholder:text-zinc-400"
-                  />
-                )}
-                <div className="space-y-1">
-                  {visibleTermRows.map((t) => {
-                    const key = termUnitKey(t.term, t.unit);
-                    return (
-                      <FilterCheckbox
-                        key={key}
-                        label={t.term}
-                        sublabel={unitLabel(t.unit)}
-                        count={t.records}
-                        checked={checkedTerms[key] ?? true}
-                        onChange={() => toggleTerm(key)}
-                        color="#8b5cf6"
-                      />
-                    );
-                  })}
-                  {visibleTermRows.length === 0 && (
-                    <span className="text-[11px] text-zinc-400 dark:text-zinc-500">
-                      No commodities match “{termSearch}”.
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Chart + details */}
-        <div className="space-y-4 min-w-0">
-          {/* Metric toggle + line chart with trim handles */}
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
-                Trade over time
-              </span>
-              <span className="text-[11px] text-zinc-400 dark:text-zinc-500 normal-case">
-                (shipments)
-              </span>
-              {brush && (
-                <span className="text-[11px] text-blue-600 dark:text-blue-400 tabular-nums ml-auto">
-                  {brush[0]}–{brush[1]}
-                </span>
-              )}
-            </div>
-            <TrendLineChart
-              data={chartByYear}
-              metric={metric}
-              minYear={minYear}
-              maxYear={maxYear}
-              brush={brush}
-              onBrushChange={setBrush}
-              provisionalFromYear={provisionalFromYear}
-            />
-            <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-1 leading-snug">
-              Drag the handles to trim the year range.
-              {maxYear >= provisionalFromYear && (
-                <>
-                  {" "}
-                  Recent years (dashed, {provisionalFromYear}+) are{" "}
-                  <span className="text-amber-500 dark:text-amber-400">provisional</span> —
-                  CITES reporting lags by a few years, so they are usually incomplete
-                  rather than showing a real drop.
-                </>
-              )}
-            </p>
-          </div>
-
-          {/* Source breakdown — most important for assessors */}
-          {displaySources.length > 0 && (
-            <div>
-              <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
-                Wild vs. Captive
-              </h5>
-              <SourceBreakdown sources={displaySources} />
-            </div>
-          )}
-
-          {/* Commodities — grouped by term + unit (never aggregated across units) */}
-          {display.termsByUnit.length > 0 && (
-            <div>
-              <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
-                Commodities
-              </h5>
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="text-left text-zinc-400 dark:text-zinc-500">
-                    <th className="font-medium pb-1 pr-2">Term</th>
-                    <th className="font-medium pb-1 pr-2">Unit</th>
-                    <th className="font-medium pb-1 pr-2 text-right">Records</th>
-                    <th className="font-medium pb-1 text-right">Quantity</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {display.termsByUnit.slice(0, 8).map((t) => (
-                    <tr
-                      key={termUnitKey(t.term, t.unit)}
-                      className="border-t border-zinc-100 dark:border-zinc-800/50"
-                    >
-                      <td className="py-1 pr-2 text-zinc-700 dark:text-zinc-300 capitalize">
-                        {t.term}
-                      </td>
-                      <td className="py-1 pr-2 text-zinc-500 dark:text-zinc-400">
-                        {t.unit || "—"}
-                      </td>
-                      <td className="py-1 pr-2 text-right text-zinc-500 dark:text-zinc-400 tabular-nums">
-                        {t.records.toLocaleString()}
-                      </td>
-                      <td className="py-1 text-right text-zinc-500 dark:text-zinc-400 tabular-nums">
-                        {fmtQty(t.quantity)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Purpose */}
-          {displayPurposes.length > 0 && (
-            <div>
-              <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
-                Purpose
-              </h5>
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-600 dark:text-zinc-300">
-                {displayPurposes.map((p) => (
-                  <span key={p.code} className="tabular-nums">
-                    {p.label}{" "}
-                    <span className="text-zinc-400 dark:text-zinc-500">
-                      ({p.records})
-                    </span>
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
+      {/* Filter charts below the map — click a bar to cross-filter the whole
+          summary. Source bars are coloured wild (amber) vs captive (emerald). */}
+      {hasFilterCharts && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <FilterBarChart
+            title="Commodity"
+            bars={commodityBars}
+            onToggle={hasShipments ? isolateTerm : undefined}
+            search={termSearch}
+            onSearchChange={setTermSearch}
+            searchPlaceholder="Search…"
+            emptyHint={
+              commoditySearch
+                ? `No commodities match “${termSearch}”.`
+                : undefined
+            }
+          />
+          <FilterBarChart
+            title="Purpose"
+            bars={purposeBars}
+            onToggle={hasShipments ? isolatePurpose : undefined}
+          />
+          <FilterBarChart
+            title="Source"
+            bars={sourceBars}
+            onToggle={hasShipments ? isolateSource : undefined}
+          />
         </div>
-      </div>
+      )}
     </div>
   );
 }

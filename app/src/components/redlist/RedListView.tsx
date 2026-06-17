@@ -3386,7 +3386,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                     className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "literature" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                     onClick={() => setActiveDetailTab("literature")}
                                   >
-                                    Papers
+                                    Literature
                                   </button>
                                 )}
                                 {s.category !== "NE" && (
@@ -3404,16 +3404,16 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                   CITES
                                 </button>
                                 <button
-                                  className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "wikipedia" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
-                                  onClick={() => setActiveDetailTab("wikipedia")}
-                                >
-                                  Wikipedia
-                                </button>
-                                <button
                                   className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "col" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                   onClick={() => setActiveDetailTab("col")}
                                 >
                                   Catalogue of Life
+                                </button>
+                                <button
+                                  className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "wikipedia" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                  onClick={() => setActiveDetailTab("wikipedia")}
+                                >
+                                  Wikipedia
                                 </button>
                                 {s.category === "NE" && (
                                   <button

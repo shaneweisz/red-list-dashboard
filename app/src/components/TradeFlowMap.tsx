@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, memo } from "react";
+import React, { useState, useMemo, useRef, useEffect, useCallback, memo } from "react";
 import {
   ComposableMap,
   Geographies,
@@ -75,8 +75,12 @@ const COUNTRY_CENTROIDS: Record<string, [number, number]> = {
 };
 
 const MAP_WIDTH = 800;
-const MAP_HEIGHT = 400;
-const MAP_OFFSET: [number, number] = [30, 20];
+// Cropped a little shorter than the projection's natural height to trim some of
+// the empty ocean below the southern continents, while keeping New Zealand and
+// the southern tip of South America in frame. The extra y-offset keeps the land
+// in place while the viewBox cuts the bottom rather than re-centring the map.
+const MAP_HEIGHT = 372;
+const MAP_OFFSET: [number, number] = [30, 34];
 
 // Build projection that matches the ComposableMap settings
 const projection = geoNaturalEarth1()
@@ -88,6 +92,21 @@ const projection = geoNaturalEarth1()
 function project(coords: [number, number]): [number, number] | null {
   const p = projection(coords);
   return p ? [p[0] + MAP_OFFSET[0], p[1] + MAP_OFFSET[1]] : null;
+}
+
+function hexToRgb(hex: string): [number, number, number] {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+/** Linearly interpolate between two hex colours (t in [0, 1]). */
+function mixColor(a: string, b: string, t: number): string {
+  const [ar, ag, ab] = hexToRgb(a);
+  const [br, bg, bb] = hexToRgb(b);
+  const r = Math.round(ar + (br - ar) * t);
+  const g = Math.round(ag + (bg - ag) * t);
+  const bl = Math.round(ab + (bb - ab) * t);
+  return `rgb(${r}, ${g}, ${bl})`;
 }
 
 /** Build a quadratic bezier arc from→to, curving left of the direction of travel */
@@ -178,6 +197,13 @@ interface TradeFlowMapProps {
   suspensionCountries?: Set<string>;
   /** Per-country suspension/quota annotations for hover tooltip */
   countryAnnotations?: Record<string, CountryAnnotation>;
+  /**
+   * Optional controlled selection. When provided, the parent owns the selected
+   * country (so e.g. clicking a Top exporters row can drive the map too);
+   * otherwise the map keeps its own internal selection state.
+   */
+  selectedCountry?: string | null;
+  onSelectCountry?: (code: string | null) => void;
 }
 
 function TradeFlowMap({
@@ -187,30 +213,98 @@ function TradeFlowMap({
   importers,
   suspensionCountries,
   countryAnnotations,
+  selectedCountry: selectedCountryProp,
+  onSelectCountry,
 }: TradeFlowMapProps) {
   const { resolvedTheme } = useTheme();
   const [hoveredFlow, setHoveredFlow] = useState<number | null>(null);
   const [hoveredReExport, setHoveredReExport] = useState<number | null>(null);
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
-  const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
+  const [internalSelected, setInternalSelected] = useState<string | null>(null);
+  const selectedCountry =
+    selectedCountryProp !== undefined ? selectedCountryProp : internalSelected;
+  const setSelectedCountry = onSelectCountry ?? setInternalSelected;
   const [showReExports, setShowReExports] = useState(false);
+
+  /* ---- Pan / zoom -------------------------------------------------- */
+  // A single transform applied to all map content (geographies + arcs +
+  // markers), so they stay aligned. At {k:1,x:0,y:0} the map renders exactly as
+  // before — pan/zoom is purely additive.
+  const MIN_ZOOM = 1;
+  const MAX_ZOOM = 8;
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [view, setView] = useState({ k: 1, x: 0, y: 0 });
+  const drag = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null);
+  const moved = useRef(false);
+
+  // Keep the (scaled) content covering the viewport.
+  const clampView = (k: number, x: number, y: number) => ({
+    k,
+    x: Math.min(0, Math.max(MAP_WIDTH * (1 - k), x)),
+    y: Math.min(0, Math.max(MAP_HEIGHT * (1 - k), y)),
+  });
+
+  // Pointer (viewBox) coords from a client event.
+  const toView = (clientX: number, clientY: number) => {
+    const rect = wrapRef.current?.getBoundingClientRect();
+    if (!rect) return [0, 0] as const;
+    return [
+      ((clientX - rect.left) / rect.width) * MAP_WIDTH,
+      ((clientY - rect.top) / rect.height) * MAP_HEIGHT,
+    ] as const;
+  };
+
+  const zoomBy = useCallback((factor: number, cx = MAP_WIDTH / 2, cy = MAP_HEIGHT / 2) => {
+    setView((v) => {
+      const k = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, v.k * factor));
+      const r = k / v.k;
+      return clampView(k, cx - (cx - v.x) * r, cy - (cy - v.y) * r);
+    });
+  }, []);
+
+  // Non-passive wheel listener so we can preventDefault the page scroll.
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const [cx, cy] = toView(e.clientX, e.clientY);
+      zoomBy(e.deltaY < 0 ? 1.2 : 1 / 1.2, cx, cy);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [zoomBy]);
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    drag.current = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y };
+    moved.current = false;
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!drag.current) return;
+    const rect = wrapRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const dx = ((e.clientX - drag.current.x) / rect.width) * MAP_WIDTH;
+    const dy = ((e.clientY - drag.current.y) / rect.height) * MAP_HEIGHT;
+    if (Math.abs(e.clientX - drag.current.x) + Math.abs(e.clientY - drag.current.y) > 3)
+      moved.current = true;
+    setView((v) => clampView(v.k, drag.current!.vx + dx, drag.current!.vy + dy));
+  };
+  const onPointerUp = () => {
+    drag.current = null;
+  };
+  // Suppress the click that ends a drag (so panning doesn't select a country).
+  const consumeClick = () => {
+    const m = moved.current;
+    moved.current = false;
+    return m;
+  };
 
   // Only render flows where we have centroids for both endpoints
   const renderableFlows = useMemo(
     () => flows.filter((f) => COUNTRY_CENTROIDS[f.from] && COUNTRY_CENTROIDS[f.to]),
     [flows]
   );
-
-  // Countries that take part in at least one drawn flow — these are clickable
-  // (on the country shape or its dot) to filter the map to their trade.
-  const flowCountryCodes = useMemo(() => {
-    const codes = new Set<string>();
-    for (const f of renderableFlows) {
-      codes.add(f.from);
-      codes.add(f.to);
-    }
-    return codes;
-  }, [renderableFlows]);
 
   // Re-export legs (origin → re-exporter) with known centroids
   const renderableReExports = useMemo(
@@ -271,16 +365,39 @@ function TradeFlowMap({
     return ex > im ? "exporter" : "importer";
   }
 
+  // Colour depth scales linearly with a country's NET trade (|exports −
+  // imports|) relative to the largest net trader, so depth faithfully reflects
+  // scale: a 900-net country next to an ~11k-net one reads as ~900/11k.
+  const netOf = (code: string) =>
+    Math.abs((exportRecords.get(code) ?? 0) - (importRecords.get(code) ?? 0));
+  let maxMagnitude = 1;
+  for (const code of new Set([...exportRecords.keys(), ...importRecords.keys()])) {
+    const net = netOf(code);
+    if (net > maxMagnitude) maxMagnitude = net;
+  }
+  function intensityOf(code: string): number {
+    return Math.min(1, netOf(code) / maxMagnitude);
+  }
+
   const maxRecords = visibleFlows.length > 0 ? Math.max(...visibleFlows.map((f) => f.records)) : 0;
 
-  // Theme-aware colors for SVG fills (can't use Tailwind classes in SVG)
+  // Theme-aware colors for SVG fills (can't use Tailwind classes in SVG). The
+  // exporter/importer values are the *saturated* end of the depth ramp (mixed
+  // toward `base` by intensity below); they match the marker dot colours.
   const colors = dark
-    ? { base: "#18181b", exporter: "#7f1d1d", importer: "#1e3a5f", stroke: "#27272a", arcDefault: "#f87171", arcHover: "#fbbf24", reExport: "#d97706" }
-    : { base: "#f4f4f5", exporter: "#fee2e2", importer: "#dbeafe", stroke: "#d4d4d8", arcDefault: "#ef4444", arcHover: "#f59e0b", reExport: "#d97706" };
+    ? { base: "#3f3f46", exporter: "#ef4444", importer: "#3b82f6", stroke: "#71717a", arcDefault: "#f87171", arcHover: "#fbbf24", reExport: "#d97706" }
+    : { base: "#f4f4f5", exporter: "#ef4444", importer: "#3b82f6", stroke: "#d4d4d8", arcDefault: "#ef4444", arcHover: "#f59e0b", reExport: "#d97706" };
 
   const hoveredFlowData = hoveredFlow !== null ? visibleFlows[hoveredFlow] : null;
   const hoveredReExportData =
     hoveredReExport !== null ? visibleReExports[hoveredReExport] : null;
+
+  // Trade totals + annotations for the hovered country tooltip
+  const hoveredExports = hoveredCountry ? exportRecords.get(hoveredCountry) ?? 0 : 0;
+  const hoveredImports = hoveredCountry ? importRecords.get(hoveredCountry) ?? 0 : 0;
+  const hoveredAnnotation = hoveredCountry
+    ? countryAnnotations?.[hoveredCountry]
+    : undefined;
 
   return (
     <div className="relative">
@@ -318,21 +435,39 @@ function TradeFlowMap({
       )}
 
       {/* Country annotation tooltip (suspensions/quotas) */}
-      {hoveredCountry && !hoveredFlowData && !hoveredReExportData && countryAnnotations?.[hoveredCountry] && (
+      {hoveredCountry && !hoveredFlowData && !hoveredReExportData && (
         <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 bg-zinc-800 dark:bg-zinc-700 text-white text-[11px] px-3 py-2 rounded-lg shadow-lg pointer-events-none max-w-[280px]">
           <div className="font-medium mb-1">{countryName(hoveredCountry)}</div>
-          {countryAnnotations[hoveredCountry].suspensions && countryAnnotations[hoveredCountry].suspensions!.length > 0 && (
+          {(hoveredExports > 0 || hoveredImports > 0) && (
+            <div className="mb-1 space-y-0.5">
+              {hoveredExports > 0 && (
+                <div>
+                  <span className="text-red-300">Exports</span>{" "}
+                  <span className="text-zinc-200 tabular-nums">{hoveredExports.toLocaleString()}</span>
+                  <span className="text-zinc-400"> records</span>
+                </div>
+              )}
+              {hoveredImports > 0 && (
+                <div>
+                  <span className="text-blue-300">Imports</span>{" "}
+                  <span className="text-zinc-200 tabular-nums">{hoveredImports.toLocaleString()}</span>
+                  <span className="text-zinc-400"> records</span>
+                </div>
+              )}
+            </div>
+          )}
+          {hoveredAnnotation?.suspensions && hoveredAnnotation.suspensions.length > 0 && (
             <div className="text-red-300">
-              {countryAnnotations[hoveredCountry].suspensions!.map((s, i) => (
+              {hoveredAnnotation.suspensions.map((s, i) => (
                 <div key={i}>
                   Trade suspension ({s.type}) since {new Date(s.startDate).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}
                 </div>
               ))}
             </div>
           )}
-          {countryAnnotations[hoveredCountry].quotas && countryAnnotations[hoveredCountry].quotas!.length > 0 && (
+          {hoveredAnnotation?.quotas && hoveredAnnotation.quotas.length > 0 && (
             <div className="text-amber-300">
-              {countryAnnotations[hoveredCountry].quotas!.map((q, i) => (
+              {hoveredAnnotation.quotas.map((q, i) => (
                 <div key={i}>
                   Quota: {q.quota.toLocaleString()}{q.unit ? ` ${q.unit}` : ""}
                 </div>
@@ -353,6 +488,18 @@ function TradeFlowMap({
         </button>
       )}
 
+      <div
+        ref={wrapRef}
+        className="relative"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerLeave={onPointerUp}
+        style={{
+          touchAction: "none",
+          cursor: drag.current ? "grabbing" : view.k > 1 ? "grab" : "default",
+        }}
+      >
       <ComposableMap
         projection="geoNaturalEarth1"
         projectionConfig={{ scale: 160, center: [0, 0] }}
@@ -360,6 +507,7 @@ function TradeFlowMap({
         width={MAP_WIDTH}
         height={MAP_HEIGHT}
       >
+       <g transform={`translate(${view.x}, ${view.y}) scale(${view.k})`}>
         <g transform={`translate(${MAP_OFFSET[0]}, ${MAP_OFFSET[1]})`}>
           {/* Base map */}
           <Geographies geography={GEO_URL}>
@@ -379,13 +527,15 @@ function TradeFlowMap({
                   // filled a red almost identical to the exporter colour and
                   // read as an exporter. (#307)
                   let fill = colors.base;
-                  if (role === "exporter") fill = colors.exporter;
-                  else if (role === "importer") fill = colors.importer;
+                  if (role && alpha2)
+                    fill = mixColor(colors.base, colors[role], intensityOf(alpha2));
 
-                  const hasAnnotation = alpha2 && countryAnnotations?.[alpha2];
-                  const isTradeCountry = alpha2 ? flowCountryCodes.has(alpha2) : false;
-                  const isClickable = isTradeCountry;
-                  const cursor = isClickable || hasAnnotation ? "pointer" : "default";
+                  const hasAnnotation = !!(alpha2 && countryAnnotations?.[alpha2]);
+                  // Any country that traded is clickable (selecting it
+                  // cross-filters the summary) and shows a hover tooltip.
+                  const isClickable = role !== null;
+                  const showTooltip = role !== null || hasAnnotation;
+                  const cursor = isClickable ? "pointer" : "default";
 
                   return (
                     <Geography
@@ -395,19 +545,21 @@ function TradeFlowMap({
                       stroke={isSuspended ? (dark ? "#f87171" : "#dc2626") : colors.stroke}
                       strokeWidth={isSuspended ? 1 : 0.4}
                       strokeDasharray={isSuspended ? "3,2" : undefined}
-                      onMouseEnter={() => hasAnnotation && setHoveredCountry(alpha2)}
+                      onMouseEnter={() => showTooltip && alpha2 && setHoveredCountry(alpha2)}
                       onMouseLeave={() => setHoveredCountry(null)}
                       onClick={
                         isClickable
-                          ? () =>
+                          ? () => {
+                              if (consumeClick()) return;
                               setSelectedCountry(
                                 selectedCountry === alpha2 ? null : alpha2
-                              )
+                              );
+                            }
                           : undefined
                       }
                       style={{
                         default: { outline: "none", cursor },
-                        hover: { outline: "none", fill: isClickable || hasAnnotation ? (dark ? "#3f3f46" : "#e4e4e7") : fill, cursor },
+                        hover: { outline: "none", fill: showTooltip ? (dark ? "#52525b" : "#e4e4e7") : fill, cursor },
                         pressed: { outline: "none" },
                       }}
                     />
@@ -547,7 +699,10 @@ function TradeFlowMap({
                       stroke={dark ? "#18181b" : "#fff"}
                       strokeWidth={isSelected ? 1 : 0.5}
                       style={{ cursor: "pointer" }}
-                      onClick={() => setSelectedCountry(selectedCountry === code ? null : code)}
+                      onClick={() => {
+                        if (consumeClick()) return;
+                        setSelectedCountry(selectedCountry === code ? null : code);
+                      }}
                     />
                     {isSelected && (
                       <text
@@ -566,7 +721,30 @@ function TradeFlowMap({
             return markers;
           })()}
         </g>
+       </g>
       </ComposableMap>
+
+        {/* Zoom controls */}
+        <div className="absolute bottom-2 right-2 z-10 flex flex-col gap-1">
+          <button
+            type="button"
+            aria-label="Zoom in"
+            onClick={() => zoomBy(1.5)}
+            className="w-6 h-6 flex items-center justify-center rounded bg-white/90 dark:bg-zinc-800/90 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 shadow-sm hover:bg-white dark:hover:bg-zinc-700 text-sm font-medium"
+          >
+            +
+          </button>
+          <button
+            type="button"
+            aria-label="Zoom out"
+            onClick={() => zoomBy(1 / 1.5)}
+            disabled={view.k <= MIN_ZOOM}
+            className="w-6 h-6 flex items-center justify-center rounded bg-white/90 dark:bg-zinc-800/90 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 shadow-sm hover:bg-white dark:hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed text-sm font-medium"
+          >
+            −
+          </button>
+        </div>
+      </div>
 
       {/* Legend — labelled with CITES roles */}
       <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 mt-1 text-[10px] text-zinc-500 dark:text-zinc-400">
