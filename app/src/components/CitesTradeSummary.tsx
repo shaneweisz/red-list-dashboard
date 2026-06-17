@@ -280,11 +280,49 @@ interface FilterBar {
   title?: string;
 }
 
+/** Rows shown per page in the paginated bar charts and country lists. */
+const PAGE_SIZE = 5;
+
+/** Prev / "x–y of N" / Next pager, shown only when there is more than one page. */
+function Pager({
+  page,
+  total,
+  onPage,
+}: {
+  page: number;
+  total: number;
+  onPage: (p: number) => void;
+}) {
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  if (totalPages <= 1) return null;
+  return (
+    <div className="flex items-center justify-between mt-1 text-[10px] text-zinc-400 dark:text-zinc-500">
+      <button
+        onClick={() => onPage(Math.max(0, page - 1))}
+        disabled={page === 0}
+        className="px-1.5 py-0.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
+      >
+        Prev
+      </button>
+      <span className="tabular-nums">
+        {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total}
+      </span>
+      <button
+        onClick={() => onPage(Math.min(totalPages - 1, page + 1))}
+        disabled={page >= totalPages - 1}
+        className="px-1.5 py-0.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
+      >
+        Next
+      </button>
+    </div>
+  );
+}
+
 /**
- * A scrollable horizontal bar chart that doubles as a cross-filter: clicking a
+ * A paginated horizontal bar chart that doubles as a cross-filter: clicking a
  * bar calls onToggle(key) to add/remove that category, and de-selected bars are
- * dimmed but stay visible so they can be toggled back on. An optional search box
- * (used by the Commodity chart) filters the rows shown.
+ * dimmed but stay visible so they can be toggled back on. Shows PAGE_SIZE rows
+ * at a time with Prev/Next, and an optional search box (used by Commodity).
  */
 function FilterBarChart({
   title,
@@ -303,7 +341,20 @@ function FilterBarChart({
   searchPlaceholder?: string;
   emptyHint?: string;
 }) {
+  const [page, setPage] = useState(0);
+  // Reset to the first page whenever the search term changes the result set
+  // (adjusting state during render, per the React docs, rather than in an effect).
+  const [prevSearch, setPrevSearch] = useState(search);
+  if (search !== prevSearch) {
+    setPrevSearch(search);
+    setPage(0);
+  }
+
+  // Scale bars against the global max so widths stay comparable across pages.
   const max = bars.reduce((m, b) => Math.max(m, b.records), 0);
+  const totalPages = Math.max(1, Math.ceil(bars.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages - 1);
+  const pageBars = bars.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
 
   return (
     <div className="min-w-0">
@@ -323,8 +374,8 @@ function FilterBarChart({
           />
         )}
       </div>
-      <div className="space-y-1 max-h-[240px] overflow-y-auto pr-1">
-        {bars.map((b) => {
+      <div className="space-y-1">
+        {pageBars.map((b) => {
           const pct = max > 0 ? (b.records / max) * 100 : 0;
           return (
             <div
@@ -364,6 +415,7 @@ function FilterBarChart({
           </span>
         )}
       </div>
+      <Pager page={safePage} total={bars.length} onPage={setPage} />
     </div>
   );
 }
@@ -400,7 +452,7 @@ function ChartTooltip({
       <div className="text-zinc-400">{label}</div>
       <div className="text-white tabular-nums">
         {(point.value ?? 0).toLocaleString()}{" "}
-        {metric === "records" ? "shipments" : "items"}
+        {metric === "records" ? "records" : "items"}
       </div>
       {isProvisional && (
         <div className="text-amber-400 text-[10px] mt-0.5">
@@ -662,16 +714,20 @@ function CountryTable({
   selected?: string | null;
   onSelect?: (code: string | null) => void;
 }) {
+  const [page, setPage] = useState(0);
   if (data.length === 0) return null;
-  const top = [...data].sort((a, b) => b.records - a.records);
+  const sorted = [...data].sort((a, b) => b.records - a.records);
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages - 1);
+  const pageRows = sorted.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
 
   return (
     <div className="min-w-0">
       <h5 className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-0.5">
         {label}
       </h5>
-      <div className="max-h-[116px] overflow-y-auto pr-1">
-        {top.map((c) => {
+      <div>
+        {pageRows.map((c) => {
           const isSel = selected === c.code;
           return (
             <div
@@ -695,6 +751,7 @@ function CountryTable({
           );
         })}
       </div>
+      <Pager page={safePage} total={sorted.length} onPage={setPage} />
     </div>
   );
 }
@@ -842,16 +899,20 @@ export default function CitesTradeSummary({
     setSelectedCountry(null);
   }, []);
 
-  // Shipments passing the checkbox filters (all years) — drives the chart line.
+  // Records passing the active filters (all years) — drives the chart line.
+  // A selected country acts as an extra cross-filter: keep only its trade
+  // (as exporter or importer).
   const checkboxRows = useMemo(() => {
     if (!data?.found || !data.shipments) return [];
     return data.shipments.filter((r) => {
       if (r.s && checkedSources[r.s] === false) return false;
       if (r.p && checkedPurposes[r.p] === false) return false;
       if (checkedTerms[termUnitKey(r.t, r.u)] === false) return false;
+      if (selectedCountry && r.e !== selectedCountry && r.i !== selectedCountry)
+        return false;
       return true;
     });
-  }, [data, checkedSources, checkedPurposes, checkedTerms]);
+  }, [data, checkedSources, checkedPurposes, checkedTerms, selectedCountry]);
 
   // Chart series (all years, checkbox-filtered)
   const chartAgg = useMemo(() => aggregateShipments(checkboxRows), [checkboxRows]);
@@ -873,10 +934,12 @@ export default function CitesTradeSummary({
       if (r.s && checkedSources[r.s] === false) return false;
       if (r.p && checkedPurposes[r.p] === false) return false;
       if (brush && (r.y < brush[0] || r.y > brush[1])) return false;
+      if (selectedCountry && r.e !== selectedCountry && r.i !== selectedCountry)
+        return false;
       return true;
     });
     return aggregateShipments(rows).termsByUnit;
-  }, [data, checkedSources, checkedPurposes, brush]);
+  }, [data, checkedSources, checkedPurposes, brush, selectedCountry]);
 
   const sourceChart = useMemo(() => {
     if (!data?.found || !data.shipments) return [];
@@ -884,10 +947,12 @@ export default function CitesTradeSummary({
       if (r.p && checkedPurposes[r.p] === false) return false;
       if (checkedTerms[termUnitKey(r.t, r.u)] === false) return false;
       if (brush && (r.y < brush[0] || r.y > brush[1])) return false;
+      if (selectedCountry && r.e !== selectedCountry && r.i !== selectedCountry)
+        return false;
       return true;
     });
     return aggregateShipments(rows).topSources;
-  }, [data, checkedPurposes, checkedTerms, brush]);
+  }, [data, checkedPurposes, checkedTerms, brush, selectedCountry]);
 
   const purposeChart = useMemo(() => {
     if (!data?.found || !data.shipments) return [];
@@ -895,10 +960,27 @@ export default function CitesTradeSummary({
       if (r.s && checkedSources[r.s] === false) return false;
       if (checkedTerms[termUnitKey(r.t, r.u)] === false) return false;
       if (brush && (r.y < brush[0] || r.y > brush[1])) return false;
+      if (selectedCountry && r.e !== selectedCountry && r.i !== selectedCountry)
+        return false;
       return true;
     });
     return aggregateShipments(rows).topPurposes;
-  }, [data, checkedSources, checkedTerms, brush]);
+  }, [data, checkedSources, checkedTerms, brush, selectedCountry]);
+
+  // Exporter / importer aggregates that DON'T apply the country cross-filter, so
+  // the Top exporters / importers lists stay populated and let you switch
+  // country (the same "exclude your own dimension" rule the bar charts use).
+  const countryAgg = useMemo(() => {
+    if (!data?.found || !data.shipments) return null;
+    const rows = data.shipments.filter((r) => {
+      if (r.s && checkedSources[r.s] === false) return false;
+      if (r.p && checkedPurposes[r.p] === false) return false;
+      if (checkedTerms[termUnitKey(r.t, r.u)] === false) return false;
+      if (brush && (r.y < brush[0] || r.y > brush[1])) return false;
+      return true;
+    });
+    return aggregateShipments(rows);
+  }, [data, checkedSources, checkedPurposes, checkedTerms, brush]);
 
   const hasShipments = !!data?.shipments && data.shipments.length > 0;
 
@@ -941,10 +1023,16 @@ export default function CitesTradeSummary({
   // Fall back to server-provided byYear when no shipments for client filtering
   const chartByYear =
     hasShipments && chartAgg.byYear.length > 0 ? chartAgg.byYear : data.byYear;
+  // Country lists (and the map's colour-by-role) use the country-excluded
+  // aggregate so they stay global while a country is selected.
   const displayExporters =
-    hasShipments && display.topExporters.length > 0 ? display.topExporters : data.topExporters;
+    hasShipments && countryAgg && countryAgg.topExporters.length > 0
+      ? countryAgg.topExporters
+      : data.topExporters;
   const displayImporters =
-    hasShipments && display.topImporters.length > 0 ? display.topImporters : data.topImporters;
+    hasShipments && countryAgg && countryAgg.topImporters.length > 0
+      ? countryAgg.topImporters
+      : data.topImporters;
   const displayFlows =
     hasShipments && display.topFlows.length > 0 ? display.topFlows : data.topFlows ?? [];
 
@@ -1001,19 +1089,21 @@ export default function CitesTradeSummary({
       ? ` Recent years (dashed, ${provisionalFromYear}+) are provisional — CITES reporting lags by a few years, so they are usually incomplete rather than showing a real drop.`
       : "");
   const tradeOverTimeChart = (
-    <div>
+    <div className="flex flex-col">
       <div className="flex items-center gap-1.5 mb-2">
         <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
           Trade over time
         </span>
         <span className="text-[11px] text-zinc-400 dark:text-zinc-500 normal-case">
-          (shipments)
+          (records)
         </span>
-        <span
-          title={trendInfo}
-          className="flex items-center justify-center w-3.5 h-3.5 rounded-full border border-zinc-400 dark:border-zinc-500 text-[9px] font-semibold text-zinc-400 dark:text-zinc-500 cursor-help"
-        >
-          i
+        <span className="relative group inline-flex">
+          <span className="flex items-center justify-center w-3.5 h-3.5 rounded-full border border-zinc-400 dark:border-zinc-500 text-[9px] font-semibold text-zinc-400 dark:text-zinc-500 cursor-help">
+            i
+          </span>
+          <span className="pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 hidden group-hover:block z-20 w-56 bg-zinc-800 dark:bg-zinc-700 text-white text-[10px] leading-snug rounded-md p-2 shadow-lg normal-case font-normal tracking-normal">
+            {trendInfo}
+          </span>
         </span>
         {brush && (
           <span className="text-[11px] text-blue-600 dark:text-blue-400 tabular-nums ml-auto">
@@ -1033,39 +1123,45 @@ export default function CitesTradeSummary({
     </div>
   );
 
+  // Record count + year range + clear button. Overlaid on the map (or shown as
+  // a row when there is no map) so it doesn't take a whole dead row of its own.
+  const headline = (
+    <div className="flex items-baseline gap-2">
+      <span className="text-sm text-zinc-700 dark:text-zinc-200">
+        <span className="font-semibold tabular-nums">
+          {display.totalRecords.toLocaleString()}
+        </span>{" "}
+        records
+        <span className="text-zinc-400 dark:text-zinc-500 ml-1 tabular-nums">
+          {effectiveRange[0]}–{effectiveRange[1]}
+        </span>
+        {brush && (
+          <span className="text-zinc-400 dark:text-zinc-500 ml-1 tabular-nums">
+            (of {minYear}–{maxYear})
+          </span>
+        )}
+      </span>
+      {hasActiveFilters && (
+        <button
+          className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline"
+          onClick={clearFilters}
+        >
+          Clear filters
+        </button>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-4">
-      {/* Headline */}
-      <div className="flex items-baseline gap-3 flex-wrap">
-        <span className="text-sm text-zinc-700 dark:text-zinc-200">
-          <span className="font-semibold tabular-nums">
-            {display.totalRecords.toLocaleString()}
-          </span>{" "}
-          shipments
-          <span className="text-zinc-400 dark:text-zinc-500 ml-1">
-            {effectiveRange[0]}–{effectiveRange[1]}
-          </span>
-          {brush && (
-            <span className="text-zinc-400 dark:text-zinc-500 ml-1">
-              (of {minYear}–{maxYear})
-            </span>
-          )}
-        </span>
-        {hasActiveFilters && (
-          <button
-            className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline ml-auto"
-            onClick={clearFilters}
-          >
-            Clear filters
-          </button>
-        )}
-      </div>
-
-      {/* Trade flow map, with Top exporters / importers and the trade-over-time
-          chart stacked in the side column. */}
+      {/* Trade flow map (with the record count overlaid), and Top exporters /
+          importers + the trade-over-time chart in the side column. */}
       {displayFlows.length > 0 ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
-          <div className="lg:col-span-2 border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden bg-zinc-50 dark:bg-zinc-800/30">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2 relative border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden bg-zinc-50 dark:bg-zinc-800/30">
+            <div className="absolute top-2 left-3 z-10 bg-zinc-50/70 dark:bg-zinc-900/40 backdrop-blur-sm rounded-md px-2 py-1">
+              {headline}
+            </div>
             <TradeFlowMap
               flows={displayFlows}
               reExportFlows={display.reExportFlows}
@@ -1077,7 +1173,9 @@ export default function CitesTradeSummary({
               onSelectCountry={setSelectedCountry}
             />
           </div>
-          <div className="space-y-3">
+          {/* Side column stretches to the map's height; the trade-over-time
+              chart is pushed to the bottom so it lines up with the map base. */}
+          <div className="flex flex-col gap-3">
             <div className="grid grid-cols-2 gap-3">
               <CountryTable
                 data={displayExporters}
@@ -1092,11 +1190,12 @@ export default function CitesTradeSummary({
                 onSelect={setSelectedCountry}
               />
             </div>
-            {tradeOverTimeChart}
+            <div className="mt-auto">{tradeOverTimeChart}</div>
           </div>
         </div>
       ) : (
         <div className="space-y-4">
+          {headline}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <CountryTable
               data={displayExporters}
