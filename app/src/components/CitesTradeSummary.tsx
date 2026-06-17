@@ -221,12 +221,12 @@ function aggregateShipments(rows: CompactRecord[]): Aggregated {
 
   const topExporters = Array.from(exporterMap.entries())
     .sort(([, a], [, b]) => b.records - a.records)
-    .slice(0, 8)
+    .slice(0, 15)
     .map(([code, v]) => ({ code, ...v }));
 
   const topImporters = Array.from(importerMap.entries())
     .sort(([, a], [, b]) => b.records - a.records)
-    .slice(0, 8)
+    .slice(0, 15)
     .map(([code, v]) => ({ code, ...v }));
 
   const topFlows = Array.from(flowMap.entries())
@@ -651,32 +651,49 @@ function TrendLineChart({
 /*  Country table                                                      */
 /* ------------------------------------------------------------------ */
 
-function CountryTable({ data, label }: { data: CountryData[]; label: string }) {
+function CountryTable({
+  data,
+  label,
+  selected,
+  onSelect,
+}: {
+  data: CountryData[];
+  label: string;
+  selected?: string | null;
+  onSelect?: (code: string | null) => void;
+}) {
   if (data.length === 0) return null;
-  const top = [...data].sort((a, b) => b.records - a.records).slice(0, 5);
+  const top = [...data].sort((a, b) => b.records - a.records);
 
   return (
-    <div>
+    <div className="min-w-0">
       <h5 className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-0.5">
         {label}
       </h5>
-      <div>
-        {top.map((c) => (
-          <div
-            key={c.code}
-            className="flex items-baseline justify-between gap-2 text-[11px] py-px"
-          >
-            <span className="truncate text-zinc-700 dark:text-zinc-300">
-              {countryName(c.code)}
-              <span className="text-zinc-400 dark:text-zinc-500 ml-1">
-                ({c.code})
+      <div className="max-h-[116px] overflow-y-auto pr-1">
+        {top.map((c) => {
+          const isSel = selected === c.code;
+          return (
+            <div
+              key={c.code}
+              onClick={onSelect ? () => onSelect(isSel ? null : c.code) : undefined}
+              title={`${countryName(c.code)} — ${c.records.toLocaleString()} records`}
+              className={`flex items-baseline justify-between gap-1.5 text-[11px] py-px px-1 -mx-1 rounded ${
+                onSelect ? "cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/60" : ""
+              } ${isSel ? "bg-amber-100 dark:bg-amber-900/40" : ""}`}
+            >
+              <span className="truncate text-zinc-700 dark:text-zinc-300">
+                {countryName(c.code)}
+                <span className="text-zinc-400 dark:text-zinc-500 ml-1">
+                  ({c.code})
+                </span>
               </span>
-            </span>
-            <span className="text-zinc-500 dark:text-zinc-400 tabular-nums shrink-0">
-              {c.records.toLocaleString()}
-            </span>
-          </div>
-        ))}
+              <span className="text-zinc-500 dark:text-zinc-400 tabular-nums shrink-0">
+                {c.records.toLocaleString()}
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -720,6 +737,10 @@ export default function CitesTradeSummary({
 
   // Year-range trim (null = full range)
   const [brush, setBrush] = useState<[number, number] | null>(null);
+
+  // Country highlighted on the map (also set by clicking a Top exporters /
+  // importers row). Filters the map's flows to that country.
+  const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
 
   // Use prefetched data from parent when available; fall back to own fetch
   const data = (prefetchedData as TradeData | null) ?? ownData;
@@ -790,8 +811,14 @@ export default function CitesTradeSummary({
     const anySourceOff = Object.values(checkedSources).some((v) => !v);
     const anyPurposeOff = Object.values(checkedPurposes).some((v) => !v);
     const anyTermOff = Object.values(checkedTerms).some((v) => !v);
-    return anySourceOff || anyPurposeOff || anyTermOff || brush !== null;
-  }, [checkedSources, checkedPurposes, checkedTerms, brush]);
+    return (
+      anySourceOff ||
+      anyPurposeOff ||
+      anyTermOff ||
+      brush !== null ||
+      selectedCountry !== null
+    );
+  }, [checkedSources, checkedPurposes, checkedTerms, brush, selectedCountry]);
 
   // Clear all filters (re-check everything, reset the year trim)
   const clearFilters = useCallback(() => {
@@ -812,6 +839,7 @@ export default function CitesTradeSummary({
     });
     setBrush(null);
     setTermSearch("");
+    setSelectedCountry(null);
   }, []);
 
   // Shipments passing the checkbox filters (all years) — drives the chart line.
@@ -967,14 +995,25 @@ export default function CitesTradeSummary({
 
   // Trade-over-time chart, placed in the map's side column (or full width when
   // there is no map).
+  const trendInfo =
+    "Drag the handles to trim the year range." +
+    (maxYear >= provisionalFromYear
+      ? ` Recent years (dashed, ${provisionalFromYear}+) are provisional — CITES reporting lags by a few years, so they are usually incomplete rather than showing a real drop.`
+      : "");
   const tradeOverTimeChart = (
     <div>
-      <div className="flex items-center gap-2 mb-2">
+      <div className="flex items-center gap-1.5 mb-2">
         <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
           Trade over time
         </span>
         <span className="text-[11px] text-zinc-400 dark:text-zinc-500 normal-case">
           (shipments)
+        </span>
+        <span
+          title={trendInfo}
+          className="flex items-center justify-center w-3.5 h-3.5 rounded-full border border-zinc-400 dark:border-zinc-500 text-[9px] font-semibold text-zinc-400 dark:text-zinc-500 cursor-help"
+        >
+          i
         </span>
         {brush && (
           <span className="text-[11px] text-blue-600 dark:text-blue-400 tabular-nums ml-auto">
@@ -991,18 +1030,6 @@ export default function CitesTradeSummary({
         onBrushChange={setBrush}
         provisionalFromYear={provisionalFromYear}
       />
-      <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-1 leading-snug">
-        Drag the handles to trim the year range.
-        {maxYear >= provisionalFromYear && (
-          <>
-            {" "}
-            Recent years (dashed, {provisionalFromYear}+) are{" "}
-            <span className="text-amber-500 dark:text-amber-400">provisional</span> —
-            CITES reporting lags by a few years, so they are usually incomplete
-            rather than showing a real drop.
-          </>
-        )}
-      </p>
     </div>
   );
 
@@ -1037,7 +1064,7 @@ export default function CitesTradeSummary({
       {/* Trade flow map, with Top exporters / importers and the trade-over-time
           chart stacked in the side column. */}
       {displayFlows.length > 0 ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
           <div className="lg:col-span-2 border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden bg-zinc-50 dark:bg-zinc-800/30">
             <TradeFlowMap
               flows={displayFlows}
@@ -1046,19 +1073,43 @@ export default function CitesTradeSummary({
               importers={displayImporters}
               suspensionCountries={suspensionCountries}
               countryAnnotations={countryAnnotations}
+              selectedCountry={selectedCountry}
+              onSelectCountry={setSelectedCountry}
             />
           </div>
           <div className="space-y-3">
-            <CountryTable data={displayExporters} label="Top exporters" />
-            <CountryTable data={displayImporters} label="Top importers" />
+            <div className="grid grid-cols-2 gap-3">
+              <CountryTable
+                data={displayExporters}
+                label="Top exporters"
+                selected={selectedCountry}
+                onSelect={setSelectedCountry}
+              />
+              <CountryTable
+                data={displayImporters}
+                label="Top importers"
+                selected={selectedCountry}
+                onSelect={setSelectedCountry}
+              />
+            </div>
             {tradeOverTimeChart}
           </div>
         </div>
       ) : (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <CountryTable data={displayExporters} label="Top exporters" />
-            <CountryTable data={displayImporters} label="Top importers" />
+            <CountryTable
+              data={displayExporters}
+              label="Top exporters"
+              selected={selectedCountry}
+              onSelect={setSelectedCountry}
+            />
+            <CountryTable
+              data={displayImporters}
+              label="Top importers"
+              selected={selectedCountry}
+              onSelect={setSelectedCountry}
+            />
           </div>
           {tradeOverTimeChart}
         </div>

@@ -178,6 +178,13 @@ interface TradeFlowMapProps {
   suspensionCountries?: Set<string>;
   /** Per-country suspension/quota annotations for hover tooltip */
   countryAnnotations?: Record<string, CountryAnnotation>;
+  /**
+   * Optional controlled selection. When provided, the parent owns the selected
+   * country (so e.g. clicking a Top exporters row can drive the map too);
+   * otherwise the map keeps its own internal selection state.
+   */
+  selectedCountry?: string | null;
+  onSelectCountry?: (code: string | null) => void;
 }
 
 function TradeFlowMap({
@@ -187,12 +194,17 @@ function TradeFlowMap({
   importers,
   suspensionCountries,
   countryAnnotations,
+  selectedCountry: selectedCountryProp,
+  onSelectCountry,
 }: TradeFlowMapProps) {
   const { resolvedTheme } = useTheme();
   const [hoveredFlow, setHoveredFlow] = useState<number | null>(null);
   const [hoveredReExport, setHoveredReExport] = useState<number | null>(null);
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
-  const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
+  const [internalSelected, setInternalSelected] = useState<string | null>(null);
+  const selectedCountry =
+    selectedCountryProp !== undefined ? selectedCountryProp : internalSelected;
+  const setSelectedCountry = onSelectCountry ?? setInternalSelected;
   const [showReExports, setShowReExports] = useState(false);
 
   // Only render flows where we have centroids for both endpoints
@@ -282,6 +294,13 @@ function TradeFlowMap({
   const hoveredReExportData =
     hoveredReExport !== null ? visibleReExports[hoveredReExport] : null;
 
+  // Trade totals + annotations for the hovered country tooltip
+  const hoveredExports = hoveredCountry ? exportRecords.get(hoveredCountry) ?? 0 : 0;
+  const hoveredImports = hoveredCountry ? importRecords.get(hoveredCountry) ?? 0 : 0;
+  const hoveredAnnotation = hoveredCountry
+    ? countryAnnotations?.[hoveredCountry]
+    : undefined;
+
   return (
     <div className="relative">
       {/* Direct-flow tooltip — labelled with CITES roles (Exporter → Importer) */}
@@ -318,21 +337,39 @@ function TradeFlowMap({
       )}
 
       {/* Country annotation tooltip (suspensions/quotas) */}
-      {hoveredCountry && !hoveredFlowData && !hoveredReExportData && countryAnnotations?.[hoveredCountry] && (
+      {hoveredCountry && !hoveredFlowData && !hoveredReExportData && (
         <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 bg-zinc-800 dark:bg-zinc-700 text-white text-[11px] px-3 py-2 rounded-lg shadow-lg pointer-events-none max-w-[280px]">
           <div className="font-medium mb-1">{countryName(hoveredCountry)}</div>
-          {countryAnnotations[hoveredCountry].suspensions && countryAnnotations[hoveredCountry].suspensions!.length > 0 && (
+          {(hoveredExports > 0 || hoveredImports > 0) && (
+            <div className="mb-1 space-y-0.5">
+              {hoveredExports > 0 && (
+                <div>
+                  <span className="text-red-300">Exports</span>{" "}
+                  <span className="text-zinc-200 tabular-nums">{hoveredExports.toLocaleString()}</span>
+                  <span className="text-zinc-400"> records</span>
+                </div>
+              )}
+              {hoveredImports > 0 && (
+                <div>
+                  <span className="text-blue-300">Imports</span>{" "}
+                  <span className="text-zinc-200 tabular-nums">{hoveredImports.toLocaleString()}</span>
+                  <span className="text-zinc-400"> records</span>
+                </div>
+              )}
+            </div>
+          )}
+          {hoveredAnnotation?.suspensions && hoveredAnnotation.suspensions.length > 0 && (
             <div className="text-red-300">
-              {countryAnnotations[hoveredCountry].suspensions!.map((s, i) => (
+              {hoveredAnnotation.suspensions.map((s, i) => (
                 <div key={i}>
                   Trade suspension ({s.type}) since {new Date(s.startDate).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}
                 </div>
               ))}
             </div>
           )}
-          {countryAnnotations[hoveredCountry].quotas && countryAnnotations[hoveredCountry].quotas!.length > 0 && (
+          {hoveredAnnotation?.quotas && hoveredAnnotation.quotas.length > 0 && (
             <div className="text-amber-300">
-              {countryAnnotations[hoveredCountry].quotas!.map((q, i) => (
+              {hoveredAnnotation.quotas.map((q, i) => (
                 <div key={i}>
                   Quota: {q.quota.toLocaleString()}{q.unit ? ` ${q.unit}` : ""}
                 </div>
@@ -382,10 +419,13 @@ function TradeFlowMap({
                   if (role === "exporter") fill = colors.exporter;
                   else if (role === "importer") fill = colors.importer;
 
-                  const hasAnnotation = alpha2 && countryAnnotations?.[alpha2];
-                  const isTradeCountry = alpha2 ? flowCountryCodes.has(alpha2) : false;
-                  const isClickable = isTradeCountry;
-                  const cursor = isClickable || hasAnnotation ? "pointer" : "default";
+                  const hasAnnotation = !!(alpha2 && countryAnnotations?.[alpha2]);
+                  // Clickable only for countries in a drawn flow (so the
+                  // selection actually filters something); the hover tooltip
+                  // shows for any country with trade totals or an annotation.
+                  const isClickable = alpha2 ? flowCountryCodes.has(alpha2) : false;
+                  const showTooltip = role !== null || hasAnnotation;
+                  const cursor = isClickable ? "pointer" : "default";
 
                   return (
                     <Geography
@@ -395,7 +435,7 @@ function TradeFlowMap({
                       stroke={isSuspended ? (dark ? "#f87171" : "#dc2626") : colors.stroke}
                       strokeWidth={isSuspended ? 1 : 0.4}
                       strokeDasharray={isSuspended ? "3,2" : undefined}
-                      onMouseEnter={() => hasAnnotation && setHoveredCountry(alpha2)}
+                      onMouseEnter={() => showTooltip && alpha2 && setHoveredCountry(alpha2)}
                       onMouseLeave={() => setHoveredCountry(null)}
                       onClick={
                         isClickable
@@ -407,7 +447,7 @@ function TradeFlowMap({
                       }
                       style={{
                         default: { outline: "none", cursor },
-                        hover: { outline: "none", fill: isClickable || hasAnnotation ? (dark ? "#3f3f46" : "#e4e4e7") : fill, cursor },
+                        hover: { outline: "none", fill: showTooltip ? (dark ? "#3f3f46" : "#e4e4e7") : fill, cursor },
                         pressed: { outline: "none" },
                       }}
                     />
