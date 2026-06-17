@@ -193,7 +193,7 @@ function TradeFlowMap({
   const [hoveredReExport, setHoveredReExport] = useState<number | null>(null);
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
-  const [showReExports, setShowReExports] = useState(true);
+  const [showReExports, setShowReExports] = useState(false);
 
   // Only render flows where we have centroids for both endpoints
   const renderableFlows = useMemo(
