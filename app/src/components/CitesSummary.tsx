@@ -124,8 +124,8 @@ function PagedList<T>({
   const slice = items.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
-      <div className="flex-1">{children(slice)}</div>
+    <>
+      {children(slice)}
       {totalPages > 1 && (
         <div className="flex items-center justify-between mt-1 text-[10px] text-zinc-400 dark:text-zinc-500">
           <button
@@ -147,7 +147,7 @@ function PagedList<T>({
           </button>
         </div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -352,173 +352,163 @@ export default function CitesSummary({
         </div>
       )}
 
-      {/* Current Listings | Reservations */}
-      {((data.currentListings && data.currentListings.length > 0) ||
-        reservationGroups.length > 0) && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-6 gap-y-4 items-stretch">
-          {data.currentListings && data.currentListings.length > 0 && (
-            <div className="flex flex-col">
-              <SectionHeader title="Current Listings" count={data.currentListings.length} />
-              <PagedList items={data.currentListings}>
-                {(slice) => (
-                  <div className="h-full rounded-lg border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800">
-                    {slice.map((listing, i) => (
-                      <div key={i} className="px-3 py-2">
-                        <div className="flex items-center gap-2 text-xs">
-                          <AppendixBadge appendix={listing.appendix} />
-                          <span className="text-zinc-400 dark:text-zinc-500 ml-auto whitespace-nowrap">
-                            since {fmtCitesDate(listing.effectiveAt)}
-                          </span>
-                        </div>
-                        {listing.annotation && (
-                          <p
-                            title={listing.annotation}
-                            className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug line-clamp-3"
-                          >
-                            {listing.annotation}
-                          </p>
-                        )}
-                      </div>
-                    ))}
+      {/* Current Listings */}
+      {data.currentListings && data.currentListings.length > 0 && (
+        <div>
+          <SectionHeader title="Current Listings" count={data.currentListings.length} />
+          <PagedList items={data.currentListings}>
+            {(slice) => (
+              <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800">
+                {slice.map((listing, i) => (
+                  <div key={i} className="px-3 py-2">
+                    <div className="flex items-center gap-2 text-xs">
+                      <AppendixBadge appendix={listing.appendix} />
+                      <span className="text-zinc-400 dark:text-zinc-500 ml-auto whitespace-nowrap">
+                        since {fmtCitesDate(listing.effectiveAt)}
+                      </span>
+                    </div>
+                    {listing.annotation && (
+                      <p
+                        title={listing.annotation}
+                        className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug line-clamp-3"
+                      >
+                        {listing.annotation}
+                      </p>
+                    )}
                   </div>
-                )}
-              </PagedList>
-            </div>
-          )}
-
-          {reservationGroups.length > 0 && (
-            <div className="flex flex-col">
-              <SectionHeader title="Reservations" count={data.reservations?.length} />
-              <PagedList items={reservationGroups}>
-                {(slice) => (
-                  <div className="h-full rounded-lg border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800">
-                    {slice.map((group, i) => (
-                      <div key={i} className="px-3 py-2">
-                        <AppendixBadge appendix={group.appendix} />
-                        <div className="mt-1.5 space-y-0.5">
-                          {group.parties.map((p, j) => (
-                            <div key={j} className="flex items-baseline gap-2 text-xs">
-                              <span className="text-zinc-700 dark:text-zinc-300">
-                                {p.name}
-                              </span>
-                              <span className="text-zinc-400 dark:text-zinc-500 ml-auto shrink-0 whitespace-nowrap">
-                                since {fmtCitesDate(p.effectiveAt)}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                        {group.annotation && (
-                          <p
-                            title={group.annotation}
-                            className="mt-1.5 text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug line-clamp-3"
-                          >
-                            {group.annotation}
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </PagedList>
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </PagedList>
         </div>
       )}
 
-      {/* Trade Quotas | Trade Suspensions */}
-      {(sortedQuotas.length > 0 || sortedSuspensions.length > 0) && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-6 gap-y-4 items-stretch">
-          {sortedQuotas.length > 0 && (
-            <div className="flex flex-col">
-              <SectionHeader title="Trade Quotas" count={sortedQuotas.length} />
-              <PagedList items={sortedQuotas}>
-                {(slice) => (
-                  <div className="h-full border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden">
-                    <table className="w-full text-[11px] table-fixed">
-                      <tbody>
-                        {slice.map((q, i) => (
-                          <tr
-                            key={i}
-                            className="border-t first:border-t-0 border-zinc-100 dark:border-zinc-800"
-                          >
-                            <td
-                              title={q.country}
-                              className="px-3 py-1 text-zinc-700 dark:text-zinc-300 truncate w-[35%]"
-                            >
-                              {q.country}
-                            </td>
-                            <td className="px-3 py-1 text-right text-zinc-700 dark:text-zinc-300 tabular-nums whitespace-nowrap w-[22%]">
-                              {q.quota != null ? q.quota.toLocaleString() : "—"}
-                              {q.unit ? ` ${q.unit}` : ""}
-                            </td>
-                            <td
-                              title={q.notes || undefined}
-                              className="px-3 py-1 text-zinc-400 truncate"
-                            >
-                              {q.notes || "—"}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+      {/* Reservations */}
+      {reservationGroups.length > 0 && (
+        <div>
+          <SectionHeader title="Reservations" count={data.reservations?.length} />
+          <PagedList items={reservationGroups}>
+            {(slice) => (
+              <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800">
+                {slice.map((group, i) => (
+                  <div key={i} className="px-3 py-2">
+                    <AppendixBadge appendix={group.appendix} />
+                    <div className="mt-1.5 space-y-0.5">
+                      {group.parties.map((p, j) => (
+                        <div key={j} className="flex items-baseline gap-2 text-xs">
+                          <span className="text-zinc-700 dark:text-zinc-300">
+                            {p.name}
+                          </span>
+                          <span className="text-zinc-400 dark:text-zinc-500 ml-auto shrink-0 whitespace-nowrap">
+                            since {fmtCitesDate(p.effectiveAt)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    {group.annotation && (
+                      <p
+                        title={group.annotation}
+                        className="mt-1.5 text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug line-clamp-3"
+                      >
+                        {group.annotation}
+                      </p>
+                    )}
                   </div>
-                )}
-              </PagedList>
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </PagedList>
+        </div>
+      )}
 
-          {sortedSuspensions.length > 0 && (
-            <div className="flex flex-col">
-              <SectionHeader title="Trade Suspensions" count={sortedSuspensions.length} />
-              <PagedList items={sortedSuspensions}>
-                {(slice) => (
-                  <div className="h-full border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden">
-                    <table className="w-full text-[11px] table-fixed">
-                      <tbody>
-                        {slice.map((s, i) => (
-                          <tr
-                            key={i}
-                            className="border-t first:border-t-0 border-zinc-100 dark:border-zinc-800"
-                          >
-                            <td
-                              title={s.country}
-                              className="px-3 py-1 text-zinc-700 dark:text-zinc-300 truncate"
+      {/* Trade Quotas */}
+      {sortedQuotas.length > 0 && (
+        <div>
+          <SectionHeader title="Trade Quotas" count={sortedQuotas.length} />
+          <PagedList items={sortedQuotas}>
+            {(slice) => (
+              <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden">
+                <table className="w-full text-[11px] table-fixed">
+                  <tbody>
+                    {slice.map((q, i) => (
+                      <tr
+                        key={i}
+                        className="border-t first:border-t-0 border-zinc-100 dark:border-zinc-800"
+                      >
+                        <td
+                          title={q.country}
+                          className="px-3 py-1 text-zinc-700 dark:text-zinc-300 truncate w-[28%]"
+                        >
+                          {q.country}
+                        </td>
+                        <td className="px-3 py-1 text-right text-zinc-700 dark:text-zinc-300 tabular-nums whitespace-nowrap w-[16%]">
+                          {q.quota != null ? q.quota.toLocaleString() : "—"}
+                          {q.unit ? ` ${q.unit}` : ""}
+                        </td>
+                        <td
+                          title={q.notes || undefined}
+                          className="px-3 py-1 text-zinc-400 truncate"
+                        >
+                          {q.notes || "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </PagedList>
+        </div>
+      )}
+
+      {/* Trade Suspensions */}
+      {sortedSuspensions.length > 0 && (
+        <div>
+          <SectionHeader title="Trade Suspensions" count={sortedSuspensions.length} />
+          <PagedList items={sortedSuspensions}>
+            {(slice) => (
+              <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden">
+                <table className="w-full text-[11px]">
+                  <tbody>
+                    {slice.map((s, i) => (
+                      <tr
+                        key={i}
+                        className="border-t first:border-t-0 border-zinc-100 dark:border-zinc-800"
+                      >
+                        <td className="px-3 py-1 text-zinc-700 dark:text-zinc-300">
+                          {s.country}
+                        </td>
+                        <td className="px-3 py-1 text-zinc-500 dark:text-zinc-400 capitalize whitespace-nowrap">
+                          {s.appliesTo}
+                        </td>
+                        <td className="px-3 py-1 text-zinc-500 dark:text-zinc-400 whitespace-nowrap tabular-nums">
+                          {new Date(s.startDate).toLocaleDateString("en-GB", {
+                            year: "numeric",
+                            month: "short",
+                          })}
+                        </td>
+                        <td className="px-3 py-1 text-right hidden md:table-cell">
+                          {s.notification?.url ? (
+                            <a
+                              href={s.notification.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={s.notification.name}
+                              className="text-blue-600 dark:text-blue-400 hover:underline"
                             >
-                              {s.country}
-                            </td>
-                            <td className="px-3 py-1 text-zinc-500 dark:text-zinc-400 capitalize whitespace-nowrap w-[18%]">
-                              {s.appliesTo}
-                            </td>
-                            <td className="px-3 py-1 text-zinc-500 dark:text-zinc-400 whitespace-nowrap tabular-nums w-[22%]">
-                              {new Date(s.startDate).toLocaleDateString("en-GB", {
-                                year: "numeric",
-                                month: "short",
-                              })}
-                            </td>
-                            <td className="px-3 py-1 text-right whitespace-nowrap w-[28%] hidden md:table-cell">
-                              {s.notification?.url ? (
-                                <a
-                                  href={s.notification.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  title={s.notification.name}
-                                  className="text-blue-600 dark:text-blue-400 hover:underline"
-                                >
-                                  {s.notification.name}
-                                </a>
-                              ) : (
-                                <span className="text-zinc-400">{s.notification?.name || "—"}</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </PagedList>
-            </div>
-          )}
+                              {s.notification.name}
+                            </a>
+                          ) : (
+                            <span className="text-zinc-400">{s.notification?.name || "—"}</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </PagedList>
         </div>
       )}
 
