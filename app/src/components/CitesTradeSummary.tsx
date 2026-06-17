@@ -131,6 +131,24 @@ function termUnitKey(term: string, unit: string): string {
   return `${term}|${unit}`;
 }
 
+/**
+ * "Isolate" a category within a filter dimension: clicking a bar selects only
+ * that one. Clicking the already-isolated category resets the dimension to all
+ * (so a second click un-filters). Returns the next checked-state map.
+ */
+function isolateState(
+  prev: Record<string, boolean>,
+  allKeys: string[],
+  key: string
+): Record<string, boolean> {
+  const onlyThis = allKeys.every((k) =>
+    k === key ? prev[k] !== false : prev[k] === false
+  );
+  const next: Record<string, boolean> = {};
+  for (const k of allKeys) next[k] = onlyThis ? true : k === key;
+  return next;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Aggregation                                                        */
 /* ------------------------------------------------------------------ */
@@ -852,16 +870,31 @@ export default function CitesTradeSummary({
     setFiltersInitialized(true);
   }, [data, filtersInitialized]);
 
-  // Toggle helpers
-  const toggleSource = useCallback((code: string) => {
-    setCheckedSources((prev) => ({ ...prev, [code]: !prev[code] }));
-  }, []);
-  const togglePurpose = useCallback((code: string) => {
-    setCheckedPurposes((prev) => ({ ...prev, [code]: !prev[code] }));
-  }, []);
-  const toggleTerm = useCallback((key: string) => {
-    setCheckedTerms((prev) => ({ ...prev, [key]: !prev[key] }));
-  }, []);
+  // Clicking a bar isolates that category (selects only it); clicking the
+  // already-isolated one resets the dimension to all.
+  const isolateSource = useCallback(
+    (code: string) => {
+      const keys = (data?.allSources ?? []).map((s) => s.code);
+      setCheckedSources((prev) => isolateState(prev, keys, code));
+    },
+    [data]
+  );
+  const isolatePurpose = useCallback(
+    (code: string) => {
+      const keys = (data?.allPurposes ?? []).map((p) => p.code);
+      setCheckedPurposes((prev) => isolateState(prev, keys, code));
+    },
+    [data]
+  );
+  const isolateTerm = useCallback(
+    (key: string) => {
+      const keys = (data?.allTermsByUnit ?? []).map((t) =>
+        termUnitKey(t.term, t.unit)
+      );
+      setCheckedTerms((prev) => isolateState(prev, keys, key));
+    },
+    [data]
+  );
 
   // Are any filters active (something unchecked, or a year range trimmed)?
   const hasActiveFilters = useMemo(() => {
@@ -1221,7 +1254,7 @@ export default function CitesTradeSummary({
           <FilterBarChart
             title="Commodity"
             bars={commodityBars}
-            onToggle={hasShipments ? toggleTerm : undefined}
+            onToggle={hasShipments ? isolateTerm : undefined}
             search={termSearch}
             onSearchChange={setTermSearch}
             searchPlaceholder="Search…"
@@ -1234,12 +1267,12 @@ export default function CitesTradeSummary({
           <FilterBarChart
             title="Purpose"
             bars={purposeBars}
-            onToggle={hasShipments ? togglePurpose : undefined}
+            onToggle={hasShipments ? isolatePurpose : undefined}
           />
           <FilterBarChart
             title="Source"
             bars={sourceBars}
-            onToggle={hasShipments ? toggleSource : undefined}
+            onToggle={hasShipments ? isolateSource : undefined}
           />
         </div>
       )}
