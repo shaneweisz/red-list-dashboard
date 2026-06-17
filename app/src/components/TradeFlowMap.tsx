@@ -201,6 +201,17 @@ function TradeFlowMap({
     [flows]
   );
 
+  // Countries that take part in at least one drawn flow — these are clickable
+  // (on the country shape or its dot) to filter the map to their trade.
+  const flowCountryCodes = useMemo(() => {
+    const codes = new Set<string>();
+    for (const f of renderableFlows) {
+      codes.add(f.from);
+      codes.add(f.to);
+    }
+    return codes;
+  }, [renderableFlows]);
+
   // Re-export legs (origin → re-exporter) with known centroids
   const renderableReExports = useMemo(
     () =>
@@ -372,6 +383,9 @@ function TradeFlowMap({
                   else if (role === "importer") fill = colors.importer;
 
                   const hasAnnotation = alpha2 && countryAnnotations?.[alpha2];
+                  const isTradeCountry = alpha2 ? flowCountryCodes.has(alpha2) : false;
+                  const isClickable = isTradeCountry;
+                  const cursor = isClickable || hasAnnotation ? "pointer" : "default";
 
                   return (
                     <Geography
@@ -383,9 +397,17 @@ function TradeFlowMap({
                       strokeDasharray={isSuspended ? "3,2" : undefined}
                       onMouseEnter={() => hasAnnotation && setHoveredCountry(alpha2)}
                       onMouseLeave={() => setHoveredCountry(null)}
+                      onClick={
+                        isClickable
+                          ? () =>
+                              setSelectedCountry(
+                                selectedCountry === alpha2 ? null : alpha2
+                              )
+                          : undefined
+                      }
                       style={{
-                        default: { outline: "none", cursor: hasAnnotation ? "pointer" : "default" },
-                        hover: { outline: "none", fill: hasAnnotation ? (dark ? "#3f3f46" : "#e4e4e7") : fill, cursor: hasAnnotation ? "pointer" : "default" },
+                        default: { outline: "none", cursor },
+                        hover: { outline: "none", fill: isClickable || hasAnnotation ? (dark ? "#3f3f46" : "#e4e4e7") : fill, cursor },
                         pressed: { outline: "none" },
                       }}
                     />
