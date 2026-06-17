@@ -131,10 +131,6 @@ function termUnitKey(term: string, unit: string): string {
   return `${term}|${unit}`;
 }
 
-function unitLabel(unit: string): string {
-  return unit || "no unit";
-}
-
 /* ------------------------------------------------------------------ */
 /*  Aggregation                                                        */
 /* ------------------------------------------------------------------ */
@@ -267,83 +263,102 @@ function aggregateShipments(rows: CompactRecord[]): Aggregated {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Filter checkbox row                                                */
+/*  Interactive filter bar chart                                        */
 /* ------------------------------------------------------------------ */
 
-function FilterCheckbox({
-  label,
-  sublabel,
-  count,
-  checked,
-  onChange,
-  color,
-}: {
+interface FilterBar {
+  /** Stable key passed back to onToggle (source/purpose code or term key). */
+  key: string;
   label: string;
   sublabel?: string;
-  count: number;
-  checked: boolean;
-  onChange: () => void;
-  color?: string;
-}) {
-  return (
-    <div
-      className={`flex items-center gap-2 transition-opacity cursor-pointer select-none ${
-        checked ? "" : "opacity-40"
-      }`}
-      onClick={onChange}
-    >
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={onChange}
-        onClick={(e) => e.stopPropagation()}
-        className="w-3.5 h-3.5 rounded shrink-0"
-        style={color ? { accentColor: color } : undefined}
-      />
-      <span className="flex-1 text-xs text-zinc-700 dark:text-zinc-300 truncate capitalize">
-        {label}
-        {sublabel && (
-          <span className="text-zinc-400 dark:text-zinc-500 ml-1 normal-case">
-            ({sublabel})
-          </span>
-        )}
-      </span>
-      <span className="text-xs text-zinc-400 dark:text-zinc-500 tabular-nums shrink-0">
-        {count.toLocaleString()}
-      </span>
-    </div>
-  );
+  records: number;
+  /** Whether this category is currently included by the filter. */
+  active: boolean;
+  /** Tailwind classes for the bar fill. */
+  barClass: string;
+  /** Optional tooltip override (defaults to "label (sublabel) — N records"). */
+  title?: string;
 }
 
-/** Section header with All / None bulk-select buttons. */
-function FilterSectionHeader({
+/**
+ * A scrollable horizontal bar chart that doubles as a cross-filter: clicking a
+ * bar calls onToggle(key) to add/remove that category, and de-selected bars are
+ * dimmed but stay visible so they can be toggled back on. An optional search box
+ * (used by the Commodity chart) filters the rows shown.
+ */
+function FilterBarChart({
   title,
-  onAll,
-  onNone,
+  bars,
+  onToggle,
+  search,
+  onSearchChange,
+  searchPlaceholder,
+  emptyHint,
 }: {
   title: string;
-  onAll: () => void;
-  onNone: () => void;
+  bars: FilterBar[];
+  onToggle?: (key: string) => void;
+  search?: string;
+  onSearchChange?: (value: string) => void;
+  searchPlaceholder?: string;
+  emptyHint?: string;
 }) {
+  const max = bars.reduce((m, b) => Math.max(m, b.records), 0);
+
   return (
-    <div className="flex items-center justify-between mb-1.5">
-      <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
+    <div className="min-w-0">
+      <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
         {title}
       </h5>
-      <div className="flex items-center gap-1 text-[10px]">
-        <button
-          className="text-blue-600 dark:text-blue-400 hover:underline"
-          onClick={onAll}
-        >
-          All
-        </button>
-        <span className="text-zinc-300 dark:text-zinc-600">/</span>
-        <button
-          className="text-blue-600 dark:text-blue-400 hover:underline"
-          onClick={onNone}
-        >
-          None
-        </button>
+      {onSearchChange && (
+        <input
+          type="text"
+          value={search ?? ""}
+          onChange={(e) => onSearchChange(e.target.value)}
+          placeholder={searchPlaceholder}
+          className="w-full mb-1.5 px-2 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 placeholder:text-zinc-400"
+        />
+      )}
+      <div className="space-y-1 max-h-[240px] overflow-y-auto pr-1">
+        {bars.map((b) => {
+          const pct = max > 0 ? (b.records / max) * 100 : 0;
+          return (
+            <div
+              key={b.key}
+              onClick={onToggle ? () => onToggle(b.key) : undefined}
+              title={
+                b.title ??
+                `${b.label}${b.sublabel ? ` (${b.sublabel})` : ""} — ${b.records.toLocaleString()} records`
+              }
+              className={`flex items-center gap-2 text-xs select-none transition-opacity ${
+                onToggle ? "cursor-pointer" : ""
+              } ${b.active ? "" : "opacity-40"}`}
+            >
+              <span className="w-24 shrink-0 truncate capitalize text-zinc-700 dark:text-zinc-300">
+                {b.label}
+                {b.sublabel && (
+                  <span className="text-zinc-400 dark:text-zinc-500 ml-1 normal-case">
+                    {b.sublabel}
+                  </span>
+                )}
+              </span>
+              <div className="flex-1 h-3.5 bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
+                <div
+                  className={`h-full rounded ${b.barClass}`}
+                  style={{ width: `${Math.max(pct, 1)}%` }}
+                />
+              </div>
+              <span className="w-12 text-right text-zinc-500 dark:text-zinc-400 tabular-nums shrink-0">
+                {b.records.toLocaleString()}
+              </span>
+            </div>
+          );
+        })}
+        {bars.length === 0 && emptyHint && (
+          <span className="text-[11px] text-zinc-400 dark:text-zinc-500">
+            {emptyHint}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -678,81 +693,6 @@ function TrendSummary({
 }
 
 /* ------------------------------------------------------------------ */
-/*  Source breakdown (wild vs captive bar)                              */
-/* ------------------------------------------------------------------ */
-
-function SourceBreakdown({
-  sources,
-  wildActive = true,
-  captiveActive = true,
-  onToggleWild,
-  onToggleCaptive,
-}: {
-  sources: CodedData[];
-  wildActive?: boolean;
-  captiveActive?: boolean;
-  onToggleWild?: () => void;
-  onToggleCaptive?: () => void;
-}) {
-  const total = sources.reduce((s, d) => s + d.records, 0);
-  if (total === 0) return null;
-
-  const wildRecords = sources
-    .filter((s) => WILD_SOURCE_CODES.has(s.code))
-    .reduce((sum, s) => sum + s.records, 0);
-  const captiveRecords = total - wildRecords;
-  const wildPct = Math.round((wildRecords / total) * 100);
-  const captivePct = 100 - wildPct;
-
-  const rows = [
-    {
-      label: "Wild",
-      active: wildActive,
-      onToggle: onToggleWild,
-      bar: "bg-amber-400 dark:bg-amber-500",
-      pct: wildPct,
-      records: wildRecords,
-    },
-    {
-      label: "Captive",
-      active: captiveActive,
-      onToggle: onToggleCaptive,
-      bar: "bg-emerald-300 dark:bg-emerald-600",
-      pct: captivePct,
-      records: captiveRecords,
-    },
-  ];
-
-  return (
-    <div className="space-y-1.5">
-      {rows.map((r) => (
-        <div
-          key={r.label}
-          onClick={r.onToggle}
-          title={r.onToggle ? `Filter by ${r.label.toLowerCase()} source` : undefined}
-          className={`flex items-center gap-2 text-xs select-none transition-opacity ${
-            r.onToggle ? "cursor-pointer" : ""
-          } ${r.active ? "" : "opacity-40"}`}
-        >
-          <span className="w-16 text-zinc-600 dark:text-zinc-300 shrink-0">
-            {r.label}
-          </span>
-          <div className="flex-1 h-4 bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
-            <div
-              className={`h-full rounded ${r.bar}`}
-              style={{ width: `${Math.max(r.pct, 1)}%` }}
-            />
-          </div>
-          <span className="w-20 text-right text-zinc-500 dark:text-zinc-400 tabular-nums shrink-0">
-            {r.pct}% ({r.records.toLocaleString()})
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
 /*  Country table                                                      */
 /* ------------------------------------------------------------------ */
 
@@ -898,50 +838,6 @@ export default function CitesTradeSummary({
     setCheckedTerms((prev) => ({ ...prev, [key]: !prev[key] }));
   }, []);
 
-  // Toggle every source code in the wild (or captive) bucket at once. If any
-  // code in the bucket is currently on, the click turns the whole bucket off;
-  // otherwise it turns it back on.
-  const toggleSourceBucket = useCallback(
-    (wild: boolean) => {
-      const codes = (data?.allSources ?? [])
-        .filter((s) => WILD_SOURCE_CODES.has(s.code) === wild)
-        .map((s) => s.code);
-      if (codes.length === 0) return;
-      setCheckedSources((prev) => {
-        const anyOn = codes.some((c) => prev[c] !== false);
-        const next = { ...prev };
-        for (const c of codes) next[c] = !anyOn;
-        return next;
-      });
-    },
-    [data]
-  );
-
-  const setAll = useCallback(
-    (
-      setter: React.Dispatch<React.SetStateAction<Record<string, boolean>>>,
-      keys: string[],
-      value: boolean
-    ) => {
-      setter((prev) => {
-        const next = { ...prev };
-        for (const k of keys) next[k] = value;
-        return next;
-      });
-    },
-    []
-  );
-
-  // Commodity rows filtered by the search box
-  const visibleTermRows = useMemo(() => {
-    const rows = data?.allTermsByUnit ?? [];
-    const q = termSearch.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((t) =>
-      `${t.term} ${t.unit}`.toLowerCase().includes(q)
-    );
-  }, [data?.allTermsByUnit, termSearch]);
-
   // Are any filters active (something unchecked, or a year range trimmed)?
   const hasActiveFilters = useMemo(() => {
     const anySourceOff = Object.values(checkedSources).some((v) => !v);
@@ -1018,6 +914,17 @@ export default function CitesTradeSummary({
     return aggregateShipments(rows).topSources;
   }, [data, checkedPurposes, checkedTerms, brush]);
 
+  const purposeChart = useMemo(() => {
+    if (!data?.found || !data.shipments) return [];
+    const rows = data.shipments.filter((r) => {
+      if (r.s && checkedSources[r.s] === false) return false;
+      if (checkedTerms[termUnitKey(r.t, r.u)] === false) return false;
+      if (brush && (r.y < brush[0] || r.y > brush[1])) return false;
+      return true;
+    });
+    return aggregateShipments(rows).topPurposes;
+  }, [data, checkedSources, checkedTerms, brush]);
+
   const hasShipments = !!data?.shipments && data.shipments.length > 0;
 
   /* ---------------------------------------------------------------- */
@@ -1059,8 +966,6 @@ export default function CitesTradeSummary({
   // Fall back to server-provided byYear when no shipments for client filtering
   const chartByYear =
     hasShipments && chartAgg.byYear.length > 0 ? chartAgg.byYear : data.byYear;
-  const displaySources =
-    hasShipments && sourceChart.length > 0 ? sourceChart : data.topSources;
   const displayExporters =
     hasShipments && display.topExporters.length > 0 ? display.topExporters : data.topExporters;
   const displayImporters =
@@ -1068,18 +973,50 @@ export default function CitesTradeSummary({
   const displayFlows =
     hasShipments && display.topFlows.length > 0 ? display.topFlows : data.topFlows ?? [];
 
-  // Cross-filter affordances (only interactive when we have client-side rows).
-  const maxCommodityRecords = commodityChart.reduce(
-    (m, t) => Math.max(m, t.records),
-    0
-  );
-  const allSources = data.allSources ?? [];
-  const wildActive = allSources.some(
-    (s) => WILD_SOURCE_CODES.has(s.code) && checkedSources[s.code] !== false
-  );
-  const captiveActive = allSources.some(
-    (s) => !WILD_SOURCE_CODES.has(s.code) && checkedSources[s.code] !== false
-  );
+  // Build the three interactive filter charts. Source bars keep the
+  // wild (amber) vs captive (emerald) distinction by colour.
+  const sourceBars: FilterBar[] = sourceChart.map((s) => ({
+    key: s.code,
+    label: s.label,
+    sublabel: s.code,
+    records: s.records,
+    active: checkedSources[s.code] !== false,
+    barClass: WILD_SOURCE_CODES.has(s.code)
+      ? "bg-amber-400 dark:bg-amber-500"
+      : "bg-emerald-300 dark:bg-emerald-600",
+  }));
+
+  const purposeBars: FilterBar[] = purposeChart.map((p) => ({
+    key: p.code,
+    label: p.label,
+    sublabel: p.code,
+    records: p.records,
+    active: checkedPurposes[p.code] !== false,
+    barClass: "bg-blue-400 dark:bg-blue-500",
+  }));
+
+  const commoditySearch = termSearch.trim().toLowerCase();
+  const commodityBars: FilterBar[] = commodityChart
+    .filter((t) =>
+      commoditySearch
+        ? `${t.term} ${t.unit}`.toLowerCase().includes(commoditySearch)
+        : true
+    )
+    .map((t) => {
+      const key = termUnitKey(t.term, t.unit);
+      return {
+        key,
+        label: t.term,
+        sublabel: t.unit || undefined,
+        records: t.records,
+        active: checkedTerms[key] !== false,
+        barClass: "bg-violet-400 dark:bg-violet-500",
+        title: `${t.term}${t.unit ? ` (${t.unit})` : ""} — ${t.records.toLocaleString()} records / ${fmtQty(t.quantity)} items`,
+      };
+    });
+
+  const hasFilterCharts =
+    sourceBars.length > 0 || purposeBars.length > 0 || commodityChart.length > 0;
 
   return (
     <div className="space-y-4">
@@ -1110,255 +1047,98 @@ export default function CitesTradeSummary({
         )}
       </div>
 
-      {/* Trade flow map */}
-      {displayFlows.length > 0 && (
-        <div className="border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden bg-zinc-50 dark:bg-zinc-800/30">
-          <TradeFlowMap
-            flows={displayFlows}
-            reExportFlows={display.reExportFlows}
-            exporters={displayExporters}
-            importers={displayImporters}
-            suspensionCountries={suspensionCountries}
-            countryAnnotations={countryAnnotations}
-          />
+      {/* Trade flow map with Top exporters / importers alongside it */}
+      {displayFlows.length > 0 ? (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2 border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden bg-zinc-50 dark:bg-zinc-800/30">
+            <TradeFlowMap
+              flows={displayFlows}
+              reExportFlows={display.reExportFlows}
+              exporters={displayExporters}
+              importers={displayImporters}
+              suspensionCountries={suspensionCountries}
+              countryAnnotations={countryAnnotations}
+            />
+          </div>
+          <div className="space-y-4">
+            <CountryTable data={displayExporters} label="Top exporters" />
+            <CountryTable data={displayImporters} label="Top importers" />
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <CountryTable data={displayExporters} label="Top exporters" />
+          <CountryTable data={displayImporters} label="Top importers" />
         </div>
       )}
 
-      {/* Exporters & Importers */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <CountryTable data={displayExporters} label="Top exporters" />
-        <CountryTable data={displayImporters} label="Top importers" />
-      </div>
-
-      {/* Filters + Chart side by side */}
-      <div
-        className={`grid grid-cols-1 gap-4 ${
-          hasShipments ? "md:grid-cols-[230px_1fr]" : ""
-        }`}
-      >
-        {/* Filter panel */}
-        {hasShipments && (
-          <div className="space-y-3 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 bg-zinc-50/50 dark:bg-zinc-800/20 max-h-[520px] overflow-y-auto">
-            {/* Source filters */}
-            {data.allSources && data.allSources.length > 0 && (
-              <div>
-                <FilterSectionHeader
-                  title="Source"
-                  onAll={() =>
-                    setAll(setCheckedSources, data.allSources!.map((s) => s.code), true)
-                  }
-                  onNone={() =>
-                    setAll(setCheckedSources, data.allSources!.map((s) => s.code), false)
-                  }
-                />
-                <div className="space-y-1">
-                  {data.allSources.map((s) => (
-                    <FilterCheckbox
-                      key={s.code}
-                      label={s.label}
-                      sublabel={s.code}
-                      count={s.records}
-                      checked={checkedSources[s.code] ?? true}
-                      onChange={() => toggleSource(s.code)}
-                      color={WILD_SOURCE_CODES.has(s.code) ? "#f59e0b" : "#34d399"}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Purpose filters */}
-            {data.allPurposes && data.allPurposes.length > 0 && (
-              <div>
-                <FilterSectionHeader
-                  title="Purpose"
-                  onAll={() =>
-                    setAll(setCheckedPurposes, data.allPurposes!.map((p) => p.code), true)
-                  }
-                  onNone={() =>
-                    setAll(setCheckedPurposes, data.allPurposes!.map((p) => p.code), false)
-                  }
-                />
-                <div className="space-y-1">
-                  {data.allPurposes.map((p) => (
-                    <FilterCheckbox
-                      key={p.code}
-                      label={p.label}
-                      sublabel={p.code}
-                      count={p.records}
-                      checked={checkedPurposes[p.code] ?? true}
-                      onChange={() => togglePurpose(p.code)}
-                      color="#3b82f6"
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Commodity (term + unit) filters — searchable, no truncation */}
-            {data.allTermsByUnit && data.allTermsByUnit.length > 0 && (
-              <div>
-                <FilterSectionHeader
-                  title="Commodity"
-                  onAll={() =>
-                    setAll(
-                      setCheckedTerms,
-                      visibleTermRows.map((t) => termUnitKey(t.term, t.unit)),
-                      true
-                    )
-                  }
-                  onNone={() =>
-                    setAll(
-                      setCheckedTerms,
-                      visibleTermRows.map((t) => termUnitKey(t.term, t.unit)),
-                      false
-                    )
-                  }
-                />
-                {data.allTermsByUnit.length > 6 && (
-                  <input
-                    type="text"
-                    value={termSearch}
-                    onChange={(e) => setTermSearch(e.target.value)}
-                    placeholder="Search commodities…"
-                    className="w-full mb-1.5 px-2 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 placeholder:text-zinc-400"
-                  />
-                )}
-                <div className="space-y-1">
-                  {visibleTermRows.map((t) => {
-                    const key = termUnitKey(t.term, t.unit);
-                    return (
-                      <FilterCheckbox
-                        key={key}
-                        label={t.term}
-                        sublabel={unitLabel(t.unit)}
-                        count={t.records}
-                        checked={checkedTerms[key] ?? true}
-                        onChange={() => toggleTerm(key)}
-                        color="#8b5cf6"
-                      />
-                    );
-                  })}
-                  {visibleTermRows.length === 0 && (
-                    <span className="text-[11px] text-zinc-400 dark:text-zinc-500">
-                      No commodities match “{termSearch}”.
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Chart + details */}
-        <div className="space-y-4 min-w-0">
-          {/* Metric toggle + line chart with trim handles */}
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
-                Trade over time
-              </span>
-              <span className="text-[11px] text-zinc-400 dark:text-zinc-500 normal-case">
-                (shipments)
-              </span>
-              {brush && (
-                <span className="text-[11px] text-blue-600 dark:text-blue-400 tabular-nums ml-auto">
-                  {brush[0]}–{brush[1]}
-                </span>
-              )}
-            </div>
-            <TrendLineChart
-              data={chartByYear}
-              metric={metric}
-              minYear={minYear}
-              maxYear={maxYear}
-              brush={brush}
-              onBrushChange={setBrush}
-              provisionalFromYear={provisionalFromYear}
-            />
-            <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-1 leading-snug">
-              Drag the handles to trim the year range.
-              {maxYear >= provisionalFromYear && (
-                <>
-                  {" "}
-                  Recent years (dashed, {provisionalFromYear}+) are{" "}
-                  <span className="text-amber-500 dark:text-amber-400">provisional</span> —
-                  CITES reporting lags by a few years, so they are usually incomplete
-                  rather than showing a real drop.
-                </>
-              )}
-            </p>
-          </div>
-
-          {/* Source breakdown — most important for assessors. Click a bar to
-              filter the whole summary to that source group. */}
-          {displaySources.length > 0 && (
-            <div>
-              <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
-                Wild vs. Captive
-              </h5>
-              <SourceBreakdown
-                sources={displaySources}
-                wildActive={wildActive}
-                captiveActive={captiveActive}
-                onToggleWild={hasShipments ? () => toggleSourceBucket(true) : undefined}
-                onToggleCaptive={
-                  hasShipments ? () => toggleSourceBucket(false) : undefined
-                }
-              />
-            </div>
-          )}
-
-          {/* Commodities — grouped by term + unit (never aggregated across
-              units). Scrollable bar chart; click a bar to filter the summary
-              to that commodity. */}
-          {commodityChart.length > 0 && (
-            <div>
-              <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
-                Commodities
-              </h5>
-              <div className="space-y-1 max-h-[200px] overflow-y-auto pr-1">
-                {commodityChart.map((t) => {
-                  const key = termUnitKey(t.term, t.unit);
-                  const active = checkedTerms[key] !== false;
-                  const pct =
-                    maxCommodityRecords > 0
-                      ? (t.records / maxCommodityRecords) * 100
-                      : 0;
-                  return (
-                    <div
-                      key={key}
-                      onClick={hasShipments ? () => toggleTerm(key) : undefined}
-                      title={`${t.term}${t.unit ? ` (${t.unit})` : ""} — ${t.records.toLocaleString()} records / ${fmtQty(t.quantity)} items`}
-                      className={`flex items-center gap-2 text-xs select-none transition-opacity ${
-                        hasShipments ? "cursor-pointer" : ""
-                      } ${active ? "" : "opacity-40"}`}
-                    >
-                      <span className="w-28 shrink-0 truncate capitalize text-zinc-700 dark:text-zinc-300">
-                        {t.term}
-                        {t.unit && (
-                          <span className="text-zinc-400 dark:text-zinc-500 ml-1 normal-case">
-                            {t.unit}
-                          </span>
-                        )}
-                      </span>
-                      <div className="flex-1 h-3.5 bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
-                        <div
-                          className="h-full bg-violet-400 dark:bg-violet-500 rounded"
-                          style={{ width: `${Math.max(pct, 1)}%` }}
-                        />
-                      </div>
-                      <span className="w-12 text-right text-zinc-500 dark:text-zinc-400 tabular-nums shrink-0">
-                        {t.records.toLocaleString()}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+      {/* Trade over time */}
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
+            Trade over time
+          </span>
+          <span className="text-[11px] text-zinc-400 dark:text-zinc-500 normal-case">
+            (shipments)
+          </span>
+          {brush && (
+            <span className="text-[11px] text-blue-600 dark:text-blue-400 tabular-nums ml-auto">
+              {brush[0]}–{brush[1]}
+            </span>
           )}
         </div>
+        <TrendLineChart
+          data={chartByYear}
+          metric={metric}
+          minYear={minYear}
+          maxYear={maxYear}
+          brush={brush}
+          onBrushChange={setBrush}
+          provisionalFromYear={provisionalFromYear}
+        />
+        <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-1 leading-snug">
+          Drag the handles to trim the year range.
+          {maxYear >= provisionalFromYear && (
+            <>
+              {" "}
+              Recent years (dashed, {provisionalFromYear}+) are{" "}
+              <span className="text-amber-500 dark:text-amber-400">provisional</span> —
+              CITES reporting lags by a few years, so they are usually incomplete
+              rather than showing a real drop.
+            </>
+          )}
+        </p>
       </div>
+
+      {/* Filter charts — click a bar to cross-filter the whole summary.
+          Source bars are coloured wild (amber) vs captive (emerald). */}
+      {hasFilterCharts && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <FilterBarChart
+            title="Source"
+            bars={sourceBars}
+            onToggle={hasShipments ? toggleSource : undefined}
+          />
+          <FilterBarChart
+            title="Commodity"
+            bars={commodityBars}
+            onToggle={hasShipments ? toggleTerm : undefined}
+            search={termSearch}
+            onSearchChange={setTermSearch}
+            searchPlaceholder="Search commodities…"
+            emptyHint={
+              commoditySearch
+                ? `No commodities match “${termSearch}”.`
+                : undefined
+            }
+          />
+          <FilterBarChart
+            title="Purpose"
+            bars={purposeBars}
+            onToggle={hasShipments ? togglePurpose : undefined}
+          />
+        </div>
+      )}
     </div>
   );
 }
