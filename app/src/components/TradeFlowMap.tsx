@@ -558,15 +558,15 @@ function TradeFlowMap({
       <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 mt-1 text-[10px] text-zinc-500 dark:text-zinc-400">
         <span className="flex items-center gap-1">
           <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
-          Exporter
+          Net exporter
         </span>
         <span className="flex items-center gap-1">
           <span className="inline-block w-2 h-2 rounded-full bg-blue-500" />
-          Importer (destination)
+          Net importer
         </span>
         <span className="flex items-center gap-1">
           <span className="inline-block w-2 h-2 rounded-full bg-violet-500" />
-          Exporter &amp; importer
+          Balanced
         </span>
         <span className="flex items-center gap-1">
           <svg width="16" height="8" className="inline-block">
