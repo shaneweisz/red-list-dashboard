@@ -62,7 +62,9 @@ interface CitesLegislation {
     notes: string | null;
     url: string | null;
     is_current: boolean;
-    unit: string | null;
+    // Species+ returns this as an object ({ code, name }), occasionally a
+    // string or null.
+    unit: { code?: string; name?: string } | string | null;
     geo_entity: { iso_code2: string; name: string; type: string };
   }[];
   cites_suspensions: {
@@ -259,7 +261,10 @@ export async function GET(request: NextRequest) {
         country: q.geo_entity.name,
         countryCode: q.geo_entity.iso_code2,
         quota: q.quota,
-        unit: q.unit,
+        unit:
+          q.unit && typeof q.unit === "object"
+            ? q.unit.name ?? q.unit.code ?? null
+            : q.unit,
         notes: q.notes,
         publicationDate: q.publication_date,
       })),
