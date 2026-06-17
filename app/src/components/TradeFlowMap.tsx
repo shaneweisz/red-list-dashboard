@@ -270,8 +270,8 @@ function TradeFlowMap({
 
   // Theme-aware colors for SVG fills (can't use Tailwind classes in SVG)
   const colors = dark
-    ? { base: "#18181b", exporter: "#7f1d1d", importer: "#1e3a5f", both: "#4c1d95", stroke: "#27272a", suspension: "#991b1b", arcDefault: "#f87171", arcHover: "#fbbf24", reExport: "#d97706" }
-    : { base: "#f4f4f5", exporter: "#fee2e2", importer: "#dbeafe", both: "#e9d5ff", stroke: "#d4d4d8", suspension: "#fecaca", arcDefault: "#ef4444", arcHover: "#f59e0b", reExport: "#d97706" };
+    ? { base: "#18181b", exporter: "#7f1d1d", importer: "#1e3a5f", both: "#4c1d95", stroke: "#27272a", arcDefault: "#f87171", arcHover: "#fbbf24", reExport: "#d97706" }
+    : { base: "#f4f4f5", exporter: "#fee2e2", importer: "#dbeafe", both: "#e9d5ff", stroke: "#d4d4d8", arcDefault: "#ef4444", arcHover: "#f59e0b", reExport: "#d97706" };
 
   const hoveredFlowData = hoveredFlow !== null ? visibleFlows[hoveredFlow] : null;
   const hoveredReExportData =
@@ -367,9 +367,14 @@ function TradeFlowMap({
                   const role = alpha2 ? roleOf(alpha2) : null;
                   const isSuspended = alpha2 ? suspensionCountries?.has(alpha2) : false;
 
+                  // Trade role drives the fill. A suspension is a secondary
+                  // annotation shown via the dashed red border below — it must
+                  // NOT repaint the country, otherwise a suspended importer
+                  // (e.g. the US, which suspends elephant-product imports) was
+                  // filled a red almost identical to the exporter colour and
+                  // read as an exporter. (#307)
                   let fill = colors.base;
-                  if (isSuspended) fill = colors.suspension;
-                  else if (role === "both") fill = colors.both;
+                  if (role === "both") fill = colors.both;
                   else if (role === "exporter") fill = colors.exporter;
                   else if (role === "importer") fill = colors.importer;
 
@@ -572,7 +577,7 @@ function TradeFlowMap({
         </span>
         {suspensionCountries && suspensionCountries.size > 0 && (
           <span className="flex items-center gap-1">
-            <span className="inline-block w-3 h-2 rounded-sm border border-dashed border-red-500 bg-red-100 dark:bg-red-900/30" />
+            <span className="inline-block w-3 h-2 rounded-sm border border-dashed border-red-500 bg-transparent" />
             Suspension
           </span>
         )}
