@@ -475,7 +475,7 @@ function ChartTooltip({
       </div>
       {isProvisional && (
         <div className="text-amber-400 text-[10px] mt-0.5">
-          provisional — incomplete reporting
+          provisional
         </div>
       )}
     </div>
@@ -897,11 +897,22 @@ export default function CitesTradeSummary({
     [data]
   );
 
+  // Whether a dimension is actively filtered (some category de-selected). When
+  // it is, rows with a *blank* value for that dimension are excluded too —
+  // otherwise isolating e.g. "Hunting trophy" would also keep the ~10.9k
+  // blank-purpose elephant records (source/purpose can be blank; term can't).
+  const anySourceOff = useMemo(
+    () => Object.values(checkedSources).some((v) => v === false),
+    [checkedSources]
+  );
+  const anyPurposeOff = useMemo(
+    () => Object.values(checkedPurposes).some((v) => v === false),
+    [checkedPurposes]
+  );
+
   // Are any filters active (something unchecked, or a year range trimmed)?
   const hasActiveFilters = useMemo(() => {
-    const anySourceOff = Object.values(checkedSources).some((v) => !v);
-    const anyPurposeOff = Object.values(checkedPurposes).some((v) => !v);
-    const anyTermOff = Object.values(checkedTerms).some((v) => !v);
+    const anyTermOff = Object.values(checkedTerms).some((v) => v === false);
     return (
       anySourceOff ||
       anyPurposeOff ||
@@ -909,7 +920,7 @@ export default function CitesTradeSummary({
       brush !== null ||
       selectedCountry !== null
     );
-  }, [checkedSources, checkedPurposes, checkedTerms, brush, selectedCountry]);
+  }, [anySourceOff, anyPurposeOff, checkedTerms, brush, selectedCountry]);
 
   // Clear all filters (re-check everything, reset the year trim)
   const clearFilters = useCallback(() => {
@@ -939,14 +950,14 @@ export default function CitesTradeSummary({
   const checkboxRows = useMemo(() => {
     if (!data?.found || !data.shipments) return [];
     return data.shipments.filter((r) => {
-      if (r.s && checkedSources[r.s] === false) return false;
-      if (r.p && checkedPurposes[r.p] === false) return false;
+      if (anySourceOff && (!r.s || checkedSources[r.s] === false)) return false;
+      if (anyPurposeOff && (!r.p || checkedPurposes[r.p] === false)) return false;
       if (checkedTerms[termUnitKey(r.t, r.u)] === false) return false;
       if (selectedCountry && r.e !== selectedCountry && r.i !== selectedCountry)
         return false;
       return true;
     });
-  }, [data, checkedSources, checkedPurposes, checkedTerms, selectedCountry]);
+  }, [data, checkedSources, checkedPurposes, checkedTerms, selectedCountry, anySourceOff, anyPurposeOff]);
 
   // Chart series (all years, checkbox-filtered)
   const chartAgg = useMemo(() => aggregateShipments(checkboxRows), [checkboxRows]);
@@ -965,20 +976,20 @@ export default function CitesTradeSummary({
   const commodityChart = useMemo(() => {
     if (!data?.found || !data.shipments) return [];
     const rows = data.shipments.filter((r) => {
-      if (r.s && checkedSources[r.s] === false) return false;
-      if (r.p && checkedPurposes[r.p] === false) return false;
+      if (anySourceOff && (!r.s || checkedSources[r.s] === false)) return false;
+      if (anyPurposeOff && (!r.p || checkedPurposes[r.p] === false)) return false;
       if (brush && (r.y < brush[0] || r.y > brush[1])) return false;
       if (selectedCountry && r.e !== selectedCountry && r.i !== selectedCountry)
         return false;
       return true;
     });
     return aggregateShipments(rows).termsByUnit;
-  }, [data, checkedSources, checkedPurposes, brush, selectedCountry]);
+  }, [data, checkedSources, checkedPurposes, brush, selectedCountry, anySourceOff, anyPurposeOff]);
 
   const sourceChart = useMemo(() => {
     if (!data?.found || !data.shipments) return [];
     const rows = data.shipments.filter((r) => {
-      if (r.p && checkedPurposes[r.p] === false) return false;
+      if (anyPurposeOff && (!r.p || checkedPurposes[r.p] === false)) return false;
       if (checkedTerms[termUnitKey(r.t, r.u)] === false) return false;
       if (brush && (r.y < brush[0] || r.y > brush[1])) return false;
       if (selectedCountry && r.e !== selectedCountry && r.i !== selectedCountry)
@@ -986,12 +997,12 @@ export default function CitesTradeSummary({
       return true;
     });
     return aggregateShipments(rows).topSources;
-  }, [data, checkedPurposes, checkedTerms, brush, selectedCountry]);
+  }, [data, checkedPurposes, checkedTerms, brush, selectedCountry, anyPurposeOff]);
 
   const purposeChart = useMemo(() => {
     if (!data?.found || !data.shipments) return [];
     const rows = data.shipments.filter((r) => {
-      if (r.s && checkedSources[r.s] === false) return false;
+      if (anySourceOff && (!r.s || checkedSources[r.s] === false)) return false;
       if (checkedTerms[termUnitKey(r.t, r.u)] === false) return false;
       if (brush && (r.y < brush[0] || r.y > brush[1])) return false;
       if (selectedCountry && r.e !== selectedCountry && r.i !== selectedCountry)
@@ -999,7 +1010,7 @@ export default function CitesTradeSummary({
       return true;
     });
     return aggregateShipments(rows).topPurposes;
-  }, [data, checkedSources, checkedTerms, brush, selectedCountry]);
+  }, [data, checkedSources, checkedTerms, brush, selectedCountry, anySourceOff]);
 
   // Exporter / importer aggregates that DON'T apply the country cross-filter, so
   // the Top exporters / importers lists stay populated and let you switch
@@ -1007,14 +1018,14 @@ export default function CitesTradeSummary({
   const countryAgg = useMemo(() => {
     if (!data?.found || !data.shipments) return null;
     const rows = data.shipments.filter((r) => {
-      if (r.s && checkedSources[r.s] === false) return false;
-      if (r.p && checkedPurposes[r.p] === false) return false;
+      if (anySourceOff && (!r.s || checkedSources[r.s] === false)) return false;
+      if (anyPurposeOff && (!r.p || checkedPurposes[r.p] === false)) return false;
       if (checkedTerms[termUnitKey(r.t, r.u)] === false) return false;
       if (brush && (r.y < brush[0] || r.y > brush[1])) return false;
       return true;
     });
     return aggregateShipments(rows);
-  }, [data, checkedSources, checkedPurposes, checkedTerms, brush]);
+  }, [data, checkedSources, checkedPurposes, checkedTerms, brush, anySourceOff, anyPurposeOff]);
 
   const hasShipments = !!data?.shipments && data.shipments.length > 0;
 

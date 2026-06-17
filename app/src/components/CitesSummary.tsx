@@ -218,17 +218,7 @@ export default function CitesSummary({
 
   return (
     <div className="p-4 md:p-6 space-y-5">
-      {/* Trade overview from CITES Trade Database */}
-      {data.citesId && (
-        <div>
-          <h4 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
-            International Trade
-          </h4>
-          <CitesTradeSummary citesId={data.citesId} prefetchedData={tradeData} prefetchedLoading={tradeLoading} suspensionCountries={suspensionCountryCodes} countryAnnotations={countryAnnotations} />
-        </div>
-      )}
-
-      {/* Listing summary + external links — below the trade info */}
+      {/* Listing summary + external links */}
       <div className="flex flex-wrap items-center gap-3">
         {data.citesListing ? (
           <div className="flex items-center gap-2">
@@ -261,6 +251,16 @@ export default function CitesSummary({
           </a>
         </div>
       </div>
+
+      {/* Trade overview from CITES Trade Database */}
+      {data.citesId && (
+        <div>
+          <h4 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
+            International Trade
+          </h4>
+          <CitesTradeSummary citesId={data.citesId} prefetchedData={tradeData} prefetchedLoading={tradeLoading} suspensionCountries={suspensionCountryCodes} countryAnnotations={countryAnnotations} />
+        </div>
+      )}
 
       {/* Current listings detail — below trade overview, above suspensions/quotas */}
       {data.currentListings && data.currentListings.length > 0 && (
