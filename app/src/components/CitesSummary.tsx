@@ -82,6 +82,29 @@ function AppendixBadge({ appendix }: { appendix: string }) {
   );
 }
 
+const fmtCitesDate = (d: string) =>
+  new Date(d).toLocaleDateString("en-GB", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+
+/** Compact section header with an optional count. */
+function SectionHeader({ title, count }: { title: string; count?: number }) {
+  return (
+    <div className="flex items-baseline gap-2 mb-1.5">
+      <h4 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
+        {title}
+      </h4>
+      {count != null && (
+        <span className="text-[11px] text-zinc-400 dark:text-zinc-500 tabular-nums">
+          {count}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function CitesSummary({
   scientificName,
 }: {
@@ -217,7 +240,7 @@ export default function CitesSummary({
     : (data.quotas || []).slice(0, 5);
 
   return (
-    <div className="p-4 md:p-6 space-y-5">
+    <div className="p-4 md:p-6 space-y-4">
       {/* Listing summary + external links */}
       <div className="flex flex-wrap items-center gap-3">
         {data.citesListing ? (
@@ -262,116 +285,86 @@ export default function CitesSummary({
         </div>
       )}
 
-      {/* Current listings detail — below trade overview, above suspensions/quotas */}
-      {data.currentListings && data.currentListings.length > 0 && (
-        <div>
-          <h4 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
-            Current Listings
-          </h4>
-          <div className="space-y-2">
-            {data.currentListings.map((listing, i) => (
-              <div
-                key={i}
-                className="flex flex-wrap items-start gap-2 text-sm"
-              >
-                <AppendixBadge appendix={listing.appendix} />
-                <span className="text-zinc-500 dark:text-zinc-400 text-xs mt-0.5">
-                  since{" "}
-                  {new Date(listing.effectiveAt).toLocaleDateString("en-GB", {
-                    year: "numeric",
-                    month: "short",
-                    day: "numeric",
-                  })}
-                </span>
-                {listing.annotation && (
-                  <p className="w-full text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 pl-0.5">
-                    {listing.annotation}
-                  </p>
-                )}
+      {/* Listings & reservations — compact, side by side on wider screens */}
+      {((data.currentListings && data.currentListings.length > 0) ||
+        (data.reservations && data.reservations.length > 0)) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-6 gap-y-4">
+          {data.currentListings && data.currentListings.length > 0 && (
+            <div>
+              <SectionHeader title="Current Listings" />
+              <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800">
+                {data.currentListings.map((listing, i) => (
+                  <div key={i} className="px-3 py-2">
+                    <div className="flex items-center gap-2 text-xs">
+                      <AppendixBadge appendix={listing.appendix} />
+                      <span className="text-zinc-400 dark:text-zinc-500 ml-auto whitespace-nowrap">
+                        since {fmtCitesDate(listing.effectiveAt)}
+                      </span>
+                    </div>
+                    {listing.annotation && (
+                      <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug">
+                        {listing.annotation}
+                      </p>
+                    )}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+            </div>
+          )}
 
-      {/* Reservations — country-specific opt-outs from a listing */}
-      {data.reservations && data.reservations.length > 0 && (
-        <div>
-          <h4 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
-            Reservations ({data.reservations.length})
-          </h4>
-          <div className="space-y-2">
-            {data.reservations.map((r, i) => (
-              <div
-                key={i}
-                className="flex flex-wrap items-start gap-2 text-sm"
-              >
-                <AppendixBadge appendix={r.appendix} />
-                <span className="text-zinc-700 dark:text-zinc-300">
-                  {r.country || r.countryCode || "Unknown party"}
-                </span>
-                <span className="text-zinc-500 dark:text-zinc-400 text-xs mt-0.5">
-                  since{" "}
-                  {new Date(r.effectiveAt).toLocaleDateString("en-GB", {
-                    year: "numeric",
-                    month: "short",
-                    day: "numeric",
-                  })}
-                </span>
-                {r.annotation && (
-                  <p className="w-full text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 pl-0.5">
-                    {r.annotation}
-                  </p>
-                )}
+          {data.reservations && data.reservations.length > 0 && (
+            <div>
+              <SectionHeader title="Reservations" count={data.reservations.length} />
+              <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800">
+                {data.reservations.map((r, i) => (
+                  <div key={i} className="px-3 py-2">
+                    <div className="flex items-center gap-2 text-xs">
+                      <AppendixBadge appendix={r.appendix} />
+                      <span className="text-zinc-700 dark:text-zinc-300 font-medium truncate">
+                        {r.country || r.countryCode || "Unknown party"}
+                      </span>
+                      <span className="text-zinc-400 dark:text-zinc-500 ml-auto whitespace-nowrap">
+                        since {fmtCitesDate(r.effectiveAt)}
+                      </span>
+                    </div>
+                    {r.annotation && (
+                      <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug">
+                        {r.annotation}
+                      </p>
+                    )}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* Trade suspensions */}
       {data.suspensions && data.suspensions.length > 0 && (
         <div>
-          <h4 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
-            Trade Suspensions ({data.suspensions.length})
-          </h4>
-          <div className="border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="bg-zinc-50 dark:bg-zinc-800/50">
-                  <th className="text-left px-3 py-1.5 font-medium text-zinc-500 dark:text-zinc-400">
-                    Country
-                  </th>
-                  <th className="text-left px-3 py-1.5 font-medium text-zinc-500 dark:text-zinc-400">
-                    Type
-                  </th>
-                  <th className="text-left px-3 py-1.5 font-medium text-zinc-500 dark:text-zinc-400">
-                    Since
-                  </th>
-                  <th className="text-left px-3 py-1.5 font-medium text-zinc-500 dark:text-zinc-400 hidden md:table-cell">
-                    Notification
-                  </th>
-                </tr>
-              </thead>
+          <SectionHeader title="Trade Suspensions" count={data.suspensions.length} />
+          <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden">
+            <table className="w-full text-[11px]">
               <tbody>
                 {suspensionsToShow.map((s, i) => (
                   <tr
                     key={i}
-                    className="border-t border-zinc-100 dark:border-zinc-800"
+                    className="border-t first:border-t-0 border-zinc-100 dark:border-zinc-800"
                   >
-                    <td className="px-3 py-1.5 text-zinc-700 dark:text-zinc-300">
+                    <td className="px-3 py-1 text-zinc-700 dark:text-zinc-300">
                       {s.country}
                     </td>
-                    <td className="px-3 py-1.5 text-zinc-500 dark:text-zinc-400 capitalize">
+                    <td className="px-3 py-1 text-zinc-500 dark:text-zinc-400 capitalize whitespace-nowrap">
                       {s.appliesTo}
                     </td>
-                    <td className="px-3 py-1.5 text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
+                    <td className="px-3 py-1 text-zinc-500 dark:text-zinc-400 whitespace-nowrap tabular-nums">
                       {new Date(s.startDate).toLocaleDateString("en-GB", {
                         year: "numeric",
                         month: "short",
                       })}
                     </td>
-                    <td className="px-3 py-1.5 text-zinc-400 hidden md:table-cell">
+                    <td className="px-3 py-1 text-right hidden md:table-cell">
                       {s.notification?.url ? (
                         <a
                           href={s.notification.url}
@@ -382,7 +375,7 @@ export default function CitesSummary({
                           {s.notification.name}
                         </a>
                       ) : (
-                        s.notification?.name || "—"
+                        <span className="text-zinc-400">{s.notification?.name || "—"}</span>
                       )}
                     </td>
                   </tr>
@@ -391,12 +384,12 @@ export default function CitesSummary({
             </table>
             {data.suspensions.length > 5 && (
               <button
-                className="w-full px-3 py-1.5 text-xs text-blue-600 dark:text-blue-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 border-t border-zinc-100 dark:border-zinc-800"
+                className="w-full px-3 py-1 text-[11px] text-blue-600 dark:text-blue-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 border-t border-zinc-100 dark:border-zinc-800"
                 onClick={() => setShowAllSuspensions(!showAllSuspensions)}
               >
                 {showAllSuspensions
                   ? "Show fewer"
-                  : `Show all ${data.suspensions.length} suspensions`}
+                  : `Show all ${data.suspensions.length}`}
               </button>
             )}
           </div>
@@ -406,38 +399,23 @@ export default function CitesSummary({
       {/* Trade quotas */}
       {data.quotas && data.quotas.length > 0 && (
         <div>
-          <h4 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
-            Trade Quotas ({data.quotas.length})
-          </h4>
-          <div className="border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="bg-zinc-50 dark:bg-zinc-800/50">
-                  <th className="text-left px-3 py-1.5 font-medium text-zinc-500 dark:text-zinc-400">
-                    Country
-                  </th>
-                  <th className="text-right px-3 py-1.5 font-medium text-zinc-500 dark:text-zinc-400">
-                    Quota
-                  </th>
-                  <th className="text-left px-3 py-1.5 font-medium text-zinc-500 dark:text-zinc-400 hidden md:table-cell">
-                    Notes
-                  </th>
-                </tr>
-              </thead>
+          <SectionHeader title="Trade Quotas" count={data.quotas.length} />
+          <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden">
+            <table className="w-full text-[11px]">
               <tbody>
                 {quotasToShow.map((q, i) => (
                   <tr
                     key={i}
-                    className="border-t border-zinc-100 dark:border-zinc-800"
+                    className="border-t first:border-t-0 border-zinc-100 dark:border-zinc-800"
                   >
-                    <td className="px-3 py-1.5 text-zinc-700 dark:text-zinc-300">
+                    <td className="px-3 py-1 text-zinc-700 dark:text-zinc-300 whitespace-nowrap">
                       {q.country}
                     </td>
-                    <td className="px-3 py-1.5 text-right text-zinc-700 dark:text-zinc-300 tabular-nums">
+                    <td className="px-3 py-1 text-right text-zinc-700 dark:text-zinc-300 tabular-nums whitespace-nowrap">
                       {q.quota != null ? q.quota.toLocaleString() : "—"}
                       {q.unit ? ` ${q.unit}` : ""}
                     </td>
-                    <td className="px-3 py-1.5 text-zinc-400 max-w-[250px] truncate hidden md:table-cell">
+                    <td className="px-3 py-1 text-zinc-400 max-w-[280px] truncate hidden md:table-cell">
                       {q.notes || "—"}
                     </td>
                   </tr>
@@ -446,12 +424,12 @@ export default function CitesSummary({
             </table>
             {data.quotas.length > 5 && (
               <button
-                className="w-full px-3 py-1.5 text-xs text-blue-600 dark:text-blue-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 border-t border-zinc-100 dark:border-zinc-800"
+                className="w-full px-3 py-1 text-[11px] text-blue-600 dark:text-blue-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 border-t border-zinc-100 dark:border-zinc-800"
                 onClick={() => setShowAllQuotas(!showAllQuotas)}
               >
                 {showAllQuotas
                   ? "Show fewer"
-                  : `Show all ${data.quotas.length} quotas`}
+                  : `Show all ${data.quotas.length}`}
               </button>
             )}
           </div>
