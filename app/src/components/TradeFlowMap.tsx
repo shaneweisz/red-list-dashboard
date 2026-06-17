@@ -246,32 +246,26 @@ function TradeFlowMap({
   for (const e of exporters ?? []) exportRecords.set(e.code, e.records);
   for (const i of importers ?? []) importRecords.set(i.code, i.records);
 
-  type TradeRole = "exporter" | "importer" | "both";
+  type TradeRole = "exporter" | "importer";
 
   /**
-   * Classify a country by its dominant direction of trade in the visible flows.
-   * "both" is reserved for genuinely balanced hubs (within a 60/40 split);
-   * otherwise we go with the larger side so the colour matches the headline
-   * Top Exporters / Top Importers tables.
+   * Classify a country by its net direction of trade: whichever of exports /
+   * imports accounts for more records. Ties fall to importer. This keeps the
+   * colour consistent with the headline Top Exporters / Top Importers tables.
    */
   function roleOf(code: string): TradeRole | null {
     const ex = exportRecords.get(code) ?? 0;
     const im = importRecords.get(code) ?? 0;
     if (ex === 0 && im === 0) return null;
-    if (im === 0) return "exporter";
-    if (ex === 0) return "importer";
-    const exShare = ex / (ex + im);
-    if (exShare >= 0.6) return "exporter";
-    if (exShare <= 0.4) return "importer";
-    return "both";
+    return ex > im ? "exporter" : "importer";
   }
 
   const maxRecords = visibleFlows.length > 0 ? Math.max(...visibleFlows.map((f) => f.records)) : 0;
 
   // Theme-aware colors for SVG fills (can't use Tailwind classes in SVG)
   const colors = dark
-    ? { base: "#18181b", exporter: "#7f1d1d", importer: "#1e3a5f", both: "#4c1d95", stroke: "#27272a", arcDefault: "#f87171", arcHover: "#fbbf24", reExport: "#d97706" }
-    : { base: "#f4f4f5", exporter: "#fee2e2", importer: "#dbeafe", both: "#e9d5ff", stroke: "#d4d4d8", arcDefault: "#ef4444", arcHover: "#f59e0b", reExport: "#d97706" };
+    ? { base: "#18181b", exporter: "#7f1d1d", importer: "#1e3a5f", stroke: "#27272a", arcDefault: "#f87171", arcHover: "#fbbf24", reExport: "#d97706" }
+    : { base: "#f4f4f5", exporter: "#fee2e2", importer: "#dbeafe", stroke: "#d4d4d8", arcDefault: "#ef4444", arcHover: "#f59e0b", reExport: "#d97706" };
 
   const hoveredFlowData = hoveredFlow !== null ? visibleFlows[hoveredFlow] : null;
   const hoveredReExportData =
@@ -374,8 +368,7 @@ function TradeFlowMap({
                   // filled a red almost identical to the exporter colour and
                   // read as an exporter. (#307)
                   let fill = colors.base;
-                  if (role === "both") fill = colors.both;
-                  else if (role === "exporter") fill = colors.exporter;
+                  if (role === "exporter") fill = colors.exporter;
                   else if (role === "importer") fill = colors.importer;
 
                   const hasAnnotation = alpha2 && countryAnnotations?.[alpha2];
@@ -521,8 +514,7 @@ function TradeFlowMap({
                 const role = roleOf(code);
                 const isSelected = selectedCountry === code;
 
-                let fill =
-                  role === "importer" ? "#3b82f6" : role === "both" ? "#8b5cf6" : "#ef4444";
+                let fill = role === "importer" ? "#3b82f6" : "#ef4444";
                 if (isSelected) fill = "#f59e0b";
 
                 markers.push(
@@ -563,10 +555,6 @@ function TradeFlowMap({
         <span className="flex items-center gap-1">
           <span className="inline-block w-2 h-2 rounded-full bg-blue-500" />
           Net importer
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="inline-block w-2 h-2 rounded-full bg-violet-500" />
-          Balanced
         </span>
         <span className="flex items-center gap-1">
           <svg width="16" height="8" className="inline-block">
