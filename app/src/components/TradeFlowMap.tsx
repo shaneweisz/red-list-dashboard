@@ -75,12 +75,12 @@ const COUNTRY_CENTROIDS: Record<string, [number, number]> = {
 };
 
 const MAP_WIDTH = 800;
-// Cropped shorter than the projection's natural height to trim the empty band
-// of ocean below the southern continents (Antarctica is filtered out). The
-// extra y-offset keeps the land in the same place while the viewBox cuts the
-// bottom rather than re-centring the map.
-const MAP_HEIGHT = 340;
-const MAP_OFFSET: [number, number] = [30, 50];
+// Cropped a little shorter than the projection's natural height to trim some of
+// the empty ocean below the southern continents, while keeping New Zealand and
+// the southern tip of South America in frame. The extra y-offset keeps the land
+// in place while the viewBox cuts the bottom rather than re-centring the map.
+const MAP_HEIGHT = 372;
+const MAP_OFFSET: [number, number] = [30, 34];
 
 // Build projection that matches the ComposableMap settings
 const projection = geoNaturalEarth1()
