@@ -94,6 +94,21 @@ function project(coords: [number, number]): [number, number] | null {
   return p ? [p[0] + MAP_OFFSET[0], p[1] + MAP_OFFSET[1]] : null;
 }
 
+function hexToRgb(hex: string): [number, number, number] {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+/** Linearly interpolate between two hex colours (t in [0, 1]). */
+function mixColor(a: string, b: string, t: number): string {
+  const [ar, ag, ab] = hexToRgb(a);
+  const [br, bg, bb] = hexToRgb(b);
+  const r = Math.round(ar + (br - ar) * t);
+  const g = Math.round(ag + (bg - ag) * t);
+  const bl = Math.round(ab + (bb - ab) * t);
+  return `rgb(${r}, ${g}, ${bl})`;
+}
+
 /** Build a quadratic bezier arc from→to, curving left of the direction of travel */
 function arcPath(
   from: [number, number],
@@ -276,12 +291,29 @@ function TradeFlowMap({
     return ex > im ? "exporter" : "importer";
   }
 
+  // Colour depth scales (log) with a country's volume in its dominant role, so
+  // small importers/exporters are barely tinted and big ones are saturated.
+  let maxMagnitude = 1;
+  for (const v of exportRecords.values()) if (v > maxMagnitude) maxMagnitude = v;
+  for (const v of importRecords.values()) if (v > maxMagnitude) maxMagnitude = v;
+  const logMax = Math.log(maxMagnitude + 1);
+  function intensityOf(code: string, role: TradeRole): number {
+    const mag =
+      role === "exporter"
+        ? exportRecords.get(code) ?? 0
+        : importRecords.get(code) ?? 0;
+    if (mag <= 0) return 0;
+    return logMax > 0 ? Math.log(mag + 1) / logMax : 1;
+  }
+
   const maxRecords = visibleFlows.length > 0 ? Math.max(...visibleFlows.map((f) => f.records)) : 0;
 
-  // Theme-aware colors for SVG fills (can't use Tailwind classes in SVG)
+  // Theme-aware colors for SVG fills (can't use Tailwind classes in SVG). The
+  // exporter/importer values are the *saturated* end of the depth ramp (mixed
+  // toward `base` by intensity below); they match the marker dot colours.
   const colors = dark
-    ? { base: "#18181b", exporter: "#7f1d1d", importer: "#1e3a5f", stroke: "#27272a", arcDefault: "#f87171", arcHover: "#fbbf24", reExport: "#d97706" }
-    : { base: "#f4f4f5", exporter: "#fee2e2", importer: "#dbeafe", stroke: "#d4d4d8", arcDefault: "#ef4444", arcHover: "#f59e0b", reExport: "#d97706" };
+    ? { base: "#18181b", exporter: "#ef4444", importer: "#3b82f6", stroke: "#27272a", arcDefault: "#f87171", arcHover: "#fbbf24", reExport: "#d97706" }
+    : { base: "#f4f4f5", exporter: "#ef4444", importer: "#3b82f6", stroke: "#d4d4d8", arcDefault: "#ef4444", arcHover: "#f59e0b", reExport: "#d97706" };
 
   const hoveredFlowData = hoveredFlow !== null ? visibleFlows[hoveredFlow] : null;
   const hoveredReExportData =
@@ -409,8 +441,12 @@ function TradeFlowMap({
                   // filled a red almost identical to the exporter colour and
                   // read as an exporter. (#307)
                   let fill = colors.base;
-                  if (role === "exporter") fill = colors.exporter;
-                  else if (role === "importer") fill = colors.importer;
+                  if (role && alpha2)
+                    fill = mixColor(
+                      colors.base,
+                      colors[role],
+                      intensityOf(alpha2, role)
+                    );
 
                   const hasAnnotation = !!(alpha2 && countryAnnotations?.[alpha2]);
                   // Any country that traded is clickable (selecting it
