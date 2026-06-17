@@ -154,6 +154,11 @@ export interface CountryAnnotation {
   quotas?: { quota: number; unit: string | null }[];
 }
 
+interface CountryTotal {
+  code: string;
+  records: number;
+}
+
 interface TradeFlowMapProps {
   flows: TradeFlow[];
   /**
@@ -161,6 +166,14 @@ interface TradeFlowMapProps {
    * (origin → re-exporter). Shown as an opt-in dashed overlay.
    */
   reExportFlows?: TradeFlow[];
+  /**
+   * Whole-dataset exporter / importer record totals (the figures behind the
+   * Top Exporters / Top Importers tables). These drive each country's colour
+   * so the map agrees with those tables; without them we fall back to tallying
+   * the handful of drawn flows, which misclassifies net importers.
+   */
+  exporters?: CountryTotal[];
+  importers?: CountryTotal[];
   /** ISO alpha-2 codes of countries with active trade suspensions */
   suspensionCountries?: Set<string>;
   /** Per-country suspension/quota annotations for hover tooltip */
@@ -170,6 +183,8 @@ interface TradeFlowMapProps {
 function TradeFlowMap({
   flows,
   reExportFlows,
+  exporters,
+  importers,
   suspensionCountries,
   countryAnnotations,
 }: TradeFlowMapProps) {
@@ -178,13 +193,24 @@ function TradeFlowMap({
   const [hoveredReExport, setHoveredReExport] = useState<number | null>(null);
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
-  const [showReExports, setShowReExports] = useState(true);
+  const [showReExports, setShowReExports] = useState(false);
 
   // Only render flows where we have centroids for both endpoints
   const renderableFlows = useMemo(
     () => flows.filter((f) => COUNTRY_CENTROIDS[f.from] && COUNTRY_CENTROIDS[f.to]),
     [flows]
   );
+
+  // Countries that take part in at least one drawn flow — these are clickable
+  // (on the country shape or its dot) to filter the map to their trade.
+  const flowCountryCodes = useMemo(() => {
+    const codes = new Set<string>();
+    for (const f of renderableFlows) {
+      codes.add(f.from);
+      codes.add(f.to);
+    }
+    return codes;
+  }, [renderableFlows]);
 
   // Re-export legs (origin → re-exporter) with known centroids
   const renderableReExports = useMemo(
@@ -214,16 +240,43 @@ function TradeFlowMap({
         : renderableReExports
       : [];
 
-  // Collect unique exporter/importer codes from visible flows
-  const exporterCodes = new Set(visibleFlows.map((f) => f.from));
-  const importerCodes = new Set(visibleFlows.map((f) => f.to));
+  // Per-country export vs import volume, used to colour each country by its
+  // DOMINANT role. Earlier this was derived purely from whether a country
+  // appeared as the source/destination of one of the few drawn flows, which
+  // painted net importers like the US, Canada and Switzerland as exporters and
+  // net exporters like South Africa as importers — contradicting the Top
+  // Exporters / Top Importers tables. We now prefer the whole-dataset
+  // aggregates behind those tables and only fall back to flow tallies for
+  // endpoints outside the top lists. (#307)
+  const exportRecords = new Map<string, number>();
+  const importRecords = new Map<string, number>();
+  for (const f of visibleFlows) {
+    exportRecords.set(f.from, (exportRecords.get(f.from) ?? 0) + f.records);
+    importRecords.set(f.to, (importRecords.get(f.to) ?? 0) + f.records);
+  }
+  for (const e of exporters ?? []) exportRecords.set(e.code, e.records);
+  for (const i of importers ?? []) importRecords.set(i.code, i.records);
+
+  type TradeRole = "exporter" | "importer";
+
+  /**
+   * Classify a country by its net direction of trade: whichever of exports /
+   * imports accounts for more records. Ties fall to importer. This keeps the
+   * colour consistent with the headline Top Exporters / Top Importers tables.
+   */
+  function roleOf(code: string): TradeRole | null {
+    const ex = exportRecords.get(code) ?? 0;
+    const im = importRecords.get(code) ?? 0;
+    if (ex === 0 && im === 0) return null;
+    return ex > im ? "exporter" : "importer";
+  }
 
   const maxRecords = visibleFlows.length > 0 ? Math.max(...visibleFlows.map((f) => f.records)) : 0;
 
   // Theme-aware colors for SVG fills (can't use Tailwind classes in SVG)
   const colors = dark
-    ? { base: "#18181b", exporter: "#7f1d1d", importer: "#1e3a5f", both: "#312e81", stroke: "#27272a", suspension: "#991b1b", arcDefault: "#f87171", arcHover: "#fbbf24", reExport: "#d97706" }
-    : { base: "#f4f4f5", exporter: "#fee2e2", importer: "#dbeafe", both: "#e0e7ff", stroke: "#d4d4d8", suspension: "#fecaca", arcDefault: "#ef4444", arcHover: "#f59e0b", reExport: "#d97706" };
+    ? { base: "#18181b", exporter: "#7f1d1d", importer: "#1e3a5f", stroke: "#27272a", arcDefault: "#f87171", arcHover: "#fbbf24", reExport: "#d97706" }
+    : { base: "#f4f4f5", exporter: "#fee2e2", importer: "#dbeafe", stroke: "#d4d4d8", arcDefault: "#ef4444", arcHover: "#f59e0b", reExport: "#d97706" };
 
   const hoveredFlowData = hoveredFlow !== null ? visibleFlows[hoveredFlow] : null;
   const hoveredReExportData =
@@ -316,17 +369,23 @@ function TradeFlowMap({
                 .map((geo) => {
                   const name = geo.properties.name;
                   const alpha2 = NAME_TO_ALPHA2[name];
-                  const isExporter = alpha2 ? exporterCodes.has(alpha2) : false;
-                  const isImporter = alpha2 ? importerCodes.has(alpha2) : false;
+                  const role = alpha2 ? roleOf(alpha2) : null;
                   const isSuspended = alpha2 ? suspensionCountries?.has(alpha2) : false;
 
+                  // Trade role drives the fill. A suspension is a secondary
+                  // annotation shown via the dashed red border below — it must
+                  // NOT repaint the country, otherwise a suspended importer
+                  // (e.g. the US, which suspends elephant-product imports) was
+                  // filled a red almost identical to the exporter colour and
+                  // read as an exporter. (#307)
                   let fill = colors.base;
-                  if (isSuspended) fill = colors.suspension;
-                  else if (isExporter && isImporter) fill = colors.both;
-                  else if (isExporter) fill = colors.exporter;
-                  else if (isImporter) fill = colors.importer;
+                  if (role === "exporter") fill = colors.exporter;
+                  else if (role === "importer") fill = colors.importer;
 
                   const hasAnnotation = alpha2 && countryAnnotations?.[alpha2];
+                  const isTradeCountry = alpha2 ? flowCountryCodes.has(alpha2) : false;
+                  const isClickable = isTradeCountry;
+                  const cursor = isClickable || hasAnnotation ? "pointer" : "default";
 
                   return (
                     <Geography
@@ -338,9 +397,17 @@ function TradeFlowMap({
                       strokeDasharray={isSuspended ? "3,2" : undefined}
                       onMouseEnter={() => hasAnnotation && setHoveredCountry(alpha2)}
                       onMouseLeave={() => setHoveredCountry(null)}
+                      onClick={
+                        isClickable
+                          ? () =>
+                              setSelectedCountry(
+                                selectedCountry === alpha2 ? null : alpha2
+                              )
+                          : undefined
+                      }
                       style={{
-                        default: { outline: "none", cursor: hasAnnotation ? "pointer" : "default" },
-                        hover: { outline: "none", fill: hasAnnotation ? (dark ? "#3f3f46" : "#e4e4e7") : fill, cursor: hasAnnotation ? "pointer" : "default" },
+                        default: { outline: "none", cursor },
+                        hover: { outline: "none", fill: isClickable || hasAnnotation ? (dark ? "#3f3f46" : "#e4e4e7") : fill, cursor },
                         pressed: { outline: "none" },
                       }}
                     />
@@ -466,12 +533,10 @@ function TradeFlowMap({
                 seen.add(code);
                 const coords = COUNTRY_CENTROIDS[code];
                 if (!coords) continue;
-                const isExp = exporterCodes.has(code);
-                const isImp = importerCodes.has(code);
-                const isBoth = isExp && isImp;
+                const role = roleOf(code);
                 const isSelected = selectedCountry === code;
 
-                let fill = isImp && !isExp ? "#3b82f6" : isBoth ? "#6366f1" : "#ef4444";
+                let fill = role === "importer" ? "#3b82f6" : "#ef4444";
                 if (isSelected) fill = "#f59e0b";
 
                 markers.push(
@@ -507,11 +572,11 @@ function TradeFlowMap({
       <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 mt-1 text-[10px] text-zinc-500 dark:text-zinc-400">
         <span className="flex items-center gap-1">
           <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
-          Exporter
+          Net exporter
         </span>
         <span className="flex items-center gap-1">
           <span className="inline-block w-2 h-2 rounded-full bg-blue-500" />
-          Importer (destination)
+          Net importer
         </span>
         <span className="flex items-center gap-1">
           <svg width="16" height="8" className="inline-block">
@@ -522,7 +587,7 @@ function TradeFlowMap({
         </span>
         {suspensionCountries && suspensionCountries.size > 0 && (
           <span className="flex items-center gap-1">
-            <span className="inline-block w-3 h-2 rounded-sm border border-dashed border-red-500 bg-red-100 dark:bg-red-900/30" />
+            <span className="inline-block w-3 h-2 rounded-sm border border-dashed border-red-500 bg-transparent" />
             Suspension
           </span>
         )}
