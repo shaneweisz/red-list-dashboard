@@ -182,8 +182,9 @@ function aggregateShipments(rows: CompactRecord[]): Aggregated {
     yEntry.quantity += r.q;
     yearMap.set(r.y, yEntry);
 
-    if (r.s) sourceMap.set(r.s, (sourceMap.get(r.s) || 0) + 1);
-    if (r.p) purposeMap.set(r.p, (purposeMap.get(r.p) || 0) + 1);
+    // Count blanks too, under code "" → "Unspecified", so they're filterable.
+    sourceMap.set(r.s, (sourceMap.get(r.s) || 0) + 1);
+    purposeMap.set(r.p, (purposeMap.get(r.p) || 0) + 1);
 
     if (r.e) {
       const e = exporterMap.get(r.e) || { records: 0, quantity: 0 };
@@ -231,11 +232,19 @@ function aggregateShipments(rows: CompactRecord[]): Aggregated {
 
   const topSources = Array.from(sourceMap.entries())
     .sort(([, a], [, b]) => b - a)
-    .map(([code, records]) => ({ code, label: SOURCE_LABELS[code] || code, records }));
+    .map(([code, records]) => ({
+      code,
+      label: code === "" ? "Unspecified" : SOURCE_LABELS[code] || code,
+      records,
+    }));
 
   const topPurposes = Array.from(purposeMap.entries())
     .sort(([, a], [, b]) => b - a)
-    .map(([code, records]) => ({ code, label: PURPOSE_LABELS[code] || code, records }));
+    .map(([code, records]) => ({
+      code,
+      label: code === "" ? "Unspecified" : PURPOSE_LABELS[code] || code,
+      records,
+    }));
 
   // Full sorted lists (not capped): the map colours every country that traded,
   // and the lists slice for display. Capping here previously hid genuine
@@ -849,18 +858,31 @@ export default function CitesTradeSummary({
     };
   }, [citesId, prefetchedData, prefetchedLoading]);
 
+  // Source / purpose category universes derived from the records, INCLUDING the
+  // blank "" ("Unspecified") category, so it gets initialised and is isolatable.
+  const allSourceCodes = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of data?.shipments ?? []) set.add(r.s);
+    return Array.from(set);
+  }, [data]);
+  const allPurposeCodes = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of data?.shipments ?? []) set.add(r.p);
+    return Array.from(set);
+  }, [data]);
+
   // Initialize filter checkboxes when data arrives
   useEffect(() => {
     if (!data || !data.found || filtersInitialized) return;
 
-    if (data.allSources) {
+    if (allSourceCodes.length > 0) {
       const init: Record<string, boolean> = {};
-      for (const s of data.allSources) init[s.code] = true;
+      for (const c of allSourceCodes) init[c] = true;
       setCheckedSources(init);
     }
-    if (data.allPurposes) {
+    if (allPurposeCodes.length > 0) {
       const init: Record<string, boolean> = {};
-      for (const p of data.allPurposes) init[p.code] = true;
+      for (const c of allPurposeCodes) init[c] = true;
       setCheckedPurposes(init);
     }
     if (data.allTermsByUnit) {
@@ -869,23 +891,21 @@ export default function CitesTradeSummary({
       setCheckedTerms(init);
     }
     setFiltersInitialized(true);
-  }, [data, filtersInitialized]);
+  }, [data, filtersInitialized, allSourceCodes, allPurposeCodes]);
 
   // Clicking a bar isolates that category (selects only it); clicking the
   // already-isolated one resets the dimension to all.
   const isolateSource = useCallback(
     (code: string) => {
-      const keys = (data?.allSources ?? []).map((s) => s.code);
-      setCheckedSources((prev) => isolateState(prev, keys, code));
+      setCheckedSources((prev) => isolateState(prev, allSourceCodes, code));
     },
-    [data]
+    [allSourceCodes]
   );
   const isolatePurpose = useCallback(
     (code: string) => {
-      const keys = (data?.allPurposes ?? []).map((p) => p.code);
-      setCheckedPurposes((prev) => isolateState(prev, keys, code));
+      setCheckedPurposes((prev) => isolateState(prev, allPurposeCodes, code));
     },
-    [data]
+    [allPurposeCodes]
   );
   const isolateTerm = useCallback(
     (key: string) => {
@@ -950,14 +970,14 @@ export default function CitesTradeSummary({
   const checkboxRows = useMemo(() => {
     if (!data?.found || !data.shipments) return [];
     return data.shipments.filter((r) => {
-      if (anySourceOff && (!r.s || checkedSources[r.s] === false)) return false;
-      if (anyPurposeOff && (!r.p || checkedPurposes[r.p] === false)) return false;
+      if (checkedSources[r.s] === false) return false;
+      if (checkedPurposes[r.p] === false) return false;
       if (checkedTerms[termUnitKey(r.t, r.u)] === false) return false;
       if (selectedCountry && r.e !== selectedCountry && r.i !== selectedCountry)
         return false;
       return true;
     });
-  }, [data, checkedSources, checkedPurposes, checkedTerms, selectedCountry, anySourceOff, anyPurposeOff]);
+  }, [data, checkedSources, checkedPurposes, checkedTerms, selectedCountry]);
 
   // Chart series (all years, checkbox-filtered)
   const chartAgg = useMemo(() => aggregateShipments(checkboxRows), [checkboxRows]);
@@ -976,20 +996,20 @@ export default function CitesTradeSummary({
   const commodityChart = useMemo(() => {
     if (!data?.found || !data.shipments) return [];
     const rows = data.shipments.filter((r) => {
-      if (anySourceOff && (!r.s || checkedSources[r.s] === false)) return false;
-      if (anyPurposeOff && (!r.p || checkedPurposes[r.p] === false)) return false;
+      if (checkedSources[r.s] === false) return false;
+      if (checkedPurposes[r.p] === false) return false;
       if (brush && (r.y < brush[0] || r.y > brush[1])) return false;
       if (selectedCountry && r.e !== selectedCountry && r.i !== selectedCountry)
         return false;
       return true;
     });
     return aggregateShipments(rows).termsByUnit;
-  }, [data, checkedSources, checkedPurposes, brush, selectedCountry, anySourceOff, anyPurposeOff]);
+  }, [data, checkedSources, checkedPurposes, brush, selectedCountry]);
 
   const sourceChart = useMemo(() => {
     if (!data?.found || !data.shipments) return [];
     const rows = data.shipments.filter((r) => {
-      if (anyPurposeOff && (!r.p || checkedPurposes[r.p] === false)) return false;
+      if (checkedPurposes[r.p] === false) return false;
       if (checkedTerms[termUnitKey(r.t, r.u)] === false) return false;
       if (brush && (r.y < brush[0] || r.y > brush[1])) return false;
       if (selectedCountry && r.e !== selectedCountry && r.i !== selectedCountry)
@@ -997,12 +1017,12 @@ export default function CitesTradeSummary({
       return true;
     });
     return aggregateShipments(rows).topSources;
-  }, [data, checkedPurposes, checkedTerms, brush, selectedCountry, anyPurposeOff]);
+  }, [data, checkedPurposes, checkedTerms, brush, selectedCountry]);
 
   const purposeChart = useMemo(() => {
     if (!data?.found || !data.shipments) return [];
     const rows = data.shipments.filter((r) => {
-      if (anySourceOff && (!r.s || checkedSources[r.s] === false)) return false;
+      if (checkedSources[r.s] === false) return false;
       if (checkedTerms[termUnitKey(r.t, r.u)] === false) return false;
       if (brush && (r.y < brush[0] || r.y > brush[1])) return false;
       if (selectedCountry && r.e !== selectedCountry && r.i !== selectedCountry)
@@ -1010,7 +1030,7 @@ export default function CitesTradeSummary({
       return true;
     });
     return aggregateShipments(rows).topPurposes;
-  }, [data, checkedSources, checkedTerms, brush, selectedCountry, anySourceOff]);
+  }, [data, checkedSources, checkedTerms, brush, selectedCountry]);
 
   // Exporter / importer aggregates that DON'T apply the country cross-filter, so
   // the Top exporters / importers lists stay populated and let you switch
@@ -1018,14 +1038,14 @@ export default function CitesTradeSummary({
   const countryAgg = useMemo(() => {
     if (!data?.found || !data.shipments) return null;
     const rows = data.shipments.filter((r) => {
-      if (anySourceOff && (!r.s || checkedSources[r.s] === false)) return false;
-      if (anyPurposeOff && (!r.p || checkedPurposes[r.p] === false)) return false;
+      if (checkedSources[r.s] === false) return false;
+      if (checkedPurposes[r.p] === false) return false;
       if (checkedTerms[termUnitKey(r.t, r.u)] === false) return false;
       if (brush && (r.y < brush[0] || r.y > brush[1])) return false;
       return true;
     });
     return aggregateShipments(rows);
-  }, [data, checkedSources, checkedPurposes, checkedTerms, brush, anySourceOff, anyPurposeOff]);
+  }, [data, checkedSources, checkedPurposes, checkedTerms, brush]);
 
   const hasShipments = !!data?.shipments && data.shipments.length > 0;
 
@@ -1092,9 +1112,12 @@ export default function CitesTradeSummary({
     sublabel: s.code,
     records: s.records,
     active: checkedSources[s.code] !== false,
-    barClass: WILD_SOURCE_CODES.has(s.code)
-      ? "bg-amber-400 dark:bg-amber-500"
-      : "bg-emerald-300 dark:bg-emerald-600",
+    barClass:
+      s.code === ""
+        ? "bg-zinc-400 dark:bg-zinc-500"
+        : WILD_SOURCE_CODES.has(s.code)
+          ? "bg-amber-400 dark:bg-amber-500"
+          : "bg-emerald-300 dark:bg-emerald-600",
   }));
 
   const purposeBars: FilterBar[] = purposeChart.map((p) => ({
@@ -1103,7 +1126,7 @@ export default function CitesTradeSummary({
     sublabel: p.code,
     records: p.records,
     active: checkedPurposes[p.code] !== false,
-    barClass: "bg-blue-400 dark:bg-blue-500",
+    barClass: p.code === "" ? "bg-zinc-400 dark:bg-zinc-500" : "bg-blue-400 dark:bg-blue-500",
   }));
 
   const commoditySearch = termSearch.trim().toLowerCase();

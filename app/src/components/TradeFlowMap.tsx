@@ -291,19 +291,18 @@ function TradeFlowMap({
     return ex > im ? "exporter" : "importer";
   }
 
-  // Colour depth scales (log) with a country's volume in its dominant role, so
-  // small importers/exporters are barely tinted and big ones are saturated.
+  // Colour depth scales linearly with a country's NET trade (|exports −
+  // imports|) relative to the largest net trader, so depth faithfully reflects
+  // scale: a 900-net country next to an ~11k-net one reads as ~900/11k.
+  const netOf = (code: string) =>
+    Math.abs((exportRecords.get(code) ?? 0) - (importRecords.get(code) ?? 0));
   let maxMagnitude = 1;
-  for (const v of exportRecords.values()) if (v > maxMagnitude) maxMagnitude = v;
-  for (const v of importRecords.values()) if (v > maxMagnitude) maxMagnitude = v;
-  const logMax = Math.log(maxMagnitude + 1);
-  function intensityOf(code: string, role: TradeRole): number {
-    const mag =
-      role === "exporter"
-        ? exportRecords.get(code) ?? 0
-        : importRecords.get(code) ?? 0;
-    if (mag <= 0) return 0;
-    return logMax > 0 ? Math.log(mag + 1) / logMax : 1;
+  for (const code of new Set([...exportRecords.keys(), ...importRecords.keys()])) {
+    const net = netOf(code);
+    if (net > maxMagnitude) maxMagnitude = net;
+  }
+  function intensityOf(code: string): number {
+    return Math.min(1, netOf(code) / maxMagnitude);
   }
 
   const maxRecords = visibleFlows.length > 0 ? Math.max(...visibleFlows.map((f) => f.records)) : 0;
@@ -442,11 +441,7 @@ function TradeFlowMap({
                   // read as an exporter. (#307)
                   let fill = colors.base;
                   if (role && alpha2)
-                    fill = mixColor(
-                      colors.base,
-                      colors[role],
-                      intensityOf(alpha2, role)
-                    );
+                    fill = mixColor(colors.base, colors[role], intensityOf(alpha2));
 
                   const hasAnnotation = !!(alpha2 && countryAnnotations?.[alpha2]);
                   // Any country that traded is clickable (selecting it
