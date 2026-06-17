@@ -681,43 +681,73 @@ function TrendSummary({
 /*  Source breakdown (wild vs captive bar)                              */
 /* ------------------------------------------------------------------ */
 
-function SourceBreakdown({ sources }: { sources: CodedData[] }) {
+function SourceBreakdown({
+  sources,
+  wildActive = true,
+  captiveActive = true,
+  onToggleWild,
+  onToggleCaptive,
+}: {
+  sources: CodedData[];
+  wildActive?: boolean;
+  captiveActive?: boolean;
+  onToggleWild?: () => void;
+  onToggleCaptive?: () => void;
+}) {
   const total = sources.reduce((s, d) => s + d.records, 0);
   if (total === 0) return null;
 
-  const wildSources = sources.filter((s) => WILD_SOURCE_CODES.has(s.code));
-  const captiveSources = sources.filter((s) => !WILD_SOURCE_CODES.has(s.code));
-  const wildRecords = wildSources.reduce((sum, s) => sum + s.records, 0);
-  const captiveRecords = captiveSources.reduce((sum, s) => sum + s.records, 0);
+  const wildRecords = sources
+    .filter((s) => WILD_SOURCE_CODES.has(s.code))
+    .reduce((sum, s) => sum + s.records, 0);
+  const captiveRecords = total - wildRecords;
   const wildPct = Math.round((wildRecords / total) * 100);
   const captivePct = 100 - wildPct;
 
+  const rows = [
+    {
+      label: "Wild",
+      active: wildActive,
+      onToggle: onToggleWild,
+      bar: "bg-amber-400 dark:bg-amber-500",
+      pct: wildPct,
+      records: wildRecords,
+    },
+    {
+      label: "Captive",
+      active: captiveActive,
+      onToggle: onToggleCaptive,
+      bar: "bg-emerald-300 dark:bg-emerald-600",
+      pct: captivePct,
+      records: captiveRecords,
+    },
+  ];
+
   return (
     <div className="space-y-1.5">
-      <div className="flex items-center gap-2 text-xs">
-        <span className="w-16 text-zinc-600 dark:text-zinc-300 shrink-0">Wild</span>
-        <div className="flex-1 h-4 bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
-          <div
-            className="h-full bg-amber-400 dark:bg-amber-500 rounded"
-            style={{ width: `${Math.max(wildPct, 1)}%` }}
-          />
+      {rows.map((r) => (
+        <div
+          key={r.label}
+          onClick={r.onToggle}
+          title={r.onToggle ? `Filter by ${r.label.toLowerCase()} source` : undefined}
+          className={`flex items-center gap-2 text-xs select-none transition-opacity ${
+            r.onToggle ? "cursor-pointer" : ""
+          } ${r.active ? "" : "opacity-40"}`}
+        >
+          <span className="w-16 text-zinc-600 dark:text-zinc-300 shrink-0">
+            {r.label}
+          </span>
+          <div className="flex-1 h-4 bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
+            <div
+              className={`h-full rounded ${r.bar}`}
+              style={{ width: `${Math.max(r.pct, 1)}%` }}
+            />
+          </div>
+          <span className="w-20 text-right text-zinc-500 dark:text-zinc-400 tabular-nums shrink-0">
+            {r.pct}% ({r.records.toLocaleString()})
+          </span>
         </div>
-        <span className="w-20 text-right text-zinc-500 dark:text-zinc-400 tabular-nums shrink-0">
-          {wildPct}% ({wildRecords.toLocaleString()})
-        </span>
-      </div>
-      <div className="flex items-center gap-2 text-xs">
-        <span className="w-16 text-zinc-600 dark:text-zinc-300 shrink-0">Captive</span>
-        <div className="flex-1 h-4 bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
-          <div
-            className="h-full bg-emerald-300 dark:bg-emerald-600 rounded"
-            style={{ width: `${Math.max(captivePct, 1)}%` }}
-          />
-        </div>
-        <span className="w-20 text-right text-zinc-500 dark:text-zinc-400 tabular-nums shrink-0">
-          {captivePct}% ({captiveRecords.toLocaleString()})
-        </span>
-      </div>
+      ))}
     </div>
   );
 }
@@ -868,6 +898,25 @@ export default function CitesTradeSummary({
     setCheckedTerms((prev) => ({ ...prev, [key]: !prev[key] }));
   }, []);
 
+  // Toggle every source code in the wild (or captive) bucket at once. If any
+  // code in the bucket is currently on, the click turns the whole bucket off;
+  // otherwise it turns it back on.
+  const toggleSourceBucket = useCallback(
+    (wild: boolean) => {
+      const codes = (data?.allSources ?? [])
+        .filter((s) => WILD_SOURCE_CODES.has(s.code) === wild)
+        .map((s) => s.code);
+      if (codes.length === 0) return;
+      setCheckedSources((prev) => {
+        const anyOn = codes.some((c) => prev[c] !== false);
+        const next = { ...prev };
+        for (const c of codes) next[c] = !anyOn;
+        return next;
+      });
+    },
+    [data]
+  );
+
   const setAll = useCallback(
     (
       setter: React.Dispatch<React.SetStateAction<Record<string, boolean>>>,
@@ -944,6 +993,31 @@ export default function CitesTradeSummary({
     return aggregateShipments(rows);
   }, [checkboxRows, brush]);
 
+  // Cross-filter views: each interactive chart aggregates rows passing every
+  // active filter EXCEPT its own dimension, so its categories stay visible and
+  // a click can toggle them back on (rather than vanishing once de-selected).
+  const commodityChart = useMemo(() => {
+    if (!data?.found || !data.shipments) return [];
+    const rows = data.shipments.filter((r) => {
+      if (r.s && checkedSources[r.s] === false) return false;
+      if (r.p && checkedPurposes[r.p] === false) return false;
+      if (brush && (r.y < brush[0] || r.y > brush[1])) return false;
+      return true;
+    });
+    return aggregateShipments(rows).termsByUnit;
+  }, [data, checkedSources, checkedPurposes, brush]);
+
+  const sourceChart = useMemo(() => {
+    if (!data?.found || !data.shipments) return [];
+    const rows = data.shipments.filter((r) => {
+      if (r.p && checkedPurposes[r.p] === false) return false;
+      if (checkedTerms[termUnitKey(r.t, r.u)] === false) return false;
+      if (brush && (r.y < brush[0] || r.y > brush[1])) return false;
+      return true;
+    });
+    return aggregateShipments(rows).topSources;
+  }, [data, checkedPurposes, checkedTerms, brush]);
+
   const hasShipments = !!data?.shipments && data.shipments.length > 0;
 
   /* ---------------------------------------------------------------- */
@@ -986,15 +1060,26 @@ export default function CitesTradeSummary({
   const chartByYear =
     hasShipments && chartAgg.byYear.length > 0 ? chartAgg.byYear : data.byYear;
   const displaySources =
-    hasShipments && display.topSources.length > 0 ? display.topSources : data.topSources;
-  const displayPurposes =
-    hasShipments && display.topPurposes.length > 0 ? display.topPurposes : data.topPurposes;
+    hasShipments && sourceChart.length > 0 ? sourceChart : data.topSources;
   const displayExporters =
     hasShipments && display.topExporters.length > 0 ? display.topExporters : data.topExporters;
   const displayImporters =
     hasShipments && display.topImporters.length > 0 ? display.topImporters : data.topImporters;
   const displayFlows =
     hasShipments && display.topFlows.length > 0 ? display.topFlows : data.topFlows ?? [];
+
+  // Cross-filter affordances (only interactive when we have client-side rows).
+  const maxCommodityRecords = commodityChart.reduce(
+    (m, t) => Math.max(m, t.records),
+    0
+  );
+  const allSources = data.allSources ?? [];
+  const wildActive = allSources.some(
+    (s) => WILD_SOURCE_CODES.has(s.code) && checkedSources[s.code] !== false
+  );
+  const captiveActive = allSources.some(
+    (s) => !WILD_SOURCE_CODES.has(s.code) && checkedSources[s.code] !== false
+  );
 
   return (
     <div className="space-y-4">
@@ -1205,71 +1290,70 @@ export default function CitesTradeSummary({
             </p>
           </div>
 
-          {/* Source breakdown — most important for assessors */}
+          {/* Source breakdown — most important for assessors. Click a bar to
+              filter the whole summary to that source group. */}
           {displaySources.length > 0 && (
             <div>
               <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
                 Wild vs. Captive
               </h5>
-              <SourceBreakdown sources={displaySources} />
+              <SourceBreakdown
+                sources={displaySources}
+                wildActive={wildActive}
+                captiveActive={captiveActive}
+                onToggleWild={hasShipments ? () => toggleSourceBucket(true) : undefined}
+                onToggleCaptive={
+                  hasShipments ? () => toggleSourceBucket(false) : undefined
+                }
+              />
             </div>
           )}
 
-          {/* Commodities — grouped by term + unit (never aggregated across units) */}
-          {display.termsByUnit.length > 0 && (
+          {/* Commodities — grouped by term + unit (never aggregated across
+              units). Scrollable bar chart; click a bar to filter the summary
+              to that commodity. */}
+          {commodityChart.length > 0 && (
             <div>
               <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
                 Commodities
               </h5>
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="text-left text-zinc-400 dark:text-zinc-500">
-                    <th className="font-medium pb-1 pr-2">Term</th>
-                    <th className="font-medium pb-1 pr-2">Unit</th>
-                    <th className="font-medium pb-1 pr-2 text-right">Records</th>
-                    <th className="font-medium pb-1 text-right">Quantity</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {display.termsByUnit.slice(0, 8).map((t) => (
-                    <tr
-                      key={termUnitKey(t.term, t.unit)}
-                      className="border-t border-zinc-100 dark:border-zinc-800/50"
+              <div className="space-y-1 max-h-[200px] overflow-y-auto pr-1">
+                {commodityChart.map((t) => {
+                  const key = termUnitKey(t.term, t.unit);
+                  const active = checkedTerms[key] !== false;
+                  const pct =
+                    maxCommodityRecords > 0
+                      ? (t.records / maxCommodityRecords) * 100
+                      : 0;
+                  return (
+                    <div
+                      key={key}
+                      onClick={hasShipments ? () => toggleTerm(key) : undefined}
+                      title={`${t.term}${t.unit ? ` (${t.unit})` : ""} — ${t.records.toLocaleString()} records / ${fmtQty(t.quantity)} items`}
+                      className={`flex items-center gap-2 text-xs select-none transition-opacity ${
+                        hasShipments ? "cursor-pointer" : ""
+                      } ${active ? "" : "opacity-40"}`}
                     >
-                      <td className="py-1 pr-2 text-zinc-700 dark:text-zinc-300 capitalize">
+                      <span className="w-28 shrink-0 truncate capitalize text-zinc-700 dark:text-zinc-300">
                         {t.term}
-                      </td>
-                      <td className="py-1 pr-2 text-zinc-500 dark:text-zinc-400">
-                        {t.unit || "—"}
-                      </td>
-                      <td className="py-1 pr-2 text-right text-zinc-500 dark:text-zinc-400 tabular-nums">
+                        {t.unit && (
+                          <span className="text-zinc-400 dark:text-zinc-500 ml-1 normal-case">
+                            {t.unit}
+                          </span>
+                        )}
+                      </span>
+                      <div className="flex-1 h-3.5 bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
+                        <div
+                          className="h-full bg-violet-400 dark:bg-violet-500 rounded"
+                          style={{ width: `${Math.max(pct, 1)}%` }}
+                        />
+                      </div>
+                      <span className="w-12 text-right text-zinc-500 dark:text-zinc-400 tabular-nums shrink-0">
                         {t.records.toLocaleString()}
-                      </td>
-                      <td className="py-1 text-right text-zinc-500 dark:text-zinc-400 tabular-nums">
-                        {fmtQty(t.quantity)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Purpose */}
-          {displayPurposes.length > 0 && (
-            <div>
-              <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
-                Purpose
-              </h5>
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-600 dark:text-zinc-300">
-                {displayPurposes.map((p) => (
-                  <span key={p.code} className="tabular-nums">
-                    {p.label}{" "}
-                    <span className="text-zinc-400 dark:text-zinc-500">
-                      ({p.records})
-                    </span>
-                  </span>
-                ))}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
