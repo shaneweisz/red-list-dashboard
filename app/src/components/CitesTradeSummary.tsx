@@ -237,14 +237,15 @@ function aggregateShipments(rows: CompactRecord[]): Aggregated {
     .sort(([, a], [, b]) => b - a)
     .map(([code, records]) => ({ code, label: PURPOSE_LABELS[code] || code, records }));
 
+  // Full sorted lists (not capped): the map colours every country that traded,
+  // and the lists slice for display. Capping here previously hid genuine
+  // traders (e.g. Cameroon, rank 16) from the map until a filter promoted them.
   const topExporters = Array.from(exporterMap.entries())
     .sort(([, a], [, b]) => b.records - a.records)
-    .slice(0, 15)
     .map(([code, v]) => ({ code, ...v }));
 
   const topImporters = Array.from(importerMap.entries())
     .sort(([, a], [, b]) => b.records - a.records)
-    .slice(0, 15)
     .map(([code, v]) => ({ code, ...v }));
 
   const topFlows = Array.from(flowMap.entries())
@@ -1056,8 +1057,9 @@ export default function CitesTradeSummary({
   // Fall back to server-provided byYear when no shipments for client filtering
   const chartByYear =
     hasShipments && chartAgg.byYear.length > 0 ? chartAgg.byYear : data.byYear;
-  // Country lists (and the map's colour-by-role) use the country-excluded
-  // aggregate so they stay global while a country is selected.
+  // Full country lists (and the map's colour-by-role) use the country-excluded
+  // aggregate so they stay global while a country is selected. The map colours
+  // every trading country; the Top exporters/importers lists show the leaders.
   const displayExporters =
     hasShipments && countryAgg && countryAgg.topExporters.length > 0
       ? countryAgg.topExporters
@@ -1066,6 +1068,8 @@ export default function CitesTradeSummary({
     hasShipments && countryAgg && countryAgg.topImporters.length > 0
       ? countryAgg.topImporters
       : data.topImporters;
+  const tableExporters = displayExporters.slice(0, 15);
+  const tableImporters = displayImporters.slice(0, 15);
   const displayFlows =
     hasShipments && display.topFlows.length > 0 ? display.topFlows : data.topFlows ?? [];
 
@@ -1107,7 +1111,7 @@ export default function CitesTradeSummary({
         records: t.records,
         active: checkedTerms[key] !== false,
         barClass: "bg-violet-400 dark:bg-violet-500",
-        title: `${t.term}${t.unit ? ` (${t.unit})` : ""} — ${t.records.toLocaleString()} records / ${fmtQty(t.quantity)} items`,
+        title: `${t.term}${t.unit ? ` (${t.unit})` : ""} — ${t.records.toLocaleString()} records / ${fmtQty(t.quantity)} ${t.unit || "items"}`,
       };
     });
 
@@ -1211,13 +1215,13 @@ export default function CitesTradeSummary({
           <div className="flex flex-col gap-3">
             <div className="grid grid-cols-2 gap-3">
               <CountryTable
-                data={displayExporters}
+                data={tableExporters}
                 label="Top exporters"
                 selected={selectedCountry}
                 onSelect={setSelectedCountry}
               />
               <CountryTable
-                data={displayImporters}
+                data={tableImporters}
                 label="Top importers"
                 selected={selectedCountry}
                 onSelect={setSelectedCountry}
@@ -1231,13 +1235,13 @@ export default function CitesTradeSummary({
           {headline}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <CountryTable
-              data={displayExporters}
+              data={tableExporters}
               label="Top exporters"
               selected={selectedCountry}
               onSelect={setSelectedCountry}
             />
             <CountryTable
-              data={displayImporters}
+              data={tableImporters}
               label="Top importers"
               selected={selectedCountry}
               onSelect={setSelectedCountry}

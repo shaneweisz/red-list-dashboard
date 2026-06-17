@@ -217,17 +217,6 @@ function TradeFlowMap({
     [flows]
   );
 
-  // Countries that take part in at least one drawn flow — these are clickable
-  // (on the country shape or its dot) to filter the map to their trade.
-  const flowCountryCodes = useMemo(() => {
-    const codes = new Set<string>();
-    for (const f of renderableFlows) {
-      codes.add(f.from);
-      codes.add(f.to);
-    }
-    return codes;
-  }, [renderableFlows]);
-
   // Re-export legs (origin → re-exporter) with known centroids
   const renderableReExports = useMemo(
     () =>
@@ -424,10 +413,9 @@ function TradeFlowMap({
                   else if (role === "importer") fill = colors.importer;
 
                   const hasAnnotation = !!(alpha2 && countryAnnotations?.[alpha2]);
-                  // Clickable only for countries in a drawn flow (so the
-                  // selection actually filters something); the hover tooltip
-                  // shows for any country with trade totals or an annotation.
-                  const isClickable = alpha2 ? flowCountryCodes.has(alpha2) : false;
+                  // Any country that traded is clickable (selecting it
+                  // cross-filters the summary) and shows a hover tooltip.
+                  const isClickable = role !== null;
                   const showTooltip = role !== null || hasAnnotation;
                   const cursor = isClickable ? "pointer" : "default";
 
