@@ -1031,6 +1031,8 @@ export default function CitesTradeSummary({
           <TradeFlowMap
             flows={displayFlows}
             reExportFlows={display.reExportFlows}
+            exporters={displayExporters}
+            importers={displayImporters}
             suspensionCountries={suspensionCountries}
             countryAnnotations={countryAnnotations}
           />

@@ -154,6 +154,11 @@ export interface CountryAnnotation {
   quotas?: { quota: number; unit: string | null }[];
 }
 
+interface CountryTotal {
+  code: string;
+  records: number;
+}
+
 interface TradeFlowMapProps {
   flows: TradeFlow[];
   /**
@@ -161,6 +166,14 @@ interface TradeFlowMapProps {
    * (origin → re-exporter). Shown as an opt-in dashed overlay.
    */
   reExportFlows?: TradeFlow[];
+  /**
+   * Whole-dataset exporter / importer record totals (the figures behind the
+   * Top Exporters / Top Importers tables). These drive each country's colour
+   * so the map agrees with those tables; without them we fall back to tallying
+   * the handful of drawn flows, which misclassifies net importers.
+   */
+  exporters?: CountryTotal[];
+  importers?: CountryTotal[];
   /** ISO alpha-2 codes of countries with active trade suspensions */
   suspensionCountries?: Set<string>;
   /** Per-country suspension/quota annotations for hover tooltip */
@@ -170,6 +183,8 @@ interface TradeFlowMapProps {
 function TradeFlowMap({
   flows,
   reExportFlows,
+  exporters,
+  importers,
   suspensionCountries,
   countryAnnotations,
 }: TradeFlowMapProps) {
@@ -214,18 +229,22 @@ function TradeFlowMap({
         : renderableReExports
       : [];
 
-  // Tally each country's export vs import volume across the visible flows so we
-  // can colour it by its DOMINANT role. Previously a country was painted
-  // "exporter"/"importer"/"both" purely on whether it appeared as a flow's
-  // source/destination — so a major net exporter like South Africa (which also
-  // receives a few large regional shipments) showed up as an importer/"both",
-  // contradicting the Top Exporters table. (#307)
+  // Per-country export vs import volume, used to colour each country by its
+  // DOMINANT role. Earlier this was derived purely from whether a country
+  // appeared as the source/destination of one of the few drawn flows, which
+  // painted net importers like the US, Canada and Switzerland as exporters and
+  // net exporters like South Africa as importers — contradicting the Top
+  // Exporters / Top Importers tables. We now prefer the whole-dataset
+  // aggregates behind those tables and only fall back to flow tallies for
+  // endpoints outside the top lists. (#307)
   const exportRecords = new Map<string, number>();
   const importRecords = new Map<string, number>();
   for (const f of visibleFlows) {
     exportRecords.set(f.from, (exportRecords.get(f.from) ?? 0) + f.records);
     importRecords.set(f.to, (importRecords.get(f.to) ?? 0) + f.records);
   }
+  for (const e of exporters ?? []) exportRecords.set(e.code, e.records);
+  for (const i of importers ?? []) importRecords.set(i.code, i.records);
 
   type TradeRole = "exporter" | "importer" | "both";
 
