@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, memo } from "react";
+import React, { useState, useMemo, useRef, useEffect, useCallback, memo } from "react";
 import {
   ComposableMap,
   Geographies,
@@ -226,6 +226,80 @@ function TradeFlowMap({
   const setSelectedCountry = onSelectCountry ?? setInternalSelected;
   const [showReExports, setShowReExports] = useState(false);
 
+  /* ---- Pan / zoom -------------------------------------------------- */
+  // A single transform applied to all map content (geographies + arcs +
+  // markers), so they stay aligned. At {k:1,x:0,y:0} the map renders exactly as
+  // before — pan/zoom is purely additive.
+  const MIN_ZOOM = 1;
+  const MAX_ZOOM = 8;
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [view, setView] = useState({ k: 1, x: 0, y: 0 });
+  const drag = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null);
+  const moved = useRef(false);
+
+  // Keep the (scaled) content covering the viewport.
+  const clampView = (k: number, x: number, y: number) => ({
+    k,
+    x: Math.min(0, Math.max(MAP_WIDTH * (1 - k), x)),
+    y: Math.min(0, Math.max(MAP_HEIGHT * (1 - k), y)),
+  });
+
+  // Pointer (viewBox) coords from a client event.
+  const toView = (clientX: number, clientY: number) => {
+    const rect = wrapRef.current?.getBoundingClientRect();
+    if (!rect) return [0, 0] as const;
+    return [
+      ((clientX - rect.left) / rect.width) * MAP_WIDTH,
+      ((clientY - rect.top) / rect.height) * MAP_HEIGHT,
+    ] as const;
+  };
+
+  const zoomBy = useCallback((factor: number, cx = MAP_WIDTH / 2, cy = MAP_HEIGHT / 2) => {
+    setView((v) => {
+      const k = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, v.k * factor));
+      const r = k / v.k;
+      return clampView(k, cx - (cx - v.x) * r, cy - (cy - v.y) * r);
+    });
+  }, []);
+
+  // Non-passive wheel listener so we can preventDefault the page scroll.
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const [cx, cy] = toView(e.clientX, e.clientY);
+      zoomBy(e.deltaY < 0 ? 1.2 : 1 / 1.2, cx, cy);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [zoomBy]);
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    drag.current = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y };
+    moved.current = false;
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!drag.current) return;
+    const rect = wrapRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const dx = ((e.clientX - drag.current.x) / rect.width) * MAP_WIDTH;
+    const dy = ((e.clientY - drag.current.y) / rect.height) * MAP_HEIGHT;
+    if (Math.abs(e.clientX - drag.current.x) + Math.abs(e.clientY - drag.current.y) > 3)
+      moved.current = true;
+    setView((v) => clampView(v.k, drag.current!.vx + dx, drag.current!.vy + dy));
+  };
+  const onPointerUp = () => {
+    drag.current = null;
+  };
+  // Suppress the click that ends a drag (so panning doesn't select a country).
+  const consumeClick = () => {
+    const m = moved.current;
+    moved.current = false;
+    return m;
+  };
+
   // Only render flows where we have centroids for both endpoints
   const renderableFlows = useMemo(
     () => flows.filter((f) => COUNTRY_CENTROIDS[f.from] && COUNTRY_CENTROIDS[f.to]),
@@ -311,7 +385,7 @@ function TradeFlowMap({
   // exporter/importer values are the *saturated* end of the depth ramp (mixed
   // toward `base` by intensity below); they match the marker dot colours.
   const colors = dark
-    ? { base: "#18181b", exporter: "#ef4444", importer: "#3b82f6", stroke: "#27272a", arcDefault: "#f87171", arcHover: "#fbbf24", reExport: "#d97706" }
+    ? { base: "#3f3f46", exporter: "#ef4444", importer: "#3b82f6", stroke: "#71717a", arcDefault: "#f87171", arcHover: "#fbbf24", reExport: "#d97706" }
     : { base: "#f4f4f5", exporter: "#ef4444", importer: "#3b82f6", stroke: "#d4d4d8", arcDefault: "#ef4444", arcHover: "#f59e0b", reExport: "#d97706" };
 
   const hoveredFlowData = hoveredFlow !== null ? visibleFlows[hoveredFlow] : null;
@@ -414,6 +488,18 @@ function TradeFlowMap({
         </button>
       )}
 
+      <div
+        ref={wrapRef}
+        className="relative"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerLeave={onPointerUp}
+        style={{
+          touchAction: "none",
+          cursor: drag.current ? "grabbing" : view.k > 1 ? "grab" : "default",
+        }}
+      >
       <ComposableMap
         projection="geoNaturalEarth1"
         projectionConfig={{ scale: 160, center: [0, 0] }}
@@ -421,6 +507,7 @@ function TradeFlowMap({
         width={MAP_WIDTH}
         height={MAP_HEIGHT}
       >
+       <g transform={`translate(${view.x}, ${view.y}) scale(${view.k})`}>
         <g transform={`translate(${MAP_OFFSET[0]}, ${MAP_OFFSET[1]})`}>
           {/* Base map */}
           <Geographies geography={GEO_URL}>
@@ -462,15 +549,17 @@ function TradeFlowMap({
                       onMouseLeave={() => setHoveredCountry(null)}
                       onClick={
                         isClickable
-                          ? () =>
+                          ? () => {
+                              if (consumeClick()) return;
                               setSelectedCountry(
                                 selectedCountry === alpha2 ? null : alpha2
-                              )
+                              );
+                            }
                           : undefined
                       }
                       style={{
                         default: { outline: "none", cursor },
-                        hover: { outline: "none", fill: showTooltip ? (dark ? "#3f3f46" : "#e4e4e7") : fill, cursor },
+                        hover: { outline: "none", fill: showTooltip ? (dark ? "#52525b" : "#e4e4e7") : fill, cursor },
                         pressed: { outline: "none" },
                       }}
                     />
@@ -610,7 +699,10 @@ function TradeFlowMap({
                       stroke={dark ? "#18181b" : "#fff"}
                       strokeWidth={isSelected ? 1 : 0.5}
                       style={{ cursor: "pointer" }}
-                      onClick={() => setSelectedCountry(selectedCountry === code ? null : code)}
+                      onClick={() => {
+                        if (consumeClick()) return;
+                        setSelectedCountry(selectedCountry === code ? null : code);
+                      }}
                     />
                     {isSelected && (
                       <text
@@ -629,7 +721,30 @@ function TradeFlowMap({
             return markers;
           })()}
         </g>
+       </g>
       </ComposableMap>
+
+        {/* Zoom controls */}
+        <div className="absolute bottom-2 right-2 z-10 flex flex-col gap-1">
+          <button
+            type="button"
+            aria-label="Zoom in"
+            onClick={() => zoomBy(1.5)}
+            className="w-6 h-6 flex items-center justify-center rounded bg-white/90 dark:bg-zinc-800/90 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 shadow-sm hover:bg-white dark:hover:bg-zinc-700 text-sm font-medium"
+          >
+            +
+          </button>
+          <button
+            type="button"
+            aria-label="Zoom out"
+            onClick={() => zoomBy(1 / 1.5)}
+            disabled={view.k <= MIN_ZOOM}
+            className="w-6 h-6 flex items-center justify-center rounded bg-white/90 dark:bg-zinc-800/90 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 shadow-sm hover:bg-white dark:hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed text-sm font-medium"
+          >
+            −
+          </button>
+        </div>
+      </div>
 
       {/* Legend — labelled with CITES roles */}
       <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 mt-1 text-[10px] text-zinc-500 dark:text-zinc-400">
