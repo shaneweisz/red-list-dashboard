@@ -307,18 +307,22 @@ function FilterBarChart({
 
   return (
     <div className="min-w-0">
-      <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
-        {title}
-      </h5>
-      {onSearchChange && (
-        <input
-          type="text"
-          value={search ?? ""}
-          onChange={(e) => onSearchChange(e.target.value)}
-          placeholder={searchPlaceholder}
-          className="w-full mb-1.5 px-2 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 placeholder:text-zinc-400"
-        />
-      )}
+      {/* Fixed-height header row so the bar lists in adjacent charts line up,
+          whether or not a chart has an inline search box. */}
+      <div className="flex items-center gap-2 mb-1.5 h-7">
+        <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider shrink-0">
+          {title}
+        </h5>
+        {onSearchChange && (
+          <input
+            type="text"
+            value={search ?? ""}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder={searchPlaceholder}
+            className="ml-auto w-32 px-2 py-0.5 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 placeholder:text-zinc-400"
+          />
+        )}
+      </div>
       <div className="space-y-1 max-h-[240px] overflow-y-auto pr-1">
         {bars.map((b) => {
           const pct = max > 0 ? (b.records / max) * 100 : 0;
@@ -644,55 +648,6 @@ function TrendLineChart({
 }
 
 /* ------------------------------------------------------------------ */
-/*  Trend summary text                                                 */
-/* ------------------------------------------------------------------ */
-
-function TrendSummary({
-  data,
-  metric,
-}: {
-  data: YearData[];
-  metric: "records" | "quantity";
-}) {
-  if (data.length < 4) return null;
-  const mid = Math.floor(data.length / 2);
-  const firstHalf = data.slice(0, mid);
-  const secondHalf = data.slice(mid);
-  const key = metric;
-  const avgFirst = firstHalf.reduce((s, d) => s + d[key], 0) / firstHalf.length;
-  const avgSecond =
-    secondHalf.reduce((s, d) => s + d[key], 0) / secondHalf.length;
-  if (avgFirst === 0 && avgSecond === 0) return null;
-  const pctChange = avgFirst === 0 ? 100 : ((avgSecond - avgFirst) / avgFirst) * 100;
-
-  if (Math.abs(pctChange) < 15) {
-    return (
-      <span className="text-zinc-400 dark:text-zinc-500 text-[11px]" title="Stable trend">
-        Trend: stable
-      </span>
-    );
-  }
-  if (pctChange > 0) {
-    return (
-      <span
-        className="text-red-500 dark:text-red-400 text-[11px] font-medium"
-        title={`Increased ~${Math.round(pctChange)}% (comparing first/second half of period)`}
-      >
-        &#9650; +{Math.round(pctChange)}%
-      </span>
-    );
-  }
-  return (
-    <span
-      className="text-emerald-500 dark:text-emerald-400 text-[11px] font-medium"
-      title={`Decreased ~${Math.round(Math.abs(pctChange))}% (comparing first/second half of period)`}
-    >
-      &#9660; {Math.round(pctChange)}%
-    </span>
-  );
-}
-
-/* ------------------------------------------------------------------ */
 /*  Country table                                                      */
 /* ------------------------------------------------------------------ */
 
@@ -702,35 +657,27 @@ function CountryTable({ data, label }: { data: CountryData[]; label: string }) {
 
   return (
     <div>
-      <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
+      <h5 className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-0.5">
         {label}
       </h5>
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="text-left text-zinc-400 dark:text-zinc-500">
-            <th className="font-medium pb-1 pr-2">Country</th>
-            <th className="font-medium pb-1 text-right">Records</th>
-          </tr>
-        </thead>
-        <tbody>
-          {top.map((c) => (
-            <tr
-              key={c.code}
-              className="border-t border-zinc-100 dark:border-zinc-800/50"
-            >
-              <td className="py-1 pr-2 text-zinc-700 dark:text-zinc-300">
-                {countryName(c.code)}
-                <span className="text-zinc-400 dark:text-zinc-500 ml-1">
-                  ({c.code})
-                </span>
-              </td>
-              <td className="py-1 text-right text-zinc-500 dark:text-zinc-400 tabular-nums">
-                {c.records.toLocaleString()}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div>
+        {top.map((c) => (
+          <div
+            key={c.code}
+            className="flex items-baseline justify-between gap-2 text-[11px] py-px"
+          >
+            <span className="truncate text-zinc-700 dark:text-zinc-300">
+              {countryName(c.code)}
+              <span className="text-zinc-400 dark:text-zinc-500 ml-1">
+                ({c.code})
+              </span>
+            </span>
+            <span className="text-zinc-500 dark:text-zinc-400 tabular-nums shrink-0">
+              {c.records.toLocaleString()}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -1018,6 +965,47 @@ export default function CitesTradeSummary({
   const hasFilterCharts =
     sourceBars.length > 0 || purposeBars.length > 0 || commodityChart.length > 0;
 
+  // Trade-over-time chart, placed in the map's side column (or full width when
+  // there is no map).
+  const tradeOverTimeChart = (
+    <div>
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
+          Trade over time
+        </span>
+        <span className="text-[11px] text-zinc-400 dark:text-zinc-500 normal-case">
+          (shipments)
+        </span>
+        {brush && (
+          <span className="text-[11px] text-blue-600 dark:text-blue-400 tabular-nums ml-auto">
+            {brush[0]}–{brush[1]}
+          </span>
+        )}
+      </div>
+      <TrendLineChart
+        data={chartByYear}
+        metric={metric}
+        minYear={minYear}
+        maxYear={maxYear}
+        brush={brush}
+        onBrushChange={setBrush}
+        provisionalFromYear={provisionalFromYear}
+      />
+      <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-1 leading-snug">
+        Drag the handles to trim the year range.
+        {maxYear >= provisionalFromYear && (
+          <>
+            {" "}
+            Recent years (dashed, {provisionalFromYear}+) are{" "}
+            <span className="text-amber-500 dark:text-amber-400">provisional</span> —
+            CITES reporting lags by a few years, so they are usually incomplete
+            rather than showing a real drop.
+          </>
+        )}
+      </p>
+    </div>
+  );
+
   return (
     <div className="space-y-4">
       {/* Headline */}
@@ -1036,7 +1024,6 @@ export default function CitesTradeSummary({
             </span>
           )}
         </span>
-        <TrendSummary data={display.byYear} metric={metric} />
         {hasActiveFilters && (
           <button
             className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline ml-auto"
@@ -1047,7 +1034,8 @@ export default function CitesTradeSummary({
         )}
       </div>
 
-      {/* Trade flow map with Top exporters / importers alongside it */}
+      {/* Trade flow map, with Top exporters / importers and the trade-over-time
+          chart stacked in the side column. */}
       {displayFlows.length > 0 ? (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-2 border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden bg-zinc-50 dark:bg-zinc-800/30">
@@ -1060,72 +1048,33 @@ export default function CitesTradeSummary({
               countryAnnotations={countryAnnotations}
             />
           </div>
-          <div className="space-y-4">
+          <div className="space-y-3">
             <CountryTable data={displayExporters} label="Top exporters" />
             <CountryTable data={displayImporters} label="Top importers" />
+            {tradeOverTimeChart}
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <CountryTable data={displayExporters} label="Top exporters" />
-          <CountryTable data={displayImporters} label="Top importers" />
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <CountryTable data={displayExporters} label="Top exporters" />
+            <CountryTable data={displayImporters} label="Top importers" />
+          </div>
+          {tradeOverTimeChart}
         </div>
       )}
 
-      {/* Trade over time */}
-      <div>
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
-            Trade over time
-          </span>
-          <span className="text-[11px] text-zinc-400 dark:text-zinc-500 normal-case">
-            (shipments)
-          </span>
-          {brush && (
-            <span className="text-[11px] text-blue-600 dark:text-blue-400 tabular-nums ml-auto">
-              {brush[0]}–{brush[1]}
-            </span>
-          )}
-        </div>
-        <TrendLineChart
-          data={chartByYear}
-          metric={metric}
-          minYear={minYear}
-          maxYear={maxYear}
-          brush={brush}
-          onBrushChange={setBrush}
-          provisionalFromYear={provisionalFromYear}
-        />
-        <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-1 leading-snug">
-          Drag the handles to trim the year range.
-          {maxYear >= provisionalFromYear && (
-            <>
-              {" "}
-              Recent years (dashed, {provisionalFromYear}+) are{" "}
-              <span className="text-amber-500 dark:text-amber-400">provisional</span> —
-              CITES reporting lags by a few years, so they are usually incomplete
-              rather than showing a real drop.
-            </>
-          )}
-        </p>
-      </div>
-
-      {/* Filter charts — click a bar to cross-filter the whole summary.
-          Source bars are coloured wild (amber) vs captive (emerald). */}
+      {/* Filter charts below the map — click a bar to cross-filter the whole
+          summary. Source bars are coloured wild (amber) vs captive (emerald). */}
       {hasFilterCharts && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <FilterBarChart
-            title="Source"
-            bars={sourceBars}
-            onToggle={hasShipments ? toggleSource : undefined}
-          />
           <FilterBarChart
             title="Commodity"
             bars={commodityBars}
             onToggle={hasShipments ? toggleTerm : undefined}
             search={termSearch}
             onSearchChange={setTermSearch}
-            searchPlaceholder="Search commodities…"
+            searchPlaceholder="Search…"
             emptyHint={
               commoditySearch
                 ? `No commodities match “${termSearch}”.`
@@ -1136,6 +1085,11 @@ export default function CitesTradeSummary({
             title="Purpose"
             bars={purposeBars}
             onToggle={hasShipments ? togglePurpose : undefined}
+          />
+          <FilterBarChart
+            title="Source"
+            bars={sourceBars}
+            onToggle={hasShipments ? toggleSource : undefined}
           />
         </div>
       )}
