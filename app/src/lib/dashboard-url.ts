@@ -21,11 +21,9 @@
  *    display-root in `taxa` (the dashboard filters sub-groups out of the parent's
  *    loaded set); a scientific-rank taxon (e.g. `felidae`) → `taxa=<id>` (matched
  *    by class/order/family); a featured group → `taxa=<id>`.
- *
- * Residual, intentionally-approximate cases (documented, not silently wrong):
- *  - `assessors`/`reviewers`: /browse matches a substring; the dashboard matches a
- *    full assessor/reviewer name. A full name is exact; a partial name may select
- *    a broader set in the dashboard.
+ *  - `assessors`/`reviewers`: both surfaces case-insensitively SUBSTRING-match the
+ *    name (the dashboard predicate mirrors /browse), so a partial name selects the
+ *    same species set in each.
  */
 import type { BrowseInput } from "@/lib/browse-query";
 import {

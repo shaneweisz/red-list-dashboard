@@ -799,16 +799,22 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const YEARS_PAGE_SIZE = 10;
   const [yearsPage, setYearsPage] = useState(0);
 
-  // Helper to check if species matches the assessors filter
+  // Helper to check if species matches the assessors filter.
+  // Case-insensitive SUBSTRING match — same semantics as the /browse + MCP
+  // `assessors` filter, so an agent's dashboard link reproduces the same set.
+  // (A chart click adds a full name, which substring-matches itself; the only
+  // difference is the rare case where one full name is a substring of another.)
   const matchesAssessorsFilter = useCallback((s: Species): boolean => {
     if (selectedAssessors.size === 0) return true;
-    return getSpeciesAssessors(s).some(a => selectedAssessors.has(a));
+    const sels = [...selectedAssessors].map(x => x.toLowerCase());
+    return getSpeciesAssessors(s).some(a => { const al = a.toLowerCase(); return sels.some(x => al.includes(x)); });
   }, [selectedAssessors, getSpeciesAssessors]);
 
-  // Helper to check if species matches the reviewers filter
+  // Helper to check if species matches the reviewers filter (substring, as above).
   const matchesReviewersFilter = useCallback((s: Species): boolean => {
     if (selectedReviewers.size === 0) return true;
-    return getSpeciesReviewers(s).some(r => selectedReviewers.has(r));
+    const sels = [...selectedReviewers].map(x => x.toLowerCase());
+    return getSpeciesReviewers(s).some(r => { const rl = r.toLowerCase(); return sels.some(x => rl.includes(x)); });
   }, [selectedReviewers, getSpeciesReviewers]);
 
   // Species details cache (images, criteria, common names)
