@@ -499,8 +499,8 @@ function TradeFlowMap({
           selected-country filter chip stacked beneath it. */}
       <div className="absolute top-2 right-2 z-10 flex flex-col items-end gap-1.5">
         {totalFlows > 1 && (
-          <div className="flex items-center gap-2 bg-zinc-50/80 dark:bg-zinc-900/60 backdrop-blur-sm rounded-md px-2 py-1 shadow-sm">
-            <span className="text-[10px] text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
+          <div className="flex items-center gap-1.5 bg-zinc-50/80 dark:bg-zinc-900/60 backdrop-blur-sm rounded px-1.5 py-0.5 shadow-sm">
+            <span className="text-[9px] text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
               Flows{" "}
               <span className="tabular-nums font-medium text-zinc-700 dark:text-zinc-200">
                 {showingAll ? `all ${totalFlows}` : shownFlows}
@@ -513,7 +513,7 @@ function TradeFlowMap({
               value={shownFlows}
               onChange={(e) => setFlowLimit(Number(e.target.value))}
               aria-label="Number of trade flows to show"
-              className="w-24 h-1 cursor-pointer accent-red-500"
+              className="w-12 h-0.5 cursor-pointer accent-red-500"
             />
           </div>
         )}
