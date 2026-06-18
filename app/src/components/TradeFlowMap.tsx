@@ -495,38 +495,16 @@ function TradeFlowMap({
         </div>
       )}
 
-      {/* Top-right controls: a slider for how many flows to draw, with the
-          selected-country filter chip stacked beneath it. */}
-      <div className="absolute top-2 right-2 z-10 flex flex-col items-end gap-1.5">
-        {totalFlows > 1 && (
-          <div className="flex items-center gap-1.5 bg-zinc-50/80 dark:bg-zinc-900/60 backdrop-blur-sm rounded px-1.5 py-0.5 shadow-sm">
-            <span className="text-[9px] text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
-              Flows{" "}
-              <span className="tabular-nums font-medium text-zinc-700 dark:text-zinc-200">
-                {showingAll ? `all ${totalFlows}` : shownFlows}
-              </span>
-            </span>
-            <input
-              type="range"
-              min={1}
-              max={totalFlows}
-              value={shownFlows}
-              onChange={(e) => setFlowLimit(Number(e.target.value))}
-              aria-label="Number of trade flows to show"
-              className="w-12 h-0.5 cursor-pointer accent-red-500"
-            />
-          </div>
-        )}
-        {selectedCountry && (
-          <button
-            className="bg-zinc-800 dark:bg-zinc-700 text-white text-[11px] px-2.5 py-1 rounded-full flex items-center gap-1.5 hover:bg-zinc-700 dark:hover:bg-zinc-600 transition-colors"
-            onClick={() => setSelectedCountry(null)}
-          >
-            {countryName(selectedCountry)}
-            <span className="text-zinc-400">&times;</span>
-          </button>
-        )}
-      </div>
+      {/* Selected country filter chip */}
+      {selectedCountry && (
+        <button
+          className="absolute top-2 right-2 z-10 bg-zinc-800 dark:bg-zinc-700 text-white text-[11px] px-2.5 py-1 rounded-full flex items-center gap-1.5 hover:bg-zinc-700 dark:hover:bg-zinc-600 transition-colors"
+          onClick={() => setSelectedCountry(null)}
+        >
+          {countryName(selectedCountry)}
+          <span className="text-zinc-400">&times;</span>
+        </button>
+      )}
 
       <div
         ref={wrapRef}
@@ -837,7 +815,26 @@ function TradeFlowMap({
             </label>
           </>
         )}
-        <span className="text-zinc-400 dark:text-zinc-500 italic">click dot to filter</span>
+        {totalFlows > 1 && (
+          <label className="flex items-center gap-1.5 select-none">
+            <span className="whitespace-nowrap">
+              Flows{" "}
+              <span className="tabular-nums font-medium text-zinc-600 dark:text-zinc-300">
+                {showingAll ? `all ${totalFlows}` : shownFlows}
+              </span>
+            </span>
+            <input
+              type="range"
+              min={1}
+              max={totalFlows}
+              value={shownFlows}
+              onChange={(e) => setFlowLimit(Number(e.target.value))}
+              aria-label="Number of trade flows to show"
+              className="slider-xs w-16 cursor-pointer"
+            />
+          </label>
+        )}
+        <span className="text-zinc-400 dark:text-zinc-500 italic">click to filter</span>
       </div>
     </div>
   );
