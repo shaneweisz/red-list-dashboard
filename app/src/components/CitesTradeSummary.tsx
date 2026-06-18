@@ -257,9 +257,12 @@ function aggregateShipments(rows: CompactRecord[]): Aggregated {
     .sort(([, a], [, b]) => b.records - a.records)
     .map(([code, v]) => ({ code, ...v }));
 
+  // Full sorted flow lists (not capped here): the map applies a user-controlled
+  // cap on how many of the top flows to draw via its "Flows shown" control, so
+  // we hand it everything and let it slice. Flows stay sorted by record count so
+  // slicing the top N keeps the largest.
   const topFlows = Array.from(flowMap.entries())
     .sort(([, a], [, b]) => b.records - a.records)
-    .slice(0, 12)
     .map(([key, v]) => {
       const [from, to] = key.split("->");
       return { from, to, ...v };
@@ -267,7 +270,6 @@ function aggregateShipments(rows: CompactRecord[]): Aggregated {
 
   const reExportFlows = Array.from(reExportMap.entries())
     .sort(([, a], [, b]) => b.records - a.records)
-    .slice(0, 12)
     .map(([key, v]) => {
       const [from, to] = key.split("->");
       return { from, to, ...v };
@@ -316,12 +318,14 @@ function Pager({
   page,
   total,
   onPage,
+  pageSize = PAGE_SIZE,
 }: {
   page: number;
   total: number;
   onPage: (p: number) => void;
+  pageSize?: number;
 }) {
-  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const totalPages = Math.ceil(total / pageSize);
   if (totalPages <= 1) return null;
   return (
     <div className="flex items-center justify-between mt-1 text-[10px] text-zinc-400 dark:text-zinc-500">
@@ -333,7 +337,7 @@ function Pager({
         Prev
       </button>
       <span className="tabular-nums">
-        {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total}
+        {page * pageSize + 1}–{Math.min((page + 1) * pageSize, total)} of {total}
       </span>
       <button
         onClick={() => onPage(Math.min(totalPages - 1, page + 1))}
@@ -736,43 +740,60 @@ function CountryTable({
   label,
   selected,
   onSelect,
+  barClass,
 }: {
   data: CountryData[];
   label: string;
   selected?: string | null;
   onSelect?: (code: string | null) => void;
+  /** Tailwind classes for the (unselected) bar fill. */
+  barClass: string;
 }) {
   const [page, setPage] = useState(0);
   if (data.length === 0) return null;
   const sorted = [...data].sort((a, b) => b.records - a.records);
+  // Scale bars against the global max so widths stay comparable across pages.
+  const max = sorted.reduce((m, c) => Math.max(m, c.records), 0);
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages - 1);
   const pageRows = sorted.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
 
   return (
     <div className="min-w-0">
-      <h5 className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-0.5">
+      <h5 className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
         {label}
       </h5>
-      <div>
+      <div className="space-y-1">
         {pageRows.map((c) => {
           const isSel = selected === c.code;
+          const pct = max > 0 ? (c.records / max) * 100 : 0;
           return (
             <div
               key={c.code}
               onClick={onSelect ? () => onSelect(isSel ? null : c.code) : undefined}
               title={`${countryName(c.code)} — ${c.records.toLocaleString()} records`}
-              className={`flex items-baseline justify-between gap-1.5 text-[11px] py-px px-1 -mx-1 rounded ${
-                onSelect ? "cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/60" : ""
-              } ${isSel ? "bg-amber-100 dark:bg-amber-900/40" : ""}`}
+              className={`flex items-center gap-1.5 text-[11px] select-none ${
+                onSelect ? "cursor-pointer" : ""
+              }`}
             >
-              <span className="truncate text-zinc-700 dark:text-zinc-300">
+              <span
+                className={`w-16 shrink-0 truncate ${
+                  isSel
+                    ? "text-amber-600 dark:text-amber-400 font-medium"
+                    : "text-zinc-700 dark:text-zinc-300"
+                }`}
+              >
                 {countryName(c.code)}
-                <span className="text-zinc-400 dark:text-zinc-500 ml-1">
-                  ({c.code})
-                </span>
               </span>
-              <span className="text-zinc-500 dark:text-zinc-400 tabular-nums shrink-0">
+              <div className="flex-1 h-3 bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
+                <div
+                  className={`h-full rounded ${
+                    isSel ? "bg-amber-400 dark:bg-amber-500" : barClass
+                  }`}
+                  style={{ width: `${Math.max(pct, 1)}%` }}
+                />
+              </div>
+              <span className="w-9 text-right text-zinc-500 dark:text-zinc-400 tabular-nums shrink-0">
                 {c.records.toLocaleString()}
               </span>
             </div>
@@ -780,6 +801,107 @@ function CountryTable({
         })}
       </div>
       <Pager page={safePage} total={sorted.length} onPage={setPage} />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Individual shipment records table                                  */
+/* ------------------------------------------------------------------ */
+
+/** Rows shown per page in the individual-records table. */
+const RECORDS_PAGE_SIZE = 5;
+
+/**
+ * A paginated table of the individual shipment records behind the summary,
+ * reflecting every active filter. Sorted most-recent-first so the latest trade
+ * is on top. Quantities follow the CITES guide (exporter-reported preferred);
+ * a re-export origin, when present, is shown ahead of the exporter.
+ */
+function RecordsTable({ rows }: { rows: CompactRecord[] }) {
+  const [page, setPage] = useState(0);
+  if (rows.length === 0) return null;
+  const totalPages = Math.max(1, Math.ceil(rows.length / RECORDS_PAGE_SIZE));
+  const safePage = Math.min(page, totalPages - 1);
+  const pageRows = rows.slice(
+    safePage * RECORDS_PAGE_SIZE,
+    safePage * RECORDS_PAGE_SIZE + RECORDS_PAGE_SIZE
+  );
+
+  return (
+    <div className="min-w-0">
+      <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
+        Records{" "}
+        <span className="text-zinc-400 dark:text-zinc-500 normal-case tabular-nums">
+          ({rows.length.toLocaleString()})
+        </span>
+      </h5>
+      <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-x-auto">
+        <table className="w-full text-[11px] whitespace-nowrap">
+          <thead>
+            <tr className="text-left text-zinc-400 dark:text-zinc-500 border-b border-zinc-100 dark:border-zinc-800">
+              <th className="px-2.5 py-1 font-medium">Year</th>
+              <th className="px-2.5 py-1 font-medium">Commodity</th>
+              <th className="px-2.5 py-1 font-medium text-right">Qty</th>
+              <th className="px-2.5 py-1 font-medium">Exporter &rarr; Importer</th>
+              <th className="px-2.5 py-1 font-medium">Source</th>
+              <th className="px-2.5 py-1 font-medium">Purpose</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pageRows.map((r, i) => (
+              <tr
+                key={i}
+                className="border-t first:border-t-0 border-zinc-100 dark:border-zinc-800"
+              >
+                <td className="px-2.5 py-1 tabular-nums text-zinc-600 dark:text-zinc-300">
+                  {r.y}
+                </td>
+                <td className="px-2.5 py-1 text-zinc-700 dark:text-zinc-300 capitalize">
+                  {r.t}
+                  {r.u && (
+                    <span className="text-zinc-400 dark:text-zinc-500 ml-1 normal-case">
+                      {r.u}
+                    </span>
+                  )}
+                </td>
+                <td className="px-2.5 py-1 text-right tabular-nums text-zinc-600 dark:text-zinc-300">
+                  {r.q > 0 ? fmtQty(r.q) : "—"}
+                </td>
+                <td className="px-2.5 py-1 text-zinc-700 dark:text-zinc-300">
+                  {r.o && (
+                    <span title={`Origin ${countryName(r.o)}`}>
+                      {countryName(r.o)}{" "}
+                      <span className="text-zinc-400 dark:text-zinc-500">&rarr;</span>{" "}
+                    </span>
+                  )}
+                  {r.e ? countryName(r.e) : "—"}{" "}
+                  <span className="text-zinc-400 dark:text-zinc-500">&rarr;</span>{" "}
+                  {r.i ? countryName(r.i) : "—"}
+                </td>
+                <td
+                  className="px-2.5 py-1 text-zinc-500 dark:text-zinc-400"
+                  title={r.s ? `${SOURCE_LABELS[r.s] || r.s} (${r.s})` : undefined}
+                >
+                  {r.s ? SOURCE_LABELS[r.s] || r.s : "—"}
+                </td>
+                <td
+                  className="px-2.5 py-1 text-zinc-500 dark:text-zinc-400"
+                  title={r.p ? `${PURPOSE_LABELS[r.p] || r.p} (${r.p})` : undefined}
+                >
+                  {r.p ? PURPOSE_LABELS[r.p] || r.p : "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <Pager
+        page={safePage}
+        total={rows.length}
+        onPage={setPage}
+        pageSize={RECORDS_PAGE_SIZE}
+      />
     </div>
   );
 }
@@ -982,13 +1104,18 @@ export default function CitesTradeSummary({
   // Chart series (all years, checkbox-filtered)
   const chartAgg = useMemo(() => aggregateShipments(checkboxRows), [checkboxRows]);
 
-  // Everything else also respects the year-range trim
-  const display = useMemo(() => {
+  // The individual records behind the summary: every active filter applied
+  // (checkboxes, country, and the year-range trim), sorted most-recent-first
+  // (largest quantity breaks ties) so the records table leads with recent trade.
+  const displayRows = useMemo(() => {
     const rows = brush
       ? checkboxRows.filter((r) => r.y >= brush[0] && r.y <= brush[1])
       : checkboxRows;
-    return aggregateShipments(rows);
+    return [...rows].sort((a, b) => b.y - a.y || b.q - a.q);
   }, [checkboxRows, brush]);
+
+  // Everything else also respects the year-range trim
+  const display = useMemo(() => aggregateShipments(displayRows), [displayRows]);
 
   // Cross-filter views: each interactive chart aggregates rows passing every
   // active filter EXCEPT its own dimension, so its categories stay visible and
@@ -1228,8 +1355,8 @@ export default function CitesTradeSummary({
       {/* Trade flow map (with the record count overlaid), and Top exporters /
           importers + the trade-over-time chart in the side column. */}
       {displayFlows.length > 0 ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2 relative border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden bg-zinc-50 dark:bg-zinc-800/30">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+          <div className="lg:col-span-3 relative border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden bg-zinc-50 dark:bg-zinc-800/30">
             <div className="absolute top-2 left-3 z-10 bg-zinc-50/70 dark:bg-zinc-900/40 backdrop-blur-sm rounded-md px-2 py-1">
               {headline}
             </div>
@@ -1246,19 +1373,21 @@ export default function CitesTradeSummary({
           </div>
           {/* Side column stretches to the map's height; the trade-over-time
               chart is pushed to the bottom so it lines up with the map base. */}
-          <div className="flex flex-col gap-3">
+          <div className="lg:col-span-2 flex flex-col gap-3">
             <div className="grid grid-cols-2 gap-3">
               <CountryTable
                 data={tableExporters}
                 label="Top exporters"
                 selected={selectedCountry}
                 onSelect={setSelectedCountry}
+                barClass="bg-red-400 dark:bg-red-500"
               />
               <CountryTable
                 data={tableImporters}
                 label="Top importers"
                 selected={selectedCountry}
                 onSelect={setSelectedCountry}
+                barClass="bg-blue-400 dark:bg-blue-500"
               />
             </div>
             <div className="mt-auto">{tradeOverTimeChart}</div>
@@ -1273,12 +1402,14 @@ export default function CitesTradeSummary({
               label="Top exporters"
               selected={selectedCountry}
               onSelect={setSelectedCountry}
+              barClass="bg-red-400 dark:bg-red-500"
             />
             <CountryTable
               data={tableImporters}
               label="Top importers"
               selected={selectedCountry}
               onSelect={setSelectedCountry}
+              barClass="bg-blue-400 dark:bg-blue-500"
             />
           </div>
           {tradeOverTimeChart}
@@ -1314,6 +1445,10 @@ export default function CitesTradeSummary({
           />
         </div>
       )}
+
+      {/* The individual shipment records behind everything above, paginated and
+          reflecting all active filters. */}
+      {hasShipments && <RecordsTable rows={displayRows} />}
     </div>
   );
 }

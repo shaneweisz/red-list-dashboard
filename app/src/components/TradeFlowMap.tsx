@@ -74,13 +74,16 @@ const COUNTRY_CENTROIDS: Record<string, [number, number]> = {
   PS: [35.2, 32.0], XK: [21.0, 42.6], MK: [21.7, 41.5],
 };
 
-const MAP_WIDTH = 800;
-// Cropped a little shorter than the projection's natural height to trim some of
-// the empty ocean below the southern continents, while keeping New Zealand and
-// the southern tip of South America in frame. The extra y-offset keeps the land
-// in place while the viewBox cuts the bottom rather than re-centring the map.
+// The natural-earth world is slightly wider than the viewBox at this scale, so
+// the far east (NZ / the dateline) would otherwise sit just past the right edge
+// while a broad band of empty eastern Pacific padded the left (west of the
+// Americas). The negative x-offset pans the content left: it trims that western
+// ocean down to a thin margin AND pulls New Zealand / Fiji fully back into
+// frame. The y-offset + shortened height crop empty ocean below the southern
+// continents while keeping the southern tip of South America in view.
+const MAP_WIDTH = 760;
 const MAP_HEIGHT = 372;
-const MAP_OFFSET: [number, number] = [30, 34];
+const MAP_OFFSET: [number, number] = [-70, 34];
 
 // Build projection that matches the ComposableMap settings
 const projection = geoNaturalEarth1()
@@ -225,6 +228,9 @@ function TradeFlowMap({
     selectedCountryProp !== undefined ? selectedCountryProp : internalSelected;
   const setSelectedCountry = onSelectCountry ?? setInternalSelected;
   const [showReExports, setShowReExports] = useState(false);
+  // How many of the top bilateral flows to draw. The default of 10 keeps the
+  // map legible; the top-right slider lets users widen it or show all.
+  const [flowLimit, setFlowLimit] = useState(10);
 
   /* ---- Pan / zoom -------------------------------------------------- */
   // A single transform applied to all map content (geographies + arcs +
@@ -319,13 +325,25 @@ function TradeFlowMap({
 
   const dark = resolvedTheme === "dark";
 
-  // Filter flows to selected country (if any)
-  const visibleFlows = selectedCountry
+  // Filter flows to selected country (if any) — these are the candidates the
+  // "Flows shown" control then caps.
+  const countryFlows = selectedCountry
     ? renderableFlows.filter((f) => f.from === selectedCountry || f.to === selectedCountry)
     : renderableFlows;
 
-  // Re-export legs to show: only when toggled on, respecting any country filter
-  const visibleReExports =
+  // The slider runs 1..totalFlows; clamp so a value left over from a larger set
+  // (e.g. before a country filter shrank it) still resolves sensibly, and detect
+  // when we're effectively showing everything.
+  const totalFlows = countryFlows.length;
+  const shownFlows = Math.min(flowLimit, totalFlows);
+  const showingAll = shownFlows >= totalFlows;
+
+  // Flows are pre-sorted by record count, so slicing keeps the largest.
+  const visibleFlows = countryFlows.slice(0, shownFlows);
+
+  // Re-export legs to show: only when toggled on, respecting any country filter,
+  // and capped by the same flow limit so the overlay stays bounded.
+  const countryReExports =
     showReExports && renderableReExports.length > 0
       ? selectedCountry
         ? renderableReExports.filter(
@@ -333,6 +351,9 @@ function TradeFlowMap({
           )
         : renderableReExports
       : [];
+  const visibleReExports = showingAll
+    ? countryReExports
+    : countryReExports.slice(0, shownFlows);
 
   // Per-country export vs import volume, used to colour each country by its
   // DOMINANT role. Earlier this was derived purely from whether a country
@@ -642,6 +663,10 @@ function TradeFlowMap({
 
           const ratio = maxRecords > 0 ? flow.records / maxRecords : 0;
           const strokeWidth = 1.5 + ratio * 2.5;
+          // Opacity also nudges up with volume, so the busiest corridors read a
+          // touch stronger — kept subtle so it reinforces the stroke-width cue
+          // rather than washing the smaller flows out.
+          const baseOpacity = (dark ? 0.6 : 0.4) + ratio * 0.25;
           const isHovered = hoveredFlow === i;
 
           // Arrowhead at destination
@@ -656,7 +681,7 @@ function TradeFlowMap({
                 stroke={isHovered ? colors.arcHover : colors.arcDefault}
                 strokeWidth={isHovered ? strokeWidth + 1 : strokeWidth}
                 strokeLinecap="round"
-                strokeOpacity={isHovered ? 0.95 : dark ? 0.7 : 0.45}
+                strokeOpacity={isHovered ? 0.95 : baseOpacity}
                 onMouseEnter={() => setHoveredFlow(i)}
                 onMouseLeave={() => setHoveredFlow(null)}
                 style={{ cursor: "pointer" }}
@@ -666,7 +691,7 @@ function TradeFlowMap({
                 <polygon
                   points="-5,-3 0,0 -5,3"
                   fill={isHovered ? colors.arcHover : colors.arcDefault}
-                  fillOpacity={isHovered ? 0.95 : dark ? 0.85 : 0.7}
+                  fillOpacity={isHovered ? 0.95 : Math.min(0.95, baseOpacity + 0.15)}
                   transform={`translate(${dest[0]},${dest[1]}) rotate(${angle})`}
                 />
               )}
@@ -793,7 +818,26 @@ function TradeFlowMap({
             </label>
           </>
         )}
-        <span className="text-zinc-400 dark:text-zinc-500 italic">click dot to filter</span>
+        {totalFlows > 1 && (
+          <label className="flex items-center gap-1.5 select-none">
+            <span className="whitespace-nowrap">
+              Flows{" "}
+              <span className="tabular-nums font-medium text-zinc-600 dark:text-zinc-300">
+                {showingAll ? `all ${totalFlows}` : shownFlows}
+              </span>
+            </span>
+            <input
+              type="range"
+              min={1}
+              max={totalFlows}
+              value={shownFlows}
+              onChange={(e) => setFlowLimit(Number(e.target.value))}
+              aria-label="Number of trade flows to show"
+              className="slider-xs w-16 cursor-pointer"
+            />
+          </label>
+        )}
+        <span className="text-zinc-400 dark:text-zinc-500 italic">click to filter</span>
       </div>
     </div>
   );

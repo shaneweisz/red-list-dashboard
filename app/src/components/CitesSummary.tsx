@@ -421,94 +421,99 @@ export default function CitesSummary({
         </div>
       )}
 
-      {/* Trade Quotas */}
-      {sortedQuotas.length > 0 && (
-        <div>
-          <SectionHeader title="Trade Quotas" count={sortedQuotas.length} />
-          <PagedList items={sortedQuotas}>
-            {(slice) => (
-              <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden">
-                <table className="w-full text-[11px] table-fixed">
-                  <tbody>
-                    {slice.map((q, i) => (
-                      <tr
-                        key={i}
-                        className="border-t first:border-t-0 border-zinc-100 dark:border-zinc-800"
-                      >
-                        <td
-                          title={q.country}
-                          className="px-3 py-1 text-zinc-700 dark:text-zinc-300 truncate w-[28%]"
-                        >
-                          {q.country}
-                        </td>
-                        <td className="px-3 py-1 text-right text-zinc-700 dark:text-zinc-300 tabular-nums whitespace-nowrap w-[16%]">
-                          {q.quota != null ? q.quota.toLocaleString() : "—"}
-                          {q.unit ? ` ${q.unit}` : ""}
-                        </td>
-                        <td
-                          title={q.notes || undefined}
-                          className="px-3 py-1 text-zinc-400 truncate"
-                        >
-                          {q.notes || "—"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </PagedList>
-        </div>
-      )}
-
-      {/* Trade Suspensions */}
-      {sortedSuspensions.length > 0 && (
-        <div>
-          <SectionHeader title="Trade Suspensions" count={sortedSuspensions.length} />
-          <PagedList items={sortedSuspensions}>
-            {(slice) => (
-              <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden">
-                <table className="w-full text-[11px]">
-                  <tbody>
-                    {slice.map((s, i) => (
-                      <tr
-                        key={i}
-                        className="border-t first:border-t-0 border-zinc-100 dark:border-zinc-800"
-                      >
-                        <td className="px-3 py-1 text-zinc-700 dark:text-zinc-300">
-                          {s.country}
-                        </td>
-                        <td className="px-3 py-1 text-zinc-500 dark:text-zinc-400 capitalize whitespace-nowrap">
-                          {s.appliesTo}
-                        </td>
-                        <td className="px-3 py-1 text-zinc-500 dark:text-zinc-400 whitespace-nowrap tabular-nums">
-                          {new Date(s.startDate).toLocaleDateString("en-GB", {
-                            year: "numeric",
-                            month: "short",
-                          })}
-                        </td>
-                        <td className="px-3 py-1 text-right hidden md:table-cell">
-                          {s.notification?.url ? (
-                            <a
-                              href={s.notification.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              title={s.notification.name}
-                              className="text-blue-600 dark:text-blue-400 hover:underline"
+      {/* Trade Quotas and Suspensions, side by side */}
+      {(sortedQuotas.length > 0 || sortedSuspensions.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+          {/* Trade Quotas */}
+          {sortedQuotas.length > 0 && (
+            <div>
+              <SectionHeader title="Trade Quotas" count={sortedQuotas.length} />
+              <PagedList items={sortedQuotas}>
+                {(slice) => (
+                  <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden">
+                    <table className="w-full text-[11px] table-fixed">
+                      <tbody>
+                        {slice.map((q, i) => (
+                          <tr
+                            key={i}
+                            className="border-t first:border-t-0 border-zinc-100 dark:border-zinc-800"
+                          >
+                            <td
+                              title={q.country}
+                              className="px-3 py-1 text-zinc-700 dark:text-zinc-300 truncate w-[28%]"
                             >
-                              {s.notification.name}
-                            </a>
-                          ) : (
-                            <span className="text-zinc-400">{s.notification?.name || "—"}</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </PagedList>
+                              {q.country}
+                            </td>
+                            <td className="px-3 py-1 text-right text-zinc-700 dark:text-zinc-300 tabular-nums whitespace-nowrap w-[16%]">
+                              {q.quota != null ? q.quota.toLocaleString() : "—"}
+                              {q.unit ? ` ${q.unit}` : ""}
+                            </td>
+                            <td
+                              title={q.notes || undefined}
+                              className="px-3 py-1 text-zinc-400 truncate"
+                            >
+                              {q.notes || "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </PagedList>
+            </div>
+          )}
+
+          {/* Trade Suspensions */}
+          {sortedSuspensions.length > 0 && (
+            <div>
+              <SectionHeader title="Trade Suspensions" count={sortedSuspensions.length} />
+              <PagedList items={sortedSuspensions}>
+                {(slice) => (
+                  <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden">
+                    <table className="w-full text-[11px]">
+                      <tbody>
+                        {slice.map((s, i) => (
+                          <tr
+                            key={i}
+                            className="border-t first:border-t-0 border-zinc-100 dark:border-zinc-800"
+                          >
+                            <td className="px-3 py-1 text-zinc-700 dark:text-zinc-300">
+                              {s.country}
+                            </td>
+                            <td className="px-3 py-1 text-zinc-500 dark:text-zinc-400 capitalize whitespace-nowrap">
+                              {s.appliesTo}
+                            </td>
+                            <td className="px-3 py-1 text-zinc-500 dark:text-zinc-400 whitespace-nowrap tabular-nums">
+                              {new Date(s.startDate).toLocaleDateString("en-GB", {
+                                year: "numeric",
+                                month: "short",
+                              })}
+                            </td>
+                            <td className="px-3 py-1 text-right hidden md:table-cell">
+                              {s.notification?.url ? (
+                                <a
+                                  href={s.notification.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title={s.notification.name}
+                                  className="text-blue-600 dark:text-blue-400 hover:underline"
+                                >
+                                  {s.notification.name}
+                                </a>
+                              ) : (
+                                <span className="text-zinc-400">{s.notification?.name || "—"}</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </PagedList>
+            </div>
+          )}
         </div>
       )}
 
