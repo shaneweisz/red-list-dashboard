@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { SpeciesSearchBar } from "../components/SpeciesSearchBar";
+import { useBrand } from "../components/BrandProvider";
 import { parseParams, type ViewMode } from "../hooks/useFilterParams";
 
 // Dynamically import view component
@@ -22,6 +23,7 @@ const RedListView = dynamic(
 );
 
 export default function RedListPage() {
+  const brand = useBrand();
   const [viewMode, setViewMode] = useState<ViewMode>("reassessments");
 
   // Hydrate viewMode from URL on mount + sync on popstate (back/forward)
@@ -45,7 +47,7 @@ export default function RedListPage() {
         {/* Header row: title + view mode toggle */}
         <div className="mb-3 md:mb-4 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
           <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-zinc-900 dark:text-zinc-100">
-            IUCN Red List Assessments Dashboard
+            {brand.title}
           </h1>
           <div className="flex items-center gap-2 shrink-0">
             {/* View mode toggle */}
