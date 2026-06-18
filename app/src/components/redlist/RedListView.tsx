@@ -8,6 +8,7 @@ import NewLiteratureSinceAssessment from "../LiteratureSearch";
 import RedListAssessments from "../RedListAssessments";
 import CitesSummary from "../CitesSummary";
 import WikipediaSummary from "../WikipediaSummary";
+import EolSummary from "../EolSummary";
 import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
@@ -788,7 +789,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
 
   // Row expansion state (initialized from URL params if present)
   const [selectedSpeciesKey, setSelectedSpeciesKeyRaw] = useState<number | null>(urlSpecies != null && isNewAssessments ? Math.abs(urlSpecies) : urlSpecies);
-  const [activeDetailTab, setActiveDetailTabRaw] = useState<"gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "col">(urlTab ?? "gbif");
+  const [activeDetailTab, setActiveDetailTabRaw] = useState<"gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "col" | "eol">(urlTab ?? "gbif");
   // Track which tabs have been visited so we only mount (and fetch data for) a tab on first click
   const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set([urlTab ?? "gbif"]));
   const urlSpeciesHandledRef = useRef(false);
@@ -805,7 +806,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     }
   }, [setSpeciesParam]);
 
-  const setActiveDetailTab = useCallback((tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "col") => {
+  const setActiveDetailTab = useCallback((tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "col" | "eol") => {
     setActiveDetailTabRaw(tab);
     programmaticTabChangeRef.current = true;
     setTabParam(tab);
@@ -3410,6 +3411,12 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                   Catalogue of Life
                                 </button>
                                 <button
+                                  className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "eol" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                  onClick={() => setActiveDetailTab("eol")}
+                                >
+                                  Encyclopedia of Life
+                                </button>
+                                <button
                                   className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "wikipedia" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                   onClick={() => setActiveDetailTab("wikipedia")}
                                 >
@@ -3516,6 +3523,11 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                             </div>
                             );
                           })()}
+                          {(stackedDetailView || visitedTabs.has("eol")) && (
+                            <div style={{ display: stackedDetailView || activeDetailTab === "eol" ? undefined : "none" }}>
+                              <EolSummary scientificName={s.scientific_name} />
+                            </div>
+                          )}
                           {s.category !== "NE" && (stackedDetailView || visitedTabs.has("redlist")) && (
                             <div style={{ display: stackedDetailView || activeDetailTab === "redlist" ? undefined : "none" }}>
                               <RedListAssessments
