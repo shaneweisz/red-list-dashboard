@@ -67,4 +67,69 @@ describe("runBrowseQuery", () => {
     const r = await runBrowseQuery({ taxa: ["corals"], region: ["Europe"] });
     expect(r.total).toBe(1);
   });
+
+  it("computes country_count and carries primary-source identifiers", async () => {
+    querySpecies.mockResolvedValue({
+      species: [row({ countries: ["AU", "FJ", "ID"], sis_taxon_id: 42, assessment_id: 99, gbif_species_key: 7, col_id: "X1" })],
+      truncated: false, tooLarge: false, neTotal: null,
+    });
+    const r = await runBrowseQuery({ taxa: ["corals"] });
+    expect(r.species[0].country_count).toBe(3);
+    expect(r.species[0]).toMatchObject({ sis_taxon_id: 42, assessment_id: 99, gbif_species_key: 7, col_id: "X1" });
+    // No country/region filter → endemism is undeterminable.
+    expect(r.species[0].endemic_to_query).toBeNull();
+  });
+
+  it("flags endemic_to_query when every range country is inside the filter", async () => {
+    querySpecies.mockResolvedValue({
+      species: [
+        row({ id: 1, scientific_name: "Endemic sp.", countries: ["ZA"] }),
+        row({ id: 2, scientific_name: "Wide sp.", countries: ["ZA", "MZ", "AU"] }),
+      ],
+      truncated: false, tooLarge: false, neTotal: null,
+    });
+    const r = await runBrowseQuery({ taxa: ["corals"], countries: ["ZA"] });
+    const endemic = r.species.find((s) => s.scientific_name === "Endemic sp.");
+    const wide = r.species.find((s) => s.scientific_name === "Wide sp.");
+    expect(endemic?.endemic_to_query).toBe(true);
+    expect(wide?.endemic_to_query).toBe(false);
+  });
+
+  it("aggregates groupBy over the full matched set, not just the capped list", async () => {
+    querySpecies.mockResolvedValue({
+      species: [
+        row({ id: 1, threat_codes: ["5.1"], population_trend: "Decreasing" }),
+        row({ id: 2, threat_codes: ["5.4", "11.4"], population_trend: "Decreasing" }),
+        row({ id: 3, threat_codes: ["11.1"], population_trend: "Stable" }),
+      ],
+      truncated: false, tooLarge: false, neTotal: null,
+    });
+    const r = await runBrowseQuery({ taxa: ["corals"], groupBy: ["threat", "trend"] });
+    // Threats counted once per distinct top-level code: code 5 → 2 species, code 11 → 2 species.
+    // Equal counts tie-break on the string value ("11" sorts before "5").
+    expect(r.groups.threat).toEqual([
+      { value: "11", label: "Climate change", count: 2 },
+      { value: "5", label: "Harvesting", count: 2 },
+    ]);
+    expect(r.groups.trend).toEqual([
+      { value: "Decreasing", count: 2 },
+      { value: "Stable", count: 1 },
+    ]);
+  });
+
+  it("groups by endemism relative to the query country set", async () => {
+    querySpecies.mockResolvedValue({
+      species: [row({ id: 1, countries: ["ZA"] }), row({ id: 2, countries: ["ZA", "AU"] })],
+      truncated: false, tooLarge: false, neTotal: null,
+    });
+    const r = await runBrowseQuery({ taxa: ["corals"], countries: ["ZA"], groupBy: ["endemism"] });
+    const map = Object.fromEntries(r.groups.endemism.map((b) => [b.value, b.count]));
+    expect(map).toEqual({ endemic_to_query: 1, not_endemic_to_query: 1 });
+  });
+
+  it("surfaces a narrowing note when a colloquial taxon silently narrows", async () => {
+    querySpecies.mockResolvedValue({ species: [row()], truncated: false, tooLarge: false, neTotal: null });
+    const r = await runBrowseQuery({ taxa: ["plants"] });
+    expect(r.narrowingNotes.join(" ")).toMatch(/Flowering Plants only/i);
+  });
 });

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  resolveThreats, resolveCategories, resolveTaxa, resolveCountries,
+  resolveThreats, resolveCategories, resolveTaxa, resolveCountries, taxonNarrowingNotes,
   categoryLabel, taxonLabel, threatDisplay, THREAT_LABEL,
 } from "@/lib/filter-vocab";
 
@@ -50,6 +50,17 @@ describe("resolveTaxa", () => {
     expect(resolveTaxa(["felidae"]).ids).toEqual(["felidae"]);
     // multi-word / punctuated values aren't taxa (species names go to `search`).
     expect(resolveTaxa(["not a taxon"]).unresolved).toEqual(["not a taxon"]);
+  });
+});
+
+describe("taxonNarrowingNotes", () => {
+  it("notes when a colloquial term silently narrows to a smaller group", () => {
+    expect(taxonNarrowingNotes(["plants"]).join(" ")).toMatch(/Flowering Plants only/i);
+    expect(taxonNarrowingNotes(["fungi"]).join(" ")).toMatch(/Mushrooms only/i);
+  });
+  it("is silent for an unambiguous taxon and de-dupes", () => {
+    expect(taxonNarrowingNotes(["mammals"])).toEqual([]);
+    expect(taxonNarrowingNotes(["plants", "plants"]).length).toBe(1);
   });
 });
 

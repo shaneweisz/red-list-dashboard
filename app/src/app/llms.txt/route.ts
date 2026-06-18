@@ -52,8 +52,19 @@ including synonyms / old names (they resolve to the accepted species).
 - Every response has a "stats" object (assessed / outdated / outdated_pct, the %
   of assessments older than 10 years) — use it for percentage questions directly.
 - Every response includes a "dashboard_url" — the interactive dashboard pre-filtered
-  to this same query. Show it to the user and encourage them to open it to inspect
-  and verify the data themselves.
+  to this same query (a REPRODUCE-MY-VIEW link, not a primary-source citation). Show
+  it to the user and encourage them to open it to inspect and verify the data.
+- Each species also carries canonical primary-source ids (sis_taxon_id, assessment_id,
+  gbif_species_key, col_id) — cite the IUCN page https://www.iucnredlist.org/species/<sis>/<assessment_id>,
+  GBIF https://www.gbif.org/species/<gbif_species_key>, or CoL for individual claims.
+  "red_list_version" pins the release the assessments were synced from.
+- Add &groupBy=threat (or category, trend, system, endemism, country) for server-side
+  counts over the FULL matched set — far cheaper and more reliable than eyeballing rows.
+  Returns a "groups" object. Combine several: &groupBy=threat&groupBy=trend.
+- A "coverage" block reports how many species in the queried group are Not Evaluated
+  globally — use it so you don't understate a crisis by trusting the assessed figure.
+- A "taxon_notes" array warns when a colloquial taxon silently narrowed (e.g. plants →
+  flowering plants only, excluding gymnosperms/ferns/mosses/algae).
 
 ## Parameters (values may be codes OR plain-English names)
 
@@ -78,6 +89,7 @@ outdated: yes | no  (assessment more than 10 years old)
 minObs / maxObs: GBIF occurrence-count bounds
 minAssessmentYear / maxAssessmentYear: assessment-year bounds
 minDescribedYear / maxDescribedYear: year-described bounds (NE species)
+groupBy: category | threat | trend | system | endemism | country (server-side counts over the full match)
 
 ## Examples
 - ${base}/browse?taxa=corals&threats=climate-change

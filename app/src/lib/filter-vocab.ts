@@ -206,6 +206,46 @@ const TAXA_ALIASES: Record<string, string> = {
   "horseshoe-crabs": "horseshoe_crabs",
 };
 
+// Colloquial terms that resolve to a NARROWER taxon than a user might assume —
+// e.g. "plants" lands on Flowering Plants only, silently excluding gymnosperms,
+// ferns, mosses, and algae. Surfaced as a note so an agent doesn't confidently
+// report a whole-kingdom total from a single-group query. Keyed by slug; the
+// note names what was excluded and the sibling groups to query for the rest.
+const TAXON_NARROWING: Record<string, { resolvedTo: string; note: string }> = {
+  "plants": { resolvedTo: "flowering_plants", note: "'plants' resolved to Flowering Plants only — it does NOT include gymnosperms, ferns_and_allies, mosses, or algae (green/red/brown). Query those groups separately for a full plant-kingdom picture." },
+  "plant": { resolvedTo: "flowering_plants", note: "'plant' resolved to Flowering Plants only — it does NOT include gymnosperms, ferns_and_allies, mosses, or algae. Query those groups separately for a full plant-kingdom picture." },
+  "flowers": { resolvedTo: "flowering_plants", note: "'flowers' resolved to Flowering Plants only — excludes gymnosperms, ferns_and_allies, mosses, and algae." },
+  "trees": { resolvedTo: "flowering_plants", note: "'trees' resolved to Flowering Plants only — many trees are gymnosperms (conifers/cycads), which are NOT included here. Query 'gymnosperms' for those." },
+  "conifers": { resolvedTo: "gymnosperms", note: "'conifers' resolved to Gymnosperms, which also includes cycads, Ginkgo, and gnetophytes — not conifers alone." },
+  "fungi": { resolvedTo: "mushrooms", note: "'fungi' resolved to Mushrooms only — the Red List's assessed fungi are a small subset of the fungal kingdom." },
+  "mushroom": { resolvedTo: "mushrooms", note: "'mushroom' resolved to Mushrooms only — a small subset of the fungal kingdom." },
+  "ferns": { resolvedTo: "ferns_and_allies", note: "'ferns' resolved to Ferns & Allies (includes horsetails, clubmosses, and quillworts), not true ferns alone." },
+  "fish": { resolvedTo: "fishes", note: "'fish' resolved to Fishes — a paraphyletic grouping spanning ray-finned, cartilaginous (sharks-rays), and jawless fishes; use the 'sharks-rays' sub-group to isolate chondrichthyans." },
+  "frogs": { resolvedTo: "amphibia", note: "'frogs' resolved to all Amphibians (also includes salamanders and caecilians), not frogs alone." },
+  "toads": { resolvedTo: "amphibia", note: "'toads' resolved to all Amphibians, not toads alone." },
+  "snails": { resolvedTo: "mollusca", note: "'snails' resolved to all Molluscs (also bivalves, cephalopods, etc.), not snails alone." },
+  "slugs": { resolvedTo: "mollusca", note: "'slugs' resolved to all Molluscs, not slugs alone." },
+  "crabs": { resolvedTo: "crustacea", note: "'crabs' resolved to all Crustaceans (also shrimp, crayfish, etc.), not crabs alone." },
+  "spiders": { resolvedTo: "arachnida", note: "'spiders' resolved to all Arachnids (also scorpions, mites, etc.), not spiders alone." },
+};
+
+/**
+ * Notes for any input taxon whose colloquial meaning silently NARROWS to a
+ * smaller group than a reader might assume (e.g. plants → flowering plants).
+ * Returned alongside results so an agent can caveat a partial total. Matches the
+ * raw values BEFORE resolution, so it sees the colloquial word the user typed.
+ */
+export function taxonNarrowingNotes(values: string[]): string[] {
+  const notes: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of values) {
+    const slug = slugify(raw);
+    const n = TAXON_NARROWING[slug];
+    if (n && !seen.has(n.note)) { seen.add(n.note); notes.push(n.note); }
+  }
+  return notes;
+}
+
 export function resolveTaxa(values: string[]): { ids: string[]; unresolved: string[] } {
   const ids = new Set<string>();
   const unresolved: string[] = [];

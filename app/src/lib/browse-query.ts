@@ -10,21 +10,25 @@
  * breakdown + outdated stats + a capped, labelled species list).
  */
 import { querySpecies, searchSpecies, type SearchResult } from "@/lib/data/species-duckdb";
-import { isOutdated } from "@/lib/data/species-store";
-import { findNode, speciesMatchesNode } from "@/lib/taxonomy-utils";
+import { isOutdated, getTaxaSummary } from "@/lib/data/species-store";
+import { findNode, speciesMatchesNode, getCsvGroupsForNode } from "@/lib/taxonomy-utils";
 import { matchesSpeciesFilter, type SpeciesFilterCriteria, type FilterableSpecies } from "@/lib/species-filter";
 import type { RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { resolveRegions } from "@/lib/regions";
 import { CATEGORY_ORDER } from "@/config/taxa";
 import {
-  resolveTaxa, resolveThreats, resolveCategories, resolveCountries,
+  resolveTaxa, resolveThreats, resolveCategories, resolveCountries, taxonNarrowingNotes,
   taxonLabel, categoryLabel, countryLabel, threatDisplay, THREAT_LABEL,
 } from "@/lib/filter-vocab";
 
 export const RESULT_CAP = 200;
 
 const threatLabel = (code: string) => (THREAT_LABEL[code] ? `${THREAT_LABEL[code]} (${code})` : code);
+
+/** Dimensions the caller can ask the server to aggregate over (token-cheap counts
+ *  over the FULL matched set, not just the capped species list). */
+export type GroupByDimension = "category" | "threat" | "trend" | "system" | "endemism" | "country";
 
 export interface BrowseInput {
   taxa?: string[];
@@ -47,6 +51,8 @@ export interface BrowseInput {
   maxAssessmentYear?: number;
   minDescribedYear?: number;
   maxDescribedYear?: number;
+  /** Server-side aggregation dimensions (see GroupByDimension). */
+  groupBy?: string[];
 }
 
 export interface BrowseSpecies {
@@ -57,16 +63,47 @@ export interface BrowseSpecies {
   category_label: string;
   threats: { code: string; label: string }[];
   countries: string[];
+  /** Number of range countries — the token-cheap stand-in for the full `countries` array. */
+  country_count: number;
+  /** True when EVERY range country falls within the query's country/region filter
+   *  (i.e. the species is restricted to the queried area). null when no country
+   *  or region filter is active, so it can't be determined. */
+  endemic_to_query: boolean | null;
   systems: string[] | null;
   population_trend: string | null;
   assessment_date: string | null;
   outdated: boolean;
   gbif_occurrence_count: number | null;
+  // Canonical primary-source identifiers (URLs are built from these in the MCP
+  // layer). assessment_id/sis are null for Not-Evaluated species; col_id is set
+  // for NE rows and resolvable for assessed ones.
+  sis_taxon_id: number | null;
+  assessment_id: number | null;
+  gbif_species_key: number | null;
+  col_id: string | null;
+}
+
+/** One aggregated bucket: a value, optional human label, and a count. */
+export interface GroupBucket { value: string; label?: string; count: number; }
+
+/** Pre-filter assessment coverage for the queried curated taxon group(s) — how
+ *  much of the CoL-described universe the IUCN Red List has actually evaluated.
+ *  Surfaces the global undercount so an agent doesn't understate a crisis by
+ *  trusting the assessed figure alone. */
+export interface CoverageInfo {
+  groups: string[];
+  assessed: number;
+  not_evaluated: number;
+  described_universe: number;
+  assessed_pct: number | null;
+  note: string;
 }
 
 export interface BrowseResult {
   interpreted: string[];
   unresolved: string[];
+  /** Notes when a colloquial taxon silently narrowed (e.g. plants → flowering plants). */
+  narrowingNotes: string[];
   /** A requested group is too large to enumerate (drill into a sub-group). */
   tooLarge: boolean;
   /** True when neither a taxon nor a search term resolved (caller decides how to surface). */
@@ -76,10 +113,19 @@ export interface BrowseResult {
   capped: boolean;
   breakdown: Record<string, number>;
   stats: { assessed: number; outdated: number; outdated_pct: number | null };
+  /** Requested server-side aggregations (over the full matched set). Empty when none asked. */
+  groups: Record<string, GroupBucket[]>;
+  /** Assessment coverage for the queried taxon group(s); undefined when not derivable. */
+  coverage?: CoverageInfo;
   species: BrowseSpecies[];
 }
 
 type Row = FilterableSpecies & {
+  id?: number;
+  sis_taxon_id?: number | null;
+  assessment_id?: number | null;
+  gbif_species_key?: number | null;
+  col_id?: string | null;
   taxon_group?: string;
   class_name?: string | null;
   order_name?: string | null;
@@ -102,6 +148,10 @@ function searchHitToRow(h: SearchResult): Row {
     gbif_occurrence_count: null, assessment_date: h.assessment_date, taxon_group: h.taxon_group,
     latest_assessors: null, latest_reviewers: null, described_year: null,
     matched_synonym: h.matched_synonym ?? null,
+    // Carry the canonical ids so a species lookup can cite its primary sources too.
+    // A positive id is the IUCN SIS id; a synthetic negative id is a CoL-only hit.
+    id: h.id, sis_taxon_id: h.id > 0 ? h.id : null, assessment_id: h.assessment_id,
+    gbif_species_key: h.gbif_species_key, col_id: null,
   };
 }
 
@@ -133,7 +183,7 @@ export async function runBrowseQuery(input: BrowseInput): Promise<BrowseResult> 
   ];
 
   if (taxa.ids.length === 0 && !search) {
-    return { interpreted: [], unresolved, tooLarge: false, noSelector: true, total: 0, shown: 0, capped: false, breakdown: {}, stats: { assessed: 0, outdated: 0, outdated_pct: null }, species: [] };
+    return { interpreted: [], unresolved, narrowingNotes: taxonNarrowingNotes(arr(input.taxa)), tooLarge: false, noSelector: true, total: 0, shown: 0, capped: false, breakdown: {}, stats: { assessed: 0, outdated: 0, outdated_pct: null }, groups: {}, species: [] };
   }
 
   const criteria: SpeciesFilterCriteria = {
@@ -200,12 +250,25 @@ export async function runBrowseQuery(input: BrowseInput): Promise<BrowseResult> 
   const outdatedCount = assessed.filter((r) => isOutdated(r.assessment_date ?? null)).length;
   const outdated_pct = assessed.length ? Math.round((outdatedCount / assessed.length) * 100) : null;
 
+  // Endemism is computed relative to the query's country/region set: a species is
+  // "endemic to the query" when EVERY one of its range countries falls inside that
+  // set. Null (undeterminable) when no country/region filter is active.
+  const querySet = new Set<string>([...countries.codes, ...regions.codes]);
+  const hasGeoFilter = querySet.size > 0;
+  const endemicOf = (r: Row): boolean | null =>
+    !hasGeoFilter ? null : r.countries.length > 0 && r.countries.every((c) => querySet.has(c));
+
+  const groups = aggregate(matched, arr(input.groupBy), endemicOf);
+  const coverage = computeCoverage(taxa.ids);
+  const narrowingNotes = taxonNarrowingNotes(arr(input.taxa));
+
   const interpreted = describeFilters({ taxa, threats, categories, countries, regionRaw, regions, systems, trends, movement, growthForms, hasMap, search, assessors, reviewers, minObs, maxObs, minAssessmentYear, maxAssessmentYear, minDescribedYear, maxDescribedYear, outdated });
 
   return {
-    interpreted, unresolved, tooLarge, noSelector: false,
+    interpreted, unresolved, narrowingNotes, tooLarge, noSelector: false,
     total, shown: shown.length, capped: total > RESULT_CAP, breakdown,
     stats: { assessed: assessed.length, outdated: outdatedCount, outdated_pct },
+    groups, coverage,
     species: shown.map((s) => ({
       scientific_name: s.scientific_name,
       common_name: s.common_name,
@@ -214,13 +277,99 @@ export async function runBrowseQuery(input: BrowseInput): Promise<BrowseResult> 
       category_label: categoryLabel(s.category),
       threats: (s.threat_codes ?? []).map((c) => ({ code: c, label: threatDisplay(c) })),
       countries: s.countries,
+      country_count: s.countries.length,
+      endemic_to_query: endemicOf(s),
       systems: s.systems ?? null,
       population_trend: s.population_trend,
       assessment_date: s.assessment_date ?? null,
       outdated: isOutdated(s.assessment_date ?? null),
       gbif_occurrence_count: s.gbif_occurrence_count ?? null,
+      sis_taxon_id: s.sis_taxon_id ?? null,
+      assessment_id: s.assessment_id ?? null,
+      gbif_species_key: s.gbif_species_key ?? null,
+      col_id: s.col_id ?? null,
     })),
   };
+}
+
+// ─── Server-side aggregation (groupBy) ───────────────────────────────────────
+//
+// Counts over the FULL matched set (not the capped species list), so an agent can
+// ask "by threat / by trend / by endemism" and get a token-cheap, reliable answer
+// instead of eyeballing dozens of raw rows. Country is capped to the top buckets.
+
+const COUNTRY_BUCKET_CAP = 30;
+
+function aggregate(rows: Row[], dimsRaw: string[], endemicOf: (r: Row) => boolean | null): Record<string, GroupBucket[]> {
+  const out: Record<string, GroupBucket[]> = {};
+  const dims = new Set(dimsRaw.map((d) => d.trim().toLowerCase()).filter(Boolean));
+  for (const dim of dims) {
+    if (dim === "category") {
+      const c = tally(rows, (r) => [r.category]);
+      out.category = sortByCategory([...c].map(([value, count]) => ({ value, label: categoryLabel(value), count })));
+    } else if (dim === "threat") {
+      // Count each species once per DISTINCT top-level threat code it carries.
+      const c = tally(rows, (r) => [...new Set((r.threat_codes ?? []).map((t) => t.split(".")[0]))]);
+      out.threat = sortByCount([...c].map(([value, count]) => ({ value, label: THREAT_LABEL[value] ?? value, count })));
+    } else if (dim === "trend") {
+      const c = tally(rows, (r) => [r.population_trend ?? "Unspecified"]);
+      out.trend = sortByCount([...c].map(([value, count]) => ({ value, count })));
+    } else if (dim === "system") {
+      const c = tally(rows, (r) => (r.systems?.length ? r.systems : ["Unspecified"]));
+      out.system = sortByCount([...c].map(([value, count]) => ({ value, count })));
+    } else if (dim === "endemism") {
+      const c = tally(rows, (r) => {
+        const e = endemicOf(r);
+        return [e == null ? "unknown" : e ? "endemic_to_query" : "not_endemic_to_query"];
+      });
+      out.endemism = [...c].map(([value, count]) => ({ value, count }));
+    } else if (dim === "country") {
+      const c = tally(rows, (r) => r.countries);
+      const sorted = sortByCount([...c].map(([value, count]) => ({ value, label: countryLabel(value), count })));
+      out.country = sorted.slice(0, COUNTRY_BUCKET_CAP);
+    }
+  }
+  return out;
+}
+
+function tally(rows: Row[], keysOf: (r: Row) => string[]): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const r of rows) for (const k of keysOf(r)) m.set(k, (m.get(k) ?? 0) + 1);
+  return m;
+}
+const sortByCount = (b: GroupBucket[]) => b.sort((x, y) => y.count - x.count || x.value.localeCompare(y.value));
+const sortByCategory = (b: GroupBucket[]) =>
+  b.sort((x, y) => (CATEGORY_ORDER[x.value] ?? 99) - (CATEGORY_ORDER[y.value] ?? 99));
+
+// ─── Assessment-coverage signal (#completeness) ──────────────────────────────
+//
+// For the queried CURATED taxon group(s), report how much of the CoL-described
+// universe IUCN has actually evaluated — from the precomputed taxa-summary, so
+// it's free. Group-level and PRE-filter (an upper bound for any sub-group/filter),
+// labelled as such, so an agent treats it as an undercount signal, not a result.
+
+function computeCoverage(taxonIds: string[]): CoverageInfo | undefined {
+  try {
+    const groups = new Set<string>();
+    for (const id of taxonIds) if (findNode(id)) for (const g of getCsvGroupsForNode(id)) groups.add(g);
+    if (groups.size === 0) return undefined;
+    let assessed = 0, ne = 0, described = 0, haveNe = false;
+    for (const row of getTaxaSummary()) {
+      if (!groups.has(row.table1a_taxon_group)) continue;
+      assessed += row.total_assessed ?? 0;
+      if (row.col_ne != null) { ne += row.col_ne; haveNe = true; }
+      if (row.col_described != null) described += row.col_described;
+    }
+    if (!haveNe) return undefined;
+    const universe = described || assessed + ne;
+    const assessed_pct = universe > 0 ? Math.round((assessed / universe) * 100) : null;
+    return {
+      groups: [...groups], assessed, not_evaluated: ne, described_universe: universe, assessed_pct,
+      note: `Of ~${universe.toLocaleString()} described species CoL knows in this taxon group, IUCN has assessed ${assessed.toLocaleString()} (${assessed_pct ?? "?"}%); ~${ne.toLocaleString()} are Not Evaluated globally. These are GROUP-level, PRE-filter figures. The global Red List can also undercount where a national/regional assessment (e.g. SANBI for South African plants) lists more threatened taxa — caveat group totals accordingly.`,
+    };
+  } catch {
+    return undefined; // taxa-summary not bundled in this function — skip, don't fail.
+  }
 }
 
 // Human-readable description of the active filters (drives the HTML/JSON "interpreted").

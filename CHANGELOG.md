@@ -2,6 +2,23 @@
 
 All notable changes to the IUCN Red List Assessments Dashboard.
 
+## [Unreleased] — Agent surface: leaner payloads, aggregation & primary sources
+
+- MCP `browse_taxon`/`find_species`: added a `verbosity` control (summary/compact/full,
+  compact default) — the per-species country array is replaced by `country_count` plus
+  an `endemic_to_query` flag, cutting payloads by ~an order of magnitude
+- Added server-side `groupBy` (category/threat/trend/system/endemism/country) and a
+  `countOnly` mode, so "patterns" and "how many" questions are answered with counts
+  over the full match instead of eyeballing rows
+- Each species now carries canonical primary-source ids + URLs (IUCN assessment page,
+  GBIF taxon, Catalogue of Life) and a pinned `red_list_version`, distinct from the
+  reproduce-my-view `dashboard_url`
+- Added a `coverage` block (how many in the group are Not Evaluated globally) and
+  `taxon_notes` warnings when a colloquial taxon silently narrows (plants → flowering
+  plants); `browse_taxon` now accepts multiple taxa for per-taxon summary blocks
+- Same fields surfaced on the `/browse?format=json` HTTP endpoint and documented in
+  `/llms.txt`
+
 ## [v2.7.0] — 2026-04-03 – 2026-04-06 — Map Colors & Linting
 
 - Refined occurrence map color scale to continuous hue gradient

@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runBrowseQuery, type BrowseInput, type BrowseResult, type BrowseSpecies } from "@/lib/browse-query";
 import { browseInputToDashboardUrl } from "@/lib/dashboard-url";
+import { RED_LIST_VERSION } from "@/lib/source-links";
 import { CATEGORY_ORDER } from "@/config/taxa";
 import { CACHE_1H } from "@/lib/cache-headers";
 import {
@@ -65,6 +66,7 @@ export async function GET(req: NextRequest) {
     minObs: intParam("minObs"), maxObs: intParam("maxObs"),
     minAssessmentYear: intParam("minAssessmentYear"), maxAssessmentYear: intParam("maxAssessmentYear"),
     minDescribedYear: intParam("minDescribedYear"), maxDescribedYear: intParam("maxDescribedYear"),
+    groupBy: parseList(sp, "groupBy"),
   };
 
   let result: BrowseResult;
@@ -104,12 +106,16 @@ export async function GET(req: NextRequest) {
         query: req.nextUrl.search,
         interpreted: result.interpreted,
         unresolved: result.unresolved,
+        taxon_notes: result.narrowingNotes,
         too_large: result.tooLarge,
         total: result.total,
         shown: result.shown,
         capped: result.capped,
         breakdown: result.breakdown,
         stats: result.stats,
+        groups: result.groups,
+        coverage: result.coverage,
+        red_list_version: RED_LIST_VERSION,
         species: result.species,
         // The interactive dashboard, pre-filtered to this same query — share it so
         // a human can inspect and verify these results for themselves.
