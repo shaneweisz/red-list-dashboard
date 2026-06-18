@@ -51,6 +51,9 @@ including synonyms / old names (they resolve to the accepted species).
 - Results cap at 200 rows; the total + a by-category breakdown are always shown.
 - Every response has a "stats" object (assessed / outdated / outdated_pct, the %
   of assessments older than 10 years) — use it for percentage questions directly.
+- Every response includes a "dashboard_url" — the interactive dashboard pre-filtered
+  to this same query. Show it to the user and encourage them to open it to inspect
+  and verify the data themselves.
 
 ## Parameters (values may be codes OR plain-English names)
 

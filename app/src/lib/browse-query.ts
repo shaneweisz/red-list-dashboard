@@ -15,7 +15,7 @@ import { findNode, speciesMatchesNode } from "@/lib/taxonomy-utils";
 import { matchesSpeciesFilter, type SpeciesFilterCriteria, type FilterableSpecies } from "@/lib/species-filter";
 import type { RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import { parseAssessors } from "@/lib/parseAssessors";
-import { IUCN_REGION_ORDER, iucnRegionCountries } from "@/lib/regions";
+import { resolveRegions } from "@/lib/regions";
 import { CATEGORY_ORDER } from "@/config/taxa";
 import {
   resolveTaxa, resolveThreats, resolveCategories, resolveCountries,
@@ -90,19 +90,9 @@ type Row = FilterableSpecies & {
   matched_synonym?: string | null;
 };
 
-// Resolve IUCN region names (case-insensitive, hyphen/space tolerant) to their
-// country codes — the dashboard's region dropdown expands to countries the same way.
-export function resolveRegions(values: string[]): { codes: string[]; unresolved: string[] } {
-  const codes = new Set<string>();
-  const unresolved: string[] = [];
-  const norm = (s: string) => s.toLowerCase().replace(/[\s_-]+/g, " ").trim();
-  for (const v of values) {
-    const hit = IUCN_REGION_ORDER.find((r) => norm(r) === norm(v));
-    if (hit) iucnRegionCountries(hit).forEach((c) => codes.add(c));
-    else unresolved.push(v);
-  }
-  return { codes: [...codes], unresolved };
-}
+// resolveRegions now lives in @/lib/regions (shared with the dashboard-URL
+// translator); re-exported here for existing importers.
+export { resolveRegions } from "@/lib/regions";
 
 function searchHitToRow(h: SearchResult): Row {
   return {

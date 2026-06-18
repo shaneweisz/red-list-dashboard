@@ -322,3 +322,20 @@ export function iucnRegionCountries(region: string): string[] {
     .filter(([, r]) => r === region)
     .map(([code]) => code);
 }
+
+/**
+ * Resolve IUCN region names (case-insensitive, hyphen/space tolerant) to their
+ * country codes — the dashboard's region dropdown expands to countries the same
+ * way, so a region filter and its expanded country set select identically.
+ */
+export function resolveRegions(values: string[]): { codes: string[]; unresolved: string[] } {
+  const codes = new Set<string>();
+  const unresolved: string[] = [];
+  const norm = (s: string) => s.toLowerCase().replace(/[\s_-]+/g, " ").trim();
+  for (const v of values) {
+    const hit = IUCN_REGION_ORDER.find((r) => norm(r) === norm(v));
+    if (hit) iucnRegionCountries(hit).forEach((c) => codes.add(c));
+    else unresolved.push(v);
+  }
+  return { codes: [...codes], unresolved };
+}

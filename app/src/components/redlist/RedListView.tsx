@@ -333,6 +333,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     selectedAssessors, setSelectedAssessors,
     selectedReviewers, setSelectedReviewers,
     searchFilter, setSearchFilter,
+    exactFilters, setExactFilters,
     sortField, sortDirection, setSort,
     clearAllFilters,
     setViewMode: setUrlViewMode,
@@ -671,8 +672,41 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         Array.from(selectedSubgroups).some(sg => speciesMatchesNode(s, sg))
       );
     }
+    // Exact URL-only base filters (outdated / obs / assessment-year / described-year
+    // bounds). Applied here on the base set so every chart AND the table inherit
+    // them — and identically to the bucket-free /browse + MCP query, which is what
+    // makes an agent's dashboard link reproduce the same species set. Mirrors
+    // species-store.isOutdated (calendar-year) + species-filter numeric bounds.
+    const { outdated, minObs, maxObs, minAssessmentYear, maxAssessmentYear, minDescribedYear, maxDescribedYear } = exactFilters;
+    if (outdated) {
+      const nowYear = new Date().getFullYear();
+      filtered = filtered.filter(s => {
+        const y = s.assessment_date ? parseInt(s.assessment_date.slice(0, 4), 10) : NaN;
+        const isOld = Number.isNaN(y) || nowYear - y > 10;
+        return isOld === (outdated === "yes");
+      });
+    }
+    if (minObs != null || maxObs != null) {
+      filtered = filtered.filter(s => {
+        const obs = s.gbif_occurrence_count ?? 0;
+        return (minObs == null || obs >= minObs) && (maxObs == null || obs <= maxObs);
+      });
+    }
+    if (minAssessmentYear != null || maxAssessmentYear != null) {
+      filtered = filtered.filter(s => {
+        const y = s.assessment_date ? parseInt(s.assessment_date.slice(0, 4), 10) : NaN;
+        if (Number.isNaN(y)) return false;
+        return (minAssessmentYear == null || y >= minAssessmentYear) && (maxAssessmentYear == null || y <= maxAssessmentYear);
+      });
+    }
+    if (minDescribedYear != null || maxDescribedYear != null) {
+      filtered = filtered.filter(s =>
+        s.described_year != null
+        && (minDescribedYear == null || s.described_year >= minDescribedYear)
+        && (maxDescribedYear == null || s.described_year <= maxDescribedYear));
+    }
     return filtered;
-  }, [species, selectedTaxa, selectedSubgroups, isNewAssessments]);
+  }, [species, selectedTaxa, selectedSubgroups, isNewAssessments, exactFilters]);
 
   // Helper to check if species matches year range filter
   const matchesYearRangeFilter = useCallback((assessmentDate: string | null, yearRanges: Set<string> = selectedYearRanges): boolean => {
@@ -2977,7 +3011,30 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 <span className="text-xs">×</span>
               </button>
             ))}
-            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || hasMapFilter || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred) && (
+            {/* Exact URL-only filters (typically arrive via an agent/MCP dashboard
+                link). Shown as chips so a human can see and clear them. */}
+            {(() => {
+              const ef = exactFilters;
+              const chips: { key: keyof typeof ef; label: string }[] = [];
+              if (ef.outdated) chips.push({ key: "outdated", label: ef.outdated === "yes" ? "Outdated (>10 yrs)" : "Current (≤10 yrs)" });
+              if (ef.minObs != null) chips.push({ key: "minObs", label: `≥ ${ef.minObs.toLocaleString()} obs` });
+              if (ef.maxObs != null) chips.push({ key: "maxObs", label: `≤ ${ef.maxObs.toLocaleString()} obs` });
+              if (ef.minAssessmentYear != null) chips.push({ key: "minAssessmentYear", label: `Assessed ≥ ${ef.minAssessmentYear}` });
+              if (ef.maxAssessmentYear != null) chips.push({ key: "maxAssessmentYear", label: `Assessed ≤ ${ef.maxAssessmentYear}` });
+              if (ef.minDescribedYear != null) chips.push({ key: "minDescribedYear", label: `Described ≥ ${ef.minDescribedYear}` });
+              if (ef.maxDescribedYear != null) chips.push({ key: "maxDescribedYear", label: `Described ≤ ${ef.maxDescribedYear}` });
+              return chips.map(c => (
+                <button
+                  key={`ef-${c.key}`}
+                  onClick={() => setExactFilters({ [c.key]: null })}
+                  className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800/60 dark:text-slate-300 flex items-center gap-1 hover:opacity-80"
+                >
+                  {c.label}
+                  <span className="text-xs">×</span>
+                </button>
+              ));
+            })()}
+            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || hasMapFilter || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred || exactFilters.outdated || exactFilters.minObs != null || exactFilters.maxObs != null || exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null || exactFilters.minDescribedYear != null || exactFilters.maxDescribedYear != null) && (
               <button
                 onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setSelectedSubgroups(new Set()); setSelectedObsRanges(new Set()); setSelectedSystems(new Set()); setHasMapFilter(null); setSelectedGrowthForms(new Set()); setSelectedPopulationTrends(new Set()); setSelectedMovementPatterns(new Set()); setSelectedThreats(new Set()); setSelectedAssessors(new Set()); setSelectedReviewers(new Set()); setShowOnlyStarred(false); }}
                 className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 underline"

@@ -186,6 +186,37 @@ describe("parseParams", () => {
     const result = parseParams("");
     expect(result.tab).toBe(null);
   });
+
+  it("parses the exact URL-only filters", () => {
+    const result = parseParams(
+      "?outdated=yes&minObs=100&maxObs=5000&minAssessmentYear=2010&maxAssessmentYear=2020&minDescribedYear=1990&maxDescribedYear=2000"
+    );
+    expect(result.outdated).toBe("yes");
+    expect(result.minObs).toBe(100);
+    expect(result.maxObs).toBe(5000);
+    expect(result.minAssessmentYear).toBe(2010);
+    expect(result.maxAssessmentYear).toBe(2020);
+    expect(result.minDescribedYear).toBe(1990);
+    expect(result.maxDescribedYear).toBe(2000);
+  });
+
+  it("defaults exact filters to null when absent / invalid", () => {
+    const result = parseParams("?outdated=maybe&minObs=abc");
+    expect(result.outdated).toBe(null);
+    expect(result.minObs).toBe(null);
+    expect(result.maxObs).toBe(null);
+  });
+
+  it("expands a region param into its country codes (no separate region state)", () => {
+    const result = parseParams("?region=Sub-Saharan+Africa");
+    expect(result.countries.size).toBeGreaterThan(0);
+  });
+
+  it("unions region countries with an explicit countries param", () => {
+    const result = parseParams("?countries=ZA&region=Europe");
+    expect(result.countries.has("ZA")).toBe(true);
+    expect(result.countries.size).toBeGreaterThan(1);
+  });
 });
 
 describe("buildQs", () => {
@@ -353,6 +384,41 @@ describe("buildQs", () => {
     const qs = buildQs({ ...emptyState, species: 176168, tab: "gbif" });
     const params = new URLSearchParams(qs);
     expect(params.has("tab")).toBe(false);
+  });
+
+  it("includes the exact URL-only filters when set", () => {
+    const qs = buildQs({
+      ...emptyState,
+      outdated: "yes", minObs: 100, maxObs: 5000,
+      minAssessmentYear: 2010, maxAssessmentYear: 2020,
+      minDescribedYear: 1990, maxDescribedYear: 2000,
+    });
+    const p = new URLSearchParams(qs);
+    expect(p.get("outdated")).toBe("yes");
+    expect(p.get("minObs")).toBe("100");
+    expect(p.get("maxObs")).toBe("5000");
+    expect(p.get("minAssessmentYear")).toBe("2010");
+    expect(p.get("maxAssessmentYear")).toBe("2020");
+    expect(p.get("minDescribedYear")).toBe("1990");
+    expect(p.get("maxDescribedYear")).toBe("2000");
+  });
+
+  it("omits exact filters when null/absent", () => {
+    const qs = buildQs({ ...emptyState, outdated: null, minObs: null });
+    expect(qs).toBe("");
+  });
+
+  it("round-trips the exact filters through parseParams", () => {
+    const qs = buildQs({
+      ...emptyState,
+      taxa: new Set(["mammals"]),
+      outdated: "no", minObs: 1, maxObs: 9, minAssessmentYear: 2000,
+    });
+    const parsed = parseParams(qs);
+    expect(parsed.outdated).toBe("no");
+    expect(parsed.minObs).toBe(1);
+    expect(parsed.maxObs).toBe(9);
+    expect(parsed.minAssessmentYear).toBe(2000);
   });
 });
 
