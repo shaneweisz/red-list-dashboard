@@ -257,9 +257,12 @@ function aggregateShipments(rows: CompactRecord[]): Aggregated {
     .sort(([, a], [, b]) => b.records - a.records)
     .map(([code, v]) => ({ code, ...v }));
 
+  // Full sorted flow lists (not capped here): the map applies a user-controlled
+  // cap on how many of the top flows to draw via its "Flows shown" control, so
+  // we hand it everything and let it slice. Flows stay sorted by record count so
+  // slicing the top N keeps the largest.
   const topFlows = Array.from(flowMap.entries())
     .sort(([, a], [, b]) => b.records - a.records)
-    .slice(0, 12)
     .map(([key, v]) => {
       const [from, to] = key.split("->");
       return { from, to, ...v };
@@ -267,7 +270,6 @@ function aggregateShipments(rows: CompactRecord[]): Aggregated {
 
   const reExportFlows = Array.from(reExportMap.entries())
     .sort(([, a], [, b]) => b.records - a.records)
-    .slice(0, 12)
     .map(([key, v]) => {
       const [from, to] = key.split("->");
       return { from, to, ...v };

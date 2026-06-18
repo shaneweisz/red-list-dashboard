@@ -225,6 +225,9 @@ function TradeFlowMap({
     selectedCountryProp !== undefined ? selectedCountryProp : internalSelected;
   const setSelectedCountry = onSelectCountry ?? setInternalSelected;
   const [showReExports, setShowReExports] = useState(false);
+  // How many of the top bilateral flows to draw. The default of 12 preserves the
+  // previous hard-coded cap; the legend control lets users widen it or show all.
+  const [flowLimit, setFlowLimit] = useState<number | "all">(12);
 
   /* ---- Pan / zoom -------------------------------------------------- */
   // A single transform applied to all map content (geographies + arcs +
@@ -319,13 +322,26 @@ function TradeFlowMap({
 
   const dark = resolvedTheme === "dark";
 
-  // Filter flows to selected country (if any)
-  const visibleFlows = selectedCountry
+  // Filter flows to selected country (if any) — these are the candidates the
+  // "Flows shown" control then caps.
+  const countryFlows = selectedCountry
     ? renderableFlows.filter((f) => f.from === selectedCountry || f.to === selectedCountry)
     : renderableFlows;
 
-  // Re-export legs to show: only when toggled on, respecting any country filter
-  const visibleReExports =
+  // Resolve the cap against what's actually available: a numeric limit that's
+  // already >= the number of flows is equivalent to "all", so we normalise it so
+  // the legend select stays in sync with what's drawn.
+  const totalFlows = countryFlows.length;
+  const effectiveLimit: number | "all" =
+    flowLimit !== "all" && flowLimit < totalFlows ? flowLimit : "all";
+
+  // Flows are pre-sorted by record count, so slicing keeps the largest.
+  const visibleFlows =
+    effectiveLimit === "all" ? countryFlows : countryFlows.slice(0, effectiveLimit);
+
+  // Re-export legs to show: only when toggled on, respecting any country filter,
+  // and capped by the same flow limit so the overlay stays bounded.
+  const countryReExports =
     showReExports && renderableReExports.length > 0
       ? selectedCountry
         ? renderableReExports.filter(
@@ -333,6 +349,10 @@ function TradeFlowMap({
           )
         : renderableReExports
       : [];
+  const visibleReExports =
+    effectiveLimit === "all"
+      ? countryReExports
+      : countryReExports.slice(0, effectiveLimit);
 
   // Per-country export vs import volume, used to colour each country by its
   // DOMINANT role. Earlier this was derived purely from whether a country
@@ -792,6 +812,29 @@ function TradeFlowMap({
               Re-exports (Origin &rarr; Exporter)
             </label>
           </>
+        )}
+        {[6, 12, 25, 50].some((n) => n < totalFlows) && (
+          <label className="flex items-center gap-1 select-none">
+            <span>Flows shown</span>
+            <select
+              value={effectiveLimit === "all" ? "all" : String(effectiveLimit)}
+              onChange={(e) =>
+                setFlowLimit(
+                  e.target.value === "all" ? "all" : Number(e.target.value)
+                )
+              }
+              className="rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300 px-1 py-0.5 text-[10px]"
+            >
+              {[6, 12, 25, 50]
+                .filter((n) => n < totalFlows)
+                .map((n) => (
+                  <option key={n} value={n}>
+                    Top {n}
+                  </option>
+                ))}
+              <option value="all">All ({totalFlows})</option>
+            </select>
+          </label>
         )}
         <span className="text-zinc-400 dark:text-zinc-500 italic">click dot to filter</span>
       </div>
