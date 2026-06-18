@@ -24,7 +24,15 @@ describe("browseInputToDashboardQuery", () => {
   it("maps a curated sub-group to subgroups + its display root in taxa", () => {
     const p = params({ taxa: ["sharks-rays"] });
     expect(p.get("subgroups")).toBe("sharks-rays");
-    expect(p.get("taxa")).toBeTruthy(); // the parent display root, so its species load
+    expect(p.get("taxa")).toBe("fishes");
+  });
+
+  it("maps a Table-1a group under a virtual root to root + prefixed sub-group", () => {
+    // corals species carry taxon_id=invertebrates, so taxa=corals alone matches
+    // nothing — the dashboard's working form is invertebrates + inv-corals.
+    const p = params({ taxa: ["corals"] });
+    expect(p.get("taxa")).toBe("invertebrates");
+    expect(p.get("subgroups")).toBe("inv-corals");
   });
 
   it("resolves category aliases (threatened → CR,EN,VU)", () => {

@@ -30,21 +30,44 @@ import {
   resolveTaxa, resolveCategories, resolveThreats, resolveCountries,
 } from "@/lib/filter-vocab";
 import { resolveRegions } from "@/lib/regions";
-import { findNode, getViewRootForNode } from "@/lib/taxonomy-utils";
+import { findNode } from "@/lib/taxonomy-utils";
+import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
 
 const arr = (a?: string[]) => (a ?? []).map((s) => s.trim()).filter(Boolean);
 
-// Split resolved taxon ids into the dashboard's `taxa` (display roots + arbitrary
-// scientific ranks) vs `subgroups` (a curated node below a display root, which
-// also needs its root selected so the parent's species load).
+// The dashboard's default view shows 8 roots; the invertebrate/plant/fungi
+// Table-1a groups (corals, insects, …) are cloned UNDER those roots with these
+// prefixes (e.g. corals → inv-corals).
+const DEFAULT_ROOTS = TAXONOMY_VIEWS.default.roots;
+const stripNodePrefix = (id: string) => id.replace(/^(inv-|pl-|fu-)/, "");
+
+// Resolve a taxon id to the dashboard's (taxa, subgroup) selection — mirroring
+// its own click logic (TaxaSummary), so a link reproduces the dashboard's native
+// view rather than a form it can't match:
+//   - a default-view root (mammals, fishes, invertebrates) → `taxa` directly;
+//   - a Table-1a group under a virtual root (corals/insects/… under
+//     `invertebrates`; plants under `plantae`; fungi under `fungi`) → that root in
+//     `taxa` + the matching sub-group node. This is REQUIRED: species rows carry
+//     the root's taxon_id (mapTaxonId: corals → invertebrates), so `taxa=corals`
+//     alone matches nothing;
+//   - a vertebrate sub-group (e.g. `sharks-rays` under `fishes`) → root + subgroup;
+//   - an arbitrary scientific rank (`felidae`) has no node → passed through as
+//     `taxa` (the dashboard matches it by class/order/family).
 function splitTaxa(ids: string[]): { taxa: string[]; subgroups: string[] } {
   const taxa = new Set<string>();
   const subgroups = new Set<string>();
   for (const id of ids) {
-    if (!findNode(id)) { taxa.add(id); continue; } // arbitrary scientific rank
-    const root = getViewRootForNode(id);
-    if (root && root !== id) { subgroups.add(id); taxa.add(root); }
-    else taxa.add(id); // a display root (or a node outside the default view)
+    if (DEFAULT_ROOTS.includes(id)) { taxa.add(id); continue; }
+    let matched = false;
+    for (const rootId of DEFAULT_ROOTS) {
+      const root = findNode(rootId);
+      const child =
+        root?.children?.find((c) => stripNodePrefix(c.id) === id) ??
+        root?.children?.find((c) => c.filter.csvGroups.length === 1 && c.filter.csvGroups[0] === id) ??
+        root?.children?.find((c) => c.filter.csvGroups.includes(id));
+      if (child) { taxa.add(rootId); subgroups.add(child.id); matched = true; break; }
+    }
+    if (!matched) taxa.add(id); // a scientific rank, or a node with no default-view home
   }
   return { taxa: [...taxa], subgroups: [...subgroups] };
 }
