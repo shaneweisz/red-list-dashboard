@@ -17,10 +17,10 @@
  *    `minDescribedYear`/`maxDescribedYear` → emitted as exact URL params. The
  *    dashboard's on-screen charts use coarse buckets; these URL-only params feed
  *    the exact same numeric/`isOutdated` predicate so the result is identical.
- *  - a curated sub-group taxon (e.g. `sharks-rays`) → `subgroups=<id>` plus its
- *    display-root in `taxa` (the dashboard filters sub-groups out of the parent's
- *    loaded set); a scientific-rank taxon (e.g. `felidae`) → `taxa=<id>` (matched
- *    by class/order/family); a featured group → `taxa=<id>`.
+ *  - taxa are emitted as a single flat token list (`taxa=corals,felidae`); the
+ *    dashboard's parseParams expands each token to its display-root + sub-group
+ *    (corals → invertebrates + inv-corals) — see taxonomy-utils. A scientific-rank
+ *    taxon (`felidae`) has no node and is matched by class/order/family.
  *  - `assessors`/`reviewers`: both surfaces case-insensitively SUBSTRING-match the
  *    name (the dashboard predicate mirrors /browse), so a partial name selects the
  *    same species set in each.
@@ -30,47 +30,8 @@ import {
   resolveTaxa, resolveCategories, resolveThreats, resolveCountries,
 } from "@/lib/filter-vocab";
 import { resolveRegions } from "@/lib/regions";
-import { findNode } from "@/lib/taxonomy-utils";
-import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
 
 const arr = (a?: string[]) => (a ?? []).map((s) => s.trim()).filter(Boolean);
-
-// The dashboard's default view shows 8 roots; the invertebrate/plant/fungi
-// Table-1a groups (corals, insects, …) are cloned UNDER those roots with these
-// prefixes (e.g. corals → inv-corals).
-const DEFAULT_ROOTS = TAXONOMY_VIEWS.default.roots;
-const stripNodePrefix = (id: string) => id.replace(/^(inv-|pl-|fu-)/, "");
-
-// Resolve a taxon id to the dashboard's (taxa, subgroup) selection — mirroring
-// its own click logic (TaxaSummary), so a link reproduces the dashboard's native
-// view rather than a form it can't match:
-//   - a default-view root (mammals, fishes, invertebrates) → `taxa` directly;
-//   - a Table-1a group under a virtual root (corals/insects/… under
-//     `invertebrates`; plants under `plantae`; fungi under `fungi`) → that root in
-//     `taxa` + the matching sub-group node. This is REQUIRED: species rows carry
-//     the root's taxon_id (mapTaxonId: corals → invertebrates), so `taxa=corals`
-//     alone matches nothing;
-//   - a vertebrate sub-group (e.g. `sharks-rays` under `fishes`) → root + subgroup;
-//   - an arbitrary scientific rank (`felidae`) has no node → passed through as
-//     `taxa` (the dashboard matches it by class/order/family).
-function splitTaxa(ids: string[]): { taxa: string[]; subgroups: string[] } {
-  const taxa = new Set<string>();
-  const subgroups = new Set<string>();
-  for (const id of ids) {
-    if (DEFAULT_ROOTS.includes(id)) { taxa.add(id); continue; }
-    let matched = false;
-    for (const rootId of DEFAULT_ROOTS) {
-      const root = findNode(rootId);
-      const child =
-        root?.children?.find((c) => stripNodePrefix(c.id) === id) ??
-        root?.children?.find((c) => c.filter.csvGroups.length === 1 && c.filter.csvGroups[0] === id) ??
-        root?.children?.find((c) => c.filter.csvGroups.includes(id));
-      if (child) { taxa.add(rootId); subgroups.add(child.id); matched = true; break; }
-    }
-    if (!matched) taxa.add(id); // a scientific rank, or a node with no default-view home
-  }
-  return { taxa: [...taxa], subgroups: [...subgroups] };
-}
 
 /**
  * Build the dashboard query string (`?…`, or `""` when nothing resolved) that
@@ -84,12 +45,10 @@ export function browseInputToDashboardQuery(input: BrowseInput): string {
     p.set("search", input.search.trim());
   }
 
+  // A single flat `taxa` token list (e.g. corals, felidae); the dashboard's
+  // parseParams expands each token to its display-root + sub-group as needed.
   const taxaIds = resolveTaxa(arr(input.taxa)).ids;
-  if (taxaIds.length) {
-    const { taxa, subgroups } = splitTaxa(taxaIds);
-    if (taxa.length) p.set("taxa", taxa.join(","));
-    if (subgroups.length) p.set("subgroups", subgroups.join(","));
-  }
+  if (taxaIds.length) p.set("taxa", taxaIds.join(","));
 
   const categories = resolveCategories(arr(input.categories)).codes;
   if (categories.length) p.set("categories", categories.join(","));
