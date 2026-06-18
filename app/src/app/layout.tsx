@@ -1,9 +1,12 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { ThemeProvider } from "../components/ThemeProvider";
+import { BrandProvider } from "../components/BrandProvider";
 import { PostHogProvider } from "../components/PostHogProvider";
+import { brandForHost } from "../config/brand";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
@@ -22,24 +25,30 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-export const metadata: Metadata = {
-  title: "IUCN Red List Assessments Dashboard",
-  description: "IUCN Red List and GBIF occurrence data explorer",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const brand = brandForHost((await headers()).get("host"));
+  return {
+    title: brand.title,
+    description: brand.description,
+  };
+}
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const brand = brandForHost((await headers()).get("host"));
   return (
     <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <PostHogProvider>
-          <ThemeProvider>{children}</ThemeProvider>
-        </PostHogProvider>
+        <BrandProvider brand={brand}>
+          <PostHogProvider>
+            <ThemeProvider>{children}</ThemeProvider>
+          </PostHogProvider>
+        </BrandProvider>
         <Analytics />
         <SpeedInsights />
       </body>
