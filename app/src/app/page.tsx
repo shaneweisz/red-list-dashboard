@@ -47,7 +47,7 @@ export default function RedListPage() {
         {/* Header row: title + view mode toggle */}
         <div className="mb-3 md:mb-4 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
           <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-zinc-900 dark:text-zinc-100">
-            {brand.title}
+            {brand.pageTitle ?? brand.title}
           </h1>
           <div className="flex items-center gap-2 shrink-0">
             {/* View mode toggle */}

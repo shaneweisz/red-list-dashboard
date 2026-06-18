@@ -1,5 +1,7 @@
 export type Brand = {
   title: string;
+  /** On-page heading. Falls back to `title` when omitted. */
+  pageTitle?: string;
   description: string;
 };
 
@@ -12,6 +14,7 @@ const DEFAULT_BRAND: Brand = {
 const BRANDS: Record<string, Brand> = {
   "dashoflife.org": {
     title: "Dashboard of Life",
+    pageTitle: "A Dashboard of Life on Earth",
     description: "IUCN Red List and GBIF occurrence data explorer",
   },
 };
