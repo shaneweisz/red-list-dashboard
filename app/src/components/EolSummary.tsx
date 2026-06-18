@@ -11,13 +11,19 @@ interface EolImage {
   source: string | null;
 }
 
+interface EolCommonName {
+  name: string;
+  lang: string;
+}
+
 interface EolSummaryData {
   found: boolean;
   eolId?: number;
   pageUrl?: string;
   scientificName?: string;
-  englishNames?: string[];
-  otherLanguageCount?: number;
+  commonNames?: EolCommonName[];
+  englishNameCount?: number;
+  languageCount?: number;
   summary?: {
     html: string;
     title: string | null;
@@ -37,6 +43,75 @@ function Spinner({ label }: { label: string }) {
         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
       </svg>
       {label}
+    </div>
+  );
+}
+
+// Render a language code (EOL uses ISO 639-1, mostly) as a human label.
+const langDisplay = (() => {
+  let dn: Intl.DisplayNames | null = null;
+  try {
+    dn = new Intl.DisplayNames(["en"], { type: "language" });
+  } catch {
+    dn = null;
+  }
+  // EOL uses a few non-standard codes; normalize the common ones.
+  const fix: Record<string, string> = { jp: "ja", iw: "he", in: "id" };
+  return (code: string): string => {
+    const c = fix[code] || code;
+    try {
+      return dn?.of(c) || code;
+    } catch {
+      return code;
+    }
+  };
+})();
+
+const NAMES_PER_PAGE = 18;
+
+function CommonNamesList({ names, englishCount, languageCount }: { names: EolCommonName[]; englishCount: number; languageCount: number }) {
+  const [page, setPage] = useState(0);
+  const pageCount = Math.max(1, Math.ceil(names.length / NAMES_PER_PAGE));
+  const safePage = Math.min(page, pageCount - 1);
+  const start = safePage * NAMES_PER_PAGE;
+  const slice = names.slice(start, start + NAMES_PER_PAGE);
+
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-2 mb-1.5">
+        <div className="text-xs uppercase tracking-wider text-zinc-400">
+          Common names ({names.length})
+          {languageCount > 1 && <span className="normal-case tracking-normal"> · {languageCount} languages</span>}
+        </div>
+        {pageCount > 1 && (
+          <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+            <button
+              onClick={() => setPage(safePage - 1)}
+              disabled={safePage === 0}
+              className="px-1.5 py-0.5 rounded disabled:opacity-30 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:hover:bg-transparent"
+              aria-label="Previous page"
+            >‹</button>
+            <span className="tabular-nums">{start + 1}–{Math.min(start + NAMES_PER_PAGE, names.length)} of {names.length}</span>
+            <button
+              onClick={() => setPage(safePage + 1)}
+              disabled={safePage >= pageCount - 1}
+              className="px-1.5 py-0.5 rounded disabled:opacity-30 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:hover:bg-transparent"
+              aria-label="Next page"
+            >›</button>
+          </div>
+        )}
+      </div>
+      <ul className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-1">
+        {slice.map((n, i) => (
+          <li key={start + i} className="flex items-baseline justify-between gap-2 text-sm">
+            <span className="text-zinc-700 dark:text-zinc-300 truncate">{n.name}</span>
+            <span className="text-[10px] uppercase tracking-wide text-zinc-400 flex-shrink-0" title={langDisplay(n.lang)}>{n.lang === "en" ? "EN" : langDisplay(n.lang)}</span>
+          </li>
+        ))}
+      </ul>
+      {englishCount === 0 && (
+        <div className="text-[11px] text-zinc-400 mt-1">No English common name recorded; names shown are from other languages.</div>
+      )}
     </div>
   );
 }
@@ -76,7 +151,7 @@ export default function EolSummary({ scientificName }: { scientificName: string 
     );
   }
 
-  const { pageUrl, englishNames = [], otherLanguageCount = 0, summary, images = [], providers = [] } = data;
+  const { pageUrl, commonNames = [], englishNameCount = 0, languageCount = 0, summary, images = [], providers = [] } = data;
 
   return (
     <div className="p-4 space-y-4">
@@ -94,19 +169,9 @@ export default function EolSummary({ scientificName }: { scientificName: string 
         )}
       </div>
 
-      {/* Common names */}
-      {englishNames.length > 0 && (
-        <div>
-          <div className="text-xs uppercase tracking-wider text-zinc-400 mb-1">Common names</div>
-          <div className="flex flex-wrap gap-1.5">
-            {englishNames.slice(0, 12).map((n, i) => (
-              <span key={i} className="px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-xs text-zinc-700 dark:text-zinc-300">{n}</span>
-            ))}
-          </div>
-          {otherLanguageCount > 0 && (
-            <div className="text-[11px] text-zinc-400 mt-1">+ names in {otherLanguageCount} other languages on EOL</div>
-          )}
-        </div>
+      {/* Common names — paginated, English first, with language labels */}
+      {commonNames.length > 0 && (
+        <CommonNamesList names={commonNames} englishCount={englishNameCount} languageCount={languageCount} />
       )}
 
       {/* Image gallery */}

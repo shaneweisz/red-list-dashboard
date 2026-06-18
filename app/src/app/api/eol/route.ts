@@ -3,6 +3,12 @@ import { CACHE_1H } from "@/lib/cache-headers";
 
 const EOL_API = "https://eol.org/api";
 
+// Identify ourselves honestly to EOL (their API Terms ask callers to observe
+// rate limits; an identifying UA lets EOL contact/throttle us if needed).
+const EOL_HEADERS = {
+  "User-Agent": "RedListDashboard/1.0 (+https://github.com/shaneweisz/redlist-dashboard)",
+};
+
 // In-memory cache (1 hour) — EOL data changes infrequently.
 const eolCache = new Map<string, { data: object; timestamp: number }>();
 const CACHE_DURATION = 60 * 60 * 1000;
@@ -107,7 +113,8 @@ export async function GET(request: NextRequest) {
   try {
     // Step 1: resolve the scientific name to an EOL page id.
     const searchResp = await fetch(
-      `${EOL_API}/search/1.0.json?q=${encodeURIComponent(name)}&page=1`
+      `${EOL_API}/search/1.0.json?q=${encodeURIComponent(name)}&page=1`,
+      { headers: EOL_HEADERS }
     );
     if (!searchResp.ok) {
       return NextResponse.json({ error: `EOL search error: ${searchResp.status}` }, { status: searchResp.status });
@@ -132,7 +139,8 @@ export async function GET(request: NextRequest) {
     const pageResp = await fetch(
       `${EOL_API}/pages/1.0/${match.id}.json?details=true&images_per_page=12` +
         `&texts_per_page=20&maps_per_page=0&videos_per_page=0&sounds_per_page=0` +
-        `&vetted=0&common_names=true&taxonomy=true&language=en`
+        `&vetted=0&common_names=true&taxonomy=true&language=en`,
+      { headers: EOL_HEADERS }
     );
     if (!pageResp.ok) {
       return NextResponse.json({ error: `EOL pages error: ${pageResp.status}` }, { status: pageResp.status });
@@ -141,24 +149,30 @@ export async function GET(request: NextRequest) {
     const page: EolPage = pageBody.taxonConcept || {};
     const objects = page.dataObjects || [];
 
-    // English vernacular names, deduped (case-insensitive). EOL's
-    // `eol_preferred` flag is unreliable (it often favours a non-English name),
-    // so we keep EOL's natural order rather than sorting by it.
+    // Vernacular names deduped by name+language, English (Latin-script) first
+    // so the full multilingual list is browsable. EOL's `eol_preferred` flag is
+    // unreliable (it often favours a non-English name), so we ignore it.
     const seen = new Set<string>();
-    const englishNames: string[] = [];
+    const englishNames: { name: string; lang: string }[] = [];
+    const otherNames: { name: string; lang: string }[] = [];
     for (const v of page.vernacularNames || []) {
-      if (v.language !== "en") continue;
-      // EOL frequently mislabels non-English names (CJK, Cyrillic, etc.) as
-      // "en"; keep only Latin-script names so the English list stays clean.
-      if (!/^[\p{Script=Latin}\s'.\-()]+$/u.test(v.vernacularName)) continue;
-      const key = v.vernacularName.toLowerCase();
+      const name = v.vernacularName?.trim();
+      const lang = v.language || "";
+      if (!name || !lang) continue;
+      const key = `${lang}:${name.toLowerCase()}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      englishNames.push(v.vernacularName);
+      if (lang === "en") {
+        // EOL frequently mislabels non-English names (CJK, Cyrillic, etc.) as
+        // "en"; keep only Latin-script names in the English bucket.
+        if (!/^[\p{Script=Latin}\s'.\-()]+$/u.test(name)) continue;
+        englishNames.push({ name, lang });
+      } else {
+        otherNames.push({ name, lang });
+      }
     }
-    const otherLanguageCount = new Set(
-      (page.vernacularNames || []).filter((v) => v.language && v.language !== "en").map((v) => v.language)
-    ).size;
+    const commonNames = [...englishNames, ...otherNames];
+    const languageCount = new Set(commonNames.map((n) => n.lang)).size;
 
     // Brief summary: prefer an English "Brief Summary" article, else any English text.
     const englishTexts = objects.filter((o) => isText(o) && o.language === "en" && o.description);
@@ -197,8 +211,9 @@ export async function GET(request: NextRequest) {
       eolId: page.identifier,
       pageUrl: `https://eol.org/pages/${page.identifier}`,
       scientificName: page.scientificName || match.title,
-      englishNames,
-      otherLanguageCount,
+      commonNames,
+      englishNameCount: englishNames.length,
+      languageCount,
       summary,
       images,
       providers,
