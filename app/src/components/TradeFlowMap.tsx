@@ -225,9 +225,9 @@ function TradeFlowMap({
     selectedCountryProp !== undefined ? selectedCountryProp : internalSelected;
   const setSelectedCountry = onSelectCountry ?? setInternalSelected;
   const [showReExports, setShowReExports] = useState(false);
-  // How many of the top bilateral flows to draw. The default of 12 preserves the
-  // previous hard-coded cap; the top-right slider lets users widen it or show all.
-  const [flowLimit, setFlowLimit] = useState(12);
+  // How many of the top bilateral flows to draw. The default of 10 keeps the
+  // map legible; the top-right slider lets users widen it or show all.
+  const [flowLimit, setFlowLimit] = useState(10);
 
   /* ---- Pan / zoom -------------------------------------------------- */
   // A single transform applied to all map content (geographies + arcs +
@@ -682,10 +682,10 @@ function TradeFlowMap({
 
           const ratio = maxRecords > 0 ? flow.records / maxRecords : 0;
           const strokeWidth = 1.5 + ratio * 2.5;
-          // Opacity also scales with volume, so the busiest corridors read
-          // strongest while small flows stay faint. The floor keeps the
-          // smallest flow visible rather than fully transparent.
-          const baseOpacity = (dark ? 0.4 : 0.3) + ratio * (dark ? 0.5 : 0.45);
+          // Opacity also nudges up with volume, so the busiest corridors read a
+          // touch stronger — kept subtle so it reinforces the stroke-width cue
+          // rather than washing the smaller flows out.
+          const baseOpacity = (dark ? 0.6 : 0.4) + ratio * 0.25;
           const isHovered = hoveredFlow === i;
 
           // Arrowhead at destination
