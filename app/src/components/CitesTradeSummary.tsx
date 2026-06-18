@@ -318,12 +318,14 @@ function Pager({
   page,
   total,
   onPage,
+  pageSize = PAGE_SIZE,
 }: {
   page: number;
   total: number;
   onPage: (p: number) => void;
+  pageSize?: number;
 }) {
-  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const totalPages = Math.ceil(total / pageSize);
   if (totalPages <= 1) return null;
   return (
     <div className="flex items-center justify-between mt-1 text-[10px] text-zinc-400 dark:text-zinc-500">
@@ -335,7 +337,7 @@ function Pager({
         Prev
       </button>
       <span className="tabular-nums">
-        {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total}
+        {page * pageSize + 1}–{Math.min((page + 1) * pageSize, total)} of {total}
       </span>
       <button
         onClick={() => onPage(Math.min(totalPages - 1, page + 1))}
@@ -787,6 +789,110 @@ function CountryTable({
 }
 
 /* ------------------------------------------------------------------ */
+/*  Individual shipment records table                                  */
+/* ------------------------------------------------------------------ */
+
+/** Rows shown per page in the individual-records table. */
+const RECORDS_PAGE_SIZE = 10;
+
+/**
+ * A paginated table of the individual shipment records behind the summary,
+ * reflecting every active filter. Sorted most-recent-first so the latest trade
+ * is on top. Quantities follow the CITES guide (exporter-reported preferred);
+ * a re-export origin, when present, is shown ahead of the exporter.
+ */
+function RecordsTable({ rows }: { rows: CompactRecord[] }) {
+  const [page, setPage] = useState(0);
+  if (rows.length === 0) return null;
+  const totalPages = Math.max(1, Math.ceil(rows.length / RECORDS_PAGE_SIZE));
+  const safePage = Math.min(page, totalPages - 1);
+  const pageRows = rows.slice(
+    safePage * RECORDS_PAGE_SIZE,
+    safePage * RECORDS_PAGE_SIZE + RECORDS_PAGE_SIZE
+  );
+
+  return (
+    <div className="min-w-0">
+      <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
+        Records{" "}
+        <span className="text-zinc-400 dark:text-zinc-500 normal-case tabular-nums">
+          ({rows.length.toLocaleString()})
+        </span>
+      </h5>
+      <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-x-auto">
+        <table className="w-full text-[11px] whitespace-nowrap">
+          <thead>
+            <tr className="text-left text-zinc-400 dark:text-zinc-500 border-b border-zinc-100 dark:border-zinc-800">
+              <th className="px-2.5 py-1 font-medium">Year</th>
+              <th className="px-2.5 py-1 font-medium">Commodity</th>
+              <th className="px-2.5 py-1 font-medium text-right">Qty</th>
+              <th className="px-2.5 py-1 font-medium">Exporter &rarr; Importer</th>
+              <th className="px-2.5 py-1 font-medium">Source</th>
+              <th className="px-2.5 py-1 font-medium">Purpose</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pageRows.map((r, i) => (
+              <tr
+                key={i}
+                className="border-t first:border-t-0 border-zinc-100 dark:border-zinc-800"
+              >
+                <td className="px-2.5 py-1 tabular-nums text-zinc-600 dark:text-zinc-300">
+                  {r.y}
+                </td>
+                <td className="px-2.5 py-1 text-zinc-700 dark:text-zinc-300 capitalize">
+                  {r.t}
+                  {r.u && (
+                    <span className="text-zinc-400 dark:text-zinc-500 ml-1 normal-case">
+                      {r.u}
+                    </span>
+                  )}
+                </td>
+                <td className="px-2.5 py-1 text-right tabular-nums text-zinc-600 dark:text-zinc-300">
+                  {r.q > 0 ? fmtQty(r.q) : "—"}
+                </td>
+                <td className="px-2.5 py-1 text-zinc-700 dark:text-zinc-300">
+                  {r.o && (
+                    <span
+                      className="text-amber-600 dark:text-amber-400"
+                      title={`Origin ${countryName(r.o)}`}
+                    >
+                      {countryName(r.o)}{" "}
+                      <span className="text-zinc-400 dark:text-zinc-500">&rarr;</span>{" "}
+                    </span>
+                  )}
+                  {r.e ? countryName(r.e) : "—"}{" "}
+                  <span className="text-zinc-400 dark:text-zinc-500">&rarr;</span>{" "}
+                  {r.i ? countryName(r.i) : "—"}
+                </td>
+                <td
+                  className="px-2.5 py-1 text-zinc-500 dark:text-zinc-400"
+                  title={r.s ? `${SOURCE_LABELS[r.s] || r.s} (${r.s})` : undefined}
+                >
+                  {r.s ? SOURCE_LABELS[r.s] || r.s : "—"}
+                </td>
+                <td
+                  className="px-2.5 py-1 text-zinc-500 dark:text-zinc-400"
+                  title={r.p ? `${PURPOSE_LABELS[r.p] || r.p} (${r.p})` : undefined}
+                >
+                  {r.p ? PURPOSE_LABELS[r.p] || r.p : "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <Pager
+        page={safePage}
+        total={rows.length}
+        onPage={setPage}
+        pageSize={RECORDS_PAGE_SIZE}
+      />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Main component                                                     */
 /* ------------------------------------------------------------------ */
 
@@ -984,13 +1090,18 @@ export default function CitesTradeSummary({
   // Chart series (all years, checkbox-filtered)
   const chartAgg = useMemo(() => aggregateShipments(checkboxRows), [checkboxRows]);
 
-  // Everything else also respects the year-range trim
-  const display = useMemo(() => {
+  // The individual records behind the summary: every active filter applied
+  // (checkboxes, country, and the year-range trim), sorted most-recent-first
+  // (largest quantity breaks ties) so the records table leads with recent trade.
+  const displayRows = useMemo(() => {
     const rows = brush
       ? checkboxRows.filter((r) => r.y >= brush[0] && r.y <= brush[1])
       : checkboxRows;
-    return aggregateShipments(rows);
+    return [...rows].sort((a, b) => b.y - a.y || b.q - a.q);
   }, [checkboxRows, brush]);
+
+  // Everything else also respects the year-range trim
+  const display = useMemo(() => aggregateShipments(displayRows), [displayRows]);
 
   // Cross-filter views: each interactive chart aggregates rows passing every
   // active filter EXCEPT its own dimension, so its categories stay visible and
@@ -1316,6 +1427,10 @@ export default function CitesTradeSummary({
           />
         </div>
       )}
+
+      {/* The individual shipment records behind everything above, paginated and
+          reflecting all active filters. */}
+      {hasShipments && <RecordsTable rows={displayRows} />}
     </div>
   );
 }
