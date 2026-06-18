@@ -33,18 +33,30 @@ describe("parseParams", () => {
     expect(result.taxa).toEqual(new Set(["mammals", "birds"]));
   });
 
-  it("maps legacy taxa IDs to current ones (back-compat for old URLs)", () => {
-    const result = parseParams("?taxa=mammalia,aves,reptilia,amphibia,arachnida,mollusca,crustacea");
-    expect(result.taxa).toEqual(
-      new Set(["mammals", "birds", "reptiles", "amphibians", "arachnids", "molluscs", "crustaceans"])
-    );
+  it("maps legacy vertebrate taxa IDs to current root ids (back-compat for old URLs)", () => {
+    const result = parseParams("?taxa=mammalia,aves,reptilia,amphibia");
+    expect(result.taxa).toEqual(new Set(["mammals", "birds", "reptiles", "amphibians"]));
+    expect(result.subgroups.size).toBe(0);
   });
 
-  it("leaves unchanged and unknown taxa IDs as-is, and dedupes legacy+current", () => {
-    // legacy latin ids collapse to current ones (mammalia → mammals, dedup; insecta →
-    // insects); beetles unchanged; unknown passes through.
+  it("expands legacy invertebrate taxa tokens to invertebrates + sub-group", () => {
+    // arachnida/mollusca/crustacea map to groups stored under `invertebrates`, so a
+    // single flat token expands to the root + its sub-group node.
+    const result = parseParams("?taxa=arachnida,mollusca,crustacea");
+    expect(result.taxa).toEqual(new Set(["invertebrates"]));
+    expect(result.subgroups).toEqual(new Set(["inv-arachnids", "inv-molluscs", "inv-crustaceans"]));
+  });
+
+  it("dedupes roots, expands group tokens, and passes unknown tokens through", () => {
     const result = parseParams("?taxa=mammalia,mammals,insecta,beetles,unknownthing");
-    expect(result.taxa).toEqual(new Set(["mammals", "insects", "beetles", "unknownthing"]));
+    expect(result.taxa).toEqual(new Set(["mammals", "invertebrates", "unknownthing"]));
+    expect(result.subgroups).toEqual(new Set(["inv-insects", "inv-beetles"]));
+  });
+
+  it("expands a single flat group token (corals → invertebrates + inv-corals)", () => {
+    const result = parseParams("?taxa=corals");
+    expect(result.taxa).toEqual(new Set(["invertebrates"]));
+    expect(result.subgroups).toEqual(new Set(["inv-corals"]));
   });
 
   it("maps legacy IDs in the subgroups param too", () => {
@@ -303,18 +315,27 @@ describe("buildQs", () => {
     expect(params.get("search")).toBe("elephant");
   });
 
-  it("includes subgroups when set", () => {
+  it("collapses a sub-group into the flat taxa token (no subgroups param)", () => {
     const qs = buildQs({ ...emptyState, subgroups: new Set(["sharks-rays"]) });
     const params = new URLSearchParams(qs);
-    expect(params.get("subgroups")).toBe("sharks-rays");
+    expect(params.get("taxa")).toBe("sharks-rays");
+    expect(params.has("subgroups")).toBe(false);
   });
 
-  it("includes multiple subgroups", () => {
+  it("collapses multiple sub-groups into the flat taxa list", () => {
     const qs = buildQs({ ...emptyState, subgroups: new Set(["sharks-rays", "ray-finned-fishes"]) });
     const params = new URLSearchParams(qs);
-    const sgs = params.get("subgroups")!.split(",");
-    expect(sgs).toContain("sharks-rays");
-    expect(sgs).toContain("ray-finned-fishes");
+    const t = params.get("taxa")!.split(",");
+    expect(t).toContain("sharks-rays");
+    expect(t).toContain("ray-finned-fishes");
+    expect(params.has("subgroups")).toBe(false);
+  });
+
+  it("collapses root + sub-group to a single flat token (invertebrates + inv-corals → corals)", () => {
+    const qs = buildQs({ ...emptyState, taxa: new Set(["invertebrates"]), subgroups: new Set(["inv-corals"]) });
+    const params = new URLSearchParams(qs);
+    expect(params.get("taxa")).toBe("corals");
+    expect(params.has("subgroups")).toBe(false);
   });
 
   it("omits subgroups when empty", () => {

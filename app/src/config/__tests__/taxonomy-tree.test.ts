@@ -803,3 +803,46 @@ describe("node-children-summaries.json", () => {
     }
   });
 });
+
+// ─── Flat taxa-token URL mapping (the single-`taxa`-param invariant) ────────
+
+import {
+  stripNodePrefix,
+  expandTaxaToken,
+  collapseTaxaToTokens,
+  getViewRootForNode,
+} from "@/lib/taxonomy-utils";
+
+describe("flat taxa-token mapping is a bijection over the default view", () => {
+  // Every default-view node (a display root or a node under one) must round-trip
+  // through its flat URL token. If a future tree change makes two nodes share a
+  // token, this fails in CI instead of silently emitting a wrong-taxon URL.
+  it("each default-view node round-trips: node → token → node", () => {
+    const collisions: string[] = [];
+    for (const id of NODE_INDEX.keys()) {
+      if (!getViewRootForNode(id)) continue; // skip nodes outside the default view
+      const { taxa, subgroup } = expandTaxaToken(stripNodePrefix(id));
+      const resolved = subgroup ?? taxa;
+      if (resolved !== id) collisions.push(`${id} → '${stripNodePrefix(id)}' → ${resolved}`);
+    }
+    expect(collisions).toEqual([]);
+  });
+
+  it("collapse ∘ expand is identity for a root + sub-group selection", () => {
+    // Sample a few representative pairs across the prefixed roots.
+    const cases: Array<[string, string]> = [
+      ["invertebrates", "inv-corals"],
+      ["invertebrates", "inv-beetles"],
+      ["fishes", "sharks-rays"],
+      ["plantae", "pl-flowering_plants"],
+      ["fungi", "fu-mushrooms"],
+    ];
+    for (const [root, sg] of cases) {
+      const tokens = collapseTaxaToTokens([root], [sg]);
+      expect(tokens).toEqual([stripNodePrefix(sg)]);
+      const { taxa, subgroup } = expandTaxaToken(tokens[0]);
+      expect(taxa).toBe(root);
+      expect(subgroup).toBe(sg);
+    }
+  });
+});

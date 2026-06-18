@@ -72,6 +72,72 @@ export function getViewRootForNode(nodeId: string): string | null {
   return null;
 }
 
+// ─── Flat taxa-token URL mapping ─────────────────────────────────────────
+//
+// The URL carries a single, flat `taxa` list. Internally a selection is a
+// display-root + (optional) sub-group node (e.g. `invertebrates` + `inv-corals`,
+// because species rows store the coarse root taxon_id: corals → invertebrates).
+// These helpers translate between the two so the URL stays clean while the
+// dashboard's two-level model is unchanged.
+//
+// A node's flat token is its id with the virtual-root prefix stripped
+// (inv-corals → corals); display roots and arbitrary scientific ranks are their
+// own token. The token↔node mapping must be a bijection over the default view —
+// enforced by a whole-tree round-trip test (taxonomy-tree.test.ts).
+
+const NODE_ID_PREFIX_RE = /^(inv-|pl-|fu-)/;
+
+/** A node id with its virtual-root prefix (inv-/pl-/fu-) removed. */
+export const stripNodePrefix = (id: string) => id.replace(NODE_ID_PREFIX_RE, "");
+
+// token → default-view sub-group node id (built once at import). Only nodes BELOW
+// a default root are indexed; the flat Table-1a clones live under `all` and are
+// excluded (getViewRootForNode === null), so a token never resolves to one.
+const DEFAULT_VIEW_TOKEN_INDEX = new Map<string, string>();
+for (const id of NODE_INDEX.keys()) {
+  if (DEFAULT_VIEW_ROOTS.has(id)) continue;
+  if (!getViewRootForNode(id)) continue;
+  const token = stripNodePrefix(id);
+  if (!DEFAULT_VIEW_TOKEN_INDEX.has(token)) DEFAULT_VIEW_TOKEN_INDEX.set(token, id);
+}
+
+/**
+ * Expand one flat URL token into the internal selection it represents:
+ * `{ taxa }` for a display root or an arbitrary scientific rank, or
+ * `{ taxa, subgroup }` for a default-view sub-group (corals → invertebrates +
+ * inv-corals). Accepts legacy/prefixed ids too (canonicalized first).
+ */
+export function expandTaxaToken(token: string): { taxa: string; subgroup?: string } {
+  const id = canonicalizeTaxonId(token.trim());
+  if (DEFAULT_VIEW_ROOTS.has(id)) return { taxa: id };
+  const nodeId = DEFAULT_VIEW_TOKEN_INDEX.get(id) ?? DEFAULT_VIEW_TOKEN_INDEX.get(stripNodePrefix(id));
+  if (nodeId) {
+    const root = getViewRootForNode(nodeId);
+    if (root) return { taxa: root, subgroup: nodeId };
+  }
+  return { taxa: id }; // a display root outside the default view, or an arbitrary rank
+}
+
+/**
+ * Collapse an internal taxa + subgroups selection into the flat URL token list.
+ * A selected sub-group is emitted as its token (and its root is dropped, since the
+ * sub-group implies it); a root with no sub-group is emitted whole.
+ */
+export function collapseTaxaToTokens(taxa: Iterable<string>, subgroups: Iterable<string>): string[] {
+  const tokens = new Set<string>();
+  const rootsWithSubgroup = new Set<string>();
+  for (const sg of subgroups) {
+    tokens.add(stripNodePrefix(sg));
+    const root = getViewRootForNode(sg);
+    if (root) rootsWithSubgroup.add(root);
+  }
+  for (const t of taxa) {
+    if (rootsWithSubgroup.has(t)) continue; // represented by its sub-group token(s)
+    tokens.add(stripNodePrefix(t));
+  }
+  return [...tokens];
+}
+
 // ─── CSV group resolution ────────────────────────────────────────────
 
 /** Get the CSV groups needed to load data for a node. */

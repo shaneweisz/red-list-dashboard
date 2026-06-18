@@ -17,10 +17,10 @@
  *    `minDescribedYear`/`maxDescribedYear` → emitted as exact URL params. The
  *    dashboard's on-screen charts use coarse buckets; these URL-only params feed
  *    the exact same numeric/`isOutdated` predicate so the result is identical.
- *  - a curated sub-group taxon (e.g. `sharks-rays`) → `subgroups=<id>` plus its
- *    display-root in `taxa` (the dashboard filters sub-groups out of the parent's
- *    loaded set); a scientific-rank taxon (e.g. `felidae`) → `taxa=<id>` (matched
- *    by class/order/family); a featured group → `taxa=<id>`.
+ *  - taxa are emitted as a single flat token list (`taxa=corals,felidae`); the
+ *    dashboard's parseParams expands each token to its display-root + sub-group
+ *    (corals → invertebrates + inv-corals) — see taxonomy-utils. A scientific-rank
+ *    taxon (`felidae`) has no node and is matched by class/order/family.
  *  - `assessors`/`reviewers`: both surfaces case-insensitively SUBSTRING-match the
  *    name (the dashboard predicate mirrors /browse), so a partial name selects the
  *    same species set in each.
@@ -30,24 +30,8 @@ import {
   resolveTaxa, resolveCategories, resolveThreats, resolveCountries,
 } from "@/lib/filter-vocab";
 import { resolveRegions } from "@/lib/regions";
-import { findNode, getViewRootForNode } from "@/lib/taxonomy-utils";
 
 const arr = (a?: string[]) => (a ?? []).map((s) => s.trim()).filter(Boolean);
-
-// Split resolved taxon ids into the dashboard's `taxa` (display roots + arbitrary
-// scientific ranks) vs `subgroups` (a curated node below a display root, which
-// also needs its root selected so the parent's species load).
-function splitTaxa(ids: string[]): { taxa: string[]; subgroups: string[] } {
-  const taxa = new Set<string>();
-  const subgroups = new Set<string>();
-  for (const id of ids) {
-    if (!findNode(id)) { taxa.add(id); continue; } // arbitrary scientific rank
-    const root = getViewRootForNode(id);
-    if (root && root !== id) { subgroups.add(id); taxa.add(root); }
-    else taxa.add(id); // a display root (or a node outside the default view)
-  }
-  return { taxa: [...taxa], subgroups: [...subgroups] };
-}
 
 /**
  * Build the dashboard query string (`?…`, or `""` when nothing resolved) that
@@ -61,12 +45,10 @@ export function browseInputToDashboardQuery(input: BrowseInput): string {
     p.set("search", input.search.trim());
   }
 
+  // A single flat `taxa` token list (e.g. corals, felidae); the dashboard's
+  // parseParams expands each token to its display-root + sub-group as needed.
   const taxaIds = resolveTaxa(arr(input.taxa)).ids;
-  if (taxaIds.length) {
-    const { taxa, subgroups } = splitTaxa(taxaIds);
-    if (taxa.length) p.set("taxa", taxa.join(","));
-    if (subgroups.length) p.set("subgroups", subgroups.join(","));
-  }
+  if (taxaIds.length) p.set("taxa", taxaIds.join(","));
 
   const categories = resolveCategories(arr(input.categories)).codes;
   if (categories.length) p.set("categories", categories.join(","));

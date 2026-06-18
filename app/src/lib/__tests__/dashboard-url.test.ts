@@ -21,10 +21,13 @@ describe("browseInputToDashboardQuery", () => {
     expect(p.has("subgroups")).toBe(false);
   });
 
-  it("maps a curated sub-group to subgroups + its display root in taxa", () => {
-    const p = params({ taxa: ["sharks-rays"] });
-    expect(p.get("subgroups")).toBe("sharks-rays");
-    expect(p.get("taxa")).toBeTruthy(); // the parent display root, so its species load
+  it("emits taxa as a single flat token list (no subgroups param)", () => {
+    // The dashboard's parseParams expands these tokens (corals → invertebrates +
+    // inv-corals; sharks-rays → fishes + sharks-rays) — see the round-trip below.
+    expect(params({ taxa: ["sharks-rays"] }).get("taxa")).toBe("sharks-rays");
+    const p = params({ taxa: ["corals"] });
+    expect(p.get("taxa")).toBe("corals");
+    expect(p.has("subgroups")).toBe(false);
   });
 
   it("resolves category aliases (threatened → CR,EN,VU)", () => {
@@ -104,5 +107,15 @@ describe("browseInputToDashboardQuery → parseParams round-trip", () => {
     const qs = browseInputToDashboardQuery({ taxa: ["amphibians"], region: ["Sub-Saharan Africa"] });
     const parsed = parseParams(qs);
     expect(parsed.countries.size).toBeGreaterThan(0);
+  });
+
+  it("a flat group token expands to the dashboard's root + sub-group selection", () => {
+    // The agent emits taxa=corals; the dashboard expands it to the working
+    // invertebrates + inv-corals — so the link reproduces the same view.
+    const qs = browseInputToDashboardQuery({ taxa: ["corals"] });
+    expect(qs).toBe("?taxa=corals");
+    const parsed = parseParams(qs);
+    expect(parsed.taxa).toEqual(new Set(["invertebrates"]));
+    expect(parsed.subgroups).toEqual(new Set(["inv-corals"]));
   });
 });

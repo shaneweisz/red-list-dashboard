@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { canonicalizeTaxonId } from "@/lib/data/taxonomy-constants";
 import { resolveRegions } from "@/lib/regions";
+import { expandTaxaToken, collapseTaxaToTokens, getViewRootForNode } from "@/lib/taxonomy-utils";
 
 // --- URL parsing helpers ---
 
@@ -46,15 +47,27 @@ export function parseParams(search: string) {
   if (p.get("region")) {
     resolveRegions(p.get("region")!.split(",").filter(Boolean)).codes.forEach((c) => countryCodes.add(c));
   }
+  // Taxa: the URL carries a single flat `taxa` token list; expand each into the
+  // internal display-root + (optional) sub-group. Legacy `subgroups=` links still
+  // parse (their values are added directly, with the parent root ensured present).
+  const taxaSet = new Set<string>();
+  const subgroupSet = new Set<string>();
+  for (const tok of p.get("taxa")?.split(",").filter(Boolean) ?? []) {
+    const { taxa, subgroup } = expandTaxaToken(tok);
+    taxaSet.add(taxa);
+    if (subgroup) subgroupSet.add(subgroup);
+  }
+  for (const sg of p.get("subgroups")?.split(",").filter(Boolean) ?? []) {
+    const id = canonicalizeTaxonId(sg);
+    subgroupSet.add(id);
+    const root = getViewRootForNode(id);
+    if (root) taxaSet.add(root);
+  }
   return {
     viewMode: (viewParam === "new-assessments" ? "new-assessments" : "reassessments") as ViewMode,
-    // Map legacy IDs (e.g. mammalia → mammals) so old shared/bookmarked URLs keep working.
-    taxa: p.get("taxa")
-      ? new Set(p.get("taxa")!.split(",").filter(Boolean).map(canonicalizeTaxonId))
-      : new Set<string>(),
-    subgroups: p.get("subgroups")
-      ? new Set(p.get("subgroups")!.split(",").filter(Boolean).map(canonicalizeTaxonId))
-      : new Set<string>(),
+    // Expanded from the flat `taxa` token list (+ legacy `subgroups=`) above.
+    taxa: taxaSet,
+    subgroups: subgroupSet,
     categories: p.get("categories")
       ? new Set(p.get("categories")!.split(",").filter(Boolean))
       : new Set<string>(),
@@ -151,8 +164,10 @@ export function buildQs(state: {
 }): string {
   const p = new URLSearchParams();
   if (state.viewMode === "new-assessments") p.set("view", "new-assessments");
-  if (state.taxa.size > 0) p.set("taxa", [...state.taxa].join(","));
-  if (state.subgroups.size > 0) p.set("subgroups", [...state.subgroups].join(","));
+  // taxa + subgroups collapse to a single flat `taxa` token list (e.g.
+  // invertebrates + inv-corals → taxa=corals); no separate subgroups param.
+  const taxaTokens = collapseTaxaToTokens(state.taxa, state.subgroups);
+  if (taxaTokens.length > 0) p.set("taxa", taxaTokens.join(","));
   if (state.categories.size > 0) p.set("categories", [...state.categories].join(","));
   if (state.yearRanges.size > 0) p.set("years", [...state.yearRanges].join(","));
   if (state.assessmentYears.size > 0) p.set("assessmentYears", [...state.assessmentYears].join(","));
