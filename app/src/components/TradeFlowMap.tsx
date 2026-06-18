@@ -226,8 +226,8 @@ function TradeFlowMap({
   const setSelectedCountry = onSelectCountry ?? setInternalSelected;
   const [showReExports, setShowReExports] = useState(false);
   // How many of the top bilateral flows to draw. The default of 12 preserves the
-  // previous hard-coded cap; the legend control lets users widen it or show all.
-  const [flowLimit, setFlowLimit] = useState<number | "all">(12);
+  // previous hard-coded cap; the top-right slider lets users widen it or show all.
+  const [flowLimit, setFlowLimit] = useState(12);
 
   /* ---- Pan / zoom -------------------------------------------------- */
   // A single transform applied to all map content (geographies + arcs +
@@ -328,16 +328,15 @@ function TradeFlowMap({
     ? renderableFlows.filter((f) => f.from === selectedCountry || f.to === selectedCountry)
     : renderableFlows;
 
-  // Resolve the cap against what's actually available: a numeric limit that's
-  // already >= the number of flows is equivalent to "all", so we normalise it so
-  // the legend select stays in sync with what's drawn.
+  // The slider runs 1..totalFlows; clamp so a value left over from a larger set
+  // (e.g. before a country filter shrank it) still resolves sensibly, and detect
+  // when we're effectively showing everything.
   const totalFlows = countryFlows.length;
-  const effectiveLimit: number | "all" =
-    flowLimit !== "all" && flowLimit < totalFlows ? flowLimit : "all";
+  const shownFlows = Math.min(flowLimit, totalFlows);
+  const showingAll = shownFlows >= totalFlows;
 
   // Flows are pre-sorted by record count, so slicing keeps the largest.
-  const visibleFlows =
-    effectiveLimit === "all" ? countryFlows : countryFlows.slice(0, effectiveLimit);
+  const visibleFlows = countryFlows.slice(0, shownFlows);
 
   // Re-export legs to show: only when toggled on, respecting any country filter,
   // and capped by the same flow limit so the overlay stays bounded.
@@ -349,10 +348,9 @@ function TradeFlowMap({
           )
         : renderableReExports
       : [];
-  const visibleReExports =
-    effectiveLimit === "all"
-      ? countryReExports
-      : countryReExports.slice(0, effectiveLimit);
+  const visibleReExports = showingAll
+    ? countryReExports
+    : countryReExports.slice(0, shownFlows);
 
   // Per-country export vs import volume, used to colour each country by its
   // DOMINANT role. Earlier this was derived purely from whether a country
@@ -497,16 +495,38 @@ function TradeFlowMap({
         </div>
       )}
 
-      {/* Selected country filter chip */}
-      {selectedCountry && (
-        <button
-          className="absolute top-2 right-2 z-10 bg-zinc-800 dark:bg-zinc-700 text-white text-[11px] px-2.5 py-1 rounded-full flex items-center gap-1.5 hover:bg-zinc-700 dark:hover:bg-zinc-600 transition-colors"
-          onClick={() => setSelectedCountry(null)}
-        >
-          {countryName(selectedCountry)}
-          <span className="text-zinc-400">&times;</span>
-        </button>
-      )}
+      {/* Top-right controls: a slider for how many flows to draw, with the
+          selected-country filter chip stacked beneath it. */}
+      <div className="absolute top-2 right-2 z-10 flex flex-col items-end gap-1.5">
+        {totalFlows > 1 && (
+          <div className="flex items-center gap-2 bg-zinc-50/80 dark:bg-zinc-900/60 backdrop-blur-sm rounded-md px-2 py-1 shadow-sm">
+            <span className="text-[10px] text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
+              Flows{" "}
+              <span className="tabular-nums font-medium text-zinc-700 dark:text-zinc-200">
+                {showingAll ? `all ${totalFlows}` : shownFlows}
+              </span>
+            </span>
+            <input
+              type="range"
+              min={1}
+              max={totalFlows}
+              value={shownFlows}
+              onChange={(e) => setFlowLimit(Number(e.target.value))}
+              aria-label="Number of trade flows to show"
+              className="w-24 h-1 cursor-pointer accent-red-500"
+            />
+          </div>
+        )}
+        {selectedCountry && (
+          <button
+            className="bg-zinc-800 dark:bg-zinc-700 text-white text-[11px] px-2.5 py-1 rounded-full flex items-center gap-1.5 hover:bg-zinc-700 dark:hover:bg-zinc-600 transition-colors"
+            onClick={() => setSelectedCountry(null)}
+          >
+            {countryName(selectedCountry)}
+            <span className="text-zinc-400">&times;</span>
+          </button>
+        )}
+      </div>
 
       <div
         ref={wrapRef}
@@ -662,6 +682,10 @@ function TradeFlowMap({
 
           const ratio = maxRecords > 0 ? flow.records / maxRecords : 0;
           const strokeWidth = 1.5 + ratio * 2.5;
+          // Opacity also scales with volume, so the busiest corridors read
+          // strongest while small flows stay faint. The floor keeps the
+          // smallest flow visible rather than fully transparent.
+          const baseOpacity = (dark ? 0.4 : 0.3) + ratio * (dark ? 0.5 : 0.45);
           const isHovered = hoveredFlow === i;
 
           // Arrowhead at destination
@@ -676,7 +700,7 @@ function TradeFlowMap({
                 stroke={isHovered ? colors.arcHover : colors.arcDefault}
                 strokeWidth={isHovered ? strokeWidth + 1 : strokeWidth}
                 strokeLinecap="round"
-                strokeOpacity={isHovered ? 0.95 : dark ? 0.7 : 0.45}
+                strokeOpacity={isHovered ? 0.95 : baseOpacity}
                 onMouseEnter={() => setHoveredFlow(i)}
                 onMouseLeave={() => setHoveredFlow(null)}
                 style={{ cursor: "pointer" }}
@@ -686,7 +710,7 @@ function TradeFlowMap({
                 <polygon
                   points="-5,-3 0,0 -5,3"
                   fill={isHovered ? colors.arcHover : colors.arcDefault}
-                  fillOpacity={isHovered ? 0.95 : dark ? 0.85 : 0.7}
+                  fillOpacity={isHovered ? 0.95 : Math.min(0.95, baseOpacity + 0.15)}
                   transform={`translate(${dest[0]},${dest[1]}) rotate(${angle})`}
                 />
               )}
@@ -812,29 +836,6 @@ function TradeFlowMap({
               Re-exports (Origin &rarr; Exporter)
             </label>
           </>
-        )}
-        {[6, 12, 25, 50].some((n) => n < totalFlows) && (
-          <label className="flex items-center gap-1 select-none">
-            <span>Flows shown</span>
-            <select
-              value={effectiveLimit === "all" ? "all" : String(effectiveLimit)}
-              onChange={(e) =>
-                setFlowLimit(
-                  e.target.value === "all" ? "all" : Number(e.target.value)
-                )
-              }
-              className="rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300 px-1 py-0.5 text-[10px]"
-            >
-              {[6, 12, 25, 50]
-                .filter((n) => n < totalFlows)
-                .map((n) => (
-                  <option key={n} value={n}>
-                    Top {n}
-                  </option>
-                ))}
-              <option value="all">All ({totalFlows})</option>
-            </select>
-          </label>
         )}
         <span className="text-zinc-400 dark:text-zinc-500 italic">click dot to filter</span>
       </div>
