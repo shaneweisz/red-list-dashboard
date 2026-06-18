@@ -1,16 +1,51 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { canonicalizeTaxonId } from "@/lib/data/taxonomy-constants";
+import { resolveRegions } from "@/lib/regions";
 
 // --- URL parsing helpers ---
 
 export type ViewMode = "reassessments" | "new-assessments";
 
+// Exact, URL-only base filters (no on-screen control — the charts use coarse
+// buckets). They let an agent/MCP dashboard link reproduce the exact /browse
+// query; each feeds the same predicate the dashboard already runs.
+export interface ExactFilters {
+  outdated: "yes" | "no" | null;
+  minObs: number | null;
+  maxObs: number | null;
+  minAssessmentYear: number | null;
+  maxAssessmentYear: number | null;
+  minDescribedYear: number | null;
+  maxDescribedYear: number | null;
+}
+
+export const EMPTY_EXACT_FILTERS: ExactFilters = {
+  outdated: null, minObs: null, maxObs: null,
+  minAssessmentYear: null, maxAssessmentYear: null,
+  minDescribedYear: null, maxDescribedYear: null,
+};
+
+const numParam = (p: URLSearchParams, key: string): number | null => {
+  const v = p.get(key);
+  if (v == null) return null;
+  const n = parseInt(v, 10);
+  return Number.isNaN(n) ? null : n;
+};
+
 export function parseParams(search: string) {
   const p = new URLSearchParams(search);
   const sortParam = p.get("sort");
   const viewParam = p.get("view");
+  // A `region` param expands to its country codes (the dashboard has no separate
+  // region state — it stores a region AS its countries and re-derives the chip).
+  const countryCodes = new Set<string>(
+    p.get("countries") ? p.get("countries")!.split(",").filter(Boolean) : []
+  );
+  if (p.get("region")) {
+    resolveRegions(p.get("region")!.split(",").filter(Boolean)).codes.forEach((c) => countryCodes.add(c));
+  }
   return {
     viewMode: (viewParam === "new-assessments" ? "new-assessments" : "reassessments") as ViewMode,
     // Map legacy IDs (e.g. mammalia → mammals) so old shared/bookmarked URLs keep working.
@@ -33,9 +68,7 @@ export function parseParams(search: string) {
     describedYears: p.get("describedYears")
       ? new Set(p.get("describedYears")!.split(",").filter(Boolean))
       : new Set<string>(),
-    countries: p.get("countries")
-      ? new Set(p.get("countries")!.split(",").filter(Boolean))
-      : new Set<string>(),
+    countries: countryCodes,
     obsRanges: p.get("obsRanges")
       ? new Set(p.get("obsRanges")!.split(",").filter(Boolean))
       : new Set<string>(),
@@ -62,6 +95,14 @@ export function parseParams(search: string) {
       ? new Set(p.get("reviewers")!.split("|").filter(Boolean))
       : new Set<string>(),
     search: p.get("search") || "",
+    // Exact URL-only base filters (see ExactFilters).
+    outdated: (p.get("outdated") === "yes" ? "yes" : p.get("outdated") === "no" ? "no" : null) as "yes" | "no" | null,
+    minObs: numParam(p, "minObs"),
+    maxObs: numParam(p, "maxObs"),
+    minAssessmentYear: numParam(p, "minAssessmentYear"),
+    maxAssessmentYear: numParam(p, "maxAssessmentYear"),
+    minDescribedYear: numParam(p, "minDescribedYear"),
+    maxDescribedYear: numParam(p, "maxDescribedYear"),
     sortField: (
       sortParam === "category" ? "category" :
       sortParam === "year" ? "year" :
@@ -96,6 +137,13 @@ export function buildQs(state: {
   assessors: Set<string>;
   reviewers: Set<string>;
   search: string;
+  outdated?: "yes" | "no" | null;
+  minObs?: number | null;
+  maxObs?: number | null;
+  minAssessmentYear?: number | null;
+  maxAssessmentYear?: number | null;
+  minDescribedYear?: number | null;
+  maxDescribedYear?: number | null;
   sortField: "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear" | null;
   sortDirection: "asc" | "desc";
   species: number | null;
@@ -120,6 +168,13 @@ export function buildQs(state: {
   if (state.assessors.size > 0) p.set("assessors", [...state.assessors].join("|"));
   if (state.reviewers.size > 0) p.set("reviewers", [...state.reviewers].join("|"));
   if (state.search) p.set("search", state.search);
+  if (state.outdated) p.set("outdated", state.outdated);
+  if (state.minObs != null) p.set("minObs", String(state.minObs));
+  if (state.maxObs != null) p.set("maxObs", String(state.maxObs));
+  if (state.minAssessmentYear != null) p.set("minAssessmentYear", String(state.minAssessmentYear));
+  if (state.maxAssessmentYear != null) p.set("maxAssessmentYear", String(state.maxAssessmentYear));
+  if (state.minDescribedYear != null) p.set("minDescribedYear", String(state.minDescribedYear));
+  if (state.maxDescribedYear != null) p.set("maxDescribedYear", String(state.maxDescribedYear));
   if (state.species != null) p.set("species", String(state.species));
   if (state.species != null && state.tab && state.tab !== "gbif") p.set("tab", state.tab);
   // null / "year" desc is the default — only write non-default sort to URL
@@ -378,6 +433,30 @@ export function useFilterParams() {
     [syncUrl]
   );
 
+  // Stable identity (keyed on the 7 primitive fields) so consumers can use it as a
+  // memo/effect dep without recomputing every render.
+  const exactFilters = useMemo<ExactFilters>(() => ({
+    outdated: state.outdated,
+    minObs: state.minObs,
+    maxObs: state.maxObs,
+    minAssessmentYear: state.minAssessmentYear,
+    maxAssessmentYear: state.maxAssessmentYear,
+    minDescribedYear: state.minDescribedYear,
+    maxDescribedYear: state.maxDescribedYear,
+  }), [state.outdated, state.minObs, state.maxObs, state.minAssessmentYear, state.maxAssessmentYear, state.minDescribedYear, state.maxDescribedYear]);
+
+  // Patch one or more exact URL-only filters (outdated / obs / year bounds).
+  const setExactFilters = useCallback(
+    (patch: Partial<ExactFilters>) => {
+      setState(prev => {
+        const next = { ...prev, ...patch };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
   const setViewMode = useCallback(
     (mode: ViewMode) => {
       setState(prev => {
@@ -443,6 +522,7 @@ export function useFilterParams() {
         assessors: new Set<string>(),
         reviewers: new Set<string>(),
         search: "",
+        ...EMPTY_EXACT_FILTERS,
         sortField: null,
         sortDirection: "desc" as const,
         species: null,
@@ -474,6 +554,7 @@ export function useFilterParams() {
         assessors: new Set<string>(),
         reviewers: new Set<string>(),
         search: "",
+        ...EMPTY_EXACT_FILTERS,
         sortField: null,
         sortDirection: "desc" as const,
         species: null,
@@ -503,6 +584,8 @@ export function useFilterParams() {
     selectedAssessors: state.assessors,
     selectedReviewers: state.reviewers,
     searchFilter: state.search,
+    exactFilters,
+    setExactFilters,
     sortField: state.sortField,
     sortDirection: state.sortDirection,
 

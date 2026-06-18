@@ -10,6 +10,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { runBrowseQuery, type BrowseInput, type BrowseResult, type BrowseSpecies } from "@/lib/browse-query";
+import { browseInputToDashboardUrl } from "@/lib/dashboard-url";
 import { CATEGORY_ORDER } from "@/config/taxa";
 import { CACHE_1H } from "@/lib/cache-headers";
 import {
@@ -110,6 +111,9 @@ export async function GET(req: NextRequest) {
         breakdown: result.breakdown,
         stats: result.stats,
         species: result.species,
+        // The interactive dashboard, pre-filtered to this same query — share it so
+        // a human can inspect and verify these results for themselves.
+        dashboard_url: browseInputToDashboardUrl(req.nextUrl.origin, input),
       },
       { headers: { ...CACHE_1H, ...NOINDEX } },
     );

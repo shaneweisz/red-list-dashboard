@@ -15,9 +15,11 @@
  * would guard nothing it doesn't, while blocking claude.ai web connectors (which speak
  * OAuth, not static bearers). If abuse becomes a concern, rate-limit instead.
  */
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createMcpHandler } from "mcp-handler";
 import { z } from "zod";
 import { runBrowseQuery, type BrowseInput } from "@/lib/browse-query";
+import { browseInputToDashboardUrl } from "@/lib/dashboard-url";
 import {
   FEATURED_TAXA, THREAT_CATEGORIES, ALL_CATEGORIES,
   taxonLabel, categoryLabel, SYSTEMS, POPULATION_TRENDS,
@@ -27,6 +29,22 @@ import { IUCN_REGION_ORDER } from "@/lib/regions";
 export const maxDuration = 60;
 
 const asText = (data: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] });
+
+// Per-request origin (e.g. https://host), captured from the incoming request so
+// the dashboard links we emit point at THIS deployment — same approach as the
+// /browse and /llms.txt routes.
+const originStore = new AsyncLocalStorage<string>();
+const getOrigin = () => originStore.getStore() ?? "";
+
+// Standing instruction attached to every queryable result: the deterministic
+// dashboard link plus a nudge to surface it and have the user verify. We compute
+// it server-side (not via tool-prompt) so it can't be skipped by the agent.
+const VERIFY_NOTE =
+  "Always show `dashboard_url` to the user and encourage them to open it to inspect and verify the data themselves. It is the interactive dashboard pre-filtered to this exact query, so it reproduces the same species set you see here.";
+
+// Wrap a queryable result with the dashboard link + verify nudge for `input`.
+const withDashboard = (input: BrowseInput, data: object) =>
+  asText({ ...data, dashboard_url: browseInputToDashboardUrl(getOrigin(), input), verify_note: VERIFY_NOTE });
 
 // Shared optional-filter schema for browse_taxon.
 const FILTERS = {
@@ -58,7 +76,7 @@ const handler = createMcpHandler(
       async (args) => {
         const { taxa, region, ...rest } = args as { taxa: string; region?: string } & Record<string, unknown>;
         const input: BrowseInput = { ...(rest as BrowseInput), taxa: [taxa], region: region ? [region] : [] };
-        return asText(await runBrowseQuery(input));
+        return withDashboard(input, await runBrowseQuery(input));
       },
     );
 
@@ -71,7 +89,7 @@ const handler = createMcpHandler(
       },
       async (args) => {
         const { name } = args as { name: string };
-        return asText(await runBrowseQuery({ search: name }));
+        return withDashboard({ search: name }, await runBrowseQuery({ search: name }));
       },
     );
 
@@ -98,4 +116,16 @@ const handler = createMcpHandler(
   { basePath: "/api" },
 );
 
-export { handler as GET, handler as POST, handler as DELETE };
+// Run the MCP handler inside the origin context so tool callbacks can build
+// absolute dashboard links from this request's host.
+const withOrigin = (h: (req: Request) => Promise<Response> | Response) => (req: Request) => {
+  let origin = "";
+  try { origin = new URL(req.url).origin; } catch { /* leave empty → relative link */ }
+  return originStore.run(origin, () => h(req));
+};
+
+const GET = withOrigin(handler);
+const POST = withOrigin(handler);
+const DELETE = withOrigin(handler);
+
+export { GET, POST, DELETE };
