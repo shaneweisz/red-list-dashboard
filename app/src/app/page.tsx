@@ -184,7 +184,7 @@ export default function RedListPage() {
           >
             CITES
           </a>
-          {" "}and{" "}
+          ,{" "}
           <a
             href="https://speciesplus.net"
             target="_blank"
@@ -192,6 +192,24 @@ export default function RedListPage() {
             className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
           >
             Species+
+          </a>
+          ,{" "}
+          <a
+            href="https://www.catalogueoflife.org"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
+          >
+            Catalogue of Life
+          </a>
+          {" "}and{" "}
+          <a
+            href="https://eol.org"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
+          >
+            Encyclopedia of Life
           </a>
           {" "}data. Any errors in aggregation or presentation are my own. Please verify against the primary sources before use, and do get in touch if you notice any issues.
         </p>
