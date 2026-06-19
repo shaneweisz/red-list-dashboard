@@ -125,10 +125,10 @@ const centeredThClasses = `${cellPad} ${colDivider} text-center text-xs font-med
 type ColumnId = "described" | "colDescribed" | "assessed" | "outdated" | "breakdown" | "gbifUnassessed" | "colNe" | "totalGbifObs" | "meanGbifObs" | "medianGbifObs" | "gbifDistribution";
 
 const COLUMN_LABELS: Record<ColumnId, string> = {
-  described: "# Described",
-  colDescribed: "# Described (CoL)",
-  assessed: "# Assessed",
-  outdated: "# Outdated (10+Y)",
+  described: "# Described Species",
+  colDescribed: "# Described Species (CoL)",
+  assessed: "# Red List Assessed",
+  outdated: "# Outdated Assessments (10+Y)",
   breakdown: "Risk Category Breakdown",
   gbifUnassessed: "# Unassessed, 1+ GBIF Obs",
   colNe: "# Not Evaluated",
@@ -545,10 +545,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           <thead>
             <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
               <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`}>Taxon</th>
-              {isVisible("described") && <th className={numericThNoDividerClasses}># Described</th>}
-              {isVisible("colDescribed") && <th className={numericThClasses}># Described (CoL)</th>}
-              {isVisible("assessed") && <th className={centeredThClasses}># Assessed</th>}
-              {isVisible("outdated") && <th className={centeredThClasses}># Outdated (10+Y)</th>}
+              {isVisible("described") && <th className={numericThNoDividerClasses}># Described Species</th>}
+              {isVisible("colDescribed") && <th className={numericThClasses}># Described Species (CoL)</th>}
+              {isVisible("assessed") && <th className={centeredThClasses}># Red List Assessed</th>}
+              {isVisible("outdated") && <th className={centeredThClasses}># Outdated Assessments (10+Y)</th>}
               {isVisible("gbifUnassessed") && <th className={centeredThClasses}># Unassessed, 1+ GBIF Obs</th>}
               {isVisible("colNe") && <th className={centeredThClasses}># Not Evaluated</th>}
               {isVisible("totalGbifObs") && <th className={numericThClasses}>Total Obs</th>}
@@ -1305,7 +1305,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           <th className={`${numericThNoDividerClasses}`}>
             <div className="flex items-center justify-end gap-2">
               <span className="inline-flex items-center gap-1">
-                # Described
+                # Described Species
                 <span className="relative group">
                   <a
                     href={describedSource === "col" ? COL_SOURCE_URL : IUCN_SOURCE_URL}
@@ -1324,7 +1324,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                 </span>
               </span>
               {/* IUCN ↔ CoL source toggle: flips the described count + recomputes % Assessed */}
-              <span className="inline-flex rounded-md overflow-hidden border border-zinc-300 dark:border-zinc-600 text-[10px] font-semibold normal-case" title="Switch # Described between IUCN Table 1a estimates and the Catalogue of Life backbone">
+              <span className="inline-flex rounded-md overflow-hidden border border-zinc-300 dark:border-zinc-600 text-[10px] font-semibold normal-case" title="Switch # Described Species between IUCN Table 1a estimates and the Catalogue of Life backbone">
                 {(["iucn", "col"] as const).map((src) => (
                   <button
                     key={src}
@@ -1343,13 +1343,13 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           </th>
         )}
         {isVisible("colDescribed") && (
-          <th className={numericThClasses}># Described (CoL)</th>
+          <th className={numericThClasses}># Described Species (CoL)</th>
         )}
         {isVisible("assessed") && (
-          <th className={centeredThClasses}># Assessed</th>
+          <th className={centeredThClasses}># Red List Assessed</th>
         )}
         {isVisible("outdated") && (
-          <th className={centeredThClasses}># Outdated (10+Y)</th>
+          <th className={centeredThClasses}># Outdated Assessments (10+Y)</th>
         )}
         {isVisible("gbifUnassessed") && (
           <th className={centeredThClasses}># Unassessed, 1+ GBIF Obs</th>
