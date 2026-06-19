@@ -22,7 +22,7 @@ const BRANDS: Record<string, Brand> = {
     title: "Dash of Life: A Dashboard of Life on Earth",
     tabTitle: "Dash of Life",
     description: "A dashboard for biodiversity data about life on Earth",
-    assessedTabLabel: "Red List Assessed",
+    assessedTabLabel: "Assessed (Red List)",
     unassessedTabLabel: "Unassessed",
     showGlobe: true,
   },
