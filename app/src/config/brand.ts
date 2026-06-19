@@ -3,6 +3,10 @@ export type Brand = {
   description: string;
   /** Browser-tab title; falls back to `title` when omitted. */
   tabTitle?: string;
+  /** Label for the "reassessments" view-mode tab; defaults to "Reassessments". */
+  assessedTabLabel?: string;
+  /** Label for the "new-assessments" view-mode tab; defaults to "New Assessments". */
+  unassessedTabLabel?: string;
   /** Show the globe icon before the title (used by the Dash of Life brand). */
   showGlobe?: boolean;
 };
@@ -18,6 +22,8 @@ const BRANDS: Record<string, Brand> = {
     title: "Dash of Life: A Dashboard of Life on Earth",
     tabTitle: "Dash of Life",
     description: "A dashboard for biodiversity data about life on Earth",
+    assessedTabLabel: "Red List Assessed",
+    unassessedTabLabel: "Unassessed",
     showGlobe: true,
   },
 };
