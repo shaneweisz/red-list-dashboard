@@ -397,6 +397,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     setSelectedPopulationTrends(new Set());
     setSelectedMovementPatterns(new Set());
     setSelectedThreats(new Set());
+    setExpandedThreat(null);
     setHasMapFilter(null);
     setSelectedGrowthForms(new Set());
     setSelectedAssessors(new Set());
@@ -493,6 +494,18 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const [showOnlyStarred, setShowOnlyStarred] = useState(false);
   const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
   const [expandedThreat, setExpandedThreat] = useState<string | null>(null);
+
+  // Keep the threats drill-down in sync with the selection. Whenever the expanded
+  // top-level category is no longer represented in the selection — because the
+  // threats were cleared (Clear all / chip ×), a child was deselected, or the view
+  // was reset — collapse the sub-category pane so no stale nested level lingers.
+  useEffect(() => {
+    if (!expandedThreat) return;
+    const stillSelected = Array.from(selectedThreats).some(
+      c => c === expandedThreat || c.startsWith(expandedThreat + ".")
+    );
+    if (!stillSelected) setExpandedThreat(null);
+  }, [selectedThreats, expandedThreat]);
 
   // Stable callback for debounced search input
   const handleSearch = useCallback((value: string) => {
@@ -1381,10 +1394,14 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedThreats, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, hasMapFilter, matchesObsRangeFilter, matchesYearRangeFilter, selectedGrowthForms, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Threat counts: apply all filters EXCEPT threats (count species per prefix, deduplicated)
-  const threatCounts = useMemo(() => {
+  // Threat counts per code, plus the denominator (`threatTotal`) for percentages:
+  // every in-view species that passes the same filters, with or without a threat
+  // coded. The threat *selection* is intentionally excluded here, so both the
+  // counts and the percentage stay stable as threats are clicked.
+  const { threatCounts, threatTotal } = useMemo(() => {
     const counts: Record<string, number> = {};
+    let total = 0;
     taxaFilteredSpecies.forEach(s => {
-      if (!s.threat_codes?.length) return;
       if (!matchesSearch(s)) return;
       if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
       if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
@@ -1396,6 +1413,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
       if (!matchesAssessorsFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
+      total++;
+      if (!s.threat_codes?.length) return;
       // Deduplicate: count each prefix at most once per species
       const counted = new Set<string>();
       for (const tc of s.threat_codes) {
@@ -1409,7 +1428,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         }
       }
     });
-    return counts;
+    return { threatCounts: counts, threatTotal: total };
   }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Handle region filter — select all countries in the chosen region
@@ -2397,9 +2416,12 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
             ) : (() => {
               // Map label→code for reverse lookup from chart clicks
               const threatLabelToCode = new Map(THREAT_CATEGORIES.map(c => [c.label, c.code]));
+              // Bar label: count + share of all in-view species (see threatTotal).
+              const threatBarLabel = (count: number) =>
+                `${count.toLocaleString()} (${threatTotal > 0 ? Math.round((count / threatTotal) * 100) : 0}%)`;
               // Use label as `code` field so it displays on y-axis, sorted by count desc
               const threatBarData = THREAT_CATEGORIES
-                .map(({ code, label }) => ({ code: label, threatCode: code, count: threatCounts[code] ?? 0, label: `${(threatCounts[code] ?? 0).toLocaleString()}` }))
+                .map(({ code, label }) => ({ code: label, threatCode: code, count: threatCounts[code] ?? 0, label: threatBarLabel(threatCounts[code] ?? 0) }))
                 .filter(d => d.count > 0)
                 .sort((a, b) => b.count - a.count);
               // selectedItems needs to use labels too for dimming
@@ -2413,7 +2435,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
               const drillCat = expandedThreat ? THREAT_CATEGORIES.find(c => c.code === expandedThreat) ?? null : null;
               const drillSubData = drillCat
                 ? drillCat.children
-                    .map(child => ({ code: child.label, threatCode: child.code, count: threatCounts[child.code] ?? 0, label: `${(threatCounts[child.code] ?? 0).toLocaleString()}` }))
+                    .map(child => ({ code: child.label, threatCode: child.code, count: threatCounts[child.code] ?? 0, label: threatBarLabel(threatCounts[child.code] ?? 0) }))
                     .filter(d => d.count > 0)
                     .sort((a, b) => b.count - a.count)
                 : [];
@@ -2462,7 +2484,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                               }}
                               barColor="#8b5cf6"
                               yAxisWidth={155}
-                              rightMargin={55}
+                              rightMargin={80}
                               yAxisTickMaxLength={22}
                             />
                           </div>
@@ -2499,7 +2521,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                   }}
                                   barColor="#a78bfa"
                                   yAxisWidth={170}
-                                  rightMargin={55}
+                                  rightMargin={80}
                                   yAxisTickMaxLength={24}
                                 />
                               </div>
@@ -3066,7 +3088,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
             })()}
             {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || hasMapFilter || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred || exactFilters.outdated || exactFilters.minObs != null || exactFilters.maxObs != null || exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null || exactFilters.minDescribedYear != null || exactFilters.maxDescribedYear != null) && (
               <button
-                onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setSelectedSubgroups(new Set()); setSelectedObsRanges(new Set()); setSelectedSystems(new Set()); setHasMapFilter(null); setSelectedGrowthForms(new Set()); setSelectedPopulationTrends(new Set()); setSelectedMovementPatterns(new Set()); setSelectedThreats(new Set()); setSelectedAssessors(new Set()); setSelectedReviewers(new Set()); setShowOnlyStarred(false); }}
+                onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setSelectedSubgroups(new Set()); setSelectedObsRanges(new Set()); setSelectedSystems(new Set()); setHasMapFilter(null); setSelectedGrowthForms(new Set()); setSelectedPopulationTrends(new Set()); setSelectedMovementPatterns(new Set()); setSelectedThreats(new Set()); setExpandedThreat(null); setSelectedAssessors(new Set()); setSelectedReviewers(new Set()); setShowOnlyStarred(false); }}
                 className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 underline"
               >
                 Clear all
