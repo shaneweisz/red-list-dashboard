@@ -2426,7 +2426,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
               // filter changes the category count nor when drilling in — which would
               // otherwise bump the country map sharing this grid row. The base chart
               // keeps its natural per-bar height and scrolls within the fixed area.
-              const THREATS_AREA_HEIGHT = 320;
+              // 266 = the country map card's 320px height minus this card's header +
+              // padding (~54px), so both cards (and their loading skeletons) match.
+              const THREATS_AREA_HEIGHT = 266;
               const chartHeight = Math.max(200, threatBarData.length * 24 + 30);
               const loading = speciesLoading && assessedSpecies.length === 0;
               return (
