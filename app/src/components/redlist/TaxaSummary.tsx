@@ -127,7 +127,7 @@ type ColumnId = "described" | "colDescribed" | "assessed" | "outdated" | "breakd
 const COLUMN_LABELS: Record<ColumnId, string> = {
   described: "# Described Species",
   colDescribed: "# Described Species (CoL)",
-  assessed: "# Assessed (Red List)",
+  assessed: "# Red List Assessed",
   outdated: "# Outdated Assessments (10+Y)",
   breakdown: "Risk Category Breakdown",
   gbifUnassessed: "# Unassessed, 1+ GBIF Obs",
@@ -547,7 +547,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`}>Taxon</th>
               {isVisible("described") && <th className={numericThNoDividerClasses}># Described Species</th>}
               {isVisible("colDescribed") && <th className={numericThClasses}># Described Species (CoL)</th>}
-              {isVisible("assessed") && <th className={centeredThClasses}># Assessed (Red List)</th>}
+              {isVisible("assessed") && <th className={centeredThClasses}># Red List Assessed</th>}
               {isVisible("outdated") && <th className={centeredThClasses}># Outdated Assessments (10+Y)</th>}
               {isVisible("gbifUnassessed") && <th className={centeredThClasses}># Unassessed, 1+ GBIF Obs</th>}
               {isVisible("colNe") && <th className={centeredThClasses}># Not Evaluated</th>}
@@ -1346,7 +1346,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           <th className={numericThClasses}># Described Species (CoL)</th>
         )}
         {isVisible("assessed") && (
-          <th className={centeredThClasses}># Assessed (Red List)</th>
+          <th className={centeredThClasses}># Red List Assessed</th>
         )}
         {isVisible("outdated") && (
           <th className={centeredThClasses}># Outdated Assessments (10+Y)</th>
