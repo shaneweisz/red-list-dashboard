@@ -28,7 +28,7 @@ export const viewport: Viewport = {
 export async function generateMetadata(): Promise<Metadata> {
   const brand = brandForHost((await headers()).get("host"));
   return {
-    title: brand.title,
+    title: brand.tabTitle ?? brand.title,
     description: brand.description,
   };
 }
