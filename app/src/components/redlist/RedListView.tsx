@@ -782,9 +782,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     return parseAssessors(s.latest_reviewers);
   }, []);
 
-  // Track which tab is active in the assessors/reviewers chart
-  const [reviewerFilterMode, setReviewerFilterMode] = useState<"assessors" | "reviewers">("assessors");
-
   // Track which view is active in the years-since-assessed chart ("range" buckets vs specific year).
   // Defaults to "year" when a specific-year filter is already active (e.g. from URL).
   const [yearsChartMode, setYearsChartMode] = useState<"range" | "year">(
@@ -1969,23 +1966,25 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     });
   };
 
+  // Assessors and reviewers each get their own chart, so the click/toggle
+  // handlers are parameterised by which selection setter they target.
+  type SetSelection = React.Dispatch<React.SetStateAction<Set<string>>>;
+
   // Toggle a single assessor/reviewer in/out of selection (used by search list)
-  const handleAssessorToggle = useCallback((code: string) => {
-    const setter = reviewerFilterMode === "assessors" ? setSelectedAssessors : setSelectedReviewers;
+  const makeAssessorToggle = useCallback((setter: SetSelection) => (code: string) => {
     setter(prev => {
       const next = new Set(prev);
       if (next.has(code)) next.delete(code);
       else next.add(code);
       return next;
     });
-  }, [reviewerFilterMode, setSelectedAssessors, setSelectedReviewers]);
+  }, []);
 
   // Handle assessor/reviewer bar click
-  const handleAssessorClick = (data: { payload?: { code?: string } }, event: React.MouseEvent) => {
+  const makeAssessorClick = useCallback((setter: SetSelection) => (data: { payload?: { code?: string } }, event: React.MouseEvent) => {
     const code = data.payload?.code;
     if (!code) return;
     const isMultiSelect = event.metaKey || event.ctrlKey;
-    const setter = reviewerFilterMode === "assessors" ? setSelectedAssessors : setSelectedReviewers;
     setter(prev => {
       if (isMultiSelect) {
         const next = new Set(prev);
@@ -1997,7 +1996,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         return new Set([code]);
       }
     });
-  };
+  }, []);
 
   const currentYear = new Date().getFullYear();
   const GBIF_FILTERS = "has_coordinate=true&has_geospatial_issue=false&basis_of_record=HUMAN_OBSERVATION&basis_of_record=MACHINE_OBSERVATION&basis_of_record=OCCURRENCE&basis_of_record=MATERIAL_SAMPLE&basis_of_record=OBSERVATION";
@@ -2750,56 +2749,56 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   </div>
                 )}
 
-                {/* Assessors / Reviewers chart */}
+                {/* Assessors and Reviewers, shown side by side */}
                 {isSingleSpecies && singleSpecies ? (
-                  <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="inline-flex rounded-md bg-zinc-100 dark:bg-zinc-800 p-0.5">
-                        <button
-                          onClick={() => setReviewerFilterMode("assessors")}
-                          className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
-                            reviewerFilterMode === "assessors"
-                              ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
-                              : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
-                          }`}
-                        >
-                          Assessors
-                        </button>
-                        <button
-                          onClick={() => setReviewerFilterMode("reviewers")}
-                          className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
-                            reviewerFilterMode === "reviewers"
-                              ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
-                              : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
-                          }`}
-                        >
-                          Reviewers
-                        </button>
-                      </div>
-                    </div>
-                    <div className="flex-1 overflow-y-auto mt-2" style={{ maxHeight: 260 }}>
-                      {(reviewerFilterMode === "assessors" ? singleSpeciesAssessors : singleSpeciesReviewers).length > 0 ? (
-                        <div className="flex flex-wrap gap-2">
-                          {(reviewerFilterMode === "assessors" ? singleSpeciesAssessors : singleSpeciesReviewers).map((name) => (
-                            <span key={name} className="inline-block px-3 py-1.5 text-sm rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">{name}</span>
-                          ))}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {([
+                      { title: "Assessors", names: singleSpeciesAssessors },
+                      { title: "Reviewers", names: singleSpeciesReviewers },
+                    ] as const).map(({ title, names }) => (
+                      <div key={title} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{title}</span>
                         </div>
-                      ) : (
-                        <span className="text-sm text-zinc-400 dark:text-zinc-500">None listed</span>
-                      )}
-                    </div>
+                        <div className="overflow-y-auto mt-2" style={{ maxHeight: 260 }}>
+                          {names.length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                              {names.map((name) => (
+                                <span key={name} className="inline-block px-3 py-1.5 text-sm rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">{name}</span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-sm text-zinc-400 dark:text-zinc-500">None listed</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 ) : (
-                  <ReviewerChart
-                    allAssessors={assessorChartData}
-                    allReviewers={reviewerChartData}
-                    selectedItems={reviewerFilterMode === "assessors" ? selectedAssessors : selectedReviewers}
-                    onBarClick={handleAssessorClick}
-                    onItemToggle={handleAssessorToggle}
-                    loading={speciesLoading && assessedSpecies.length === 0}
-                    viewMode={reviewerFilterMode}
-                    onViewModeChange={setReviewerFilterMode}
-                  />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <ReviewerChart
+                      allAssessors={assessorChartData}
+                      allReviewers={reviewerChartData}
+                      viewMode="assessors"
+                      showToggle={false}
+                      title="Assessors"
+                      selectedItems={selectedAssessors}
+                      onBarClick={makeAssessorClick(setSelectedAssessors)}
+                      onItemToggle={makeAssessorToggle(setSelectedAssessors)}
+                      loading={speciesLoading && assessedSpecies.length === 0}
+                    />
+                    <ReviewerChart
+                      allAssessors={assessorChartData}
+                      allReviewers={reviewerChartData}
+                      viewMode="reviewers"
+                      showToggle={false}
+                      title="Reviewers"
+                      selectedItems={selectedReviewers}
+                      onBarClick={makeAssessorClick(setSelectedReviewers)}
+                      onItemToggle={makeAssessorToggle(setSelectedReviewers)}
+                      loading={speciesLoading && assessedSpecies.length === 0}
+                    />
+                  </div>
                 )}
               </div>
             )}
