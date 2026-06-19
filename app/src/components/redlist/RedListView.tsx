@@ -397,6 +397,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     setSelectedPopulationTrends(new Set());
     setSelectedMovementPatterns(new Set());
     setSelectedThreats(new Set());
+    setExpandedThreat(null);
     setHasMapFilter(null);
     setSelectedGrowthForms(new Set());
     setSelectedAssessors(new Set());
@@ -493,6 +494,18 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const [showOnlyStarred, setShowOnlyStarred] = useState(false);
   const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
   const [expandedThreat, setExpandedThreat] = useState<string | null>(null);
+
+  // Keep the threats drill-down in sync with the selection. Whenever the expanded
+  // top-level category is no longer represented in the selection — because the
+  // threats were cleared (Clear all / chip ×), a child was deselected, or the view
+  // was reset — collapse the sub-category pane so no stale nested level lingers.
+  useEffect(() => {
+    if (!expandedThreat) return;
+    const stillSelected = Array.from(selectedThreats).some(
+      c => c === expandedThreat || c.startsWith(expandedThreat + ".")
+    );
+    if (!stillSelected) setExpandedThreat(null);
+  }, [selectedThreats, expandedThreat]);
 
   // Stable callback for debounced search input
   const handleSearch = useCallback((value: string) => {
@@ -781,9 +794,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const getSpeciesReviewers = useCallback((s: Species): string[] => {
     return parseAssessors(s.latest_reviewers);
   }, []);
-
-  // Track which tab is active in the assessors/reviewers chart
-  const [reviewerFilterMode, setReviewerFilterMode] = useState<"assessors" | "reviewers">("assessors");
 
   // Track which view is active in the years-since-assessed chart ("range" buckets vs specific year).
   // Defaults to "year" when a specific-year filter is already active (e.g. from URL).
@@ -1384,10 +1394,14 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedThreats, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, hasMapFilter, matchesObsRangeFilter, matchesYearRangeFilter, selectedGrowthForms, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Threat counts: apply all filters EXCEPT threats (count species per prefix, deduplicated)
-  const threatCounts = useMemo(() => {
+  // Threat counts per code, plus the denominator (`threatTotal`) for percentages:
+  // every in-view species that passes the same filters, with or without a threat
+  // coded. The threat *selection* is intentionally excluded here, so both the
+  // counts and the percentage stay stable as threats are clicked.
+  const { threatCounts, threatTotal } = useMemo(() => {
     const counts: Record<string, number> = {};
+    let total = 0;
     taxaFilteredSpecies.forEach(s => {
-      if (!s.threat_codes?.length) return;
       if (!matchesSearch(s)) return;
       if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
       if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
@@ -1399,6 +1413,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
       if (!matchesAssessorsFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
+      total++;
+      if (!s.threat_codes?.length) return;
       // Deduplicate: count each prefix at most once per species
       const counted = new Set<string>();
       for (const tc of s.threat_codes) {
@@ -1412,7 +1428,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         }
       }
     });
-    return counts;
+    return { threatCounts: counts, threatTotal: total };
   }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Handle region filter — select all countries in the chosen region
@@ -1969,23 +1985,25 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     });
   };
 
+  // Assessors and reviewers each get their own chart, so the click/toggle
+  // handlers are parameterised by which selection setter they target.
+  type SetSelection = React.Dispatch<React.SetStateAction<Set<string>>>;
+
   // Toggle a single assessor/reviewer in/out of selection (used by search list)
-  const handleAssessorToggle = useCallback((code: string) => {
-    const setter = reviewerFilterMode === "assessors" ? setSelectedAssessors : setSelectedReviewers;
+  const makeAssessorToggle = useCallback((setter: SetSelection) => (code: string) => {
     setter(prev => {
       const next = new Set(prev);
       if (next.has(code)) next.delete(code);
       else next.add(code);
       return next;
     });
-  }, [reviewerFilterMode, setSelectedAssessors, setSelectedReviewers]);
+  }, []);
 
   // Handle assessor/reviewer bar click
-  const handleAssessorClick = (data: { payload?: { code?: string } }, event: React.MouseEvent) => {
+  const makeAssessorClick = useCallback((setter: SetSelection) => (data: { payload?: { code?: string } }, event: React.MouseEvent) => {
     const code = data.payload?.code;
     if (!code) return;
     const isMultiSelect = event.metaKey || event.ctrlKey;
-    const setter = reviewerFilterMode === "assessors" ? setSelectedAssessors : setSelectedReviewers;
     setter(prev => {
       if (isMultiSelect) {
         const next = new Set(prev);
@@ -1997,7 +2015,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         return new Set([code]);
       }
     });
-  };
+  }, []);
 
   const currentYear = new Date().getFullYear();
   const GBIF_FILTERS = "has_coordinate=true&has_geospatial_issue=false&basis_of_record=HUMAN_OBSERVATION&basis_of_record=MACHINE_OBSERVATION&basis_of_record=OCCURRENCE&basis_of_record=MATERIAL_SAMPLE&basis_of_record=OBSERVATION";
@@ -2327,7 +2345,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
           </div>
           )}
 
-          {/* Charts row 2: Country map + (Reviewers or GBIF Observations for new-assessments) */}
+          {/* Charts row 2: Country map + (Threats or GBIF Observations for new-assessments) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Country Map */}
             <div>
@@ -2373,7 +2391,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
               )}
             </div>
 
-            {/* Reviewers (reassessments) or GBIF Observations chart (new-assessments) */}
+            {/* Threats (reassessments) or GBIF Observations chart (new-assessments) */}
             {isNewAssessments ? (
               <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
                 <div className="flex items-center justify-between mb-1">
@@ -2395,56 +2413,129 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   )}
                 </div>
               </div>
-            ) : isSingleSpecies && singleSpecies ? (
-              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
-                <div className="flex items-center justify-between mb-1">
-                  <div className="inline-flex rounded-md bg-zinc-100 dark:bg-zinc-800 p-0.5">
-                    <button
-                      onClick={() => setReviewerFilterMode("assessors")}
-                      className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
-                        reviewerFilterMode === "assessors"
-                          ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
-                          : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
-                      }`}
-                    >
-                      Assessors
-                    </button>
-                    <button
-                      onClick={() => setReviewerFilterMode("reviewers")}
-                      className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
-                        reviewerFilterMode === "reviewers"
-                          ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
-                          : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
-                      }`}
-                    >
-                      Reviewers
-                    </button>
+            ) : (() => {
+              // Map label→code for reverse lookup from chart clicks
+              const threatLabelToCode = new Map(THREAT_CATEGORIES.map(c => [c.label, c.code]));
+              // Bar label: count + share of all in-view species (see threatTotal).
+              const threatBarLabel = (count: number) =>
+                `${count.toLocaleString()} (${threatTotal > 0 ? Math.round((count / threatTotal) * 100) : 0}%)`;
+              // Use label as `code` field so it displays on y-axis, sorted by count desc
+              const threatBarData = THREAT_CATEGORIES
+                .map(({ code, label }) => ({ code: label, threatCode: code, count: threatCounts[code] ?? 0, label: threatBarLabel(threatCounts[code] ?? 0) }))
+                .filter(d => d.count > 0)
+                .sort((a, b) => b.count - a.count);
+              // selectedItems needs to use labels too for dimming
+              const selectedThreatLabels = new Set(
+                Array.from(selectedThreats).map(code => THREAT_CATEGORIES.find(c => c.code === code)?.label).filter(Boolean) as string[]
+              );
+              // Drill-down: when a top-level category is expanded, its sub-categories
+              // appear in a split pane below the main chart (rather than expanding the
+              // card downward) so the card height stays constant — both charts share a
+              // fixed-height area and scroll internally.
+              const drillCat = expandedThreat ? THREAT_CATEGORIES.find(c => c.code === expandedThreat) ?? null : null;
+              const drillSubData = drillCat
+                ? drillCat.children
+                    .map(child => ({ code: child.label, threatCode: child.code, count: threatCounts[child.code] ?? 0, label: threatBarLabel(threatCounts[child.code] ?? 0) }))
+                    .filter(d => d.count > 0)
+                    .sort((a, b) => b.count - a.count)
+                : [];
+              const isDrilled = drillCat !== null && drillSubData.length > 0;
+              const drillSelectedSubLabels = drillCat ? new Set(
+                Array.from(selectedThreats).map(code => drillCat.children.find(c => c.code === code)?.label).filter(Boolean) as string[]
+              ) : new Set<string>();
+              // The card content area is a constant height (independent of how many
+              // categories are present) so the card never resizes — neither when the
+              // filter changes the category count nor when drilling in — which would
+              // otherwise bump the country map sharing this grid row. The base chart
+              // keeps its natural per-bar height and scrolls within the fixed area.
+              // 266 = the country map card's 320px height minus this card's header +
+              // padding (~54px), so both cards (and their loading skeletons) match.
+              const THREATS_AREA_HEIGHT = 266;
+              const chartHeight = Math.max(200, threatBarData.length * 18 + 30);
+              const loading = speciesLoading && assessedSpecies.length === 0;
+              return (
+                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+                  <div className="flex items-center justify-between mb-1 min-h-[24px]">
+                    <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Threats</span>
+                  </div>
+                  <div style={{ height: THREATS_AREA_HEIGHT }} className="flex flex-col overflow-hidden">
+                    {loading ? (
+                      <div className="h-full flex items-center justify-center"><Spinner /></div>
+                    ) : threatBarData.length > 0 ? (
+                      <>
+                        {/* Top-level categories — always visible; scrolls if it overflows the shared height */}
+                        <div className="flex-1 min-h-0 overflow-y-auto">
+                          <div style={{ height: chartHeight }}>
+                            <FilterBarChart
+                              data={threatBarData}
+                              dataKey="code"
+                              selectedItems={selectedThreatLabels}
+                              onBarClick={(data: { payload?: { code?: string; threatCode?: string } }, event: React.MouseEvent) => {
+                                const label = data.payload?.code;
+                                const code = label ? threatLabelToCode.get(label) : undefined;
+                                if (!code) return;
+                                const isMulti = event.metaKey || event.ctrlKey;
+                                setSelectedThreats(prev => {
+                                  if (isMulti) { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; }
+                                  if (prev.size === 1 && prev.has(code)) return new Set();
+                                  return new Set([code]);
+                                });
+                                setExpandedThreat(prev => prev === code ? null : code);
+                              }}
+                              barColor="#8b5cf6"
+                              yAxisWidth={155}
+                              rightMargin={80}
+                              yAxisTickMaxLength={22}
+                            />
+                          </div>
+                        </div>
+                        {/* Sub-categories of the drilled-into category — shares the fixed height */}
+                        {isDrilled && (
+                          <div className="shrink-0 mt-2 pt-2 border-t border-zinc-200 dark:border-zinc-800 flex flex-col" style={{ maxHeight: "50%" }}>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 truncate">{drillCat!.label}</span>
+                              <button
+                                onClick={() => setExpandedThreat(null)}
+                                className="shrink-0 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                                aria-label="Close sub-categories"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                              </button>
+                            </div>
+                            <div className="min-h-0 overflow-y-auto">
+                              <div style={{ height: Math.max(80, drillSubData.length * 18 + 30) }}>
+                                <FilterBarChart
+                                  data={drillSubData}
+                                  dataKey="code"
+                                  selectedItems={drillSelectedSubLabels}
+                                  onBarClick={(data: { payload?: { code?: string } }, event: React.MouseEvent) => {
+                                    const label = data.payload?.code;
+                                    const child = drillCat!.children.find(c => c.label === label);
+                                    if (!child) return;
+                                    const isMulti = event.metaKey || event.ctrlKey;
+                                    setSelectedThreats(prev => {
+                                      if (isMulti) { const next = new Set(prev); if (next.has(child.code)) next.delete(child.code); else next.add(child.code); return next; }
+                                      if (prev.size === 1 && prev.has(child.code)) return new Set();
+                                      return new Set([child.code]);
+                                    });
+                                  }}
+                                  barColor="#a78bfa"
+                                  yAxisWidth={170}
+                                  rightMargin={80}
+                                  yAxisTickMaxLength={24}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="h-full flex items-center justify-center"><span className="text-sm text-zinc-400 dark:text-zinc-500">No threat data</span></div>
+                    )}
                   </div>
                 </div>
-                <div className="flex-1 overflow-y-auto mt-2" style={{ maxHeight: 260 }}>
-                  {(reviewerFilterMode === "assessors" ? singleSpeciesAssessors : singleSpeciesReviewers).length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {(reviewerFilterMode === "assessors" ? singleSpeciesAssessors : singleSpeciesReviewers).map((name) => (
-                        <span key={name} className="inline-block px-3 py-1.5 text-sm rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">{name}</span>
-                      ))}
-                    </div>
-                  ) : (
-                    <span className="text-sm text-zinc-400 dark:text-zinc-500">None listed</span>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <ReviewerChart
-                allAssessors={assessorChartData}
-                allReviewers={reviewerChartData}
-                selectedItems={reviewerFilterMode === "assessors" ? selectedAssessors : selectedReviewers}
-                onBarClick={handleAssessorClick}
-                onItemToggle={handleAssessorToggle}
-                loading={speciesLoading && assessedSpecies.length === 0}
-                viewMode={reviewerFilterMode}
-                onViewModeChange={setReviewerFilterMode}
-              />
-            )}
+              );
+            })()}
           </div>
 
           {/* Charts row 3 (new-assessments only): Year Described (CoL) */}
@@ -2682,103 +2773,57 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   </div>
                 )}
 
-                {/* Threats: bar chart + side-by-side sub-category chart */}
-                {!isNewAssessments && (() => {
-                  // Map label→code for reverse lookup from chart clicks
-                  const threatLabelToCode = new Map(THREAT_CATEGORIES.map(c => [c.label, c.code]));
-                  // Use label as `code` field so it displays on y-axis, sorted by count desc
-                  const threatBarData = THREAT_CATEGORIES
-                    .map(({ code, label }) => ({ code: label, threatCode: code, count: threatCounts[code] ?? 0, label: `${(threatCounts[code] ?? 0).toLocaleString()}` }))
-                    .filter(d => d.count > 0)
-                    .sort((a, b) => b.count - a.count);
-                  // selectedItems needs to use labels too for dimming
-                  const selectedThreatLabels = new Set(
-                    Array.from(selectedThreats).map(code => THREAT_CATEGORIES.find(c => c.code === code)?.label).filter(Boolean) as string[]
-                  );
-                  // Collect all expanded categories (only selected top-level threats, or the last-clicked one if nothing selected)
-                  const expandedCodes = new Set<string>();
-                  for (const code of selectedThreats) {
-                    if (THREAT_CATEGORIES.some(c => c.code === code)) expandedCodes.add(code);
-                  }
-                  if (expandedCodes.size === 0 && expandedThreat) expandedCodes.add(expandedThreat);
-                  const expandedCats = THREAT_CATEGORIES.filter(c => expandedCodes.has(c.code));
-                  const hasSubChart = expandedCats.length > 0;
-                  const chartHeight = Math.max(200, threatBarData.length * 24 + 30);
-                  return (
-                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Threats</span>
-                      </div>
-                      <div>
-                        {/* Main threat categories chart */}
-                        <div style={{ height: chartHeight }}>
-                          {threatBarData.length > 0 ? (
-                            <FilterBarChart
-                              data={threatBarData}
-                              dataKey="code"
-                              selectedItems={selectedThreatLabels}
-                              onBarClick={(data: { payload?: { code?: string; threatCode?: string } }, event: React.MouseEvent) => {
-                                const label = data.payload?.code;
-                                const code = label ? threatLabelToCode.get(label) : undefined;
-                                if (!code) return;
-                                const isMulti = event.metaKey || event.ctrlKey;
-                                setSelectedThreats(prev => {
-                                  if (isMulti) { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; }
-                                  if (prev.size === 1 && prev.has(code)) return new Set();
-                                  return new Set([code]);
-                                });
-                                setExpandedThreat(prev => prev === code ? null : code);
-                              }}
-                              barColor="#f43f5e"
-                              yAxisWidth={155}
-                              rightMargin={55}
-                              yAxisTickMaxLength={22}
-                            />
-                          ) : null}
+                {/* Assessors and Reviewers, shown side by side */}
+                {isSingleSpecies && singleSpecies ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {([
+                      { title: "Assessors", names: singleSpeciesAssessors },
+                      { title: "Reviewers", names: singleSpeciesReviewers },
+                    ] as const).map(({ title, names }) => (
+                      <div key={title} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{title}</span>
                         </div>
-                        {/* Sub-category charts (inline below, grouped per category) */}
-                        {hasSubChart && expandedCats.map(cat => {
-                          const catSubData = cat.children
-                            .map(child => ({ code: child.label, threatCode: child.code, count: threatCounts[child.code] ?? 0, label: `${(threatCounts[child.code] ?? 0).toLocaleString()}` }))
-                            .filter(d => d.count > 0)
-                            .sort((a, b) => b.count - a.count);
-                          if (catSubData.length === 0) return null;
-                          const catSubHeight = Math.max(80, catSubData.length * 24 + 30);
-                          const catSelectedSubLabels = new Set(
-                            Array.from(selectedThreats).map(code => cat.children.find(c => c.code === code)?.label).filter(Boolean) as string[]
-                          );
-                          return (
-                            <div key={cat.code} className="ml-8 mt-1 pl-4 border-l-2 border-rose-200 dark:border-rose-800">
-                              <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1 block">{cat.label}</span>
-                              <div style={{ height: catSubHeight }}>
-                                <FilterBarChart
-                                  data={catSubData}
-                                  dataKey="code"
-                                  selectedItems={catSelectedSubLabels}
-                                  onBarClick={(data: { payload?: { code?: string } }, event: React.MouseEvent) => {
-                                    const label = data.payload?.code;
-                                    const child = cat.children.find(c => c.label === label);
-                                    if (!child) return;
-                                    const isMulti = event.metaKey || event.ctrlKey;
-                                    setSelectedThreats(prev => {
-                                      if (isMulti) { const next = new Set(prev); if (next.has(child.code)) next.delete(child.code); else next.add(child.code); return next; }
-                                      if (prev.size === 1 && prev.has(child.code)) return new Set();
-                                      return new Set([child.code]);
-                                    });
-                                  }}
-                                  barColor="#fb923c"
-                                  yAxisWidth={170}
-                                  rightMargin={55}
-                                  yAxisTickMaxLength={24}
-                                />
-                              </div>
+                        <div className="overflow-y-auto mt-2" style={{ maxHeight: 260 }}>
+                          {names.length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                              {names.map((name) => (
+                                <span key={name} className="inline-block px-3 py-1.5 text-sm rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">{name}</span>
+                              ))}
                             </div>
-                          );
-                        })}
+                          ) : (
+                            <span className="text-sm text-zinc-400 dark:text-zinc-500">None listed</span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })()}
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <ReviewerChart
+                      allAssessors={assessorChartData}
+                      allReviewers={reviewerChartData}
+                      viewMode="assessors"
+                      showToggle={false}
+                      title="Assessors"
+                      selectedItems={selectedAssessors}
+                      onBarClick={makeAssessorClick(setSelectedAssessors)}
+                      onItemToggle={makeAssessorToggle(setSelectedAssessors)}
+                      loading={speciesLoading && assessedSpecies.length === 0}
+                    />
+                    <ReviewerChart
+                      allAssessors={assessorChartData}
+                      allReviewers={reviewerChartData}
+                      viewMode="reviewers"
+                      showToggle={false}
+                      title="Reviewers"
+                      selectedItems={selectedReviewers}
+                      onBarClick={makeAssessorClick(setSelectedReviewers)}
+                      onItemToggle={makeAssessorToggle(setSelectedReviewers)}
+                      loading={speciesLoading && assessedSpecies.length === 0}
+                    />
+                  </div>
+                )}
               </div>
             )}
           </div>}
@@ -3043,7 +3088,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
             })()}
             {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || hasMapFilter || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred || exactFilters.outdated || exactFilters.minObs != null || exactFilters.maxObs != null || exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null || exactFilters.minDescribedYear != null || exactFilters.maxDescribedYear != null) && (
               <button
-                onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setSelectedSubgroups(new Set()); setSelectedObsRanges(new Set()); setSelectedSystems(new Set()); setHasMapFilter(null); setSelectedGrowthForms(new Set()); setSelectedPopulationTrends(new Set()); setSelectedMovementPatterns(new Set()); setSelectedThreats(new Set()); setSelectedAssessors(new Set()); setSelectedReviewers(new Set()); setShowOnlyStarred(false); }}
+                onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setSelectedSubgroups(new Set()); setSelectedObsRanges(new Set()); setSelectedSystems(new Set()); setHasMapFilter(null); setSelectedGrowthForms(new Set()); setSelectedPopulationTrends(new Set()); setSelectedMovementPatterns(new Set()); setSelectedThreats(new Set()); setExpandedThreat(null); setSelectedAssessors(new Set()); setSelectedReviewers(new Set()); setShowOnlyStarred(false); }}
                 className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 underline"
               >
                 Clear all
