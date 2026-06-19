@@ -19,8 +19,7 @@ const DEFAULT_BRAND: Brand = {
 // Per-hostname overrides. Keys are bare hostnames (no port, no "www.").
 const BRANDS: Record<string, Brand> = {
   "dashoflife.org": {
-    title: "Dash of Life: A Dashboard of Life on Earth",
-    tabTitle: "Dash of Life",
+    title: "Dash of Life",
     description: "A dashboard for biodiversity data about life on Earth",
     assessedTabLabel: "Red List Assessed",
     unassessedTabLabel: "Unassessed",
