@@ -2422,8 +2422,12 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
               const drillSelectedSubLabels = drillCat ? new Set(
                 Array.from(selectedThreats).map(code => drillCat.children.find(c => c.code === code)?.label).filter(Boolean) as string[]
               ) : new Set<string>();
-              // Height is fixed to the top-level category count so the card does not
-              // resize when drilling into sub-categories.
+              // The card content area is a constant height (independent of how many
+              // categories are present) so the card never resizes — neither when the
+              // filter changes the category count nor when drilling in — which would
+              // otherwise bump the country map sharing this grid row. The base chart
+              // keeps its natural per-bar height and scrolls within the fixed area.
+              const THREATS_AREA_HEIGHT = 320;
               const chartHeight = Math.max(200, threatBarData.length * 24 + 30);
               const loading = speciesLoading && assessedSpecies.length === 0;
               return (
@@ -2431,7 +2435,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   <div className="flex items-center justify-between mb-1 min-h-[24px]">
                     <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Threats</span>
                   </div>
-                  <div style={{ height: chartHeight }} className="flex flex-col overflow-hidden">
+                  <div style={{ height: THREATS_AREA_HEIGHT }} className="flex flex-col overflow-hidden">
                     {loading ? (
                       <div className="h-full flex items-center justify-center"><Spinner /></div>
                     ) : threatBarData.length > 0 ? (
