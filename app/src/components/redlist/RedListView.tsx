@@ -2407,86 +2407,90 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
               const selectedThreatLabels = new Set(
                 Array.from(selectedThreats).map(code => THREAT_CATEGORIES.find(c => c.code === code)?.label).filter(Boolean) as string[]
               );
-              // Collect all expanded categories (only selected top-level threats, or the last-clicked one if nothing selected)
-              const expandedCodes = new Set<string>();
-              for (const code of selectedThreats) {
-                if (THREAT_CATEGORIES.some(c => c.code === code)) expandedCodes.add(code);
-              }
-              if (expandedCodes.size === 0 && expandedThreat) expandedCodes.add(expandedThreat);
-              const expandedCats = THREAT_CATEGORIES.filter(c => expandedCodes.has(c.code));
-              const hasSubChart = expandedCats.length > 0;
+              // Drill-down: when a top-level category is expanded, its sub-categories
+              // replace the main chart in place (rather than expanding below) so the
+              // card height stays constant.
+              const drillCat = expandedThreat ? THREAT_CATEGORIES.find(c => c.code === expandedThreat) ?? null : null;
+              const drillSubData = drillCat
+                ? drillCat.children
+                    .map(child => ({ code: child.label, threatCode: child.code, count: threatCounts[child.code] ?? 0, label: `${(threatCounts[child.code] ?? 0).toLocaleString()}` }))
+                    .filter(d => d.count > 0)
+                    .sort((a, b) => b.count - a.count)
+                : [];
+              const isDrilled = drillCat !== null && drillSubData.length > 0;
+              const drillSelectedSubLabels = drillCat ? new Set(
+                Array.from(selectedThreats).map(code => drillCat.children.find(c => c.code === code)?.label).filter(Boolean) as string[]
+              ) : new Set<string>();
+              // Height is fixed to the top-level category count so the card does not
+              // resize when drilling into sub-categories.
               const chartHeight = Math.max(200, threatBarData.length * 24 + 30);
+              const loading = speciesLoading && assessedSpecies.length === 0;
               return (
-                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Threats</span>
+                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+                  <div className="flex items-center justify-between mb-1 min-h-[24px]">
+                    {isDrilled ? (
+                      <button
+                        onClick={() => setExpandedThreat(null)}
+                        className="flex items-center gap-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                        <span>Threats<span className="text-zinc-400 dark:text-zinc-500 font-normal"> / {drillCat!.label}</span></span>
+                      </button>
+                    ) : (
+                      <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Threats</span>
+                    )}
                   </div>
-                  <div>
-                    {/* Main threat categories chart */}
-                    <div style={{ height: chartHeight }}>
-                      {threatBarData.length > 0 ? (
+                  <div style={{ height: chartHeight }} className="overflow-hidden">
+                    {loading ? (
+                      <div className="h-full flex items-center justify-center"><Spinner /></div>
+                    ) : isDrilled ? (
+                      <div style={{ height: Math.max(80, drillSubData.length * 24 + 30) }}>
                         <FilterBarChart
-                          data={threatBarData}
+                          data={drillSubData}
                           dataKey="code"
-                          selectedItems={selectedThreatLabels}
-                          onBarClick={(data: { payload?: { code?: string; threatCode?: string } }, event: React.MouseEvent) => {
+                          selectedItems={drillSelectedSubLabels}
+                          onBarClick={(data: { payload?: { code?: string } }, event: React.MouseEvent) => {
                             const label = data.payload?.code;
-                            const code = label ? threatLabelToCode.get(label) : undefined;
-                            if (!code) return;
+                            const child = drillCat!.children.find(c => c.label === label);
+                            if (!child) return;
                             const isMulti = event.metaKey || event.ctrlKey;
                             setSelectedThreats(prev => {
-                              if (isMulti) { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; }
-                              if (prev.size === 1 && prev.has(code)) return new Set();
-                              return new Set([code]);
+                              if (isMulti) { const next = new Set(prev); if (next.has(child.code)) next.delete(child.code); else next.add(child.code); return next; }
+                              if (prev.size === 1 && prev.has(child.code)) return new Set();
+                              return new Set([child.code]);
                             });
-                            setExpandedThreat(prev => prev === code ? null : code);
                           }}
-                          barColor="#f43f5e"
-                          yAxisWidth={155}
+                          barColor="#fb923c"
+                          yAxisWidth={170}
                           rightMargin={55}
-                          yAxisTickMaxLength={22}
+                          yAxisTickMaxLength={24}
                         />
-                      ) : null}
-                    </div>
-                    {/* Sub-category charts (inline below, grouped per category) */}
-                    {hasSubChart && expandedCats.map(cat => {
-                      const catSubData = cat.children
-                        .map(child => ({ code: child.label, threatCode: child.code, count: threatCounts[child.code] ?? 0, label: `${(threatCounts[child.code] ?? 0).toLocaleString()}` }))
-                        .filter(d => d.count > 0)
-                        .sort((a, b) => b.count - a.count);
-                      if (catSubData.length === 0) return null;
-                      const catSubHeight = Math.max(80, catSubData.length * 24 + 30);
-                      const catSelectedSubLabels = new Set(
-                        Array.from(selectedThreats).map(code => cat.children.find(c => c.code === code)?.label).filter(Boolean) as string[]
-                      );
-                      return (
-                        <div key={cat.code} className="ml-8 mt-1 pl-4 border-l-2 border-rose-200 dark:border-rose-800">
-                          <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1 block">{cat.label}</span>
-                          <div style={{ height: catSubHeight }}>
-                            <FilterBarChart
-                              data={catSubData}
-                              dataKey="code"
-                              selectedItems={catSelectedSubLabels}
-                              onBarClick={(data: { payload?: { code?: string } }, event: React.MouseEvent) => {
-                                const label = data.payload?.code;
-                                const child = cat.children.find(c => c.label === label);
-                                if (!child) return;
-                                const isMulti = event.metaKey || event.ctrlKey;
-                                setSelectedThreats(prev => {
-                                  if (isMulti) { const next = new Set(prev); if (next.has(child.code)) next.delete(child.code); else next.add(child.code); return next; }
-                                  if (prev.size === 1 && prev.has(child.code)) return new Set();
-                                  return new Set([child.code]);
-                                });
-                              }}
-                              barColor="#fb923c"
-                              yAxisWidth={170}
-                              rightMargin={55}
-                              yAxisTickMaxLength={24}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
+                      </div>
+                    ) : threatBarData.length > 0 ? (
+                      <FilterBarChart
+                        data={threatBarData}
+                        dataKey="code"
+                        selectedItems={selectedThreatLabels}
+                        onBarClick={(data: { payload?: { code?: string; threatCode?: string } }, event: React.MouseEvent) => {
+                          const label = data.payload?.code;
+                          const code = label ? threatLabelToCode.get(label) : undefined;
+                          if (!code) return;
+                          const isMulti = event.metaKey || event.ctrlKey;
+                          setSelectedThreats(prev => {
+                            if (isMulti) { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; }
+                            if (prev.size === 1 && prev.has(code)) return new Set();
+                            return new Set([code]);
+                          });
+                          setExpandedThreat(code);
+                        }}
+                        barColor="#f43f5e"
+                        yAxisWidth={155}
+                        rightMargin={55}
+                        yAxisTickMaxLength={22}
+                      />
+                    ) : (
+                      <div className="h-full flex items-center justify-center"><span className="text-sm text-zinc-400 dark:text-zinc-500">No threat data</span></div>
+                    )}
                   </div>
                 </div>
               );
