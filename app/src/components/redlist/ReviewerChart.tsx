@@ -169,7 +169,7 @@ export default function AssessorChart({
                       onClick={() => onItemToggle(entry.code)}
                       className={`w-full flex items-center justify-between px-2 py-1 rounded text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors ${
                         isSelected
-                          ? "bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300"
+                          ? "bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300"
                           : "text-zinc-700 dark:text-zinc-300"
                       }`}
                     >
@@ -189,7 +189,7 @@ export default function AssessorChart({
             dataKey="code"
             selectedItems={selectedItems}
             onBarClick={onBarClick}
-            barColor="#8b5cf6"
+            barColor="#fb923c"
             yAxisWidth={150}
             leftMargin={-30}
             rightMargin={55}

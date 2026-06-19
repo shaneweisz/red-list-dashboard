@@ -2429,7 +2429,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
               // 266 = the country map card's 320px height minus this card's header +
               // padding (~54px), so both cards (and their loading skeletons) match.
               const THREATS_AREA_HEIGHT = 266;
-              const chartHeight = Math.max(200, threatBarData.length * 24 + 30);
+              const chartHeight = Math.max(200, threatBarData.length * 18 + 30);
               const loading = speciesLoading && assessedSpecies.length === 0;
               return (
                 <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
@@ -2460,7 +2460,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                 });
                                 setExpandedThreat(prev => prev === code ? null : code);
                               }}
-                              barColor="#f43f5e"
+                              barColor="#8b5cf6"
                               yAxisWidth={155}
                               rightMargin={55}
                               yAxisTickMaxLength={22}
@@ -2481,7 +2481,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                               </button>
                             </div>
                             <div className="min-h-0 overflow-y-auto">
-                              <div style={{ height: Math.max(80, drillSubData.length * 24 + 30) }}>
+                              <div style={{ height: Math.max(80, drillSubData.length * 18 + 30) }}>
                                 <FilterBarChart
                                   data={drillSubData}
                                   dataKey="code"
@@ -2497,7 +2497,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                       return new Set([child.code]);
                                     });
                                   }}
-                                  barColor="#fb923c"
+                                  barColor="#a78bfa"
                                   yAxisWidth={170}
                                   rightMargin={55}
                                   yAxisTickMaxLength={24}
