@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
+import { FaGlobeAmericas } from "react-icons/fa";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { SpeciesSearchBar } from "../components/SpeciesSearchBar";
 import { useBrand } from "../components/BrandProvider";
@@ -46,7 +47,10 @@ export default function RedListPage() {
       <main className="max-w-5xl w-full min-w-0 mx-auto flex-1">
         {/* Header row: title + view mode toggle */}
         <div className="mb-3 md:mb-4 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-zinc-900 dark:text-zinc-100">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+            {brand.showGlobe && (
+              <FaGlobeAmericas className="shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+            )}
             {brand.title}
           </h1>
           <div className="flex items-center gap-2 shrink-0">
@@ -67,7 +71,7 @@ export default function RedListPage() {
                     : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
                 }`}
               >
-                Reassessments
+                Red List Assessed
               </button>
               <button
                 onClick={() => {
@@ -84,7 +88,7 @@ export default function RedListPage() {
                     : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
                 }`}
               >
-                New Assessments
+                Unassessed
               </button>
             </div>
             <ThemeToggle />

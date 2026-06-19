@@ -1,18 +1,21 @@
 export type Brand = {
   title: string;
   description: string;
+  /** Show the globe icon before the title (used by the Dash of Life brand). */
+  showGlobe?: boolean;
 };
 
 const DEFAULT_BRAND: Brand = {
   title: "IUCN Red List Assessments Dashboard",
-  description: "IUCN Red List and GBIF occurrence data explorer",
+  description: "A dashboard for biodiversity data about life on Earth",
 };
 
 // Per-hostname overrides. Keys are bare hostnames (no port, no "www.").
 const BRANDS: Record<string, Brand> = {
   "dashoflife.org": {
-    title: "Dashboard of Life",
-    description: "IUCN Red List and GBIF occurrence data explorer",
+    title: "Dash of Life: A Dashboard of Life on Earth",
+    description: "A dashboard for biodiversity data about life on Earth",
+    showGlobe: true,
   },
 };
 
