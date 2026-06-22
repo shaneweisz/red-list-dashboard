@@ -227,7 +227,7 @@ function TradeFlowMap({
   const selectedCountry =
     selectedCountryProp !== undefined ? selectedCountryProp : internalSelected;
   const setSelectedCountry = onSelectCountry ?? setInternalSelected;
-  const [showReExports, setShowReExports] = useState(false);
+  const [showReExports, setShowReExports] = useState(true);
   // How many of the top bilateral flows to draw. The default of 10 keeps the
   // map legible; the top-right slider lets users widen it or show all.
   const [flowLimit, setFlowLimit] = useState(10);
