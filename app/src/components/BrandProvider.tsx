@@ -4,8 +4,11 @@ import { createContext, useContext } from "react";
 import type { Brand } from "../config/brand";
 
 const BrandContext = createContext<Brand>({
-  title: "IUCN Red List Assessments Dashboard",
-  description: "IUCN Red List and GBIF occurrence data explorer",
+  title: "Dash of Life",
+  description: "A dashboard for biodiversity data about life on Earth",
+  assessedTabLabel: "Red List Assessed",
+  unassessedTabLabel: "Unassessed",
+  showGlobe: true,
 });
 
 export function BrandProvider({
