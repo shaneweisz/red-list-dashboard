@@ -47,7 +47,7 @@ export default function RedListPage() {
       <main className="max-w-5xl w-full min-w-0 mx-auto flex-1">
         {/* Header row: title + view mode toggle */}
         <div className="mb-3 md:mb-4 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+          <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
             {brand.showGlobe && (
               <FaGlobeAmericas className="shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
             )}
