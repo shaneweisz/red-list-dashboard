@@ -4,7 +4,7 @@ import { createContext, useContext } from "react";
 import type { Brand } from "../config/brand";
 
 const BrandContext = createContext<Brand>({
-  title: "Dash of Life: A Dashboard of Earth's Species",
+  title: "Dash of Life: A Dashboard for Species Conservation",
   description: "A dashboard for biodiversity data about life on Earth",
   assessedTabLabel: "Red List Assessed",
   unassessedTabLabel: "Unassessed",
