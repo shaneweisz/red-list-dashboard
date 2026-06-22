@@ -98,7 +98,7 @@ export default function RedListPage() {
         {/* Search bar + subtitle */}
         <div className="mb-4 md:mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <p className="text-sm md:text-base text-zinc-600 dark:text-zinc-400">
-            Click taxa rows to filter, use charts and search to explore species.<span className="hidden sm:inline"> Cmd/Ctrl+click to multiselect.</span>
+            A Dashboard of Life on Earth
           </p>
           <SpeciesSearchBar />
         </div>

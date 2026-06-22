@@ -1776,7 +1776,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     </div>
     {/* Subtle expand/table controls */}
     {!loading && perTaxa.length > 0 && selectedTaxa.size === 0 && (
-      <div className="flex items-center justify-end gap-3 mt-1.5">
+      <div className="flex items-center justify-between gap-3 mt-1.5">
+        <p className="text-xs text-zinc-400 dark:text-zinc-500">
+          Click taxa rows to filter, use charts and search to explore species.<span className="hidden sm:inline"> Cmd/Ctrl+click to multiselect.</span>
+        </p>
+        <div className="flex items-center gap-3 shrink-0">
         {table1aMode ? (
           <button
             onClick={exitTable1a}
@@ -1818,6 +1822,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             </span>
           </>
         )}
+        </div>
       </div>
     )}
     </>
