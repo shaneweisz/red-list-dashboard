@@ -189,7 +189,7 @@ export default function AssessorChart({
             dataKey="code"
             selectedItems={selectedItems}
             onBarClick={onBarClick}
-            barColor="#fb923c"
+            barColor={viewMode === "assessors" ? "#fb923c" : "#818cf8"}
             yAxisWidth={150}
             leftMargin={-30}
             rightMargin={55}
