@@ -281,8 +281,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   }, []);
 
   useEffect(() => {
-    if (scrollRef.current && taxa.length > 0) {
-      autoScroll(scrollRef.current);
+    const el = scrollRef.current;
+    if (el && taxa.length > 0) {
+      // rAF so the scroll is applied after layout settles (otherwise it can
+      // land before column widths are known and fail to reveal Assessed).
+      requestAnimationFrame(() => autoScroll(el));
     }
   }, [taxa, autoScroll]);
 
@@ -1763,14 +1766,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     {/* Subtle controls: usage hint + # Described toggle + expand/table controls,
         all landing-only — hidden once a taxon is selected. */}
     {!loading && perTaxa.length > 0 && selectedTaxa.size === 0 && (
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 mt-1.5">
-        {/* Usage hint — hidden on mobile to save space */}
-        <span className="hidden sm:inline pl-3 md:pl-4 text-xs text-zinc-400 dark:text-zinc-500">
+      <div className="hidden sm:flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 mt-1.5">
+        {/* Usage hint */}
+        <span className="pl-3 md:pl-4 text-xs text-zinc-400 dark:text-zinc-500">
           Click taxa rows to filter, use charts and search to explore species.<span className="hidden sm:inline"> Cmd/Ctrl+click to multiselect.</span>
         </span>
         <div className="flex items-center gap-3">
-          {/* IUCN ↔ CoL source toggle: flips the described count + recomputes % Assessed (hidden on mobile) */}
-          <span className="hidden sm:inline-flex items-center gap-1.5">
+          {/* IUCN ↔ CoL source toggle: flips the described count + recomputes % Assessed */}
+          <span className="inline-flex items-center gap-1.5">
             <span className="text-xs text-zinc-400 dark:text-zinc-500">Source for # Described:</span>
             <span className="inline-flex rounded-md overflow-hidden border border-zinc-300 dark:border-zinc-600 text-[10px] font-semibold" title="Switch # Described Species between IUCN Table 1a estimates and the Catalogue of Life backbone">
               {(["iucn", "col"] as const).map((src) => (
@@ -1788,7 +1791,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               ))}
             </span>
           </span>
-          <span className="hidden sm:inline text-zinc-300 dark:text-zinc-700">|</span>
+          <span className="text-zinc-300 dark:text-zinc-700">|</span>
           {table1aMode ? (
             <button
               onClick={exitTable1a}
