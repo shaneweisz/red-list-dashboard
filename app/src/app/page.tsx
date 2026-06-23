@@ -98,7 +98,7 @@ export default function RedListPage() {
             {/* Row 2: subtitle aligned with the search bar */}
             <div className="mt-2 md:mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               {brand.subtitle && (
-                <p className="text-base md:text-lg text-zinc-500 dark:text-zinc-400">{brand.subtitle}</p>
+                <p className="text-lg md:text-xl text-zinc-500 dark:text-zinc-400">{brand.subtitle}</p>
               )}
               <SpeciesSearchBar />
             </div>
