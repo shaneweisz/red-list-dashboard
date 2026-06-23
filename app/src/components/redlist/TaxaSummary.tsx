@@ -114,16 +114,16 @@ const stickyClasses = "sticky left-0 z-10";
 const cellPad = "px-3 py-2 md:px-4 md:py-2.5";
 const colDivider = "border-l border-zinc-200 dark:border-zinc-700";
 const numericTdNoDividerClasses = `${cellPad} text-right whitespace-nowrap w-0`;
-const numericThNoDividerClasses = `${cellPad} text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`;
+const numericThNoDividerClasses = `${cellPad} text-right text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap w-0`;
 const numericTdClasses = `${numericTdNoDividerClasses} ${colDivider}`;
 const numericThClasses = `${numericThNoDividerClasses} ${colDivider}`;
 const flexTdClasses = `${cellPad} ${colDivider} whitespace-nowrap w-0`;
-const flexThClasses = `${cellPad} ${colDivider} text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`;
+const flexThClasses = `${cellPad} ${colDivider} text-left text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap w-0`;
 // Bar-column headers (Assessed / Outdated / Unassessed / Not Evaluated) are allowed
 // to wrap: their cells already carry a bar min-width, so a long single-line header
-// (e.g. "# Outdated Assessments (10+Y)") would otherwise force the column wider than
+// (e.g. "# Outdated (>10 yrs old)") would otherwise force the column wider than
 // it needs to be and push the table into horizontal overflow.
-const centeredThClasses = `${cellPad} ${colDivider} text-center text-xs font-medium text-zinc-500 uppercase tracking-wider w-0`;
+const centeredThClasses = `${cellPad} ${colDivider} text-center text-sm font-bold text-zinc-600 dark:text-zinc-300 w-0`;
 
 // Toggleable column IDs (Taxon is always visible)
 type ColumnId = "described" | "colDescribed" | "assessed" | "outdated" | "breakdown" | "gbifUnassessed" | "colNe" | "totalGbifObs" | "meanGbifObs" | "medianGbifObs" | "gbifDistribution";
@@ -132,7 +132,7 @@ const COLUMN_LABELS: Record<ColumnId, string> = {
   described: "# Described Species",
   colDescribed: "# Described Species (CoL)",
   assessed: "# Red List Assessed",
-  outdated: "# Outdated Assessments (10+Y)",
+  outdated: "# Outdated (>10 yrs old)",
   breakdown: "Risk Category Breakdown",
   gbifUnassessed: "# Unassessed, 1+ GBIF Obs",
   colNe: "# Not Evaluated",
@@ -548,11 +548,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         <table className="w-full">
           <thead>
             <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
-              <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`}>Taxon</th>
+              <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} text-center text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap w-0`}>Taxonomic Group</th>
               {isVisible("described") && <th className={numericThNoDividerClasses}># Described Species</th>}
               {isVisible("colDescribed") && <th className={numericThClasses}># Described Species (CoL)</th>}
               {isVisible("assessed") && <th className={centeredThClasses}># Red List Assessed</th>}
-              {isVisible("outdated") && <th className={centeredThClasses}># Outdated Assessments (10+Y)</th>}
+              {isVisible("outdated") && <th className={centeredThClasses}># Outdated (&gt;10 yrs old)</th>}
               {isVisible("gbifUnassessed") && <th className={centeredThClasses}># Unassessed, 1+ GBIF Obs</th>}
               {isVisible("colNe") && <th className={centeredThClasses}># Not Evaluated</th>}
               {isVisible("totalGbifObs") && <th className={numericThClasses}>Total Obs</th>}
@@ -1285,9 +1285,9 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   const renderHead = () => (
     <thead>
       <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
-        <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`}>
-          <div className="flex items-center gap-1.5">
-            Taxon
+        <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} text-center text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap w-0`}>
+          <div className="flex items-center justify-center gap-1.5">
+            Taxonomic Group
             <button
               ref={menuButtonRef}
               onClick={(e) => {
@@ -1335,7 +1335,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           <th className={centeredThClasses}># Red List Assessed</th>
         )}
         {isVisible("outdated") && (
-          <th className={centeredThClasses}># Outdated Assessments (10+Y)</th>
+          <th className={centeredThClasses}># Outdated (&gt;10 yrs old)</th>
         )}
         {isVisible("gbifUnassessed") && (
           <th className={centeredThClasses}># Unassessed, 1+ GBIF Obs</th>
