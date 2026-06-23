@@ -154,6 +154,7 @@ The Red List CSVs live in a private R2 bucket rather than in the repo, so the fi
 | `npm run lint` | Run ESLint |
 | `npm test` | Run tests (Vitest) |
 | `npm run test:watch` | Run tests in watch mode |
+| `npm run test:coverage` | Run tests with a coverage report (scoped to the `src` logic layer; HTML report in `coverage/`) |
 | `npm run fetch-data-from-r2` | Download the sync pinned in `app/latest-sync.txt` from R2 into `app/data/` |
 | `npm run upload-data-to-r2` | Upload current `app/data/` to R2 as a new timestamped sync and bump `app/latest-sync.txt` |
 | `npm run diff-data-vs-r2` | Diff local `app/data/` against the currently-pinned R2 sync |
