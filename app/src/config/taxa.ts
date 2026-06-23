@@ -173,6 +173,9 @@ export const CATEGORY_ORDER: Record<string, number> = {
   NE: 8,
 };
 
+// IUCN "Threatened" categories: Critically Endangered, Endangered, Vulnerable
+export const THREATENED_CATEGORIES = ["CR", "EN", "VU"] as const;
+
 // Category full names
 export const CATEGORY_NAMES: Record<string, string> = {
   EX: "Extinct",
