@@ -23,8 +23,13 @@ jobs:
         run: npm ci
         working-directory: app
 
-      - name: Run tests
-        run: npm test
+      - name: Run tests with coverage
+        run: npm run test:coverage
+        working-directory: app
+
+      - name: Publish coverage summary
+        if: ${{ !cancelled() }}
+        run: node scripts/coverage-report.mjs
         working-directory: app
 
   lint:
