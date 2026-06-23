@@ -115,6 +115,11 @@ const cellPad = "px-3 py-2 md:px-4 md:py-2.5";
 const colDivider = "border-l border-zinc-200 dark:border-zinc-700";
 const numericTdNoDividerClasses = `${cellPad} text-right whitespace-nowrap w-0`;
 const numericThNoDividerClasses = `${cellPad} text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`;
+// "# Described Species" header is allowed to wrap (#334): its data cells are plain
+// nowrap numbers, so only the (longest) header forces the column wide. Letting the
+// header wrap drops the column's min-width to its longest word, so the column shrinks
+// and frees horizontal space for the wider bar columns.
+const describedThClasses = `${cellPad} text-right text-xs font-medium text-zinc-500 uppercase tracking-wider w-0`;
 const numericTdClasses = `${numericTdNoDividerClasses} ${colDivider}`;
 const numericThClasses = `${numericThNoDividerClasses} ${colDivider}`;
 const flexTdClasses = `${cellPad} ${colDivider} whitespace-nowrap w-0`;
@@ -549,7 +554,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           <thead>
             <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
               <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`}>Taxon</th>
-              {isVisible("described") && <th className={numericThNoDividerClasses}># Described Species</th>}
+              {isVisible("described") && <th className={describedThClasses}># Described Species</th>}
               {isVisible("colDescribed") && <th className={numericThClasses}># Described Species (CoL)</th>}
               {isVisible("assessed") && <th className={centeredThClasses}># Red List Assessed</th>}
               {isVisible("outdated") && <th className={centeredThClasses}># Outdated Assessments (10+Y)</th>}
@@ -1306,44 +1311,28 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           </div>
         </th>
         {isVisible("described") && (
-          <th className={`${numericThNoDividerClasses}`}>
-            <div className="flex items-center justify-end gap-2">
-              <span className="inline-flex items-center gap-1">
-                # Described Species
-                <span className="relative group">
-                  <a
-                    href={describedSource === "col" ? COL_SOURCE_URL : IUCN_SOURCE_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-                  >
-                    <FaInfoCircle size={12} />
-                  </a>
-                  <span className="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible z-50 shadow-lg normal-case">
-                    {describedSource === "col"
-                      ? "Described species from the Catalogue of Life backbone"
-                      : "Estimates from IUCN Red List Table 1a (2025-2)"}
-                  </span>
+          <th className={describedThClasses}>
+            {/* The IUCN ↔ CoL source toggle lives below the table (in line with the
+                Table 1a controls); the header just labels the column + links the source. */}
+            <span className="inline-flex items-center justify-end gap-1">
+              # Described Species
+              <span className="relative group flex-shrink-0">
+                <a
+                  href={describedSource === "col" ? COL_SOURCE_URL : IUCN_SOURCE_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                >
+                  <FaInfoCircle size={12} />
+                </a>
+                <span className="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible z-50 shadow-lg normal-case">
+                  {describedSource === "col"
+                    ? "Described species from the Catalogue of Life backbone"
+                    : "Estimates from IUCN Red List Table 1a (2025-2)"}
                 </span>
               </span>
-              {/* IUCN ↔ CoL source toggle: flips the described count + recomputes % Assessed */}
-              <span className="inline-flex rounded-md overflow-hidden border border-zinc-300 dark:border-zinc-600 text-[10px] font-semibold normal-case" title="Switch # Described Species between IUCN Table 1a estimates and the Catalogue of Life backbone">
-                {(["iucn", "col"] as const).map((src) => (
-                  <button
-                    key={src}
-                    onClick={(e) => { e.stopPropagation(); setDescribedSource(src); }}
-                    className={`px-1.5 py-0.5 transition-colors ${
-                      describedSource === src
-                        ? "bg-zinc-700 text-white dark:bg-zinc-200 dark:text-zinc-900"
-                        : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700"
-                    }`}
-                  >
-                    {src === "iucn" ? "IUCN" : "CoL"}
-                  </button>
-                ))}
-              </span>
-            </div>
+            </span>
           </th>
         )}
         {isVisible("colDescribed") && (
@@ -1779,9 +1768,34 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       </table>
     </div>
     {/* Subtle expand/table controls */}
-    {!loading && perTaxa.length > 0 && selectedTaxa.size === 0 && (
+    {!loading && perTaxa.length > 0 && (
       <div className="flex items-center justify-end gap-3 mt-1.5">
-        {table1aMode ? (
+        {/* IUCN ↔ CoL "# Described" source toggle (#334): moved out of the column header
+            to sit in line with the Table 1a controls. Flips the count + recomputes % Assessed. */}
+        {isVisible("described") && (
+          <>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="text-xs text-zinc-400 dark:text-zinc-500"># Described:</span>
+              <span className="inline-flex rounded-md overflow-hidden border border-zinc-300 dark:border-zinc-600 text-[10px] font-semibold" title="Switch # Described Species between IUCN Table 1a estimates and the Catalogue of Life backbone">
+                {(["iucn", "col"] as const).map((src) => (
+                  <button
+                    key={src}
+                    onClick={() => setDescribedSource(src)}
+                    className={`px-1.5 py-0.5 transition-colors ${
+                      describedSource === src
+                        ? "bg-zinc-700 text-white dark:bg-zinc-200 dark:text-zinc-900"
+                        : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                    }`}
+                  >
+                    {src === "iucn" ? "IUCN" : "CoL"}
+                  </button>
+                ))}
+              </span>
+            </span>
+            {selectedTaxa.size === 0 && <span className="text-zinc-300 dark:text-zinc-700">|</span>}
+          </>
+        )}
+        {selectedTaxa.size === 0 && (table1aMode ? (
           <button
             onClick={exitTable1a}
             className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
@@ -1821,7 +1835,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               </span>
             </span>
           </>
-        )}
+        ))}
       </div>
     )}
     </>
