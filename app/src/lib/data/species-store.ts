@@ -336,6 +336,19 @@ function matchesTaxonomyFilter(
 }
 
 /**
+ * Strip trailing parenthetical affiliations from an assessor/reviewer name.
+ * The same person appears with a "(... Red List Authority)" / "(... Assessment
+ * Team)" role label in some assessments but not others, so we drop it to (a)
+ * aggregate that person's species under one candidate and (b) keep the name a
+ * stable identity that round-trips with the assessors/reviewers dashboard filter
+ * (which matches against the latest assessment, where the label is often absent).
+ * e.g. "Amori, G. (Small Nonvolant Mammal Red List Authority)" -> "Amori, G."
+ */
+function stripAffiliation(name: string): string {
+  return name.replace(/\s*\([^)]*\)/g, "").trim();
+}
+
+/**
  * Find assessor candidates for an NE species by looking at assessed species
  * in the given taxon groups that share at least one country with the target species.
  * Accepts multiple groups so a taxa like "plantae" can search across all plant groups.
@@ -388,7 +401,7 @@ export function getAssessorCandidatesByCountry(
         const date = assessment.date ?? "";
         if (date > latestDate) latestDate = date;
         for (const name of parseAssessorNames(assessment.assessors)) {
-          const normalizedName = name.trim();
+          const normalizedName = stripAffiliation(name);
           if (normalizedName && normalizedName.length >= 3) {
             speciesAssessors.add(normalizedName);
           }
@@ -508,7 +521,7 @@ export function getReviewerCandidatesByCountry(
         const date = assessment.date ?? "";
         if (date > latestDate) latestDate = date;
         for (const name of parseAssessorNames(assessment.reviewers)) {
-          const normalizedName = name.trim();
+          const normalizedName = stripAffiliation(name);
           if (normalizedName && normalizedName.length >= 3) {
             speciesReviewers.add(normalizedName);
           }
