@@ -3553,7 +3553,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                               <span className="shrink-0 px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">All Sections</span>
                             )}
                             <button
-                              className="shrink-0 ml-auto px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 flex items-center gap-1"
+                              className="shrink-0 ml-2 px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 flex items-center gap-1"
                               onClick={() => setStackedDetailView(!stackedDetailView)}
                               title={stackedDetailView ? "Switch to tabbed view" : "Switch to stacked view"}
                             >
