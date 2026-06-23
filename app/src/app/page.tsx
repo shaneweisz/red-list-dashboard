@@ -46,7 +46,7 @@ export default function RedListPage() {
     <div className="min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950 px-4 sm:px-6 py-4 md:px-16 md:py-8">
       <main className="max-w-5xl w-full min-w-0 mx-auto flex-1">
         {/* Header: globe + two aligned rows (title | view-toggle, subtitle | search) */}
-        <div className="mb-4 md:mb-6 flex items-start gap-2">
+        <div className="mb-[0.9rem] md:mb-[1.35rem] flex items-start gap-2">
           {brand.showGlobe && (
             <FaGlobeAmericas className="shrink-0 mt-1 text-2xl sm:text-3xl md:text-[2rem] text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
           )}
