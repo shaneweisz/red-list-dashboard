@@ -50,11 +50,12 @@ export default function RedListPage() {
           {brand.showGlobe && (
             <FaGlobeAmericas className="shrink-0 mt-1 text-2xl sm:text-3xl md:text-[2rem] text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
           )}
-          <div className="flex-1 min-w-0">
-            {/* Row 1: title aligned with the view-mode toggle */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-              <h1 className="text-2xl sm:text-3xl md:text-[2rem] font-bold text-zinc-900 dark:text-zinc-100">{brand.title}</h1>
-              <div className="flex items-center gap-2 shrink-0">
+          <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center gap-x-3 gap-y-1.5 sm:gap-y-3 [grid-template-areas:'title'_'subtitle'_'controls'_'search'] sm:[grid-template-areas:'title_controls'_'subtitle_search']">
+            <h1 className="[grid-area:title] text-2xl sm:text-3xl md:text-[2rem] font-bold text-zinc-900 dark:text-zinc-100">{brand.title}</h1>
+            {brand.subtitle && (
+              <p className="[grid-area:subtitle] text-lg md:text-xl text-zinc-500 dark:text-zinc-400">{brand.subtitle}</p>
+            )}
+            <div className="[grid-area:controls] flex items-center gap-2 sm:justify-self-end">
               {/* View mode toggle */}
               <div className="flex rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden text-sm">
                 <button
@@ -93,13 +94,8 @@ export default function RedListPage() {
                 </button>
               </div>
               <ThemeToggle />
-              </div>
             </div>
-            {/* Row 2: subtitle aligned with the search bar */}
-            <div className="mt-2 md:mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-              {brand.subtitle && (
-                <p className="text-lg md:text-xl text-zinc-500 dark:text-zinc-400">{brand.subtitle}</p>
-              )}
+            <div className="[grid-area:search] sm:justify-self-end">
               <SpeciesSearchBar />
             </div>
           </div>
