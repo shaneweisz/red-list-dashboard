@@ -114,7 +114,7 @@ const stickyClasses = "sticky left-0 z-10";
 const cellPad = "px-3 py-2 md:px-4 md:py-2.5";
 const colDivider = "border-l border-zinc-200 dark:border-zinc-700";
 const numericTdNoDividerClasses = `${cellPad} text-right whitespace-nowrap w-0`;
-const numericThNoDividerClasses = `${cellPad} text-right text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap w-0`;
+const numericThNoDividerClasses = `${cellPad} text-right text-sm font-bold text-zinc-600 dark:text-zinc-300 w-0`;
 const numericTdClasses = `${numericTdNoDividerClasses} ${colDivider}`;
 const numericThClasses = `${numericThNoDividerClasses} ${colDivider}`;
 const flexTdClasses = `${cellPad} ${colDivider} whitespace-nowrap w-0`;
@@ -465,7 +465,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         )}
         {isVisible("assessed") && (
           <td className={flexTdClasses}>
-            <div className="flex items-center gap-1.5 sm:gap-3 min-w-[140px] md:min-w-[160px]">
+            <div className="flex items-center gap-1.5 sm:gap-3 min-w-[170px] md:min-w-[190px]">
               <div className="h-4 w-[48px] sm:w-[60px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
               <div className="flex-1 min-w-[40px] h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
               <div className="h-3 w-[44px] sm:w-[52px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
@@ -474,7 +474,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         )}
         {isVisible("outdated") && (
           <td className={flexTdClasses}>
-            <div className="flex items-center gap-1.5 sm:gap-3 min-w-[140px] md:min-w-[160px]">
+            <div className="flex items-center gap-1.5 sm:gap-3 min-w-[170px] md:min-w-[190px]">
               <div className="h-4 w-[48px] sm:w-[60px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
               <div className="flex-1 min-w-[40px] h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
               <div className="h-3 w-[44px] sm:w-[52px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
@@ -483,7 +483,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         )}
         {isVisible("gbifUnassessed") && (
           <td className={flexTdClasses}>
-            <div className="flex items-center gap-1.5 sm:gap-3 min-w-[140px] md:min-w-[160px]">
+            <div className="flex items-center gap-1.5 sm:gap-3 min-w-[170px] md:min-w-[190px]">
               <div className="h-4 w-[48px] sm:w-[60px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
               <div className="flex-1 min-w-[40px] h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
               <div className="h-3 w-[44px] sm:w-[52px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
@@ -492,7 +492,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         )}
         {isVisible("colNe") && (
           <td className={flexTdClasses}>
-            <div className="flex items-center gap-1.5 sm:gap-3 min-w-[140px] md:min-w-[160px]">
+            <div className="flex items-center gap-1.5 sm:gap-3 min-w-[170px] md:min-w-[190px]">
               <div className="h-4 w-[48px] sm:w-[60px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
               <div className="flex-1 min-w-[40px] h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
               <div className="h-3 w-[44px] sm:w-[52px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
@@ -612,7 +612,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     const fillColor = isAll ? "rgba(255,255,255,0.25)" : barColor;
     const fw = fontWeight || "font-medium";
     return (
-      <div className="flex items-center gap-1.5 sm:gap-3 min-w-[140px] md:min-w-[160px]">
+      <div className="flex items-center gap-1.5 sm:gap-3 min-w-[170px] md:min-w-[190px]">
         {count != null && (
           <span className={`text-sm md:text-base ${fw} tabular-nums text-zinc-700 dark:text-zinc-300 w-[48px] sm:w-[60px] text-right flex-shrink-0`}>
             {count.toLocaleString()}
@@ -1760,79 +1760,76 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         </tbody>
       </table>
     </div>
-    {/* Subtle controls: # Described source toggle (always shown) + expand/table controls (landing only) */}
-    {!loading && perTaxa.length > 0 && (
+    {/* Subtle controls: usage hint + # Described toggle + expand/table controls,
+        all landing-only — hidden once a taxon is selected. */}
+    {!loading && perTaxa.length > 0 && selectedTaxa.size === 0 && (
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 mt-1.5">
-        {/* Usage hint, kept alongside the table controls it describes */}
-        <span className="text-xs text-zinc-400 dark:text-zinc-500">
+        {/* Usage hint */}
+        <span className="pl-3 md:pl-4 text-xs text-zinc-400 dark:text-zinc-500">
           Click taxa rows to filter, use charts and search to explore species.<span className="hidden sm:inline"> Cmd/Ctrl+click to multiselect.</span>
         </span>
         <div className="flex items-center gap-3">
-        {/* IUCN ↔ CoL source toggle: flips the described count + recomputes % Assessed */}
-        <span className="inline-flex items-center gap-1.5">
-          <span className="text-xs text-zinc-400 dark:text-zinc-500"># Described:</span>
-          <span className="inline-flex rounded-md overflow-hidden border border-zinc-300 dark:border-zinc-600 text-[10px] font-semibold" title="Switch # Described Species between IUCN Table 1a estimates and the Catalogue of Life backbone">
-            {(["iucn", "col"] as const).map((src) => (
-              <button
-                key={src}
-                onClick={(e) => { e.stopPropagation(); setDescribedSource(src); }}
-                className={`px-1.5 py-0.5 transition-colors ${
-                  describedSource === src
-                    ? "bg-zinc-700 text-white dark:bg-zinc-200 dark:text-zinc-900"
-                    : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700"
-                }`}
-              >
-                {src === "iucn" ? "IUCN" : "CoL"}
-              </button>
-            ))}
-          </span>
-        </span>
-        {selectedTaxa.size === 0 && (
-          <>
-            <span className="text-zinc-300 dark:text-zinc-700">|</span>
-            {table1aMode ? (
-              <button
-                onClick={exitTable1a}
-                className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-              >
-                Exit Table 1a mode
-              </button>
-            ) : (
-              <>
+          {/* IUCN ↔ CoL source toggle: flips the described count + recomputes % Assessed */}
+          <span className="inline-flex items-center gap-1.5">
+            <span className="text-xs text-zinc-400 dark:text-zinc-500"># Described:</span>
+            <span className="inline-flex rounded-md overflow-hidden border border-zinc-300 dark:border-zinc-600 text-[10px] font-semibold" title="Switch # Described Species between IUCN Table 1a estimates and the Catalogue of Life backbone">
+              {(["iucn", "col"] as const).map((src) => (
                 <button
-                  onClick={allExpanded ? collapseAll : expandAll}
-                  className="inline-flex items-center gap-1 text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                  key={src}
+                  onClick={(e) => { e.stopPropagation(); setDescribedSource(src); }}
+                  className={`px-1.5 py-0.5 transition-colors ${
+                    describedSource === src
+                      ? "bg-zinc-700 text-white dark:bg-zinc-200 dark:text-zinc-900"
+                      : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                  }`}
                 >
-                  {allExpanded ? <FaCompressAlt size={9} /> : <FaExpandAlt size={9} />}
-                  {allExpanded ? "Collapse all" : "Expand all"}
+                  {src === "iucn" ? "IUCN" : "CoL"}
                 </button>
-                <span className="text-zinc-300 dark:text-zinc-700">|</span>
-                <span className="inline-flex items-center gap-1">
-                  <button
-                    onClick={enterTable1a}
-                    className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+              ))}
+            </span>
+          </span>
+          <span className="text-zinc-300 dark:text-zinc-700">|</span>
+          {table1aMode ? (
+            <button
+              onClick={exitTable1a}
+              className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+            >
+              Exit Table 1a mode
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={allExpanded ? collapseAll : expandAll}
+                className="inline-flex items-center gap-1 text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+              >
+                {allExpanded ? <FaCompressAlt size={9} /> : <FaExpandAlt size={9} />}
+                {allExpanded ? "Collapse all" : "Expand all"}
+              </button>
+              <span className="text-zinc-300 dark:text-zinc-700">|</span>
+              <span className="inline-flex items-center gap-1">
+                <button
+                  onClick={enterTable1a}
+                  className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                >
+                  Table 1a mode
+                </button>
+                <span className="relative group/t1a">
+                  <a
+                    href={IUCN_SOURCE_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    Table 1a mode
-                  </button>
-                  <span className="relative group/t1a">
-                    <a
-                      href={IUCN_SOURCE_URL}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <FaInfoCircle size={10} />
-                    </a>
-                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover/t1a:opacity-100 group-hover/t1a:visible z-50 shadow-lg pointer-events-none">
-                      View IUCN Red List Table 1a (PDF)
-                    </span>
+                    <FaInfoCircle size={10} />
+                  </a>
+                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover/t1a:opacity-100 group-hover/t1a:visible z-50 shadow-lg pointer-events-none">
+                    View IUCN Red List Table 1a (PDF)
                   </span>
                 </span>
-              </>
-            )}
-          </>
-        )}
+              </span>
+            </>
+          )}
         </div>
       </div>
     )}

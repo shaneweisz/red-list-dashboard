@@ -3,8 +3,8 @@
 import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { FaGlobeAmericas } from "react-icons/fa";
-import { ThemeToggle } from "../components/ThemeToggle";
 import { SpeciesSearchBar } from "../components/SpeciesSearchBar";
+import { ThemeToggle } from "../components/ThemeToggle";
 import { useBrand } from "../components/BrandProvider";
 import { parseParams, type ViewMode } from "../hooks/useFilterParams";
 
@@ -45,61 +45,63 @@ export default function RedListPage() {
   return (
     <div className="min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950 px-4 sm:px-6 py-4 md:px-16 md:py-8">
       <main className="max-w-5xl w-full min-w-0 mx-auto flex-1">
-        {/* Header row: title + view mode toggle */}
-        <div className="mb-4 md:mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-          <div className="flex items-start gap-2">
-            {brand.showGlobe && (
-              <FaGlobeAmericas className="shrink-0 mt-1 text-2xl sm:text-3xl md:text-[2rem] text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
-            )}
-            <div>
+        {/* Header: globe + two aligned rows (title | view-toggle, subtitle | search) */}
+        <div className="mb-4 md:mb-6 flex items-start gap-2">
+          {brand.showGlobe && (
+            <FaGlobeAmericas className="shrink-0 mt-1 text-2xl sm:text-3xl md:text-[2rem] text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+          )}
+          <div className="flex-1 min-w-0">
+            {/* Row 1: title aligned with the view-mode toggle */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <h1 className="text-2xl sm:text-3xl md:text-[2rem] font-bold text-zinc-900 dark:text-zinc-100">{brand.title}</h1>
+              <div className="flex items-center gap-2 shrink-0">
+              {/* View mode toggle */}
+              <div className="flex rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden text-sm">
+                <button
+                  onClick={() => {
+                    if (viewMode === "reassessments") return;
+                    setViewMode("reassessments");
+                    setSharedTaxa(new Set());
+                    setSharedSubgroups(new Set());
+                    window.history.pushState(null, "", "/");
+                    window.dispatchEvent(new PopStateEvent("popstate"));
+                  }}
+                  className={`px-3 py-2 sm:py-1.5 font-medium transition-colors ${
+                    viewMode === "reassessments"
+                      ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                      : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+                  }`}
+                >
+                  {brand.assessedTabLabel ?? "Reassessments"}
+                </button>
+                <button
+                  onClick={() => {
+                    if (viewMode === "new-assessments") return;
+                    setViewMode("new-assessments");
+                    setSharedTaxa(new Set());
+                    setSharedSubgroups(new Set());
+                    window.history.pushState(null, "", "/?view=new-assessments");
+                    window.dispatchEvent(new PopStateEvent("popstate"));
+                  }}
+                  className={`px-3 py-2 sm:py-1.5 font-medium transition-colors ${
+                    viewMode === "new-assessments"
+                      ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                      : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+                  }`}
+                >
+                  {brand.unassessedTabLabel ?? "New Assessments"}
+                </button>
+              </div>
+              <ThemeToggle />
+              </div>
+            </div>
+            {/* Row 2: subtitle aligned with the search bar */}
+            <div className="mt-2 md:mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               {brand.subtitle && (
-                <p className="mt-0.5 text-lg md:text-xl text-zinc-500 dark:text-zinc-400">{brand.subtitle}</p>
+                <p className="text-base md:text-lg text-zinc-500 dark:text-zinc-400">{brand.subtitle}</p>
               )}
+              <SpeciesSearchBar />
             </div>
-          </div>
-          <div className="flex flex-col items-stretch sm:items-end gap-2 shrink-0">
-            <div className="flex items-center gap-2">
-            {/* View mode toggle */}
-            <div className="flex rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden text-sm">
-              <button
-                onClick={() => {
-                  if (viewMode === "reassessments") return;
-                  setViewMode("reassessments");
-                  setSharedTaxa(new Set());
-                  setSharedSubgroups(new Set());
-                  window.history.pushState(null, "", "/");
-                  window.dispatchEvent(new PopStateEvent("popstate"));
-                }}
-                className={`px-3 py-2 sm:py-1.5 font-medium transition-colors ${
-                  viewMode === "reassessments"
-                    ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
-                    : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
-                }`}
-              >
-                {brand.assessedTabLabel ?? "Reassessments"}
-              </button>
-              <button
-                onClick={() => {
-                  if (viewMode === "new-assessments") return;
-                  setViewMode("new-assessments");
-                  setSharedTaxa(new Set());
-                  setSharedSubgroups(new Set());
-                  window.history.pushState(null, "", "/?view=new-assessments");
-                  window.dispatchEvent(new PopStateEvent("popstate"));
-                }}
-                className={`px-3 py-2 sm:py-1.5 font-medium transition-colors ${
-                  viewMode === "new-assessments"
-                    ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
-                    : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
-                }`}
-              >
-                {brand.unassessedTabLabel ?? "New Assessments"}
-              </button>
-            </div>
-            <ThemeToggle />
-            </div>
-            <SpeciesSearchBar />
           </div>
         </div>
 
