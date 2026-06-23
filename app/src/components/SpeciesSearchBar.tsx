@@ -162,7 +162,7 @@ export function SpeciesSearchBar() {
   }
 
   return (
-    <div ref={containerRef} className="relative w-full sm:w-[20rem]">
+    <div ref={containerRef} className="relative w-full sm:w-[22rem] md:w-[28rem]">
       <div className="relative">
         {/* Magnifying glass icon */}
         <svg
@@ -186,7 +186,7 @@ export function SpeciesSearchBar() {
           onFocus={() => query.length >= 2 && setIsOpen(true)}
           onKeyDown={handleKeyDown}
           placeholder="Search for a species..."
-          className="w-full pl-10 pr-8 py-1 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-400 dark:focus:ring-zinc-500"
+          className="w-full pl-10 pr-8 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-400 dark:focus:ring-zinc-500"
         />
         {/* Clear button */}
         {query && (

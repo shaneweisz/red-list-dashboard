@@ -1,5 +1,7 @@
 export type Brand = {
   title: string;
+  /** Tagline shown beneath the title; omitted brands render no subtitle. */
+  subtitle?: string;
   description: string;
   /** Browser-tab title; falls back to `title` when omitted. */
   tabTitle?: string;
@@ -13,7 +15,8 @@ export type Brand = {
 
 // "Dash of Life" is the default brand shown on every host.
 const DEFAULT_BRAND: Brand = {
-  title: "Dash of Life: A Dashboard for Conservation of Threatened Species",
+  title: "Dash of Life",
+  subtitle: "A Dashboard for Conservation of Threatened Species",
   tabTitle: "Dash of Life",
   description: "A dashboard for biodiversity data about life on Earth",
   assessedTabLabel: "Red List Assessed",

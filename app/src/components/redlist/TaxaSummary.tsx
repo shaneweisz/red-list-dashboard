@@ -1762,7 +1762,12 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     </div>
     {/* Subtle controls: # Described source toggle (always shown) + expand/table controls (landing only) */}
     {!loading && perTaxa.length > 0 && (
-      <div className="flex items-center justify-end gap-3 mt-1.5">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 mt-1.5">
+        {/* Usage hint, kept alongside the table controls it describes */}
+        <span className="text-xs text-zinc-400 dark:text-zinc-500">
+          Click taxa rows to filter, use charts and search to explore species.<span className="hidden sm:inline"> Cmd/Ctrl+click to multiselect.</span>
+        </span>
+        <div className="flex items-center gap-3">
         {/* IUCN ↔ CoL source toggle: flips the described count + recomputes % Assessed */}
         <span className="inline-flex items-center gap-1.5">
           <span className="text-xs text-zinc-400 dark:text-zinc-500"># Described:</span>
@@ -1828,6 +1833,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             )}
           </>
         )}
+        </div>
       </div>
     )}
     </>
