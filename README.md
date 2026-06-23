@@ -40,7 +40,7 @@ Shows all taxonomic groups with species counts, assessment coverage, outdated as
 
 ### Interactive Filter Charts
 Four clickable charts for filtering species:
-- **Risk Category** — EX/EW/CR/EN/VU/NT/LC/DD
+- **Conservation Status** — EX/EW/CR/EN/VU/NT/LC/DD
 - **Years Since Assessed** — highlights species not reassessed in 10+ years
 - **Country** — world map with species/GBIF toggle
 - **GBIF Observations** — distribution by observation count range
