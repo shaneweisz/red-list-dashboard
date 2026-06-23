@@ -133,7 +133,7 @@ const COLUMN_LABELS: Record<ColumnId, string> = {
   colDescribed: "# Described Species (CoL)",
   assessed: "# Red List Assessed",
   outdated: "# Outdated (>10 yrs old)",
-  breakdown: "Risk Category Breakdown",
+  breakdown: "Conservation Status Breakdown",
   gbifUnassessed: "# Unassessed, 1+ GBIF Obs",
   colNe: "# Not Evaluated",
   totalGbifObs: "Total Obs",
@@ -562,7 +562,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               {isVisible("gbifDistribution") && <th className={flexThClasses}>Obs Distribution</th>}
               {isVisible("meanGbifObs") && <th className={numericThClasses}>Mean Obs</th>}
               {isVisible("medianGbifObs") && <th className={numericThClasses}>Median Obs</th>}
-              {isVisible("breakdown") && <th className={flexThClasses}>Risk Category Breakdown</th>}
+              {isVisible("breakdown") && <th className={flexThClasses}>Conservation Status Breakdown</th>}
             </tr>
           </thead>
           <tbody>
@@ -1360,7 +1360,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         )}
         {isVisible("breakdown") && (
           <th className={flexThClasses}>
-            <span className="uppercase">Risk Category Breakdown</span>
+            <span className="uppercase">Conservation Status Breakdown</span>
             <div className="flex items-center gap-1.5 mt-1 font-normal normal-case">
               {BAR_CATEGORIES.map((cat) => (
                 <span key={cat} className="inline-flex items-center gap-0.5">

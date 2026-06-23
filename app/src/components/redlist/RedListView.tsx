@@ -11,7 +11,7 @@ import WikipediaSummary from "../WikipediaSummary";
 import EolSummary from "../EolSummary";
 import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME } from "../WorldMap";
-import { CATEGORY_COLORS, TAXA_BY_ID } from "@/config/taxa";
+import { CATEGORY_COLORS, TAXA_BY_ID, THREATENED_CATEGORIES } from "@/config/taxa";
 import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode } from "@/lib/taxonomy-utils";
 import ReviewerChart from "./ReviewerChart";
 import { parseAssessors } from "@/lib/parseAssessors";
@@ -1909,6 +1909,16 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     });
   };
 
+  // Whether the current selection is exactly the "Threatened" set (CR, EN, VU)
+  const isThreatenedSelected =
+    selectedCategories.size === THREATENED_CATEGORIES.length &&
+    THREATENED_CATEGORIES.every((c) => selectedCategories.has(c));
+
+  // "Threatened" shortcut: select CR, EN and VU at once (toggle off if already exactly that set)
+  const handleThreatenedClick = () => {
+    setSelectedCategories(isThreatenedSelected ? new Set() : new Set<string>(THREATENED_CATEGORIES));
+  };
+
   // Handle year range bar click (Cmd/Ctrl+click for multi-select, regular click replaces)
   const handleYearClick = (data: { payload?: { range?: string } }, event: React.MouseEvent) => {
     const range = data.payload?.range;
@@ -2145,11 +2155,26 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
           {/* Charts row 1: bar charts (new-assessments mode only shows GBIF Observations) */}
           {!isNewAssessments && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {/* Risk Category */}
+            {/* Conservation Status */}
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Risk Category</span>
-                              </div>
+                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Conservation Status</span>
+                {!(isSingleSpecies && singleSpecies) && (
+                  <button
+                    type="button"
+                    onClick={handleThreatenedClick}
+                    className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
+                      isThreatenedSelected
+                        ? "bg-red-600 text-white shadow-sm"
+                        : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+                    }`}
+                    aria-pressed={isThreatenedSelected}
+                    title="Select Critically Endangered, Endangered and Vulnerable"
+                  >
+                    Threatened
+                  </button>
+                )}
+              </div>
               <div className="flex-1 min-h-[150px] flex items-center justify-center">
                 {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
