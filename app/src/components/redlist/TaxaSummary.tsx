@@ -111,7 +111,7 @@ const getOutdatedBarColor = (percent: number) =>
 // Sticky cell classes for the pinned taxon column
 const stickyClasses = "sticky left-0 z-10";
 // Compact cell classes for tighter table spacing
-const cellPad = "px-3 py-2 md:px-5 md:py-2.5";
+const cellPad = "px-3 py-2 md:px-4 md:py-2.5";
 const colDivider = "border-l border-zinc-200 dark:border-zinc-700";
 const numericTdNoDividerClasses = `${cellPad} text-right whitespace-nowrap w-0`;
 const numericThNoDividerClasses = `${cellPad} text-right text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`;
@@ -119,7 +119,11 @@ const numericTdClasses = `${numericTdNoDividerClasses} ${colDivider}`;
 const numericThClasses = `${numericThNoDividerClasses} ${colDivider}`;
 const flexTdClasses = `${cellPad} ${colDivider} whitespace-nowrap w-0`;
 const flexThClasses = `${cellPad} ${colDivider} text-left text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`;
-const centeredThClasses = `${cellPad} ${colDivider} text-center text-xs font-medium text-zinc-500 uppercase tracking-wider whitespace-nowrap w-0`;
+// Bar-column headers (Assessed / Outdated / Unassessed / Not Evaluated) are allowed
+// to wrap: their cells already carry a bar min-width, so a long single-line header
+// (e.g. "# Outdated Assessments (10+Y)") would otherwise force the column wider than
+// it needs to be and push the table into horizontal overflow.
+const centeredThClasses = `${cellPad} ${colDivider} text-center text-xs font-medium text-zinc-500 uppercase tracking-wider w-0`;
 
 // Toggleable column IDs (Taxon is always visible)
 type ColumnId = "described" | "colDescribed" | "assessed" | "outdated" | "breakdown" | "gbifUnassessed" | "colNe" | "totalGbifObs" | "meanGbifObs" | "medianGbifObs" | "gbifDistribution";
@@ -461,7 +465,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         )}
         {isVisible("assessed") && (
           <td className={flexTdClasses}>
-            <div className="flex items-center gap-1.5 sm:gap-3 min-w-[140px] md:min-w-[200px]">
+            <div className="flex items-center gap-1.5 sm:gap-3 min-w-[140px] md:min-w-[160px]">
               <div className="h-4 w-[48px] sm:w-[60px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
               <div className="flex-1 min-w-[40px] h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
               <div className="h-3 w-[44px] sm:w-[52px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
@@ -470,7 +474,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         )}
         {isVisible("outdated") && (
           <td className={flexTdClasses}>
-            <div className="flex items-center gap-1.5 sm:gap-3 min-w-[140px] md:min-w-[200px]">
+            <div className="flex items-center gap-1.5 sm:gap-3 min-w-[140px] md:min-w-[160px]">
               <div className="h-4 w-[48px] sm:w-[60px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
               <div className="flex-1 min-w-[40px] h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
               <div className="h-3 w-[44px] sm:w-[52px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
@@ -479,7 +483,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         )}
         {isVisible("gbifUnassessed") && (
           <td className={flexTdClasses}>
-            <div className="flex items-center gap-1.5 sm:gap-3 min-w-[140px] md:min-w-[200px]">
+            <div className="flex items-center gap-1.5 sm:gap-3 min-w-[140px] md:min-w-[160px]">
               <div className="h-4 w-[48px] sm:w-[60px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
               <div className="flex-1 min-w-[40px] h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
               <div className="h-3 w-[44px] sm:w-[52px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
@@ -488,7 +492,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         )}
         {isVisible("colNe") && (
           <td className={flexTdClasses}>
-            <div className="flex items-center gap-1.5 sm:gap-3 min-w-[140px] md:min-w-[200px]">
+            <div className="flex items-center gap-1.5 sm:gap-3 min-w-[140px] md:min-w-[160px]">
               <div className="h-4 w-[48px] sm:w-[60px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
               <div className="flex-1 min-w-[40px] h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
               <div className="h-3 w-[44px] sm:w-[52px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
@@ -608,7 +612,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     const fillColor = isAll ? "rgba(255,255,255,0.25)" : barColor;
     const fw = fontWeight || "font-medium";
     return (
-      <div className="flex items-center gap-1.5 sm:gap-3 min-w-[140px] md:min-w-[200px]">
+      <div className="flex items-center gap-1.5 sm:gap-3 min-w-[140px] md:min-w-[160px]">
         {count != null && (
           <span className={`text-sm md:text-base ${fw} tabular-nums text-zinc-700 dark:text-zinc-300 w-[48px] sm:w-[60px] text-right flex-shrink-0`}>
             {count.toLocaleString()}
