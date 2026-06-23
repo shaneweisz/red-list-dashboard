@@ -5,7 +5,7 @@ import type { Brand } from "../config/brand";
 
 const BrandContext = createContext<Brand>({
   title: "Dash of Life",
-  subtitle: "A Dashboard for Threatened Species Conservation",
+  subtitle: "A Dashboard for Conservation of Threatened Species",
   description: "A dashboard for biodiversity data about life on Earth",
   assessedTabLabel: "Red List Assessed",
   unassessedTabLabel: "Unassessed",

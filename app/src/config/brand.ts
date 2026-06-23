@@ -16,7 +16,7 @@ export type Brand = {
 // "Dash of Life" is the default brand shown on every host.
 const DEFAULT_BRAND: Brand = {
   title: "Dash of Life",
-  subtitle: "A Dashboard for Threatened Species Conservation",
+  subtitle: "A Dashboard for Conservation of Threatened Species",
   tabTitle: "Dash of Life",
   description: "A dashboard for biodiversity data about life on Earth",
   assessedTabLabel: "Red List Assessed",
