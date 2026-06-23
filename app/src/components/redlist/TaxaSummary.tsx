@@ -1285,8 +1285,8 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   const renderHead = () => (
     <thead>
       <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
-        <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} text-center text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap w-0`}>
-          <div className="flex items-center justify-center gap-1.5">
+        <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} ${table1aMode ? "text-left" : "text-center"} text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap w-0`}>
+          <div className={`flex items-center gap-1.5 ${table1aMode ? "justify-start" : "justify-center"}`}>
             Taxonomic Group
             <button
               ref={menuButtonRef}
