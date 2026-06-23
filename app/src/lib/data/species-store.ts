@@ -442,6 +442,126 @@ export function getAssessorCandidatesByCountry(
     });
 }
 
+export interface ReviewerCountryCandidate {
+  name: string;
+  /** Per-region species counts (aggregated from the target species' countries) */
+  regionCounts: Record<string, number>;
+  /** Per-country species counts (country codes from the target species) */
+  countryCounts: Record<string, number>;
+  /** Species reviewed in this taxonomy scope with country overlap */
+  totalInRegion: number;
+  /** Total species reviewed in this taxonomy scope (regardless of country) */
+  totalAll: number;
+  latestDate: string;
+}
+
+/**
+ * Find reviewer candidates for an NE species by looking at assessed species
+ * in the given taxon groups that share at least one country with the target species.
+ * Accepts multiple groups so a taxa like "plantae" can search across all plant groups.
+ * Applies an optional taxonomy filter (e.g. orderNames for beetles) to narrow scope.
+ * Aggregates counts by UN M49 sub-region for cleaner visualisation.
+ */
+export function getReviewerCandidatesByCountry(
+  taxonGroups: string[],
+  countries: string[],
+  taxonomyFilter?: TaxonomyFilter,
+): ReviewerCountryCandidate[] {
+  if (countries.length === 0 || taxonGroups.length === 0) return [];
+
+  const countrySet = new Set(countries.map((c) => c.toUpperCase()));
+
+  const reviewerMap = new Map<string, { regionCounts: Record<string, number>; countryCounts: Record<string, number>; totalInRegion: number; totalAll: number; latestDate: string; seenSpeciesRegion: Set<number>; seenSpeciesAll: Set<number> }>();
+
+  for (const taxonGroup of taxonGroups) {
+    const redlistRows = loadRedlistForGroup(taxonGroup);
+    const historyMap = loadHistoryForGroup(taxonGroup);
+
+    for (const row of redlistRows) {
+      // Apply taxonomy filter (e.g. only coleoptera for beetles)
+      if (taxonomyFilter && !matchesTaxonomyFilter(row, taxonomyFilter)) continue;
+
+      // Find which of the target countries this species occurs in
+      const overlapping = row.countries.filter((c) => countrySet.has(c.toUpperCase()));
+      const hasCountryOverlap = overlapping.length > 0;
+
+      // Map overlapping countries to their regions (deduplicate per-species)
+      const regions = hasCountryOverlap
+        ? new Set(overlapping.map((c) => countryToRegion(c)))
+        : new Set<string>();
+
+      const assessments = historyMap[String(row.sis_taxon_id)] ?? [];
+      const allAssessments = assessments.length > 0 ? assessments : [{
+        id: row.assessment_id,
+        year: row.year_published,
+        category: row.category,
+        date: row.assessment_date,
+        assessors: null as string | null,
+        reviewers: null as string | null,
+      }];
+
+      // Collect unique reviewer names across all assessments for this species
+      const speciesReviewers = new Set<string>();
+      let latestDate = "";
+      for (const assessment of allAssessments) {
+        if (!assessment.reviewers) continue;
+        const date = assessment.date ?? "";
+        if (date > latestDate) latestDate = date;
+        for (const name of parseAssessorNames(assessment.reviewers)) {
+          const normalizedName = name.trim();
+          if (normalizedName && normalizedName.length >= 3) {
+            speciesReviewers.add(normalizedName);
+          }
+        }
+      }
+
+      // Credit each reviewer once per species
+      for (const normalizedName of speciesReviewers) {
+        let stats = reviewerMap.get(normalizedName);
+        if (!stats) {
+          stats = { regionCounts: {}, countryCounts: {}, totalInRegion: 0, totalAll: 0, latestDate: "", seenSpeciesRegion: new Set(), seenSpeciesAll: new Set() };
+          reviewerMap.set(normalizedName, stats);
+        }
+
+        // Always count for totalAll
+        if (!stats.seenSpeciesAll.has(row.sis_taxon_id)) {
+          stats.seenSpeciesAll.add(row.sis_taxon_id);
+          stats.totalAll++;
+        }
+
+        // Count for region overlap
+        if (hasCountryOverlap && !stats.seenSpeciesRegion.has(row.sis_taxon_id)) {
+          stats.seenSpeciesRegion.add(row.sis_taxon_id);
+          stats.totalInRegion++;
+          for (const region of regions) {
+            stats.regionCounts[region] = (stats.regionCounts[region] ?? 0) + 1;
+          }
+          for (const c of overlapping) {
+            const code = c.toUpperCase();
+            stats.countryCounts[code] = (stats.countryCounts[code] ?? 0) + 1;
+          }
+        }
+        if (latestDate > stats.latestDate) stats.latestDate = latestDate;
+      }
+    }
+  }
+
+  return [...reviewerMap.entries()]
+    .filter(([, stats]) => stats.totalInRegion > 0)
+    .map(([name, stats]) => ({
+      name,
+      regionCounts: stats.regionCounts,
+      countryCounts: stats.countryCounts,
+      totalInRegion: stats.totalInRegion,
+      totalAll: stats.totalAll,
+      latestDate: stats.latestDate,
+    }))
+    .sort((a, b) => {
+      if (a.totalInRegion !== b.totalInRegion) return b.totalInRegion - a.totalInRegion;
+      return b.latestDate.localeCompare(a.latestDate);
+    });
+}
+
 /**
  * Parse assessor string into individual names.
  * Handles formats like "Smith, J.A." and "IUCN SSC Amphibian Specialist Group"

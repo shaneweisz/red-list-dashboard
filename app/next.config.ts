@@ -71,6 +71,7 @@ const nextConfig: NextConfig = {
     // Reads the Red List / GBIF CSVs (+ mapping) but never the search index or
     // the R2-only CoL artifacts.
     "/api/redlist/assessor-candidates-by-country": ["**/data/search-index.json", ...COL_ARTIFACTS],
+    "/api/redlist/reviewer-candidates-by-country": ["**/data/search-index.json", ...COL_ARTIFACTS],
     // These read only the small precomputed summary JSONs.
     "/api/redlist/taxa-summary": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", ...COL_ARTIFACTS],
     "/api/redlist/taxa-subgroups": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", ...COL_ARTIFACTS],

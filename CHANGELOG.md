@@ -2,6 +2,10 @@
 
 All notable changes to the IUCN Red List Assessments Dashboard.
 
+## [Unreleased]
+
+- Added "Suggested Reviewers" tab for NE species, analogous to Suggested Assessors
+
 ## [v2.7.0] — 2026-04-03 – 2026-04-06 — Map Colors & Linting
 
 - Refined occurrence map color scale to continuous hue gradient

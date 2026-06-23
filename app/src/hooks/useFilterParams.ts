@@ -127,7 +127,7 @@ export function parseParams(search: string) {
     ) as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear" | null,
     sortDirection: (p.get("dir") === "asc" ? "asc" : "desc") as "asc" | "desc",
     species: p.get("species") ? Number(p.get("species")) : null,
-    tab: (p.get("tab") || null) as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "col" | "eol" | null,
+    tab: (p.get("tab") || null) as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol" | null,
   };
 }
 
@@ -160,7 +160,7 @@ export function buildQs(state: {
   sortField: "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear" | null;
   sortDirection: "asc" | "desc";
   species: number | null;
-  tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "col" | "eol" | null;
+  tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol" | null;
 }): string {
   const p = new URLSearchParams();
   if (state.viewMode === "new-assessments") p.set("view", "new-assessments");
@@ -495,7 +495,7 @@ export function useFilterParams() {
   );
 
   const setSpeciesParam = useCallback(
-    (species: number | null, tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "col" | "eol" = "gbif") => {
+    (species: number | null, tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol" = "gbif") => {
       setState(prev => {
         const next = { ...prev, species, tab: species != null ? tab : null };
         queueMicrotask(() => syncUrl(next, true));
@@ -506,7 +506,7 @@ export function useFilterParams() {
   );
 
   const setTabParam = useCallback(
-    (tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "col" | "eol") => {
+    (tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol") => {
       setState(prev => {
         if (prev.species == null) return prev; // no species selected, nothing to update
         const next = { ...prev, tab };

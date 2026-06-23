@@ -20,6 +20,7 @@ import { useFilterParams } from "@/hooks/useFilterParams";
 import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 
 import AssessorCandidatesTable from "../AssessorCandidatesTable";
+import ReviewerCandidatesTable from "../ReviewerCandidatesTable";
 import { getLastSearchResult, clearLastSearchResult } from "../SpeciesSearchBar";
 
 // Species list is served by the DuckDB/Parquet-backed /api/redlist/species route.
@@ -839,7 +840,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
 
   // Row expansion state (initialized from URL params if present)
   const [selectedSpeciesKey, setSelectedSpeciesKeyRaw] = useState<number | null>(urlSpecies != null && isNewAssessments ? Math.abs(urlSpecies) : urlSpecies);
-  const [activeDetailTab, setActiveDetailTabRaw] = useState<"gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "col" | "eol">(urlTab ?? "gbif");
+  const [activeDetailTab, setActiveDetailTabRaw] = useState<"gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol">(urlTab ?? "gbif");
   // Track which tabs have been visited so we only mount (and fetch data for) a tab on first click
   const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set([urlTab ?? "gbif"]));
   const urlSpeciesHandledRef = useRef(false);
@@ -856,7 +857,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     }
   }, [setSpeciesParam]);
 
-  const setActiveDetailTab = useCallback((tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "col" | "eol") => {
+  const setActiveDetailTab = useCallback((tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol") => {
     setActiveDetailTabRaw(tab);
     programmaticTabChangeRef.current = true;
     setTabParam(tab);
@@ -3538,6 +3539,14 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                     Suggested Assessors
                                   </button>
                                 )}
+                                {s.category === "NE" && (
+                                  <button
+                                    className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "reviewers" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                    onClick={() => setActiveDetailTab("reviewers")}
+                                  >
+                                    Suggested Reviewers
+                                  </button>
+                                )}
                               </>
                             )}
                             {stackedDetailView && (
@@ -3661,6 +3670,15 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                           {s.category === "NE" && (stackedDetailView || visitedTabs.has("assessors")) && (
                             <div style={{ display: stackedDetailView || activeDetailTab === "assessors" ? undefined : "none" }}>
                               <AssessorCandidatesTable
+                                taxaId={[...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group}
+                                taxaName={findNode([...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group)?.name ?? TAXA_BY_ID[[...selectedTaxa][0] ?? s.taxon_group]?.name ?? "Species"}
+                                countries={s.countries}
+                              />
+                            </div>
+                          )}
+                          {s.category === "NE" && (stackedDetailView || visitedTabs.has("reviewers")) && (
+                            <div style={{ display: stackedDetailView || activeDetailTab === "reviewers" ? undefined : "none" }}>
+                              <ReviewerCandidatesTable
                                 taxaId={[...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group}
                                 taxaName={findNode([...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group)?.name ?? TAXA_BY_ID[[...selectedTaxa][0] ?? s.taxon_group]?.name ?? "Species"}
                                 countries={s.countries}
