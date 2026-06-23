@@ -1771,7 +1771,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         <div className="flex items-center gap-3">
           {/* IUCN ↔ CoL source toggle: flips the described count + recomputes % Assessed */}
           <span className="inline-flex items-center gap-1.5">
-            <span className="text-xs text-zinc-400 dark:text-zinc-500"># Described:</span>
+            <span className="text-xs text-zinc-400 dark:text-zinc-500">Source for # Described:</span>
             <span className="inline-flex rounded-md overflow-hidden border border-zinc-300 dark:border-zinc-600 text-[10px] font-semibold" title="Switch # Described Species between IUCN Table 1a estimates and the Catalogue of Life backbone">
               {(["iucn", "col"] as const).map((src) => (
                 <button
