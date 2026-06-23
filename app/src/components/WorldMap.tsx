@@ -157,6 +157,10 @@ interface WorldMapProps {
   speciesLabel?: string;
   // Callback when a region is selected from the dropdown (sets country filter)
   onRegionFilter?: (region: string) => void;
+  // Whether the "endemics only" filter is active (single-country species)
+  endemicsOnly?: boolean;
+  // Callback to toggle the endemics-only filter
+  onEndemicsToggle?: () => void;
   // Optional footer content rendered inside the panel below the map
   footer?: React.ReactNode;
   // Whether to show the Species/GBIF color mode toggle (only accurate for top-level taxa)
@@ -168,7 +172,7 @@ const DEFAULT_ZOOM = 1.0;
 const MIN_ZOOM = 1.0;
 const MAX_ZOOM = 8.0;
 
-function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, footer, showGbifToggle = true }: WorldMapProps) {
+function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, endemicsOnly = false, onEndemicsToggle, footer, showGbifToggle = true }: WorldMapProps) {
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoveredCountryCode, setHoveredCountryCode] = useState<string | null>(null);
   const [speciesStats, setSpeciesStats] = useState<CountryStats>(precomputedStats || {});
@@ -432,6 +436,20 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
               GBIF
             </button>
           </div>
+          )}
+          {onEndemicsToggle && (
+            <button
+              onClick={onEndemicsToggle}
+              title="Show only species endemic to a single country"
+              aria-pressed={endemicsOnly}
+              className={`px-1.5 py-0.5 rounded-md text-[10px] font-medium transition-colors border ${
+                endemicsOnly
+                  ? "bg-teal-500 text-white border-teal-500 shadow-sm"
+                  : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:text-zinc-700 dark:hover:text-zinc-300"
+              }`}
+            >
+              Endemics
+            </button>
           )}
           {onRegionFilter && (
             <select

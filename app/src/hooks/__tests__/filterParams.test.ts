@@ -246,6 +246,7 @@ describe("buildQs", () => {
     movementPatterns: new Set<string>(),
     threats: new Set<string>(),
     hasMap: null as "yes" | "no" | null,
+    endemicsOnly: false,
     growthForms: new Set<string>(),
     assessors: new Set<string>(),
     reviewers: new Set<string>(),
@@ -313,6 +314,17 @@ describe("buildQs", () => {
     const qs = buildQs({ ...emptyState, search: "elephant" });
     const params = new URLSearchParams(qs);
     expect(params.get("search")).toBe("elephant");
+  });
+
+  it("round-trips the endemics-only filter", () => {
+    const qs = buildQs({ ...emptyState, endemicsOnly: true });
+    expect(new URLSearchParams(qs).get("endemics")).toBe("1");
+    expect(parseParams(qs).endemicsOnly).toBe(true);
+  });
+
+  it("omits endemics when false", () => {
+    const qs = buildQs({ ...emptyState, endemicsOnly: false });
+    expect(new URLSearchParams(qs).has("endemics")).toBe(false);
   });
 
   it("collapses a sub-group into the flat taxa token (no subgroups param)", () => {
@@ -460,6 +472,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
       movementPatterns: new Set<string>(),
       threats: new Set<string>(),
       hasMap: null as "yes" | "no" | null,
+      endemicsOnly: false,
       growthForms: new Set<string>(),
       assessors: new Set<string>(),
       reviewers: new Set<string>(),
@@ -499,6 +512,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
       movementPatterns: new Set<string>(),
       threats: new Set<string>(),
       hasMap: null as "yes" | "no" | null,
+      endemicsOnly: false,
       growthForms: new Set<string>(),
       assessors: new Set<string>(),
       reviewers: new Set<string>(),
@@ -535,6 +549,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
       movementPatterns: new Set<string>(),
       threats: new Set<string>(),
       hasMap: null as "yes" | "no" | null,
+      endemicsOnly: false,
       growthForms: new Set<string>(),
       assessors: new Set<string>(),
       reviewers: new Set<string>(),
@@ -567,6 +582,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
       movementPatterns: new Set<string>(),
       threats: new Set<string>(),
       hasMap: null as "yes" | "no" | null,
+      endemicsOnly: false,
       growthForms: new Set<string>(),
       assessors: new Set<string>(),
       reviewers: new Set<string>(),
@@ -598,6 +614,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
       movementPatterns: new Set<string>(),
       threats: new Set<string>(),
       hasMap: null as "yes" | "no" | null,
+      endemicsOnly: false,
       growthForms: new Set<string>(),
       assessors: new Set<string>(),
       reviewers: new Set<string>(),
