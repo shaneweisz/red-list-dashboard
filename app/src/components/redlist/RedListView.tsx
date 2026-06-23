@@ -2155,10 +2155,10 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
           {/* Charts row 1: bar charts (new-assessments mode only shows GBIF Observations) */}
           {!isNewAssessments && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {/* Risk Category */}
+            {/* Conservation Status */}
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Risk Category</span>
+                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Conservation Status</span>
                 {!(isSingleSpecies && singleSpecies) && (
                   <button
                     type="button"

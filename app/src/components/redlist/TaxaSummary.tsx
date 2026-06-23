@@ -133,7 +133,7 @@ const COLUMN_LABELS: Record<ColumnId, string> = {
   colDescribed: "# Described Species (CoL)",
   assessed: "# Red List Assessed",
   outdated: "# Outdated Assessments (10+Y)",
-  breakdown: "Risk Category Breakdown",
+  breakdown: "Conservation Status Breakdown",
   gbifUnassessed: "# Unassessed, 1+ GBIF Obs",
   colNe: "# Not Evaluated",
   totalGbifObs: "Total Obs",
@@ -559,7 +559,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               {isVisible("gbifDistribution") && <th className={flexThClasses}>Obs Distribution</th>}
               {isVisible("meanGbifObs") && <th className={numericThClasses}>Mean Obs</th>}
               {isVisible("medianGbifObs") && <th className={numericThClasses}>Median Obs</th>}
-              {isVisible("breakdown") && <th className={flexThClasses}>Risk Category Breakdown</th>}
+              {isVisible("breakdown") && <th className={flexThClasses}>Conservation Status Breakdown</th>}
             </tr>
           </thead>
           <tbody>
@@ -1357,7 +1357,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         )}
         {isVisible("breakdown") && (
           <th className={flexThClasses}>
-            <span className="uppercase">Risk Category Breakdown</span>
+            <span className="uppercase">Conservation Status Breakdown</span>
             <div className="flex items-center gap-1.5 mt-1 font-normal normal-case">
               {BAR_CATEGORIES.map((cat) => (
                 <span key={cat} className="inline-flex items-center gap-0.5">
@@ -1760,8 +1760,9 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         </tbody>
       </table>
     </div>
-    {/* Subtle controls: # Described source toggle (always shown) + expand/table controls (landing only) */}
-    {!loading && perTaxa.length > 0 && (
+    {/* Subtle controls: # Described source toggle + expand/table controls.
+        Landing only (selectedTaxa.size === 0) — hidden once a taxa row is clicked. */}
+    {!loading && perTaxa.length > 0 && selectedTaxa.size === 0 && (
       <div className="flex items-center justify-end gap-3 mt-1.5">
         {/* IUCN ↔ CoL source toggle: flips the described count + recomputes % Assessed */}
         <span className="inline-flex items-center gap-1.5">
@@ -1782,10 +1783,8 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             ))}
           </span>
         </span>
-        {selectedTaxa.size === 0 && (
-          <>
-            <span className="text-zinc-300 dark:text-zinc-700">|</span>
-            {table1aMode ? (
+        <span className="text-zinc-300 dark:text-zinc-700">|</span>
+        {table1aMode ? (
               <button
                 onClick={exitTable1a}
                 className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
@@ -1826,8 +1825,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                 </span>
               </>
             )}
-          </>
-        )}
       </div>
     )}
     </>
