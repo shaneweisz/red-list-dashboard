@@ -15,9 +15,8 @@ export default defineConfig({
       reportsDirectory: "coverage",
       // Scope the metric to the application logic layer. React UI components
       // (*.tsx) and the data-pipeline scripts are not unit-tested, so they are
-      // excluded to keep the number actionable. `all: true` still reports
-      // logic files that no test imports (as 0%) so gaps stay visible.
-      all: true,
+      // excluded to keep the number actionable. Files matching `include` are
+      // reported even when no test imports them (as 0%), so gaps stay visible.
       include: ["src/**/*.ts"],
       exclude: [
         "**/*.test.ts",
