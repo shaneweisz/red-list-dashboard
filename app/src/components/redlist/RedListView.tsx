@@ -20,6 +20,7 @@ import { useFilterParams } from "@/hooks/useFilterParams";
 import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 
 import AssessorCandidatesTable from "../AssessorCandidatesTable";
+import ReviewerCandidatesTable from "../ReviewerCandidatesTable";
 import { getLastSearchResult, clearLastSearchResult } from "../SpeciesSearchBar";
 
 // Species list is served by the DuckDB/Parquet-backed /api/redlist/species route.
@@ -839,7 +840,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
 
   // Row expansion state (initialized from URL params if present)
   const [selectedSpeciesKey, setSelectedSpeciesKeyRaw] = useState<number | null>(urlSpecies != null && isNewAssessments ? Math.abs(urlSpecies) : urlSpecies);
-  const [activeDetailTab, setActiveDetailTabRaw] = useState<"gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "col" | "eol">(urlTab ?? "gbif");
+  const [activeDetailTab, setActiveDetailTabRaw] = useState<"gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol">(urlTab ?? "gbif");
   // Track which tabs have been visited so we only mount (and fetch data for) a tab on first click
   const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set([urlTab ?? "gbif"]));
   const urlSpeciesHandledRef = useRef(false);
@@ -856,7 +857,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     }
   }, [setSpeciesParam]);
 
-  const setActiveDetailTab = useCallback((tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "col" | "eol") => {
+  const setActiveDetailTab = useCallback((tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol") => {
     setActiveDetailTabRaw(tab);
     programmaticTabChangeRef.current = true;
     setTabParam(tab);
@@ -947,7 +948,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     }
   }, [assessedSpecies, neSpecies, singleSpeciesPreview]);
 
-  const [stackedDetailView, setStackedDetailView] = useState(false);
   const [mounted, setMounted] = useState(false);
 
 
@@ -3481,18 +3481,16 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                       <td colSpan={isNewAssessments ? 4 : 8} className="p-0 bg-zinc-50 dark:bg-zinc-800/30" style={{ width: 0 }}>
                         <div style={{ minWidth: '100%', maxWidth: 'calc(100vw - 2rem)', transform: 'translateX(var(--scroll-left, 0px))' }}>
                           {/* Tab bar */}
-                          <div className="flex items-center border-b border-zinc-200 dark:border-zinc-700 overflow-x-auto flex-nowrap" onClick={(e) => e.stopPropagation()}>
-                            {!stackedDetailView && (
-                              <>
+                          <div className="flex flex-wrap items-center border-b border-zinc-200 dark:border-zinc-700" onClick={(e) => e.stopPropagation()}>
                                 <button
-                                  className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "gbif" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                  className={`shrink-0 px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "gbif" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                   onClick={() => setActiveDetailTab("gbif")}
                                 >
                                   {gbifSpeciesKey ? "GBIF + iNat" : "iNaturalist"}
                                 </button>
                                 {(assessmentYear || s.category === "NE") && (
                                   <button
-                                    className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "literature" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                    className={`shrink-0 px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "literature" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                     onClick={() => setActiveDetailTab("literature")}
                                   >
                                     Literature
@@ -3500,67 +3498,58 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                 )}
                                 {s.category !== "NE" && (
                                   <button
-                                    className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "redlist" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                    className={`shrink-0 px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "redlist" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                     onClick={() => setActiveDetailTab("redlist")}
                                   >
                                     IUCN Red List
                                   </button>
                                 )}
                                 <button
-                                  className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "cites" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                  className={`shrink-0 px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "cites" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                   onClick={() => setActiveDetailTab("cites")}
                                 >
                                   CITES
                                 </button>
                                 <button
-                                  className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "col" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                  className={`shrink-0 px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "col" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                   onClick={() => setActiveDetailTab("col")}
                                 >
                                   Catalogue of Life
                                 </button>
                                 <button
-                                  className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "eol" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                  className={`shrink-0 px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "eol" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                   onClick={() => setActiveDetailTab("eol")}
                                 >
                                   Encyclopedia of Life
                                 </button>
                                 <button
-                                  className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "wikipedia" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                  className={`shrink-0 px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "wikipedia" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                   onClick={() => setActiveDetailTab("wikipedia")}
                                 >
                                   Wikipedia
                                 </button>
                                 {s.category === "NE" && (
                                   <button
-                                    className={`px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "assessors" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                    className={`shrink-0 px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "assessors" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                     onClick={() => setActiveDetailTab("assessors")}
                                   >
                                     Suggested Assessors
                                   </button>
                                 )}
-                              </>
-                            )}
-                            {stackedDetailView && (
-                              <span className="px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">All Sections</span>
-                            )}
-                            <button
-                              className="ml-auto px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 flex items-center gap-1"
-                              onClick={() => setStackedDetailView(!stackedDetailView)}
-                              title={stackedDetailView ? "Switch to tabbed view" : "Switch to stacked view"}
-                            >
-                              {stackedDetailView ? (
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" strokeWidth="2"/><path d="M9 3v18" strokeWidth="2"/></svg>
-                              ) : (
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" strokeWidth="2"/><path d="M3 12h18" strokeWidth="2"/></svg>
-                              )}
-                              {stackedDetailView ? "Tabbed" : "Stacked"}
-                            </button>
+                                {s.category === "NE" && (
+                                  <button
+                                    className={`shrink-0 px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "reviewers" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                    onClick={() => setActiveDetailTab("reviewers")}
+                                  >
+                                    Suggested Reviewers
+                                  </button>
+                                )}
                           </div>
                           {/* Content — overflow-hidden so child components don't extend past viewport */}
                           <div style={{ overflow: 'hidden', width: '100%' }}>
                           {gbifSpeciesKey ? (
-                            (stackedDetailView || visitedTabs.has("gbif")) && (
-                            <div style={{ display: stackedDetailView || activeDetailTab === "gbif" ? undefined : "none" }}>
+                            (visitedTabs.has("gbif")) && (
+                            <div style={{ display: activeDetailTab === "gbif" ? undefined : "none" }}>
                               <OccurrenceMapRow
                                 speciesKey={gbifSpeciesKey}
                                 mounted={mounted}
@@ -3570,23 +3559,23 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                               />
                             </div>
                             )
-                          ) : (stackedDetailView || visitedTabs.has("gbif")) && (
-                            <div style={{ display: stackedDetailView || activeDetailTab === "gbif" ? undefined : "none" }}>
+                          ) : (visitedTabs.has("gbif")) && (
+                            <div style={{ display: activeDetailTab === "gbif" ? undefined : "none" }}>
                               <InatObservationsPanel scientificName={s.scientific_name} mounted={mounted} />
                             </div>
                           )}
-                          {(assessmentYear || s.category === "NE") && (stackedDetailView || visitedTabs.has("literature")) && (
-                            <div className="p-4" style={{ display: stackedDetailView || activeDetailTab === "literature" ? undefined : "none" }}>
+                          {(assessmentYear || s.category === "NE") && (visitedTabs.has("literature")) && (
+                            <div className="p-4" style={{ display: activeDetailTab === "literature" ? undefined : "none" }}>
                               <NewLiteratureSinceAssessment
                                 scientificName={s.scientific_name}
                                 assessmentYear={assessmentYear ?? 0}
                               />
                             </div>
                           )}
-                          {(stackedDetailView || visitedTabs.has("col")) && (() => {
+                          {(visitedTabs.has("col")) && (() => {
                             const syn = synonymsBySpecies[synKey(s) ?? ""];
                             return (
-                            <div style={{ display: stackedDetailView || activeDetailTab === "col" ? undefined : "none" }}>
+                            <div style={{ display: activeDetailTab === "col" ? undefined : "none" }}>
                               {!syn ? (
                                 <div className="flex items-center justify-center p-8">
                                   <svg className="w-5 h-5 animate-spin text-zinc-400" fill="none" viewBox="0 0 24 24">
@@ -3631,13 +3620,13 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                             </div>
                             );
                           })()}
-                          {(stackedDetailView || visitedTabs.has("eol")) && (
-                            <div style={{ display: stackedDetailView || activeDetailTab === "eol" ? undefined : "none" }}>
+                          {(visitedTabs.has("eol")) && (
+                            <div style={{ display: activeDetailTab === "eol" ? undefined : "none" }}>
                               <EolSummary scientificName={s.scientific_name} />
                             </div>
                           )}
-                          {s.category !== "NE" && (stackedDetailView || visitedTabs.has("redlist")) && (
-                            <div style={{ display: stackedDetailView || activeDetailTab === "redlist" ? undefined : "none" }}>
+                          {s.category !== "NE" && (visitedTabs.has("redlist")) && (
+                            <div style={{ display: activeDetailTab === "redlist" ? undefined : "none" }}>
                               <RedListAssessments
                                 sisTaxonId={s.sis_taxon_id ?? undefined}
                                 currentAssessmentId={s.assessment_id ?? 0}
@@ -3648,19 +3637,28 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                               />
                             </div>
                           )}
-                          {(stackedDetailView || visitedTabs.has("wikipedia")) && (
-                          <div style={{ display: stackedDetailView || activeDetailTab === "wikipedia" ? undefined : "none" }}>
+                          {(visitedTabs.has("wikipedia")) && (
+                          <div style={{ display: activeDetailTab === "wikipedia" ? undefined : "none" }}>
                             <WikipediaSummary scientificName={s.scientific_name} />
                           </div>
                           )}
-                          {(stackedDetailView || visitedTabs.has("cites")) && (
-                          <div style={{ display: stackedDetailView || activeDetailTab === "cites" ? undefined : "none" }}>
+                          {(visitedTabs.has("cites")) && (
+                          <div style={{ display: activeDetailTab === "cites" ? undefined : "none" }}>
                             <CitesSummary scientificName={s.scientific_name} />
                           </div>
                           )}
-                          {s.category === "NE" && (stackedDetailView || visitedTabs.has("assessors")) && (
-                            <div style={{ display: stackedDetailView || activeDetailTab === "assessors" ? undefined : "none" }}>
+                          {s.category === "NE" && (visitedTabs.has("assessors")) && (
+                            <div style={{ display: activeDetailTab === "assessors" ? undefined : "none" }}>
                               <AssessorCandidatesTable
+                                taxaId={[...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group}
+                                taxaName={findNode([...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group)?.name ?? TAXA_BY_ID[[...selectedTaxa][0] ?? s.taxon_group]?.name ?? "Species"}
+                                countries={s.countries}
+                              />
+                            </div>
+                          )}
+                          {s.category === "NE" && (visitedTabs.has("reviewers")) && (
+                            <div style={{ display: activeDetailTab === "reviewers" ? undefined : "none" }}>
+                              <ReviewerCandidatesTable
                                 taxaId={[...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group}
                                 taxaName={findNode([...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group)?.name ?? TAXA_BY_ID[[...selectedTaxa][0] ?? s.taxon_group]?.name ?? "Species"}
                                 countries={s.countries}
