@@ -2187,36 +2187,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
               </div>
             </div>
 
-            {/* GBIF Observations */}
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">GBIF Observations <GbifInfoTooltip /></span>
-                              </div>
-              <div className="flex-1 min-h-[150px] flex items-center justify-center">
-                {speciesLoading && assessedSpecies.length === 0 ? (
-                  <Spinner />
-                ) : isSingleSpecies && singleSpecies ? (() => {
-                  const obs = singleSpecies.gbif_occurrence_count ?? 0;
-                  const range = obs === 0 ? "0" : obs <= 10 ? "1-10" : obs <= 100 ? "11-100" : obs <= 1000 ? "101-1K" : obs <= 10000 ? "1K-10K" : "10K+";
-                  return (
-                    <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">
-                      {range}
-                    </span>
-                  );
-                })() : gbifObsData.length > 0 ? (
-                  <FilterBarChart
-                    data={gbifObsData}
-                    dataKey="shortRange"
-                    selectedItems={selectedObsRanges}
-                    onBarClick={handleObsClick}
-                    barColor="#10b981"
-                    yAxisWidth={42}
-                    rightMargin={85}
-                  />
-                ) : null}
-              </div>
-            </div>
-
             {/* Years Since Assessed / Assessments by Year */}
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
               <div className="flex items-center justify-between mb-1 gap-2">
@@ -2342,6 +2312,36 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 )}
               </div>
             </div>
+
+            {/* Geospatial GBIF Records */}
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">Geospatial GBIF Records <GbifInfoTooltip /></span>
+                              </div>
+              <div className="flex-1 min-h-[150px] flex items-center justify-center">
+                {speciesLoading && assessedSpecies.length === 0 ? (
+                  <Spinner />
+                ) : isSingleSpecies && singleSpecies ? (() => {
+                  const obs = singleSpecies.gbif_occurrence_count ?? 0;
+                  const range = obs === 0 ? "0" : obs <= 10 ? "1-10" : obs <= 100 ? "11-100" : obs <= 1000 ? "101-1K" : obs <= 10000 ? "1K-10K" : "10K+";
+                  return (
+                    <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">
+                      {range}
+                    </span>
+                  );
+                })() : gbifObsData.length > 0 ? (
+                  <FilterBarChart
+                    data={gbifObsData}
+                    dataKey="shortRange"
+                    selectedItems={selectedObsRanges}
+                    onBarClick={handleObsClick}
+                    barColor="#10b981"
+                    yAxisWidth={42}
+                    rightMargin={85}
+                  />
+                ) : null}
+              </div>
+            </div>
           </div>
           )}
 
@@ -2395,7 +2395,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
             {isNewAssessments ? (
               <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">GBIF Observations <GbifInfoTooltip /></span>
+                  <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">Geospatial GBIF Records <GbifInfoTooltip /></span>
                 </div>
                 <div style={{ height: 180 }} className="flex items-center justify-center">
                   {speciesLoading && assessedSpecies.length === 0 ? (
