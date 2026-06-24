@@ -809,8 +809,11 @@ function CountryTable({
 /*  Individual shipment records table                                  */
 /* ------------------------------------------------------------------ */
 
-/** Rows shown per page in the individual-records table. */
+/** Default rows shown per page in the individual-records table. */
 const RECORDS_PAGE_SIZE = 5;
+
+/** Page-size options offered in the individual-records table. */
+const RECORDS_PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
 
 /**
  * A paginated table of the individual shipment records behind the summary,
@@ -820,22 +823,42 @@ const RECORDS_PAGE_SIZE = 5;
  */
 function RecordsTable({ rows }: { rows: CompactRecord[] }) {
   const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(RECORDS_PAGE_SIZE);
   if (rows.length === 0) return null;
-  const totalPages = Math.max(1, Math.ceil(rows.length / RECORDS_PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
   const safePage = Math.min(page, totalPages - 1);
   const pageRows = rows.slice(
-    safePage * RECORDS_PAGE_SIZE,
-    safePage * RECORDS_PAGE_SIZE + RECORDS_PAGE_SIZE
+    safePage * pageSize,
+    safePage * pageSize + pageSize
   );
 
   return (
     <div className="min-w-0">
-      <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
-        Records{" "}
-        <span className="text-zinc-400 dark:text-zinc-500 normal-case tabular-nums">
-          ({rows.length.toLocaleString()})
-        </span>
-      </h5>
+      <div className="flex items-center justify-between gap-2 mb-1.5">
+        <h5 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
+          Records{" "}
+          <span className="text-zinc-400 dark:text-zinc-500 normal-case tabular-nums">
+            ({rows.length.toLocaleString()})
+          </span>
+        </h5>
+        <label className="flex items-center gap-1 text-[10px] text-zinc-400 dark:text-zinc-500">
+          <span>Rows</span>
+          <select
+            value={pageSize}
+            onChange={(e) => {
+              setPageSize(Number(e.target.value));
+              setPage(0);
+            }}
+            className="rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-1 py-0.5 text-[10px] text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 focus:outline-none cursor-pointer"
+          >
+            {RECORDS_PAGE_SIZE_OPTIONS.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
       <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-x-auto">
         <table className="w-full text-[11px] whitespace-nowrap">
           <thead>
@@ -900,7 +923,7 @@ function RecordsTable({ rows }: { rows: CompactRecord[] }) {
         page={safePage}
         total={rows.length}
         onPage={setPage}
-        pageSize={RECORDS_PAGE_SIZE}
+        pageSize={pageSize}
       />
     </div>
   );
