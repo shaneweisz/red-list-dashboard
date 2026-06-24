@@ -24,6 +24,7 @@
 import { z } from "zod";
 import {
   resolveCategories, resolveThreats, categoryLabel, THREAT_LABEL,
+  ALL_CATEGORIES, THREAT_CATEGORIES, SYSTEMS, POPULATION_TRENDS,
 } from "@/lib/filter-vocab";
 import type { FilterableSpecies, SpeciesFilterCriteria } from "@/lib/species-filter";
 
@@ -56,6 +57,21 @@ interface ApplyResult {
   describe: string | null;
 }
 
+/** Help/vocabulary for one shared filter, surfaced by the /browse index help and
+ *  the get_vocabulary MCP tool — both derive from this, so they can't drift. */
+export interface FilterVocab {
+  /** MCP/BrowseInput key. */
+  key: string;
+  /** Dashboard URL param key (what a /browse or shared URL actually uses). */
+  urlKey: string;
+  /** Short human label. */
+  label: string;
+  /** Enumerable values — plain strings, or {code,label} for coded vocab; [] = free-text. */
+  values: readonly (string | { code: string; label: string })[];
+  /** Free-text note (aliases, "common values", endemic meaning, …). */
+  note?: string;
+}
+
 interface SharedFilterDef {
   /** Field name on the MCP / BrowseInput object (and the key in SHARED_FILTER_SCHEMA). */
   mcpKey: keyof SharedFilterInput;
@@ -65,14 +81,22 @@ interface SharedFilterDef {
   sample: unknown;
   /** Resolve the raw input value and write the result onto `c`. Null when absent. */
   apply(raw: unknown, c: SpeciesFilterCriteria): ApplyResult | null;
+  /** Read this filter's value from URL params into MCP-input shape (inverse of toParam). */
+  readParam(sp: URLSearchParams): unknown;
   /** Emit the dashboard URL param from a resolved criteria object. */
   toParam(c: SpeciesFilterCriteria, p: URLSearchParams): void;
   /** Predicate clause: does the species pass this filter, given the criteria? */
   match(s: FilterableSpecies, c: SpeciesFilterCriteria): boolean;
+  /** Help/vocabulary entry for the discovery surfaces. */
+  vocab: FilterVocab;
 }
 
 const toArray = (raw: unknown): string[] =>
   Array.isArray(raw) ? raw.map((v) => String(v).trim()).filter(Boolean) : [];
+
+/** Read a comma/multi-valued list param (matches the /browse + dashboard parsing). */
+const readList = (sp: URLSearchParams, key: string): string[] =>
+  sp.getAll(key).join(",").split(",").map((s) => s.trim()).filter(Boolean);
 
 /**
  * Factory for a "set of values" filter (OR within the set). Handles vocab
@@ -91,6 +115,8 @@ function setFilter(opts: {
   /** Render a resolved value for the `interpreted` text (defaults to identity). */
   render?: (code: string) => string;
   match: (s: FilterableSpecies, values: Set<string>) => boolean;
+  /** Discovery-surface vocabulary (label/values/note). */
+  vocab: Omit<FilterVocab, "key" | "urlKey">;
 }): SharedFilterDef {
   const { mcpKey, criteriaKey, label, sample, resolve, render, match } = opts;
   const urlKey = opts.urlKey ?? mcpKey;
@@ -109,6 +135,10 @@ function setFilter(opts: {
         describe: codes.length ? `${label}: ${codes.map((c2) => (render ? render(c2) : c2)).join(", ")}` : null,
       };
     },
+    readParam(sp) {
+      const vals = readList(sp, urlKey);
+      return vals.length ? vals : undefined;
+    },
     toParam(c, p) {
       const set = get(c);
       if (set && set.size) p.set(urlKey, [...set].join(","));
@@ -117,6 +147,7 @@ function setFilter(opts: {
       const set = get(c);
       return !set || set.size === 0 || match(s, set);
     },
+    vocab: { key: mcpKey, urlKey, ...opts.vocab },
   };
 }
 
@@ -127,32 +158,54 @@ export const SHARED_FILTERS: SharedFilterDef[] = [
     mcpKey: "categories", criteriaKey: "categories", label: "Categories",
     sample: ["threatened"], resolve: resolveCategories, render: categoryLabel,
     match: (s, set) => set.has(s.category),
+    vocab: {
+      label: "IUCN status category",
+      values: ALL_CATEGORIES.map((c) => ({ code: c, label: categoryLabel(c) })),
+      note: "codes or names; also 'threatened' (= CR, EN, VU). NE = not yet evaluated.",
+    },
   }),
   setFilter({
     mcpKey: "threats", criteriaKey: "threats", label: "Threats",
     sample: ["climate-change"], resolve: resolveThreats, render: threatRender,
     match: (s, set) =>
       s.threat_codes?.some((tc) => [...set].some((sel) => tc === sel || tc.startsWith(sel + "."))) ?? false,
+    vocab: {
+      label: "IUCN threat",
+      values: THREAT_CATEGORIES.map((t) => ({ code: t.code, label: t.label })),
+      note: "prefix match (11 covers 11.1, 11.4, …); aliases: climate-change, pollution, overfishing.",
+    },
   }),
   setFilter({
     mcpKey: "systems", criteriaKey: "systems", label: "Systems",
     sample: ["Marine"],
     match: (s, set) => s.systems?.some((sys) => set.has(sys)) ?? false,
+    vocab: { label: "Realm / system", values: SYSTEMS },
   }),
   setFilter({
     mcpKey: "trends", criteriaKey: "populationTrends", label: "Population trend",
     sample: ["Decreasing"],
     match: (s, set) => s.population_trend != null && set.has(s.population_trend),
+    vocab: { label: "Population trend", values: POPULATION_TRENDS },
   }),
   setFilter({
     mcpKey: "movement", criteriaKey: "movementPatterns", label: "Movement",
     sample: ["Migratory"],
     match: (s, set) => s.movement_pattern != null && set.has(s.movement_pattern),
+    vocab: {
+      label: "Movement pattern",
+      values: ["Full Migrant", "Altitudinal Migrant", "Nomadic", "Not a Migrant", "Unknown"],
+      note: "free text; common values shown.",
+    },
   }),
   setFilter({
     mcpKey: "growthForms", criteriaKey: "growthForms", label: "Growth forms",
     sample: ["Tree"],
     match: (s, set) => s.growth_forms?.some((gf) => set.has(gf)) ?? false,
+    vocab: {
+      label: "Plant / fungus growth form",
+      values: ["Tree", "Shrub", "Herb", "Forb", "Graminoid", "Geophyte", "Lithophyte", "Epiphyte"],
+      note: "free text; common values shown.",
+    },
   }),
   // hasMap — enum yes/no
   {
@@ -162,8 +215,13 @@ export const SHARED_FILTERS: SharedFilterDef[] = [
       c.hasMap = raw;
       return { unresolved: [], describe: `Has range map: ${raw}` };
     },
+    readParam(sp) {
+      const v = sp.get("hasMap");
+      return v === "yes" || v === "no" ? v : undefined;
+    },
     toParam(c, p) { if (c.hasMap) p.set("hasMap", c.hasMap); },
     match(s, c) { return !c.hasMap || (c.hasMap === "yes" ? s.has_map : !s.has_map); },
+    vocab: { key: "hasMap", urlKey: "hasMap", label: "Has IUCN range map", values: ["yes", "no"] },
   },
   // endemic — flag (single-country species). URL param is `endemics=1`.
   {
@@ -173,8 +231,14 @@ export const SHARED_FILTERS: SharedFilterDef[] = [
       c.endemicsOnly = true;
       return { unresolved: [], describe: "Endemic to a single country" };
     },
+    readParam(sp) {
+      const v = sp.get("endemics");
+      // Canonical dashboard form is `endemics=1`; also accept `endemics=yes`.
+      return v === "1" || v === "yes" ? "yes" : undefined;
+    },
     toParam(c, p) { if (c.endemicsOnly) p.set("endemics", "1"); },
     match(s, c) { return !c.endemicsOnly || s.countries.length === 1; },
+    vocab: { key: "endemic", urlKey: "endemics", label: "Endemic to a single country", values: ["yes"], note: "URL param is endemics=1." },
   },
 ];
 
@@ -203,6 +267,24 @@ export function applySharedFilters(
 export function emitSharedParams(criteria: SpeciesFilterCriteria, p: URLSearchParams): void {
   for (const f of SHARED_FILTERS) f.toParam(criteria, p);
 }
+
+/**
+ * Read the shared-filter portion of a BrowseInput straight from URL params
+ * (the inverse of emitSharedParams at the input layer). The /browse route uses
+ * this so every registry filter is parsed from a pasted/shared URL — adding a
+ * filter to the registry wires /browse automatically, no per-param edit.
+ */
+export function readSharedInput(sp: URLSearchParams): Partial<SharedFilterInput> {
+  const out: Record<string, unknown> = {};
+  for (const f of SHARED_FILTERS) {
+    const v = f.readParam(sp);
+    if (v !== undefined) out[f.mcpKey] = v;
+  }
+  return out as Partial<SharedFilterInput>;
+}
+
+/** Vocabulary for every shared filter, for the /browse index + get_vocabulary. */
+export const SHARED_FILTER_VOCAB: FilterVocab[] = SHARED_FILTERS.map((f) => f.vocab);
 
 /** AND of every shared-filter clause (each is a no-op when its filter is absent). */
 export function matchSharedFilters(s: FilterableSpecies, criteria: SpeciesFilterCriteria): boolean {

@@ -21,11 +21,7 @@ import { z } from "zod";
 import { runBrowseQuery, type BrowseInput } from "@/lib/browse-query";
 import { browseInputToDashboardUrl } from "@/lib/dashboard-url";
 import { SHARED_FILTER_SCHEMA } from "@/lib/shared-filters";
-import {
-  FEATURED_TAXA, THREAT_CATEGORIES, ALL_CATEGORIES,
-  taxonLabel, categoryLabel, SYSTEMS, POPULATION_TRENDS,
-} from "@/lib/filter-vocab";
-import { IUCN_REGION_ORDER } from "@/lib/regions";
+import { buildVocabulary } from "@/lib/browse-help";
 
 export const maxDuration = 60;
 
@@ -101,19 +97,7 @@ const handler = createMcpHandler(
         description: "Returns the valid values for browse_taxon: featured taxon groups, IUCN threat categories, status categories, IUCN regions, systems, population trends, movement patterns, growth forms, and the endemic flag. Call this first if unsure what values to pass.",
         inputSchema: {},
       },
-      async () =>
-        asText({
-          taxa: FEATURED_TAXA.map((id) => ({ id, label: taxonLabel(id) })),
-          note: "taxa also accepts any sub-group or scientific class/order/family name.",
-          threats: THREAT_CATEGORIES.map((t) => ({ code: t.code, label: t.label })),
-          categories: ALL_CATEGORIES.map((c) => ({ code: c, label: categoryLabel(c) })),
-          regions: IUCN_REGION_ORDER,
-          systems: SYSTEMS,
-          trends: POPULATION_TRENDS,
-          movement: { note: "Free-text movement pattern; common values: Full Migrant, Altitudinal Migrant, Nomadic, Not a Migrant, Unknown." },
-          growthForms: { note: "Free-text plant/fungus growth form, e.g. Tree, Shrub, Herb, Forb, Graminoid, Geophyte, Lithophyte, Epiphyte." },
-          endemic: { note: "Pass endemic: 'yes' to keep only species endemic to a single country." },
-        }),
+      async () => asText(buildVocabulary()),
     );
   },
   {},

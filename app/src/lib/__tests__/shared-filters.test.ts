@@ -11,11 +11,16 @@
 import { describe, it, expect } from "vitest";
 import {
   SHARED_FILTERS, SHARED_FILTER_SCHEMA,
-  applySharedFilters, emitSharedParams, matchSharedFilters,
+  applySharedFilters, emitSharedParams, matchSharedFilters, readSharedInput,
 } from "@/lib/shared-filters";
 import { browseInputToDashboardQuery } from "@/lib/dashboard-url";
+import { buildVocabulary } from "@/lib/browse-help";
 import { parseParams, buildQs } from "@/hooks/useFilterParams";
 import { matchesSpeciesFilter, type SpeciesFilterCriteria } from "@/lib/species-filter";
+
+/** The URL-param value a /browse or shared link would carry for a filter's sample. */
+const urlValue = (sample: unknown): string =>
+  Array.isArray(sample) ? sample.join(",") : String(sample);
 
 describe("shared-filter registry integrity", () => {
   it("every descriptor has a matching MCP schema entry (and vice versa)", () => {
@@ -51,6 +56,46 @@ describe("every shared filter round-trips MCP input → dashboard URL → parseP
       expect(rebuilt.get(f.urlKey)).toBe(emitted);
     });
   }
+});
+
+// The /browse route builds its BrowseInput via readSharedInput, so a filter
+// added to the registry must be parsed from a pasted /browse URL with no edit
+// to the route. This fails if readParam isn't wired (the bug that left the
+// endemic filter dead on /browse even though MCP + the dashboard URL had it).
+describe("every shared filter is parsed from a /browse URL by readSharedInput", () => {
+  for (const f of SHARED_FILTERS) {
+    it(`${f.mcpKey} is read from ?${f.urlKey}=… and resolves`, () => {
+      const sp = new URLSearchParams({ [f.urlKey]: urlValue(f.sample) });
+      const parsed = readSharedInput(sp);
+
+      // 1. readSharedInput picks the value up under the MCP key.
+      expect(parsed[f.mcpKey]).toBeDefined();
+
+      // 2. ...and it resolves into a real criterion (a non-empty `interpreted` line).
+      const c: SpeciesFilterCriteria = {};
+      const { describe: lines } = applySharedFilters(parsed, c);
+      expect(lines.length).toBeGreaterThan(0);
+    });
+  }
+});
+
+// Discovery surfaces (the /browse index help + the get_vocabulary MCP tool) both
+// render buildVocabulary(), so every registry filter is advertised. This fails
+// if a filter is added but never described (the gap that hid movement/
+// growthForms/endemic from agents).
+describe("the shared vocabulary advertises every registry filter", () => {
+  it("buildVocabulary().filters covers exactly the registry filters", () => {
+    const vocabKeys = buildVocabulary().filters.map((v) => v.key).sort();
+    const registryKeys = SHARED_FILTERS.map((f) => f.mcpKey).sort();
+    expect(vocabKeys).toEqual(registryKeys);
+  });
+
+  it("each filter has a label and either enumerable values or a note", () => {
+    for (const v of buildVocabulary().filters) {
+      expect(v.label).toBeTruthy();
+      expect(v.values.length > 0 || !!v.note).toBe(true);
+    }
+  });
 });
 
 describe("registry predicate clauses", () => {
