@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Privacy",
+  title: "Privacy policy",
   description:
     "How this dashboard uses anonymous, cookieless usage analytics.",
 };
@@ -18,7 +18,7 @@ export default function PrivacyPage() {
       </Link>
 
       <h1 className="mt-6 text-2xl font-semibold text-zinc-800 dark:text-zinc-100">
-        Privacy
+        Privacy policy
       </h1>
 
       <div className="mt-4 space-y-4 text-sm text-zinc-600 dark:text-zinc-400">
