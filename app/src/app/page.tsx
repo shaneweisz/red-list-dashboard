@@ -58,7 +58,7 @@ export default function RedListPage() {
               <h1 className="text-2xl sm:text-3xl md:text-[2rem] font-bold text-zinc-900 dark:text-zinc-100 truncate">{brand.title}</h1>
             </div>
             {brand.subtitle && (
-              <p className="[grid-area:subtitle] text-sm md:text-[1.375rem] text-zinc-500 dark:text-zinc-400">{brand.subtitle}</p>
+              <p className="[grid-area:subtitle] text-[15px] md:text-[1.375rem] text-zinc-500 dark:text-zinc-400">{brand.subtitle}</p>
             )}
             <div className="[grid-area:controls] flex items-center gap-2 sm:justify-self-end">
               {/* View mode toggle */}
