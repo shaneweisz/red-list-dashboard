@@ -28,6 +28,7 @@ const DEFAULT_BRAND: Brand = {
 // dedicated Red List hostnames below.
 const RED_LIST_BRAND: Brand = {
   title: "IUCN Red List Assessments Dashboard",
+  subtitle: "A Dashboard for Conservation of Threatened Species",
   description: "A dashboard for biodiversity data about life on Earth",
 };
 
