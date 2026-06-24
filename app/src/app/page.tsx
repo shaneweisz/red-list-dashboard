@@ -129,6 +129,13 @@ export default function RedListPage() {
           >
             sw984@cam.ac.uk
           </a>
+          . See our{" "}
+          <a
+            href="/privacy"
+            className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
+          >
+            privacy notice
+          </a>
           .
         </p>
         <p className="text-center text-xs text-zinc-400 dark:text-zinc-500 mt-3">

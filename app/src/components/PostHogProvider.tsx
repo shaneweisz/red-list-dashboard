@@ -13,7 +13,11 @@ if (
     // at the real EU dashboard.
     api_host: "/ingest",
     ui_host: "https://eu.posthog.com",
-    cookieless_mode: "always",
+    // In-memory persistence: the distinct_id lives only in JS for the page
+    // session — no cookie or localStorage, so no consent banner is needed. We
+    // avoid cookieless server-hash mode because it derives identity from the
+    // client IP, which our server-side /ingest proxy hides from PostHog.
+    persistence: "memory",
     disable_session_recording: true,
   });
 }
