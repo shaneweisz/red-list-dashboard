@@ -470,7 +470,7 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
                 return "";
               })()}
               onChange={(e) => onRegionFilter(e.target.value)}
-              className="text-xs bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500 max-w-[120px] truncate"
+              className="text-[10px] bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500 max-w-[96px] truncate"
             >
               <option value="">All Regions</option>
               {IUCN_REGION_ORDER.map(region => (
