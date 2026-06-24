@@ -515,7 +515,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const PAGE_SIZE = 10;
+  const [pageSize, setPageSize] = useState(10);
+  const PAGE_SIZE = pageSize;
 
   // ── Data fetching ────────────────────────────────────────────────────
   // Cache of fetched species per taxon ID. When "all" is fetched, it supersedes
@@ -3711,30 +3712,51 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         </div>
 
         {/* Pagination */}
-        {totalPages > 1 && (
+        {totalFiltered > 0 && (
           <div className="flex flex-col sm:flex-row items-center justify-between px-3 md:px-4 py-3 border-t border-zinc-200 dark:border-zinc-800 gap-2">
-            <div className="text-xs md:text-sm text-zinc-500">
-              {(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, totalFiltered)} of {totalFiltered}
+            <div className="flex items-center gap-3">
+              <div className="text-xs md:text-sm text-zinc-500">
+                {(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, totalFiltered)} of {totalFiltered}
+              </div>
+              <label className="flex items-center gap-1.5 text-xs md:text-sm text-zinc-500">
+                <span>Rows</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 text-xs md:text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 focus:outline-none cursor-pointer"
+                >
+                  {[10, 25, 50, 100].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="px-3 py-1 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-zinc-50 dark:hover:bg-zinc-800"
-              >
-                Prev
-              </button>
-              <span className="text-xs md:text-sm text-zinc-600 dark:text-zinc-400">
-                {currentPage} / {totalPages}
-              </span>
-              <button
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-                className="px-3 py-1 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-zinc-50 dark:hover:bg-zinc-800"
-              >
-                Next
-              </button>
-            </div>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                >
+                  Prev
+                </button>
+                <span className="text-xs md:text-sm text-zinc-600 dark:text-zinc-400">
+                  {currentPage} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </div>
         )}
         </>
