@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { FaGlobeAmericas } from "react-icons/fa";
 import { SpeciesSearchBar } from "../components/SpeciesSearchBar";
 import { ThemeToggle } from "../components/ThemeToggle";
@@ -214,6 +215,14 @@ export default function RedListPage() {
             Encyclopedia of Life
           </a>
           {" "}data. Any errors in aggregation or presentation are my own. Please verify against the primary sources before use, and do get in touch if you notice any issues.
+        </p>
+        <p className="text-center text-xs text-zinc-400 dark:text-zinc-500 mt-4">
+          <Link
+            href="/privacy"
+            className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
+          >
+            Privacy policy
+          </Link>
         </p>
       </footer>
     </div>
