@@ -98,6 +98,8 @@ export function parseParams(search: string) {
       ? new Set(p.get("threats")!.split(",").filter(Boolean))
       : new Set<string>(),
     hasMap: p.get("hasMap") as "yes" | "no" | null,
+    // Endemics-only: restrict to species occurring in exactly one country.
+    endemicsOnly: p.get("endemics") === "1",
     growthForms: p.get("growthForms")
       ? new Set(p.get("growthForms")!.split(",").filter(Boolean))
       : new Set<string>(),
@@ -146,6 +148,7 @@ export function buildQs(state: {
   movementPatterns: Set<string>;
   threats: Set<string>;
   hasMap: "yes" | "no" | null;
+  endemicsOnly: boolean;
   growthForms: Set<string>;
   assessors: Set<string>;
   reviewers: Set<string>;
@@ -179,6 +182,7 @@ export function buildQs(state: {
   if (state.movementPatterns.size > 0) p.set("movement", [...state.movementPatterns].join(","));
   if (state.threats.size > 0) p.set("threats", [...state.threats].join(","));
   if (state.hasMap) p.set("hasMap", state.hasMap);
+  if (state.endemicsOnly) p.set("endemics", "1");
   if (state.growthForms.size > 0) p.set("growthForms", [...state.growthForms].join(","));
   if (state.assessors.size > 0) p.set("assessors", [...state.assessors].join("|"));
   if (state.reviewers.size > 0) p.set("reviewers", [...state.reviewers].join("|"));
@@ -413,6 +417,17 @@ export function useFilterParams() {
     [syncUrl]
   );
 
+  const setEndemicsOnly = useCallback(
+    (value: boolean) => {
+      setState(prev => {
+        const next = { ...prev, endemicsOnly: value };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
   const setSelectedAssessors = useCallback(
     (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
       setState(prev => {
@@ -533,6 +548,7 @@ export function useFilterParams() {
         movementPatterns: new Set<string>(),
         threats: new Set<string>(),
         hasMap: null,
+        endemicsOnly: false,
         growthForms: new Set<string>(),
         assessors: new Set<string>(),
         reviewers: new Set<string>(),
@@ -565,6 +581,7 @@ export function useFilterParams() {
         movementPatterns: new Set<string>(),
         threats: new Set<string>(),
         hasMap: null,
+        endemicsOnly: false,
         growthForms: new Set<string>(),
         assessors: new Set<string>(),
         reviewers: new Set<string>(),
@@ -595,6 +612,7 @@ export function useFilterParams() {
     selectedMovementPatterns: state.movementPatterns,
     selectedThreats: state.threats,
     hasMapFilter: state.hasMap,
+    endemicsOnly: state.endemicsOnly,
     selectedGrowthForms: state.growthForms,
     selectedAssessors: state.assessors,
     selectedReviewers: state.reviewers,
@@ -618,6 +636,7 @@ export function useFilterParams() {
     setSelectedMovementPatterns,
     setSelectedThreats,
     setHasMapFilter,
+    setEndemicsOnly,
     setSelectedGrowthForms,
     setSelectedAssessors,
     setSelectedReviewers,

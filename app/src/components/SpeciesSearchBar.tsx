@@ -118,6 +118,7 @@ export function SpeciesSearchBar() {
         movementPatterns: new Set(),
         threats: new Set(),
         hasMap: null,
+        endemicsOnly: false,
         growthForms: new Set(),
         assessors: new Set(),
         reviewers: new Set(),
