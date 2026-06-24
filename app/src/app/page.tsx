@@ -46,15 +46,19 @@ export default function RedListPage() {
   return (
     <div className="min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950 px-4 sm:px-6 py-4 md:px-16 md:py-8">
       <main className="max-w-5xl w-full min-w-0 mx-auto flex-1">
-        {/* Header: globe + two aligned rows (title | view-toggle, subtitle | search) */}
-        <div className="mb-[0.9rem] md:mb-[1.35rem] flex items-start gap-2">
-          {brand.showGlobe && (
-            <FaGlobeAmericas className="shrink-0 mt-1 text-2xl sm:text-3xl md:text-[2rem] text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
-          )}
-          <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center gap-x-3 gap-y-1.5 sm:gap-y-3 [grid-template-areas:'title'_'subtitle'_'controls'_'search'] sm:[grid-template-areas:'title_controls'_'subtitle_search']">
-            <h1 className="[grid-area:title] text-2xl sm:text-3xl md:text-[2rem] font-bold text-zinc-900 dark:text-zinc-100">{brand.title}</h1>
+        {/* Header: two aligned rows (title | view-toggle, subtitle | search).
+            Globe sits inline with the title so the subtitle, controls and
+            search bar share the same flush-left edge as the table below. */}
+        <div className="mb-[0.9rem] md:mb-[1.35rem]">
+          <div className="min-w-0 grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center gap-x-3 gap-y-1.5 sm:gap-y-3 [grid-template-areas:'title'_'subtitle'_'controls'_'search'] sm:[grid-template-areas:'title_controls'_'subtitle_search']">
+            <div className="[grid-area:title] flex items-center gap-2 min-w-0">
+              {brand.showGlobe && (
+                <FaGlobeAmericas className="shrink-0 text-2xl sm:text-3xl md:text-[2rem] text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+              )}
+              <h1 className="text-2xl sm:text-3xl md:text-[2rem] font-bold text-zinc-900 dark:text-zinc-100 truncate">{brand.title}</h1>
+            </div>
             {brand.subtitle && (
-              <p className="[grid-area:subtitle] text-base md:text-[1.375rem] text-zinc-500 dark:text-zinc-400">{brand.subtitle}</p>
+              <p className="[grid-area:subtitle] text-sm md:text-[1.375rem] text-zinc-500 dark:text-zinc-400">{brand.subtitle}</p>
             )}
             <div className="[grid-area:controls] flex items-center gap-2 sm:justify-self-end">
               {/* View mode toggle */}
