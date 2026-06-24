@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { FaGlobeAmericas } from "react-icons/fa";
 import { SpeciesSearchBar } from "../components/SpeciesSearchBar";
 import { ThemeToggle } from "../components/ThemeToggle";
@@ -130,12 +131,12 @@ export default function RedListPage() {
             sw984@cam.ac.uk
           </a>
           . See our{" "}
-          <a
+          <Link
             href="/privacy"
             className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
           >
             privacy notice
-          </a>
+          </Link>
           .
         </p>
         <p className="text-center text-xs text-zinc-400 dark:text-zinc-500 mt-3">
