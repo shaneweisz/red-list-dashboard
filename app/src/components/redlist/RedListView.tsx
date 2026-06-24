@@ -316,6 +316,22 @@ interface RedListViewProps {
 
 export default function RedListView({ viewMode = "reassessments", sharedTaxa, sharedSubgroups, onTaxaChange, onSubgroupsChange }: RedListViewProps = {}) {
   const isNewAssessments = viewMode === "new-assessments";
+
+  // The species table scrolls horizontally on narrow screens, so an expanded
+  // detail row's `<td colSpan>` is as wide as the (often off-screen) table, not
+  // the viewport. Expose the scroll container's *visible* width as a CSS var so
+  // the detail panel can size itself to fit the screen instead of overflowing.
+  const tableScrollCleanupRef = useRef<(() => void) | null>(null);
+  const tableScrollRef = useCallback((el: HTMLDivElement | null) => {
+    tableScrollCleanupRef.current?.();
+    tableScrollCleanupRef.current = null;
+    if (!el) return;
+    const update = () => el.style.setProperty("--view-width", `${el.clientWidth}px`);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    tableScrollCleanupRef.current = () => ro.disconnect();
+  }, []);
   // Filters synced with URL search params for shareable links
   const {
     selectedTaxa, setSelectedTaxa,
@@ -3199,6 +3215,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
           </div>
         )}
         <div
+          ref={tableScrollRef}
           className={`bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-x-auto transition-opacity duration-150 ${speciesLoading && !singleSpeciesPreview ? "opacity-50 pointer-events-none" : ""}`}
           onScroll={(e) => {
             e.currentTarget.style.setProperty('--scroll-left', `${e.currentTarget.scrollLeft}px`);
@@ -3530,7 +3547,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   {selectedSpeciesKey === speciesKey && (
                     <tr>
                       <td colSpan={isNewAssessments ? 4 : 8} className="p-0 bg-zinc-50 dark:bg-zinc-800/30" style={{ width: 0 }}>
-                        <div style={{ minWidth: '100%', maxWidth: 'calc(100vw - 2rem)', transform: 'translateX(var(--scroll-left, 0px))' }}>
+                        <div style={{ width: 'var(--view-width, 100%)', maxWidth: '100%', transform: 'translateX(var(--scroll-left, 0px))' }}>
                           {/* Tab bar */}
                           <div className="flex flex-wrap items-center border-b border-zinc-200 dark:border-zinc-700" onClick={(e) => e.stopPropagation()}>
                                 <button
