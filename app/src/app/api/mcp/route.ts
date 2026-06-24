@@ -98,7 +98,7 @@ const handler = createMcpHandler(
       "get_vocabulary",
       {
         title: "Get the valid filter vocabulary",
-        description: "Returns the valid values for browse_taxon: featured taxon groups, IUCN threat categories, status categories, IUCN regions, systems, and population trends. Call this first if unsure what values to pass.",
+        description: "Returns the valid values for browse_taxon: featured taxon groups, IUCN threat categories, status categories, IUCN regions, systems, population trends, movement patterns, growth forms, and the endemic flag. Call this first if unsure what values to pass.",
         inputSchema: {},
       },
       async () =>
@@ -110,6 +110,9 @@ const handler = createMcpHandler(
           regions: IUCN_REGION_ORDER,
           systems: SYSTEMS,
           trends: POPULATION_TRENDS,
+          movement: { note: "Free-text movement pattern; common values: Full Migrant, Altitudinal Migrant, Nomadic, Not a Migrant, Unknown." },
+          growthForms: { note: "Free-text plant/fungus growth form, e.g. Tree, Shrub, Herb, Forb, Graminoid, Geophyte, Lithophyte, Epiphyte." },
+          endemic: { note: "Pass endemic: 'yes' to keep only species endemic to a single country." },
         }),
     );
   },

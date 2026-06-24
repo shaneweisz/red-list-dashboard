@@ -169,7 +169,7 @@ export const SHARED_FILTERS: SharedFilterDef[] = [
   {
     mcpKey: "endemic", urlKey: "endemics", sample: "yes",
     apply(raw, c) {
-      if (raw !== "yes" && raw !== true) return null;
+      if (raw !== "yes") return null;
       c.endemicsOnly = true;
       return { unresolved: [], describe: "Endemic to a single country" };
     },

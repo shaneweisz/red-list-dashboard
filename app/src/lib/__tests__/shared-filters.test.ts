@@ -42,11 +42,13 @@ describe("every shared filter round-trips MCP input → dashboard URL → parseP
       const qs = browseInputToDashboardQuery({ taxa: ["mammals"], [f.mcpKey]: f.sample });
 
       // 1. The MCP→dashboard-URL builder emits this filter's param.
-      expect(new URLSearchParams(qs).has(f.urlKey)).toBe(true);
+      const emitted = new URLSearchParams(qs).get(f.urlKey);
+      expect(emitted).not.toBeNull();
 
-      // 2. The dashboard parses it and re-emits it (no silent drop in buildQs/parseParams).
+      // 2. The dashboard parses it and re-emits it with the SAME value (no silent
+      //    drop OR mis-decode in buildQs/parseParams).
       const rebuilt = new URLSearchParams(buildQs(parseParams(qs)));
-      expect(rebuilt.has(f.urlKey)).toBe(true);
+      expect(rebuilt.get(f.urlKey)).toBe(emitted);
     });
   }
 });
