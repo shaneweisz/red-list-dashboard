@@ -20,6 +20,7 @@ import { createMcpHandler } from "mcp-handler";
 import { z } from "zod";
 import { runBrowseQuery, type BrowseInput } from "@/lib/browse-query";
 import { browseInputToDashboardUrl } from "@/lib/dashboard-url";
+import { SHARED_FILTER_SCHEMA } from "@/lib/shared-filters";
 import {
   FEATURED_TAXA, THREAT_CATEGORIES, ALL_CATEGORIES,
   taxonLabel, categoryLabel, SYSTEMS, POPULATION_TRENDS,
@@ -46,17 +47,17 @@ const VERIFY_NOTE =
 const withDashboard = (input: BrowseInput, data: object) =>
   asText({ ...data, dashboard_url: browseInputToDashboardUrl(getOrigin(), input), verify_note: VERIFY_NOTE });
 
-// Shared optional-filter schema for browse_taxon.
+// Optional-filter schema for browse_taxon. The categorical filters
+// (categories, threats, systems, trends, movement, growthForms, hasMap,
+// endemic) come from the shared-filter registry — the single source of truth
+// shared with the dashboard URL, the predicate, and the dashboard-link builder,
+// so they can't drift. The fields here are the bespoke ones.
 const FILTERS = {
-  categories: z.array(z.string()).optional().describe("IUCN status codes or names: CR, EN, VU, NT, LC, DD, NE, EX, EW — or 'threatened' (=CR,EN,VU). NE = not yet evaluated."),
-  threats: z.array(z.string()).optional().describe("IUCN threat codes (prefix match, e.g. '11' = climate change) or aliases like climate-change, pollution, overfishing."),
+  ...SHARED_FILTER_SCHEMA,
   countries: z.array(z.string()).optional().describe("ISO alpha-2 codes or country names."),
   region: z.string().optional().describe("An IUCN region (expands to its countries), e.g. 'Sub-Saharan Africa'."),
   assessors: z.array(z.string()).optional().describe("Latest-assessment assessor name (substring match)."),
   reviewers: z.array(z.string()).optional().describe("Latest-assessment reviewer name (substring match)."),
-  systems: z.array(z.string()).optional(),
-  trends: z.array(z.string()).optional().describe("Population trend: Increasing, Decreasing, Stable, Unknown."),
-  hasMap: z.enum(["yes", "no"]).optional(),
   outdated: z.enum(["yes", "no"]).optional().describe("Assessment older than 10 years."),
   minObs: z.number().optional(), maxObs: z.number().optional(),
   minAssessmentYear: z.number().optional(), maxAssessmentYear: z.number().optional(),

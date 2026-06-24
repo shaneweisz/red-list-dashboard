@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
     trends: parseList(sp, "trends"),
     movement: parseList(sp, "movement"),
     growthForms: parseList(sp, "growthForms"),
-    hasMap: hasMapRaw === "yes" ? "yes" : hasMapRaw === "no" ? "no" : null,
+    hasMap: hasMapRaw === "yes" ? "yes" : hasMapRaw === "no" ? "no" : undefined,
     outdated: outdatedRaw === "yes" ? "yes" : outdatedRaw === "no" ? "no" : null,
     assessors: parseList(sp, "assessors"),
     reviewers: parseList(sp, "reviewers"),
