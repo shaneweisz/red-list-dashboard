@@ -23,6 +23,30 @@ const COL_ARTIFACTS = [
 ];
 
 const nextConfig: NextConfig = {
+  // Proxy PostHog through our own origin so ad/tracking blockers (which match the
+  // posthog.com domain directly) can't drop analytics for the academic audience.
+  // /static + /array hit the asset host (it keeps cache-control headers the main
+  // API strips); the catch-all must come last. EU cloud destinations.
+  async rewrites() {
+    return [
+      {
+        source: "/ingest/static/:path*",
+        destination: "https://eu-assets.i.posthog.com/static/:path*",
+      },
+      {
+        source: "/ingest/array/:path*",
+        destination: "https://eu-assets.i.posthog.com/array/:path*",
+      },
+      {
+        source: "/ingest/:path*",
+        destination: "https://eu.i.posthog.com/:path*",
+      },
+    ];
+  },
+  // PostHog's API relies on trailing slashes; without this Next.js redirects them
+  // and breaks event capture through the proxy.
+  skipTrailingSlashRedirect: true,
+
   // #261: DuckDB-backed read routes query Parquet in R2. Keep the native addon
   // out of the bundler, and force-include the 68MB libduckdb.so it dlopens at
   // runtime (file-tracing misses dlopen deps). Scoped to the v2 routes so the

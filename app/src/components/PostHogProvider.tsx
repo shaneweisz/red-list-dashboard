@@ -8,7 +8,11 @@ if (
   process.env.NEXT_PUBLIC_POSTHOG_KEY
 ) {
   posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY, {
-    api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST,
+    // First-party reverse proxy (see next.config.ts rewrites) so ad/tracking
+    // blockers can't drop events. ui_host keeps "View in PostHog" links pointing
+    // at the real EU dashboard.
+    api_host: "/ingest",
+    ui_host: "https://eu.posthog.com",
     cookieless_mode: "always",
     disable_session_recording: true,
   });
