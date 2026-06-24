@@ -1,25 +1,37 @@
 /**
  * /llms.txt — a short, machine-readable guide so an agent can answer questions
- * from the dashboard via /browse. Generated from filter-vocab so it can't drift
- * from what /browse actually accepts. The base URL is taken from the request
+ * from the dashboard via /browse. The categorical filters are generated from the
+ * shared-filter registry (the same source /browse + get_vocabulary use), so this
+ * can't advertise a different filter set. The base URL is taken from the request
  * origin, so pasted example links always point at this same deployment.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { CACHE_1H } from "@/lib/cache-headers";
-import {
-  THREAT_CATEGORIES, FEATURED_TAXA, ALL_CATEGORIES,
-  SYSTEMS, POPULATION_TRENDS, taxonLabel, categoryLabel,
-} from "@/lib/filter-vocab";
+import { FEATURED_TAXA, taxonLabel } from "@/lib/filter-vocab";
+import { SHARED_FILTER_VOCAB, type FilterVocab } from "@/lib/shared-filters";
 import { IUCN_REGION_ORDER } from "@/lib/regions";
 
 export const revalidate = 3600;
 
+/** Render one registry filter as an llms.txt parameter block. Coded vocab
+ *  (categories, threats) becomes a header + one line per code; the rest a
+ *  one-liner of values and/or a note — so every registry filter is listed. */
+function paramBlock(v: FilterVocab): string {
+  const coded = v.values.length > 0 && typeof v.values[0] !== "string";
+  if (coded) {
+    const lines = (v.values as { code: string; label: string }[])
+      .map((x) => `  - ${x.code} = ${x.label}`).join("\n");
+    return `${v.key}${v.note ? ` (${v.note})` : ""}:\n${lines}`;
+  }
+  const vals = (v.values as string[]).join(", ");
+  return `${v.key}: ${vals}${v.note ? ` (${v.note})` : ""}`;
+}
+
 export function GET(req: NextRequest) {
   const base = new URL(req.url).origin;
   const taxa = FEATURED_TAXA.map((id) => `  - ${id} (${taxonLabel(id)})`).join("\n");
-  const threats = THREAT_CATEGORIES.map((t) => `  - ${t.code} = ${t.label}`).join("\n");
-  const cats = ALL_CATEGORIES.map((c) => `  - ${c} = ${categoryLabel(c)}`).join("\n");
+  const filters = SHARED_FILTER_VOCAB.map(paramBlock).join("\n");
 
   const body = `# Red List Dashboard
 
@@ -60,16 +72,7 @@ including synonyms / old names (they resolve to the accepted species).
 taxa — any rank; featured groups:
 ${taxa}
 
-threats — IUCN threat class (sub-codes like 11.4 work; aliases: climate-change,
-pollution, invasive-species, overfishing, logging, hunting, dams):
-${threats}
-
-categories — IUCN status (aliases: threatened = CR,EN,VU; extinct = EX,EW):
-${cats}
-
-systems: ${SYSTEMS.join(", ")}
-trends:  ${POPULATION_TRENDS.join(", ")}
-hasMap:  yes | no
+${filters}
 countries: ISO alpha-2 code or name (e.g. IN or India)
 region (IUCN region — expands to its countries): ${IUCN_REGION_ORDER.join(", ")}
 assessors / reviewers: name of the latest-assessment assessor/reviewer (substring, e.g. assessors=Smith)

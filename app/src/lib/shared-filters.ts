@@ -161,7 +161,7 @@ export const SHARED_FILTERS: SharedFilterDef[] = [
     vocab: {
       label: "IUCN status category",
       values: ALL_CATEGORIES.map((c) => ({ code: c, label: categoryLabel(c) })),
-      note: "codes or names; also 'threatened' (= CR, EN, VU). NE = not yet evaluated.",
+      note: "codes or names; aliases: threatened = CR, EN, VU; extinct = EX, EW. NE = not yet evaluated.",
     },
   }),
   setFilter({
@@ -172,7 +172,7 @@ export const SHARED_FILTERS: SharedFilterDef[] = [
     vocab: {
       label: "IUCN threat",
       values: THREAT_CATEGORIES.map((t) => ({ code: t.code, label: t.label })),
-      note: "prefix match (11 covers 11.1, 11.4, …); aliases: climate-change, pollution, overfishing.",
+      note: "prefix/sub-code match (11 covers 11.1, 11.4, …); aliases: climate-change, pollution, invasive-species, overfishing, logging, hunting, dams.",
     },
   }),
   setFilter({

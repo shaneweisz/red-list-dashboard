@@ -77,6 +77,12 @@ describe("every shared filter is parsed from a /browse URL by readSharedInput", 
       expect(lines.length).toBeGreaterThan(0);
     });
   }
+
+  it("reads the canonical endemics=1 dashboard form (not just the yes alias)", () => {
+    expect(readSharedInput(new URLSearchParams("endemics=1")).endemic).toBe("yes");
+    expect(readSharedInput(new URLSearchParams("endemics=yes")).endemic).toBe("yes");
+    expect(readSharedInput(new URLSearchParams("endemics=0")).endemic).toBeUndefined();
+  });
 });
 
 // Discovery surfaces (the /browse index help + the get_vocabulary MCP tool) both
