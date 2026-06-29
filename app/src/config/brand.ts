@@ -32,10 +32,18 @@ const RED_LIST_BRAND: Brand = {
   description: "A dashboard for biodiversity data about life on Earth",
 };
 
+// The "Dash For Life" brand, identical to the default save for its title.
+const DASH_FOR_LIFE_BRAND: Brand = {
+  ...DEFAULT_BRAND,
+  title: "Dash For Life",
+  tabTitle: "Dash For Life",
+};
+
 // Per-hostname overrides. Keys are bare hostnames (no port, no "www.").
 const BRANDS: Record<string, Brand> = {
   "red.cst.cam.ac.uk": RED_LIST_BRAND,
   "red-list-dashboard.vercel.app": RED_LIST_BRAND,
+  "dashforlife.org": DASH_FOR_LIFE_BRAND,
 };
 
 /** Resolve the brand for an incoming request's `Host` header. */
