@@ -4,6 +4,13 @@
  * Extracted from RedListView.tsx so the same base-filter logic runs both
  * client-side (the dashboard) and server-side (the /browse LLM endpoint).
  *
+ * The *categorical* clauses (categories, threats, systems, population trend,
+ * movement, growth form, hasMap, endemic) are declared once in the shared-filter
+ * registry (@/lib/shared-filters) and matched here via matchSharedFilters, so the
+ * predicate can't drift from the MCP schema or the dashboard URL. The clauses
+ * that don't share that shape stay inline below: countries (entangled with the
+ * region expansion), name search, and the GBIF-obs / assessment-year bounds.
+ *
  * Semantics (must match the dashboard exactly):
  *  - Within one filter, multiple selected values are OR (species matches ANY).
  *  - Across different filters it is AND (species must satisfy EVERY active filter).
@@ -14,6 +21,7 @@
  * and the "starred" filter are intentionally NOT included here — they depend on
  * the current date, GBIF counts, or local UI state and stay inline in RedListView.
  */
+import { matchSharedFilters } from "@/lib/shared-filters";
 
 /** Minimal structural shape this predicate needs. Both `SpeciesRow`
  *  (server data store) and `RedListSpecies` (client hook) satisfy it. */
@@ -41,6 +49,8 @@ export interface SpeciesFilterCriteria {
   movementPatterns?: Set<string>;
   growthForms?: Set<string>;
   hasMap?: "yes" | "no" | null;
+  /** Only species endemic to a single country (occurring in exactly one). */
+  endemicsOnly?: boolean;
   /** Already lowercased by the caller. */
   search?: string;
   /** GBIF occurrence count bounds (null obs counts as 0). */
@@ -54,30 +64,11 @@ export interface SpeciesFilterCriteria {
 const empty = (s?: Set<string>) => !s || s.size === 0;
 
 export function matchesSpeciesFilter(s: FilterableSpecies, f: SpeciesFilterCriteria): boolean {
-  const matchesCategory = empty(f.categories) || f.categories!.has(s.category);
+  // Categorical clauses (categories, threats, systems, trend, movement, growth
+  // form, hasMap, endemic) — declared once in the shared-filter registry.
+  if (!matchSharedFilters(s, f)) return false;
 
   const matchesCountry = empty(f.countries) || s.countries.some((c) => f.countries!.has(c));
-
-  const matchesSystem = empty(f.systems) || (s.systems?.some((sys) => f.systems!.has(sys)) ?? false);
-
-  const matchesTrend =
-    empty(f.populationTrends) ||
-    (s.population_trend != null && f.populationTrends!.has(s.population_trend));
-
-  const matchesMovement =
-    empty(f.movementPatterns) ||
-    (s.movement_pattern != null && f.movementPatterns!.has(s.movement_pattern));
-
-  const matchesThreat =
-    empty(f.threats) ||
-    (s.threat_codes?.some((tc) =>
-      Array.from(f.threats!).some((sel) => tc === sel || tc.startsWith(sel + "."))
-    ) ?? false);
-
-  const matchesMap = !f.hasMap || (f.hasMap === "yes" ? s.has_map : !s.has_map);
-
-  const matchesGrowth =
-    empty(f.growthForms) || (s.growth_forms?.some((gf) => f.growthForms!.has(gf)) ?? false);
 
   const q = f.search;
   const matchesSearch =
@@ -99,18 +90,6 @@ export function matchesSpeciesFilter(s: FilterableSpecies, f: SpeciesFilterCrite
     }
   }
 
-  return (
-    matchesCategory &&
-    matchesCountry &&
-    matchesSystem &&
-    matchesTrend &&
-    matchesMovement &&
-    matchesThreat &&
-    matchesMap &&
-    matchesGrowth &&
-    matchesSearch &&
-    matchesMinObs &&
-    matchesMaxObs &&
-    matchesYear
-  );
+  return matchesCountry && matchesSearch && matchesMinObs && matchesMaxObs && matchesYear;
 }
+

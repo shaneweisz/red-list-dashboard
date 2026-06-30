@@ -11,13 +11,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runBrowseQuery, type BrowseInput, type BrowseResult, type BrowseSpecies } from "@/lib/browse-query";
 import { browseInputToDashboardUrl } from "@/lib/dashboard-url";
+import { readSharedInput } from "@/lib/shared-filters";
+import { buildVocabulary, type Vocabulary } from "@/lib/browse-help";
 import { CATEGORY_ORDER } from "@/config/taxa";
 import { CACHE_1H } from "@/lib/cache-headers";
-import {
-  taxonLabel, categoryLabel,
-  THREAT_CATEGORIES, FEATURED_TAXA, ALL_CATEGORIES, SYSTEMS, POPULATION_TRENDS,
-} from "@/lib/filter-vocab";
-import { IUCN_REGION_ORDER } from "@/lib/regions";
+import { categoryLabel } from "@/lib/filter-vocab";
 
 export const revalidate = 3600;
 
@@ -45,20 +43,15 @@ export async function GET(req: NextRequest) {
     const n = parseInt(v, 10);
     return Number.isNaN(n) ? undefined : n;
   };
-  const hasMapRaw = sp.get("hasMap");
   const outdatedRaw = sp.get("outdated");
   const input: BrowseInput = {
+    // Categorical filters (categories…endemic) are read from the URL by the
+    // shared registry, so /browse parses every registry filter automatically.
+    ...readSharedInput(sp),
     taxa: parseList(sp, "taxa"),
     search: (sp.get("search") ?? "").trim(),
-    categories: parseList(sp, "categories"),
-    threats: parseList(sp, "threats"),
     countries: parseList(sp, "countries"),
     region: parseList(sp, "region"),
-    systems: parseList(sp, "systems"),
-    trends: parseList(sp, "trends"),
-    movement: parseList(sp, "movement"),
-    growthForms: parseList(sp, "growthForms"),
-    hasMap: hasMapRaw === "yes" ? "yes" : hasMapRaw === "no" ? "no" : null,
     outdated: outdatedRaw === "yes" ? "yes" : outdatedRaw === "no" ? "no" : null,
     assessors: parseList(sp, "assessors"),
     reviewers: parseList(sp, "reviewers"),
@@ -197,37 +190,24 @@ const EXAMPLES: { url: string; desc: string }[] = [
 ];
 
 function indexData(unresolved: string[]) {
-  return {
-    description: "Server-rendered view of the Red List dashboard. Two modes: browse a taxon (taxa=…, with optional base filters) or look up a species by name (search=…, synonym-aware). Values may be codes or plain-English names. Results capped, with a total count.",
-    unresolved,
-    params: {
-      taxa: FEATURED_TAXA.map((id) => ({ id, label: taxonLabel(id) })),
-      threats: THREAT_CATEGORIES.map((t) => ({ code: t.code, label: t.label })),
-      categories: ALL_CATEGORIES.map((c) => ({ code: c, label: categoryLabel(c) })),
-      region: IUCN_REGION_ORDER,
-      systems: SYSTEMS,
-      trends: POPULATION_TRENDS,
-      hasMap: ["yes", "no"],
-      search: "free-text scientific or common name (incl. synonyms / old names)",
-      assessors: "latest-assessment assessor name (substring, e.g. Smith)",
-      reviewers: "latest-assessment reviewer name (substring)",
-      outdated: "yes | no (assessment >10 years old)",
-      minObs: "min GBIF occurrence count (e.g. 100)",
-      maxObs: "max GBIF occurrence count",
-      minAssessmentYear: "earliest assessment year (e.g. 2015)",
-      maxAssessmentYear: "latest assessment year",
-      minDescribedYear: "earliest CoL year-described (NE species)",
-      maxDescribedYear: "latest CoL year-described",
-    },
-    note: "taxa accepts any taxonomic rank — a curated group (birds, corals), a sub-group (sharks-rays, flatworms), or a scientific name (felidae, odonata). Every response includes a `stats` object (assessed/outdated/outdated_pct) for percentage questions.",
-    examples: EXAMPLES,
-  };
+  return { ...buildVocabulary(), unresolved, examples: EXAMPLES };
+}
+
+/** Render one filter's enumerable values for the HTML help (coded vocab → `code` label). */
+function vocabValuesHtml(v: Vocabulary["filters"][number]): string {
+  const vals = v.values
+    .map((x) => (typeof x === "string" ? `<code>${esc(x)}</code>` : `<code>${esc(x.code)}</code> ${esc(x.label)}`))
+    .join(", ");
+  return `<strong>${esc(v.key)}</strong>: ${vals}${v.note ? ` — ${esc(v.note)}` : ""}`;
 }
 
 function indexHtml(unresolved: string[]): string {
-  const taxaList = FEATURED_TAXA.map((id) => `<code>${esc(id)}</code> (${esc(taxonLabel(id))})`).join(", ");
-  const threatList = THREAT_CATEGORIES.map((t) => `<code>${t.code}</code> ${esc(t.label)}`).join(", ");
-  const catList = ALL_CATEGORIES.map((c) => `<code>${c}</code> ${esc(categoryLabel(c))}`).join(", ");
+  const vocab = buildVocabulary();
+  const taxaList = vocab.taxa.map((t) => `<code>${esc(t.id)}</code> (${esc(t.label)})`).join(", ");
+  const filterLines = vocab.filters.map((v) => `<p>${vocabValuesHtml(v)}</p>`).join("\n");
+  const paramLines = Object.entries(vocab.params)
+    .map(([k, desc]) => `<strong>${esc(k)}</strong>: ${esc(desc)}`)
+    .join(" ");
   const examples = EXAMPLES.map((e) => `<li><a href="${esc(e.url)}">${esc(e.url)}</a> — ${esc(e.desc)}</li>`).join("");
 
   return `${PAGE_HEAD}<h1>Red List Dashboard — Browse</h1>
@@ -237,15 +217,12 @@ ${unresolvedBlock(unresolved)}
 <li><strong>Browse a taxon</strong>: <code>?taxa=&lt;name&gt;</code> + optional filters. <code>taxa</code> works at <em>any rank</em> — a group (<code>birds</code>, <code>corals</code>), a sub-group (<code>sharks-rays</code>, <code>flatworms</code>), or a scientific name (<code>felidae</code>, <code>odonata</code>).</li>
 <li><strong>Look up a species</strong>: <code>?search=&lt;name&gt;</code> — scientific or common name, including <em>synonyms / old names</em>.</li>
 </ul>
-<p>Values can be codes <em>or</em> plain-English names. Add <code>&amp;format=json</code> for JSON. Within one filter, comma-separated values are OR; across filters they are AND. Threats match by prefix (<code>11</code> covers <code>11.1</code>, <code>11.4</code>, …).</p>
+<p>Values can be codes <em>or</em> plain-English names. Add <code>&amp;format=json</code> for JSON. Within one filter, comma-separated values are OR; across filters they are AND.</p>
 <h2>Filters (combine with <code>taxa</code>)</h2>
-<p><strong>taxa</strong>: ${taxaList} — or any sub-group / scientific name.</p>
-<p><strong>threats</strong>: ${threatList} — plus aliases like <code>climate-change</code>, <code>pollution</code>, <code>overfishing</code>.</p>
-<p><strong>categories</strong>: ${catList} — plus <code>threatened</code> (= CR, EN, VU).</p>
-<p><strong>systems</strong>: ${SYSTEMS.map((s) => `<code>${s}</code>`).join(", ")}. <strong>trends</strong>: ${POPULATION_TRENDS.map((s) => `<code>${s}</code>`).join(", ")}. <strong>hasMap</strong>: <code>yes</code>/<code>no</code>.</p>
-<p><strong>countries</strong>: ISO code or name. <strong>region</strong> (IUCN): ${IUCN_REGION_ORDER.map((r) => `<code>${esc(r)}</code>`).join(", ")}.</p>
-<p><strong>assessors</strong> / <strong>reviewers</strong>: name of the latest-assessment assessor/reviewer (substring match).</p>
-<p><strong>outdated</strong>: <code>yes</code>/<code>no</code> (assessment &gt;10 yrs old). <strong>minObs</strong>/<strong>maxObs</strong>, <strong>minAssessmentYear</strong>/<strong>maxAssessmentYear</strong>, <strong>minDescribedYear</strong>/<strong>maxDescribedYear</strong>: numeric bounds.</p>
+<p><strong>taxa</strong>: ${taxaList} — ${esc(vocab.taxaNote)}</p>
+${filterLines}
+<p><strong>region</strong> (IUCN): ${vocab.region.map((r) => `<code>${esc(r)}</code>`).join(", ")}.</p>
+<p>${paramLines}</p>
 <p>Every response leads with a total, a by-category breakdown, and an outdated count + %, so percentage questions are answered in one request.</p>
 <h2>Examples</h2><ul>${examples}</ul>
 ${PAGE_FOOT}`;

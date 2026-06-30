@@ -13,31 +13,27 @@ import { querySpecies, searchSpecies, type SearchResult } from "@/lib/data/speci
 import { isOutdated } from "@/lib/data/species-store";
 import { findNode, speciesMatchesNode } from "@/lib/taxonomy-utils";
 import { matchesSpeciesFilter, type SpeciesFilterCriteria, type FilterableSpecies } from "@/lib/species-filter";
+import { applySharedFilters, type SharedFilterInput } from "@/lib/shared-filters";
 import type { RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { resolveRegions } from "@/lib/regions";
 import { CATEGORY_ORDER } from "@/config/taxa";
 import {
-  resolveTaxa, resolveThreats, resolveCategories, resolveCountries,
-  taxonLabel, categoryLabel, countryLabel, threatDisplay, THREAT_LABEL,
+  resolveTaxa, resolveCountries,
+  taxonLabel, categoryLabel, countryLabel, threatDisplay,
 } from "@/lib/filter-vocab";
 
 export const RESULT_CAP = 200;
 
-const threatLabel = (code: string) => (THREAT_LABEL[code] ? `${THREAT_LABEL[code]} (${code})` : code);
-
-export interface BrowseInput {
+// The categorical filters (categories, threats, systems, trends, movement,
+// growthForms, hasMap, endemic) come from the shared-filter registry via
+// SharedFilterInput; the fields below are the bespoke ones (taxa/search,
+// country+region, assessor/reviewer substring, and the exact numeric params).
+export interface BrowseInput extends SharedFilterInput {
   taxa?: string[];
   search?: string;
-  categories?: string[];
-  threats?: string[];
   countries?: string[];
   region?: string[];
-  systems?: string[];
-  trends?: string[];
-  movement?: string[];
-  growthForms?: string[];
-  hasMap?: "yes" | "no" | null;
   outdated?: "yes" | "no" | null;
   assessors?: string[];
   reviewers?: string[];
@@ -110,24 +106,28 @@ const setOrUndef = (a: string[]) => (a.length ? new Set(a) : undefined);
 
 export async function runBrowseQuery(input: BrowseInput): Promise<BrowseResult> {
   const taxa = resolveTaxa(arr(input.taxa));
-  const threats = resolveThreats(arr(input.threats));
-  const categories = resolveCategories(arr(input.categories));
   const countries = resolveCountries(arr(input.countries));
   const regionRaw = arr(input.region);
   const regions = resolveRegions(regionRaw);
   const assessors = arr(input.assessors);
   const reviewers = arr(input.reviewers);
-  const systems = arr(input.systems);
-  const trends = arr(input.trends);
-  const movement = arr(input.movement);
-  const growthForms = arr(input.growthForms);
   const search = (input.search ?? "").trim();
-  const { hasMap = null, outdated = null, minObs, maxObs, minAssessmentYear, maxAssessmentYear, minDescribedYear, maxDescribedYear } = input;
+  const { outdated = null, minObs, maxObs, minAssessmentYear, maxAssessmentYear, minDescribedYear, maxDescribedYear } = input;
+
+  // Categorical filters resolve into `criteria` via the shared registry; the
+  // bespoke ones (country+region, search, obs/year bounds) are added below.
+  const criteria: SpeciesFilterCriteria = {};
+  const shared = applySharedFilters(input, criteria);
+  criteria.countries = setOrUndef([...countries.codes, ...regions.codes]);
+  criteria.search = search ? search.toLowerCase() : undefined;
+  criteria.minObs = minObs;
+  criteria.maxObs = maxObs;
+  criteria.minAssessmentYear = minAssessmentYear;
+  criteria.maxAssessmentYear = maxAssessmentYear;
 
   const unresolved = [
     ...taxa.unresolved.map((v) => `taxa=${v}`),
-    ...threats.unresolved.map((v) => `threats=${v}`),
-    ...categories.unresolved.map((v) => `categories=${v}`),
+    ...shared.unresolved,
     ...countries.unresolved.map((v) => `countries=${v}`),
     ...regions.unresolved.map((v) => `region=${v}`),
   ];
@@ -136,24 +136,11 @@ export async function runBrowseQuery(input: BrowseInput): Promise<BrowseResult> 
     return { interpreted: [], unresolved, tooLarge: false, noSelector: true, total: 0, shown: 0, capped: false, breakdown: {}, stats: { assessed: 0, outdated: 0, outdated_pct: null }, species: [] };
   }
 
-  const criteria: SpeciesFilterCriteria = {
-    categories: setOrUndef(categories.codes),
-    threats: setOrUndef(threats.codes),
-    countries: setOrUndef([...countries.codes, ...regions.codes]),
-    systems: setOrUndef(systems),
-    populationTrends: setOrUndef(trends),
-    movementPatterns: setOrUndef(movement),
-    growthForms: setOrUndef(growthForms),
-    hasMap,
-    search: search ? search.toLowerCase() : undefined,
-    minObs, maxObs, minAssessmentYear, maxAssessmentYear,
-  };
-
   let matched: Row[] = [];
   let tooLarge = false;
 
   if (taxa.ids.length) {
-    const includeNE = categories.codes.includes("NE");
+    const includeNE = criteria.categories?.has("NE") ?? false;
     const results = await Promise.all(taxa.ids.map((id) => querySpecies({ taxon: id, includeNE })));
     const seen = new Set<number>();
     results.forEach((res, i) => {
@@ -200,7 +187,23 @@ export async function runBrowseQuery(input: BrowseInput): Promise<BrowseResult> 
   const outdatedCount = assessed.filter((r) => isOutdated(r.assessment_date ?? null)).length;
   const outdated_pct = assessed.length ? Math.round((outdatedCount / assessed.length) * 100) : null;
 
-  const interpreted = describeFilters({ taxa, threats, categories, countries, regionRaw, regions, systems, trends, movement, growthForms, hasMap, search, assessors, reviewers, minObs, maxObs, minAssessmentYear, maxAssessmentYear, minDescribedYear, maxDescribedYear, outdated });
+  // Human-readable active-filter summary (drives the HTML/JSON "interpreted").
+  // The categorical lines come from the shared registry; the rest are bespoke.
+  const interpreted: string[] = [];
+  if (taxa.ids.length) interpreted.push(`Taxa: ${taxa.ids.map(taxonLabel).join(", ")}`);
+  interpreted.push(...shared.describe);
+  if (countries.codes.length) interpreted.push(`Countries: ${countries.codes.map(countryLabel).join(", ")}`);
+  if (regions.codes.length) interpreted.push(`Region: ${regionRaw.filter((v) => !regions.unresolved.includes(v)).join(", ")}`);
+  if (search) interpreted.push(`Name search: "${search}"`);
+  if (assessors.length) interpreted.push(`Assessor: ${assessors.join(", ")}`);
+  if (reviewers.length) interpreted.push(`Reviewer: ${reviewers.join(", ")}`);
+  if (minObs != null) interpreted.push(`GBIF observations ≥ ${minObs.toLocaleString()}`);
+  if (maxObs != null) interpreted.push(`GBIF observations ≤ ${maxObs.toLocaleString()}`);
+  if (minAssessmentYear != null) interpreted.push(`Assessed in or after ${minAssessmentYear}`);
+  if (maxAssessmentYear != null) interpreted.push(`Assessed in or before ${maxAssessmentYear}`);
+  if (minDescribedYear != null) interpreted.push(`Described in or after ${minDescribedYear}`);
+  if (maxDescribedYear != null) interpreted.push(`Described in or before ${maxDescribedYear}`);
+  if (outdated) interpreted.push(outdated === "yes" ? "Outdated assessments (>10 yrs old)" : "Current assessments (≤10 yrs old)");
 
   return {
     interpreted, unresolved, tooLarge, noSelector: false,
@@ -221,38 +224,4 @@ export async function runBrowseQuery(input: BrowseInput): Promise<BrowseResult> 
       gbif_occurrence_count: s.gbif_occurrence_count ?? null,
     })),
   };
-}
-
-// Human-readable description of the active filters (drives the HTML/JSON "interpreted").
-function describeFilters(r: {
-  taxa: ReturnType<typeof resolveTaxa>; threats: ReturnType<typeof resolveThreats>;
-  categories: ReturnType<typeof resolveCategories>; countries: ReturnType<typeof resolveCountries>;
-  regionRaw: string[]; regions: { codes: string[]; unresolved: string[] };
-  systems: string[]; trends: string[]; movement: string[]; growthForms: string[];
-  hasMap: "yes" | "no" | null; search: string; assessors: string[]; reviewers: string[];
-  minObs?: number; maxObs?: number; minAssessmentYear?: number; maxAssessmentYear?: number;
-  minDescribedYear?: number; maxDescribedYear?: number; outdated: "yes" | "no" | null;
-}): string[] {
-  const parts: string[] = [];
-  if (r.taxa.ids.length) parts.push(`Taxa: ${r.taxa.ids.map(taxonLabel).join(", ")}`);
-  if (r.threats.codes.length) parts.push(`Threats: ${r.threats.codes.map(threatLabel).join(", ")}`);
-  if (r.categories.codes.length) parts.push(`Categories: ${r.categories.codes.map(categoryLabel).join(", ")}`);
-  if (r.countries.codes.length) parts.push(`Countries: ${r.countries.codes.map(countryLabel).join(", ")}`);
-  if (r.regions.codes.length) parts.push(`Region: ${r.regionRaw.filter((v) => !r.regions.unresolved.includes(v)).join(", ")}`);
-  if (r.systems.length) parts.push(`Systems: ${r.systems.join(", ")}`);
-  if (r.trends.length) parts.push(`Population trend: ${r.trends.join(", ")}`);
-  if (r.movement.length) parts.push(`Movement: ${r.movement.join(", ")}`);
-  if (r.growthForms.length) parts.push(`Growth forms: ${r.growthForms.join(", ")}`);
-  if (r.hasMap) parts.push(`Has range map: ${r.hasMap}`);
-  if (r.search) parts.push(`Name search: "${r.search}"`);
-  if (r.assessors.length) parts.push(`Assessor: ${r.assessors.join(", ")}`);
-  if (r.reviewers.length) parts.push(`Reviewer: ${r.reviewers.join(", ")}`);
-  if (r.minObs != null) parts.push(`GBIF observations ≥ ${r.minObs.toLocaleString()}`);
-  if (r.maxObs != null) parts.push(`GBIF observations ≤ ${r.maxObs.toLocaleString()}`);
-  if (r.minAssessmentYear != null) parts.push(`Assessed in or after ${r.minAssessmentYear}`);
-  if (r.maxAssessmentYear != null) parts.push(`Assessed in or before ${r.maxAssessmentYear}`);
-  if (r.minDescribedYear != null) parts.push(`Described in or after ${r.minDescribedYear}`);
-  if (r.maxDescribedYear != null) parts.push(`Described in or before ${r.maxDescribedYear}`);
-  if (r.outdated) parts.push(r.outdated === "yes" ? "Outdated assessments (>10 yrs old)" : "Current assessments (≤10 yrs old)");
-  return parts;
 }

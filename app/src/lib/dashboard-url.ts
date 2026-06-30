@@ -26,9 +26,9 @@
  *    same species set in each.
  */
 import type { BrowseInput } from "@/lib/browse-query";
-import {
-  resolveTaxa, resolveCategories, resolveThreats, resolveCountries,
-} from "@/lib/filter-vocab";
+import { applySharedFilters, emitSharedParams } from "@/lib/shared-filters";
+import type { SpeciesFilterCriteria } from "@/lib/species-filter";
+import { resolveTaxa, resolveCountries } from "@/lib/filter-vocab";
 import { resolveRegions } from "@/lib/regions";
 
 const arr = (a?: string[]) => (a ?? []).map((s) => s.trim()).filter(Boolean);
@@ -50,11 +50,12 @@ export function browseInputToDashboardQuery(input: BrowseInput): string {
   const taxaIds = resolveTaxa(arr(input.taxa)).ids;
   if (taxaIds.length) p.set("taxa", taxaIds.join(","));
 
-  const categories = resolveCategories(arr(input.categories)).codes;
-  if (categories.length) p.set("categories", categories.join(","));
-
-  const threats = resolveThreats(arr(input.threats)).codes;
-  if (threats.length) p.set("threats", threats.join(","));
+  // Categorical filters (categories, threats, systems, trends, movement,
+  // growthForms, hasMap, endemic) — resolved + emitted by the shared registry,
+  // so the URL keys here can't drift from the MCP schema or the predicate.
+  const criteria: SpeciesFilterCriteria = {};
+  applySharedFilters(input, criteria);
+  emitSharedParams(criteria, p);
 
   // Countries + region (region expands to its country set — lossless).
   const countries = new Set<string>([
@@ -62,20 +63,6 @@ export function browseInputToDashboardQuery(input: BrowseInput): string {
     ...resolveRegions(arr(input.region)).codes,
   ]);
   if (countries.size) p.set("countries", [...countries].join(","));
-
-  const systems = arr(input.systems);
-  if (systems.length) p.set("systems", systems.join(","));
-
-  const trends = arr(input.trends);
-  if (trends.length) p.set("trends", trends.join(","));
-
-  const movement = arr(input.movement);
-  if (movement.length) p.set("movement", movement.join(","));
-
-  const growthForms = arr(input.growthForms);
-  if (growthForms.length) p.set("growthForms", growthForms.join(","));
-
-  if (input.hasMap === "yes" || input.hasMap === "no") p.set("hasMap", input.hasMap);
 
   const assessors = arr(input.assessors);
   if (assessors.length) p.set("assessors", assessors.join("|"));

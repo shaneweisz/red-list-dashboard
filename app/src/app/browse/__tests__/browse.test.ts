@@ -40,7 +40,8 @@ beforeEach(() => {
 describe("/browse", () => {
   it("returns a self-describing index when called bare (json)", async () => {
     const d = await json("?format=json");
-    expect(d.params.taxa.length).toBeGreaterThan(0);
+    expect(d.taxa.length).toBeGreaterThan(0);
+    expect(d.filters.length).toBeGreaterThan(0);
     expect(d.examples.length).toBeGreaterThan(0);
     expect(querySpecies).not.toHaveBeenCalled();
   });
