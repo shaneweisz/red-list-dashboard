@@ -146,16 +146,7 @@ export default function RedListPage() {
           >
             PhD research project
           </a>
-          {" "}at the University of Cambridge. This is a non-commercial research tool; commercial users should obtain IUCN Red List data via{" "}
-          <a
-            href="https://www.ibat-alliance.org/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
-          >
-            IBAT
-          </a>
-          . The data is sourced from{" "}
+          {" "}at the University of Cambridge. The data is sourced from{" "}
           <a
             href="https://www.iucnredlist.org"
             target="_blank"
@@ -227,7 +218,16 @@ export default function RedListPage() {
           >
             Encyclopedia of Life
           </a>
-          {" "}data. Any errors in aggregation or presentation are my own. Please verify against the primary sources before use, and do get in touch if you notice any issues.
+          {" "}data. This is a non-commercial research tool; commercial users should obtain IUCN Red List data via{" "}
+          <a
+            href="https://www.ibat-alliance.org/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
+          >
+            IBAT
+          </a>
+          . Any errors in aggregation or presentation are my own. Please verify against the primary sources before use, and do get in touch if you notice any issues.
         </p>
         <p className="text-center text-xs text-zinc-400 dark:text-zinc-500 mt-4">
           <Link
