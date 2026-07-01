@@ -2060,6 +2060,25 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const GBIF_FILTERS = "has_coordinate=true&has_geospatial_issue=false&basis_of_record=HUMAN_OBSERVATION&basis_of_record=MACHINE_OBSERVATION&basis_of_record=OCCURRENCE&basis_of_record=MATERIAL_SAMPLE&basis_of_record=OBSERVATION";
   const isNE = (s: Species) => s.category === "NE";
 
+  // A single selected taxon that isn't a curated tree node — an arbitrary rank
+  // (e.g. ?taxa=felidae) reached via search. TaxaSummary can't label it (it only
+  // knows curated nodes), so the results block shows a thin header instead. The
+  // matched rank is read off the loaded species (all matched class/order/family
+  // = the token; the first row's matching field is that rank).
+  const arbitraryTaxon = useMemo(() => {
+    if (selectedTaxa.size !== 1) return null;
+    const id = [...selectedTaxa][0];
+    if (id === "all" || findNode(id)) return null;
+    const v = id.toLowerCase();
+    let rank: "family" | "order" | "class" | null = null;
+    for (const s of species) {
+      if ((s.family ?? "").toLowerCase() === v) { rank = "family"; break; }
+      if ((s.order_name ?? "").toLowerCase() === v) { rank = "order"; break; }
+      if ((s.class_name ?? "").toLowerCase() === v) { rank = "class"; break; }
+    }
+    return { name: id.charAt(0).toUpperCase() + id.slice(1), rank };
+  }, [selectedTaxa, species]);
+
   return (
     <div className="space-y-4 min-w-0">
       {/* Always show Taxa Summary table */}
@@ -2120,6 +2139,27 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         </div>
       ) : (
       <div className="space-y-3">
+
+          {/* Arbitrary-taxon header — a non-curated rank (e.g. Felidae) reached via
+              search. Kept deliberately thin: name + matched rank, no landing cards /
+              described-count / drill-down (no honest data for arbitrary ranks). */}
+          {arbitraryTaxon && !isSingleSpecies && (
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-5 py-4">
+              <div className="flex items-baseline gap-2 flex-wrap">
+                <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{arbitraryTaxon.name}</h2>
+                {arbitraryTaxon.rank && (
+                  <span className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                    {arbitraryTaxon.rank}
+                  </span>
+                )}
+              </div>
+              <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                Not part of the curated taxonomy — showing{" "}
+                {isNewAssessments ? "species not yet evaluated" : "assessed species"} matched at{" "}
+                {arbitraryTaxon.rank ?? "rank"} level.
+              </p>
+            </div>
+          )}
 
           {/* Single species header — skeleton while loading */}
           {!isSingleSpecies && urlSpecies != null && speciesLoading && (
