@@ -218,7 +218,7 @@ export default function RedListPage() {
           >
             Encyclopedia of Life
           </a>
-          {" "}data. This is a non-commercial research tool; commercial users should obtain IUCN Red List data via{" "}
+          {" "}data. This is a free, non-commercial research tool; commercial users should obtain IUCN Red List data via{" "}
           <a
             href="https://www.ibat-alliance.org/"
             target="_blank"
