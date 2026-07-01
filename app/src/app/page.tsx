@@ -146,7 +146,16 @@ export default function RedListPage() {
           >
             PhD research project
           </a>
-          {" "}at the University of Cambridge. The data is sourced from IUCN Red List (version 2025-2),{" "}
+          {" "}at the University of Cambridge. The data is sourced from{" "}
+          <a
+            href="https://www.iucnredlist.org"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
+          >
+            IUCN Red List
+          </a>
+          {" "}(version 2025-2),{" "}
           <a
             href="https://www.gbif.org"
             target="_blank"
