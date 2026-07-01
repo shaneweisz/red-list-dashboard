@@ -146,14 +146,23 @@ export default function RedListPage() {
           >
             PhD research project
           </a>
-          {" "}at the University of Cambridge. The data is sourced from publicly available{" "}
+          {" "}at the University of Cambridge. This is a non-commercial research tool; commercial users should obtain IUCN Red List data via{" "}
+          <a
+            href="https://www.ibat-alliance.org/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
+          >
+            IBAT
+          </a>
+          . The data is sourced from{" "}
           <a
             href="https://www.iucnredlist.org"
             target="_blank"
             rel="noopener noreferrer"
             className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
           >
-            IUCN Red List
+            IUCN Red List (version 2025-2)
           </a>
           ,{" "}
           <a
