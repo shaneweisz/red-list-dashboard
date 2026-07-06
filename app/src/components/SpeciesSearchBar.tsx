@@ -153,12 +153,17 @@ export function SpeciesSearchBar() {
   );
 
   // Browse a whole higher-rank taxon (e.g. Felidae): navigate to ?taxa=<taxon> in the
-  // assessed (reassessments) view, where category/threat charts render. The
   // arbitrary-rank taxon flows through resolveWhere → querySpecies just like a
-  // curated node; no species is preselected.
+  // curated node; no species is preselected. Preserve the current view: from the
+  // new-assessments view, browsing a taxon shows its not-evaluated species (charts
+  // come from the assessed/reassessments view).
   const selectTaxon = useCallback((t: TaxonSuggestion) => {
+    const currentView: ViewMode =
+      new URLSearchParams(window.location.search).get("view") === "new-assessments"
+        ? "new-assessments"
+        : "reassessments";
     const qs = buildQs({
-      viewMode: "reassessments",
+      viewMode: currentView,
       taxa: new Set([t.taxon]),
       subgroups: new Set(),
       categories: new Set(),
