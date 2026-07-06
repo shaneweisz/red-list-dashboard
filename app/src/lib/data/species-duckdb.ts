@@ -601,3 +601,56 @@ export async function getSpeciesUnder(taxon: string, limit = 50): Promise<{
     sample: rows.map((r) => ({ col_id: String(r.col_id), scientific_name: String(r.scientific_name) })),
   };
 }
+
+// ─── Higher-rank taxon suggestions (search-bar autocomplete) ─────────────────
+
+export interface TaxonSuggestion {
+  /** Prettified display name, e.g. "Felidae". */
+  name: string;
+  /** Rank the query matched at. */
+  rank: "class" | "order" | "family";
+  /** Lowercased token to pass as ?taxa= (what resolveWhere/querySpecies match on). */
+  taxon: string;
+}
+
+// Recognize a higher-rank taxon (class / order / family) the user is typing, so the
+// search bar can offer "Browse Felidae → " above the species hits. Restricted to the
+// three ranks resolveWhere()'s arbitrary-rank branch matches on — genus is excluded
+// because the dashboard query (querySpecies) can't filter by it, so a genus pick would
+// land on an empty view. Prefix-matches the DISTINCT rank names in the assessed ∪
+// unassessed parquets (already warm in the search hot path, name columns pre-lowercased
+// at build time), so it never full-scans species/. A rank with zero assessed and zero
+// GBIF-observed species won't surface — acceptable: those are exactly the taxa a user
+// wouldn't browse to, and the direct species/synonym search still answers by name.
+export async function suggestTaxa(query: string, limit = 3): Promise<TaxonSuggestion[]> {
+  if (query.length < 2) return [];
+  const conn = await getConn();
+  const q = query.toLowerCase();
+  const RANKS: { col: string; rank: TaxonSuggestion["rank"] }[] = [
+    { col: "family", rank: "family" },
+    { col: "order_name", rank: "order" },
+    { col: "class_name", rank: "class" },
+  ];
+  const part = (src: string, col: string, rank: string) =>
+    `SELECT DISTINCT ${col} AS name, '${rank}' AS rank FROM '${parquetUri(src)}'
+     WHERE ${col} IS NOT NULL AND ${col} LIKE $q || '%'`;
+  const parts = RANKS.flatMap(({ col, rank }) =>
+    [part("assessed.parquet", col, rank), part("unassessed.parquet", col, rank)]);
+  const lim = Math.min(Math.max(limit, 1), 10);
+  // Exact match first, then shortest (closest) name, then alphabetical. DISTINCT in the
+  // sub-selects collapses per-file dupes; the outer query dedupes across ranks by name.
+  const sql = `
+    SELECT name, any_value(rank) AS rank FROM (${parts.join(" UNION ALL ")})
+    GROUP BY name
+    ORDER BY (name = $q) DESC, length(name), name
+    LIMIT ${lim}`;
+  const rows = (await conn.runAndReadAll(sql, { q })).getRowObjects();
+  return rows.map((r) => {
+    const name = String(r.name);
+    return {
+      name: name.charAt(0).toUpperCase() + name.slice(1),
+      rank: String(r.rank) as TaxonSuggestion["rank"],
+      taxon: name,
+    };
+  });
+}

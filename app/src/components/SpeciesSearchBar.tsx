@@ -19,6 +19,14 @@ interface SearchResult {
   matched_synonym?: string | null;
 }
 
+// A higher-rank taxon (class/order/family) the query matched — pinned above the
+// species hits. Selecting it browses the whole taxon via ?taxa=<taxon>.
+interface TaxonSuggestion {
+  name: string;
+  rank: "class" | "order" | "family";
+  taxon: string;
+}
+
 /**
  * Module-level cache of the last selected search result.
  * RedListView reads this to construct the preview without an API call.
@@ -34,6 +42,7 @@ export function clearLastSearchResult(): void {
 export function SpeciesSearchBar() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [taxaResults, setTaxaResults] = useState<TaxonSuggestion[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [highlightIndex, setHighlightIndex] = useState(-1);
   const [loading, setLoading] = useState(false);
@@ -51,6 +60,7 @@ export function SpeciesSearchBar() {
   useEffect(() => {
     if (query.length < 2) {
       setResults([]);
+      setTaxaResults([]);
       setIsOpen(false);
       return;
     }
@@ -69,11 +79,13 @@ export function SpeciesSearchBar() {
         if (!res.ok) throw new Error("Search failed");
         const data = await res.json();
         setResults(data.results);
+        setTaxaResults(data.taxa ?? []);
         setIsOpen(true);
         setHighlightIndex(-1);
       } catch (e) {
         if (e instanceof DOMException && e.name === "AbortError") return;
         setResults([]);
+        setTaxaResults([]);
         setIsOpen(false);
       } finally {
         setLoading(false);
@@ -134,23 +146,76 @@ export function SpeciesSearchBar() {
 
       setQuery("");
       setResults([]);
+      setTaxaResults([]);
       setIsOpen(false);
     },
     []
   );
 
+  // Browse a whole higher-rank taxon (e.g. Felidae): navigate to ?taxa=<taxon> in the
+  // arbitrary-rank taxon flows through resolveWhere → querySpecies just like a
+  // curated node; no species is preselected. Preserve the current view: from the
+  // new-assessments view, browsing a taxon shows its not-evaluated species (charts
+  // come from the assessed/reassessments view).
+  const selectTaxon = useCallback((t: TaxonSuggestion) => {
+    const currentView: ViewMode =
+      new URLSearchParams(window.location.search).get("view") === "new-assessments"
+        ? "new-assessments"
+        : "reassessments";
+    const qs = buildQs({
+      viewMode: currentView,
+      taxa: new Set([t.taxon]),
+      subgroups: new Set(),
+      categories: new Set(),
+      yearRanges: new Set(),
+      assessmentYears: new Set(),
+      describedYears: new Set(),
+      countries: new Set(),
+      obsRanges: new Set(),
+      systems: new Set(),
+      populationTrends: new Set(),
+      movementPatterns: new Set(),
+      threats: new Set(),
+      hasMap: null,
+      endemicsOnly: false,
+      growthForms: new Set(),
+      assessors: new Set(),
+      reviewers: new Set(),
+      search: "",
+      sortField: null,
+      sortDirection: "desc",
+      species: null,
+      tab: null,
+    });
+    window.history.pushState(null, "", "/" + qs);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+
+    setQuery("");
+    setResults([]);
+    setTaxaResults([]);
+    setIsOpen(false);
+  }, []);
+
+  // Keyboard navigation runs over a single combined list: taxon suggestions first,
+  // then species. An index < taxaResults.length picks a taxon; the rest pick species.
+  const totalItems = taxaResults.length + results.length;
+  const activateIndex = (i: number) => {
+    if (i < taxaResults.length) selectTaxon(taxaResults[i]);
+    else selectResult(results[i - taxaResults.length]);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (!isOpen || results.length === 0) return;
+    if (!isOpen || totalItems === 0) return;
 
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setHighlightIndex((i) => (i < results.length - 1 ? i + 1 : 0));
+      setHighlightIndex((i) => (i < totalItems - 1 ? i + 1 : 0));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setHighlightIndex((i) => (i > 0 ? i - 1 : results.length - 1));
+      setHighlightIndex((i) => (i > 0 ? i - 1 : totalItems - 1));
     } else if (e.key === "Enter" && highlightIndex >= 0) {
       e.preventDefault();
-      selectResult(results[highlightIndex]);
+      activateIndex(highlightIndex);
     } else if (e.key === "Escape") {
       setIsOpen(false);
       inputRef.current?.blur();
@@ -186,7 +251,7 @@ export function SpeciesSearchBar() {
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => query.length >= 2 && setIsOpen(true)}
           onKeyDown={handleKeyDown}
-          placeholder="Search for a species..."
+          placeholder="Search for a species or taxon..."
           className="w-full pl-10 pr-8 py-1.5 text-base rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-400 dark:focus:ring-zinc-500"
         />
         {/* Clear button */}
@@ -195,6 +260,7 @@ export function SpeciesSearchBar() {
             onClick={() => {
               setQuery("");
               setResults([]);
+              setTaxaResults([]);
               setIsOpen(false);
               inputRef.current?.focus();
             }}
@@ -216,12 +282,37 @@ export function SpeciesSearchBar() {
       {/* Dropdown */}
       {isOpen && (
         <div className="absolute z-50 w-full mt-1 max-h-80 overflow-y-auto rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 shadow-lg">
-          {results.length === 0 && !loading ? (
+          {/* Higher-rank taxon suggestions, pinned above species hits */}
+          {taxaResults.map((t, i) => (
+            <button
+              key={`taxon-${t.rank}-${t.taxon}`}
+              onClick={() => selectTaxon(t)}
+              onMouseEnter={() => setHighlightIndex(i)}
+              className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-700/60 ${
+                i === highlightIndex
+                  ? "bg-zinc-100 dark:bg-zinc-700"
+                  : "hover:bg-zinc-50 dark:hover:bg-zinc-700/50"
+              }`}
+            >
+              <svg className="h-4 w-4 shrink-0 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h10M4 18h6" />
+              </svg>
+              <span className="flex-1 min-w-0 text-zinc-900 dark:text-zinc-100">
+                Browse <span className="font-medium">{t.name}</span>
+              </span>
+              <span className="shrink-0 text-xs font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+                {t.rank}
+              </span>
+            </button>
+          ))}
+          {results.length === 0 && taxaResults.length === 0 && !loading ? (
             <div className="px-3 py-2 text-sm text-zinc-500 dark:text-zinc-400">
               No species found
             </div>
           ) : (
-            results.map((result, i) => (
+            results.map((result, ri) => {
+              const i = taxaResults.length + ri;
+              return (
               <button
                 key={`${result.id}-${result.taxon_group}`}
                 onClick={() => selectResult(result)}
@@ -261,7 +352,8 @@ export function SpeciesSearchBar() {
                   {result.category}
                 </span>
               </button>
-            ))
+              );
+            })
           )}
         </div>
       )}
