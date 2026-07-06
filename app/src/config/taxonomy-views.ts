@@ -60,6 +60,79 @@ export const TAXONOMY_VIEWS: Record<string, TaxonomyView> = {
       },
     ],
   },
+
+  // "By SSC specialist group" view — a sibling of Table 1a. Same sectioned
+  // layout, but instead of stopping at the coarse Table 1a class rows it breaks
+  // the vertebrates down to the order/family taxa where IUCN SSC Specialist
+  // Groups actually operate (Primates, Sharks & Rays, Crocodilians, Turtles &
+  // Tortoises, Amphibians, …). Rows reuse existing taxonomy nodes, so every
+  // number comes from the same precomputed summaries — nothing is invented.
+  // Rows resolve via node-children-summaries.json (see the taxa-summary route),
+  // which is why finer nodes like "primates" / "sharks-rays" are valid here.
+  sscSpecialistGroups: {
+    id: "sscSpecialistGroups",
+    name: "SSC Specialist Groups",
+    roots: [
+      "primates", "carnivores", "bats", "rodents", "artiodactyls", "marsupials",
+      "eulipotyphla", "rabbits-hares", "odd-toed-ungulates", "sirenians",
+      "pangolins", "other-mammals",
+      "birds",
+      "squamates", "turtles-tortoises", "crocodilians", "tuataras",
+      "amphibians",
+      "sharks-rays", "ray-finned-fishes", "jawless-fish", "lobe-finned-fishes",
+      "insects", "molluscs", "crustaceans", "corals", "arachnids",
+      "velvet_worms", "horseshoe_crabs", "other_invertebrates",
+      "flowering_plants", "gymnosperms", "ferns_and_allies", "mosses",
+      "green_algae", "red_algae",
+      "mushrooms", "brown_algae",
+    ],
+    sections: [
+      {
+        title: "MAMMALS",
+        nodeIds: [
+          "primates", "carnivores", "bats", "rodents", "artiodactyls",
+          "marsupials", "eulipotyphla", "rabbits-hares", "odd-toed-ungulates",
+          "sirenians", "pangolins", "other-mammals",
+        ],
+      },
+      {
+        title: "BIRDS",
+        nodeIds: ["birds"],
+      },
+      {
+        title: "REPTILES",
+        nodeIds: ["squamates", "turtles-tortoises", "crocodilians", "tuataras"],
+      },
+      {
+        title: "AMPHIBIANS",
+        nodeIds: ["amphibians"],
+      },
+      {
+        title: "FISHES",
+        nodeIds: [
+          "sharks-rays", "ray-finned-fishes", "jawless-fish", "lobe-finned-fishes",
+        ],
+      },
+      {
+        title: "INVERTEBRATES",
+        nodeIds: [
+          "insects", "molluscs", "crustaceans", "corals", "arachnids",
+          "velvet_worms", "horseshoe_crabs", "other_invertebrates",
+        ],
+      },
+      {
+        title: "PLANTS",
+        nodeIds: [
+          "flowering_plants", "gymnosperms", "ferns_and_allies", "mosses",
+          "green_algae", "red_algae",
+        ],
+      },
+      {
+        title: "FUNGI & PROTISTS",
+        nodeIds: ["mushrooms", "brown_algae"],
+      },
+    ],
+  },
 };
 
 export function getView(viewId: string): TaxonomyView {

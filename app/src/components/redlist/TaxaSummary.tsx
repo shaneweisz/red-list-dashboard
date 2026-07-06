@@ -325,6 +325,12 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   const [table1aData, setTable1aData] = useState<Table1aSectionData[] | null>(null);
   const [table1aLoading, setTable1aLoading] = useState(false);
 
+  // "By SSC specialist group" mode — sibling of Table 1a with the same sectioned
+  // layout, but rows are the finer taxa where IUCN SSC Specialist Groups operate.
+  const [sscMode, setSscMode] = useState(false);
+  const [sscData, setSscData] = useState<Table1aSectionData[] | null>(null);
+  const [sscLoading, setSscLoading] = useState(false);
+
   // "# Described" source toggle (#272/#274): IUCN Table 1a estimates vs the CoL
   // backbone described count. Flipping to CoL swaps the described value AND
   // recomputes % Assessed against it. The separate "# Described (CoL)" column
@@ -393,8 +399,30 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     }
   }, [table1aData]);
 
-  const exitTable1a = useCallback(() => {
+  const enterSsc = useCallback(async () => {
+    setSscMode(true);
+    if (!sscData) {
+      setSscLoading(true);
+      try {
+        const res = await fetch("/api/redlist/taxa-summary?ssc=true");
+        if (res.ok) {
+          const data = await res.json();
+          setSscData(data.sections);
+        }
+      } finally {
+        setSscLoading(false);
+      }
+    }
+  }, [sscData]);
+
+  // Table 1a and the SSC specialist-group view share the exact same sectioned
+  // rendering; only the data source differs. These derive the active one.
+  const sectionsMode = table1aMode || sscMode;
+  const sectionsData = table1aMode ? table1aData : sscData;
+  const sectionsLoading = table1aMode ? table1aLoading : sscLoading;
+  const exitSections = useCallback(() => {
     setTable1aMode(false);
+    setSscMode(false);
   }, []);
 
   const allExpanded = useMemo(() => perTaxa.filter(t => isExpandable(t.id)).every(t => expandedTaxa.has(t.id)), [perTaxa, expandedTaxa]);
@@ -1288,8 +1316,8 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   const renderHead = () => (
     <thead>
       <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
-        <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} ${table1aMode ? "text-left" : "text-center"} text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap w-0`}>
-          <div className={`flex items-center gap-1.5 ${table1aMode ? "justify-start" : "justify-center"}`}>
+        <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} ${sectionsMode ? "text-left" : "text-center"} text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap w-0`}>
+          <div className={`flex items-center gap-1.5 ${sectionsMode ? "justify-start" : "justify-center"}`}>
             Taxonomic Group
             <button
               ref={menuButtonRef}
@@ -1428,9 +1456,9 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       <table className="w-full">
         {renderHead()}
         <tbody>
-          {table1aMode ? (
-            /* Table 1a view: sections with headers, individual rows, subtotals */
-            table1aLoading ? (
+          {sectionsMode ? (
+            /* Sectioned view (Table 1a or SSC specialist groups): section headers, rows, subtotals */
+            sectionsLoading ? (
               <tr>
                 <td colSpan={visibleColCount} className={`${cellPad} text-center text-sm text-zinc-400`}>
                   <div className="flex items-center justify-center gap-2 py-4">
@@ -1438,13 +1466,13 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
-                    Loading Table 1a data…
+                    Loading {sscMode ? "specialist group" : "Table 1a"} data…
                   </div>
                 </td>
               </tr>
-            ) : table1aData ? (
+            ) : sectionsData ? (
               <>
-                {table1aData.map((section, si) => {
+                {sectionsData.map((section, si) => {
                   // Apply the IUCN/CoL described-source toggle to every row first, so the
                   // per-row cells and the subtotals below all use the effective described.
                   const rows = section.rows.map(applySource);
@@ -1486,7 +1514,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                           key={row.group}
                           className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer"
                           onClick={(e) => {
-                            setTable1aMode(false);
+                            exitSections();
                             const defaultRoots = new Set(TAXONOMY_VIEWS.default.roots);
                             if (defaultRoots.has(row.group)) {
                               // Direct view root (e.g. mammals, birds) — select it
@@ -1625,7 +1653,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                         )}
                       </tr>
                       {/* Gap between sections */}
-                      {si < table1aData.length - 1 && (
+                      {si < sectionsData.length - 1 && (
                         <tr><td colSpan={visibleColCount} className="p-0"><div className="h-1" /></td></tr>
                       )}
                     </React.Fragment>
@@ -1792,12 +1820,12 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             </span>
           </span>
           <span className="text-zinc-300 dark:text-zinc-700">|</span>
-          {table1aMode ? (
+          {sectionsMode ? (
             <button
-              onClick={exitTable1a}
+              onClick={exitSections}
               className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
             >
-              Exit Table 1a mode
+              Exit {sscMode ? "specialist group" : "Table 1a"} mode
             </button>
           ) : (
             <>
@@ -1828,6 +1856,23 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                   </a>
                   <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover/t1a:opacity-100 group-hover/t1a:visible z-50 shadow-lg pointer-events-none">
                     View IUCN Red List Table 1a (PDF)
+                  </span>
+                </span>
+              </span>
+              <span className="text-zinc-300 dark:text-zinc-700">|</span>
+              <span className="inline-flex items-center gap-1">
+                <button
+                  onClick={enterSsc}
+                  className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                >
+                  By SSC specialist group
+                </button>
+                <span className="relative group/ssc">
+                  <span className="text-zinc-400" aria-hidden>
+                    <FaInfoCircle size={10} />
+                  </span>
+                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-normal w-56 text-center opacity-0 invisible group-hover/ssc:opacity-100 group-hover/ssc:visible z-50 shadow-lg pointer-events-none">
+                    Groups taxa by the IUCN SSC Specialist Groups that assess them (vertebrates broken down to the order/family level)
                   </span>
                 </span>
               </span>

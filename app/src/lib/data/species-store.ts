@@ -110,6 +110,7 @@ const redlistCache = new Map<string, RedlistRow[]>();
 const historyCache = new Map<string, HistoryMap>();
 let taxaSummaryCache: TaxaSummaryRow[] | null = null;
 let nodeChildrenSummariesCache: Record<string, NodeSummary[]> | null = null;
+let flatNodeSummariesCache: Record<string, NodeSummary> | null = null;
 
 /** @internal Reset all module-level caches (for tests only). */
 export function _resetCaches(): void {
@@ -117,6 +118,7 @@ export function _resetCaches(): void {
   historyCache.clear();
   taxaSummaryCache = null;
   nodeChildrenSummariesCache = null;
+  flatNodeSummariesCache = null;
 }
 
 function loadRedlistForGroup(group: string): RedlistRow[] {
@@ -167,6 +169,30 @@ export function getPrecomputedChildrenSummaries(parentNodeId: string): NodeSumma
     nodeChildrenSummariesCache = JSON.parse(content) as Record<string, NodeSummary[]>;
   }
   return nodeChildrenSummariesCache[parentNodeId] ?? [];
+}
+
+/**
+ * Flat index of every precomputed node summary by node id, merged across all
+ * parent groupings in node-children-summaries.json. Used by the "By SSC
+ * specialist group" view, which mixes coarse top-level taxa (under "all") with
+ * finer vertebrate nodes (under "mammals" / "reptiles" / "fishes" / …). Node
+ * ids are unique across parents for every taxon this view references, so a
+ * first-write-wins merge is unambiguous.
+ */
+export function getFlatNodeSummaries(): Record<string, NodeSummary> {
+  if (flatNodeSummariesCache) return flatNodeSummariesCache;
+  if (!nodeChildrenSummariesCache) {
+    const content = fs.readFileSync(NODE_CHILDREN_SUMMARIES_PATH, "utf-8");
+    nodeChildrenSummariesCache = JSON.parse(content) as Record<string, NodeSummary[]>;
+  }
+  const flat: Record<string, NodeSummary> = {};
+  for (const summaries of Object.values(nodeChildrenSummariesCache)) {
+    for (const s of summaries) {
+      if (!(s.id in flat)) flat[s.id] = s;
+    }
+  }
+  flatNodeSummariesCache = flat;
+  return flat;
 }
 
 // =============================================================================

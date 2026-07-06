@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTaxaSummary } from "@/lib/data/species-store";
+import { getTaxaSummary, getFlatNodeSummaries } from "@/lib/data/species-store";
 import { findNode, getCsvGroupsForNode } from "@/lib/taxonomy-utils";
 import { getView } from "@/config/taxonomy-views";
 import { CACHE_1H } from "@/lib/cache-headers";
@@ -48,6 +48,42 @@ export async function GET(request: NextRequest) {
     );
 
     const isTable1a = request.nextUrl.searchParams.get("table1a") === "true";
+    const isSsc = request.nextUrl.searchParams.get("ssc") === "true";
+
+    if (isSsc) {
+      // "By SSC specialist group" view — same sectioned shape as Table 1a, but
+      // rows are the finer taxa (Primates, Sharks & Rays, Crocodilians, …) where
+      // IUCN SSC Specialist Groups operate. Every row resolves to a precomputed
+      // node summary, so the numbers match the drill-down views exactly. GBIF
+      // observation totals aren't precomputed per node, so those columns (hidden
+      // in the Red List focus this view opens from) are omitted here.
+      const flat = getFlatNodeSummaries();
+      const view = getView("sscSpecialistGroups");
+      const sections = (view.sections ?? []).map((section) => ({
+        title: section.title,
+        rows: section.nodeIds.map((nodeId) => {
+          const summary = flat[nodeId];
+          const node = findNode(nodeId);
+          const estimatedDescribed = summary?.estimatedDescribed ?? node?.estimatedDescribed ?? 0;
+          const totalAssessed = summary?.totalAssessed ?? 0;
+          const outdated = summary?.outdated ?? 0;
+          return {
+            group: nodeId,
+            name: summary?.name ?? node?.name ?? nodeId,
+            estimatedDescribed,
+            totalAssessed,
+            percentAssessed: estimatedDescribed > 0 ? (totalAssessed / estimatedDescribed) * 100 : 0,
+            outdated,
+            percentOutdated: totalAssessed > 0 ? (outdated / totalAssessed) * 100 : 0,
+            byCategory: summary?.byCategory ?? {},
+            gbifNeSpeciesCount: summary?.gbifNeSpeciesCount,
+            colDescribed: summary?.colDescribed,
+            colNe: summary?.colNe,
+          };
+        }),
+      }));
+      return NextResponse.json({ sections }, { headers: CACHE_1H });
+    }
 
     if (isTable1a) {
       // Return data structured by Table 1a sections from the view config
