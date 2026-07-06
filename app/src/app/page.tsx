@@ -148,6 +148,15 @@ export default function RedListPage() {
           </a>
           {" "}at the University of Cambridge. The data is sourced from{" "}
           <a
+            href="https://www.iucnredlist.org"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
+          >
+            IUCN Red List
+          </a>
+          {" "}(version 2025-2),{" "}
+          <a
             href="https://www.gbif.org"
             target="_blank"
             rel="noopener noreferrer"
@@ -200,7 +209,7 @@ export default function RedListPage() {
           >
             Catalogue of Life
           </a>
-          ,{" "}
+          , and{" "}
           <a
             href="https://eol.org"
             target="_blank"
@@ -209,16 +218,7 @@ export default function RedListPage() {
           >
             Encyclopedia of Life
           </a>
-          {" "}and{" "}
-          <a
-            href="https://www.iucnredlist.org"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
-          >
-            IUCN Red List
-          </a>
-          {" "}(version 2025-2) data. This is a free, non-commercial research tool; commercial users should obtain IUCN Red List data via{" "}
+          {" "}data. This is a free, non-commercial research tool; commercial users should obtain IUCN Red List data via{" "}
           <a
             href="https://www.ibat-alliance.org/"
             target="_blank"

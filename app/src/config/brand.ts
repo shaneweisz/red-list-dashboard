@@ -27,16 +27,17 @@ const DEFAULT_BRAND: Brand = {
 // The original IUCN Red List dashboard branding, kept only for the
 // dedicated Red List hostnames below.
 const RED_LIST_BRAND: Brand = {
-  title: "IUCN Red List Assessments Dashboard",
+  title: "Red List Dashboard",
   subtitle: "A Dashboard for Conservation of Threatened Species",
   description: "A dashboard for biodiversity data about life on Earth",
+  showGlobe: true,
 };
 
-// The "Dash For Life" brand, identical to the default save for its title.
+// The "Dash for Life" brand, identical to the default save for its title.
 const DASH_FOR_LIFE_BRAND: Brand = {
   ...DEFAULT_BRAND,
-  title: "Dash For Life",
-  tabTitle: "Dash For Life",
+  title: "Dash for Life",
+  tabTitle: "Dash for Life",
 };
 
 // Per-hostname overrides. Keys are bare hostnames (no port, no "www.").
