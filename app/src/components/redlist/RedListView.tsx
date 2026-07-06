@@ -2159,7 +2159,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   {isNewAssessments ? "Not Evaluated Species" : "Assessed Species"}
                 </div>
                 <div className="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                  {totalFiltered.toLocaleString()}
+                  {speciesLoading && assessedSpecies.length === 0
+                    ? <Spinner className="h-6 w-6" />
+                    : totalFiltered.toLocaleString()}
                 </div>
               </div>
             </div>
