@@ -2140,22 +2140,28 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       ) : (
       <div className="space-y-3">
 
-          {/* Arbitrary-taxon header — a non-curated rank (e.g. Felidae) reached via
-              search. Kept deliberately thin: name + matched rank + the matched-species
-              count (mirrors the table's totalFiltered), no landing cards / drill-down. */}
+          {/* Arbitrary-taxon header — a non-curated rank (e.g. Carnivora) reached via
+              search. Two stat cards: the taxon (name + matched rank) and the
+              matched-species count (mirrors the table's totalFiltered). No landing
+              cards / drill-down — no honest data for arbitrary ranks. */}
           {arbitraryTaxon && !isSingleSpecies && (
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-5 py-4">
-              <div className="flex items-baseline gap-2 flex-wrap">
-                <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{arbitraryTaxon.name}</h2>
-                {arbitraryTaxon.rank && (
-                  <span className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                    {arbitraryTaxon.rank}
-                  </span>
-                )}
+            <div className="grid grid-cols-2 gap-4 max-w-md">
+              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
+                <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                  {arbitraryTaxon.rank ?? "Taxon"}
+                </div>
+                <div className="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+                  {arbitraryTaxon.name}
+                </div>
               </div>
-              <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                {totalFiltered.toLocaleString()} species
-              </p>
+              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
+                <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                  Species
+                </div>
+                <div className="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+                  {totalFiltered.toLocaleString()}
+                </div>
+              </div>
             </div>
           )}
 
