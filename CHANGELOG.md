@@ -4,6 +4,10 @@ All notable changes to the IUCN Red List Assessments Dashboard.
 
 ## [Unreleased]
 
+- Renamed the red.cst.cam.ac.uk brand title to "Red List Dashboard" and added
+  the globe icon before it
+- Reordered footer data sources to lead with IUCN Red List (version 2025-2)
+- Renamed the "Dash For Life" brand to "Dash for Life"
 - Added "Suggested Reviewers" tab for NE species, analogous to Suggested Assessors
 - Strip "(... Red List Authority)" affiliation labels from suggested
   assessor/reviewer candidates so each person aggregates under one row and the
