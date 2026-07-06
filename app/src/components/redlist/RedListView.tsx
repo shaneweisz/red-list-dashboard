@@ -2156,7 +2156,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
               </div>
               <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
                 <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                  Species
+                  {isNewAssessments ? "Not Evaluated Species" : "Assessed Species"}
                 </div>
                 <div className="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
                   {totalFiltered.toLocaleString()}
