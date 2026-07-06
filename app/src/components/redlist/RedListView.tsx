@@ -2145,7 +2145,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
               matched-species count (mirrors the table's totalFiltered). No landing
               cards / drill-down — no honest data for arbitrary ranks. */}
           {arbitraryTaxon && !isSingleSpecies && (
-            <div className="grid grid-cols-2 gap-4 max-w-md">
+            <div className="grid grid-cols-2 gap-4">
               <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
                 <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                   {arbitraryTaxon.rank ?? "Taxon"}
