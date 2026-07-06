@@ -2141,8 +2141,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       <div className="space-y-3">
 
           {/* Arbitrary-taxon header — a non-curated rank (e.g. Felidae) reached via
-              search. Kept deliberately thin: name + matched rank, no landing cards /
-              described-count / drill-down (no honest data for arbitrary ranks). */}
+              search. Kept deliberately thin: name + matched rank + the matched-species
+              count (mirrors the table's totalFiltered), no landing cards / drill-down. */}
           {arbitraryTaxon && !isSingleSpecies && (
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-5 py-4">
               <div className="flex items-baseline gap-2 flex-wrap">
@@ -2154,9 +2154,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 )}
               </div>
               <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                Not part of the curated taxonomy — showing{" "}
-                {isNewAssessments ? "species not yet evaluated" : "assessed species"} matched at{" "}
-                {arbitraryTaxon.rank ?? "rank"} level.
+                {totalFiltered.toLocaleString()} species
               </p>
             </div>
           )}
