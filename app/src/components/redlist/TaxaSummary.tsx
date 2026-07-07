@@ -397,6 +397,51 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     setTable1aMode(false);
   }, []);
 
+  // SSC groups mode (pilot: mammal Specialist Groups) — same flat-table layout as
+  // Table 1a mode, sourced from the precomputed "ssc-groups" node's children
+  // instead of the top-level Table 1a CSV groups.
+  const [sscMode, setSscMode] = useState(false);
+  const [sscData, setSscData] = useState<Table1aSectionData[] | null>(null);
+  const [sscLoading, setSscLoading] = useState(false);
+
+  const enterSsc = useCallback(async () => {
+    setSscMode(true);
+    if (!sscData) {
+      setSscLoading(true);
+      try {
+        const res = await fetch("/api/redlist/taxa-subgroups?nodeId=ssc-groups");
+        if (res.ok) {
+          const data = await res.json();
+          const rows: Table1aRowData[] = (data.subgroups ?? []).map((sg: SubGroupSummary) => ({
+            group: sg.id,
+            name: sg.name,
+            estimatedDescribed: sg.estimatedDescribed,
+            totalAssessed: sg.totalAssessed,
+            percentAssessed: sg.estimatedDescribed > 0 ? (sg.totalAssessed / sg.estimatedDescribed) * 100 : 0,
+            outdated: sg.outdated,
+            percentOutdated: sg.totalAssessed > 0 ? (sg.outdated / sg.totalAssessed) * 100 : 0,
+            byCategory: sg.byCategory,
+            gbifNeSpeciesCount: sg.gbifNeSpeciesCount,
+            colDescribed: sg.colDescribed,
+            colNe: sg.colNe,
+          }));
+          setSscData([{ title: "MAMMAL SPECIALIST GROUPS", rows }]);
+        }
+      } finally {
+        setSscLoading(false);
+      }
+    }
+  }, [sscData]);
+
+  const exitSsc = useCallback(() => {
+    setSscMode(false);
+  }, []);
+
+  // Shared flat-table data source for whichever mode (Table 1a / SSC groups) is active
+  const flatMode = table1aMode || sscMode;
+  const flatData = table1aMode ? table1aData : sscData;
+  const flatLoading = table1aMode ? table1aLoading : sscLoading;
+
   const allExpanded = useMemo(() => perTaxa.filter(t => isExpandable(t.id)).every(t => expandedTaxa.has(t.id)), [perTaxa, expandedTaxa]);
 
   // Collapse all when returning to landing page (no taxa selected)
@@ -1288,8 +1333,8 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   const renderHead = () => (
     <thead>
       <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
-        <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} ${table1aMode ? "text-left" : "text-center"} text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap w-0`}>
-          <div className={`flex items-center gap-1.5 ${table1aMode ? "justify-start" : "justify-center"}`}>
+        <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} ${flatMode ? "text-left" : "text-center"} text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap w-0`}>
+          <div className={`flex items-center gap-1.5 ${flatMode ? "justify-start" : "justify-center"}`}>
             Taxonomic Group
             <button
               ref={menuButtonRef}
@@ -1428,9 +1473,9 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       <table className="w-full">
         {renderHead()}
         <tbody>
-          {table1aMode ? (
-            /* Table 1a view: sections with headers, individual rows, subtotals */
-            table1aLoading ? (
+          {flatMode ? (
+            /* Table 1a / SSC groups view: sections with headers, individual rows, subtotals */
+            flatLoading ? (
               <tr>
                 <td colSpan={visibleColCount} className={`${cellPad} text-center text-sm text-zinc-400`}>
                   <div className="flex items-center justify-center gap-2 py-4">
@@ -1438,13 +1483,13 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
-                    Loading Table 1a data…
+                    {table1aMode ? "Loading Table 1a data…" : "Loading SSC groups data…"}
                   </div>
                 </td>
               </tr>
-            ) : table1aData ? (
+            ) : flatData ? (
               <>
-                {table1aData.map((section, si) => {
+                {flatData.map((section, si) => {
                   // Apply the IUCN/CoL described-source toggle to every row first, so the
                   // per-row cells and the subtotals below all use the effective described.
                   const rows = section.rows.map(applySource);
@@ -1486,6 +1531,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                           key={row.group}
                           className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer"
                           onClick={(e) => {
+                            if (sscMode) {
+                              // SSC groups are pre-filtered mammal sub-populations, not
+                              // display-root taxa — navigate straight to Mammals + this
+                              // group's filter (all 35 pilot groups are mammal-scoped).
+                              setSscMode(false);
+                              onNavigateToSubgroup?.("mammals", row.group);
+                              return;
+                            }
                             setTable1aMode(false);
                             const defaultRoots = new Set(TAXONOMY_VIEWS.default.roots);
                             if (defaultRoots.has(row.group)) {
@@ -1625,7 +1678,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                         )}
                       </tr>
                       {/* Gap between sections */}
-                      {si < table1aData.length - 1 && (
+                      {si < flatData.length - 1 && (
                         <tr><td colSpan={visibleColCount} className="p-0"><div className="h-1" /></td></tr>
                       )}
                     </React.Fragment>
@@ -1799,6 +1852,13 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             >
               Exit Table 1a mode
             </button>
+          ) : sscMode ? (
+            <button
+              onClick={exitSsc}
+              className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+            >
+              Exit SSC groups mode
+            </button>
           ) : (
             <>
               <button
@@ -1828,6 +1888,29 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                   </a>
                   <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover/t1a:opacity-100 group-hover/t1a:visible z-50 shadow-lg pointer-events-none">
                     View IUCN Red List Table 1a (PDF)
+                  </span>
+                </span>
+              </span>
+              <span className="text-zinc-300 dark:text-zinc-700">|</span>
+              <span className="inline-flex items-center gap-1">
+                <button
+                  onClick={enterSsc}
+                  className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                >
+                  SSC groups mode
+                </button>
+                <span className="relative group/ssc">
+                  <a
+                    href="https://iucn.org/our-union/commissions/group/1445"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <FaInfoCircle size={10} />
+                  </a>
+                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover/ssc:opacity-100 group-hover/ssc:visible z-50 shadow-lg pointer-events-none">
+                    View IUCN SSC Specialist Groups (mammals pilot)
                   </span>
                 </span>
               </span>

@@ -63,11 +63,20 @@ export function getNodePath(id: string): string[] {
 
 const DEFAULT_VIEW_ROOTS = new Set(TAXONOMY_VIEWS.default.roots);
 
+// SSC Specialist Group leaves live under "ssc-groups" — a separate wrapper kept
+// OUT of the "mammals" tree node (so it doesn't pollute the normal Mammals
+// subgroup list) and out of the default view (so it isn't a 9th landing-page
+// taxon). But for URL persistence + click-through navigation they behave like a
+// "mammals" sub-group (onNavigateToSubgroup("mammals", sscLeafId)) — so redirect
+// their view-root resolution to "mammals" without actually re-parenting them.
+const VIEW_ROOT_OVERRIDES: Record<string, string> = { "ssc-groups": "mammals" };
+
 /** Find the default-view ancestor for a node (one of the 8 display roots). */
 export function getViewRootForNode(nodeId: string): string | null {
   if (DEFAULT_VIEW_ROOTS.has(nodeId)) return nodeId;
   for (const a of getAncestors(nodeId)) {
     if (DEFAULT_VIEW_ROOTS.has(a)) return a;
+    if (VIEW_ROOT_OVERRIDES[a]) return VIEW_ROOT_OVERRIDES[a];
   }
   return null;
 }
@@ -164,6 +173,7 @@ export function matchesFilter(
     class_name: string | null;
     order_name: string | null;
     family?: string | null;
+    scientific_name?: string | null;
   },
   filter: SpeciesFilter,
 ): boolean {
@@ -205,6 +215,20 @@ export function matchesFilter(
     if (fam && filter.excludeFamilies.includes(fam)) return false;
   }
 
+  // Genus include/exclude filter (derived from the first token of scientific_name)
+  if (filter.genera?.length || filter.excludeGenera?.length) {
+    const genus = (row.scientific_name ?? "").trim().split(/\s+/)[0]?.toLowerCase() ?? "";
+    if (filter.genera && filter.genera.length > 0 && !filter.genera.includes(genus)) return false;
+    if (filter.excludeGenera && filter.excludeGenera.length > 0 && genus && filter.excludeGenera.includes(genus)) return false;
+  }
+
+  // Full scientific name include/exclude filter (for species-level carve-outs)
+  if (filter.speciesNames?.length || filter.excludeSpeciesNames?.length) {
+    const name = (row.scientific_name ?? "").trim().toLowerCase();
+    if (filter.speciesNames && filter.speciesNames.length > 0 && !filter.speciesNames.includes(name)) return false;
+    if (filter.excludeSpeciesNames && filter.excludeSpeciesNames.length > 0 && name && filter.excludeSpeciesNames.includes(name)) return false;
+  }
+
   return true;
 }
 
@@ -215,7 +239,7 @@ export function matchesFilter(
  * but checks CSV group membership first.
  */
 export function speciesMatchesNode(
-  species: { taxon_group: string; class_name: string | null; order_name: string | null; family?: string | null },
+  species: { taxon_group: string; class_name: string | null; order_name: string | null; family?: string | null; scientific_name?: string | null },
   nodeId: string,
 ): boolean {
   const node = NODE_INDEX.get(nodeId);

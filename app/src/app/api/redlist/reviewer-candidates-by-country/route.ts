@@ -28,6 +28,10 @@ export async function GET(request: NextRequest) {
     excludeClasses: filter.excludeClasses,
     excludeOrders: filter.excludeOrders,
     excludeFamilies: filter.excludeFamilies,
+    genera: filter.genera,
+    excludeGenera: filter.excludeGenera,
+    speciesNames: filter.speciesNames,
+    excludeSpeciesNames: filter.excludeSpeciesNames,
   } : undefined;
 
   try {

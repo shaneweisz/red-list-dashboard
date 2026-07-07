@@ -22,6 +22,27 @@
       "colNe": 394
     },
     {
+      "id": "ssc-groups",
+      "name": "SSC Specialist Groups",
+      "estimatedDescribed": 0,
+      "totalAssessed": 6036,
+      "outdated": 1099,
+      "gbifNeSpeciesCount": 314,
+      "byCategory": {
+        "CR": 238,
+        "VU": 567,
+        "EN": 559,
+        "LC": 3391,
+        "DD": 789,
+        "NT": 400,
+        "EX": 90,
+        "EW": 1,
+        "LR/nt": 1
+      },
+      "colDescribed": 6163,
+      "colNe": 394
+    },
+    {
       "id": "birds",
       "name": "Birds",
       "estimatedDescribed": 11185,
@@ -694,6 +715,576 @@
       },
       "colDescribed": 248,
       "colNe": 7
+    }
+  ],
+  "ssc-groups": [
+    {
+      "id": "ssc-african-elephant",
+      "name": "African Elephant Specialist Group",
+      "estimatedDescribed": 2,
+      "totalAssessed": 2,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 0,
+      "byCategory": {
+        "CR": 1,
+        "EN": 1
+      },
+      "colDescribed": 2,
+      "colNe": 0
+    },
+    {
+      "id": "ssc-asian-elephant",
+      "name": "Asian Elephant Specialist Group",
+      "estimatedDescribed": 1,
+      "totalAssessed": 1,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 0,
+      "byCategory": {
+        "EN": 1
+      },
+      "colDescribed": 1,
+      "colNe": 0
+    },
+    {
+      "id": "ssc-african-rhino",
+      "name": "African Rhino Specialist Group",
+      "estimatedDescribed": 2,
+      "totalAssessed": 2,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 1,
+      "byCategory": {
+        "NT": 1,
+        "CR": 1
+      },
+      "colDescribed": 2,
+      "colNe": 0
+    },
+    {
+      "id": "ssc-asian-rhino",
+      "name": "Asian Rhino Specialist Group",
+      "estimatedDescribed": 3,
+      "totalAssessed": 3,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 1,
+      "byCategory": {
+        "CR": 2,
+        "VU": 1
+      },
+      "colDescribed": 3,
+      "colNe": 0
+    },
+    {
+      "id": "ssc-afro-asian-wild-cattle",
+      "name": "Afro-Asian Wild Cattle Specialist Group",
+      "estimatedDescribed": 9,
+      "totalAssessed": 10,
+      "outdated": 3,
+      "gbifNeSpeciesCount": 4,
+      "byCategory": {
+        "CR": 4,
+        "VU": 2,
+        "EN": 3,
+        "EX": 1
+      },
+      "colDescribed": 15,
+      "colNe": 5
+    },
+    {
+      "id": "ssc-afrotheria",
+      "name": "Afrotheria Specialist Group",
+      "estimatedDescribed": 83,
+      "totalAssessed": 80,
+      "outdated": 77,
+      "gbifNeSpeciesCount": 1,
+      "byCategory": {
+        "EN": 8,
+        "LC": 50,
+        "DD": 8,
+        "VU": 10,
+        "CR": 1,
+        "NT": 3
+      },
+      "colDescribed": 82,
+      "colNe": 2
+    },
+    {
+      "id": "ssc-anteater-sloth-armadillo",
+      "name": "Anteater, Sloth and Armadillo Specialist Group",
+      "estimatedDescribed": 31,
+      "totalAssessed": 38,
+      "outdated": 8,
+      "gbifNeSpeciesCount": 1,
+      "byCategory": {
+        "LC": 20,
+        "NT": 5,
+        "DD": 7,
+        "VU": 3,
+        "CR": 1,
+        "EN": 2
+      },
+      "colDescribed": 37,
+      "colNe": 2
+    },
+    {
+      "id": "ssc-antelope",
+      "name": "Antelope Specialist Group",
+      "estimatedDescribed": 90,
+      "totalAssessed": 96,
+      "outdated": 3,
+      "gbifNeSpeciesCount": 13,
+      "byCategory": {
+        "CR": 3,
+        "LC": 49,
+        "VU": 14,
+        "NT": 12,
+        "EN": 13,
+        "EX": 3,
+        "DD": 2
+      },
+      "colDescribed": 92,
+      "colNe": 8
+    },
+    {
+      "id": "ssc-australasian-marsupial-monotreme",
+      "name": "Australasian Marsupial and Monotreme Specialist Group",
+      "estimatedDescribed": 250,
+      "totalAssessed": 259,
+      "outdated": 174,
+      "gbifNeSpeciesCount": 17,
+      "byCategory": {
+        "LC": 128,
+        "NT": 35,
+        "EN": 25,
+        "CR": 16,
+        "EX": 17,
+        "VU": 34,
+        "DD": 4
+      },
+      "colDescribed": 249,
+      "colNe": 12
+    },
+    {
+      "id": "ssc-bat",
+      "name": "Bat Specialist Group",
+      "estimatedDescribed": 1485,
+      "totalAssessed": 1336,
+      "outdated": 203,
+      "gbifNeSpeciesCount": 98,
+      "byCategory": {
+        "VU": 109,
+        "EN": 88,
+        "LC": 773,
+        "NT": 97,
+        "CR": 24,
+        "DD": 235,
+        "EX": 9,
+        "LR/nt": 1
+      },
+      "colDescribed": 1433,
+      "colNe": 136
+    },
+    {
+      "id": "ssc-bear",
+      "name": "Bear Specialist Group",
+      "estimatedDescribed": 7,
+      "totalAssessed": 7,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 3,
+      "byCategory": {
+        "VU": 5,
+        "LC": 2
+      },
+      "colDescribed": 7,
+      "colNe": 0
+    },
+    {
+      "id": "ssc-polar-bear",
+      "name": "Polar Bear Specialist Group",
+      "estimatedDescribed": 1,
+      "totalAssessed": 1,
+      "outdated": 1,
+      "gbifNeSpeciesCount": 0,
+      "byCategory": {
+        "VU": 1
+      },
+      "colDescribed": 1,
+      "colNe": 0
+    },
+    {
+      "id": "ssc-bison",
+      "name": "Bison Specialist Group",
+      "estimatedDescribed": 2,
+      "totalAssessed": 2,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 1,
+      "byCategory": {
+        "NT": 2
+      },
+      "colDescribed": 0,
+      "colNe": 0
+    },
+    {
+      "id": "ssc-canid",
+      "name": "Canid Specialist Group",
+      "estimatedDescribed": 37,
+      "totalAssessed": 38,
+      "outdated": 21,
+      "gbifNeSpeciesCount": 4,
+      "byCategory": {
+        "LC": 25,
+        "CR": 1,
+        "EN": 4,
+        "NT": 6,
+        "EX": 2
+      },
+      "colDescribed": 39,
+      "colNe": 3
+    },
+    {
+      "id": "ssc-caprinae",
+      "name": "Caprinae Specialist Group",
+      "estimatedDescribed": 40,
+      "totalAssessed": 31,
+      "outdated": 6,
+      "gbifNeSpeciesCount": 3,
+      "byCategory": {
+        "VU": 9,
+        "NT": 9,
+        "EN": 2,
+        "LC": 11
+      },
+      "colDescribed": 31,
+      "colNe": 5
+    },
+    {
+      "id": "ssc-cat",
+      "name": "Cat Specialist Group",
+      "estimatedDescribed": 41,
+      "totalAssessed": 39,
+      "outdated": 17,
+      "gbifNeSpeciesCount": 10,
+      "byCategory": {
+        "VU": 14,
+        "LC": 16,
+        "EN": 4,
+        "NT": 5
+      },
+      "colDescribed": 46,
+      "colNe": 7
+    },
+    {
+      "id": "ssc-cetacean",
+      "name": "Cetacean Specialist Group",
+      "estimatedDescribed": 94,
+      "totalAssessed": 92,
+      "outdated": 3,
+      "gbifNeSpeciesCount": 3,
+      "byCategory": {
+        "LC": 48,
+        "EN": 12,
+        "VU": 7,
+        "NT": 10,
+        "CR": 5,
+        "DD": 10
+      },
+      "colDescribed": 71,
+      "colNe": 3
+    },
+    {
+      "id": "ssc-deer",
+      "name": "Deer Specialist Group",
+      "estimatedDescribed": 55,
+      "totalAssessed": 56,
+      "outdated": 45,
+      "gbifNeSpeciesCount": 7,
+      "byCategory": {
+        "EN": 6,
+        "CR": 2,
+        "VU": 16,
+        "LC": 16,
+        "EX": 1,
+        "NT": 4,
+        "EW": 1,
+        "DD": 10
+      },
+      "colDescribed": 46,
+      "colNe": 0
+    },
+    {
+      "id": "ssc-equid",
+      "name": "Equid Specialist Group",
+      "estimatedDescribed": 7,
+      "totalAssessed": 7,
+      "outdated": 3,
+      "gbifNeSpeciesCount": 5,
+      "byCategory": {
+        "CR": 1,
+        "EN": 2,
+        "NT": 2,
+        "LC": 1,
+        "VU": 1
+      },
+      "colDescribed": 10,
+      "colNe": 2
+    },
+    {
+      "id": "ssc-giraffe-okapi",
+      "name": "Giraffe and Okapi Specialist Group",
+      "estimatedDescribed": 5,
+      "totalAssessed": 2,
+      "outdated": 1,
+      "gbifNeSpeciesCount": 3,
+      "byCategory": {
+        "VU": 1,
+        "EN": 1
+      },
+      "colDescribed": 5,
+      "colNe": 3
+    },
+    {
+      "id": "ssc-hippo",
+      "name": "Hippo Specialist Group",
+      "estimatedDescribed": 2,
+      "totalAssessed": 4,
+      "outdated": 1,
+      "gbifNeSpeciesCount": 0,
+      "byCategory": {
+        "EN": 1,
+        "VU": 1,
+        "EX": 2
+      },
+      "colDescribed": 1,
+      "colNe": 0
+    },
+    {
+      "id": "ssc-hyaena",
+      "name": "Hyaena Specialist Group",
+      "estimatedDescribed": 4,
+      "totalAssessed": 4,
+      "outdated": 4,
+      "gbifNeSpeciesCount": 3,
+      "byCategory": {
+        "LC": 2,
+        "NT": 2
+      },
+      "colDescribed": 4,
+      "colNe": 0
+    },
+    {
+      "id": "ssc-lagomorph",
+      "name": "Lagomorph Specialist Group",
+      "estimatedDescribed": 112,
+      "totalAssessed": 96,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 7,
+      "byCategory": {
+        "LC": 63,
+        "CR": 2,
+        "EN": 14,
+        "VU": 8,
+        "NT": 2,
+        "DD": 6,
+        "EX": 1
+      },
+      "colDescribed": 97,
+      "colNe": 5
+    },
+    {
+      "id": "ssc-new-world-marsupial",
+      "name": "New World Marsupial Specialist Group",
+      "estimatedDescribed": 128,
+      "totalAssessed": 107,
+      "outdated": 53,
+      "gbifNeSpeciesCount": 16,
+      "byCategory": {
+        "LC": 72,
+        "DD": 15,
+        "VU": 8,
+        "CR": 2,
+        "NT": 9,
+        "EX": 1
+      },
+      "colDescribed": 129,
+      "colNe": 30
+    },
+    {
+      "id": "ssc-otter",
+      "name": "Otter Specialist Group",
+      "estimatedDescribed": 14,
+      "totalAssessed": 13,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 0,
+      "byCategory": {
+        "NT": 5,
+        "EN": 5,
+        "LC": 1,
+        "VU": 2
+      },
+      "colDescribed": 13,
+      "colNe": 0
+    },
+    {
+      "id": "ssc-pangolin",
+      "name": "Pangolin Specialist Group",
+      "estimatedDescribed": 8,
+      "totalAssessed": 8,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 1,
+      "byCategory": {
+        "EN": 3,
+        "CR": 3,
+        "VU": 2
+      },
+      "colDescribed": 10,
+      "colNe": 2
+    },
+    {
+      "id": "ssc-peccary",
+      "name": "Peccary Specialist Group",
+      "estimatedDescribed": 3,
+      "totalAssessed": 3,
+      "outdated": 2,
+      "gbifNeSpeciesCount": 1,
+      "byCategory": {
+        "EN": 1,
+        "LC": 1,
+        "VU": 1
+      },
+      "colDescribed": 3,
+      "colNe": 0
+    },
+    {
+      "id": "ssc-pinniped",
+      "name": "Pinniped Specialist Group",
+      "estimatedDescribed": 36,
+      "totalAssessed": 36,
+      "outdated": 24,
+      "gbifNeSpeciesCount": 0,
+      "byCategory": {
+        "LC": 21,
+        "EN": 6,
+        "VU": 4,
+        "NT": 3,
+        "EX": 2
+      },
+      "colDescribed": 33,
+      "colNe": 0
+    },
+    {
+      "id": "ssc-primate",
+      "name": "Primate Specialist Group",
+      "estimatedDescribed": 522,
+      "totalAssessed": 527,
+      "outdated": 208,
+      "gbifNeSpeciesCount": 8,
+      "byCategory": {
+        "LC": 118,
+        "EN": 146,
+        "VU": 115,
+        "NT": 44,
+        "CR": 88,
+        "DD": 14,
+        "EX": 2
+      },
+      "colDescribed": 527,
+      "colNe": 6
+    },
+    {
+      "id": "ssc-sirenia",
+      "name": "Sirenia Specialist Group",
+      "estimatedDescribed": 5,
+      "totalAssessed": 5,
+      "outdated": 2,
+      "gbifNeSpeciesCount": 0,
+      "byCategory": {
+        "VU": 4,
+        "EX": 1
+      },
+      "colDescribed": 4,
+      "colNe": 0
+    },
+    {
+      "id": "ssc-small-carnivore",
+      "name": "Small Carnivore Specialist Group",
+      "estimatedDescribed": 158,
+      "totalAssessed": 158,
+      "outdated": 151,
+      "gbifNeSpeciesCount": 7,
+      "byCategory": {
+        "LC": 109,
+        "NT": 10,
+        "EN": 9,
+        "VU": 19,
+        "DD": 6,
+        "CR": 3,
+        "EX": 2
+      },
+      "colDescribed": 158,
+      "colNe": 7
+    },
+    {
+      "id": "ssc-small-mammal",
+      "name": "Small Mammal Specialist Group",
+      "estimatedDescribed": 3366,
+      "totalAssessed": 2926,
+      "outdated": 63,
+      "gbifNeSpeciesCount": 71,
+      "byCategory": {
+        "CR": 77,
+        "LC": 1847,
+        "DD": 469,
+        "NT": 132,
+        "EN": 187,
+        "VU": 169,
+        "EX": 45
+      },
+      "colDescribed": 2942,
+      "colNe": 153
+    },
+    {
+      "id": "ssc-tapir",
+      "name": "Tapir Specialist Group",
+      "estimatedDescribed": 4,
+      "totalAssessed": 4,
+      "outdated": 3,
+      "gbifNeSpeciesCount": 0,
+      "byCategory": {
+        "EN": 3,
+        "VU": 1
+      },
+      "colDescribed": 4,
+      "colNe": 0
+    },
+    {
+      "id": "ssc-wild-camelid",
+      "name": "Wild Camelid Specialist Group",
+      "estimatedDescribed": 2,
+      "totalAssessed": 2,
+      "outdated": 0,
+      "gbifNeSpeciesCount": 0,
+      "byCategory": {
+        "LC": 2
+      },
+      "colDescribed": 3,
+      "colNe": 2
+    },
+    {
+      "id": "ssc-wild-pig",
+      "name": "Wild Pig Specialist Group",
+      "estimatedDescribed": 18,
+      "totalAssessed": 18,
+      "outdated": 4,
+      "gbifNeSpeciesCount": 1,
+      "byCategory": {
+        "VU": 5,
+        "EN": 3,
+        "CR": 1,
+        "NT": 2,
+        "EX": 1,
+        "LC": 6
+      },
+      "colDescribed": 16,
+      "colNe": 0
     }
   ],
   "reptiles": [

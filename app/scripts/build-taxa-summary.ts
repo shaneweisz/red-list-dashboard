@@ -109,6 +109,8 @@ function filterToSql(filter: NodeFilter): string {
   const cls = "coalesce(lower(class_name), '')";
   const ord = "coalesce(lower(order_name), '')";
   const fam = "coalesce(lower(family), '')";
+  const genus = "coalesce(lower(split_part(scientific_name, ' ', 1)), '')";
+  const sciName = "coalesce(lower(scientific_name), '')";
   const conds: string[] = [`taxon_group IN (${sqlStrList(filter.csvGroups)})`];
   if (filter.classNames?.length) conds.push(`${cls} IN (${sqlStrList(expandClasses(filter.classNames))})`);
   if (filter.excludeClasses?.length) conds.push(`${cls} NOT IN (${sqlStrList(expandClasses(filter.excludeClasses))})`);
@@ -122,6 +124,10 @@ function filterToSql(filter: NodeFilter): string {
   }
   if (filter.families?.length) conds.push(`${fam} IN (${sqlStrList(filter.families)})`);
   if (filter.excludeFamilies?.length) conds.push(`${fam} NOT IN (${sqlStrList(filter.excludeFamilies)})`);
+  if (filter.genera?.length) conds.push(`${genus} IN (${sqlStrList(filter.genera)})`);
+  if (filter.excludeGenera?.length) conds.push(`${genus} NOT IN (${sqlStrList(filter.excludeGenera)})`);
+  if (filter.speciesNames?.length) conds.push(`${sciName} IN (${sqlStrList(filter.speciesNames)})`);
+  if (filter.excludeSpeciesNames?.length) conds.push(`${sciName} NOT IN (${sqlStrList(filter.excludeSpeciesNames)})`);
   return conds.join(" AND ");
 }
 

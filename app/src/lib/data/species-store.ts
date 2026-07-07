@@ -299,11 +299,15 @@ interface TaxonomyFilter {
   excludeClasses?: string[];
   excludeOrders?: string[];
   excludeFamilies?: string[];
+  genera?: string[];
+  excludeGenera?: string[];
+  speciesNames?: string[];
+  excludeSpeciesNames?: string[];
 }
 
 /** Check if a redlist row passes the taxonomy filter */
 function matchesTaxonomyFilter(
-  row: { class_name: string | null; order_name: string | null; family: string | null },
+  row: { class_name: string | null; order_name: string | null; family: string | null; scientific_name?: string | null },
   filter: TaxonomyFilter,
 ): boolean {
   if (filter.classNames && filter.classNames.length > 0) {
@@ -331,6 +335,16 @@ function matchesTaxonomyFilter(
   if (filter.excludeFamilies && filter.excludeFamilies.length > 0) {
     const fam = (row.family ?? "").toLowerCase();
     if (fam && filter.excludeFamilies.includes(fam)) return false;
+  }
+  if (filter.genera?.length || filter.excludeGenera?.length) {
+    const genus = (row.scientific_name ?? "").trim().split(/\s+/)[0]?.toLowerCase() ?? "";
+    if (filter.genera && filter.genera.length > 0 && !filter.genera.includes(genus)) return false;
+    if (filter.excludeGenera && filter.excludeGenera.length > 0 && genus && filter.excludeGenera.includes(genus)) return false;
+  }
+  if (filter.speciesNames?.length || filter.excludeSpeciesNames?.length) {
+    const name = (row.scientific_name ?? "").trim().toLowerCase();
+    if (filter.speciesNames && filter.speciesNames.length > 0 && !filter.speciesNames.includes(name)) return false;
+    if (filter.excludeSpeciesNames && filter.excludeSpeciesNames.length > 0 && name && filter.excludeSpeciesNames.includes(name)) return false;
   }
   return true;
 }

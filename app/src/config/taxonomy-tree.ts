@@ -26,6 +26,17 @@ export interface SpeciesFilter {
   excludeFamilies?: string[];
   /** Exclude mode: exclude these classes */
   excludeClasses?: string[];
+  /** Filter by genus (lowercase) — derived from the first token of scientific_name.
+   * Needed for SSC specialist groups that split a family (e.g. Bovidae's Caprinae
+   * vs. Bovini vs. the rest, or Ursidae's polar bear vs. other bears). */
+  genera?: string[];
+  /** Exclude mode: exclude these genera */
+  excludeGenera?: string[];
+  /** Filter by full scientific name (lowercase "genus species") — for the rare case
+   * a specialist group's boundary is a single species (e.g. polar bear within Ursidae). */
+  speciesNames?: string[];
+  /** Exclude mode: exclude these scientific names */
+  excludeSpeciesNames?: string[];
 }
 
 export interface TaxonomyNode {
@@ -497,6 +508,345 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 217,
           estimatedSource: "Remainder of IUCN Table 1a total of 6,819 minus " + MDD + " named orders (incl. Afrosoricida ~55 + Macroscelidea ~20 + other small orders)",
           estimatedSourceUrl: IUCN_SOURCE_URL,
+        },
+      ],
+    },
+
+    // ─── SSC SPECIALIST GROUPS (pilot: mammals) ─────────────────────────
+    // A second, independent lens over the same "mammals" CSV group, organized
+    // by IUCN SSC (Species Survival Commission) Specialist Group boundaries
+    // instead of by taxonomic order — so an SSC group (e.g. the Small Mammal
+    // Specialist Group) can pull up exactly the species it's responsible for.
+    // Kept as a separate wrapper (not nested under "mammals") so it doesn't
+    // pollute the normal Mammals subgroup list (rodents/bats/primates/...).
+    //
+    // Scope for each group was sourced from its own page at
+    // https://iucn.org/our-union/commissions/group/<slug> (linked from the
+    // SSC groups directory, https://iucn.org/our-union/commissions/group/1445),
+    // cross-checked against standard mammalian taxonomy where a page didn't
+    // spell out its exact boundary with a neighboring group (e.g. Bear SG vs.
+    // Polar Bear SG, or Antelope SG vs. Caprinae/Bison/Wild Cattle SG within
+    // Bovidae). estimatedDescribed figures below are approximate best-effort
+    // counts (MDD-based where possible) — treat as a rough denominator for
+    // "% Assessed" until spot-checked; totalAssessed/outdated/by-category come
+    // from real per-species data and are unaffected by any error here.
+    {
+      id: "ssc-groups",
+      name: "SSC Specialist Groups",
+      filter: { csvGroups: ["mammals"] },
+      children: [
+        {
+          id: "ssc-african-elephant",
+          name: "African Elephant Specialist Group",
+          filter: { csvGroups: ["mammals"], genera: ["loxodonta"] },
+          estimatedDescribed: 2,
+          estimatedSource: MDD + " — Loxodonta (approx.)",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-asian-elephant",
+          name: "Asian Elephant Specialist Group",
+          filter: { csvGroups: ["mammals"], genera: ["elephas"] },
+          estimatedDescribed: 1,
+          estimatedSource: MDD + " — Elephas (approx.)",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-african-rhino",
+          name: "African Rhino Specialist Group",
+          filter: { csvGroups: ["mammals"], genera: ["diceros", "ceratotherium"] },
+          estimatedDescribed: 2,
+          estimatedSource: MDD + " — Diceros + Ceratotherium (approx.)",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-asian-rhino",
+          name: "Asian Rhino Specialist Group",
+          filter: { csvGroups: ["mammals"], genera: ["rhinoceros", "dicerorhinus"] },
+          estimatedDescribed: 3,
+          estimatedSource: MDD + " — Rhinoceros + Dicerorhinus (approx.)",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-afro-asian-wild-cattle",
+          name: "Afro-Asian Wild Cattle Specialist Group",
+          filter: { csvGroups: ["mammals"], genera: ["bos", "bubalus", "pseudoryx"] },
+          estimatedDescribed: 9,
+          estimatedSource: MDD + " — Bos + Bubalus + Pseudoryx (approx.; excludes Syncerus caffer, covered by the Antelope SG)",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-afrotheria",
+          name: "Afrotheria Specialist Group",
+          filter: { csvGroups: ["mammals"], orderNames: ["afrosoricida", "macroscelidea", "hyracoidea", "tubulidentata"] },
+          estimatedDescribed: 83,
+          estimatedSource: MDD + " — Afrosoricida + Macroscelidea + Hyracoidea + Tubulidentata (approx.)",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-anteater-sloth-armadillo",
+          name: "Anteater, Sloth and Armadillo Specialist Group",
+          filter: { csvGroups: ["mammals"], orderNames: ["pilosa", "cingulata"] },
+          estimatedDescribed: 31,
+          estimatedSource: MDD + " — Pilosa + Cingulata (Xenarthra, approx.)",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-antelope",
+          name: "Antelope Specialist Group",
+          filter: {
+            csvGroups: ["mammals"],
+            families: ["bovidae"],
+            excludeGenera: [
+              "bos", "bubalus", "pseudoryx", "bison",
+              "capra", "ovis", "ovibos", "rupicapra", "naemorhedus",
+              "capricornis", "oreamnos", "budorcas", "pantholops",
+              "ammotragus", "hemitragus", "nilgiritragus",
+            ],
+          },
+          estimatedDescribed: 90,
+          estimatedSource: MDD + " — Bovidae minus wild cattle/bison (Wild Cattle/Bison SG) and Caprinae (Caprinae SG) (approx.)",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-australasian-marsupial-monotreme",
+          name: "Australasian Marsupial and Monotreme Specialist Group",
+          filter: {
+            csvGroups: ["mammals"],
+            orderNames: ["diprotodontia", "dasyuromorphia", "peramelemorphia", "notoryctemorphia", "monotremata"],
+          },
+          estimatedDescribed: 250,
+          estimatedSource: MDD + " — Australasian marsupial orders + Monotremata (approx.)",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-bat",
+          name: "Bat Specialist Group",
+          filter: { csvGroups: ["mammals"], orderNames: ["chiroptera"] },
+          estimatedDescribed: 1_485,
+          estimatedSource: MDD + " — Chiroptera",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-bear",
+          name: "Bear Specialist Group",
+          filter: { csvGroups: ["mammals"], families: ["ursidae"], excludeSpeciesNames: ["ursus maritimus"] },
+          estimatedDescribed: 7,
+          estimatedSource: MDD + " — Ursidae minus polar bear (Polar Bear SG)",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-polar-bear",
+          name: "Polar Bear Specialist Group",
+          filter: { csvGroups: ["mammals"], speciesNames: ["ursus maritimus"] },
+          estimatedDescribed: 1,
+          estimatedSource: MDD + " — Ursus maritimus",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-bison",
+          name: "Bison Specialist Group",
+          filter: { csvGroups: ["mammals"], genera: ["bison"] },
+          estimatedDescribed: 2,
+          estimatedSource: MDD + " — Bison (approx.)",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-canid",
+          name: "Canid Specialist Group",
+          filter: { csvGroups: ["mammals"], families: ["canidae"] },
+          estimatedDescribed: 37,
+          estimatedSource: MDD + " — Canidae (approx.)",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-caprinae",
+          name: "Caprinae Specialist Group",
+          filter: {
+            csvGroups: ["mammals"],
+            genera: [
+              "capra", "ovis", "ovibos", "rupicapra", "naemorhedus",
+              "capricornis", "oreamnos", "budorcas", "pantholops",
+              "ammotragus", "hemitragus", "nilgiritragus",
+            ],
+          },
+          estimatedDescribed: 40,
+          estimatedSource: MDD + " — Caprinae genera within Bovidae (approx.)",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-cat",
+          name: "Cat Specialist Group",
+          filter: { csvGroups: ["mammals"], families: ["felidae"] },
+          estimatedDescribed: 41,
+          estimatedSource: MDD + " — Felidae (approx.)",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-cetacean",
+          name: "Cetacean Specialist Group",
+          filter: {
+            csvGroups: ["mammals"],
+            families: [
+              "balaenidae", "balaenopteridae", "eschrichtiidae", "physeteridae",
+              "kogiidae", "ziphiidae", "delphinidae", "monodontidae",
+              "phocoenidae", "iniidae", "lipotidae", "platanistidae", "pontoporiidae",
+            ],
+          },
+          estimatedDescribed: 94,
+          estimatedSource: MDD + " — cetacean families (order_name is shared with Artiodactyla under Cetartiodactyla, so filtered by family instead) (approx.)",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-deer",
+          name: "Deer Specialist Group",
+          filter: { csvGroups: ["mammals"], families: ["cervidae"] },
+          estimatedDescribed: 55,
+          estimatedSource: MDD + " — Cervidae (approx.)",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-equid",
+          name: "Equid Specialist Group",
+          filter: { csvGroups: ["mammals"], families: ["equidae"] },
+          estimatedDescribed: 7,
+          estimatedSource: MDD + " — Equidae",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-giraffe-okapi",
+          name: "Giraffe and Okapi Specialist Group",
+          filter: { csvGroups: ["mammals"], families: ["giraffidae"] },
+          estimatedDescribed: 5,
+          estimatedSource: MDD + " — Giraffidae (GSG 4-species giraffe taxonomy + okapi) (approx.)",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-hippo",
+          name: "Hippo Specialist Group",
+          filter: { csvGroups: ["mammals"], families: ["hippopotamidae"] },
+          estimatedDescribed: 2,
+          estimatedSource: MDD + " — Hippopotamidae",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-hyaena",
+          name: "Hyaena Specialist Group",
+          filter: { csvGroups: ["mammals"], families: ["hyaenidae"] },
+          estimatedDescribed: 4,
+          estimatedSource: MDD + " — Hyaenidae",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-lagomorph",
+          name: "Lagomorph Specialist Group",
+          filter: { csvGroups: ["mammals"], orderNames: ["lagomorpha"] },
+          estimatedDescribed: 112,
+          estimatedSource: MDD + " — Lagomorpha",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-new-world-marsupial",
+          name: "New World Marsupial Specialist Group",
+          filter: { csvGroups: ["mammals"], orderNames: ["didelphimorphia", "paucituberculata", "microbiotheria"] },
+          estimatedDescribed: 128,
+          estimatedSource: MDD + " — Didelphimorphia + Paucituberculata + Microbiotheria (approx.)",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-otter",
+          name: "Otter Specialist Group",
+          filter: {
+            csvGroups: ["mammals"],
+            genera: ["lutra", "pteronura", "aonyx", "lutrogale", "enhydra", "hydrictis", "lontra"],
+          },
+          estimatedDescribed: 14,
+          estimatedSource: MDD + " — Lutrinae genera within Mustelidae (approx.)",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-pangolin",
+          name: "Pangolin Specialist Group",
+          filter: { csvGroups: ["mammals"], orderNames: ["pholidota"] },
+          estimatedDescribed: 8,
+          estimatedSource: MDD + " — Pholidota",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-peccary",
+          name: "Peccary Specialist Group",
+          filter: { csvGroups: ["mammals"], families: ["tayassuidae"] },
+          estimatedDescribed: 3,
+          estimatedSource: MDD + " — Tayassuidae",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-pinniped",
+          name: "Pinniped Specialist Group",
+          filter: { csvGroups: ["mammals"], families: ["otariidae", "phocidae", "odobenidae"] },
+          estimatedDescribed: 36,
+          estimatedSource: MDD + " — Otariidae + Phocidae + Odobenidae (approx.)",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-primate",
+          name: "Primate Specialist Group",
+          filter: { csvGroups: ["mammals"], orderNames: ["primates"] },
+          estimatedDescribed: 522,
+          estimatedSource: MDD + " — Primates",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-sirenia",
+          name: "Sirenia Specialist Group",
+          filter: { csvGroups: ["mammals"], orderNames: ["sirenia"] },
+          estimatedDescribed: 5,
+          estimatedSource: MDD + " — Sirenia (manatees + dugong)",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-small-carnivore",
+          name: "Small Carnivore Specialist Group",
+          filter: {
+            csvGroups: ["mammals"],
+            families: ["mustelidae", "viverridae", "herpestidae", "eupleridae", "procyonidae", "mephitidae", "nandiniidae", "prionodontidae"],
+            excludeGenera: ["lutra", "pteronura", "aonyx", "lutrogale", "enhydra", "hydrictis", "lontra"],
+          },
+          estimatedDescribed: 158,
+          estimatedSource: MDD + " — small-carnivore families minus Lutrinae/otters (Otter SG) (approx.)",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-small-mammal",
+          name: "Small Mammal Specialist Group",
+          filter: { csvGroups: ["mammals"], orderNames: ["rodentia", "eulipotyphla", "scandentia"] },
+          estimatedDescribed: 3_366,
+          estimatedSource: MDD + " — Rodentia + Eulipotyphla + Scandentia (approx.)",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-tapir",
+          name: "Tapir Specialist Group",
+          filter: { csvGroups: ["mammals"], families: ["tapiridae"] },
+          estimatedDescribed: 4,
+          estimatedSource: MDD + " — Tapiridae",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-wild-camelid",
+          name: "Wild Camelid Specialist Group",
+          filter: { csvGroups: ["mammals"], genera: ["lama", "vicugna"] },
+          estimatedDescribed: 2,
+          estimatedSource: MDD + " — Lama + Vicugna (South American camelids; excludes wild Bactrian camel, Camelus ferus, not part of this group's remit)",
+          estimatedSourceUrl: MDD_URL,
+        },
+        {
+          id: "ssc-wild-pig",
+          name: "Wild Pig Specialist Group",
+          filter: { csvGroups: ["mammals"], families: ["suidae"] },
+          estimatedDescribed: 18,
+          estimatedSource: MDD + " — Suidae (approx.)",
+          estimatedSourceUrl: MDD_URL,
         },
       ],
     },
