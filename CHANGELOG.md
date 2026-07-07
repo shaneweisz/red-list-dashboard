@@ -4,14 +4,81 @@ All notable changes to the IUCN Red List Assessments Dashboard.
 
 ## [Unreleased]
 
-- Renamed the red.cst.cam.ac.uk brand title to "Red List Dashboard" and added
-  the globe icon before it
-- Reordered footer data sources to lead with IUCN Red List (version 2025-2)
-- Renamed the "Dash For Life" brand to "Dash for Life"
-- Added "Suggested Reviewers" tab for NE species, analogous to Suggested Assessors
-- Strip "(... Red List Authority)" affiliation labels from suggested
-  assessor/reviewer candidates so each person aggregates under one row and the
-  filter link matches reliably
+## [v2.16.0] — 2026-06-30 – 2026-07-07 — Shared Filters, Attribution & Taxon Browsing
+
+- Added a shared filter registry so the dashboard URL, MCP tools, and /browse stay in sync
+- Added a "Dash For Life" brand for dashforlife.org, then renamed it to "Dash for Life"
+- Added a commercial-use disclaimer to the Red List attribution footer
+- Renamed the red.cst.cam.ac.uk brand title to "Red List Dashboard", added the globe icon, and reordered footer data sources to lead with IUCN Red List (version 2025-2)
+- Surfaced arbitrary-taxon browsing via search with a thin taxon header
+- Clarified GBIF column headers and added IUCN criteria on category hover
+- Refreshed GBIF/CoL data sync (first full resync in ~3 weeks)
+
+## [v2.15.0] — 2026-06-22 – 2026-06-24 — Dash of Life Default Brand & Header Redesign
+
+- Made Dash of Life the default brand with a globe favicon
+- Redesigned the dashboard header with a title + subtitle layout; renamed "Risk Category" to "Conservation Status"
+- Added a "Suggested Reviewers" tab for NE species, analogous to Suggested Assessors, and stripped affiliation labels so assessor/reviewer candidates aggregate correctly
+- Added a "Threatened" shortcut to the risk category chart
+- Added an endemics filter to the country map and a configurable page-size selector to species/CITES tables
+- Fixed table overflow, mobile landing alignment, and expanded-detail viewport fit
+- Reverse-proxied PostHog events through /ingest to beat ad blockers
+- Added test coverage reporting to CI
+
+## [v2.14.0] — 2026-06-18 – 2026-06-19 — CITES Map Polish, EOL Tab & Dash of Life Rebrand
+
+- Added flow-count slider, volume-scaled flows, and a records table to the CITES trade map
+- Added an Encyclopedia of Life (EOL) tab to the species detail panel
+- Gave agent-facing MCP/browse results a verifiable dashboard_url and simplified taxa URL params to a single flat param
+- Introduced "Dash of Life" as an alternate brand for dashoflife.org, with per-domain titles
+- Reworked the Threats and Assessors/Reviewers charts (repositioned, side-by-side layout)
+
+## [v2.13.0] — 2026-06-15 – 2026-06-17 — Search Speed & CITES Trade Overhaul
+
+- Sped up cold-start search and stopped syncing the unused JSON search index
+- Fixed a described-year mis-parse from DOI citations and added a pre-Linnaean floor
+- Overhauled CITES trade data: full history since 1975, unit-aware commodities, clearer re-exports, and cross-filterable bar charts
+- Fixed the CITES trade map to color countries by dominant trade role rather than mere importer/exporter presence
+
+## [v2.12.0] — 2026-06-12 – 2026-06-15 — Catalogue of Life Integration & Agent Access
+
+- Ingested the Catalogue of Life backbone: surfaced the full described-species universe in New Assessments with an IUCN↔CoL toggle
+- Extended search and synonym resolution to cover the full CoL universe, including CoL-only and retired-name species
+- Added a Protected Areas (WDPA) overlay toggle to the occurrence map
+- Added a CoL described-year field, filter chart, and table column for Not Evaluated species
+- Restored iNaturalist observations for species with no GBIF backbone match
+- Demoted spurious Catalogue of Life Extended Release taxonomic over-splits via a curated-checklist overlay
+- Split "Other Invertebrates" into phylum-based browse sub-groups
+- Rebuilt the /browse endpoint and llms.txt, and added a remote MCP server (/api/mcp, now public) for agent data access
+
+## [v2.11.0] — 2026-06-10 – 2026-06-11 — DuckDB/Parquet Read Layer Migration
+
+- Removed the orphaned criteria-estimation feature and corrected README/env drift
+- Restructured taxa groups to common-name IDs and split Insecta into 8 order-based groups, in prep for Catalogue of Life ingestion
+- Migrated the species read layer onto DuckDB/Parquet on R2, enabling arbitrary-rank taxonomic filtering (e.g. by family)
+- Cut v2 cold-start and history-join latency; lazy-loaded assessment history (−40% species-list payload)
+- Moved cross-taxa search onto DuckDB, retiring the 95MB in-memory JSON search index
+- Collapsed /api/v2 into /api/redlist and removed the dead CSV species path
+
+## [v2.10.0] — 2026-05-04 – 2026-05-26 — Data Refreshes & R2 Migration
+
+- Refreshed GBIF occurrence data (May 4 and May 18 syncs)
+- Reduced default occurrence map sample size from 1000 to 300 for faster loads
+- Separated CITES country reservations from actual appendix listing changes
+- Migrated the data sync pipeline from committed CSVs to Cloudflare R2 storage, enabling the repo to go public
+
+## [v2.9.0] — 2026-04-21 – 2026-04-30 — Filter & View Fixes
+
+- Defaulted preserved-specimen occurrences on for plants and fungi, where herbarium records are core assessment evidence
+- Made filter chart bars clickable across their whole row, not just the bar itself
+- Fixed filters that narrowed results to one species from incorrectly triggering the single-species detail view
+
+## [v2.8.0] — 2026-04-08 — Chart & Taxonomy Refinements
+
+- Added a Range/Year toggle to the Years Since Assessed chart, with year-based filtering and URL sync
+- Hid the CSV download button as a precaution against commercial bulk-downloading of Red List data
+- Matched IUCN scientific-name synonyms during sync to fix recently-reclassified species showing as unassessed
+- Removed colloquial taxonomy groupings (e.g. "Insectivores", "Whales & Dolphins") in favor of monophyletic clades with real described-species estimates
 
 ## [v2.7.0] — 2026-04-03 – 2026-04-06 — Map Colors & Linting
 
