@@ -3322,7 +3322,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   onClick={() => handleSort("totalGbif")}
                 >
                   <span className="flex items-center justify-end gap-1">
-                    {isNewAssessments ? "GBIF Observations" : "Total GBIF"}
+                    {isNewAssessments ? "GBIF Observations" : "GBIF Total"}
                     <GbifInfoTooltip />
                     {(sortField === "totalGbif" || (isNewAssessments && sortField === null)) && (
                       <span className={isNewAssessments ? "text-emerald-500" : "text-red-500"}>{sortDirection === "desc" ? "↓" : "↑"}</span>
@@ -3335,7 +3335,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   onClick={() => handleSort("newGbif")}
                 >
                   <span className="flex items-center justify-end gap-1">
-                    New GBIF
+                    GBIF Since Assess.
                     <HoverTooltip text="Records added after the assessment year (not the exact date). Uses the year following the assessment as the start of the range.">
                       <svg className="w-3 h-3 text-zinc-400 dark:text-zinc-500 cursor-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <circle cx="12" cy="12" r="10" />
@@ -3354,7 +3354,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   onClick={() => handleSort("pctNewGbif")}
                 >
                   <span className="flex items-center justify-end gap-1">
-                    % New GBIF
+                    % GBIF Since Assess.
                     {sortField === "pctNewGbif" && (
                       <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
                     )}
@@ -3461,8 +3461,10 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                     </td>
                     {!isNewAssessments && (
                     <td className="px-2 md:px-4 py-3 whitespace-nowrap">
-                      {details?.criteria && !["DD", "LC", "NT", "EX", "EW", "NE"].includes(s.category) ? (
-                        <HoverTooltip text={`${details.criteria}${explainCriteria(details.criteria)}`}>
+                      {(() => {
+                        const criteria = s.criteria ?? details?.criteria;
+                        return criteria && !["DD", "LC", "NT", "EX", "EW", "NE"].includes(s.category) ? (
+                        <HoverTooltip text={`${criteria}${explainCriteria(criteria)}`}>
                           <span
                             className="px-2 py-0.5 text-xs font-medium rounded cursor-help"
                             style={{
@@ -3484,7 +3486,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                         >
                           {s.category}
                         </span>
-                      )}
+                        );
+                      })()}
                     </td>
                     )}
                     {!isNewAssessments && (
