@@ -1570,8 +1570,30 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                           }}
                         >
                           <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 bg-white dark:bg-zinc-900`}>
-                            <span className="text-sm md:text-base text-zinc-900 dark:text-zinc-100 pl-4">
-                              {row.name}
+                            <span className="inline-flex items-center gap-1.5 pl-4">
+                              <span className="text-sm md:text-base text-zinc-900 dark:text-zinc-100">
+                                {row.name}
+                              </span>
+                              {(() => {
+                                const sourceUrl = findNode(row.group)?.sourceUrl;
+                                if (!sourceUrl) return null;
+                                return (
+                                  <span className="relative group/row-src">
+                                    <a
+                                      href={sourceUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <FaInfoCircle size={10} />
+                                    </a>
+                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover/row-src:opacity-100 group-hover/row-src:visible z-50 shadow-lg pointer-events-none">
+                                      View official IUCN page
+                                    </span>
+                                  </span>
+                                );
+                              })()}
                             </span>
                           </td>
                           {isVisible("described") && (

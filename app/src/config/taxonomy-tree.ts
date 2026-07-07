@@ -54,6 +54,10 @@ export interface TaxonomyNode {
   estimatedSourceUrl?: string;
   /** UI color (only on nodes shown at top level) */
   color?: string;
+  /** Optional link to the node's own definitive/official page (e.g. an SSC
+   * Specialist Group's page on iucn.org) — distinct from estimatedSourceUrl,
+   * which cites the described-species count specifically. */
+  sourceUrl?: string;
   /** Arbitrary depth children */
   children?: TaxonomyNode[];
 }
@@ -64,6 +68,7 @@ const IUCN_SOURCE = "IUCN 2025-2";
 const IUCN_SOURCE_URL = "https://nc.iucnredlist.org/redlist/content/attachment_files/2025-2_RL_Table1a.pdf";
 const MDD = "Mammal Diversity Database (v2.0, 2025)";
 const MDD_URL = "https://www.mammaldiversity.org/explore/taxonomy-table/";
+const SSC_GROUP_URL_BASE = "https://iucn.org/our-union/commissions/group/";
 const REPTILE_DB = "Reptile Database, Sep 2025";
 const REPTILE_DB_URL = "http://www.reptile-database.org/db-info/SpeciesStat.html";
 const AMPHIBIAWEB = "AmphibiaWeb, 2025";
@@ -542,6 +547,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 2,
           estimatedSource: MDD + " — Loxodonta (approx.)",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-african-elephant-specialist-group",
         },
         {
           id: "ssc-asian-elephant",
@@ -550,6 +556,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 1,
           estimatedSource: MDD + " — Elephas (approx.)",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-asian-elephant-specialist-group",
         },
         {
           id: "ssc-african-rhino",
@@ -558,6 +565,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 2,
           estimatedSource: MDD + " — Diceros + Ceratotherium (approx.)",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-african-rhino-specialist-group",
         },
         {
           id: "ssc-asian-rhino",
@@ -566,6 +574,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 3,
           estimatedSource: MDD + " — Rhinoceros + Dicerorhinus (approx.)",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-asian-rhino-specialist-group",
         },
         {
           id: "ssc-afro-asian-wild-cattle",
@@ -574,6 +583,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 9,
           estimatedSource: MDD + " — Bos + Bubalus + Pseudoryx (approx.; excludes Syncerus caffer, covered by the Antelope SG)",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-afro-asian-wild-cattle-specialist-group-0",
         },
         {
           id: "ssc-afrotheria",
@@ -582,6 +592,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 83,
           estimatedSource: MDD + " — Afrosoricida + Macroscelidea + Hyracoidea + Tubulidentata (approx.)",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-afrotheria-specialist-group",
         },
         {
           id: "ssc-anteater-sloth-armadillo",
@@ -590,6 +601,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 31,
           estimatedSource: MDD + " — Pilosa + Cingulata (Xenarthra, approx.)",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-anteater-sloth-and-armadillo-specialist-group",
         },
         {
           id: "ssc-antelope",
@@ -607,6 +619,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 90,
           estimatedSource: MDD + " — Bovidae minus wild cattle/bison (Wild Cattle/Bison SG) and Caprinae (Caprinae SG) (approx.)",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-antelope-specialist-group",
         },
         {
           id: "ssc-australasian-marsupial-monotreme",
@@ -618,6 +631,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 250,
           estimatedSource: MDD + " — Australasian marsupial orders + Monotremata (approx.)",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-australasian-marsupial-and-monotreme-specialist-group",
         },
         {
           id: "ssc-bat",
@@ -626,6 +640,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 1_485,
           estimatedSource: MDD + " — Chiroptera",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-bat-specialist-group",
         },
         {
           id: "ssc-bear",
@@ -634,6 +649,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 7,
           estimatedSource: MDD + " — Ursidae minus polar bear (Polar Bear SG)",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-bear-specialist-group",
         },
         {
           id: "ssc-polar-bear",
@@ -642,6 +658,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 1,
           estimatedSource: MDD + " — Ursus maritimus",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-polar-bear-specialist-group",
         },
         {
           id: "ssc-bison",
@@ -650,6 +667,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 2,
           estimatedSource: MDD + " — Bison (approx.)",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-bison-specialist-group",
         },
         {
           id: "ssc-canid",
@@ -658,6 +676,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 37,
           estimatedSource: MDD + " — Canidae (approx.)",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-canid-specialist-group",
         },
         {
           id: "ssc-caprinae",
@@ -673,6 +692,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 40,
           estimatedSource: MDD + " — Caprinae genera within Bovidae (approx.)",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-caprinae-specialist-group",
         },
         {
           id: "ssc-cat",
@@ -681,6 +701,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 41,
           estimatedSource: MDD + " — Felidae (approx.)",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-cat-specialist-group",
         },
         {
           id: "ssc-cetacean",
@@ -696,6 +717,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 94,
           estimatedSource: MDD + " — cetacean families (order_name is shared with Artiodactyla under Cetartiodactyla, so filtered by family instead) (approx.)",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-cetacean-specialist-group",
         },
         {
           id: "ssc-deer",
@@ -704,6 +726,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 55,
           estimatedSource: MDD + " — Cervidae (approx.)",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-deer-specialist-group",
         },
         {
           id: "ssc-equid",
@@ -712,6 +735,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 7,
           estimatedSource: MDD + " — Equidae",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-equid-specialist-group",
         },
         {
           id: "ssc-giraffe-okapi",
@@ -720,6 +744,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 5,
           estimatedSource: MDD + " — Giraffidae (GSG 4-species giraffe taxonomy + okapi) (approx.)",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-giraffe-and-okapi-specialist-group",
         },
         {
           id: "ssc-hippo",
@@ -728,6 +753,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 2,
           estimatedSource: MDD + " — Hippopotamidae",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-hippo-specialist-group",
         },
         {
           id: "ssc-hyaena",
@@ -736,6 +762,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 4,
           estimatedSource: MDD + " — Hyaenidae",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-hyaena-specialist-group",
         },
         {
           id: "ssc-lagomorph",
@@ -744,6 +771,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 112,
           estimatedSource: MDD + " — Lagomorpha",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-lagomorph-specialist-group",
         },
         {
           id: "ssc-new-world-marsupial",
@@ -752,6 +780,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 128,
           estimatedSource: MDD + " — Didelphimorphia + Paucituberculata + Microbiotheria (approx.)",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-new-world-marsupial-specialist-group",
         },
         {
           id: "ssc-otter",
@@ -763,6 +792,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 14,
           estimatedSource: MDD + " — Lutrinae genera within Mustelidae (approx.)",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-otter-specialist-group",
         },
         {
           id: "ssc-pangolin",
@@ -771,6 +801,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 8,
           estimatedSource: MDD + " — Pholidota",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-pangolin-specialist-group",
         },
         {
           id: "ssc-peccary",
@@ -779,6 +810,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 3,
           estimatedSource: MDD + " — Tayassuidae",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-peccary-specialist-group",
         },
         {
           id: "ssc-pinniped",
@@ -787,6 +819,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 36,
           estimatedSource: MDD + " — Otariidae + Phocidae + Odobenidae (approx.)",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-pinniped-specialist-group",
         },
         {
           id: "ssc-primate",
@@ -795,6 +828,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 522,
           estimatedSource: MDD + " — Primates",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-primate-specialist-group",
         },
         {
           id: "ssc-sirenia",
@@ -803,6 +837,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 5,
           estimatedSource: MDD + " — Sirenia (manatees + dugong)",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-sirenia-specialist-group",
         },
         {
           id: "ssc-small-carnivore",
@@ -815,6 +850,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 158,
           estimatedSource: MDD + " — small-carnivore families minus Lutrinae/otters (Otter SG) (approx.)",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-small-carnivore-specialist-group",
         },
         {
           id: "ssc-small-mammal",
@@ -823,6 +859,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 3_366,
           estimatedSource: MDD + " — Rodentia + Eulipotyphla + Scandentia (approx.)",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-small-mammal-specialist-group",
         },
         {
           id: "ssc-tapir",
@@ -831,6 +868,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 4,
           estimatedSource: MDD + " — Tapiridae",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-tapir-specialist-group",
         },
         {
           id: "ssc-wild-camelid",
@@ -839,6 +877,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 2,
           estimatedSource: MDD + " — Lama + Vicugna (South American camelids; excludes wild Bactrian camel, Camelus ferus, not part of this group's remit)",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-wild-camelid-specialist-group-0",
         },
         {
           id: "ssc-wild-pig",
@@ -847,6 +886,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 18,
           estimatedSource: MDD + " — Suidae (approx.)",
           estimatedSourceUrl: MDD_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-wild-pig-specialist-group",
         },
       ],
     },
