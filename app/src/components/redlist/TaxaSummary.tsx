@@ -1569,16 +1569,16 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                             }
                           }}
                         >
-                          <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 bg-white dark:bg-zinc-900`}>
-                            <span className="inline-flex items-center gap-1.5 pl-4">
-                              <span className="text-sm md:text-base text-zinc-900 dark:text-zinc-100">
+                          <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 max-w-[160px] sm:max-w-[240px] lg:max-w-[360px] bg-white dark:bg-zinc-900`}>
+                            <span className="flex items-center gap-1.5 pl-4 min-w-0">
+                              <span className="text-sm md:text-base text-zinc-900 dark:text-zinc-100 truncate" title={row.name}>
                                 {row.name}
                               </span>
                               {(() => {
                                 const sourceUrl = findNode(row.group)?.sourceUrl;
                                 if (!sourceUrl) return null;
                                 return (
-                                  <span className="relative group/row-src">
+                                  <span className="relative group/row-src flex-shrink-0">
                                     <a
                                       href={sourceUrl}
                                       target="_blank"
@@ -1846,12 +1846,12 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     {/* Subtle controls: usage hint + # Described toggle + expand/table controls,
         all landing-only — hidden once a taxon is selected. */}
     {!loading && perTaxa.length > 0 && selectedTaxa.size === 0 && (
-      <div className="hidden sm:flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 mt-1.5">
-        {/* Usage hint */}
-        <span className="pl-3 md:pl-4 text-xs text-zinc-400 dark:text-zinc-500">
-          Click taxa rows to filter, use charts and search to explore species.<span className="hidden sm:inline"> Cmd/Ctrl+click to multiselect.</span>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 mt-1.5">
+        {/* Usage hint — desktop only; the toggles below matter more on mobile than this prose */}
+        <span className="hidden sm:inline pl-3 md:pl-4 text-xs text-zinc-400 dark:text-zinc-500">
+          Click taxa rows to filter, use charts and search to explore species. Cmd/Ctrl+click to multiselect.
         </span>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 pl-3 sm:pl-0">
           {/* IUCN ↔ CoL source toggle: flips the described count + recomputes % Assessed */}
           <span className="inline-flex items-center gap-1.5">
             <span className="text-xs text-zinc-400 dark:text-zinc-500">Source for # Described:</span>
