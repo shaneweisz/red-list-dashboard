@@ -3461,8 +3461,10 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                     </td>
                     {!isNewAssessments && (
                     <td className="px-2 md:px-4 py-3 whitespace-nowrap">
-                      {details?.criteria && !["DD", "LC", "NT", "EX", "EW", "NE"].includes(s.category) ? (
-                        <HoverTooltip text={`${details.criteria}${explainCriteria(details.criteria)}`}>
+                      {(() => {
+                        const criteria = s.criteria ?? details?.criteria;
+                        return criteria && !["DD", "LC", "NT", "EX", "EW", "NE"].includes(s.category) ? (
+                        <HoverTooltip text={`${criteria}${explainCriteria(criteria)}`}>
                           <span
                             className="px-2 py-0.5 text-xs font-medium rounded cursor-help"
                             style={{
@@ -3484,7 +3486,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                         >
                           {s.category}
                         </span>
-                      )}
+                        );
+                      })()}
                     </td>
                     )}
                     {!isNewAssessments && (
