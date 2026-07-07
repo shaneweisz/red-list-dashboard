@@ -459,6 +459,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       // Expand all ancestors up to the view root (which is in selectedTaxa)
       for (const ancestorId of getAncestors(sgId)) {
         if (selectedTaxa.has(ancestorId)) break; // Stop at the view root
+        if (ancestorId === "ssc-groups") break; // Display-only wrapper — see SSC groups mode
         if (!expandedTaxa.has(ancestorId)) toExpand.add(ancestorId);
       }
       // Expand the node itself if it has children
@@ -1748,6 +1749,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                         const intermediateAncestorIds: string[] = [];
                         for (const aId of ancestors) {
                           if (selectedTaxa.has(aId)) break; // Stop at view root
+                          // "ssc-groups" is a display-only wrapper (SSC groups mode) kept
+                          // outside the real tree so it doesn't show up as a breadcrumb —
+                          // its children navigate as if parented by "mammals" instead.
+                          if (aId === "ssc-groups") break;
                           intermediateAncestorIds.push(aId);
                         }
 
