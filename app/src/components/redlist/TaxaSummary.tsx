@@ -1330,7 +1330,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   const renderHead = () => (
     <thead>
       <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
-        <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} ${flatMode ? "text-left" : "text-center"} text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap w-0`}>
+        <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} ${flatMode ? "text-left" : "text-center"} text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap w-0 ${flatMode ? "overflow-hidden max-w-[120px] sm:max-w-[170px] lg:max-w-[220px]" : ""}`}>
           <div className={`flex items-center gap-1.5 ${flatMode ? "justify-start" : "justify-center"}`}>
             Taxonomic Group
             <button
@@ -1568,7 +1568,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                             }
                           }}
                         >
-                          <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 max-w-[160px] sm:max-w-[240px] lg:max-w-[360px] bg-white dark:bg-zinc-900`}>
+                          <td className={`${stickyClasses} ${cellPad} whitespace-nowrap overflow-hidden w-0 max-w-[120px] sm:max-w-[170px] lg:max-w-[220px] bg-white dark:bg-zinc-900`}>
                             <span className="flex items-center gap-1.5 pl-4 min-w-0">
                               <span className="text-sm md:text-base text-zinc-900 dark:text-zinc-100 truncate" title={row.name}>
                                 {row.name}
@@ -1848,7 +1848,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 mt-1.5">
         {/* Usage hint — desktop only; the toggles below matter more on mobile than this prose */}
         <span className="hidden sm:inline pl-3 md:pl-4 text-xs text-zinc-400 dark:text-zinc-500">
-          Click taxa rows to filter, use charts and search to explore species. Cmd/Ctrl+click to multiselect.
+          Click to filter, Cmd/Ctrl+click to multi-select.
         </span>
         <div className="flex flex-wrap items-center gap-3 pl-3 sm:pl-0">
           {/* IUCN ↔ CoL source toggle: flips the described count + recomputes % Assessed */}
