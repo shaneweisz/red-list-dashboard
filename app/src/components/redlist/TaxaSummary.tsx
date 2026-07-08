@@ -433,7 +433,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           colDescribed: sg.colDescribed,
           colNe: sg.colNe,
         }));
-        rows.sort((a, b) => b.totalAssessed - a.totalAssessed);
+        // Sort by # assessed descending, but pin the remainder row ("not claimed
+        // by a named group") to the bottom regardless of its own count — it's a
+        // catch-all, not one of the 35 pilot groups, so it reads as an appendix.
+        rows.sort((a, b) => {
+          if (a.group === "ssc-other-mammals") return 1;
+          if (b.group === "ssc-other-mammals") return -1;
+          return b.totalAssessed - a.totalAssessed;
+        });
         setSscData([{ title: "MAMMAL SPECIALIST GROUPS", rows }]);
       })
       .finally(() => setSscLoading(false));
