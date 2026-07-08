@@ -334,6 +334,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   }, []);
   // Filters synced with URL search params for shareable links
   const {
+    layoutMode, setLayoutMode,
+    navigateToTaxonSubgroup,
     selectedTaxa, setSelectedTaxa,
     selectedSubgroups, setSelectedSubgroups,
     selectedCategories, setSelectedCategories,
@@ -2088,6 +2090,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         selectedSubgroups={selectedSubgroups}
         disableAllSpecies={isNewAssessments}
         viewMode={viewMode}
+        layoutMode={layoutMode}
+        onLayoutModeChange={setLayoutMode}
         onToggleSubgroup={(sgId) => {
           // Clicking a view root ancestor → clear subgroups to show its children
           if (selectedTaxa.has(sgId)) {
@@ -2111,10 +2115,11 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
           }
         }}
         onNavigateToSubgroup={(taxonId, subgroupId) => {
-          // Navigate directly to a taxon + subgroup atomically (avoids clearAllFilters race)
+          // Navigate directly to a taxon + subgroup atomically (avoids clearAllFilters race,
+          // and pushes a single history entry so one back-press undoes the whole navigation —
+          // including exiting Table 1a/SSC groups mode, which this also clears)
           skipClearOnTaxaChangeRef.current = true;
-          setSelectedTaxa(new Set([taxonId]));
-          setSelectedSubgroups(new Set([subgroupId]));
+          navigateToTaxonSubgroup(taxonId, subgroupId);
         }}
       />
 

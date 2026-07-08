@@ -83,6 +83,10 @@ interface Props {
   onNavigateToSubgroup?: (taxonId: string, subgroupId: string) => void;
   disableAllSpecies?: boolean;
   viewMode?: "reassessments" | "new-assessments";
+  /** Table 1a mode / SSC groups mode — URL-synced (see useFilterParams) so it
+   * survives reload/share and the browser back button can return to it. */
+  layoutMode: "table1a" | "ssc" | null;
+  onLayoutModeChange: (mode: "table1a" | "ssc" | null) => void;
 }
 
 // Dynamic: any tree node with children is expandable
@@ -191,7 +195,7 @@ function DisabledAllTooltip() {
   );
 }
 
-export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments" }: Props) {
+export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", layoutMode, onLayoutModeChange }: Props) {
   const isNewAssessments = viewMode === "new-assessments";
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -320,8 +324,12 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     }
   }, []);
 
-  // Table 1a mode
-  const [table1aMode, setTable1aMode] = useState(false);
+  // Table 1a mode / SSC groups mode — derived from the URL-synced layoutMode
+  // prop (see useFilterParams) rather than local state, so a page load or
+  // browser back/forward that lands on ?layout=table1a|ssc restores the mode
+  // automatically. table1aData/sscData stay local — just a fetch-once cache.
+  const table1aMode = layoutMode === "table1a";
+  const sscMode = layoutMode === "ssc";
   const [table1aData, setTable1aData] = useState<Table1aSectionData[] | null>(null);
   const [table1aLoading, setTable1aLoading] = useState(false);
 
@@ -377,65 +385,54 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     setExpandedTaxa(new Set());
   }, []);
 
-  const enterTable1a = useCallback(async () => {
-    setTable1aMode(true);
-    if (!table1aData) {
-      setTable1aLoading(true);
-      try {
-        const res = await fetch("/api/redlist/taxa-summary?table1a=true");
-        if (res.ok) {
-          const data = await res.json();
-          setTable1aData(data.sections);
-        }
-      } finally {
-        setTable1aLoading(false);
-      }
-    }
-  }, [table1aData]);
-
-  const exitTable1a = useCallback(() => {
-    setTable1aMode(false);
-  }, []);
+  // Fetch-if-needed, driven by table1aMode rather than a click handler, so it
+  // also runs when the mode is entered via URL load or browser back/forward.
+  // Uses a ref (not the loading state) to gate the fetch — including the
+  // loading state itself in the deps would re-run this effect the instant
+  // setTable1aLoading(true) commits, cancelling the very fetch it just started.
+  const table1aFetchStartedRef = useRef(false);
+  useEffect(() => {
+    if (!table1aMode || table1aData || table1aFetchStartedRef.current) return;
+    table1aFetchStartedRef.current = true;
+    setTable1aLoading(true);
+    fetch("/api/redlist/taxa-summary?table1a=true")
+      .then(res => res.ok ? res.json() : null)
+      .then(data => { if (data) setTable1aData(data.sections); })
+      .finally(() => setTable1aLoading(false));
+  }, [table1aMode, table1aData]);
 
   // SSC groups mode (pilot: mammal Specialist Groups) — same flat-table layout as
   // Table 1a mode, sourced from the precomputed "ssc-groups" node's children
   // instead of the top-level Table 1a CSV groups.
-  const [sscMode, setSscMode] = useState(false);
   const [sscData, setSscData] = useState<Table1aSectionData[] | null>(null);
   const [sscLoading, setSscLoading] = useState(false);
+  const sscFetchStartedRef = useRef(false);
 
-  const enterSsc = useCallback(async () => {
-    setSscMode(true);
-    if (!sscData) {
-      setSscLoading(true);
-      try {
-        const res = await fetch("/api/redlist/taxa-subgroups?nodeId=ssc-groups");
-        if (res.ok) {
-          const data = await res.json();
-          const rows: Table1aRowData[] = (data.subgroups ?? []).map((sg: SubGroupSummary) => ({
-            group: sg.id,
-            name: sg.name,
-            estimatedDescribed: sg.estimatedDescribed,
-            totalAssessed: sg.totalAssessed,
-            percentAssessed: sg.estimatedDescribed > 0 ? (sg.totalAssessed / sg.estimatedDescribed) * 100 : 0,
-            outdated: sg.outdated,
-            percentOutdated: sg.totalAssessed > 0 ? (sg.outdated / sg.totalAssessed) * 100 : 0,
-            byCategory: sg.byCategory,
-            gbifNeSpeciesCount: sg.gbifNeSpeciesCount,
-            colDescribed: sg.colDescribed,
-            colNe: sg.colNe,
-          }));
-          setSscData([{ title: "MAMMAL SPECIALIST GROUPS", rows }]);
-        }
-      } finally {
-        setSscLoading(false);
-      }
-    }
-  }, [sscData]);
-
-  const exitSsc = useCallback(() => {
-    setSscMode(false);
-  }, []);
+  useEffect(() => {
+    if (!sscMode || sscData || sscFetchStartedRef.current) return;
+    sscFetchStartedRef.current = true;
+    setSscLoading(true);
+    fetch("/api/redlist/taxa-subgroups?nodeId=ssc-groups")
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (!data) return;
+        const rows: Table1aRowData[] = (data.subgroups ?? []).map((sg: SubGroupSummary) => ({
+          group: sg.id,
+          name: sg.name,
+          estimatedDescribed: sg.estimatedDescribed,
+          totalAssessed: sg.totalAssessed,
+          percentAssessed: sg.estimatedDescribed > 0 ? (sg.totalAssessed / sg.estimatedDescribed) * 100 : 0,
+          outdated: sg.outdated,
+          percentOutdated: sg.totalAssessed > 0 ? (sg.outdated / sg.totalAssessed) * 100 : 0,
+          byCategory: sg.byCategory,
+          gbifNeSpeciesCount: sg.gbifNeSpeciesCount,
+          colDescribed: sg.colDescribed,
+          colNe: sg.colNe,
+        }));
+        setSscData([{ title: "MAMMAL SPECIALIST GROUPS", rows }]);
+      })
+      .finally(() => setSscLoading(false));
+  }, [sscMode, sscData]);
 
   // Shared flat-table data source for whichever mode (Table 1a / SSC groups) is active
   const flatMode = table1aMode || sscMode;
@@ -459,7 +456,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       // Expand all ancestors up to the view root (which is in selectedTaxa)
       for (const ancestorId of getAncestors(sgId)) {
         if (selectedTaxa.has(ancestorId)) break; // Stop at the view root
-        if (ancestorId === "ssc-groups") break; // Display-only wrapper — see SSC groups mode
         if (!expandedTaxa.has(ancestorId)) toExpand.add(ancestorId);
       }
       // Expand the node itself if it has children
@@ -1536,14 +1532,17 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                               // SSC groups are pre-filtered mammal sub-populations, not
                               // display-root taxa — navigate straight to Mammals + this
                               // group's filter (all 35 pilot groups are mammal-scoped).
-                              setSscMode(false);
+                              // onNavigateToSubgroup clears layoutMode atomically as part
+                              // of the same history push — don't also clear it here, or
+                              // the navigation splits into two separate back-button steps.
                               onNavigateToSubgroup?.("mammals", row.group);
                               return;
                             }
-                            setTable1aMode(false);
                             const defaultRoots = new Set(TAXONOMY_VIEWS.default.roots);
                             if (defaultRoots.has(row.group)) {
-                              // Direct view root (e.g. mammals, birds) — select it
+                              // Direct view root (e.g. mammals, birds) — select it. This path
+                              // doesn't go through onNavigateToSubgroup, so exit the mode here.
+                              onLayoutModeChange(null);
                               onToggleTaxon(row.group, e);
                             } else if (onNavigateToSubgroup) {
                               // Table 1a group under a virtual root (e.g. molluscs → invertebrates).
@@ -1874,14 +1873,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           <span className="text-zinc-300 dark:text-zinc-700">|</span>
           {table1aMode ? (
             <button
-              onClick={exitTable1a}
+              onClick={() => onLayoutModeChange(null)}
               className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
             >
               Exit Table 1a mode
             </button>
           ) : sscMode ? (
             <button
-              onClick={exitSsc}
+              onClick={() => onLayoutModeChange(null)}
               className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
             >
               Exit SSC groups mode
@@ -1898,7 +1897,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               <span className="text-zinc-300 dark:text-zinc-700">|</span>
               <span className="inline-flex items-center gap-1">
                 <button
-                  onClick={enterTable1a}
+                  onClick={() => onLayoutModeChange("table1a")}
                   className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
                 >
                   Table 1a mode
@@ -1921,7 +1920,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               <span className="text-zinc-300 dark:text-zinc-700">|</span>
               <span className="inline-flex items-center gap-1">
                 <button
-                  onClick={enterSsc}
+                  onClick={() => onLayoutModeChange("ssc")}
                   className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
                 >
                   SSC groups mode

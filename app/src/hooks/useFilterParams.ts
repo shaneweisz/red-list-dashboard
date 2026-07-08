@@ -9,6 +9,11 @@ import { expandTaxaToken, collapseTaxaToTokens, getViewRootForNode } from "@/lib
 
 export type ViewMode = "reassessments" | "new-assessments";
 
+// Flat-table layout ("Table 1a mode" / "SSC groups mode") — URL-synced so it
+// survives reload/share and so the browser back button can return to it after
+// drilling into a group (see navigateToTaxonSubgroup below).
+export type LayoutMode = "table1a" | "ssc" | null;
+
 // Exact, URL-only base filters (no on-screen control — the charts use coarse
 // buckets). They let an agent/MCP dashboard link reproduce the exact /browse
 // query; each feeds the same predicate the dashboard already runs.
@@ -39,6 +44,7 @@ export function parseParams(search: string) {
   const p = new URLSearchParams(search);
   const sortParam = p.get("sort");
   const viewParam = p.get("view");
+  const layoutParam = p.get("layout");
   // A `region` param expands to its country codes (the dashboard has no separate
   // region state — it stores a region AS its countries and re-derives the chip).
   const countryCodes = new Set<string>(
@@ -65,6 +71,7 @@ export function parseParams(search: string) {
   }
   return {
     viewMode: (viewParam === "new-assessments" ? "new-assessments" : "reassessments") as ViewMode,
+    layoutMode: (layoutParam === "table1a" || layoutParam === "ssc" ? layoutParam : null) as LayoutMode,
     // Expanded from the flat `taxa` token list (+ legacy `subgroups=`) above.
     taxa: taxaSet,
     subgroups: subgroupSet,
@@ -135,6 +142,7 @@ export function parseParams(search: string) {
 
 export function buildQs(state: {
   viewMode: ViewMode;
+  layoutMode?: LayoutMode;
   taxa: Set<string>;
   subgroups: Set<string>;
   categories: Set<string>;
@@ -167,6 +175,7 @@ export function buildQs(state: {
 }): string {
   const p = new URLSearchParams();
   if (state.viewMode === "new-assessments") p.set("view", "new-assessments");
+  if (state.layoutMode) p.set("layout", state.layoutMode);
   // taxa + subgroups collapse to a single flat `taxa` token list (e.g.
   // invertebrates + inv-corals → taxa=corals); no separate subgroups param.
   const taxaTokens = collapseTaxaToTokens(state.taxa, state.subgroups);
@@ -339,6 +348,33 @@ export function useFilterParams() {
       setState(prev => {
         const nextSubgroups = typeof updater === "function" ? updater(prev.subgroups) : updater;
         const next = { ...prev, subgroups: nextSubgroups };
+        queueMicrotask(() => syncUrl(next, true));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
+  const setLayoutMode = useCallback(
+    (mode: LayoutMode) => {
+      setState(prev => {
+        const next = { ...prev, layoutMode: mode };
+        queueMicrotask(() => syncUrl(next, true)); // push so back button exits the mode
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
+  // Atomic taxon + sub-group navigation (used by Table 1a / SSC groups mode
+  // click-through). A single setState + single history push, so one back-press
+  // undoes the whole navigation instead of unwinding it one field at a time —
+  // and clearing layoutMode in the same update means back lands on the flat
+  // table the group was drilled into from, not a half-updated intermediate.
+  const navigateToTaxonSubgroup = useCallback(
+    (taxonId: string, subgroupId: string) => {
+      setState(prev => {
+        const next = { ...prev, taxa: new Set([taxonId]), subgroups: new Set([subgroupId]), layoutMode: null };
         queueMicrotask(() => syncUrl(next, true));
         return next;
       });
@@ -599,6 +635,7 @@ export function useFilterParams() {
 
   return {
     viewMode: state.viewMode,
+    layoutMode: state.layoutMode,
     selectedTaxa: state.taxa,
     selectedSubgroups: state.subgroups,
     selectedCategories: state.categories,
@@ -623,6 +660,8 @@ export function useFilterParams() {
     sortDirection: state.sortDirection,
 
     setViewMode,
+    setLayoutMode,
+    navigateToTaxonSubgroup,
     setSelectedTaxa,
     setSelectedSubgroups,
     setSelectedCategories,
