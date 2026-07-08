@@ -336,6 +336,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const {
     layoutMode, setLayoutMode,
     navigateToTaxonSubgroup,
+    returnToLayoutMode,
     selectedTaxa, setSelectedTaxa,
     selectedSubgroups, setSelectedSubgroups,
     selectedCategories, setSelectedCategories,
@@ -2093,8 +2094,15 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         layoutMode={layoutMode}
         onLayoutModeChange={setLayoutMode}
         onToggleSubgroup={(sgId) => {
-          // Clicking a view root ancestor → clear subgroups to show its children
+          // Clicking a view root ancestor → clear subgroups to show its children.
+          // If the currently-selected subgroup is an SSC group, we got here by
+          // drilling out of SSC groups mode — return to that flat table instead
+          // of falling through to the plain taxon tree view.
           if (selectedTaxa.has(sgId)) {
+            if ([...selectedSubgroups].some(id => id.startsWith("ssc-"))) {
+              returnToLayoutMode("ssc");
+              return;
+            }
             setSelectedSubgroups(new Set());
             return;
           }

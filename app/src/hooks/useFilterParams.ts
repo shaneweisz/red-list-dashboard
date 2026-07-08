@@ -382,6 +382,22 @@ export function useFilterParams() {
     [syncUrl]
   );
 
+  // Reverse of navigateToTaxonSubgroup — clears taxa/subgroups back to the
+  // landing page and re-enters a flat-table layout mode, atomically (one
+  // history push). Used when clicking the "Mammals" ancestor row after
+  // drilling out of SSC groups mode should return to that table instead of
+  // falling through to the plain taxon tree view.
+  const returnToLayoutMode = useCallback(
+    (mode: LayoutMode) => {
+      setState(prev => {
+        const next = { ...prev, taxa: new Set<string>(), subgroups: new Set<string>(), layoutMode: mode };
+        queueMicrotask(() => syncUrl(next, true));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
   const setSelectedSystems = useCallback(
     (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
       setState(prev => {
@@ -662,6 +678,7 @@ export function useFilterParams() {
     setViewMode,
     setLayoutMode,
     navigateToTaxonSubgroup,
+    returnToLayoutMode,
     setSelectedTaxa,
     setSelectedSubgroups,
     setSelectedCategories,
