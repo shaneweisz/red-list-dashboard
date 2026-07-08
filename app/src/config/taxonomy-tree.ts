@@ -888,6 +888,45 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-wild-pig-specialist-group",
         },
+        // Catch-all: mammal orders/families/genera not claimed by any of the 35
+        // groups above — e.g. treeshrew-adjacent oddities, moles' relatives with
+        // no dedicated group, and the wild Bactrian camel (Camelus, deliberately
+        // excluded from Wild Camelid SG's South-American-only remit). Kept in
+        // sync manually — if a 36th SSC group is added above, add its
+        // order/family/genus here too so it doesn't double-count into this row.
+        {
+          id: "ssc-other-mammals",
+          name: "No SSC Group",
+          filter: {
+            csvGroups: ["mammals"],
+            excludeOrders: [
+              "afrosoricida", "macroscelidea", "hyracoidea", "tubulidentata",
+              "pilosa", "cingulata",
+              "diprotodontia", "dasyuromorphia", "peramelemorphia", "notoryctemorphia", "monotremata",
+              "chiroptera",
+              "didelphimorphia", "paucituberculata", "microbiotheria",
+              "pholidota",
+              "primates",
+              "sirenia",
+              "rodentia", "eulipotyphla", "scandentia",
+              "lagomorpha",
+              "proboscidea",
+            ],
+            excludeFamilies: [
+              "ursidae", "canidae", "felidae", "cervidae", "equidae", "giraffidae",
+              "hippopotamidae", "hyaenidae", "tayassuidae",
+              "otariidae", "phocidae", "odobenidae",
+              "tapiridae", "rhinocerotidae", "bovidae", "suidae",
+              "balaenidae", "balaenopteridae", "eschrichtiidae", "physeteridae", "kogiidae", "ziphiidae",
+              "delphinidae", "monodontidae", "phocoenidae", "iniidae", "lipotidae", "platanistidae", "pontoporiidae",
+              "mustelidae", "viverridae", "herpestidae", "eupleridae", "procyonidae", "mephitidae", "nandiniidae", "prionodontidae",
+            ],
+            excludeGenera: ["lama", "vicugna"],
+          },
+          estimatedDescribed: 192,
+          estimatedSource: "Remainder of IUCN Table 1a mammals total (6,819) minus the 35 SSC pilot groups above (approx.)",
+          estimatedSourceUrl: IUCN_SOURCE_URL,
+        },
       ],
     },
 

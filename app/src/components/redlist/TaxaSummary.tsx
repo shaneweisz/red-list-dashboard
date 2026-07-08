@@ -128,6 +128,10 @@ const flexThClasses = `${cellPad} ${colDivider} text-left text-sm font-bold text
 // (e.g. "# Outdated (>10 yrs old)") would otherwise force the column wider than
 // it needs to be and push the table into horizontal overflow.
 const centeredThClasses = `${cellPad} ${colDivider} text-center text-sm font-bold text-zinc-600 dark:text-zinc-300 w-0`;
+// "# Described Species" is the widest single-line header after the taxon name
+// column; letting it wrap (like the bar-column headers above) keeps the column
+// from being wider than its numeric content actually needs.
+const numericThWrapClasses = `${cellPad} text-right text-sm font-bold text-zinc-600 dark:text-zinc-300 w-0 max-w-[110px]`;
 
 // Toggleable column IDs (Taxon is always visible)
 type ColumnId = "described" | "colDescribed" | "assessed" | "outdated" | "breakdown" | "gbifUnassessed" | "colNe" | "totalGbifObs" | "meanGbifObs" | "medianGbifObs" | "gbifDistribution";
@@ -429,6 +433,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           colDescribed: sg.colDescribed,
           colNe: sg.colNe,
         }));
+        rows.sort((a, b) => b.totalAssessed - a.totalAssessed);
         setSscData([{ title: "MAMMAL SPECIALIST GROUPS", rows }]);
       })
       .finally(() => setSscLoading(false));
@@ -1330,7 +1335,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   const renderHead = () => (
     <thead>
       <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
-        <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} ${flatMode ? "text-left" : "text-center"} text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap w-0 ${flatMode ? "overflow-hidden max-w-[120px] sm:max-w-[170px] lg:max-w-[220px]" : ""}`}>
+        <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} ${flatMode ? "text-left" : "text-center"} text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap w-0 ${flatMode ? "max-w-[160px] sm:max-w-[240px] lg:max-w-[300px]" : ""}`}>
           <div className={`flex items-center gap-1.5 ${flatMode ? "justify-start" : "justify-center"}`}>
             Taxonomic Group
             <button
@@ -1351,7 +1356,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           </div>
         </th>
         {isVisible("described") && (
-          <th className={`${numericThNoDividerClasses}`}>
+          <th className={flatMode ? numericThWrapClasses : numericThNoDividerClasses}>
             <span className="inline-flex items-center gap-1">
               # Described Species
               <span className="relative group">
@@ -1511,16 +1516,53 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
 
                   return (
                     <React.Fragment key={section.title}>
-                      {/* Section header */}
-                      <tr className="bg-zinc-100 dark:bg-zinc-800/80">
-                        <td
-                          colSpan={visibleColCount}
-                          className={`${stickyClasses} bg-zinc-100 dark:bg-zinc-800/80 ${cellPad}`}
-                        >
+                      {/* Section header — shows the section's subtotals directly, so they're
+                          visible without scrolling past every row to reach the bottom. */}
+                      <tr className="bg-zinc-100 dark:bg-zinc-800/80 border-b border-zinc-200 dark:border-zinc-700">
+                        <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 bg-zinc-100 dark:bg-zinc-800/80`}>
                           <span className="text-xs font-bold text-zinc-600 dark:text-zinc-300 uppercase tracking-wider">
                             {section.title}
                           </span>
                         </td>
+                        {isVisible("described") && (
+                          <td className={numericTdNoDividerClasses}>
+                            <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 tabular-nums">{subDescribed.toLocaleString()}</span>
+                          </td>
+                        )}
+                        {colDescribedCell(subColDescribed, true)}
+                        {isVisible("assessed") && (
+                          <td className={flexTdClasses}>
+                            {renderBar(subPctAssessed, getAssessedBarColor(subPctAssessed), false, subAssessed, "font-semibold")}
+                          </td>
+                        )}
+                        {isVisible("outdated") && (
+                          <td className={flexTdClasses}>
+                            {subAssessed > 0 ? renderBar(subPctOutdated, getOutdatedBarColor(subPctOutdated), false, subOutdated, "font-semibold") : <span className="text-sm text-zinc-400">—</span>}
+                          </td>
+                        )}
+                        {isVisible("gbifUnassessed") && (
+                          <td className={flexTdClasses}>
+                            {subGbifNe > 0 && subDescribed > 0
+                              ? renderBar((subGbifNe / subDescribed) * 100, "#3b82f6", false, subGbifNe, "font-semibold")
+                              : <span className="text-sm text-zinc-400">—</span>}
+                          </td>
+                        )}
+                        {colNeCell(subColNe, subDescribed, { bold: true })}
+                        {isVisible("totalGbifObs") && (
+                          <td className={numericTdClasses}>
+                            <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 tabular-nums">{subGbifObs.toLocaleString()}</span>
+                          </td>
+                        )}
+                        {isVisible("gbifDistribution") && <td className={flexTdClasses}><span className="text-sm text-zinc-400">—</span></td>}
+                        {isVisible("meanGbifObs") && (
+                          <td className={numericTdClasses}>
+                            <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 tabular-nums">{subMeanGbif != null ? subMeanGbif.toLocaleString() : "—"}</span>
+                          </td>
+                        )}
+                        {isVisible("medianGbifObs") && <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>}
+                        {isVisible("breakdown") && (
+                          <td className={flexTdClasses}>{renderBreakdownBar(subByCategory)}</td>
+                        )}
                       </tr>
                       {/* Section rows */}
                       {rows.map((row) => (
@@ -1568,7 +1610,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                             }
                           }}
                         >
-                          <td className={`${stickyClasses} ${cellPad} whitespace-nowrap overflow-hidden w-0 max-w-[120px] sm:max-w-[170px] lg:max-w-[220px] bg-white dark:bg-zinc-900`}>
+                          <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 max-w-[160px] sm:max-w-[240px] lg:max-w-[300px] bg-white dark:bg-zinc-900`}>
                             <span className="flex items-center gap-1.5 pl-4 min-w-0">
                               <span className="text-sm md:text-base text-zinc-900 dark:text-zinc-100 truncate" title={row.name}>
                                 {row.name}
@@ -1654,51 +1696,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                           )}
                         </tr>
                       ))}
-                      {/* Subtotal row */}
-                      <tr className="border-t border-zinc-200 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-800/30">
-                        <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 bg-zinc-50/50 dark:bg-zinc-800/30`}>
-                          <span className="text-sm font-semibold text-zinc-600 dark:text-zinc-300 pl-6">Subtotal</span>
-                        </td>
-                        {isVisible("described") && (
-                          <td className={numericTdNoDividerClasses}>
-                            <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 tabular-nums">{subDescribed.toLocaleString()}</span>
-                          </td>
-                        )}
-                        {colDescribedCell(subColDescribed, true)}
-                        {isVisible("assessed") && (
-                          <td className={flexTdClasses}>
-                            {renderBar(subPctAssessed, getAssessedBarColor(subPctAssessed), false, subAssessed, "font-semibold")}
-                          </td>
-                        )}
-                        {isVisible("outdated") && (
-                          <td className={flexTdClasses}>
-                            {subAssessed > 0 ? renderBar(subPctOutdated, getOutdatedBarColor(subPctOutdated), false, subOutdated, "font-semibold") : <span className="text-sm text-zinc-400">—</span>}
-                          </td>
-                        )}
-                        {isVisible("gbifUnassessed") && (
-                          <td className={flexTdClasses}>
-                            {subGbifNe > 0 && subDescribed > 0
-                              ? renderBar((subGbifNe / subDescribed) * 100, "#3b82f6", false, subGbifNe, "font-semibold")
-                              : <span className="text-sm text-zinc-400">—</span>}
-                          </td>
-                        )}
-                        {colNeCell(subColNe, subDescribed, { bold: true })}
-                        {isVisible("totalGbifObs") && (
-                          <td className={numericTdClasses}>
-                            <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 tabular-nums">{subGbifObs.toLocaleString()}</span>
-                          </td>
-                        )}
-                        {isVisible("gbifDistribution") && <td className={flexTdClasses}><span className="text-sm text-zinc-400">—</span></td>}
-                        {isVisible("meanGbifObs") && (
-                          <td className={numericTdClasses}>
-                            <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 tabular-nums">{subMeanGbif != null ? subMeanGbif.toLocaleString() : "—"}</span>
-                          </td>
-                        )}
-                        {isVisible("medianGbifObs") && <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>}
-                        {isVisible("breakdown") && (
-                          <td className={flexTdClasses}>{renderBreakdownBar(subByCategory)}</td>
-                        )}
-                      </tr>
                       {/* Gap between sections */}
                       {si < flatData.length - 1 && (
                         <tr><td colSpan={visibleColCount} className="p-0"><div className="h-1" /></td></tr>

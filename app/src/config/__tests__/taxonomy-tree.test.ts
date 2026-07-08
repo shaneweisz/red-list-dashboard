@@ -640,10 +640,36 @@ describe("matchesFilter – speciesNames filter", () => {
 describe("SSC Specialist Groups tree", () => {
   const sscNode = findNode("ssc-groups");
 
-  it("ssc-groups exists, is not part of the default view, and has 35 children", () => {
+  it("ssc-groups exists, is not part of the default view, and has 36 children (35 pilot groups + remainder)", () => {
     expect(sscNode).toBeDefined();
-    expect(sscNode?.children?.length).toBe(35);
+    expect(sscNode?.children?.length).toBe(36);
     expect(TAXONOMY_VIEWS.default.roots).not.toContain("ssc-groups");
+  });
+
+  it("ssc-other-mammals (the remainder row) doesn't overlap any of the 35 named groups", () => {
+    // Species that should land in each named group's scope must NOT also match
+    // the remainder filter — otherwise the remainder double-counts them.
+    const cases: Array<{ class_name: string; order_name: string; family: string; scientific_name: string }> = [
+      { class_name: "Mammalia", order_name: "Chiroptera", family: "Pteropodidae", scientific_name: "Pteropus vampyrus" },
+      { class_name: "Mammalia", order_name: "Carnivora", family: "Felidae", scientific_name: "Panthera tigris" },
+      { class_name: "Mammalia", order_name: "Artiodactyla", family: "Delphinidae", scientific_name: "Tursiops truncatus" },
+      { class_name: "Mammalia", order_name: "Artiodactyla", family: "Bovidae", scientific_name: "Bison bison" },
+      { class_name: "Mammalia", order_name: "Artiodactyla", family: "Bovidae", scientific_name: "Gazella dorcas" },
+      { class_name: "Mammalia", order_name: "Proboscidea", family: "Elephantidae", scientific_name: "Loxodonta africana" },
+      { class_name: "Mammalia", order_name: "Carnivora", family: "Ursidae", scientific_name: "Ursus maritimus" },
+      { class_name: "Mammalia", order_name: "Carnivora", family: "Mustelidae", scientific_name: "Lutra lutra" },
+      { class_name: "Mammalia", order_name: "Carnivora", family: "Mustelidae", scientific_name: "Mustela nivalis" },
+      { class_name: "Mammalia", order_name: "Artiodactyla", family: "Camelidae", scientific_name: "Vicugna vicugna" },
+    ];
+    for (const row of cases) {
+      expect(speciesMatchesNode({ ...row, taxon_group: "mammals" }, "ssc-other-mammals"), row.scientific_name).toBe(false);
+    }
+  });
+
+  it("ssc-other-mammals catches a genuinely uncovered species (wild Bactrian camel, deliberately excluded from Wild Camelid SG)", () => {
+    const camel = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Camelidae", scientific_name: "Camelus ferus", taxon_group: "mammals" };
+    expect(speciesMatchesNode(camel, "ssc-other-mammals")).toBe(true);
+    expect(speciesMatchesNode(camel, "ssc-wild-camelid")).toBe(false);
   });
 
   it("all SSC group children use the mammals csvGroup and have a unique id", () => {

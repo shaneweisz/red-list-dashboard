@@ -1285,6 +1285,22 @@
       },
       "colDescribed": 16,
       "colNe": 0
+    },
+    {
+      "id": "ssc-other-mammals",
+      "name": "No SSC Group",
+      "estimatedDescribed": 192,
+      "totalAssessed": 23,
+      "outdated": 19,
+      "gbifNeSpeciesCount": 19,
+      "byCategory": {
+        "EN": 9,
+        "LC": 10,
+        "VU": 1,
+        "DD": 3
+      },
+      "colDescribed": 47,
+      "colNe": 1
     }
   ],
   "reptiles": [
