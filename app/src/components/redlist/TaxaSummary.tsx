@@ -278,7 +278,23 @@ function DescribedInfoIcon({ nodeId, source }: { nodeId: string; source: "iucn" 
             </>
           ) : (
             <>
-              <p>{describeFilter(node.filter, nodeId)}</p>
+              <p>
+                {describeFilter(node.filter, nodeId).map((seg, i) =>
+                  seg.colId ? (
+                    <a
+                      key={i}
+                      href={`${COL_SOURCE_URL}data/taxon/${seg.colId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-300 hover:text-blue-200 underline"
+                    >
+                      {seg.text}
+                    </a>
+                  ) : (
+                    <span key={i}>{seg.text}</span>
+                  )
+                )}
+              </p>
               <p className="mt-1.5 text-zinc-300">
                 Source:{" "}
                 <a href={COL_SOURCE_URL} target="_blank" rel="noopener noreferrer" className="text-blue-300 hover:text-blue-200 underline">

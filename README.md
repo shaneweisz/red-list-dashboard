@@ -118,6 +118,7 @@ Phases 8–10 build the **Catalogue of Life backbone** (run on a full sync only)
 8. `fetch-coldp` — CoL eXtended Release ColDP archive → `NameUsage.tsv` (downloaded to a temp dir, not `data/`)
 9. `build-backbone` — `NameUsage.tsv` → `backbone.parquet` (tree + synonyms) + `species/` (accepted-species universe, partitioned; tagged `extinct`/`in_base`)
 10. `build-matching` — reconciles IUCN/GBIF species to CoL → `species_link.parquet` (`{sis_taxon_id, gbif_species_key} → col_id`, via accepted-name + CoL/IUCN synonym matching)
+11. `build-col-taxon-ids` — resolves every taxon name referenced in `taxonomy-tree.ts`'s filters against `backbone.parquet` → `src/config/col-taxon-ids.json` (each name's CoL taxon id, so the dashboard can link a name straight to its CoL page). Small and derived from committed source, so — unlike the other outputs here — it's **committed to git**, not published to R2. Re-run standalone (`npx tsx scripts/build-col-taxon-ids.ts`) whenever a node's filter changes, without needing a full sync.
 
 **Publishing a refresh.** `app/data/` lives in a private R2 bucket; the active version is pinned via `app/latest-sync.txt`. To publish a fresh sync:
 

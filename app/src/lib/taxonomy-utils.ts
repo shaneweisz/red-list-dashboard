@@ -10,6 +10,7 @@ import { TAXONOMY_TREE, type TaxonomyNode, type SpeciesFilter } from "@/config/t
 import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
 import { canonicalizeTaxonId } from "@/lib/data/taxonomy-constants";
 import { NODE_DESCRIPTION_OVERRIDES, COL_NODE_TOOLTIP_NOTES } from "@/config/col-described-overrides";
+import COL_TAXON_IDS from "@/config/col-taxon-ids.json";
 
 // ─── Indexes (built once at import) ──────────────────────────────────
 
@@ -291,11 +292,42 @@ const capitalize = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1)
 // Binomial convention: capitalize the genus, leave the species epithet lowercase.
 const capitalizeSpeciesName = (s: string): string => s.split(" ").map((w, i) => (i === 0 ? capitalize(w) : w)).join(" ");
 
+type FilterRank = "class" | "order" | "family" | "genus" | "species";
+
+// name → CoL taxon id (catalogueoflife.org/data/taxon/<id>), built by
+// scripts/build-col-taxon-ids.ts from the taxonomy tree + backbone.parquet. Only
+// covers names actually referenced by a SpeciesFilter somewhere in the tree — not
+// every name resolves (CoL classifies a few things differently, e.g. Bison is lumped
+// into Bos), in which case the segment below just has no colId and renders as plain text.
+const COL_TAXON_ID_MAP: Record<string, string> = COL_TAXON_IDS;
+
+/** One piece of a describeFilter() result: plain text, or a taxon name to link. */
+export interface DescribeFilterSegment {
+  text: string;
+  /** Present when this segment is a taxon name we could resolve to a CoL page. */
+  colId?: string;
+}
+
 // Long exclude/include lists (e.g. Antelope SG's 14-genus excludeGenera) would make an
-// unreadable tooltip — cap what's spelled out and summarize the rest by count.
-function joinCapped(names: string[], max = 4): string {
-  const capped = names.slice(0, max).map(capitalize).join(", ");
-  return names.length > max ? `${capped}, +${names.length - max} more` : capped;
+// unreadable tooltip — cap what's spelled out and summarize the rest by count. Each
+// shown name becomes its own segment, linked when we have a CoL id for it.
+function joinCappedSegments(rank: FilterRank, names: string[], max = 4): DescribeFilterSegment[] {
+  const segs: DescribeFilterSegment[] = [];
+  names.slice(0, max).forEach((n, i) => {
+    if (i > 0) segs.push({ text: ", " });
+    segs.push({ text: capitalize(n), colId: COL_TAXON_ID_MAP[`${rank}:${n.toLowerCase()}`] });
+  });
+  if (names.length > max) segs.push({ text: `, +${names.length - max} more` });
+  return segs;
+}
+
+function speciesSegments(names: string[]): DescribeFilterSegment[] {
+  const segs: DescribeFilterSegment[] = [];
+  names.forEach((n, i) => {
+    if (i > 0) segs.push({ text: ", " });
+    segs.push({ text: capitalizeSpeciesName(n), colId: COL_TAXON_ID_MAP[`species:${n.toLowerCase()}`] });
+  });
+  return segs;
 }
 
 /**
@@ -305,30 +337,59 @@ function joinCapped(names: string[], max = 4): string {
  * for filters too broad/exclusion-heavy to summarize automatically (e.g. the SSC
  * "No SSC Group" catch-all), then appends a COL_NODE_TOOLTIP_NOTES note (if any)
  * explaining a CoL-specific quirk (lumped genus, domestic-form exclusion, coverage gap).
+ *
+ * Returns segments rather than a plain string so the caller can render each taxon
+ * name as a link to its Catalogue of Life page where we have one (see COL_TAXON_IDS).
  */
-export function describeFilter(filter: SpeciesFilter, nodeId?: string): string {
+export function describeFilter(filter: SpeciesFilter, nodeId?: string): DescribeFilterSegment[] {
   const override = nodeId ? NODE_DESCRIPTION_OVERRIDES[nodeId] : undefined;
   const note = nodeId ? COL_NODE_TOOLTIP_NOTES[nodeId] : undefined;
 
-  if (override) return note ? `${override} — ${note}` : override;
+  if (override) {
+    const segs: DescribeFilterSegment[] = [{ text: override }];
+    if (note) segs.push({ text: ` — ${note}` });
+    return segs;
+  }
 
-  const includeParts: string[] = [];
-  if (filter.classNames?.length) includeParts.push(`Class: ${joinCapped(filter.classNames)}`);
-  if (filter.orderNames?.length) includeParts.push(`Order: ${joinCapped(filter.orderNames)}`);
-  if (filter.families?.length) includeParts.push(`Family: ${joinCapped(filter.families)}`);
-  if (filter.genera?.length) includeParts.push(`Genus: ${joinCapped(filter.genera)}`);
-  if (filter.speciesNames?.length) includeParts.push(`Species: ${filter.speciesNames.map(capitalizeSpeciesName).join(", ")}`);
+  const segs: DescribeFilterSegment[] = [];
+  let hasPart = false;
+  const addPart = (label: string, rank: FilterRank, names: string[] | undefined) => {
+    if (!names?.length) return;
+    if (hasPart) segs.push({ text: "; " });
+    hasPart = true;
+    segs.push({ text: `${label}: ` }, ...joinCappedSegments(rank, names));
+  };
+  addPart("Class", "class", filter.classNames);
+  addPart("Order", "order", filter.orderNames);
+  addPart("Family", "family", filter.families);
+  addPart("Genus", "genus", filter.genera);
+  if (filter.speciesNames?.length) {
+    if (hasPart) segs.push({ text: "; " });
+    hasPart = true;
+    segs.push({ text: "Species: " }, ...speciesSegments(filter.speciesNames));
+  }
+  if (!hasPart) segs.push({ text: "All species in this group" });
 
-  let base = includeParts.length ? includeParts.join("; ") : "All species in this group";
+  const excludeSegs: DescribeFilterSegment[] = [];
+  let hasExclude = false;
+  const addExclude = (rank: FilterRank, names: string[] | undefined) => {
+    if (!names?.length) return;
+    if (hasExclude) excludeSegs.push({ text: "; " });
+    hasExclude = true;
+    excludeSegs.push(...joinCappedSegments(rank, names));
+  };
+  addExclude("class", filter.excludeClasses);
+  addExclude("order", filter.excludeOrders);
+  addExclude("family", filter.excludeFamilies);
+  addExclude("genus", filter.excludeGenera);
+  if (filter.excludeSpeciesNames?.length) {
+    if (hasExclude) excludeSegs.push({ text: "; " });
+    hasExclude = true;
+    excludeSegs.push(...speciesSegments(filter.excludeSpeciesNames));
+  }
+  if (hasExclude) segs.push({ text: " (excluding " }, ...excludeSegs, { text: ")" });
 
-  const excludeParts: string[] = [];
-  if (filter.excludeClasses?.length) excludeParts.push(joinCapped(filter.excludeClasses));
-  if (filter.excludeOrders?.length) excludeParts.push(joinCapped(filter.excludeOrders));
-  if (filter.excludeFamilies?.length) excludeParts.push(joinCapped(filter.excludeFamilies));
-  if (filter.excludeGenera?.length) excludeParts.push(joinCapped(filter.excludeGenera));
-  if (filter.excludeSpeciesNames?.length) excludeParts.push(filter.excludeSpeciesNames.map(capitalizeSpeciesName).join(", "));
-  if (excludeParts.length) base += ` (excluding ${excludeParts.join("; ")})`;
-
-  return note ? `${base} — ${note}` : base;
+  if (note) segs.push({ text: ` — ${note}` });
+  return segs;
 }
 
