@@ -12,7 +12,7 @@ import EolSummary from "../EolSummary";
 import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID, THREATENED_CATEGORIES } from "@/config/taxa";
-import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode } from "@/lib/taxonomy-utils";
+import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode, matchesBreakdownName, breakdownDisplayName } from "@/lib/taxonomy-utils";
 import ReviewerChart from "./ReviewerChart";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { iucnRegionCountries, countryToIucnRegion } from "@/lib/regions";
@@ -350,6 +350,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     selectedMovementPatterns, setSelectedMovementPatterns,
     selectedThreats, setSelectedThreats,
     hasMapFilter, setHasMapFilter,
+    breakdownFilter, setBreakdownFilter,
     endemicsOnly, setEndemicsOnly,
     selectedGrowthForms, setSelectedGrowthForms,
     selectedAssessors, setSelectedAssessors,
@@ -711,6 +712,14 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         Array.from(selectedSubgroups).some(sg => speciesMatchesNode(s, sg))
       );
     }
+    // Narrow to one breakdown row from a described-species popover (bd= URL param —
+    // see TaxaSummary.tsx's BreakdownList). Gated on the filter's own nodeId still
+    // being selected: a stale bd= surviving a later, unrelated navigation (any
+    // setSelectedSubgroups/setSelectedTaxa call resets it, but this is a second,
+    // cheap line of defense) becomes inert instead of silently hiding every species.
+    if (breakdownFilter && selectedSubgroups.has(breakdownFilter.nodeId)) {
+      filtered = filtered.filter(s => matchesBreakdownName(s, breakdownFilter.rank, breakdownFilter.name));
+    }
     // Exact URL-only base filters (outdated / obs / assessment-year / described-year
     // bounds). Applied here on the base set so every chart AND the table inherit
     // them — and identically to the bucket-free /browse + MCP query, which is what
@@ -745,7 +754,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         && (maxDescribedYear == null || s.described_year <= maxDescribedYear));
     }
     return filtered;
-  }, [species, selectedTaxa, selectedSubgroups, isNewAssessments, exactFilters]);
+  }, [species, selectedTaxa, selectedSubgroups, isNewAssessments, exactFilters, breakdownFilter]);
 
   // Helper to check if species matches year range filter
   const matchesYearRangeFilter = useCallback((assessmentDate: string | null, yearRanges: Set<string> = selectedYearRanges): boolean => {
@@ -3009,6 +3018,15 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 </button>
               );
             })}
+            {breakdownFilter && selectedSubgroups.has(breakdownFilter.nodeId) && (
+              <button
+                onClick={() => setBreakdownFilter(null)}
+                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
+              >
+                {breakdownDisplayName(breakdownFilter.rank, breakdownFilter.name)}
+                <span className="text-xs">×</span>
+              </button>
+            )}
             {!isNewAssessments && Array.from(selectedCategories).filter(cat => cat !== "NE").map(cat => (
               <button
                 key={cat}

@@ -380,6 +380,37 @@ export function breakdownHref(rank: FilterRank, name: string): string | undefine
   return colId ? colHref(rank, colId) : undefined;
 }
 
+/**
+ * Does a species row belong to one specific name within a filter rank — e.g. rank
+ * "order", name "rodentia"? Used to narrow a node's species list down to a single
+ * breakdown row (RedListView's `bd=` URL param, set when a described-species popover
+ * breakdown row is clicked — see TaxaSummary.tsx's BreakdownList). Mirrors the same
+ * order/class_name fallback matchesFilter() uses for the GBIF-taxonomy quirk where
+ * order_name is sometimes empty.
+ */
+export function matchesBreakdownName(
+  row: { class_name: string | null; order_name: string | null; family?: string | null; scientific_name?: string | null },
+  rank: FilterRank,
+  name: string,
+): boolean {
+  const n = name.toLowerCase();
+  switch (rank) {
+    case "class":
+      return (row.class_name ?? "").toLowerCase() === n;
+    case "order": {
+      const ord = (row.order_name ?? "").toLowerCase();
+      const cls = (row.class_name ?? "").toLowerCase();
+      return ord === n || (ord === "" && cls === n);
+    }
+    case "family":
+      return (row.family ?? "").toLowerCase() === n;
+    case "genus":
+      return ((row.scientific_name ?? "").trim().split(/\s+/)[0] ?? "").toLowerCase() === n;
+    case "species":
+      return (row.scientific_name ?? "").trim().toLowerCase() === n;
+  }
+}
+
 /** One piece of a describeFilter() result: plain text, or a taxon name to link. */
 export interface DescribeFilterSegment {
   text: string;

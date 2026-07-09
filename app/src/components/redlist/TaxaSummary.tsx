@@ -211,11 +211,18 @@ function DisabledAllTooltip() {
 // RedListView's internal useFilterParams URL sync already listen for globally (see
 // the Assessed/Unassessed toggle in page.tsx, which does the same thing) — so this
 // needs no prop-drilling through RedListView/TaxaSummary to reach either one.
-function navigateToNodeSpeciesList(nodeId: string, view: "reassessments" | "new-assessments") {
+function navigateToNodeSpeciesList(
+  nodeId: string,
+  view: "reassessments" | "new-assessments",
+  breakdown?: { rank: FilterRank; name: string },
+) {
   if (typeof window === "undefined") return;
   const params = new URLSearchParams();
   params.set("taxa", stripNodePrefix(nodeId));
   if (view === "new-assessments") params.set("view", "new-assessments");
+  // Narrows to just this breakdown row (e.g. Rodentia within Small Mammal SG) — see
+  // parseBreakdownParam/RedListView's taxaFilteredSpecies for how `bd=` is consumed.
+  if (breakdown) params.set("bd", `${nodeId}:${breakdown.rank}:${breakdown.name}`);
   window.history.pushState(null, "", `/?${params.toString()}`);
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
@@ -224,9 +231,9 @@ function navigateToNodeSpeciesList(nodeId: string, view: "reassessments" | "new-
 // specialist see, for each name in the node's primary filter dimension (e.g. each
 // order in Small Mammal SG), how its colDescribed splits into Assessed vs Not
 // Evaluated, without leaving the tooltip. Clicking Assessed/Not Evaluated navigates
-// to the NODE's own species list in that view (same destination clicking the row
-// gives) — not narrowed to just that one name, since a name-scoped species list
-// needs a new API param; that's a follow-up, not this pass.
+// to the node's species list in that view, narrowed client-side to just this one
+// name via the `bd=` URL param (RedListView's taxaFilteredSpecies) — species are
+// already fully fetched per node, so no new API param was needed.
 function BreakdownList({
   rank,
   label,
@@ -284,7 +291,7 @@ function BreakdownList({
                     <button
                       type="button"
                       className="underline decoration-dotted underline-offset-2 hover:text-white"
-                      onClick={() => { navigateToNodeSpeciesList(nodeId, "reassessments"); onNavigate(); }}
+                      onClick={() => { navigateToNodeSpeciesList(nodeId, "reassessments", { rank, name: b.name }); onNavigate(); }}
                     >
                       Assessed ({assessedCount})
                     </button>
@@ -293,7 +300,7 @@ function BreakdownList({
                     <button
                       type="button"
                       className="underline decoration-dotted underline-offset-2 hover:text-white"
-                      onClick={() => { navigateToNodeSpeciesList(nodeId, "new-assessments"); onNavigate(); }}
+                      onClick={() => { navigateToNodeSpeciesList(nodeId, "new-assessments", { rank, name: b.name }); onNavigate(); }}
                     >
                       Not Evaluated ({b.neCount})
                     </button>
