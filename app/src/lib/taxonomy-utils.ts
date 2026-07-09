@@ -11,6 +11,7 @@ import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
 import { canonicalizeTaxonId } from "@/lib/data/taxonomy-constants";
 import { NODE_DESCRIPTION_OVERRIDES, COL_NODE_TOOLTIP_NOTES, COL_EXCLUDE_ALL_NODES, COL_SPECIES_NAME_OVERRIDES } from "@/config/col-described-overrides";
 import COL_TAXON_IDS from "@/config/col-taxon-ids.json";
+import COL_RELEASE from "@/config/col-release.json";
 
 // ─── Indexes (built once at import) ──────────────────────────────────
 
@@ -312,6 +313,14 @@ export function getNodeDef(nodeId: string): { node: TaxonomyNode; parentId: stri
 // ─── Plain-language filter description (for the "# Described Species" tooltip) ──
 
 export const COL_SOURCE_URL = "https://www.catalogueoflife.org/";
+
+// The exact CoL XR release colDescribed is built from (scripts/fetch-coldp.ts writes
+// this alongside every sync) — cited by alias (e.g. "COL26.6 XR") and linked via its
+// DOI, so "Source" points at the specific dataset version actually used instead of a
+// generic, dateless homepage link that says nothing about which release produced the
+// numbers on screen.
+export const COL_RELEASE_LABEL = `Catalogue of Life (${COL_RELEASE.alias})`;
+export const COL_RELEASE_URL = COL_RELEASE.doi ? `https://doi.org/${COL_RELEASE.doi}` : COL_SOURCE_URL;
 
 const capitalize = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 

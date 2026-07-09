@@ -33,19 +33,45 @@ export interface ColdpPaths {
   dir: string;
   nameUsage: string;
   reference: string;
+  xrDataset: XrDatasetInfo;
 }
 
-async function resolveLatestXrDataset(): Promise<{ key: string; alias: string }> {
-  const res = await fetch("https://api.checklistbank.org/dataset?origin=xrelease&limit=1&sortBy=created");
-  if (!res.ok) throw new Error(`resolveLatestXrDataset: ChecklistBank dataset search failed: ${res.status}`);
-  const body = (await res.json()) as { result?: Array<{ key: number; alias: string }> };
-  const latest = body.result?.[0];
-  if (!latest) throw new Error("resolveLatestXrDataset: no xrelease datasets returned");
-  return { key: String(latest.key), alias: latest.alias };
+export interface XrDatasetInfo {
+  key: string;
+  alias: string;
+  doi: string | null;
+  issued: string | null;
+}
+
+// Looked up by key (COL_XR_DATASET override) or by the newest xrelease dataset — either
+// way we still hit the API so the citation metadata (alias/doi/issued) below is always
+// accurate, not just the key.
+export async function resolveXrDataset(): Promise<XrDatasetInfo> {
+  const overrideKey = process.env.COL_XR_DATASET;
+  const res = overrideKey
+    ? await fetch(`https://api.checklistbank.org/dataset/${overrideKey}`)
+    : await fetch("https://api.checklistbank.org/dataset?origin=xrelease&limit=1&sortBy=created");
+  if (!res.ok) throw new Error(`resolveXrDataset: ChecklistBank lookup failed: ${res.status}`);
+  const body = await res.json();
+  const ds = overrideKey ? body : body.result?.[0];
+  if (!ds) throw new Error("resolveXrDataset: no xrelease datasets returned");
+  return { key: String(ds.key), alias: ds.alias, doi: ds.doi ?? null, issued: ds.issued ?? null };
+}
+
+// Citation metadata for the exact XR release the "described species" universe is built
+// from — checked into git (like col-taxon-ids.json) so the frontend's "Source" link
+// cites and links to the specific dataset version, not a generic/dateless CoL homepage
+// link that silently goes stale as new releases ship.
+export function writeReleaseMetadata(xr: XrDatasetInfo): void {
+  const outPath = path.join(__dirname, "../src/config/col-release.json");
+  fs.writeFileSync(outPath, JSON.stringify(xr, null, 2) + "\n");
+  console.log(`fetch-coldp: wrote ${outPath} (${xr.alias}, ${xr.key})`);
 }
 
 export async function run(opts: { destDir?: string } = {}): Promise<ColdpPaths> {
-  const XR_DATASET = process.env.COL_XR_DATASET || (await resolveLatestXrDataset()).key;
+  const xr = await resolveXrDataset();
+  const XR_DATASET = xr.key;
+  writeReleaseMetadata(xr);
   const destDir = opts.destDir || fs.mkdtempSync(path.join(os.tmpdir(), "coldp-xr-"));
   fs.mkdirSync(destDir, { recursive: true });
   const zip = path.join(destDir, "coldp_xr.zip");
@@ -63,7 +89,7 @@ export async function run(opts: { destDir?: string } = {}): Promise<ColdpPaths> 
   if (!fs.existsSync(reference)) throw new Error("fetch-coldp: Reference.tsv missing after extraction");
   console.log(`fetch-coldp: wrote ${nameUsage} (${(fs.statSync(nameUsage).size / 1024 / 1024).toFixed(0)} MB)`);
   console.log(`fetch-coldp: wrote ${reference} (${(fs.statSync(reference).size / 1024 / 1024).toFixed(0)} MB)`);
-  return { dir: destDir, nameUsage, reference };
+  return { dir: destDir, nameUsage, reference, xrDataset: xr };
 }
 
 const isDirectRun = process.argv[1]?.endsWith("fetch-coldp.ts") || process.argv[1]?.endsWith("fetch-coldp.js");

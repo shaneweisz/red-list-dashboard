@@ -406,8 +406,10 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     setTruncationByTaxon({});
     setNeSpecies([]);
     setNeSpeciesFetched(false);
-    // Clear assessment-specific filters (preserve search + species so search-bar navigation survives mode switch)
-    setSelectedSubgroups(new Set());
+    // Clear assessment-specific filters (preserve search + species so search-bar navigation survives mode
+    // switch; also preserve selectedSubgroups — new-assessments mode fetches a selected sub-group directly
+    // (see the fetch effect below), so e.g. toggling Unassessed while viewing an SSC group should stay
+    // scoped to that group, not fall back to all of Mammals)
     setSelectedCategories(new Set());
     setSelectedYearRanges(new Set());
     setSelectedAssessmentYears(new Set());
@@ -430,7 +432,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     if (viewMode === "new-assessments") {
       setSelectedTaxa(prev => prev.has("all") ? new Set<string>() : prev);
     }
-  }, [viewMode, setSelectedTaxa, setSelectedSubgroups, setSelectedCategories, setSelectedYearRanges, setSelectedAssessmentYears, setSelectedDescribedYears, setSelectedCountries, setSelectedObsRanges, setSelectedSystems, setSelectedPopulationTrends, setSelectedMovementPatterns, setSelectedThreats, setHasMapFilter, setEndemicsOnly, setSelectedGrowthForms, setSelectedAssessors, setSelectedReviewers, setSort]);
+  }, [viewMode, setSelectedTaxa, setSelectedCategories, setSelectedYearRanges, setSelectedAssessmentYears, setSelectedDescribedYears, setSelectedCountries, setSelectedObsRanges, setSelectedSystems, setSelectedPopulationTrends, setSelectedMovementPatterns, setSelectedThreats, setHasMapFilter, setEndemicsOnly, setSelectedGrowthForms, setSelectedAssessors, setSelectedReviewers, setSort]);
 
   // Taxon toggle handler (used by TaxaSummary)
   // Regular click: select only that taxon (or deselect if already sole selection)

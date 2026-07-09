@@ -7,7 +7,7 @@ import { FaInfoCircle, FaExpandAlt, FaCompressAlt, FaChevronRight } from "react-
 import { HiOutlineAdjustmentsHorizontal } from "react-icons/hi2";
 import TaxaIcon from "@/components/TaxaIcon";
 import { CATEGORY_COLORS, CATEGORY_NAMES, CATEGORY_ORDER } from "@/config/taxa";
-import { hasChildren, findNode, getAncestors, stripNodePrefix, OFFICIAL_IUCN_DESCRIBED_NODE_IDS, describeFilter, COL_SOURCE_URL } from "@/lib/taxonomy-utils";
+import { hasChildren, findNode, getAncestors, stripNodePrefix, OFFICIAL_IUCN_DESCRIBED_NODE_IDS, describeFilter, COL_RELEASE_LABEL, COL_RELEASE_URL } from "@/lib/taxonomy-utils";
 import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
 interface Table1aRowData {
   group: string;
@@ -298,26 +298,10 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
               </p>
               <p className="mt-1.5 text-zinc-300">
                 Source:{" "}
-                <a href={COL_SOURCE_URL} target="_blank" rel="noopener noreferrer" className="text-blue-300 hover:text-blue-200 underline">
-                  Catalogue of Life 2025
+                <a href={COL_RELEASE_URL} target="_blank" rel="noopener noreferrer" className="text-blue-300 hover:text-blue-200 underline">
+                  {COL_RELEASE_LABEL}
                 </a>
-                .{" "}
-                <button
-                  type="button"
-                  className="text-blue-300 hover:text-blue-200 underline"
-                  onClick={() => {
-                    // The popover is portal-rendered to document.body, so it isn't a DOM
-                    // descendant of the row — btnRef (the trigger icon, NOT portaled) still
-                    // is, so use it to reach the row and replay its own click handler
-                    // instead of duplicating that per-context navigation logic here.
-                    const tr = btnRef.current?.closest("tr");
-                    setOpen(false);
-                    tr?.click();
-                  }}
-                >
-                  Click this row
-                </button>
-                {" "}to see the species list (toggle &quot;Unassessed&quot; for the rest).
+                .
               </p>
             </>
           )}
@@ -1483,7 +1467,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               # Described Species
               <span className="relative group">
                 <a
-                  href={describedSource === "col" ? COL_SOURCE_URL : IUCN_SOURCE_URL}
+                  href={describedSource === "col" ? COL_RELEASE_URL : IUCN_SOURCE_URL}
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
@@ -1493,7 +1477,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                 </a>
                 <span className="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible z-50 shadow-lg normal-case">
                   {describedSource === "col"
-                    ? "Described species from the Catalogue of Life backbone"
+                    ? `Described species from the ${COL_RELEASE_LABEL} backbone`
                     : "Estimates from IUCN Red List Table 1a (2025-2)"}
                 </span>
               </span>
