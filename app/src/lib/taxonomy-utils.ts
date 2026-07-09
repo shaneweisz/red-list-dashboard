@@ -9,7 +9,7 @@
 import { TAXONOMY_TREE, type TaxonomyNode, type SpeciesFilter } from "@/config/taxonomy-tree";
 import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
 import { canonicalizeTaxonId } from "@/lib/data/taxonomy-constants";
-import { NODE_DESCRIPTION_OVERRIDES, COL_NODE_TOOLTIP_NOTES } from "@/config/col-described-overrides";
+import { NODE_DESCRIPTION_OVERRIDES, COL_NODE_TOOLTIP_NOTES, COL_EXCLUDE_ALL_NODES, COL_SPECIES_NAME_OVERRIDES } from "@/config/col-described-overrides";
 import COL_TAXON_IDS from "@/config/col-taxon-ids.json";
 
 // ─── Indexes (built once at import) ──────────────────────────────────
@@ -246,6 +246,18 @@ export function matchesFilter(
     if (filter.excludeSpeciesNames && filter.excludeSpeciesNames.length > 0 && name && filter.excludeSpeciesNames.includes(name)) return false;
   }
 
+  // CoL-only universe exclusions (domestic/feral forms, e.g. Felis catus, + names
+  // reassigned to another node's species-name override, e.g. Bison) — never part of
+  // ANY node's species universe. Mirrors filterToSql's COL_EXCLUDE_ALL_NODES
+  // exclusion (build-taxa-summary.ts), which only ran server-side at build time; this
+  // client-side path is what actually filters the species LIST shown when a user
+  // drills into a node (e.g. clicking Cat SG's row) — without this, the "# Described"
+  // count and the displayed species list would disagree (found via user report: the
+  // count excluded Felis catus but the NE species list still showed it). Safe
+  // unconditionally: none of these names are ever IUCN-assessed (verified against
+  // assessed.parquet), so this can't hide a real assessed species.
+  if (row.scientific_name && COL_EXCLUDE_ALL_NODES.includes(row.scientific_name.trim().toLowerCase())) return false;
+
   return true;
 }
 
@@ -266,6 +278,18 @@ export function speciesMatchesNode(
 
   // Must belong to one of the filter's CSV groups
   if (!f.csvGroups.includes(species.taxon_group)) return false;
+
+  // Mirrors filterToSql's COL_SPECIES_NAME_OVERRIDES branch (build-taxa-summary.ts):
+  // CoL lumps genus Bison into Bos, so a CoL-sourced row (NE species, named "Bos
+  // bison") never matches Bison SG's own filter (genera: ["bison"]) — but an
+  // IUCN-sourced row (assessed species, still named "Bison bison") DOES match the
+  // normal filter directly, since IUCN hasn't adopted CoL's lumping. Added as an
+  // extra match path, not a replacement, so both naming conventions work.
+  const override = COL_SPECIES_NAME_OVERRIDES[nodeId];
+  if (override) {
+    const name = (species.scientific_name ?? "").trim().toLowerCase();
+    if (override.includes(name)) return true;
+  }
 
   return matchesFilter(species, f);
 }
