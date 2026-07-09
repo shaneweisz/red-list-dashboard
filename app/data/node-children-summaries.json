@@ -18,8 +18,8 @@
         "EW": 1,
         "LR/nt": 1
       },
-      "colDescribed": 6154,
-      "colNe": 387
+      "colDescribed": 6410,
+      "colNe": 524
     },
     {
       "id": "ssc-groups",
@@ -39,8 +39,8 @@
         "EW": 1,
         "LR/nt": 1
       },
-      "colDescribed": 6154,
-      "colNe": 387
+      "colDescribed": 6410,
+      "colNe": 524
     },
     {
       "id": "birds",
@@ -59,8 +59,8 @@
         "EX": 164,
         "DD": 36
       },
-      "colDescribed": 10582,
-      "colNe": 284
+      "colDescribed": 10992,
+      "colNe": 338
     },
     {
       "id": "reptiles",
@@ -82,8 +82,8 @@
         "EW": 2,
         "LR/cd": 1
       },
-      "colDescribed": 12777,
-      "colNe": 2352
+      "colDescribed": 12860,
+      "colNe": 2434
     },
     {
       "id": "amphibians",
@@ -102,7 +102,7 @@
         "EX": 37,
         "EW": 2
       },
-      "colDescribed": 8916,
+      "colDescribed": 8923,
       "colNe": 977
     },
     {
@@ -124,8 +124,8 @@
         "LR/lc": 1,
         "LR/nt": 2
       },
-      "colDescribed": 36776,
-      "colNe": 7999
+      "colDescribed": 37289,
+      "colNe": 8302
     },
     {
       "id": "insects",
@@ -147,8 +147,8 @@
         "EW": 1,
         "LR/cd": 3
       },
-      "colDescribed": 933720,
-      "colNe": 920961
+      "colDescribed": 937900,
+      "colNe": 925025
     },
     {
       "id": "arachnids",
@@ -166,8 +166,8 @@
         "CR": 121,
         "EX": 9
       },
-      "colDescribed": 98709,
-      "colNe": 97679
+      "colDescribed": 99715,
+      "colNe": 98680
     },
     {
       "id": "molluscs",
@@ -188,8 +188,8 @@
         "LR/lc": 16,
         "EW": 12
       },
-      "colDescribed": 88109,
-      "colNe": 79296
+      "colDescribed": 89652,
+      "colNe": 80696
     },
     {
       "id": "crustaceans",
@@ -211,8 +211,8 @@
         "LR/nt": 1,
         "EW": 1
       },
-      "colDescribed": 68648,
-      "colNe": 65432
+      "colDescribed": 69280,
+      "colNe": 66007
     },
     {
       "id": "corals",
@@ -229,8 +229,8 @@
         "EN": 245,
         "NT": 24
       },
-      "colDescribed": 5675,
-      "colNe": 4763
+      "colDescribed": 5735,
+      "colNe": 4826
     },
     {
       "id": "velvet_worms",
@@ -281,8 +281,8 @@
         "EX": 6,
         "NT": 98
       },
-      "colDescribed": 139734,
-      "colNe": 138885
+      "colDescribed": 142417,
+      "colNe": 141335
     },
     {
       "id": "flowering_plants",
@@ -304,8 +304,8 @@
         "EX": 134,
         "LR/lc": 125
       },
-      "colDescribed": 354361,
-      "colNe": 281016
+      "colDescribed": 356867,
+      "colNe": 283415
     },
     {
       "id": "gymnosperms",
@@ -343,8 +343,8 @@
         "EX": 2,
         "EW": 1
       },
-      "colDescribed": 13958,
-      "colNe": 13106
+      "colDescribed": 14135,
+      "colNe": 13275
     },
     {
       "id": "mosses",
@@ -363,8 +363,8 @@
         "LR/lc": 3,
         "DD": 37
       },
-      "colDescribed": 19189,
-      "colNe": 18867
+      "colDescribed": 19262,
+      "colNe": 18937
     },
     {
       "id": "green_algae",
@@ -411,8 +411,8 @@
         "EN": 1,
         "VU": 1
       },
-      "colDescribed": 377,
-      "colNe": 377
+      "colDescribed": 451,
+      "colNe": 451
     },
     {
       "id": "mushrooms",
@@ -429,8 +429,8 @@
         "LC": 491,
         "DD": 290
       },
-      "colDescribed": 156543,
-      "colNe": 155365
+      "colDescribed": 156521,
+      "colNe": 155345
     },
     {
       "id": "invertebrates",
@@ -452,8 +452,8 @@
         "EW": 14,
         "LR/cd": 12
       },
-      "colDescribed": 1334834,
-      "colNe": 1307240
+      "colDescribed": 1344938,
+      "colNe": 1316793
     },
     {
       "id": "plantae",
@@ -475,8 +475,8 @@
         "EX": 141,
         "LR/lc": 128
       },
-      "colDescribed": 392546,
-      "colNe": 316947
+      "colDescribed": 395302,
+      "colNe": 319585
     },
     {
       "id": "fungi",
@@ -493,8 +493,8 @@
         "LC": 491,
         "DD": 302
       },
-      "colDescribed": 156920,
-      "colNe": 155742
+      "colDescribed": 156972,
+      "colNe": 155796
     }
   ],
   "mammals": [
@@ -514,8 +514,8 @@
         "VU": 137,
         "EX": 37
       },
-      "colDescribed": 2337,
-      "colNe": 78
+      "colDescribed": 2388,
+      "colNe": 86
     },
     {
       "id": "bats",
@@ -534,8 +534,8 @@
         "EX": 9,
         "LR/nt": 1
       },
-      "colDescribed": 1433,
-      "colNe": 136
+      "colDescribed": 1442,
+      "colNe": 134
     },
     {
       "id": "eulipotyphla",
@@ -553,8 +553,8 @@
         "CR": 10,
         "EX": 8
       },
-      "colDescribed": 582,
-      "colNe": 75
+      "colDescribed": 589,
+      "colNe": 74
     },
     {
       "id": "primates",
@@ -591,16 +591,16 @@
         "VU": 41,
         "DD": 19
       },
-      "colDescribed": 373,
-      "colNe": 42,
+      "colDescribed": 386,
+      "colNe": 41,
       "colBreakdown": [
         {
           "name": "diprotodontia",
-          "count": 146
+          "count": 154
         },
         {
           "name": "dasyuromorphia",
-          "count": 76
+          "count": 77
         },
         {
           "name": "didelphimorphia",
@@ -608,7 +608,7 @@
         },
         {
           "name": "peramelemorphia",
-          "count": 20
+          "count": 24
         },
         {
           "name": "paucituberculata",
@@ -640,7 +640,7 @@
         "EX": 6,
         "DD": 6
       },
-      "colDescribed": 301,
+      "colDescribed": 306,
       "colNe": 15
     },
     {
@@ -660,8 +660,8 @@
         "EW": 1,
         "DD": 25
       },
-      "colDescribed": 225,
-      "colNe": 21
+      "colDescribed": 395,
+      "colNe": 154
     },
     {
       "id": "rabbits-hares",
@@ -679,7 +679,7 @@
         "DD": 6,
         "EX": 1
       },
-      "colDescribed": 97,
+      "colDescribed": 98,
       "colNe": 5
     },
     {
@@ -693,7 +693,7 @@
         "VU": 4,
         "EX": 1
       },
-      "colDescribed": 4,
+      "colDescribed": 5,
       "colNe": 0
     },
     {
@@ -710,7 +710,7 @@
         "LC": 1,
         "VU": 3
       },
-      "colDescribed": 17,
+      "colDescribed": 16,
       "colNe": 0
     },
     {
@@ -836,16 +836,16 @@
         "EN": 3,
         "EX": 1
       },
-      "colDescribed": 11,
-      "colNe": 3,
+      "colDescribed": 12,
+      "colNe": 2,
       "colBreakdown": [
         {
           "name": "bos",
-          "count": 6
+          "count": 8
         },
         {
           "name": "bubalus",
-          "count": 4
+          "count": 3
         },
         {
           "name": "pseudoryx",
@@ -933,8 +933,8 @@
         "EX": 3,
         "DD": 2
       },
-      "colDescribed": 92,
-      "colNe": 8
+      "colDescribed": 217,
+      "colNe": 119
     },
     {
       "id": "ssc-australasian-marsupial-monotreme",
@@ -952,20 +952,20 @@
         "VU": 34,
         "DD": 4
       },
-      "colDescribed": 249,
+      "colDescribed": 262,
       "colNe": 12,
       "colBreakdown": [
         {
           "name": "diprotodontia",
-          "count": 146
+          "count": 154
         },
         {
           "name": "dasyuromorphia",
-          "count": 76
+          "count": 77
         },
         {
           "name": "peramelemorphia",
-          "count": 20
+          "count": 24
         },
         {
           "name": "notoryctemorphia",
@@ -994,8 +994,8 @@
         "EX": 9,
         "LR/nt": 1
       },
-      "colDescribed": 1433,
-      "colNe": 136
+      "colDescribed": 1442,
+      "colNe": 134
     },
     {
       "id": "ssc-bear",
@@ -1051,7 +1051,7 @@
         "NT": 6,
         "EX": 2
       },
-      "colDescribed": 38,
+      "colDescribed": 40,
       "colNe": 2
     },
     {
@@ -1067,16 +1067,16 @@
         "EN": 2,
         "LC": 11
       },
-      "colDescribed": 31,
-      "colNe": 5,
+      "colDescribed": 59,
+      "colNe": 28,
       "colBreakdown": [
         {
           "name": "capra",
-          "count": 8
+          "count": 10
         },
         {
           "name": "ovis",
-          "count": 5
+          "count": 21
         },
         {
           "name": "ovibos",
@@ -1084,15 +1084,15 @@
         },
         {
           "name": "rupicapra",
-          "count": 2
+          "count": 5
         },
         {
           "name": "naemorhedus",
-          "count": 4
+          "count": 6
         },
         {
           "name": "capricornis",
-          "count": 6
+          "count": 7
         },
         {
           "name": "oreamnos",
@@ -1100,7 +1100,7 @@
         },
         {
           "name": "budorcas",
-          "count": 1
+          "count": 4
         },
         {
           "name": "pantholops",
@@ -1116,7 +1116,7 @@
         },
         {
           "name": "nilgiritragus",
-          "count": 0
+          "count": 1
         }
       ]
     },
@@ -1225,8 +1225,8 @@
         "EW": 1,
         "DD": 10
       },
-      "colDescribed": 46,
-      "colNe": 0
+      "colDescribed": 55,
+      "colNe": 1
     },
     {
       "id": "ssc-equid",
@@ -1242,7 +1242,7 @@
         "LC": 1,
         "VU": 1
       },
-      "colDescribed": 8,
+      "colDescribed": 7,
       "colNe": 0
     },
     {
@@ -1271,7 +1271,7 @@
         "VU": 1,
         "EX": 2
       },
-      "colDescribed": 1,
+      "colDescribed": 4,
       "colNe": 0
     },
     {
@@ -1304,7 +1304,7 @@
         "DD": 6,
         "EX": 1
       },
-      "colDescribed": 97,
+      "colDescribed": 98,
       "colNe": 5
     },
     {
@@ -1323,7 +1323,7 @@
         "EX": 1
       },
       "colDescribed": 129,
-      "colNe": 30,
+      "colNe": 29,
       "colBreakdown": [
         {
           "name": "didelphimorphia",
@@ -1429,16 +1429,16 @@
         "NT": 3,
         "EX": 2
       },
-      "colDescribed": 33,
+      "colDescribed": 35,
       "colNe": 0,
       "colBreakdown": [
         {
           "name": "otariidae",
-          "count": 14
+          "count": 15
         },
         {
           "name": "phocidae",
-          "count": 18
+          "count": 19
         },
         {
           "name": "odobenidae",
@@ -1476,7 +1476,7 @@
         "VU": 4,
         "EX": 1
       },
-      "colDescribed": 4,
+      "colDescribed": 5,
       "colNe": 0
     },
     {
@@ -1495,12 +1495,12 @@
         "CR": 3,
         "EX": 2
       },
-      "colDescribed": 158,
+      "colDescribed": 159,
       "colNe": 7,
       "colBreakdown": [
         {
           "name": "mustelidae",
-          "count": 51
+          "count": 52
         },
         {
           "name": "viverridae",
@@ -1548,16 +1548,16 @@
         "VU": 169,
         "EX": 45
       },
-      "colDescribed": 2942,
-      "colNe": 153,
+      "colDescribed": 3000,
+      "colNe": 160,
       "colBreakdown": [
         {
           "name": "rodentia",
-          "count": 2337
+          "count": 2388
         },
         {
           "name": "eulipotyphla",
-          "count": 582
+          "count": 589
         },
         {
           "name": "scandentia",
@@ -1590,7 +1590,7 @@
         "LC": 2
       },
       "colDescribed": 2,
-      "colNe": 1,
+      "colNe": 0,
       "colBreakdown": [
         {
           "name": "lama",
@@ -1617,7 +1617,7 @@
         "EX": 1,
         "LC": 6
       },
-      "colDescribed": 16,
+      "colDescribed": 17,
       "colNe": 0
     },
     {
@@ -1633,7 +1633,7 @@
         "VU": 1,
         "DD": 3
       },
-      "colDescribed": 47,
+      "colDescribed": 50,
       "colNe": 1
     }
   ],
@@ -1655,8 +1655,8 @@
         "DD": 1489,
         "EW": 2
       },
-      "colDescribed": 12383,
-      "colNe": 2244
+      "colDescribed": 12458,
+      "colNe": 2322
     },
     {
       "id": "turtles-tortoises",
@@ -1677,8 +1677,8 @@
         "DD": 13,
         "LR/cd": 1
       },
-      "colDescribed": 366,
-      "colNe": 104
+      "colDescribed": 374,
+      "colNe": 108
     },
     {
       "id": "crocodilians",
@@ -1728,7 +1728,7 @@
         "EX": 34,
         "EW": 2
       },
-      "colDescribed": 7862,
+      "colDescribed": 7868,
       "colNe": 876
     },
     {
@@ -1747,7 +1747,7 @@
         "EX": 3,
         "DD": 45
       },
-      "colDescribed": 827,
+      "colDescribed": 828,
       "colNe": 81
     },
     {
@@ -1789,8 +1789,8 @@
         "LR/lc": 1,
         "LR/nt": 2
       },
-      "colDescribed": 35285,
-      "colNe": 7917
+      "colDescribed": 35781,
+      "colNe": 8211
     },
     {
       "id": "lobe-finned-fishes",
@@ -1824,8 +1824,8 @@
         "DD": 151,
         "EX": 1
       },
-      "colDescribed": 1343,
-      "colNe": 66
+      "colDescribed": 1359,
+      "colNe": 74
     },
     {
       "id": "jawless-fish",
@@ -1842,12 +1842,12 @@
         "DD": 35,
         "CR": 5
       },
-      "colDescribed": 140,
-      "colNe": 16,
+      "colDescribed": 141,
+      "colNe": 17,
       "colBreakdown": [
         {
           "name": "myxini",
-          "count": 91
+          "count": 92
         },
         {
           "name": "petromyzonti",
@@ -1874,8 +1874,8 @@
         "NT": 215,
         "DD": 803
       },
-      "colDescribed": 263954,
-      "colNe": 261837
+      "colDescribed": 264850,
+      "colNe": 262700
     },
     {
       "id": "butterflies-moths",
@@ -1895,8 +1895,8 @@
         "DD": 109,
         "LR/lc": 15
       },
-      "colDescribed": 167380,
-      "colNe": 165961
+      "colDescribed": 167869,
+      "colNe": 166413
     },
     {
       "id": "flies-mosquitoes",
@@ -1914,8 +1914,8 @@
         "DD": 75,
         "CR": 23
       },
-      "colDescribed": 169204,
-      "colNe": 168787
+      "colDescribed": 169530,
+      "colNe": 169099
     },
     {
       "id": "bees-wasps-ants",
@@ -1934,8 +1934,8 @@
         "NT": 90,
         "EN": 49
       },
-      "colDescribed": 131820,
-      "colNe": 130972
+      "colDescribed": 132024,
+      "colNe": 131172
     },
     {
       "id": "true-bugs",
@@ -1954,8 +1954,8 @@
         "NT": 5,
         "DD": 8
       },
-      "colDescribed": 101059,
-      "colNe": 100984
+      "colDescribed": 102199,
+      "colNe": 102123
     },
     {
       "id": "grasshoppers-crickets",
@@ -1975,8 +1975,8 @@
         "LR/cd": 3,
         "NT": 166
       },
-      "colDescribed": 29505,
-      "colNe": 28019
+      "colDescribed": 29898,
+      "colNe": 28406
     },
     {
       "id": "dragonflies-damselflies",
@@ -1994,8 +1994,8 @@
         "NT": 236,
         "EX": 1
       },
-      "colDescribed": 6450,
-      "colNe": 343
+      "colDescribed": 6494,
+      "colNe": 364
     },
     {
       "id": "other-insects",
@@ -2013,8 +2013,8 @@
         "DD": 50,
         "NT": 26
       },
-      "colDescribed": 64348,
-      "colNe": 64058
+      "colDescribed": 65036,
+      "colNe": 64748
     }
   ],
   "other_invertebrates": [
@@ -2029,20 +2029,20 @@
         "NT": 1,
         "DD": 1
       },
-      "colDescribed": 20852,
-      "colNe": 20852,
+      "colDescribed": 21079,
+      "colNe": 21079,
       "colBreakdown": [
         {
           "name": "trematoda",
-          "count": 12064
+          "count": 12127
         },
         {
           "name": "monogenea",
-          "count": 5786
+          "count": 5862
         },
         {
           "name": "cestoda",
-          "count": 2989
+          "count": 3077
         },
         {
           "name": "turbellaria",
@@ -2066,16 +2066,16 @@
       "outdated": 0,
       "gbifNeSpeciesCount": 0,
       "byCategory": {},
-      "colDescribed": 20900,
-      "colNe": 20900,
+      "colDescribed": 19937,
+      "colNe": 19937,
       "colBreakdown": [
         {
           "name": "chromadorea",
-          "count": 13704
+          "count": 12738
         },
         {
           "name": "enoplea",
-          "count": 7196
+          "count": 7199
         }
       ]
     },
@@ -2096,16 +2096,16 @@
         "EX": 2,
         "LC": 108
       },
-      "colDescribed": 17954,
-      "colNe": 17851,
+      "colDescribed": 20776,
+      "colNe": 20443,
       "colBreakdown": [
         {
           "name": "polychaeta",
-          "count": 12833
+          "count": 13025
         },
         {
           "name": "clitellata",
-          "count": 5121
+          "count": 7751
         }
       ]
     },
@@ -2125,16 +2125,16 @@
         "CR": 41,
         "EX": 3
       },
-      "colDescribed": 17459,
-      "colNe": 17186,
+      "colDescribed": 17517,
+      "colNe": 17244,
       "colBreakdown": [
         {
           "name": "diplopoda",
-          "count": 12910
+          "count": 12969
         },
         {
           "name": "chilopoda",
-          "count": 3330
+          "count": 3329
         },
         {
           "name": "symphyla",
@@ -2159,24 +2159,24 @@
         "NT": 2,
         "VU": 1
       },
-      "colDescribed": 9885,
-      "colNe": 9841,
+      "colDescribed": 10002,
+      "colNe": 9957,
       "colBreakdown": [
         {
           "name": "demospongiae",
-          "count": 8105
+          "count": 8196
         },
         {
           "name": "calcarea",
-          "count": 917
+          "count": 920
         },
         {
           "name": "hexactinellida",
-          "count": 727
+          "count": 745
         },
         {
           "name": "homoscleromorpha",
-          "count": 136
+          "count": 141
         }
       ]
     },
@@ -2194,24 +2194,24 @@
         "DD": 18,
         "EN": 8
       },
-      "colDescribed": 8929,
-      "colNe": 8892,
+      "colDescribed": 9000,
+      "colNe": 8963,
       "colBreakdown": [
         {
           "name": "hydrozoa",
-          "count": 3923
+          "count": 3988
         },
         {
           "name": "myxozoa",
-          "count": 3023
+          "count": 3011
         },
         {
           "name": "anthozoa",
-          "count": 1623
+          "count": 1633
         },
         {
           "name": "scyphozoa",
-          "count": 257
+          "count": 261
         },
         {
           "name": "staurozoa",
@@ -2219,7 +2219,7 @@
         },
         {
           "name": "cubozoa",
-          "count": 51
+          "count": 55
         }
       ]
     },
@@ -2238,12 +2238,12 @@
         "EN": 7,
         "CR": 2
       },
-      "colDescribed": 7640,
-      "colNe": 7295,
+      "colDescribed": 7758,
+      "colNe": 7410,
       "colBreakdown": [
         {
           "name": "asteroidea",
-          "count": 2001
+          "count": 2052
         },
         {
           "name": "echinoidea",
@@ -2251,15 +2251,15 @@
         },
         {
           "name": "holothuroidea",
-          "count": 1820
+          "count": 1831
         },
         {
           "name": "ophiuroidea",
-          "count": 2123
+          "count": 2170
         },
         {
           "name": "crinoidea",
-          "count": 678
+          "count": 687
         }
       ]
     },
@@ -2271,20 +2271,20 @@
       "outdated": 0,
       "gbifNeSpeciesCount": 0,
       "byCategory": {},
-      "colDescribed": 5479,
-      "colNe": 5479,
+      "colDescribed": 5495,
+      "colNe": 5495,
       "colBreakdown": [
         {
           "name": "gymnolaemata",
-          "count": 4871
+          "count": 4884
         },
         {
           "name": "stenolaemata",
-          "count": 540
+          "count": 546
         },
         {
           "name": "phylactolaemata",
-          "count": 68
+          "count": 65
         }
       ]
     },
@@ -2296,12 +2296,12 @@
       "outdated": 0,
       "gbifNeSpeciesCount": 0,
       "byCategory": {},
-      "colDescribed": 3144,
-      "colNe": 3144,
+      "colDescribed": 3178,
+      "colNe": 3178,
       "colBreakdown": [
         {
           "name": "ascidiacea",
-          "count": 2967
+          "count": 3000
         },
         {
           "name": "thaliacea",
@@ -2313,7 +2313,7 @@
         },
         {
           "name": "leptocardii",
-          "count": 30
+          "count": 31
         }
       ]
     },
@@ -2333,8 +2333,8 @@
         "CR": 4,
         "NT": 10
       },
-      "colDescribed": 27492,
-      "colNe": 27445
+      "colDescribed": 27675,
+      "colNe": 27629
     }
   ],
   "mushrooms": [
@@ -2353,8 +2353,8 @@
         "LC": 54,
         "DD": 25
       },
-      "colDescribed": 47977,
-      "colNe": 47839,
+      "colDescribed": 47938,
+      "colNe": 47802,
       "colBreakdown": [
         {
           "name": "eurotiales",
@@ -2366,19 +2366,19 @@
         },
         {
           "name": "xylariales",
-          "count": 3647
+          "count": 3651
         },
         {
           "name": "pleosporales",
-          "count": 12105
+          "count": 12087
         },
         {
           "name": "capnodiales",
-          "count": 636
+          "count": 632
         },
         {
           "name": "helotiales",
-          "count": 8553
+          "count": 8546
         },
         {
           "name": "orbiliales",
@@ -2386,7 +2386,7 @@
         },
         {
           "name": "pezizales",
-          "count": 3021
+          "count": 3025
         },
         {
           "name": "rhytismatales",
@@ -2398,7 +2398,7 @@
         },
         {
           "name": "dothideales",
-          "count": 1212
+          "count": 1194
         },
         {
           "name": "chaetothyriales",
@@ -2422,19 +2422,19 @@
         },
         {
           "name": "lecanorales",
-          "count": 4742
+          "count": 4741
         },
         {
           "name": "peltigerales",
-          "count": 1068
+          "count": 1067
         },
         {
           "name": "teloschistales",
-          "count": 930
+          "count": 933
         },
         {
           "name": "caliciales",
-          "count": 1194
+          "count": 1193
         },
         {
           "name": "acarosporales",
@@ -2473,8 +2473,8 @@
         "DD": 265,
         "CR": 23
       },
-      "colDescribed": 108566,
-      "colNe": 107526
+      "colDescribed": 108583,
+      "colNe": 107543
     }
   ],
   "invertebrates": [
@@ -2498,8 +2498,8 @@
         "EW": 1,
         "LR/cd": 3
       },
-      "colDescribed": 933720,
-      "colNe": 920961
+      "colDescribed": 937900,
+      "colNe": 925025
     },
     {
       "id": "inv-arachnids",
@@ -2517,8 +2517,8 @@
         "CR": 121,
         "EX": 9
       },
-      "colDescribed": 98709,
-      "colNe": 97679
+      "colDescribed": 99715,
+      "colNe": 98680
     },
     {
       "id": "inv-molluscs",
@@ -2539,8 +2539,8 @@
         "LR/lc": 16,
         "EW": 12
       },
-      "colDescribed": 88109,
-      "colNe": 79296
+      "colDescribed": 89652,
+      "colNe": 80696
     },
     {
       "id": "inv-crustaceans",
@@ -2562,8 +2562,8 @@
         "LR/nt": 1,
         "EW": 1
       },
-      "colDescribed": 68648,
-      "colNe": 65432
+      "colDescribed": 69280,
+      "colNe": 66007
     },
     {
       "id": "inv-corals",
@@ -2580,8 +2580,8 @@
         "EN": 245,
         "NT": 24
       },
-      "colDescribed": 5675,
-      "colNe": 4763
+      "colDescribed": 5735,
+      "colNe": 4826
     },
     {
       "id": "inv-velvet_worms",
@@ -2632,8 +2632,8 @@
         "EX": 6,
         "NT": 98
       },
-      "colDescribed": 139734,
-      "colNe": 138885
+      "colDescribed": 142417,
+      "colNe": 141335
     }
   ],
   "inv-insects": [
@@ -2654,8 +2654,8 @@
         "NT": 215,
         "DD": 803
       },
-      "colDescribed": 263954,
-      "colNe": 261837
+      "colDescribed": 264850,
+      "colNe": 262700
     },
     {
       "id": "inv-butterflies-moths",
@@ -2675,8 +2675,8 @@
         "DD": 109,
         "LR/lc": 15
       },
-      "colDescribed": 167380,
-      "colNe": 165961
+      "colDescribed": 167869,
+      "colNe": 166413
     },
     {
       "id": "inv-flies-mosquitoes",
@@ -2694,8 +2694,8 @@
         "DD": 75,
         "CR": 23
       },
-      "colDescribed": 169204,
-      "colNe": 168787
+      "colDescribed": 169530,
+      "colNe": 169099
     },
     {
       "id": "inv-bees-wasps-ants",
@@ -2714,8 +2714,8 @@
         "NT": 90,
         "EN": 49
       },
-      "colDescribed": 131820,
-      "colNe": 130972
+      "colDescribed": 132024,
+      "colNe": 131172
     },
     {
       "id": "inv-true-bugs",
@@ -2734,8 +2734,8 @@
         "NT": 5,
         "DD": 8
       },
-      "colDescribed": 101059,
-      "colNe": 100984
+      "colDescribed": 102199,
+      "colNe": 102123
     },
     {
       "id": "inv-grasshoppers-crickets",
@@ -2755,8 +2755,8 @@
         "LR/cd": 3,
         "NT": 166
       },
-      "colDescribed": 29505,
-      "colNe": 28019
+      "colDescribed": 29898,
+      "colNe": 28406
     },
     {
       "id": "inv-dragonflies-damselflies",
@@ -2774,8 +2774,8 @@
         "NT": 236,
         "EX": 1
       },
-      "colDescribed": 6450,
-      "colNe": 343
+      "colDescribed": 6494,
+      "colNe": 364
     },
     {
       "id": "inv-other-insects",
@@ -2793,8 +2793,8 @@
         "DD": 50,
         "NT": 26
       },
-      "colDescribed": 64348,
-      "colNe": 64058
+      "colDescribed": 65036,
+      "colNe": 64748
     }
   ],
   "inv-other_invertebrates": [
@@ -2809,20 +2809,20 @@
         "NT": 1,
         "DD": 1
       },
-      "colDescribed": 20852,
-      "colNe": 20852,
+      "colDescribed": 21079,
+      "colNe": 21079,
       "colBreakdown": [
         {
           "name": "trematoda",
-          "count": 12064
+          "count": 12127
         },
         {
           "name": "monogenea",
-          "count": 5786
+          "count": 5862
         },
         {
           "name": "cestoda",
-          "count": 2989
+          "count": 3077
         },
         {
           "name": "turbellaria",
@@ -2846,16 +2846,16 @@
       "outdated": 0,
       "gbifNeSpeciesCount": 0,
       "byCategory": {},
-      "colDescribed": 20900,
-      "colNe": 20900,
+      "colDescribed": 19937,
+      "colNe": 19937,
       "colBreakdown": [
         {
           "name": "chromadorea",
-          "count": 13704
+          "count": 12738
         },
         {
           "name": "enoplea",
-          "count": 7196
+          "count": 7199
         }
       ]
     },
@@ -2876,16 +2876,16 @@
         "EX": 2,
         "LC": 108
       },
-      "colDescribed": 17954,
-      "colNe": 17851,
+      "colDescribed": 20776,
+      "colNe": 20443,
       "colBreakdown": [
         {
           "name": "polychaeta",
-          "count": 12833
+          "count": 13025
         },
         {
           "name": "clitellata",
-          "count": 5121
+          "count": 7751
         }
       ]
     },
@@ -2905,16 +2905,16 @@
         "CR": 41,
         "EX": 3
       },
-      "colDescribed": 17459,
-      "colNe": 17186,
+      "colDescribed": 17517,
+      "colNe": 17244,
       "colBreakdown": [
         {
           "name": "diplopoda",
-          "count": 12910
+          "count": 12969
         },
         {
           "name": "chilopoda",
-          "count": 3330
+          "count": 3329
         },
         {
           "name": "symphyla",
@@ -2939,24 +2939,24 @@
         "NT": 2,
         "VU": 1
       },
-      "colDescribed": 9885,
-      "colNe": 9841,
+      "colDescribed": 10002,
+      "colNe": 9957,
       "colBreakdown": [
         {
           "name": "demospongiae",
-          "count": 8105
+          "count": 8196
         },
         {
           "name": "calcarea",
-          "count": 917
+          "count": 920
         },
         {
           "name": "hexactinellida",
-          "count": 727
+          "count": 745
         },
         {
           "name": "homoscleromorpha",
-          "count": 136
+          "count": 141
         }
       ]
     },
@@ -2974,24 +2974,24 @@
         "DD": 18,
         "EN": 8
       },
-      "colDescribed": 8929,
-      "colNe": 8892,
+      "colDescribed": 9000,
+      "colNe": 8963,
       "colBreakdown": [
         {
           "name": "hydrozoa",
-          "count": 3923
+          "count": 3988
         },
         {
           "name": "myxozoa",
-          "count": 3023
+          "count": 3011
         },
         {
           "name": "anthozoa",
-          "count": 1623
+          "count": 1633
         },
         {
           "name": "scyphozoa",
-          "count": 257
+          "count": 261
         },
         {
           "name": "staurozoa",
@@ -2999,7 +2999,7 @@
         },
         {
           "name": "cubozoa",
-          "count": 51
+          "count": 55
         }
       ]
     },
@@ -3018,12 +3018,12 @@
         "EN": 7,
         "CR": 2
       },
-      "colDescribed": 7640,
-      "colNe": 7295,
+      "colDescribed": 7758,
+      "colNe": 7410,
       "colBreakdown": [
         {
           "name": "asteroidea",
-          "count": 2001
+          "count": 2052
         },
         {
           "name": "echinoidea",
@@ -3031,15 +3031,15 @@
         },
         {
           "name": "holothuroidea",
-          "count": 1820
+          "count": 1831
         },
         {
           "name": "ophiuroidea",
-          "count": 2123
+          "count": 2170
         },
         {
           "name": "crinoidea",
-          "count": 678
+          "count": 687
         }
       ]
     },
@@ -3051,20 +3051,20 @@
       "outdated": 0,
       "gbifNeSpeciesCount": 0,
       "byCategory": {},
-      "colDescribed": 5479,
-      "colNe": 5479,
+      "colDescribed": 5495,
+      "colNe": 5495,
       "colBreakdown": [
         {
           "name": "gymnolaemata",
-          "count": 4871
+          "count": 4884
         },
         {
           "name": "stenolaemata",
-          "count": 540
+          "count": 546
         },
         {
           "name": "phylactolaemata",
-          "count": 68
+          "count": 65
         }
       ]
     },
@@ -3076,12 +3076,12 @@
       "outdated": 0,
       "gbifNeSpeciesCount": 0,
       "byCategory": {},
-      "colDescribed": 3144,
-      "colNe": 3144,
+      "colDescribed": 3178,
+      "colNe": 3178,
       "colBreakdown": [
         {
           "name": "ascidiacea",
-          "count": 2967
+          "count": 3000
         },
         {
           "name": "thaliacea",
@@ -3093,7 +3093,7 @@
         },
         {
           "name": "leptocardii",
-          "count": 30
+          "count": 31
         }
       ]
     },
@@ -3113,8 +3113,8 @@
         "CR": 4,
         "NT": 10
       },
-      "colDescribed": 27492,
-      "colNe": 27445
+      "colDescribed": 27675,
+      "colNe": 27629
     }
   ],
   "plantae": [
@@ -3138,8 +3138,8 @@
         "EX": 134,
         "LR/lc": 125
       },
-      "colDescribed": 354361,
-      "colNe": 281016
+      "colDescribed": 356867,
+      "colNe": 283415
     },
     {
       "id": "pl-gymnosperms",
@@ -3177,8 +3177,8 @@
         "EX": 2,
         "EW": 1
       },
-      "colDescribed": 13958,
-      "colNe": 13106
+      "colDescribed": 14135,
+      "colNe": 13275
     },
     {
       "id": "pl-mosses",
@@ -3197,8 +3197,8 @@
         "LR/lc": 3,
         "DD": 37
       },
-      "colDescribed": 19189,
-      "colNe": 18867
+      "colDescribed": 19262,
+      "colNe": 18937
     },
     {
       "id": "pl-green_algae",
@@ -3249,8 +3249,8 @@
         "LC": 491,
         "DD": 290
       },
-      "colDescribed": 156543,
-      "colNe": 155365
+      "colDescribed": 156521,
+      "colNe": 155345
     },
     {
       "id": "fu-brown_algae",
@@ -3265,8 +3265,8 @@
         "EN": 1,
         "VU": 1
       },
-      "colDescribed": 377,
-      "colNe": 377
+      "colDescribed": 451,
+      "colNe": 451
     }
   ],
   "fu-mushrooms": [
@@ -3285,8 +3285,8 @@
         "LC": 54,
         "DD": 25
       },
-      "colDescribed": 47977,
-      "colNe": 47839,
+      "colDescribed": 47938,
+      "colNe": 47802,
       "colBreakdown": [
         {
           "name": "eurotiales",
@@ -3298,19 +3298,19 @@
         },
         {
           "name": "xylariales",
-          "count": 3647
+          "count": 3651
         },
         {
           "name": "pleosporales",
-          "count": 12105
+          "count": 12087
         },
         {
           "name": "capnodiales",
-          "count": 636
+          "count": 632
         },
         {
           "name": "helotiales",
-          "count": 8553
+          "count": 8546
         },
         {
           "name": "orbiliales",
@@ -3318,7 +3318,7 @@
         },
         {
           "name": "pezizales",
-          "count": 3021
+          "count": 3025
         },
         {
           "name": "rhytismatales",
@@ -3330,7 +3330,7 @@
         },
         {
           "name": "dothideales",
-          "count": 1212
+          "count": 1194
         },
         {
           "name": "chaetothyriales",
@@ -3354,19 +3354,19 @@
         },
         {
           "name": "lecanorales",
-          "count": 4742
+          "count": 4741
         },
         {
           "name": "peltigerales",
-          "count": 1068
+          "count": 1067
         },
         {
           "name": "teloschistales",
-          "count": 930
+          "count": 933
         },
         {
           "name": "caliciales",
-          "count": 1194
+          "count": 1193
         },
         {
           "name": "acarosporales",
@@ -3405,8 +3405,8 @@
         "DD": 265,
         "CR": 23
       },
-      "colDescribed": 108566,
-      "colNe": 107526
+      "colDescribed": 108583,
+      "colNe": 107543
     }
   ]
 }

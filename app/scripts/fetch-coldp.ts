@@ -3,10 +3,16 @@
  * ColDP archive and extract NameUsage.tsv + Reference.tsv — the inputs to build-backbone.
  *
  * Downloads to a TEMP dir (outside data/) so the ~2.8GB TSVs are never swept into the
- * R2 upload; build-backbone reads them, then the sync removes the temp dir. XR ≈
- * ChecklistBank dataset 313100 ("COL25.11 XR"), a swappable pinned dep (env
- * COL_XR_DATASET). Shells out to curl + unzip (streams a 1.4GB zip to disk — too
- * big for an in-memory fetch).
+ * R2 upload; build-backbone reads them, then the sync removes the temp dir. Each XR
+ * release gets its own numeric ChecklistBank dataset key (COL25.11 XR = 313100,
+ * COL26.6 XR = 315557, …) — there's no rolling "latest" alias for XR the way "3LR"
+ * rolls for the regular release, so resolveLatestXrDataset() below queries
+ * ChecklistBank for the newest `origin=xrelease` dataset instead of hardcoding one.
+ * A hardcoded key silently goes stale forever once written (caught #276: a sync
+ * kept re-fetching a 7-month-old XR snapshot, showing real discrepancies vs the
+ * live site for species added/reclassified since). Override via env COL_XR_DATASET
+ * if a specific release is ever needed. Shells out to curl + unzip (streams a
+ * 1.4GB zip to disk — too big for an in-memory fetch).
  *
  * Reference.tsv (the cited-publication table) carries each reference's `col:issued`
  * date; build-backbone joins it via a name's `col:nameReferenceID` to recover the
@@ -23,15 +29,23 @@ import * as path from "path";
 import { execFileSync } from "child_process";
 import { loadEnvFiles } from "./utils";
 
-const XR_DATASET = process.env.COL_XR_DATASET || "313100";
-
 export interface ColdpPaths {
   dir: string;
   nameUsage: string;
   reference: string;
 }
 
+async function resolveLatestXrDataset(): Promise<{ key: string; alias: string }> {
+  const res = await fetch("https://api.checklistbank.org/dataset?origin=xrelease&limit=1&sortBy=created");
+  if (!res.ok) throw new Error(`resolveLatestXrDataset: ChecklistBank dataset search failed: ${res.status}`);
+  const body = (await res.json()) as { result?: Array<{ key: number; alias: string }> };
+  const latest = body.result?.[0];
+  if (!latest) throw new Error("resolveLatestXrDataset: no xrelease datasets returned");
+  return { key: String(latest.key), alias: latest.alias };
+}
+
 export async function run(opts: { destDir?: string } = {}): Promise<ColdpPaths> {
+  const XR_DATASET = process.env.COL_XR_DATASET || (await resolveLatestXrDataset()).key;
   const destDir = opts.destDir || fs.mkdtempSync(path.join(os.tmpdir(), "coldp-xr-"));
   fs.mkdirSync(destDir, { recursive: true });
   const zip = path.join(destDir, "coldp_xr.zip");

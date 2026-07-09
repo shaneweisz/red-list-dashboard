@@ -18,21 +18,24 @@
 // lose real wild-species coverage:
 //   Bos taurus (domestic cattle) — sibling: Bos primigenius (aurochs)
 //   Bos frontalis (gayal/mithun, domesticated from gaur) — sibling: Bos gaurus
+//   Bubalus bubalis (domestic water buffalo) — sibling: Bubalus arnee (wild water buffalo)
 //   Canis familiaris (domestic dog) — sibling: Canis lupus
 //   Equus caballus (domestic horse) — sibling: Equus ferus
 //   Equus asinus (domestic donkey) — sibling: Equus africanus
 //   Felis catus (domestic cat) — sibling: Felis lybica
-//   Vicugna pacos (domestic alpaca) — sibling: Vicugna vicugna
-// NOT excluded, deliberately: Lama glama (domestic llama). Its wild sibling, the
-// guanaco (Lama guanicoe), is missing from this CoL release entirely — excluding
-// glama would drop Wild Camelid SG's CoL count further rather than fixing it. Also
-// not excluded: Sus scrofa, Bubalus bubalis — CoL treats these as a single species
-// spanning both wild and domestic populations (no separate wild-only accepted name),
-// so excluding them would remove genuine wild-population coverage, not just the
-// domestic form.
+//   Lama glama (domestic llama) — sibling: Lama guanicoe (guanaco)
+//   Sus domesticus (domestic pig) — sibling: Sus scrofa (wild boar)
+//   Vicugna pacos (domestic alpaca) — sibling: Vicugna vicugna (wild vicuña)
+// Bubalus bubalis, Lama glama, and Sus domesticus were added to this list once the
+// 2026-06-19 CoL XR release (COL26.6 XR) split each from its wild sibling as its own
+// accepted species — a prior release lumped them together (or, for Lama glama, was
+// missing the guanaco entirely), so excluding them wasn't possible/safe before then.
+// If a future release re-lumps a pair (or splits another one, e.g. Bos frontalis),
+// re-verify against data/species/ rather than assuming this list stays accurate.
 export const COL_DOMESTIC_EXCLUDE_NAMES = [
-  "bos taurus", "bos frontalis", "canis familiaris", "equus caballus",
-  "equus asinus", "felis catus", "vicugna pacos",
+  "bos taurus", "bos frontalis", "bubalus bubalis", "canis familiaris",
+  "equus caballus", "equus asinus", "felis catus", "lama glama",
+  "sus domesticus", "vicugna pacos",
 ];
 
 // CoL lumps genus Bison entirely into Bos (no "Bison" genus exists in this release —
@@ -55,12 +58,12 @@ export const COL_EXCLUDE_ALL_NODES = [
 // above (a plain filter description, generated separately, covers everything else).
 export const COL_NODE_TOOLTIP_NOTES: Record<string, string> = {
   "ssc-bison": "Catalogue of Life classifies Bison within genus Bos, so this count matches by species name (Bos bison, Bos bonasus) instead of genus.",
-  "ssc-afro-asian-wild-cattle": "Excludes the domestic cow (Bos taurus) and gayal (Bos frontalis), and Bison (Bos bison, Bos bonasus — counted separately under Bison SG).",
+  "ssc-afro-asian-wild-cattle": "Excludes the domestic cow (Bos taurus), gayal (Bos frontalis), and domestic water buffalo (Bubalus bubalis), and Bison (Bos bison, Bos bonasus — counted separately under Bison SG).",
   "ssc-canid": "Excludes the domestic dog (Canis familiaris).",
   "ssc-cat": "Excludes the domestic cat (Felis catus).",
   "ssc-equid": "Excludes the domestic horse (Equus caballus) and donkey (Equus asinus).",
-  "ssc-wild-camelid": "Excludes the domestic alpaca (Vicugna pacos). The wild guanaco (Lama guanicoe) is missing from this Catalogue of Life release entirely, so this figure likely undercounts by one species.",
-  "ssc-hippo": "The pygmy hippopotamus (Choeropsis liberiensis) is missing from this Catalogue of Life release entirely — this figure undercounts by one species. No filter fix is possible; flagging this for Catalogue of Life is the only real fix.",
+  "ssc-wild-camelid": "Excludes the domestic llama (Lama glama) and alpaca (Vicugna pacos).",
+  "ssc-wild-pig": "Excludes the domestic pig (Sus domesticus).",
 };
 
 // A handful of nodes have a filter too broad/exclusion-heavy to summarize

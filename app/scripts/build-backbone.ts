@@ -59,7 +59,10 @@ const SPECIES_STATUS = "('accepted')";
 // We tag each species with in_base = (its sourceID is a Base GSD); the read layer's
 // extant universe filters to in_base, dropping that unflagged-fossil tail. Source
 // keys are global + version-stable, so a current Base release is a valid allowlist.
-const COL_BASE_DATASET = process.env.COL_BASE_DATASET || "315149";
+// "3LR" is ChecklistBank's rolling alias for the current release (unlike XR, which
+// gets a new numeric key every cycle with no rolling alias — see fetch-coldp.ts) —
+// use it rather than a numeric key, which would freeze to that one release forever.
+const COL_BASE_DATASET = process.env.COL_BASE_DATASET || "3LR";
 
 // A curated-checklist usage "demotes" an XR-accepted species when the checklist does
 // NOT recognize that col_id as an accepted species — i.e. it's a synonym (incl.

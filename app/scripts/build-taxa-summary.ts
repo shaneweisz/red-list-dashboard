@@ -11,7 +11,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { DuckDBInstance } from "@duckdb/node-api";
+import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
 import { loadEnvFiles, DATA_DIR, REDLIST_DIR, GBIF_DIR } from "./utils";
 import { TAXA } from "./taxa";
 import { readRedlistCsv } from "./fetch-redlist-species";
@@ -59,6 +59,33 @@ function median(values: number[]): number | null {
     : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
+// A species CoL flags extinct still counts toward "described" if IUCN's OWN linked
+// assessment agrees it's extinct (category EX/EW) — matching IUCN's Red List
+// Guidelines (taxa extinct before 1500 CE are out of scope entirely; CoL gives us no
+// extinction date, so "IUCN has confirmed EX/EW" is the closest available signal).
+// Deliberately NOT "any IUCN assessment exists for this col_id": species_link matches
+// by name/synonym, not taxonomic concept, so a CoL-extinct species can link to a
+// STALE assessment of an unrelated or since-split taxon with a non-EX category (e.g.
+// several CoL-extinct-flagged names matched to Least-Concern Columba species during
+// verification) — requiring the category itself be EX/EW is what makes this safe.
+// Species newly included this way are, by construction, always already-assessed
+// (that's the join condition), so they can never also appear in col_ne — expanding
+// this set only ever grows col_described, it never mislabels something "Not
+// Evaluated" that's actually a long-extinct, never-assessed fossil.
+async function createExEwAssessedTable(conn: DuckDBConnection, link: string, assessed: string, tableName: string): Promise<void> {
+  await conn.run(`
+    CREATE TEMP TABLE ${tableName} AS
+      SELECT DISTINCT l.col_id
+      FROM read_parquet('${link}') l
+      JOIN read_parquet('${assessed}') a ON a.id = l.id
+      WHERE l.src = 'redlist' AND l.col_id IS NOT NULL AND a.iucn_category IN ('EX', 'EW')`);
+}
+
+// "Extant, or CoL-extinct but IUCN-confirmed EX/EW" — see createExEwAssessedTable.
+function extantUniverseSql(exEwTable: string): string {
+  return `(extinct IS NOT TRUE OR col_id IN (SELECT col_id FROM ${exEwTable}))`;
+}
+
 // Per-taxon_group CoL counts from the backbone artifacts: col_described = extant
 // accepted universe; col_ne = that minus the col_ids IUCN has assessed. species/ is
 // partitioned by taxon_group, so this is a single grouped scan. Returns empty (→ 0s)
@@ -66,16 +93,19 @@ function median(values: number[]): number | null {
 async function colCountsByGroup(): Promise<Map<string, { col_described: number; col_ne: number }>> {
   const out = new Map<string, { col_described: number; col_ne: number }>();
   const link = path.join(DATA_DIR, "species_link.parquet");
+  const assessedPath = path.join(DATA_DIR, "assessed.parquet");
   const speciesGlob = path.join(DATA_DIR, "species", "**", "*.parquet");
   if (!fs.existsSync(path.join(DATA_DIR, "species")) || !fs.existsSync(link)) {
     console.log("  CoL counts: species/ or species_link.parquet missing — skipping (col_described/col_ne = 0)");
     return out;
   }
   const conn = await (await DuckDBInstance.create(":memory:")).connect();
+  await createExEwAssessedTable(conn, link, assessedPath, "ex_ew_assessed");
+  const universe = extantUniverseSql("ex_ew_assessed");
   const rows = await (await conn.run(`
     SELECT taxon_group,
-           count(*) FILTER (in_base AND extinct IS NOT TRUE AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL}) AS col_described,
-           count(*) FILTER (in_base AND extinct IS NOT TRUE AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL} AND col_id NOT IN (
+           count(*) FILTER (in_base AND ${universe} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL}) AS col_described,
+           count(*) FILTER (in_base AND ${universe} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL} AND col_id NOT IN (
              SELECT col_id FROM read_parquet('${link}') WHERE src = 'redlist' AND col_id IS NOT NULL
            )) AS col_ne
     FROM read_parquet('${speciesGlob}', hive_partitioning=true)
@@ -173,6 +203,7 @@ function primaryDimension(filter: NodeFilter): PrimaryDim | null {
 // which is why the entries sum to exactly colDescribed.
 async function attachColCounts(summaries: Record<string, NodeSummary[]>): Promise<void> {
   const link = path.join(DATA_DIR, "species_link.parquet");
+  const assessedPath = path.join(DATA_DIR, "assessed.parquet");
   const speciesGlob = path.join(DATA_DIR, "species", "**", "*.parquet");
   if (!fs.existsSync(path.join(DATA_DIR, "species")) || !fs.existsSync(link)) {
     console.log("  CoL node counts: species/ or species_link.parquet missing — skipping.");
@@ -182,6 +213,8 @@ async function attachColCounts(summaries: Record<string, NodeSummary[]>): Promis
   await conn.run(
     `CREATE TEMP TABLE assessed_cids AS SELECT DISTINCT col_id FROM read_parquet('${link}') WHERE src = 'redlist' AND col_id IS NOT NULL`
   );
+  await createExEwAssessedTable(conn, link, assessedPath, "ex_ew_assessed");
+  const universe = extantUniverseSql("ex_ew_assessed");
   let n = 0;
   let breakdownQueries = 0;
   for (const children of Object.values(summaries)) {
@@ -189,8 +222,8 @@ async function attachColCounts(summaries: Record<string, NodeSummary[]>): Promis
       const node = NODE_INDEX.get(child.id);
       if (!node) continue;
       const rows = await (await conn.run(`
-        SELECT count(*) FILTER (in_base AND extinct IS NOT TRUE AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL}) AS col_described,
-               count(*) FILTER (in_base AND extinct IS NOT TRUE AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL} AND col_id NOT IN (SELECT col_id FROM assessed_cids)) AS col_ne
+        SELECT count(*) FILTER (in_base AND ${universe} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL}) AS col_described,
+               count(*) FILTER (in_base AND ${universe} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL} AND col_id NOT IN (SELECT col_id FROM assessed_cids)) AS col_ne
         FROM read_parquet('${speciesGlob}', hive_partitioning=true)
         WHERE ${filterToSql(node.filter, node.id)}`)).getRowObjects();
       child.colDescribed = Number(rows[0].col_described);
@@ -203,7 +236,7 @@ async function attachColCounts(summaries: Record<string, NodeSummary[]>): Promis
         for (const name of dim.names) {
           const narrowed: NodeFilter = { ...node.filter, [dim.field]: [name] };
           const bRows = await (await conn.run(`
-            SELECT count(*) FILTER (in_base AND extinct IS NOT TRUE AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL}) AS n
+            SELECT count(*) FILTER (in_base AND ${universe} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL}) AS n
             FROM read_parquet('${speciesGlob}', hive_partitioning=true)
             WHERE ${filterToSql(narrowed, node.id)}`)).getRowObjects();
           breakdown.push({ name, count: Number(bRows[0].n) });
