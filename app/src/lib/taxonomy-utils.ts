@@ -9,6 +9,7 @@
 import { TAXONOMY_TREE, type TaxonomyNode, type SpeciesFilter } from "@/config/taxonomy-tree";
 import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
 import { canonicalizeTaxonId } from "@/lib/data/taxonomy-constants";
+import { NODE_DESCRIPTION_OVERRIDES, COL_NODE_TOOLTIP_NOTES } from "@/config/col-described-overrides";
 
 // ─── Indexes (built once at import) ──────────────────────────────────
 
@@ -281,5 +282,53 @@ export function getNodeDef(nodeId: string): { node: TaxonomyNode; parentId: stri
   const parentId = PARENT_INDEX.get(nodeId);
   if (!parentId) return null; // Root node
   return { node, parentId };
+}
+
+// ─── Plain-language filter description (for the "# Described Species" tooltip) ──
+
+const capitalize = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
+
+// Binomial convention: capitalize the genus, leave the species epithet lowercase.
+const capitalizeSpeciesName = (s: string): string => s.split(" ").map((w, i) => (i === 0 ? capitalize(w) : w)).join(" ");
+
+// Long exclude/include lists (e.g. Antelope SG's 14-genus excludeGenera) would make an
+// unreadable tooltip — cap what's spelled out and summarize the rest by count.
+function joinCapped(names: string[], max = 4): string {
+  const capped = names.slice(0, max).map(capitalize).join(", ");
+  return names.length > max ? `${capped}, +${names.length - max} more` : capped;
+}
+
+/**
+ * Render a node's SpeciesFilter as a short, human-readable description for the
+ * "# Described Species" tooltip — e.g. "Family: Felidae" or "Genus: Bos, Bubalus,
+ * Pseudoryx (excluding Bison, Bos taurus)". Checks NODE_DESCRIPTION_OVERRIDES first
+ * for filters too broad/exclusion-heavy to summarize automatically (e.g. the SSC
+ * "No SSC Group" catch-all), then appends a COL_NODE_TOOLTIP_NOTES note (if any)
+ * explaining a CoL-specific quirk (lumped genus, domestic-form exclusion, coverage gap).
+ */
+export function describeFilter(filter: SpeciesFilter, nodeId?: string): string {
+  const override = nodeId ? NODE_DESCRIPTION_OVERRIDES[nodeId] : undefined;
+  const note = nodeId ? COL_NODE_TOOLTIP_NOTES[nodeId] : undefined;
+
+  if (override) return note ? `${override} — ${note}` : override;
+
+  const includeParts: string[] = [];
+  if (filter.classNames?.length) includeParts.push(`Class: ${joinCapped(filter.classNames)}`);
+  if (filter.orderNames?.length) includeParts.push(`Order: ${joinCapped(filter.orderNames)}`);
+  if (filter.families?.length) includeParts.push(`Family: ${joinCapped(filter.families)}`);
+  if (filter.genera?.length) includeParts.push(`Genus: ${joinCapped(filter.genera)}`);
+  if (filter.speciesNames?.length) includeParts.push(`Species: ${filter.speciesNames.map(capitalizeSpeciesName).join(", ")}`);
+
+  let base = includeParts.length ? includeParts.join("; ") : "All species in this group";
+
+  const excludeParts: string[] = [];
+  if (filter.excludeClasses?.length) excludeParts.push(joinCapped(filter.excludeClasses));
+  if (filter.excludeOrders?.length) excludeParts.push(joinCapped(filter.excludeOrders));
+  if (filter.excludeFamilies?.length) excludeParts.push(joinCapped(filter.excludeFamilies));
+  if (filter.excludeGenera?.length) excludeParts.push(joinCapped(filter.excludeGenera));
+  if (filter.excludeSpeciesNames?.length) excludeParts.push(filter.excludeSpeciesNames.map(capitalizeSpeciesName).join(", "));
+  if (excludeParts.length) base += ` (excluding ${excludeParts.join("; ")})`;
+
+  return note ? `${base} — ${note}` : base;
 }
 

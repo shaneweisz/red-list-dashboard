@@ -20,6 +20,10 @@ import { readMappingCsv } from "./match-redlist-species-to-gbif";
 import { NODE_INDEX, hasChildren, matchesFilter } from "../src/lib/taxonomy-utils";
 import type { TaxonomyNode } from "../src/config/taxonomy-tree";
 import type { NodeSummary } from "../src/lib/data/species-store";
+import {
+  COL_SPECIES_NAME_OVERRIDES,
+  COL_EXCLUDE_ALL_NODES,
+} from "../src/config/col-described-overrides";
 
 const CURRENT_YEAR = new Date().getFullYear();
 const OUTDATED_THRESHOLD_YEARS = 10;
@@ -100,41 +104,9 @@ function sqlStrList(vals: string[]): string {
   return vals.map((v) => `'${v.toLowerCase().replace(/'/g, "''")}'`).join(", ");
 }
 
-// Domestic/feral forms that would otherwise inflate a CoL-derived "described species"
-// count for the SSC group whose genus/family they fall under — e.g. Canid SG (family
-// Canidae) would count the domestic dog as one of its described species. Each name here
-// has a wild-form sibling species confirmed present separately in the CoL backbone
-// (verified directly against data/species/), so excluding the domestic form doesn't
-// lose real wild-species coverage:
-//   Bos taurus (domestic cattle) — sibling: Bos primigenius (aurochs)
-//   Bos frontalis (gayal/mithun, domesticated from gaur) — sibling: Bos gaurus
-//   Canis familiaris (domestic dog) — sibling: Canis lupus
-//   Equus caballus (domestic horse) — sibling: Equus ferus
-//   Equus asinus (domestic donkey) — sibling: Equus africanus
-//   Felis catus (domestic cat) — sibling: Felis lybica
-//   Vicugna pacos (domestic alpaca) — sibling: Vicugna vicugna
-// NOT excluded, deliberately: Lama glama (domestic llama). Its wild sibling, the
-// guanaco (Lama guanicoe), is missing from this CoL release entirely — excluding
-// glama would drop Wild Camelid SG's CoL count further rather than fixing it. Also
-// not excluded: Sus scrofa, Bubalus bubalis — CoL treats these as a single species
-// spanning both wild and domestic populations (no separate wild-only accepted name),
-// so excluding them would remove genuine wild-population coverage, not just the
-// domestic form.
-const COL_DOMESTIC_EXCLUDE_NAMES = [
-  "bos taurus", "bos frontalis", "canis familiaris", "equus caballus",
-  "equus asinus", "felis catus", "vicugna pacos",
-];
-
-// CoL lumps genus Bison entirely into Bos (no "Bison" genus exists in this release —
-// verified directly), so the Bison SG filter (genera: ["bison"]) matches zero CoL rows.
-// Override its CoL computation to match by species name instead of genus. The same two
-// names are added to the domestic-exclude list's effect for every OTHER node (via the
-// general exclusion below) so Afro-Asian Wild Cattle SG — whose own genus filter
-// (bos/bubalus/pseudoryx) would otherwise also match them — doesn't double-count.
-const COL_SPECIES_NAME_OVERRIDES: Record<string, string[]> = {
-  "ssc-bison": ["bos bison", "bos bonasus"],
-};
-const COL_EXCLUDE_ALL_NODES = [...COL_DOMESTIC_EXCLUDE_NAMES, ...COL_SPECIES_NAME_OVERRIDES["ssc-bison"]];
+// See config/col-described-overrides.ts for what these are and why — shared with the
+// frontend so the "# Described Species" tooltip explains the same overrides applied
+// here, instead of the two silently drifting apart.
 
 // Translate a taxonomy node filter into a SQL predicate over species/, mirroring
 // matchesFilter() exactly — including its `?? ""` null handling (so a null order_name

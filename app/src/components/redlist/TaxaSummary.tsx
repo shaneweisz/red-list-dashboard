@@ -7,7 +7,7 @@ import { FaInfoCircle, FaExpandAlt, FaCompressAlt, FaChevronRight } from "react-
 import { HiOutlineAdjustmentsHorizontal } from "react-icons/hi2";
 import TaxaIcon from "@/components/TaxaIcon";
 import { CATEGORY_COLORS, CATEGORY_NAMES, CATEGORY_ORDER } from "@/config/taxa";
-import { hasChildren, findNode, getAncestors, stripNodePrefix, OFFICIAL_IUCN_DESCRIBED_NODE_IDS } from "@/lib/taxonomy-utils";
+import { hasChildren, findNode, getAncestors, stripNodePrefix, OFFICIAL_IUCN_DESCRIBED_NODE_IDS, describeFilter } from "@/lib/taxonomy-utils";
 import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
 interface Table1aRowData {
   group: string;
@@ -348,7 +348,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   // resolveDescribed and OFFICIAL_IUCN_DESCRIBED_NODE_IDS.
   const [describedSource, setDescribedSource] = useState<"iucn" | "col">("iucn");
   const resolveDescribed = useCallback(
-    (nodeId: string, estimatedDescribed: number, colDescribed: number | undefined, totalAssessed: number): number => {
+    (nodeId: string, estimatedDescribed: number, colDescribed: number | undefined, totalAssessed: number): { value: number; source: "iucn" | "col" } => {
       const isOfficial = OFFICIAL_IUCN_DESCRIBED_NODE_IDS.has(stripNodePrefix(nodeId));
       const useCol = isOfficial ? describedSource === "col" : true;
       // A described count below the real assessed count is a logical impossibility —
@@ -356,14 +356,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       // release is missing species IUCN's own assessors already recognize (e.g.
       // Artiodactyla, where several recent splits aren't in CoL yet). Fall back to
       // the estimate rather than show an impossible >100%-assessed row.
-      if (useCol && colDescribed != null && colDescribed >= totalAssessed) return colDescribed;
-      return estimatedDescribed;
+      if (useCol && colDescribed != null && colDescribed >= totalAssessed) return { value: colDescribed, source: "col" };
+      return { value: estimatedDescribed, source: "iucn" };
     },
     [describedSource]
   );
   const applySource = useCallback(
     <T extends { estimatedDescribed: number; colDescribed?: number; totalAssessed: number; percentAssessed: number }>(row: T, nodeId: string): T => {
-      const described = resolveDescribed(nodeId, row.estimatedDescribed, row.colDescribed, row.totalAssessed);
+      const { value: described } = resolveDescribed(nodeId, row.estimatedDescribed, row.colDescribed, row.totalAssessed);
       if (described === row.estimatedDescribed) return row;
       return {
         ...row,
@@ -829,6 +829,57 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       </td>
     ) : null;
 
+  // "# Described Species" hover tooltip — explains what's counted and where the
+  // number comes from, so a skeptical SSC group member can check it. Two cases:
+  //  - source "iucn": the node's own citation (IUCN Table 1a, or a hand-typed
+  //    third-party estimate like MDD/Reptile Database) — the pre-existing pattern.
+  //  - source "col": the number is CoL-derived, so explain what the node's filter
+  //    actually counts (describeFilter) and link to Catalogue of Life. Clicking the
+  //    row itself already shows the underlying species list (existing behavior) —
+  //    noted here rather than building new auto-navigation into it.
+  const describedSourceTooltip = (nodeId: string, source: "iucn" | "col") => {
+    const node = findNode(nodeId);
+    if (!node) return null;
+    if (source === "iucn") {
+      if (!node.estimatedSource) return null;
+      return (
+        <span className="relative group/src">
+          <a
+            href={node.estimatedSourceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+          >
+            <FaInfoCircle size={10} />
+          </a>
+          <span className="absolute right-0 top-1/2 -translate-y-1/2 mr-5 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover/src:opacity-100 group-hover/src:visible z-50 shadow-lg normal-case max-w-[300px] whitespace-normal text-left">
+            {node.estimatedSource}
+          </span>
+        </span>
+      );
+    }
+    return (
+      <span className="relative group/src">
+        <a
+          href={COL_SOURCE_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+        >
+          <FaInfoCircle size={10} />
+        </a>
+        <span className="absolute right-0 top-1/2 -translate-y-1/2 mr-5 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded opacity-0 invisible group-hover/src:opacity-100 group-hover/src:visible z-50 shadow-lg normal-case max-w-[300px] whitespace-normal text-left">
+          <span className="block">{describeFilter(node.filter, nodeId)}</span>
+          <span className="block mt-1 text-zinc-400">
+            Source: Catalogue of Life 2025. Click this row to see the species list (toggle &quot;Unassessed&quot; for the rest).
+          </span>
+        </span>
+      </span>
+    );
+  };
+
   // Render a data row
   const renderRow = (
     id: string,
@@ -967,7 +1018,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
 
   // Render an ancestor context row with full data — clicking navigates to that level.
   const renderAncestorRow = (sg: SubGroupSummary, color: string, depth: number, topTaxonId: string, isViewRoot: boolean) => {
-    const sgDescribed = resolveDescribed(sg.id, sg.estimatedDescribed, sg.colDescribed, sg.totalAssessed);
+    const { value: sgDescribed, source: sgDescribedSource } = resolveDescribed(sg.id, sg.estimatedDescribed, sg.colDescribed, sg.totalAssessed);
     const sgPctAssessed = sgDescribed > 0 ? (sg.totalAssessed / sgDescribed) * 100 : 0;
     const sgPctOutdated = sg.totalAssessed > 0 ? (sg.outdated / sg.totalAssessed) * 100 : 0;
     return (
@@ -986,7 +1037,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         </td>
         {isVisible("described") && (
           <td className={numericTdNoDividerClasses}>
-            <span className="text-sm text-zinc-700 dark:text-zinc-300 tabular-nums">{sgDescribed.toLocaleString()}</span>
+            <span className="text-sm text-zinc-700 dark:text-zinc-300 tabular-nums inline-flex items-center gap-1">
+              {sgDescribed.toLocaleString()}
+              {describedSourceTooltip(sg.id, sgDescribedSource)}
+            </span>
           </td>
         )}
         {colDescribedCell(sg.colDescribed)}
@@ -1033,7 +1087,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
 
   // Render a standalone subgroup row (used when table is collapsed to a selected subgroup)
   const renderCollapsedSubgroupRow = (taxon: TaxonSummary, sg: SubGroupSummary) => {
-    const sgDescribed = resolveDescribed(sg.id, sg.estimatedDescribed, sg.colDescribed, sg.totalAssessed);
+    const { value: sgDescribed, source: sgDescribedSource } = resolveDescribed(sg.id, sg.estimatedDescribed, sg.colDescribed, sg.totalAssessed);
     const sgPctAssessed = sgDescribed > 0 ? (sg.totalAssessed / sgDescribed) * 100 : 0;
     const sgPctOutdated = sg.totalAssessed > 0 ? (sg.outdated / sg.totalAssessed) * 100 : 0;
     return (
@@ -1057,26 +1111,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           <td className={numericTdNoDividerClasses}>
             <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums inline-flex items-center gap-1">
               {sgDescribed.toLocaleString()}
-              {(() => {
-                const sgNode = findNode(sg.id);
-                if (!sgNode?.estimatedSource) return null;
-                return (
-                  <span className="relative group/src">
-                    <a
-                      href={sgNode.estimatedSourceUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-                    >
-                      <FaInfoCircle size={10} />
-                    </a>
-                    <span className="absolute right-0 top-1/2 -translate-y-1/2 mr-5 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover/src:opacity-100 group-hover/src:visible z-50 shadow-lg normal-case max-w-[300px] whitespace-normal text-left">
-                      {sgNode.estimatedSource}
-                    </span>
-                  </span>
-                );
-              })()}
+              {describedSourceTooltip(sg.id, sgDescribedSource)}
             </span>
           </td>
         )}
@@ -1124,7 +1159,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
 
   // Render a subgroup row, recursively expandable if it has children
   const renderSubgroupRow = (sg: SubGroupSummary, parentColor: string, depth: number, topTaxonId: string): React.ReactNode => {
-    const sgDescribed = resolveDescribed(sg.id, sg.estimatedDescribed, sg.colDescribed, sg.totalAssessed);
+    const { value: sgDescribed, source: sgDescribedSource } = resolveDescribed(sg.id, sg.estimatedDescribed, sg.colDescribed, sg.totalAssessed);
     const sgPctAssessed = sgDescribed > 0 ? (sg.totalAssessed / sgDescribed) * 100 : 0;
     const sgPctOutdated = sg.totalAssessed > 0 ? (sg.outdated / sg.totalAssessed) * 100 : 0;
     const isSgSelected = selectedSubgroups.has(sg.id);
@@ -1170,26 +1205,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             <td className={numericTdNoDividerClasses}>
               <span className="text-sm text-zinc-600 dark:text-zinc-400 tabular-nums inline-flex items-center gap-1">
                 {sgDescribed.toLocaleString()}
-                {(() => {
-                  const sgNode = findNode(sg.id);
-                  if (!sgNode?.estimatedSource) return null;
-                  return (
-                    <span className="relative group/src">
-                      <a
-                        href={sgNode.estimatedSourceUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-                      >
-                        <FaInfoCircle size={10} />
-                      </a>
-                      <span className="absolute right-0 top-1/2 -translate-y-1/2 mr-5 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover/src:opacity-100 group-hover/src:visible z-50 shadow-lg normal-case max-w-[300px] whitespace-normal text-left">
-                        {sgNode.estimatedSource}
-                      </span>
-                    </span>
-                  );
-                })()}
+                {describedSourceTooltip(sg.id, sgDescribedSource)}
               </span>
             </td>
           )}
@@ -1520,8 +1536,17 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                 {flatData.map((section, si) => {
                   // Resolve each row's effective described source first (IUCN toggle for
                   // Table 1a's own rows; always CoL for SSC groups — see resolveDescribed),
-                  // so the per-row cells and the subtotals below all agree.
-                  const rows = section.rows.map(r => applySource(r, r.group));
+                  // so the per-row cells and the subtotals below all agree. Keep the
+                  // per-row source (describedSource) around too, for the tooltip.
+                  const rows = section.rows.map(r => {
+                    const { value: described, source } = resolveDescribed(r.group, r.estimatedDescribed, r.colDescribed, r.totalAssessed);
+                    return {
+                      ...r,
+                      estimatedDescribed: described,
+                      percentAssessed: described > 0 ? (r.totalAssessed / described) * 100 : 0,
+                      describedSource: source,
+                    };
+                  });
                   // Compute section subtotals
                   const subDescribed = rows.reduce((s, r) => s + r.estimatedDescribed, 0);
                   const subAssessed = rows.reduce((s, r) => s + r.totalAssessed, 0);
@@ -1666,8 +1691,9 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                           </td>
                           {isVisible("described") && (
                             <td className={numericTdNoDividerClasses}>
-                              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">
+                              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums inline-flex items-center gap-1">
                                 {row.estimatedDescribed.toLocaleString()}
+                                {describedSourceTooltip(row.group, row.describedSource)}
                               </span>
                             </td>
                           )}
