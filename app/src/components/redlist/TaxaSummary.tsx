@@ -247,7 +247,7 @@ function DescribedInfoIcon({ nodeId, source }: { nodeId: string; source: "iucn" 
           e.stopPropagation();
           if (!open && btnRef.current) {
             const rect = btnRef.current.getBoundingClientRect();
-            setPos({ top: rect.bottom + 4, left: Math.min(rect.left, window.innerWidth - 320) });
+            setPos({ top: rect.bottom + 4, left: Math.min(rect.left, window.innerWidth - 360) });
           }
           setOpen((v) => !v);
         }}
@@ -259,7 +259,7 @@ function DescribedInfoIcon({ nodeId, source }: { nodeId: string; source: "iucn" 
         <div
           ref={popoverRef}
           onClick={(e) => e.stopPropagation()}
-          className="fixed z-[9999] px-3 py-2 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded-lg shadow-lg normal-case max-w-[300px] text-left"
+          className="fixed z-[9999] px-3 py-2 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded-lg shadow-lg normal-case max-w-[340px] max-h-[70vh] overflow-y-auto text-left"
           style={{ top: pos.top, left: pos.left }}
         >
           {source === "iucn" ? (

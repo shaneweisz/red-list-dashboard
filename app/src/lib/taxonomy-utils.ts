@@ -308,16 +308,15 @@ export interface DescribeFilterSegment {
   colId?: string;
 }
 
-// Long exclude/include lists (e.g. Antelope SG's 14-genus excludeGenera) would make an
-// unreadable tooltip — cap what's spelled out and summarize the rest by count. Each
-// shown name becomes its own segment, linked when we have a CoL id for it.
-function joinCappedSegments(rank: FilterRank, names: string[], max = 4): DescribeFilterSegment[] {
+// Every name gets its own segment (linked when we have a CoL id for it) — no capping,
+// so a skeptical reviewer can see and click through to every single name, even for a
+// long list like Antelope SG's 14-genus excludeGenera.
+function joinSegments(rank: FilterRank, names: string[]): DescribeFilterSegment[] {
   const segs: DescribeFilterSegment[] = [];
-  names.slice(0, max).forEach((n, i) => {
+  names.forEach((n, i) => {
     if (i > 0) segs.push({ text: ", " });
     segs.push({ text: capitalize(n), colId: COL_TAXON_ID_MAP[`${rank}:${n.toLowerCase()}`] });
   });
-  if (names.length > max) segs.push({ text: `, +${names.length - max} more` });
   return segs;
 }
 
@@ -357,7 +356,7 @@ export function describeFilter(filter: SpeciesFilter, nodeId?: string): Describe
     if (!names?.length) return;
     if (hasPart) segs.push({ text: "; " });
     hasPart = true;
-    segs.push({ text: `${label}: ` }, ...joinCappedSegments(rank, names));
+    segs.push({ text: `${label}: ` }, ...joinSegments(rank, names));
   };
   addPart("Class", "class", filter.classNames);
   addPart("Order", "order", filter.orderNames);
@@ -376,7 +375,7 @@ export function describeFilter(filter: SpeciesFilter, nodeId?: string): Describe
     if (!names?.length) return;
     if (hasExclude) excludeSegs.push({ text: "; " });
     hasExclude = true;
-    excludeSegs.push(...joinCappedSegments(rank, names));
+    excludeSegs.push(...joinSegments(rank, names));
   };
   addExclude("class", filter.excludeClasses);
   addExclude("order", filter.excludeOrders);
