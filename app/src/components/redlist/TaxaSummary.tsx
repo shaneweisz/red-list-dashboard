@@ -29,7 +29,7 @@ interface Table1aRowData {
   medianGbifObsPerSpecies?: number;
   colDescribed?: number;
   colNe?: number;
-  colBreakdown?: { name: string; count: number; neCount: number }[];
+  colBreakdown?: { name: string; count: number; neCount: number; trueAssessed: number }[];
 }
 
 interface Table1aSectionData {
@@ -76,7 +76,7 @@ interface SubGroupSummary {
   byCategory: Record<string, number>;
   colDescribed?: number;
   colNe?: number;
-  colBreakdown?: { name: string; count: number; neCount: number }[];
+  colBreakdown?: { name: string; count: number; neCount: number; trueAssessed: number }[];
 }
 
 interface Props {
@@ -243,7 +243,7 @@ function BreakdownList({
 }: {
   rank: FilterRank;
   label: string;
-  breakdown: { name: string; count: number; neCount: number }[];
+  breakdown: { name: string; count: number; neCount: number; trueAssessed: number }[];
   nodeId: string;
   onNavigate: () => void;
 }) {
@@ -260,6 +260,13 @@ function BreakdownList({
         {breakdown.map((b) => {
           const isOpen = expanded.has(b.name);
           const assessedCount = b.count - b.neCount;
+          // IUCN's own assessed count for this name (trueAssessed) can differ from
+          // what lines up on the CoL side (assessedCount) — a taxonomic split/lump
+          // CoL and IUCN disagree on, a CoL coverage gap (not yet in its curated
+          // Base checklist), or an extinct species CoL flags but IUCN hasn't
+          // confirmed EX/EW. Flagged rather than silently shown as if reconciled.
+          const mismatch = assessedCount !== b.trueAssessed;
+          const mismatchTitle = `IUCN's Red List counts ${b.trueAssessed} assessed ${breakdownDisplayName(rank, b.name)} species; only ${assessedCount} line up with the Catalogue of Life data here — likely a taxonomic split/lump, a CoL coverage gap, or an unconfirmed extinction.`;
           const href = breakdownHref(rank, b.name);
           return (
             <li key={b.name} className="mt-0.5">
@@ -272,6 +279,9 @@ function BreakdownList({
                   <FaChevronRight size={7} className={`text-zinc-400 transition-transform ${isOpen ? "rotate-90" : ""}`} />
                   {breakdownDisplayName(rank, b.name)} ({b.count})
                 </button>
+                {mismatch && (
+                  <span className="text-amber-400 cursor-help" title={mismatchTitle}>⚠</span>
+                )}
                 {href && (
                   <a
                     href={href}
@@ -295,6 +305,11 @@ function BreakdownList({
                     >
                       Assessed ({assessedCount})
                     </button>
+                    {mismatch && (
+                      <span className="ml-1 text-amber-400 cursor-help" title={mismatchTitle}>
+                        (IUCN: {b.trueAssessed})
+                      </span>
+                    )}
                   </li>
                   <li>
                     <button
@@ -322,7 +337,7 @@ function BreakdownList({
 // between a hover trigger and its target does this, there's no CSS-only fix that
 // survives a real mouse gap. Portal-rendered (mirrors the column-visibility menu
 // pattern above) so it isn't clipped by the table's scroll/sticky ancestors.
-function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; source: "iucn" | "col"; breakdown?: { name: string; count: number; neCount: number }[] }) {
+function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; source: "iucn" | "col"; breakdown?: { name: string; count: number; neCount: number; trueAssessed: number }[] }) {
   const node = findNode(nodeId);
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);

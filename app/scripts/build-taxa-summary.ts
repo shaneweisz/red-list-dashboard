@@ -231,8 +231,8 @@ async function attachColCounts(summaries: Record<string, NodeSummary[]>): Promis
       n++;
 
       const dim = COL_SPECIES_NAME_OVERRIDES[node.id] ? null : primaryDimension(node.filter);
-      if (dim && dim.names.length > 1) {
-        const breakdown: { name: string; count: number; neCount: number }[] = [];
+      if (dim) {
+        const breakdown: { name: string; count: number; neCount: number; trueAssessed: number }[] = [];
         for (const name of dim.names) {
           const narrowed: NodeFilter = { ...node.filter, [dim.field]: [name] };
           const bRows = await (await conn.run(`
@@ -240,7 +240,16 @@ async function attachColCounts(summaries: Record<string, NodeSummary[]>): Promis
                    count(*) FILTER (in_base AND ${universe} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL} AND col_id NOT IN (SELECT col_id FROM assessed_cids)) AS ne
             FROM read_parquet('${speciesGlob}', hive_partitioning=true)
             WHERE ${filterToSql(narrowed, node.id)}`)).getRowObjects();
-          breakdown.push({ name, count: Number(bRows[0].n), neCount: Number(bRows[0].ne) });
+          // IUCN's own count of assessed species matching this one name — via
+          // filterToSql WITHOUT nodeId, so a Bison-style CoL species-name override
+          // (which only makes sense for CoL-sourced rows) doesn't wrongly zero out an
+          // IUCN-sourced match (assessed.parquet still says "Bison bison", never CoL's
+          // lumped "Bos bison"). Compared against count-neCount on the frontend to
+          // flag likely splits/lumps/coverage gaps the CoL-derived figures paper over
+          // (see BreakdownList in TaxaSummary.tsx).
+          const trueRows = await (await conn.run(`
+            SELECT count(*) AS n FROM read_parquet('${assessedPath}') WHERE ${filterToSql(narrowed)}`)).getRowObjects();
+          breakdown.push({ name, count: Number(bRows[0].n), neCount: Number(bRows[0].ne), trueAssessed: Number(trueRows[0].n) });
           breakdownQueries++;
         }
         child.colBreakdown = breakdown;
