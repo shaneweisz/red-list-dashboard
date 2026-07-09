@@ -512,6 +512,9 @@ interface OccurrenceMapRowProps {
    * preserved specimens ON for plants & fungi, where herbarium/fungarium
    * records are a core data source. */
   taxonGroup?: string;
+  /** Called once the occurrence data has loaded and there are no records to show,
+   * letting the parent fall back to another tab (e.g. Catalogue of Life). */
+  onEmpty?: () => void;
 }
 
 /**
@@ -531,6 +534,7 @@ export default function OccurrenceMapRow({
   assessmentYear,
   assessmentDate,
   taxonGroup,
+  onEmpty,
 }: OccurrenceMapRowProps) {
   const [occurrences, setOccurrences] = useState<OccurrenceFeature[]>([]);
   const [breakdown, setBreakdown] = useState<RecordTypeBreakdown | null>(null);
@@ -673,6 +677,15 @@ export default function OccurrenceMapRow({
       .catch(console.error)
       .finally(() => setLoadingBreakdown(false));
   }, [speciesKey, countryCode]);
+
+  // Once occurrences have loaded, tell the parent if GBIF (which includes iNat
+  // records) returned nothing — so an unevaluated species with no occurrence data
+  // can fall back to another tab (e.g. Catalogue of Life).
+  useEffect(() => {
+    if (!loadingOccurrences && totalOccurrences === 0) {
+      onEmpty?.();
+    }
+  }, [loadingOccurrences, totalOccurrences, onEmpty]);
 
   // Fetch iNat photos for a given page
   const fetchInatPhotos = useCallback((page: number, limit: number) => {

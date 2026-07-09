@@ -865,6 +865,12 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const urlSpeciesHandledRef = useRef(false);
   // Track whether a tab change was initiated programmatically (click) vs URL navigation (popstate)
   const programmaticTabChangeRef = useRef(false);
+  // Whether the user has explicitly picked a tab for the currently open species.
+  // When the occurrence tab turns up no records for a not-evaluated species we
+  // auto-switch to Catalogue of Life — but only while the user hasn't chosen a tab.
+  const manualTabSelectionRef = useRef(false);
+  // Guards the auto-switch so it fires at most once per opened species.
+  const autoColSwitchedRef = useRef(false);
 
   // Wrap setters to sync with URL
   const setSelectedSpeciesKey = useCallback((key: number | null) => {
@@ -873,12 +879,15 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     if (key != null) {
       setActiveDetailTabRaw("gbif");
       setVisitedTabs(new Set(["gbif"]));
+      manualTabSelectionRef.current = false;
+      autoColSwitchedRef.current = false;
     }
   }, [setSpeciesParam]);
 
-  const setActiveDetailTab = useCallback((tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol") => {
+  const setActiveDetailTab = useCallback((tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol", isManual = true) => {
     setActiveDetailTabRaw(tab);
     programmaticTabChangeRef.current = true;
+    if (isManual) manualTabSelectionRef.current = true;
     setTabParam(tab);
     setVisitedTabs(prev => {
       if (prev.has(tab)) return prev;
@@ -887,6 +896,15 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       return next;
     });
   }, [setTabParam]);
+
+  // When the occurrence tab (GBIF + iNat) reports no records for a not-evaluated
+  // species, fall back to the Catalogue of Life tab — unless the user has already
+  // navigated to a tab themselves.
+  const handleOccurrenceEmpty = useCallback(() => {
+    if (manualTabSelectionRef.current || autoColSwitchedRef.current) return;
+    autoColSwitchedRef.current = true;
+    setActiveDetailTab("col", false);
+  }, [setActiveDetailTab]);
   // Sync species/tab from URL params (fires on popstate, e.g. back/forward or search bar navigation)
   // In new-assessments mode, row keys use Math.abs(id) so selectedSpeciesKey must match.
   useEffect(() => {
@@ -899,6 +917,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       setSelectedSpeciesKeyRaw(isNewAssessments ? Math.abs(urlSpecies) : urlSpecies);
       setActiveDetailTabRaw(urlTab ?? "gbif");
       setVisitedTabs(new Set([urlTab ?? "gbif"]));
+      // A tab pinned in the URL counts as an explicit choice, so don't auto-switch.
+      manualTabSelectionRef.current = urlTab != null && urlTab !== "gbif";
+      autoColSwitchedRef.current = false;
       urlSpeciesHandledRef.current = false; // allow auto-page-navigate for new species
     }
   }, [urlSpecies, urlTab, isNewAssessments]);
@@ -3673,12 +3694,13 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                 assessmentYear={assessmentYear}
                                 assessmentDate={s.assessment_date}
                                 taxonGroup={s.taxon_group}
+                                onEmpty={s.category === "NE" ? handleOccurrenceEmpty : undefined}
                               />
                             </div>
                             )
                           ) : (visitedTabs.has("gbif")) && (
                             <div style={{ display: activeDetailTab === "gbif" ? undefined : "none" }}>
-                              <InatObservationsPanel scientificName={s.scientific_name} mounted={mounted} />
+                              <InatObservationsPanel scientificName={s.scientific_name} mounted={mounted} onEmpty={s.category === "NE" ? handleOccurrenceEmpty : undefined} />
                             </div>
                           )}
                           {(assessmentYear || s.category === "NE") && (visitedTabs.has("literature")) && (
