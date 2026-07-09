@@ -199,6 +199,102 @@ function DisabledAllTooltip() {
   );
 }
 
+// "# Described Species" info icon — click-to-open (not hover), so the popover stays
+// put while the user moves the mouse onto it to read/click a link. An earlier
+// hover-only version (CSS :hover + an offset tooltip) made the tooltip vanish the
+// instant the cursor left the tiny icon, before it reached the tooltip — any gap
+// between a hover trigger and its target does this, there's no CSS-only fix that
+// survives a real mouse gap. Portal-rendered (mirrors the column-visibility menu
+// pattern above) so it isn't clipped by the table's scroll/sticky ancestors.
+function DescribedInfoIcon({ nodeId, source }: { nodeId: string; source: "iucn" | "col" }) {
+  const node = findNode(nodeId);
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: Event) => {
+      if (e instanceof KeyboardEvent && e.key !== "Escape") return;
+      if (e.type === "mousedown") {
+        const target = e.target as Node;
+        if (popoverRef.current?.contains(target) || btnRef.current?.contains(target)) return;
+      }
+      setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", close);
+    // Table body scrolls internally (overflow-x-auto) — a stale-positioned popover
+    // left open through a scroll is worse than just closing it.
+    document.addEventListener("scroll", close, true);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", close);
+      document.removeEventListener("scroll", close, true);
+    };
+  }, [open]);
+
+  if (!node) return null;
+  if (source === "iucn" && !node.estimatedSource) return null;
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          if (!open && btnRef.current) {
+            const rect = btnRef.current.getBoundingClientRect();
+            setPos({ top: rect.bottom + 4, left: Math.min(rect.left, window.innerWidth - 320) });
+          }
+          setOpen((v) => !v);
+        }}
+        className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+      >
+        <FaInfoCircle size={10} />
+      </button>
+      {open && typeof document !== "undefined" && createPortal(
+        <div
+          ref={popoverRef}
+          onClick={(e) => e.stopPropagation()}
+          className="fixed z-[9999] px-3 py-2 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded-lg shadow-lg normal-case max-w-[300px] text-left"
+          style={{ top: pos.top, left: pos.left }}
+        >
+          {source === "iucn" ? (
+            <>
+              <p>{node.estimatedSource}</p>
+              {node.estimatedSourceUrl && (
+                <a
+                  href={node.estimatedSourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1 inline-block text-blue-300 hover:text-blue-200 underline"
+                >
+                  View source
+                </a>
+              )}
+            </>
+          ) : (
+            <>
+              <p>{describeFilter(node.filter, nodeId)}</p>
+              <p className="mt-1.5 text-zinc-300">
+                Source:{" "}
+                <a href={COL_SOURCE_URL} target="_blank" rel="noopener noreferrer" className="text-blue-300 hover:text-blue-200 underline">
+                  Catalogue of Life 2025
+                </a>
+                . Click this row to see the species list (toggle &quot;Unassessed&quot; for the rest).
+              </p>
+            </>
+          )}
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
 export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", layoutMode, onLayoutModeChange }: Props) {
   const isNewAssessments = viewMode === "new-assessments";
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
@@ -829,57 +925,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       </td>
     ) : null;
 
-  // "# Described Species" hover tooltip — explains what's counted and where the
-  // number comes from, so a skeptical SSC group member can check it. Two cases:
-  //  - source "iucn": the node's own citation (IUCN Table 1a, or a hand-typed
-  //    third-party estimate like MDD/Reptile Database) — the pre-existing pattern.
-  //  - source "col": the number is CoL-derived, so explain what the node's filter
-  //    actually counts (describeFilter) and link to Catalogue of Life. Clicking the
-  //    row itself already shows the underlying species list (existing behavior) —
-  //    noted here rather than building new auto-navigation into it.
-  const describedSourceTooltip = (nodeId: string, source: "iucn" | "col") => {
-    const node = findNode(nodeId);
-    if (!node) return null;
-    if (source === "iucn") {
-      if (!node.estimatedSource) return null;
-      return (
-        <span className="relative group/src">
-          <a
-            href={node.estimatedSourceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-          >
-            <FaInfoCircle size={10} />
-          </a>
-          <span className="absolute right-0 top-1/2 -translate-y-1/2 mr-5 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover/src:opacity-100 group-hover/src:visible z-50 shadow-lg normal-case max-w-[300px] whitespace-normal text-left">
-            {node.estimatedSource}
-          </span>
-        </span>
-      );
-    }
-    return (
-      <span className="relative group/src">
-        <a
-          href={COL_SOURCE_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-        >
-          <FaInfoCircle size={10} />
-        </a>
-        <span className="absolute right-0 top-1/2 -translate-y-1/2 mr-5 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded opacity-0 invisible group-hover/src:opacity-100 group-hover/src:visible z-50 shadow-lg normal-case max-w-[300px] whitespace-normal text-left">
-          <span className="block">{describeFilter(node.filter, nodeId)}</span>
-          <span className="block mt-1 text-zinc-400">
-            Source: Catalogue of Life 2025. Click this row to see the species list (toggle &quot;Unassessed&quot; for the rest).
-          </span>
-        </span>
-      </span>
-    );
-  };
-
   // Render a data row
   const renderRow = (
     id: string,
@@ -1039,7 +1084,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           <td className={numericTdNoDividerClasses}>
             <span className="text-sm text-zinc-700 dark:text-zinc-300 tabular-nums inline-flex items-center gap-1">
               {sgDescribed.toLocaleString()}
-              {describedSourceTooltip(sg.id, sgDescribedSource)}
+              <DescribedInfoIcon nodeId={sg.id} source={sgDescribedSource} />
             </span>
           </td>
         )}
@@ -1111,7 +1156,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           <td className={numericTdNoDividerClasses}>
             <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums inline-flex items-center gap-1">
               {sgDescribed.toLocaleString()}
-              {describedSourceTooltip(sg.id, sgDescribedSource)}
+              <DescribedInfoIcon nodeId={sg.id} source={sgDescribedSource} />
             </span>
           </td>
         )}
@@ -1205,7 +1250,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             <td className={numericTdNoDividerClasses}>
               <span className="text-sm text-zinc-600 dark:text-zinc-400 tabular-nums inline-flex items-center gap-1">
                 {sgDescribed.toLocaleString()}
-                {describedSourceTooltip(sg.id, sgDescribedSource)}
+                <DescribedInfoIcon nodeId={sg.id} source={sgDescribedSource} />
               </span>
             </td>
           )}
@@ -1693,7 +1738,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                             <td className={numericTdNoDividerClasses}>
                               <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums inline-flex items-center gap-1">
                                 {row.estimatedDescribed.toLocaleString()}
-                                {describedSourceTooltip(row.group, row.describedSource)}
+                                <DescribedInfoIcon nodeId={row.group} source={row.describedSource} />
                               </span>
                             </td>
                           )}
