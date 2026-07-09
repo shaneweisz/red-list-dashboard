@@ -7,7 +7,7 @@ import { FaInfoCircle, FaExpandAlt, FaCompressAlt, FaChevronRight } from "react-
 import { HiOutlineAdjustmentsHorizontal } from "react-icons/hi2";
 import TaxaIcon from "@/components/TaxaIcon";
 import { CATEGORY_COLORS, CATEGORY_NAMES, CATEGORY_ORDER } from "@/config/taxa";
-import { hasChildren, findNode, getAncestors } from "@/lib/taxonomy-utils";
+import { hasChildren, findNode, getAncestors, stripNodePrefix, OFFICIAL_IUCN_DESCRIBED_NODE_IDS } from "@/lib/taxonomy-utils";
 import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
 interface Table1aRowData {
   group: string;
@@ -338,29 +338,48 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   const [table1aLoading, setTable1aLoading] = useState(false);
 
   // "# Described" source toggle (#272/#274): IUCN Table 1a estimates vs the CoL
-  // backbone described count. Flipping to CoL swaps the described value AND
-  // recomputes % Assessed against it. The separate "# Described (CoL)" column
-  // (cog-only) is unaffected. Rows without a CoL count (sub-groups) stay IUCN.
+  // backbone described count. For the 8 summary taxa + Table 1a's own rows — the
+  // only nodes with a genuinely IUCN-sourced number — this toggle picks between the
+  // two, defaulting to IUCN. Every other row (sub-groups, all 36 SSC groups) always
+  // shows the CoL-derived count regardless of the toggle: their old "estimated"
+  // number was a static third-party citation (MDD, Reptile Database, …) or a
+  // hand-typed approximation that never gets re-verified, whereas colDescribed is
+  // recomputed from the current CoL backbone on every data sync. See
+  // resolveDescribed and OFFICIAL_IUCN_DESCRIBED_NODE_IDS.
   const [describedSource, setDescribedSource] = useState<"iucn" | "col">("iucn");
+  const resolveDescribed = useCallback(
+    (nodeId: string, estimatedDescribed: number, colDescribed: number | undefined, totalAssessed: number): number => {
+      const isOfficial = OFFICIAL_IUCN_DESCRIBED_NODE_IDS.has(stripNodePrefix(nodeId));
+      const useCol = isOfficial ? describedSource === "col" : true;
+      // A described count below the real assessed count is a logical impossibility —
+      // can't have assessed more species than exist — and always means this CoL
+      // release is missing species IUCN's own assessors already recognize (e.g.
+      // Artiodactyla, where several recent splits aren't in CoL yet). Fall back to
+      // the estimate rather than show an impossible >100%-assessed row.
+      if (useCol && colDescribed != null && colDescribed >= totalAssessed) return colDescribed;
+      return estimatedDescribed;
+    },
+    [describedSource]
+  );
   const applySource = useCallback(
-    <T extends { estimatedDescribed: number; colDescribed?: number; totalAssessed: number; percentAssessed: number }>(row: T): T => {
-      if (describedSource !== "col" || row.colDescribed == null) return row;
-      const described = row.colDescribed;
+    <T extends { estimatedDescribed: number; colDescribed?: number; totalAssessed: number; percentAssessed: number }>(row: T, nodeId: string): T => {
+      const described = resolveDescribed(nodeId, row.estimatedDescribed, row.colDescribed, row.totalAssessed);
+      if (described === row.estimatedDescribed) return row;
       return {
         ...row,
         estimatedDescribed: described,
         percentAssessed: described > 0 ? (row.totalAssessed / described) * 100 : 0,
       };
     },
-    [describedSource]
+    [resolveDescribed]
   );
 
   // Separate "all" row from per-taxon rows (needed before early returns for hooks)
   const allTaxon = useMemo(() => {
     const raw = taxa.find((t) => t.id === "all");
-    return raw ? applySource(raw) : undefined;
+    return raw ? applySource(raw, raw.id) : undefined;
   }, [taxa, applySource]);
-  const perTaxa = useMemo(() => taxa.filter((t) => t.id !== "all").map(applySource), [taxa, applySource]);
+  const perTaxa = useMemo(() => taxa.filter((t) => t.id !== "all").map(t => applySource(t, t.id)), [taxa, applySource]);
 
   // Expand all expandable taxa
   const expandAll = useCallback(async () => {
@@ -948,7 +967,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
 
   // Render an ancestor context row with full data — clicking navigates to that level.
   const renderAncestorRow = (sg: SubGroupSummary, color: string, depth: number, topTaxonId: string, isViewRoot: boolean) => {
-    const sgDescribed = describedSource === "col" && sg.colDescribed != null ? sg.colDescribed : sg.estimatedDescribed;
+    const sgDescribed = resolveDescribed(sg.id, sg.estimatedDescribed, sg.colDescribed, sg.totalAssessed);
     const sgPctAssessed = sgDescribed > 0 ? (sg.totalAssessed / sgDescribed) * 100 : 0;
     const sgPctOutdated = sg.totalAssessed > 0 ? (sg.outdated / sg.totalAssessed) * 100 : 0;
     return (
@@ -1014,7 +1033,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
 
   // Render a standalone subgroup row (used when table is collapsed to a selected subgroup)
   const renderCollapsedSubgroupRow = (taxon: TaxonSummary, sg: SubGroupSummary) => {
-    const sgDescribed = describedSource === "col" && sg.colDescribed != null ? sg.colDescribed : sg.estimatedDescribed;
+    const sgDescribed = resolveDescribed(sg.id, sg.estimatedDescribed, sg.colDescribed, sg.totalAssessed);
     const sgPctAssessed = sgDescribed > 0 ? (sg.totalAssessed / sgDescribed) * 100 : 0;
     const sgPctOutdated = sg.totalAssessed > 0 ? (sg.outdated / sg.totalAssessed) * 100 : 0;
     return (
@@ -1105,7 +1124,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
 
   // Render a subgroup row, recursively expandable if it has children
   const renderSubgroupRow = (sg: SubGroupSummary, parentColor: string, depth: number, topTaxonId: string): React.ReactNode => {
-    const sgDescribed = describedSource === "col" && sg.colDescribed != null ? sg.colDescribed : sg.estimatedDescribed;
+    const sgDescribed = resolveDescribed(sg.id, sg.estimatedDescribed, sg.colDescribed, sg.totalAssessed);
     const sgPctAssessed = sgDescribed > 0 ? (sg.totalAssessed / sgDescribed) * 100 : 0;
     const sgPctOutdated = sg.totalAssessed > 0 ? (sg.outdated / sg.totalAssessed) * 100 : 0;
     const isSgSelected = selectedSubgroups.has(sg.id);
@@ -1499,9 +1518,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             ) : flatData ? (
               <>
                 {flatData.map((section, si) => {
-                  // Apply the IUCN/CoL described-source toggle to every row first, so the
-                  // per-row cells and the subtotals below all use the effective described.
-                  const rows = section.rows.map(applySource);
+                  // Resolve each row's effective described source first (IUCN toggle for
+                  // Table 1a's own rows; always CoL for SSC groups — see resolveDescribed),
+                  // so the per-row cells and the subtotals below all agree.
+                  const rows = section.rows.map(r => applySource(r, r.group));
                   // Compute section subtotals
                   const subDescribed = rows.reduce((s, r) => s + r.estimatedDescribed, 0);
                   const subAssessed = rows.reduce((s, r) => s + r.totalAssessed, 0);
@@ -1858,7 +1878,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           {/* IUCN ↔ CoL source toggle: flips the described count + recomputes % Assessed */}
           <span className="inline-flex items-center gap-1.5">
             <span className="text-xs text-zinc-400 dark:text-zinc-500">Source for # Described:</span>
-            <span className="inline-flex rounded-md overflow-hidden border border-zinc-300 dark:border-zinc-600 text-[10px] font-semibold" title="Switch # Described Species between IUCN Table 1a estimates and the Catalogue of Life backbone">
+            <span className="inline-flex rounded-md overflow-hidden border border-zinc-300 dark:border-zinc-600 text-[10px] font-semibold" title="Switch # Described Species between IUCN Table 1a estimates and the Catalogue of Life backbone, for the rows with an official IUCN figure — every other row (sub-groups, SSC groups) always shows the CoL-derived count">
               {(["iucn", "col"] as const).map((src) => (
                 <button
                   key={src}

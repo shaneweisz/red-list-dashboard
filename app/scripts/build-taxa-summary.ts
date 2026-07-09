@@ -100,17 +100,59 @@ function sqlStrList(vals: string[]): string {
   return vals.map((v) => `'${v.toLowerCase().replace(/'/g, "''")}'`).join(", ");
 }
 
+// Domestic/feral forms that would otherwise inflate a CoL-derived "described species"
+// count for the SSC group whose genus/family they fall under — e.g. Canid SG (family
+// Canidae) would count the domestic dog as one of its described species. Each name here
+// has a wild-form sibling species confirmed present separately in the CoL backbone
+// (verified directly against data/species/), so excluding the domestic form doesn't
+// lose real wild-species coverage:
+//   Bos taurus (domestic cattle) — sibling: Bos primigenius (aurochs)
+//   Bos frontalis (gayal/mithun, domesticated from gaur) — sibling: Bos gaurus
+//   Canis familiaris (domestic dog) — sibling: Canis lupus
+//   Equus caballus (domestic horse) — sibling: Equus ferus
+//   Equus asinus (domestic donkey) — sibling: Equus africanus
+//   Felis catus (domestic cat) — sibling: Felis lybica
+//   Vicugna pacos (domestic alpaca) — sibling: Vicugna vicugna
+// NOT excluded, deliberately: Lama glama (domestic llama). Its wild sibling, the
+// guanaco (Lama guanicoe), is missing from this CoL release entirely — excluding
+// glama would drop Wild Camelid SG's CoL count further rather than fixing it. Also
+// not excluded: Sus scrofa, Bubalus bubalis — CoL treats these as a single species
+// spanning both wild and domestic populations (no separate wild-only accepted name),
+// so excluding them would remove genuine wild-population coverage, not just the
+// domestic form.
+const COL_DOMESTIC_EXCLUDE_NAMES = [
+  "bos taurus", "bos frontalis", "canis familiaris", "equus caballus",
+  "equus asinus", "felis catus", "vicugna pacos",
+];
+
+// CoL lumps genus Bison entirely into Bos (no "Bison" genus exists in this release —
+// verified directly), so the Bison SG filter (genera: ["bison"]) matches zero CoL rows.
+// Override its CoL computation to match by species name instead of genus. The same two
+// names are added to the domestic-exclude list's effect for every OTHER node (via the
+// general exclusion below) so Afro-Asian Wild Cattle SG — whose own genus filter
+// (bos/bubalus/pseudoryx) would otherwise also match them — doesn't double-count.
+const COL_SPECIES_NAME_OVERRIDES: Record<string, string[]> = {
+  "ssc-bison": ["bos bison", "bos bonasus"],
+};
+const COL_EXCLUDE_ALL_NODES = [...COL_DOMESTIC_EXCLUDE_NAMES, ...COL_SPECIES_NAME_OVERRIDES["ssc-bison"]];
+
 // Translate a taxonomy node filter into a SQL predicate over species/, mirroring
 // matchesFilter() exactly — including its `?? ""` null handling (so a null order_name
 // behaves like an empty string, not SQL NULL, which would otherwise drop such rows from
 // both an include and its complementary exclude). Children partition a group by
 // class/order, which is exclusive in the CoL universe — so no claim-tracking needed.
-function filterToSql(filter: NodeFilter): string {
+// nodeId (optional) triggers the species-name overrides above when computing a node's
+// own CoL described/not-evaluated counts — irrelevant for the real IUCN-assessed-species
+// matching this same function mirrors, which doesn't go through this code path.
+function filterToSql(filter: NodeFilter, nodeId?: string): string {
+  const sciName = "coalesce(lower(scientific_name), '')";
+  if (nodeId && COL_SPECIES_NAME_OVERRIDES[nodeId]) {
+    return `taxon_group IN (${sqlStrList(filter.csvGroups)}) AND ${sciName} IN (${sqlStrList(COL_SPECIES_NAME_OVERRIDES[nodeId])})`;
+  }
   const cls = "coalesce(lower(class_name), '')";
   const ord = "coalesce(lower(order_name), '')";
   const fam = "coalesce(lower(family), '')";
   const genus = "coalesce(lower(split_part(scientific_name, ' ', 1)), '')";
-  const sciName = "coalesce(lower(scientific_name), '')";
   const conds: string[] = [`taxon_group IN (${sqlStrList(filter.csvGroups)})`];
   if (filter.classNames?.length) conds.push(`${cls} IN (${sqlStrList(expandClasses(filter.classNames))})`);
   if (filter.excludeClasses?.length) conds.push(`${cls} NOT IN (${sqlStrList(expandClasses(filter.excludeClasses))})`);
@@ -128,6 +170,10 @@ function filterToSql(filter: NodeFilter): string {
   if (filter.excludeGenera?.length) conds.push(`${genus} NOT IN (${sqlStrList(filter.excludeGenera)})`);
   if (filter.speciesNames?.length) conds.push(`${sciName} IN (${sqlStrList(filter.speciesNames)})`);
   if (filter.excludeSpeciesNames?.length) conds.push(`${sciName} NOT IN (${sqlStrList(filter.excludeSpeciesNames)})`);
+  // Domestic forms + species reassigned to another node's CoL override (see above) —
+  // excluded from every node's CoL count so they don't inflate one group's "described"
+  // total or get double-counted between two groups.
+  conds.push(`${sciName} NOT IN (${sqlStrList(COL_EXCLUDE_ALL_NODES)})`);
   return conds.join(" AND ");
 }
 
@@ -154,7 +200,7 @@ async function attachColCounts(summaries: Record<string, NodeSummary[]>): Promis
         SELECT count(*) FILTER (in_base AND extinct IS NOT TRUE AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL}) AS col_described,
                count(*) FILTER (in_base AND extinct IS NOT TRUE AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL} AND col_id NOT IN (SELECT col_id FROM assessed_cids)) AS col_ne
         FROM read_parquet('${speciesGlob}', hive_partitioning=true)
-        WHERE ${filterToSql(node.filter)}`)).getRowObjects();
+        WHERE ${filterToSql(node.filter, node.id)}`)).getRowObjects();
       child.colDescribed = Number(rows[0].col_described);
       child.colNe = Number(rows[0].col_ne);
       n++;

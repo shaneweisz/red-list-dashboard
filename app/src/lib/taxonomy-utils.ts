@@ -63,6 +63,21 @@ export function getNodePath(id: string): string[] {
 
 const DEFAULT_VIEW_ROOTS = new Set(TAXONOMY_VIEWS.default.roots);
 
+// Nodes whose "# Described Species" figure is genuinely IUCN's own published number
+// (the Table 1a PDF) rather than a third-party citation (MDD, Reptile Database,
+// AmphibiaWeb, Eschmeyer, Zhang 2011, …) or a hand-typed approximation (the SSC
+// pilot groups). That's exactly the 8 default-view summary taxa plus Table 1a's own
+// 21 rows (28 CSV groups, with "insects" as one row) — every node one level deeper
+// (Rodents, Bats, Beetles, every SSC group, …) cites something else, which — unlike
+// the CoL-derived colDescribed figure — never gets automatically re-verified as the
+// underlying species data changes. Used to pick the "# Described" default per row:
+// IUCN for these, CoL for everything else. See TaxaSummary.tsx's applySource.
+export const OFFICIAL_IUCN_DESCRIBED_NODE_IDS = new Set([
+  "all", // the grand total across the 8 summary taxa — itself an IUCN-sourced sum
+  ...TAXONOMY_VIEWS.default.roots,
+  ...TAXONOMY_VIEWS.table1a.roots,
+]);
+
 // SSC Specialist Group leaves live under "ssc-groups" — a separate wrapper kept
 // OUT of the "mammals" tree node (so it doesn't pollute the normal Mammals
 // subgroup list) and out of the default view (so it isn't a 9th landing-page

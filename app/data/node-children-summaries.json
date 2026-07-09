@@ -18,8 +18,8 @@
         "EW": 1,
         "LR/nt": 1
       },
-      "colDescribed": 6163,
-      "colNe": 394
+      "colDescribed": 6154,
+      "colNe": 387
     },
     {
       "id": "ssc-groups",
@@ -39,8 +39,8 @@
         "EW": 1,
         "LR/nt": 1
       },
-      "colDescribed": 6163,
-      "colNe": 394
+      "colDescribed": 6154,
+      "colNe": 387
     },
     {
       "id": "birds",
@@ -610,8 +610,8 @@
         "EX": 6,
         "DD": 6
       },
-      "colDescribed": 303,
-      "colNe": 17
+      "colDescribed": 301,
+      "colNe": 15
     },
     {
       "id": "artiodactyls",
@@ -630,8 +630,8 @@
         "EW": 1,
         "DD": 25
       },
-      "colDescribed": 230,
-      "colNe": 24
+      "colDescribed": 225,
+      "colNe": 21
     },
     {
       "id": "rabbits-hares",
@@ -680,8 +680,8 @@
         "LC": 1,
         "VU": 3
       },
-      "colDescribed": 19,
-      "colNe": 2
+      "colDescribed": 17,
+      "colNe": 0
     },
     {
       "id": "pangolins",
@@ -786,8 +786,8 @@
         "EN": 3,
         "EX": 1
       },
-      "colDescribed": 15,
-      "colNe": 5
+      "colDescribed": 11,
+      "colNe": 3
     },
     {
       "id": "ssc-afrotheria",
@@ -920,7 +920,7 @@
       "byCategory": {
         "NT": 2
       },
-      "colDescribed": 0,
+      "colDescribed": 2,
       "colNe": 0
     },
     {
@@ -937,8 +937,8 @@
         "NT": 6,
         "EX": 2
       },
-      "colDescribed": 39,
-      "colNe": 3
+      "colDescribed": 38,
+      "colNe": 2
     },
     {
       "id": "ssc-caprinae",
@@ -969,8 +969,8 @@
         "EN": 4,
         "NT": 5
       },
-      "colDescribed": 46,
-      "colNe": 7
+      "colDescribed": 45,
+      "colNe": 6
     },
     {
       "id": "ssc-cetacean",
@@ -1024,8 +1024,8 @@
         "LC": 1,
         "VU": 1
       },
-      "colDescribed": 10,
-      "colNe": 2
+      "colDescribed": 8,
+      "colNe": 0
     },
     {
       "id": "ssc-giraffe-okapi",
@@ -1265,8 +1265,8 @@
       "byCategory": {
         "LC": 2
       },
-      "colDescribed": 3,
-      "colNe": 2
+      "colDescribed": 2,
+      "colNe": 1
     },
     {
       "id": "ssc-wild-pig",
