@@ -6,7 +6,7 @@
       "estimatedDescribed": 6819,
       "totalAssessed": 6036,
       "outdated": 1099,
-      "gbifNeSpeciesCount": 316,
+      "gbifNeSpeciesCount": 315,
       "byCategory": {
         "CR": 238,
         "VU": 567,
@@ -27,7 +27,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 6036,
       "outdated": 1099,
-      "gbifNeSpeciesCount": 316,
+      "gbifNeSpeciesCount": 315,
       "byCategory": {
         "CR": 238,
         "VU": 567,
@@ -649,7 +649,7 @@
       "estimatedDescribed": 371,
       "totalAssessed": 336,
       "outdated": 84,
-      "gbifNeSpeciesCount": 35,
+      "gbifNeSpeciesCount": 34,
       "byCategory": {
         "CR": 15,
         "LC": 141,
@@ -829,7 +829,7 @@
       "estimatedDescribed": 9,
       "totalAssessed": 10,
       "outdated": 3,
-      "gbifNeSpeciesCount": 4,
+      "gbifNeSpeciesCount": 3,
       "byCategory": {
         "CR": 4,
         "VU": 2,
@@ -1140,18 +1140,18 @@
       "id": "ssc-cetacean",
       "name": "Cetacean Specialist Group",
       "estimatedDescribed": 94,
-      "totalAssessed": 92,
+      "totalAssessed": 93,
       "outdated": 3,
       "gbifNeSpeciesCount": 3,
       "byCategory": {
-        "LC": 48,
+        "LC": 49,
         "EN": 12,
         "VU": 7,
         "NT": 10,
         "CR": 5,
         "DD": 10
       },
-      "colDescribed": 71,
+      "colDescribed": 96,
       "colNe": 3,
       "colBreakdown": [
         {
@@ -1177,6 +1177,14 @@
         {
           "name": "ziphiidae",
           "count": 0
+        },
+        {
+          "name": "hyperoodontidae",
+          "count": 24
+        },
+        {
+          "name": "neobalaenidae",
+          "count": 1
         },
         {
           "name": "delphinidae",
@@ -1624,16 +1632,16 @@
       "id": "ssc-other-mammals",
       "name": "No SSC Group",
       "estimatedDescribed": 192,
-      "totalAssessed": 23,
+      "totalAssessed": 22,
       "outdated": 19,
       "gbifNeSpeciesCount": 19,
       "byCategory": {
         "EN": 9,
-        "LC": 10,
+        "LC": 9,
         "VU": 1,
         "DD": 3
       },
-      "colDescribed": 50,
+      "colDescribed": 25,
       "colNe": 1
     }
   ],

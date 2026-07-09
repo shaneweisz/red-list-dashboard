@@ -328,13 +328,22 @@ type FilterRank = "class" | "order" | "family" | "genus" | "species";
 const COL_TAXON_ID_MAP: Record<string, string> = COL_TAXON_IDS;
 
 // A container rank (class/order/family/genus) links to a species-level search scoped
-// to that taxon, with the same extant + accepted/provisionally-accepted definition
-// colDescribed itself uses — so clicking through shows exactly the species being
-// counted, not just a static profile page. A species-rank name has no "species
-// under it" to browse, so it links straight to its own taxon page instead.
+// to that taxon, with the same extant + accepted-only definition colDescribed itself
+// uses (SPECIES_STATUS in scripts/build-backbone.ts) — so clicking through shows
+// exactly the species being counted, not just a static profile page. Deliberately
+// omits status=provisionally%20accepted: colDescribed excludes those names (they
+// overshoot IUCN's own described-species totals — see the SPECIES_STATUS comment),
+// so including them here would make the count look wrong on click-through even
+// though it isn't. Known gap: a handful of nodes' colDescribed also includes
+// CoL-extinct species IUCN has confirmed EX/EW (see createExEwAssessedTable in
+// build-taxa-summary.ts) — those don't show up here since CoL's extinct=0/1 filter
+// can't express "extinct, but only the IUCN-confirmed ones," so a clicked-through
+// count can undercount colDescribed by that node's EX/EW additions. A species-rank
+// name has no "species under it" to browse, so it links straight to its own taxon
+// page instead.
 function colHref(rank: FilterRank, colId: string): string {
   if (rank === "species") return `${COL_SOURCE_URL}data/taxon/${colId}`;
-  return `${COL_SOURCE_URL}data/search?TAXON_ID=${colId}&extinct=0&rank=species&status=accepted&status=provisionally%20accepted`;
+  return `${COL_SOURCE_URL}data/search?TAXON_ID=${colId}&extinct=0&rank=species&status=accepted`;
 }
 
 /** One piece of a describeFilter() result: plain text, or a taxon name to link. */
