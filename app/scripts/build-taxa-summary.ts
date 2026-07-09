@@ -149,9 +149,28 @@ function filterToSql(filter: NodeFilter, nodeId?: string): string {
   return conds.join(" AND ");
 }
 
+type PrimaryDim = { field: keyof NodeFilter; rank: string; names: string[] };
+
+// Whichever include field enumerates this node's species is its "primary dimension"
+// — the tree never sets more than one of these on a node (verified by
+// taxonomy-tree.test.ts), so picking the first non-empty one is unambiguous.
+function primaryDimension(filter: NodeFilter): PrimaryDim | null {
+  if (filter.classNames?.length) return { field: "classNames", rank: "class", names: filter.classNames };
+  if (filter.orderNames?.length) return { field: "orderNames", rank: "order", names: filter.orderNames };
+  if (filter.families?.length) return { field: "families", rank: "family", names: filter.families };
+  if (filter.genera?.length) return { field: "genera", rank: "genus", names: filter.genera };
+  if (filter.speciesNames?.length) return { field: "speciesNames", rank: "species", names: filter.speciesNames };
+  return null;
+}
+
 // Attach CoL counts (colDescribed / colNe) to every node-children summary — same
 // universe + assessed-by-col_id logic as the per-group counts, filtered per node so
-// sub-groups (e.g. mammals → rodents) get real numbers instead of "—".
+// sub-groups (e.g. mammals → rodents) get real numbers instead of "—". Also attaches
+// a per-name breakdown of colDescribed for nodes whose primary dimension enumerates
+// more than one name (e.g. Pinniped SG: Otariidae/Phocidae/Odobenidae) — each count
+// re-runs filterToSql narrowed to that one name (keeping every other clause, so a
+// domestic-form exclusion or an overlapping node's excludeGenera still applies),
+// which is why the entries sum to exactly colDescribed.
 async function attachColCounts(summaries: Record<string, NodeSummary[]>): Promise<void> {
   const link = path.join(DATA_DIR, "species_link.parquet");
   const speciesGlob = path.join(DATA_DIR, "species", "**", "*.parquet");
@@ -164,6 +183,7 @@ async function attachColCounts(summaries: Record<string, NodeSummary[]>): Promis
     `CREATE TEMP TABLE assessed_cids AS SELECT DISTINCT col_id FROM read_parquet('${link}') WHERE src = 'redlist' AND col_id IS NOT NULL`
   );
   let n = 0;
+  let breakdownQueries = 0;
   for (const children of Object.values(summaries)) {
     for (const child of children) {
       const node = NODE_INDEX.get(child.id);
@@ -176,9 +196,24 @@ async function attachColCounts(summaries: Record<string, NodeSummary[]>): Promis
       child.colDescribed = Number(rows[0].col_described);
       child.colNe = Number(rows[0].col_ne);
       n++;
+
+      const dim = COL_SPECIES_NAME_OVERRIDES[node.id] ? null : primaryDimension(node.filter);
+      if (dim && dim.names.length > 1) {
+        const breakdown: { name: string; count: number }[] = [];
+        for (const name of dim.names) {
+          const narrowed: NodeFilter = { ...node.filter, [dim.field]: [name] };
+          const bRows = await (await conn.run(`
+            SELECT count(*) FILTER (in_base AND extinct IS NOT TRUE AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL}) AS n
+            FROM read_parquet('${speciesGlob}', hive_partitioning=true)
+            WHERE ${filterToSql(narrowed, node.id)}`)).getRowObjects();
+          breakdown.push({ name, count: Number(bRows[0].n) });
+          breakdownQueries++;
+        }
+        child.colBreakdown = breakdown;
+      }
     }
   }
-  console.log(`  CoL node counts: attached to ${n} node summaries.`);
+  console.log(`  CoL node counts: attached to ${n} node summaries (${breakdownQueries} per-name breakdown queries).`);
 }
 
 export async function run(): Promise<void> {

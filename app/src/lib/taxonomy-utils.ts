@@ -287,6 +287,8 @@ export function getNodeDef(nodeId: string): { node: TaxonomyNode; parentId: stri
 
 // ─── Plain-language filter description (for the "# Described Species" tooltip) ──
 
+export const COL_SOURCE_URL = "https://www.catalogueoflife.org/";
+
 const capitalize = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 
 // Binomial convention: capitalize the genus, leave the species epithet lowercase.
@@ -294,53 +296,80 @@ const capitalizeSpeciesName = (s: string): string => s.split(" ").map((w, i) => 
 
 type FilterRank = "class" | "order" | "family" | "genus" | "species";
 
-// name → CoL taxon id (catalogueoflife.org/data/taxon/<id>), built by
-// scripts/build-col-taxon-ids.ts from the taxonomy tree + backbone.parquet. Only
-// covers names actually referenced by a SpeciesFilter somewhere in the tree — not
-// every name resolves (CoL classifies a few things differently, e.g. Bison is lumped
-// into Bos), in which case the segment below just has no colId and renders as plain text.
+// name → CoL taxon id, built by scripts/build-col-taxon-ids.ts from the taxonomy tree
+// + backbone.parquet. Only covers names actually referenced by a SpeciesFilter
+// somewhere in the tree — not every name resolves (CoL classifies a few things
+// differently, e.g. Bison is lumped into Bos), in which case the segment below just
+// has no href and renders as plain text.
 const COL_TAXON_ID_MAP: Record<string, string> = COL_TAXON_IDS;
+
+// A container rank (class/order/family/genus) links to a species-level search scoped
+// to that taxon, with the same extant + accepted/provisionally-accepted definition
+// colDescribed itself uses — so clicking through shows exactly the species being
+// counted, not just a static profile page. A species-rank name has no "species
+// under it" to browse, so it links straight to its own taxon page instead.
+function colHref(rank: FilterRank, colId: string): string {
+  if (rank === "species") return `${COL_SOURCE_URL}data/taxon/${colId}`;
+  return `${COL_SOURCE_URL}data/search?TAXON_ID=${colId}&extinct=0&rank=species&status=accepted&status=provisionally%20accepted`;
+}
 
 /** One piece of a describeFilter() result: plain text, or a taxon name to link. */
 export interface DescribeFilterSegment {
   text: string;
   /** Present when this segment is a taxon name we could resolve to a CoL page. */
-  colId?: string;
+  href?: string;
 }
 
 // Every name gets its own segment (linked when we have a CoL id for it) — no capping,
 // so a skeptical reviewer can see and click through to every single name, even for a
-// long list like Antelope SG's 14-genus excludeGenera.
-function joinSegments(rank: FilterRank, names: string[]): DescribeFilterSegment[] {
+// long list like Antelope SG's 14-genus excludeGenera. `counts` (only passed for the
+// primary include dimension — see describeFilter) appends each name's own share of
+// the total as a separate plain-text segment, e.g. "Otariidae (12)".
+function joinSegments(rank: FilterRank, names: string[], counts?: Record<string, number>): DescribeFilterSegment[] {
   const segs: DescribeFilterSegment[] = [];
   names.forEach((n, i) => {
     if (i > 0) segs.push({ text: ", " });
-    segs.push({ text: capitalize(n), colId: COL_TAXON_ID_MAP[`${rank}:${n.toLowerCase()}`] });
+    const colId = COL_TAXON_ID_MAP[`${rank}:${n.toLowerCase()}`];
+    segs.push({ text: capitalize(n), href: colId ? colHref(rank, colId) : undefined });
+    const count = counts?.[n.toLowerCase()];
+    if (count != null) segs.push({ text: ` (${count})` });
   });
   return segs;
 }
 
-function speciesSegments(names: string[]): DescribeFilterSegment[] {
+function speciesSegments(names: string[], counts?: Record<string, number>): DescribeFilterSegment[] {
   const segs: DescribeFilterSegment[] = [];
   names.forEach((n, i) => {
     if (i > 0) segs.push({ text: ", " });
-    segs.push({ text: capitalizeSpeciesName(n), colId: COL_TAXON_ID_MAP[`species:${n.toLowerCase()}`] });
+    const colId = COL_TAXON_ID_MAP[`species:${n.toLowerCase()}`];
+    segs.push({ text: capitalizeSpeciesName(n), href: colId ? colHref("species", colId) : undefined });
+    const count = counts?.[n.toLowerCase()];
+    if (count != null) segs.push({ text: ` (${count})` });
   });
   return segs;
 }
 
 /**
  * Render a node's SpeciesFilter as a short, human-readable description for the
- * "# Described Species" tooltip — e.g. "Family: Felidae" or "Genus: Bos, Bubalus,
- * Pseudoryx (excluding Bison, Bos taurus)". Checks NODE_DESCRIPTION_OVERRIDES first
- * for filters too broad/exclusion-heavy to summarize automatically (e.g. the SSC
- * "No SSC Group" catch-all), then appends a COL_NODE_TOOLTIP_NOTES note (if any)
- * explaining a CoL-specific quirk (lumped genus, domestic-form exclusion, coverage gap).
+ * "# Described Species" tooltip — e.g. "Family: Felidae" or "Genus: Bos (11),
+ * Bubalus (1), Pseudoryx (1) (excluding Bison, Bos taurus)". Checks
+ * NODE_DESCRIPTION_OVERRIDES first for filters too broad/exclusion-heavy to
+ * summarize automatically (e.g. the SSC "No SSC Group" catch-all), then appends a
+ * COL_NODE_TOOLTIP_NOTES note (if any) explaining a CoL-specific quirk (lumped
+ * genus, domestic-form exclusion, coverage gap).
  *
  * Returns segments rather than a plain string so the caller can render each taxon
- * name as a link to its Catalogue of Life page where we have one (see COL_TAXON_IDS).
+ * name as a link to its Catalogue of Life page where we have one (see
+ * COL_TAXON_IDS). `breakdown` (optional, from NodeSummary.colBreakdown — a build-time
+ * per-name recount of colDescribed) attaches each name's own count in the primary
+ * include dimension only; excluded names never get a count (they're subtracted,
+ * not summed).
  */
-export function describeFilter(filter: SpeciesFilter, nodeId?: string): DescribeFilterSegment[] {
+export function describeFilter(
+  filter: SpeciesFilter,
+  nodeId?: string,
+  breakdown?: { name: string; count: number }[]
+): DescribeFilterSegment[] {
   const override = nodeId ? NODE_DESCRIPTION_OVERRIDES[nodeId] : undefined;
   const note = nodeId ? COL_NODE_TOOLTIP_NOTES[nodeId] : undefined;
 
@@ -350,13 +379,17 @@ export function describeFilter(filter: SpeciesFilter, nodeId?: string): Describe
     return segs;
   }
 
+  const counts = breakdown?.length
+    ? Object.fromEntries(breakdown.map((b) => [b.name.toLowerCase(), b.count]))
+    : undefined;
+
   const segs: DescribeFilterSegment[] = [];
   let hasPart = false;
   const addPart = (label: string, rank: FilterRank, names: string[] | undefined) => {
     if (!names?.length) return;
     if (hasPart) segs.push({ text: "; " });
     hasPart = true;
-    segs.push({ text: `${label}: ` }, ...joinSegments(rank, names));
+    segs.push({ text: `${label}: ` }, ...joinSegments(rank, names, counts));
   };
   addPart("Class", "class", filter.classNames);
   addPart("Order", "order", filter.orderNames);
@@ -365,7 +398,7 @@ export function describeFilter(filter: SpeciesFilter, nodeId?: string): Describe
   if (filter.speciesNames?.length) {
     if (hasPart) segs.push({ text: "; " });
     hasPart = true;
-    segs.push({ text: "Species: " }, ...speciesSegments(filter.speciesNames));
+    segs.push({ text: "Species: " }, ...speciesSegments(filter.speciesNames, counts));
   }
   if (!hasPart) segs.push({ text: "All species in this group" });
 

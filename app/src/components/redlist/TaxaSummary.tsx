@@ -7,7 +7,7 @@ import { FaInfoCircle, FaExpandAlt, FaCompressAlt, FaChevronRight } from "react-
 import { HiOutlineAdjustmentsHorizontal } from "react-icons/hi2";
 import TaxaIcon from "@/components/TaxaIcon";
 import { CATEGORY_COLORS, CATEGORY_NAMES, CATEGORY_ORDER } from "@/config/taxa";
-import { hasChildren, findNode, getAncestors, stripNodePrefix, OFFICIAL_IUCN_DESCRIBED_NODE_IDS, describeFilter } from "@/lib/taxonomy-utils";
+import { hasChildren, findNode, getAncestors, stripNodePrefix, OFFICIAL_IUCN_DESCRIBED_NODE_IDS, describeFilter, COL_SOURCE_URL } from "@/lib/taxonomy-utils";
 import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
 interface Table1aRowData {
   group: string;
@@ -25,6 +25,7 @@ interface Table1aRowData {
   medianGbifObsPerSpecies?: number;
   colDescribed?: number;
   colNe?: number;
+  colBreakdown?: { name: string; count: number }[];
 }
 
 interface Table1aSectionData {
@@ -33,7 +34,6 @@ interface Table1aSectionData {
 }
 
 const IUCN_SOURCE_URL = "https://nc.iucnredlist.org/redlist/content/attachment_files/2025-2_RL_Table1a.pdf";
-const COL_SOURCE_URL = "https://www.catalogueoflife.org/";
 
 // Ordered categories for the breakdown bar (most threatened first)
 const BAR_CATEGORIES = Object.keys(CATEGORY_ORDER).sort(
@@ -72,6 +72,7 @@ interface SubGroupSummary {
   byCategory: Record<string, number>;
   colDescribed?: number;
   colNe?: number;
+  colBreakdown?: { name: string; count: number }[];
 }
 
 interface Props {
@@ -206,7 +207,7 @@ function DisabledAllTooltip() {
 // between a hover trigger and its target does this, there's no CSS-only fix that
 // survives a real mouse gap. Portal-rendered (mirrors the column-visibility menu
 // pattern above) so it isn't clipped by the table's scroll/sticky ancestors.
-function DescribedInfoIcon({ nodeId, source }: { nodeId: string; source: "iucn" | "col" }) {
+function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; source: "iucn" | "col"; breakdown?: { name: string; count: number }[] }) {
   const node = findNode(nodeId);
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -279,11 +280,11 @@ function DescribedInfoIcon({ nodeId, source }: { nodeId: string; source: "iucn" 
           ) : (
             <>
               <p>
-                {describeFilter(node.filter, nodeId).map((seg, i) =>
-                  seg.colId ? (
+                {describeFilter(node.filter, nodeId, breakdown).map((seg, i) =>
+                  seg.href ? (
                     <a
                       key={i}
-                      href={`${COL_SOURCE_URL}data/taxon/${seg.colId}`}
+                      href={seg.href}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-blue-300 hover:text-blue-200 underline"
@@ -564,6 +565,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           gbifNeSpeciesCount: sg.gbifNeSpeciesCount,
           colDescribed: sg.colDescribed,
           colNe: sg.colNe,
+          colBreakdown: sg.colBreakdown,
         }));
         // Sort by # assessed descending, but pin the remainder row ("not claimed
         // by a named group") to the bottom regardless of its own count — it's a
@@ -1101,7 +1103,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           <td className={numericTdNoDividerClasses}>
             <span className="text-sm text-zinc-700 dark:text-zinc-300 tabular-nums inline-flex items-center gap-1">
               {sgDescribed.toLocaleString()}
-              <DescribedInfoIcon nodeId={sg.id} source={sgDescribedSource} />
+              <DescribedInfoIcon nodeId={sg.id} source={sgDescribedSource} breakdown={sg.colBreakdown} />
             </span>
           </td>
         )}
@@ -1173,7 +1175,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           <td className={numericTdNoDividerClasses}>
             <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums inline-flex items-center gap-1">
               {sgDescribed.toLocaleString()}
-              <DescribedInfoIcon nodeId={sg.id} source={sgDescribedSource} />
+              <DescribedInfoIcon nodeId={sg.id} source={sgDescribedSource} breakdown={sg.colBreakdown} />
             </span>
           </td>
         )}
@@ -1267,7 +1269,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             <td className={numericTdNoDividerClasses}>
               <span className="text-sm text-zinc-600 dark:text-zinc-400 tabular-nums inline-flex items-center gap-1">
                 {sgDescribed.toLocaleString()}
-                <DescribedInfoIcon nodeId={sg.id} source={sgDescribedSource} />
+                <DescribedInfoIcon nodeId={sg.id} source={sgDescribedSource} breakdown={sg.colBreakdown} />
               </span>
             </td>
           )}
@@ -1755,7 +1757,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                             <td className={numericTdNoDividerClasses}>
                               <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums inline-flex items-center gap-1">
                                 {row.estimatedDescribed.toLocaleString()}
-                                <DescribedInfoIcon nodeId={row.group} source={row.describedSource} />
+                                <DescribedInfoIcon nodeId={row.group} source={row.describedSource} breakdown={row.colBreakdown} />
                               </span>
                             </td>
                           )}

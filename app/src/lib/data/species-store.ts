@@ -642,6 +642,13 @@ export interface NodeSummary {
   // artifacts weren't present at build time.
   colDescribed?: number;
   colNe?: number;
+  // Per-name breakdown of colDescribed, for nodes whose filter enumerates more than
+  // one name in its primary include dimension (e.g. Pinniped SG's families
+  // [otariidae, phocidae, odobenidae]) — each entry's count uses the same filter
+  // (including excludes) narrowed to that one name, so the entries sum to
+  // colDescribed exactly. Undefined for single-name filters (redundant with the
+  // total) or when the CoL artifacts weren't present at build time.
+  colBreakdown?: { name: string; count: number }[];
 }
 
 const CURRENT_YEAR = new Date().getFullYear();
