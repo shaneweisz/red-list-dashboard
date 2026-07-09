@@ -301,7 +301,23 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
                 <a href={COL_SOURCE_URL} target="_blank" rel="noopener noreferrer" className="text-blue-300 hover:text-blue-200 underline">
                   Catalogue of Life 2025
                 </a>
-                . Click this row to see the species list (toggle &quot;Unassessed&quot; for the rest).
+                .{" "}
+                <button
+                  type="button"
+                  className="text-blue-300 hover:text-blue-200 underline"
+                  onClick={() => {
+                    // The popover is portal-rendered to document.body, so it isn't a DOM
+                    // descendant of the row — btnRef (the trigger icon, NOT portaled) still
+                    // is, so use it to reach the row and replay its own click handler
+                    // instead of duplicating that per-context navigation logic here.
+                    const tr = btnRef.current?.closest("tr");
+                    setOpen(false);
+                    tr?.click();
+                  }}
+                >
+                  Click this row
+                </button>
+                {" "}to see the species list (toggle &quot;Unassessed&quot; for the rest).
               </p>
             </>
           )}
