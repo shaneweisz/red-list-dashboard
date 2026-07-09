@@ -596,31 +596,38 @@
       "colBreakdown": [
         {
           "name": "diprotodontia",
-          "count": 154
+          "count": 154,
+          "neCount": 8
         },
         {
           "name": "dasyuromorphia",
-          "count": 77
+          "count": 77,
+          "neCount": 3
         },
         {
           "name": "didelphimorphia",
-          "count": 121
+          "count": 121,
+          "neCount": 29
         },
         {
           "name": "peramelemorphia",
-          "count": 24
+          "count": 24,
+          "neCount": 1
         },
         {
           "name": "paucituberculata",
-          "count": 7
+          "count": 7,
+          "neCount": 0
         },
         {
           "name": "notoryctemorphia",
-          "count": 2
+          "count": 2,
+          "neCount": 0
         },
         {
           "name": "microbiotheria",
-          "count": 1
+          "count": 1,
+          "neCount": 0
         }
       ]
     },
@@ -791,11 +798,13 @@
       "colBreakdown": [
         {
           "name": "diceros",
-          "count": 1
+          "count": 1,
+          "neCount": 0
         },
         {
           "name": "ceratotherium",
-          "count": 1
+          "count": 1,
+          "neCount": 0
         }
       ]
     },
@@ -815,11 +824,13 @@
       "colBreakdown": [
         {
           "name": "rhinoceros",
-          "count": 2
+          "count": 2,
+          "neCount": 0
         },
         {
           "name": "dicerorhinus",
-          "count": 1
+          "count": 1,
+          "neCount": 0
         }
       ]
     },
@@ -841,15 +852,18 @@
       "colBreakdown": [
         {
           "name": "bos",
-          "count": 8
+          "count": 8,
+          "neCount": 2
         },
         {
           "name": "bubalus",
-          "count": 3
+          "count": 3,
+          "neCount": 0
         },
         {
           "name": "pseudoryx",
-          "count": 1
+          "count": 1,
+          "neCount": 0
         }
       ]
     },
@@ -873,19 +887,23 @@
       "colBreakdown": [
         {
           "name": "afrosoricida",
-          "count": 55
+          "count": 55,
+          "neCount": 0
         },
         {
           "name": "macroscelidea",
-          "count": 20
+          "count": 20,
+          "neCount": 1
         },
         {
           "name": "hyracoidea",
-          "count": 6
+          "count": 6,
+          "neCount": 1
         },
         {
           "name": "tubulidentata",
-          "count": 1
+          "count": 1,
+          "neCount": 0
         }
       ]
     },
@@ -909,11 +927,13 @@
       "colBreakdown": [
         {
           "name": "pilosa",
-          "count": 16
+          "count": 16,
+          "neCount": 0
         },
         {
           "name": "cingulata",
-          "count": 21
+          "count": 21,
+          "neCount": 2
         }
       ]
     },
@@ -957,23 +977,28 @@
       "colBreakdown": [
         {
           "name": "diprotodontia",
-          "count": 154
+          "count": 154,
+          "neCount": 8
         },
         {
           "name": "dasyuromorphia",
-          "count": 77
+          "count": 77,
+          "neCount": 3
         },
         {
           "name": "peramelemorphia",
-          "count": 24
+          "count": 24,
+          "neCount": 1
         },
         {
           "name": "notoryctemorphia",
-          "count": 2
+          "count": 2,
+          "neCount": 0
         },
         {
           "name": "monotremata",
-          "count": 5
+          "count": 5,
+          "neCount": 0
         }
       ]
     },
@@ -1072,51 +1097,63 @@
       "colBreakdown": [
         {
           "name": "capra",
-          "count": 10
+          "count": 10,
+          "neCount": 1
         },
         {
           "name": "ovis",
-          "count": 21
+          "count": 21,
+          "neCount": 15
         },
         {
           "name": "ovibos",
-          "count": 1
+          "count": 1,
+          "neCount": 0
         },
         {
           "name": "rupicapra",
-          "count": 5
+          "count": 5,
+          "neCount": 3
         },
         {
           "name": "naemorhedus",
-          "count": 6
+          "count": 6,
+          "neCount": 3
         },
         {
           "name": "capricornis",
-          "count": 7
+          "count": 7,
+          "neCount": 3
         },
         {
           "name": "oreamnos",
-          "count": 1
+          "count": 1,
+          "neCount": 0
         },
         {
           "name": "budorcas",
-          "count": 4
+          "count": 4,
+          "neCount": 3
         },
         {
           "name": "pantholops",
-          "count": 1
+          "count": 1,
+          "neCount": 0
         },
         {
           "name": "ammotragus",
-          "count": 1
+          "count": 1,
+          "neCount": 0
         },
         {
           "name": "hemitragus",
-          "count": 1
+          "count": 1,
+          "neCount": 0
         },
         {
           "name": "nilgiritragus",
-          "count": 1
+          "count": 1,
+          "neCount": 0
         }
       ]
     },
@@ -1156,63 +1193,78 @@
       "colBreakdown": [
         {
           "name": "balaenidae",
-          "count": 4
+          "count": 4,
+          "neCount": 0
         },
         {
           "name": "balaenopteridae",
-          "count": 9
+          "count": 9,
+          "neCount": 0
         },
         {
           "name": "eschrichtiidae",
-          "count": 1
+          "count": 1,
+          "neCount": 0
         },
         {
           "name": "physeteridae",
-          "count": 1
+          "count": 1,
+          "neCount": 0
         },
         {
           "name": "kogiidae",
-          "count": 2
+          "count": 2,
+          "neCount": 0
         },
         {
           "name": "ziphiidae",
-          "count": 0
+          "count": 0,
+          "neCount": 0
         },
         {
           "name": "hyperoodontidae",
-          "count": 24
+          "count": 24,
+          "neCount": 0
         },
         {
           "name": "neobalaenidae",
-          "count": 1
+          "count": 1,
+          "neCount": 0
         },
         {
           "name": "delphinidae",
-          "count": 40
+          "count": 40,
+          "neCount": 3
         },
         {
           "name": "monodontidae",
-          "count": 2
+          "count": 2,
+          "neCount": 0
         },
         {
           "name": "phocoenidae",
-          "count": 7
+          "count": 7,
+          "neCount": 0
         },
         {
           "name": "iniidae",
-          "count": 1
+          "count": 1,
+          "neCount": 0
         },
         {
           "name": "lipotidae",
-          "count": 1
+          "count": 1,
+          "neCount": 0
         },
         {
           "name": "platanistidae",
-          "count": 2
+          "count": 2,
+          "neCount": 0
         },
         {
           "name": "pontoporiidae",
-          "count": 1
+          "count": 1,
+          "neCount": 0
         }
       ]
     },
@@ -1335,15 +1387,18 @@
       "colBreakdown": [
         {
           "name": "didelphimorphia",
-          "count": 121
+          "count": 121,
+          "neCount": 29
         },
         {
           "name": "paucituberculata",
-          "count": 7
+          "count": 7,
+          "neCount": 0
         },
         {
           "name": "microbiotheria",
-          "count": 1
+          "count": 1,
+          "neCount": 0
         }
       ]
     },
@@ -1365,31 +1420,38 @@
       "colBreakdown": [
         {
           "name": "lutra",
-          "count": 2
+          "count": 2,
+          "neCount": 0
         },
         {
           "name": "pteronura",
-          "count": 1
+          "count": 1,
+          "neCount": 0
         },
         {
           "name": "aonyx",
-          "count": 3
+          "count": 3,
+          "neCount": 0
         },
         {
           "name": "lutrogale",
-          "count": 1
+          "count": 1,
+          "neCount": 0
         },
         {
           "name": "enhydra",
-          "count": 1
+          "count": 1,
+          "neCount": 0
         },
         {
           "name": "hydrictis",
-          "count": 1
+          "count": 1,
+          "neCount": 0
         },
         {
           "name": "lontra",
-          "count": 4
+          "count": 4,
+          "neCount": 0
         }
       ]
     },
@@ -1442,15 +1504,18 @@
       "colBreakdown": [
         {
           "name": "otariidae",
-          "count": 15
+          "count": 15,
+          "neCount": 0
         },
         {
           "name": "phocidae",
-          "count": 19
+          "count": 19,
+          "neCount": 0
         },
         {
           "name": "odobenidae",
-          "count": 1
+          "count": 1,
+          "neCount": 0
         }
       ]
     },
@@ -1508,35 +1573,43 @@
       "colBreakdown": [
         {
           "name": "mustelidae",
-          "count": 52
+          "count": 52,
+          "neCount": 3
         },
         {
           "name": "viverridae",
-          "count": 36
+          "count": 36,
+          "neCount": 1
         },
         {
           "name": "herpestidae",
-          "count": 34
+          "count": 34,
+          "neCount": 0
         },
         {
           "name": "eupleridae",
-          "count": 7
+          "count": 7,
+          "neCount": 0
         },
         {
           "name": "procyonidae",
-          "count": 13
+          "count": 13,
+          "neCount": 0
         },
         {
           "name": "mephitidae",
-          "count": 14
+          "count": 14,
+          "neCount": 3
         },
         {
           "name": "nandiniidae",
-          "count": 1
+          "count": 1,
+          "neCount": 0
         },
         {
           "name": "prionodontidae",
-          "count": 2
+          "count": 2,
+          "neCount": 0
         }
       ]
     },
@@ -1561,15 +1634,18 @@
       "colBreakdown": [
         {
           "name": "rodentia",
-          "count": 2388
+          "count": 2388,
+          "neCount": 86
         },
         {
           "name": "eulipotyphla",
-          "count": 589
+          "count": 589,
+          "neCount": 74
         },
         {
           "name": "scandentia",
-          "count": 23
+          "count": 23,
+          "neCount": 0
         }
       ]
     },
@@ -1602,11 +1678,13 @@
       "colBreakdown": [
         {
           "name": "lama",
-          "count": 1
+          "count": 1,
+          "neCount": 0
         },
         {
           "name": "vicugna",
-          "count": 1
+          "count": 1,
+          "neCount": 0
         }
       ]
     },
@@ -1855,11 +1933,13 @@
       "colBreakdown": [
         {
           "name": "myxini",
-          "count": 92
+          "count": 92,
+          "neCount": 11
         },
         {
           "name": "petromyzonti",
-          "count": 49
+          "count": 49,
+          "neCount": 6
         }
       ]
     }
@@ -2042,27 +2122,33 @@
       "colBreakdown": [
         {
           "name": "trematoda",
-          "count": 12127
+          "count": 12127,
+          "neCount": 12127
         },
         {
           "name": "monogenea",
-          "count": 5862
+          "count": 5862,
+          "neCount": 5862
         },
         {
           "name": "cestoda",
-          "count": 3077
+          "count": 3077,
+          "neCount": 3077
         },
         {
           "name": "turbellaria",
-          "count": 13
+          "count": 13,
+          "neCount": 13
         },
         {
           "name": "rhabditophora",
-          "count": 0
+          "count": 0,
+          "neCount": 0
         },
         {
           "name": "catenulida",
-          "count": 0
+          "count": 0,
+          "neCount": 0
         }
       ]
     },
@@ -2079,11 +2165,13 @@
       "colBreakdown": [
         {
           "name": "chromadorea",
-          "count": 12738
+          "count": 12738,
+          "neCount": 12738
         },
         {
           "name": "enoplea",
-          "count": 7199
+          "count": 7199,
+          "neCount": 7199
         }
       ]
     },
@@ -2109,11 +2197,13 @@
       "colBreakdown": [
         {
           "name": "polychaeta",
-          "count": 13025
+          "count": 13025,
+          "neCount": 13023
         },
         {
           "name": "clitellata",
-          "count": 7751
+          "count": 7751,
+          "neCount": 7420
         }
       ]
     },
@@ -2138,19 +2228,23 @@
       "colBreakdown": [
         {
           "name": "diplopoda",
-          "count": 12969
+          "count": 12969,
+          "neCount": 12722
         },
         {
           "name": "chilopoda",
-          "count": 3329
+          "count": 3329,
+          "neCount": 3303
         },
         {
           "name": "symphyla",
-          "count": 227
+          "count": 227,
+          "neCount": 227
         },
         {
           "name": "pauropoda",
-          "count": 992
+          "count": 992,
+          "neCount": 992
         }
       ]
     },
@@ -2172,19 +2266,23 @@
       "colBreakdown": [
         {
           "name": "demospongiae",
-          "count": 8196
+          "count": 8196,
+          "neCount": 8155
         },
         {
           "name": "calcarea",
-          "count": 920
+          "count": 920,
+          "neCount": 918
         },
         {
           "name": "hexactinellida",
-          "count": 745
+          "count": 745,
+          "neCount": 743
         },
         {
           "name": "homoscleromorpha",
-          "count": 141
+          "count": 141,
+          "neCount": 141
         }
       ]
     },
@@ -2207,27 +2305,33 @@
       "colBreakdown": [
         {
           "name": "hydrozoa",
-          "count": 3988
+          "count": 3988,
+          "neCount": 3973
         },
         {
           "name": "myxozoa",
-          "count": 3011
+          "count": 3011,
+          "neCount": 3011
         },
         {
           "name": "anthozoa",
-          "count": 1633
+          "count": 1633,
+          "neCount": 1611
         },
         {
           "name": "scyphozoa",
-          "count": 261
+          "count": 261,
+          "neCount": 261
         },
         {
           "name": "staurozoa",
-          "count": 52
+          "count": 52,
+          "neCount": 52
         },
         {
           "name": "cubozoa",
-          "count": 55
+          "count": 55,
+          "neCount": 55
         }
       ]
     },
@@ -2251,23 +2355,28 @@
       "colBreakdown": [
         {
           "name": "asteroidea",
-          "count": 2052
+          "count": 2052,
+          "neCount": 2050
         },
         {
           "name": "echinoidea",
-          "count": 1018
+          "count": 1018,
+          "neCount": 1017
         },
         {
           "name": "holothuroidea",
-          "count": 1831
+          "count": 1831,
+          "neCount": 1486
         },
         {
           "name": "ophiuroidea",
-          "count": 2170
+          "count": 2170,
+          "neCount": 2170
         },
         {
           "name": "crinoidea",
-          "count": 687
+          "count": 687,
+          "neCount": 687
         }
       ]
     },
@@ -2284,15 +2393,18 @@
       "colBreakdown": [
         {
           "name": "gymnolaemata",
-          "count": 4884
+          "count": 4884,
+          "neCount": 4884
         },
         {
           "name": "stenolaemata",
-          "count": 546
+          "count": 546,
+          "neCount": 546
         },
         {
           "name": "phylactolaemata",
-          "count": 65
+          "count": 65,
+          "neCount": 65
         }
       ]
     },
@@ -2309,19 +2421,23 @@
       "colBreakdown": [
         {
           "name": "ascidiacea",
-          "count": 3000
+          "count": 3000,
+          "neCount": 3000
         },
         {
           "name": "thaliacea",
-          "count": 79
+          "count": 79,
+          "neCount": 79
         },
         {
           "name": "appendicularia",
-          "count": 68
+          "count": 68,
+          "neCount": 68
         },
         {
           "name": "leptocardii",
-          "count": 31
+          "count": 31,
+          "neCount": 31
         }
       ]
     },
@@ -2366,103 +2482,128 @@
       "colBreakdown": [
         {
           "name": "eurotiales",
-          "count": 1773
+          "count": 1773,
+          "neCount": 1769
         },
         {
           "name": "hypocreales",
-          "count": 0
+          "count": 0,
+          "neCount": 0
         },
         {
           "name": "xylariales",
-          "count": 3651
+          "count": 3651,
+          "neCount": 3643
         },
         {
           "name": "pleosporales",
-          "count": 12087
+          "count": 12087,
+          "neCount": 12086
         },
         {
           "name": "capnodiales",
-          "count": 632
+          "count": 632,
+          "neCount": 632
         },
         {
           "name": "helotiales",
-          "count": 8546
+          "count": 8546,
+          "neCount": 8541
         },
         {
           "name": "orbiliales",
-          "count": 798
+          "count": 798,
+          "neCount": 798
         },
         {
           "name": "pezizales",
-          "count": 3025
+          "count": 3025,
+          "neCount": 3006
         },
         {
           "name": "rhytismatales",
-          "count": 720
+          "count": 720,
+          "neCount": 719
         },
         {
           "name": "leotiales",
-          "count": 259
+          "count": 259,
+          "neCount": 259
         },
         {
           "name": "dothideales",
-          "count": 1194
+          "count": 1194,
+          "neCount": 1194
         },
         {
           "name": "chaetothyriales",
-          "count": 828
+          "count": 828,
+          "neCount": 827
         },
         {
           "name": "verrucariales",
-          "count": 652
+          "count": 652,
+          "neCount": 652
         },
         {
           "name": "arthoniales",
-          "count": 1121
+          "count": 1121,
+          "neCount": 1118
         },
         {
           "name": "ostropales",
-          "count": 2718
+          "count": 2718,
+          "neCount": 2711
         },
         {
           "name": "pertusariales",
-          "count": 983
+          "count": 983,
+          "neCount": 981
         },
         {
           "name": "lecanorales",
-          "count": 4741
+          "count": 4741,
+          "neCount": 4701
         },
         {
           "name": "peltigerales",
-          "count": 1067
+          "count": 1067,
+          "neCount": 1043
         },
         {
           "name": "teloschistales",
-          "count": 933
+          "count": 933,
+          "neCount": 932
         },
         {
           "name": "caliciales",
-          "count": 1193
+          "count": 1193,
+          "neCount": 1183
         },
         {
           "name": "acarosporales",
-          "count": 239
+          "count": 239,
+          "neCount": 238
         },
         {
           "name": "geoglossales",
-          "count": 105
+          "count": 105,
+          "neCount": 102
         },
         {
           "name": "cyttariales",
-          "count": 15
+          "count": 15,
+          "neCount": 13
         },
         {
           "name": "coryneliales",
-          "count": 64
+          "count": 64,
+          "neCount": 63
         },
         {
           "name": "trypetheliales",
-          "count": 594
+          "count": 594,
+          "neCount": 591
         }
       ]
     },
@@ -2822,27 +2963,33 @@
       "colBreakdown": [
         {
           "name": "trematoda",
-          "count": 12127
+          "count": 12127,
+          "neCount": 12127
         },
         {
           "name": "monogenea",
-          "count": 5862
+          "count": 5862,
+          "neCount": 5862
         },
         {
           "name": "cestoda",
-          "count": 3077
+          "count": 3077,
+          "neCount": 3077
         },
         {
           "name": "turbellaria",
-          "count": 13
+          "count": 13,
+          "neCount": 13
         },
         {
           "name": "rhabditophora",
-          "count": 0
+          "count": 0,
+          "neCount": 0
         },
         {
           "name": "catenulida",
-          "count": 0
+          "count": 0,
+          "neCount": 0
         }
       ]
     },
@@ -2859,11 +3006,13 @@
       "colBreakdown": [
         {
           "name": "chromadorea",
-          "count": 12738
+          "count": 12738,
+          "neCount": 12738
         },
         {
           "name": "enoplea",
-          "count": 7199
+          "count": 7199,
+          "neCount": 7199
         }
       ]
     },
@@ -2889,11 +3038,13 @@
       "colBreakdown": [
         {
           "name": "polychaeta",
-          "count": 13025
+          "count": 13025,
+          "neCount": 13023
         },
         {
           "name": "clitellata",
-          "count": 7751
+          "count": 7751,
+          "neCount": 7420
         }
       ]
     },
@@ -2918,19 +3069,23 @@
       "colBreakdown": [
         {
           "name": "diplopoda",
-          "count": 12969
+          "count": 12969,
+          "neCount": 12722
         },
         {
           "name": "chilopoda",
-          "count": 3329
+          "count": 3329,
+          "neCount": 3303
         },
         {
           "name": "symphyla",
-          "count": 227
+          "count": 227,
+          "neCount": 227
         },
         {
           "name": "pauropoda",
-          "count": 992
+          "count": 992,
+          "neCount": 992
         }
       ]
     },
@@ -2952,19 +3107,23 @@
       "colBreakdown": [
         {
           "name": "demospongiae",
-          "count": 8196
+          "count": 8196,
+          "neCount": 8155
         },
         {
           "name": "calcarea",
-          "count": 920
+          "count": 920,
+          "neCount": 918
         },
         {
           "name": "hexactinellida",
-          "count": 745
+          "count": 745,
+          "neCount": 743
         },
         {
           "name": "homoscleromorpha",
-          "count": 141
+          "count": 141,
+          "neCount": 141
         }
       ]
     },
@@ -2987,27 +3146,33 @@
       "colBreakdown": [
         {
           "name": "hydrozoa",
-          "count": 3988
+          "count": 3988,
+          "neCount": 3973
         },
         {
           "name": "myxozoa",
-          "count": 3011
+          "count": 3011,
+          "neCount": 3011
         },
         {
           "name": "anthozoa",
-          "count": 1633
+          "count": 1633,
+          "neCount": 1611
         },
         {
           "name": "scyphozoa",
-          "count": 261
+          "count": 261,
+          "neCount": 261
         },
         {
           "name": "staurozoa",
-          "count": 52
+          "count": 52,
+          "neCount": 52
         },
         {
           "name": "cubozoa",
-          "count": 55
+          "count": 55,
+          "neCount": 55
         }
       ]
     },
@@ -3031,23 +3196,28 @@
       "colBreakdown": [
         {
           "name": "asteroidea",
-          "count": 2052
+          "count": 2052,
+          "neCount": 2050
         },
         {
           "name": "echinoidea",
-          "count": 1018
+          "count": 1018,
+          "neCount": 1017
         },
         {
           "name": "holothuroidea",
-          "count": 1831
+          "count": 1831,
+          "neCount": 1486
         },
         {
           "name": "ophiuroidea",
-          "count": 2170
+          "count": 2170,
+          "neCount": 2170
         },
         {
           "name": "crinoidea",
-          "count": 687
+          "count": 687,
+          "neCount": 687
         }
       ]
     },
@@ -3064,15 +3234,18 @@
       "colBreakdown": [
         {
           "name": "gymnolaemata",
-          "count": 4884
+          "count": 4884,
+          "neCount": 4884
         },
         {
           "name": "stenolaemata",
-          "count": 546
+          "count": 546,
+          "neCount": 546
         },
         {
           "name": "phylactolaemata",
-          "count": 65
+          "count": 65,
+          "neCount": 65
         }
       ]
     },
@@ -3089,19 +3262,23 @@
       "colBreakdown": [
         {
           "name": "ascidiacea",
-          "count": 3000
+          "count": 3000,
+          "neCount": 3000
         },
         {
           "name": "thaliacea",
-          "count": 79
+          "count": 79,
+          "neCount": 79
         },
         {
           "name": "appendicularia",
-          "count": 68
+          "count": 68,
+          "neCount": 68
         },
         {
           "name": "leptocardii",
-          "count": 31
+          "count": 31,
+          "neCount": 31
         }
       ]
     },
@@ -3298,103 +3475,128 @@
       "colBreakdown": [
         {
           "name": "eurotiales",
-          "count": 1773
+          "count": 1773,
+          "neCount": 1769
         },
         {
           "name": "hypocreales",
-          "count": 0
+          "count": 0,
+          "neCount": 0
         },
         {
           "name": "xylariales",
-          "count": 3651
+          "count": 3651,
+          "neCount": 3643
         },
         {
           "name": "pleosporales",
-          "count": 12087
+          "count": 12087,
+          "neCount": 12086
         },
         {
           "name": "capnodiales",
-          "count": 632
+          "count": 632,
+          "neCount": 632
         },
         {
           "name": "helotiales",
-          "count": 8546
+          "count": 8546,
+          "neCount": 8541
         },
         {
           "name": "orbiliales",
-          "count": 798
+          "count": 798,
+          "neCount": 798
         },
         {
           "name": "pezizales",
-          "count": 3025
+          "count": 3025,
+          "neCount": 3006
         },
         {
           "name": "rhytismatales",
-          "count": 720
+          "count": 720,
+          "neCount": 719
         },
         {
           "name": "leotiales",
-          "count": 259
+          "count": 259,
+          "neCount": 259
         },
         {
           "name": "dothideales",
-          "count": 1194
+          "count": 1194,
+          "neCount": 1194
         },
         {
           "name": "chaetothyriales",
-          "count": 828
+          "count": 828,
+          "neCount": 827
         },
         {
           "name": "verrucariales",
-          "count": 652
+          "count": 652,
+          "neCount": 652
         },
         {
           "name": "arthoniales",
-          "count": 1121
+          "count": 1121,
+          "neCount": 1118
         },
         {
           "name": "ostropales",
-          "count": 2718
+          "count": 2718,
+          "neCount": 2711
         },
         {
           "name": "pertusariales",
-          "count": 983
+          "count": 983,
+          "neCount": 981
         },
         {
           "name": "lecanorales",
-          "count": 4741
+          "count": 4741,
+          "neCount": 4701
         },
         {
           "name": "peltigerales",
-          "count": 1067
+          "count": 1067,
+          "neCount": 1043
         },
         {
           "name": "teloschistales",
-          "count": 933
+          "count": 933,
+          "neCount": 932
         },
         {
           "name": "caliciales",
-          "count": 1193
+          "count": 1193,
+          "neCount": 1183
         },
         {
           "name": "acarosporales",
-          "count": 239
+          "count": 239,
+          "neCount": 238
         },
         {
           "name": "geoglossales",
-          "count": 105
+          "count": 105,
+          "neCount": 102
         },
         {
           "name": "cyttariales",
-          "count": 15
+          "count": 15,
+          "neCount": 13
         },
         {
           "name": "coryneliales",
-          "count": 64
+          "count": 64,
+          "neCount": 63
         },
         {
           "name": "trypetheliales",
-          "count": 594
+          "count": 594,
+          "neCount": 591
         }
       ]
     },

@@ -7,7 +7,11 @@ import { FaInfoCircle, FaExpandAlt, FaCompressAlt, FaChevronRight } from "react-
 import { HiOutlineAdjustmentsHorizontal } from "react-icons/hi2";
 import TaxaIcon from "@/components/TaxaIcon";
 import { CATEGORY_COLORS, CATEGORY_NAMES, CATEGORY_ORDER } from "@/config/taxa";
-import { hasChildren, findNode, getAncestors, stripNodePrefix, OFFICIAL_IUCN_DESCRIBED_NODE_IDS, describeFilter, COL_RELEASE_LABEL, COL_RELEASE_URL } from "@/lib/taxonomy-utils";
+import {
+  hasChildren, findNode, getAncestors, stripNodePrefix, OFFICIAL_IUCN_DESCRIBED_NODE_IDS,
+  describeFilter, COL_RELEASE_LABEL, COL_RELEASE_URL, primaryFilterRank, breakdownDisplayName, breakdownHref,
+  type FilterRank,
+} from "@/lib/taxonomy-utils";
 import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
 interface Table1aRowData {
   group: string;
@@ -25,7 +29,7 @@ interface Table1aRowData {
   medianGbifObsPerSpecies?: number;
   colDescribed?: number;
   colNe?: number;
-  colBreakdown?: { name: string; count: number }[];
+  colBreakdown?: { name: string; count: number; neCount: number }[];
 }
 
 interface Table1aSectionData {
@@ -72,7 +76,7 @@ interface SubGroupSummary {
   byCategory: Record<string, number>;
   colDescribed?: number;
   colNe?: number;
-  colBreakdown?: { name: string; count: number }[];
+  colBreakdown?: { name: string; count: number; neCount: number }[];
 }
 
 interface Props {
@@ -200,6 +204,110 @@ function DisabledAllTooltip() {
   );
 }
 
+// Navigate to a node's own species list in a given view — the same destination a
+// table-row click gives, from deep inside a portal-rendered popover that isn't a DOM
+// descendant of any row. Pushes taxa (+ view, if switching to Unassessed) in one
+// history entry and dispatches popstate, which both page.tsx's viewMode state and
+// RedListView's internal useFilterParams URL sync already listen for globally (see
+// the Assessed/Unassessed toggle in page.tsx, which does the same thing) — so this
+// needs no prop-drilling through RedListView/TaxaSummary to reach either one.
+function navigateToNodeSpeciesList(nodeId: string, view: "reassessments" | "new-assessments") {
+  if (typeof window === "undefined") return;
+  const params = new URLSearchParams();
+  params.set("taxa", stripNodePrefix(nodeId));
+  if (view === "new-assessments") params.set("view", "new-assessments");
+  window.history.pushState(null, "", `/?${params.toString()}`);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
+// Expandable per-name breakdown for the "# Described Species" popover — lets a
+// specialist see, for each name in the node's primary filter dimension (e.g. each
+// order in Small Mammal SG), how its colDescribed splits into Assessed vs Not
+// Evaluated, without leaving the tooltip. Clicking Assessed/Not Evaluated navigates
+// to the NODE's own species list in that view (same destination clicking the row
+// gives) — not narrowed to just that one name, since a name-scoped species list
+// needs a new API param; that's a follow-up, not this pass.
+function BreakdownList({
+  rank,
+  label,
+  breakdown,
+  nodeId,
+  onNavigate,
+}: {
+  rank: FilterRank;
+  label: string;
+  breakdown: { name: string; count: number; neCount: number }[];
+  nodeId: string;
+  onNavigate: () => void;
+}) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggle = (name: string) => setExpanded((prev) => {
+    const next = new Set(prev);
+    if (next.has(name)) next.delete(name); else next.add(name);
+    return next;
+  });
+  return (
+    <div className="mt-1">
+      <p className="text-zinc-300">{label}:</p>
+      <ul className="mt-0.5">
+        {breakdown.map((b) => {
+          const isOpen = expanded.has(b.name);
+          const assessedCount = b.count - b.neCount;
+          const href = breakdownHref(rank, b.name);
+          return (
+            <li key={b.name} className="mt-0.5">
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => toggle(b.name)}
+                  className="flex items-center gap-1 hover:text-white"
+                >
+                  <FaChevronRight size={7} className={`text-zinc-400 transition-transform ${isOpen ? "rotate-90" : ""}`} />
+                  {breakdownDisplayName(rank, b.name)} ({b.count})
+                </button>
+                {href && (
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-zinc-400 hover:text-blue-300"
+                    title={`View ${breakdownDisplayName(rank, b.name)} on Catalogue of Life`}
+                  >
+                    <FaInfoCircle size={9} />
+                  </a>
+                )}
+              </div>
+              {isOpen && (
+                <ul className="ml-4 mt-0.5 space-y-0.5">
+                  <li>
+                    <button
+                      type="button"
+                      className="underline decoration-dotted underline-offset-2 hover:text-white"
+                      onClick={() => { navigateToNodeSpeciesList(nodeId, "reassessments"); onNavigate(); }}
+                    >
+                      Assessed ({assessedCount})
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      type="button"
+                      className="underline decoration-dotted underline-offset-2 hover:text-white"
+                      onClick={() => { navigateToNodeSpeciesList(nodeId, "new-assessments"); onNavigate(); }}
+                    >
+                      Not Evaluated ({b.neCount})
+                    </button>
+                  </li>
+                </ul>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 // "# Described Species" info icon — click-to-open (not hover), so the popover stays
 // put while the user moves the mouse onto it to read/click a link. An earlier
 // hover-only version (CSS :hover + an offset tooltip) made the tooltip vanish the
@@ -207,7 +315,7 @@ function DisabledAllTooltip() {
 // between a hover trigger and its target does this, there's no CSS-only fix that
 // survives a real mouse gap. Portal-rendered (mirrors the column-visibility menu
 // pattern above) so it isn't clipped by the table's scroll/sticky ancestors.
-function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; source: "iucn" | "col"; breakdown?: { name: string; count: number }[] }) {
+function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; source: "iucn" | "col"; breakdown?: { name: string; count: number; neCount: number }[] }) {
   const node = findNode(nodeId);
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -280,7 +388,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
           ) : (
             <>
               <p>
-                {describeFilter(node.filter, nodeId, breakdown).map((seg, i) =>
+                {describeFilter(node.filter, nodeId, Boolean(breakdown?.length)).map((seg, i) =>
                   seg.href ? (
                     <a
                       key={i}
@@ -296,6 +404,18 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
                   )
                 )}
               </p>
+              {breakdown?.length ? (() => {
+                const dim = primaryFilterRank(node.filter);
+                return dim ? (
+                  <BreakdownList
+                    rank={dim.rank}
+                    label={dim.label}
+                    breakdown={breakdown}
+                    nodeId={nodeId}
+                    onNavigate={() => setOpen(false)}
+                  />
+                ) : null;
+              })() : null}
               <p className="mt-1.5 text-zinc-300">
                 Source:{" "}
                 <a href={COL_RELEASE_URL} target="_blank" rel="noopener noreferrer" className="text-blue-300 hover:text-blue-200 underline">

@@ -232,14 +232,15 @@ async function attachColCounts(summaries: Record<string, NodeSummary[]>): Promis
 
       const dim = COL_SPECIES_NAME_OVERRIDES[node.id] ? null : primaryDimension(node.filter);
       if (dim && dim.names.length > 1) {
-        const breakdown: { name: string; count: number }[] = [];
+        const breakdown: { name: string; count: number; neCount: number }[] = [];
         for (const name of dim.names) {
           const narrowed: NodeFilter = { ...node.filter, [dim.field]: [name] };
           const bRows = await (await conn.run(`
-            SELECT count(*) FILTER (in_base AND ${universe} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL}) AS n
+            SELECT count(*) FILTER (in_base AND ${universe} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL}) AS n,
+                   count(*) FILTER (in_base AND ${universe} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL} AND col_id NOT IN (SELECT col_id FROM assessed_cids)) AS ne
             FROM read_parquet('${speciesGlob}', hive_partitioning=true)
             WHERE ${filterToSql(narrowed, node.id)}`)).getRowObjects();
-          breakdown.push({ name, count: Number(bRows[0].n) });
+          breakdown.push({ name, count: Number(bRows[0].n), neCount: Number(bRows[0].ne) });
           breakdownQueries++;
         }
         child.colBreakdown = breakdown;
