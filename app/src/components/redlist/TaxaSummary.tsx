@@ -444,22 +444,23 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   // resolveDescribed and OFFICIAL_IUCN_DESCRIBED_NODE_IDS.
   const [describedSource, setDescribedSource] = useState<"iucn" | "col">("iucn");
   const resolveDescribed = useCallback(
-    (nodeId: string, estimatedDescribed: number, colDescribed: number | undefined, totalAssessed: number): { value: number; source: "iucn" | "col" } => {
+    (nodeId: string, estimatedDescribed: number, colDescribed: number | undefined): { value: number; source: "iucn" | "col" } => {
       const isOfficial = OFFICIAL_IUCN_DESCRIBED_NODE_IDS.has(stripNodePrefix(nodeId));
       const useCol = isOfficial ? describedSource === "col" : true;
-      // A described count below the real assessed count is a logical impossibility —
-      // can't have assessed more species than exist — and always means this CoL
-      // release is missing species IUCN's own assessors already recognize (e.g.
-      // Artiodactyla, where several recent splits aren't in CoL yet). Fall back to
-      // the estimate rather than show an impossible >100%-assessed row.
-      if (useCol && colDescribed != null && colDescribed >= totalAssessed) return { value: colDescribed, source: "col" };
+      // No fallback when colDescribed < totalAssessed: an apparent >100%-assessed row
+      // (renderBar clamps the bar itself but still prints the real percentage) is a
+      // more honest signal than silently reverting to a static, never-re-verified
+      // citation — it means this specific CoL release is missing species IUCN's own
+      // assessors already recognize (e.g. the pygmy hippo, or a handful of recent
+      // Artiodactyla splits), and that's worth surfacing, not hiding.
+      if (useCol && colDescribed != null) return { value: colDescribed, source: "col" };
       return { value: estimatedDescribed, source: "iucn" };
     },
     [describedSource]
   );
   const applySource = useCallback(
     <T extends { estimatedDescribed: number; colDescribed?: number; totalAssessed: number; percentAssessed: number }>(row: T, nodeId: string): T => {
-      const { value: described } = resolveDescribed(nodeId, row.estimatedDescribed, row.colDescribed, row.totalAssessed);
+      const { value: described } = resolveDescribed(nodeId, row.estimatedDescribed, row.colDescribed);
       if (described === row.estimatedDescribed) return row;
       return {
         ...row,
@@ -1063,7 +1064,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
 
   // Render an ancestor context row with full data — clicking navigates to that level.
   const renderAncestorRow = (sg: SubGroupSummary, color: string, depth: number, topTaxonId: string, isViewRoot: boolean) => {
-    const { value: sgDescribed, source: sgDescribedSource } = resolveDescribed(sg.id, sg.estimatedDescribed, sg.colDescribed, sg.totalAssessed);
+    const { value: sgDescribed, source: sgDescribedSource } = resolveDescribed(sg.id, sg.estimatedDescribed, sg.colDescribed);
     const sgPctAssessed = sgDescribed > 0 ? (sg.totalAssessed / sgDescribed) * 100 : 0;
     const sgPctOutdated = sg.totalAssessed > 0 ? (sg.outdated / sg.totalAssessed) * 100 : 0;
     return (
@@ -1132,7 +1133,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
 
   // Render a standalone subgroup row (used when table is collapsed to a selected subgroup)
   const renderCollapsedSubgroupRow = (taxon: TaxonSummary, sg: SubGroupSummary) => {
-    const { value: sgDescribed, source: sgDescribedSource } = resolveDescribed(sg.id, sg.estimatedDescribed, sg.colDescribed, sg.totalAssessed);
+    const { value: sgDescribed, source: sgDescribedSource } = resolveDescribed(sg.id, sg.estimatedDescribed, sg.colDescribed);
     const sgPctAssessed = sgDescribed > 0 ? (sg.totalAssessed / sgDescribed) * 100 : 0;
     const sgPctOutdated = sg.totalAssessed > 0 ? (sg.outdated / sg.totalAssessed) * 100 : 0;
     return (
@@ -1204,7 +1205,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
 
   // Render a subgroup row, recursively expandable if it has children
   const renderSubgroupRow = (sg: SubGroupSummary, parentColor: string, depth: number, topTaxonId: string): React.ReactNode => {
-    const { value: sgDescribed, source: sgDescribedSource } = resolveDescribed(sg.id, sg.estimatedDescribed, sg.colDescribed, sg.totalAssessed);
+    const { value: sgDescribed, source: sgDescribedSource } = resolveDescribed(sg.id, sg.estimatedDescribed, sg.colDescribed);
     const sgPctAssessed = sgDescribed > 0 ? (sg.totalAssessed / sgDescribed) * 100 : 0;
     const sgPctOutdated = sg.totalAssessed > 0 ? (sg.outdated / sg.totalAssessed) * 100 : 0;
     const isSgSelected = selectedSubgroups.has(sg.id);
@@ -1584,7 +1585,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                   // so the per-row cells and the subtotals below all agree. Keep the
                   // per-row source (describedSource) around too, for the tooltip.
                   const rows = section.rows.map(r => {
-                    const { value: described, source } = resolveDescribed(r.group, r.estimatedDescribed, r.colDescribed, r.totalAssessed);
+                    const { value: described, source } = resolveDescribed(r.group, r.estimatedDescribed, r.colDescribed);
                     return {
                       ...r,
                       estimatedDescribed: described,
