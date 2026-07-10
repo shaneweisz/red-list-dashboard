@@ -205,6 +205,8 @@ export interface NoMatchDetail {
   reason: NoMatchReason;
   /** The species name it's lumped with (reason "lumped" only). */
   detail?: string;
+  /** That species' own assessed id, so the frontend can link to it too ("lumped" only). */
+  detailId?: number;
 }
 
 // Classifies one "no match" diagnosis row (see the diagRows query in attachColCounts)
@@ -229,9 +231,10 @@ function classifyNoMatch(row: Record<string, unknown>): NoMatchDetail {
   const linkedInBase = row.linked_in_base as boolean | null;
   const linkedExtinct = row.linked_extinct as boolean | null;
   const winnerName = row.winner_name as string | null;
+  const winnerId = row.winner_id as number | null;
   if (!linkedColId) return { id, name, reason: "no_link" };
   if (!linkedName) return { id, name, reason: "missing_from_backbone" };
-  if (winnerName) return { id, name, reason: "lumped", detail: winnerName };
+  if (winnerName) return { id, name, reason: "lumped", detail: winnerName, detailId: winnerId != null ? Number(winnerId) : undefined };
   if (!linkedInBase) return { id, name, reason: "not_in_base" };
   if (linkedExtinct) return { id, name, reason: "extinct_unconfirmed" };
   return { id, name, reason: "classified_elsewhere" };
@@ -346,7 +349,7 @@ async function attachColCounts(summaries: Record<string, NodeSummary[]>): Promis
               ma.id AS id, ma.scientific_name AS name,
               pl.col_id AS linked_col_id,
               sp.scientific_name AS linked_name, sp.in_base AS linked_in_base, sp.extinct AS linked_extinct,
-              w.winner_name AS winner_name
+              w.winner_name AS winner_name, w.winner_id AS winner_id
             FROM matched_assessed ma
             LEFT JOIN primary_links pl ON pl.id = ma.id
             LEFT JOIN read_parquet('${speciesGlob}', hive_partitioning=true) sp ON sp.col_id = pl.col_id

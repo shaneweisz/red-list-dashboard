@@ -19,7 +19,7 @@ import type { RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 // See scripts/build-taxa-summary.ts's classifyNoMatch for what each reason means.
 // Modular/additive on top of colBreakdown[].noMatchIds — safe to drop independently
 // of the count-only CoL Match / No CoL Match mechanism it rides alongside.
-type NoMatchDetail = { id: number; name: string; reason: string; detail?: string };
+type NoMatchDetail = { id: number; name: string; reason: string; detail?: string; detailId?: number };
 const NO_MATCH_REASON_LABEL: Record<string, string> = {
   no_link: "not yet matched to any Catalogue of Life name",
   missing_from_backbone: "its Catalogue of Life match isn't in the current backbone",
@@ -275,16 +275,18 @@ const PANEL_GAP = 8;
 // Positions the species-list panel beside the popup it was opened from: to the
 // right if there's room, else to the left, else (narrow viewports) directly under
 // it — same "best effort, not perfect" approach as the popup's own positioning.
-function computePanelPos(popupPos: { top: number; left: number }): { top: number; left: number } {
-  if (typeof window === "undefined") return popupPos;
-  const popupRight = popupPos.left + 340;
-  if (window.innerWidth - popupRight - PANEL_GAP >= PANEL_WIDTH) {
-    return { top: popupPos.top, left: popupRight + PANEL_GAP };
+// Takes the popup's ACTUAL rendered rect (not just its {top,left} origin) — the
+// popup's width varies with its content (it's max-w-[340px], not a fixed width), so
+// assuming the max width left a visible gap for any popup narrower than that.
+function computePanelPos(popupRect: { top: number; left: number; right: number }): { top: number; left: number } {
+  if (typeof window === "undefined") return { top: popupRect.top, left: popupRect.right };
+  if (window.innerWidth - popupRect.right - PANEL_GAP >= PANEL_WIDTH) {
+    return { top: popupRect.top, left: popupRect.right + PANEL_GAP };
   }
-  if (popupPos.left - PANEL_GAP >= PANEL_WIDTH) {
-    return { top: popupPos.top, left: popupPos.left - PANEL_WIDTH - PANEL_GAP };
+  if (popupRect.left - PANEL_GAP >= PANEL_WIDTH) {
+    return { top: popupRect.top, left: popupRect.left - PANEL_WIDTH - PANEL_GAP };
   }
-  return { top: popupPos.top + 220, left: Math.max(8, Math.min(popupPos.left, window.innerWidth - PANEL_WIDTH - 8)) };
+  return { top: popupRect.top + 220, left: Math.max(8, Math.min(popupRect.left, window.innerWidth - PANEL_WIDTH - 8)) };
 }
 
 // Paginated species-level list rendered beside the main popup when a count row
@@ -377,18 +379,15 @@ function SpeciesListPanel({
     >
       <div className="flex items-center justify-between gap-2 mb-1.5">
         <p className="font-medium">{request.label}</p>
-        <button type="button" onClick={onClose} className="text-zinc-400 hover:text-white flex-shrink-0" aria-label="Close">
-          ✕
-        </button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <a href={fullListHref} target="_blank" rel="noopener noreferrer" className="text-blue-300 hover:text-blue-200 underline">
+            Open full list ↗
+          </a>
+          <button type="button" onClick={onClose} className="text-zinc-400 hover:text-white" aria-label="Close">
+            ✕
+          </button>
+        </div>
       </div>
-      <a
-        href={fullListHref}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-blue-300 hover:text-blue-200 underline block mb-1.5"
-      >
-        Open full list ↗
-      </a>
       {error && <p className="text-red-300">{error}</p>}
       {!error && rows === null && <p className="text-zinc-400">Loading…</p>}
       {!error && filtered && filtered.length === 0 && <p className="text-zinc-400">No species.</p>}
@@ -411,7 +410,21 @@ function SpeciesListPanel({
                     <span className="text-zinc-300">
                       {" — "}
                       {NO_MATCH_REASON_LABEL[detail.reason] ?? detail.reason}
-                      {detail.detail ? ` ${detail.detail}` : ""}
+                      {detail.detail && (
+                        detail.detailId != null ? (
+                          <>
+                            {" "}
+                            <a
+                              href={speciesHref(nodeId, detail.detailId, "reassessments")}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-300 hover:text-blue-200 underline"
+                            >
+                              {detail.detail}
+                            </a>
+                          </>
+                        ) : ` ${detail.detail}`
+                      )}
                     </span>
                   )}
                 </li>
@@ -707,7 +720,8 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
                     breakdown={breakdown}
                     onOpenPanel={(request) => {
                       setActivePanel(request);
-                      setPanelPos(computePanelPos(pos));
+                      const rect = popoverRef.current?.getBoundingClientRect();
+                      setPanelPos(rect ? computePanelPos(rect) : { top: pos.top, left: pos.left + PANEL_GAP });
                     }}
                   />
                 ) : null;
