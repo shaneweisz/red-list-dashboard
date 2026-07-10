@@ -10,7 +10,7 @@ import { CATEGORY_COLORS, CATEGORY_NAMES, CATEGORY_ORDER } from "@/config/taxa";
 import {
   hasChildren, findNode, getAncestors, stripNodePrefix, OFFICIAL_IUCN_DESCRIBED_NODE_IDS,
   describeFilter, COL_RELEASE_LABEL, COL_RELEASE_URL, primaryFilterRank, breakdownDisplayName, breakdownHref,
-  type FilterRank,
+  type FilterRank, type DescribeFilterSegment,
 } from "@/lib/taxonomy-utils";
 import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
 interface Table1aRowData {
@@ -252,7 +252,6 @@ function AssessedBreakdownRow({
   nodeId: string;
   onNavigate: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   if (noMatchIds.length === 0) {
     return (
       <li>
@@ -269,38 +268,48 @@ function AssessedBreakdownRow({
   const colMatchCount = trueAssessed - noMatchIds.length;
   return (
     <li>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1 hover:text-white"
-      >
-        <FaChevronRight size={7} className={`text-zinc-400 transition-transform ${open ? "rotate-90" : ""}`} />
-        Assessed ({trueAssessed})
-      </button>
-      {open && (
-        <ul className="ml-4 mt-0.5 space-y-0.5">
-          <li>
-            <button
-              type="button"
-              className="underline decoration-dotted underline-offset-2 hover:text-white"
-              onClick={() => { navigateToNodeSpeciesList(nodeId, "reassessments", { rank, name, excl: noMatchIds }); onNavigate(); }}
-            >
-              CoL Match ({colMatchCount})
-            </button>
-          </li>
-          <li>
-            <button
-              type="button"
-              className="underline decoration-dotted underline-offset-2 hover:text-white"
-              title="Assessed by IUCN, but not linked to a described species on the Catalogue of Life side here — likely a taxonomic split/lump, a CoL coverage gap, or an unconfirmed extinction."
-              onClick={() => { navigateToNodeSpeciesList(nodeId, "reassessments", { rank, name, only: noMatchIds }); onNavigate(); }}
-            >
-              No CoL Match ({noMatchIds.length})
-            </button>
-          </li>
-        </ul>
-      )}
+      Assessed ({trueAssessed})
+      <ul className="ml-4 mt-0.5 space-y-0.5">
+        <li>
+          <button
+            type="button"
+            className="underline decoration-dotted underline-offset-2 hover:text-white"
+            onClick={() => { navigateToNodeSpeciesList(nodeId, "reassessments", { rank, name, excl: noMatchIds }); onNavigate(); }}
+          >
+            CoL Match ({colMatchCount})
+          </button>
+        </li>
+        <li>
+          <button
+            type="button"
+            className="underline decoration-dotted underline-offset-2 hover:text-white"
+            title="Assessed by IUCN, but not linked to a described species on the Catalogue of Life side here — likely a taxonomic split/lump, a CoL coverage gap, or an unconfirmed extinction."
+            onClick={() => { navigateToNodeSpeciesList(nodeId, "reassessments", { rank, name, only: noMatchIds }); onNavigate(); }}
+          >
+            No CoL Match ({noMatchIds.length})
+          </button>
+        </li>
+      </ul>
     </li>
+  );
+}
+
+// Renders a describeFilter() result: plain text, or a link where we resolved a CoL id.
+function renderFilterSegs(segs: DescribeFilterSegment[]): React.ReactNode {
+  return segs.map((seg, i) =>
+    seg.href ? (
+      <a
+        key={i}
+        href={seg.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-blue-300 hover:text-blue-200 underline"
+      >
+        {seg.text}
+      </a>
+    ) : (
+      <span key={i}>{seg.text}</span>
+    )
   );
 }
 
@@ -429,6 +438,14 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
   if (!node) return null;
   if (source === "iucn" && !node.estimatedSource) return null;
 
+  // With a breakdown, describeFilter's primary dimension (e.g. "Family: Bovidae") is
+  // hidden — the BreakdownList below shows it instead — leaving just the exclude
+  // clause (e.g. "(excluding Bos, Bubalus, ...)") and any CoL note. Rendered AFTER
+  // the breakdown list rather than before, so "excluding X, Y, Z" reads as a
+  // qualifier on "Family: Bovidae (217)" instead of floating above it with nothing
+  // to attach to.
+  const filterSegs = source === "col" ? describeFilter(node.filter, nodeId, Boolean(breakdown?.length)) : [];
+
   return (
     <>
       <button
@@ -469,23 +486,9 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
             </>
           ) : (
             <>
-              <p>
-                {describeFilter(node.filter, nodeId, Boolean(breakdown?.length)).map((seg, i) =>
-                  seg.href ? (
-                    <a
-                      key={i}
-                      href={seg.href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-300 hover:text-blue-200 underline"
-                    >
-                      {seg.text}
-                    </a>
-                  ) : (
-                    <span key={i}>{seg.text}</span>
-                  )
-                )}
-              </p>
+              {!breakdown?.length && filterSegs.length > 0 && (
+                <p>{renderFilterSegs(filterSegs)}</p>
+              )}
               {breakdown?.length ? (() => {
                 const dim = primaryFilterRank(node.filter);
                 return dim ? (
@@ -498,6 +501,9 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
                   />
                 ) : null;
               })() : null}
+              {breakdown?.length && filterSegs.length > 0 && (
+                <p className="mt-1">{renderFilterSegs(filterSegs)}</p>
+              )}
               <p className="mt-1.5 text-zinc-300">
                 Source:{" "}
                 <a href={COL_RELEASE_URL} target="_blank" rel="noopener noreferrer" className="text-blue-300 hover:text-blue-200 underline">
