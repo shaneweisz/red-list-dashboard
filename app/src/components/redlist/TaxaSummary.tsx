@@ -703,13 +703,12 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
     if (!open) return;
     const close = (e: Event) => {
       if (e instanceof KeyboardEvent && e.key !== "Escape") return;
-      // Both mousedown (outside click) and scroll (capture-phase, so it also
-      // fires for a scroll *inside* the popover/panel's own overflow-y-auto — the
-      // event's target is the scrolling element itself, not something that bubbles
-      // up to it) need to ignore anything originating inside the popover, the
-      // panel, or the trigger button — otherwise clicking a link or just scrolling
-      // to read more of a long list closes the whole thing before you get there.
-      if (e.type === "mousedown" || e.type === "scroll") {
+      // Outside click only — deliberately NOT closed by scroll (page or table-body)
+      // anymore. It used to close on any scroll to avoid a stale-positioned
+      // popover, but position: fixed keeps it correctly anchored to the viewport
+      // regardless of what scrolls underneath it, and closing on scroll made it
+      // impossible to scroll the rest of the page while consulting the popover.
+      if (e.type === "mousedown") {
         const target = e.target as Node;
         if (
           popoverRef.current?.contains(target) ||
@@ -722,14 +721,9 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
     };
     document.addEventListener("mousedown", close);
     document.addEventListener("keydown", close);
-    // Table body scrolls internally (overflow-x-auto) — a stale-positioned popover
-    // left open through a scroll of the PAGE is worse than just closing it (the
-    // containment check above exempts scrolling the popover/panel's own content).
-    document.addEventListener("scroll", close, true);
     return () => {
       document.removeEventListener("mousedown", close);
       document.removeEventListener("keydown", close);
-      document.removeEventListener("scroll", close, true);
     };
   }, [open]);
 
