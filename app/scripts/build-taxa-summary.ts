@@ -198,22 +198,33 @@ function primaryDimension(filter: NodeFilter): PrimaryDim | null {
 // (a single function producing an additive field, colBreakdown[].noMatchDetails) so
 // this can be reverted independently of the count-only noMatchIds mechanism it rides
 // alongside.
-export type NoMatchReason = "no_link" | "missing_from_backbone" | "lumped" | "not_in_base" | "extinct_unconfirmed" | "classified_elsewhere";
+export type NoMatchReason = "no_link" | "missing_from_backbone" | "infraspecific" | "provisional" | "lumped" | "not_in_base" | "extinct_unconfirmed" | "classified_elsewhere";
 export interface NoMatchDetail {
   id: number;
   name: string;
   reason: NoMatchReason;
-  /** The species name it's lumped with (reason "lumped" only). */
+  /** The species/name it's lumped with or demoted under (reasons "lumped"/"infraspecific" only). */
   detail?: string;
-  /** That species' own assessed id, so the frontend can link to it too ("lumped" only). */
+  /** That species' own assessed id, so the frontend can link to it too ("lumped"/"infraspecific", only when the parent is itself IUCN-assessed). */
   detailId?: number;
 }
 
 // Classifies one "no match" diagnosis row (see the diagRows query in attachColCounts)
 // into a human-explainable reason, cheapest/most-specific check first:
 //  - no_link: never matched to any CoL name at all.
-//  - missing_from_backbone: its linked col_id isn't in the current species/ build
-//    (e.g. a curated-checklist demotion — see build-backbone.ts's `demoted` table).
+//  - infraspecific: its linked col_id IS in the current backbone, but at subspecies/
+//    variety/form rank, not species rank — CoL currently treats it as part of
+//    another species rather than its own (e.g. Arctocephalus townsendi is currently
+//    "Arctocephalus philippii townsendi" in CoL). `detail`/`detailId` name the
+//    parent it's classified under, linked if that parent is itself IUCN-assessed.
+//  - provisional: its linked col_id IS species rank in the current backbone, but
+//    status is "provisionally accepted" rather than "accepted" — CoL has the
+//    concept, just hasn't fully accepted it yet (deliberately excluded from
+//    colDescribed — provisionally-accepted names overshoot IUCN's own totals).
+//  - missing_from_backbone: its linked col_id has no row in the backbone at all —
+//    a genuine dangling reference (rare/never in practice; kept as a fallback for
+//    the infraspecific/provisional checks above when they can't resolve a parent,
+//    and for whenever backbone.parquet isn't available at build time).
 //  - lumped: its linked col_id IS in the universe, but a DIFFERENT assessed species
 //    won the accepted-name tie-break for it (a genuine CoL synonymy/lump).
 //  - not_in_base: its linked col_id exists and matches this name, but isn't in CoL's
@@ -232,8 +243,21 @@ function classifyNoMatch(row: Record<string, unknown>): NoMatchDetail {
   const linkedExtinct = row.linked_extinct as boolean | null;
   const winnerName = row.winner_name as string | null;
   const winnerId = row.winner_id as number | null;
+  const bkRank = row.bk_rank as string | null;
+  const parentName = row.parent_name as string | null;
+  const parentAssessedId = row.parent_assessed_id as number | null;
+  const parentAssessedName = row.parent_assessed_name as string | null;
   if (!linkedColId) return { id, name, reason: "no_link" };
-  if (!linkedName) return { id, name, reason: "missing_from_backbone" };
+  if (!linkedName) {
+    if (bkRank === "species") return { id, name, reason: "provisional" };
+    if (bkRank) {
+      if (parentAssessedName) {
+        return { id, name, reason: "infraspecific", detail: parentAssessedName, detailId: parentAssessedId != null ? Number(parentAssessedId) : undefined };
+      }
+      if (parentName) return { id, name, reason: "infraspecific", detail: parentName };
+    }
+    return { id, name, reason: "missing_from_backbone" };
+  }
   if (winnerName) return { id, name, reason: "lumped", detail: winnerName, detailId: winnerId != null ? Number(winnerId) : undefined };
   if (!linkedInBase) return { id, name, reason: "not_in_base" };
   if (linkedExtinct) return { id, name, reason: "extinct_unconfirmed" };
@@ -308,6 +332,27 @@ const SPLIT_CANDIDATES_SQL = (bb: string, assessedPath: string) => `
          row_number() OVER (PARTITION BY ne_col_id ORDER BY parent_id) AS rn
   FROM matched`;
 
+// Precomputes a global col_id → IUCN-assessed-species lookup, once per build. Used
+// by the "infraspecific" no-match reason (see classifyNoMatch) to name/link the
+// currently-assessed species a demoted subspecies/variety is now classified under
+// (e.g. Arctocephalus townsendi → Arctocephalus philippii) — a plain global lookup,
+// not scoped to any one breakdown name, since the parent can fall in a different
+// name within the same node (rare, but there's no reason to miss it). Same
+// accepted-preferred tie-break as the per-name `winners` CTE in diagRows.
+const COL_TO_ASSESSED_SQL = (link: string, assessedPath: string) => `
+  CREATE TEMP TABLE col_to_assessed AS
+  WITH links AS (
+    SELECT l.col_id AS col_id, l.id AS assessed_id, a.scientific_name AS assessed_name,
+           row_number() OVER (
+             PARTITION BY l.col_id
+             ORDER BY (CASE WHEN l.match_method IN ('accepted', 'accepted_homonym') THEN 0 ELSE 1 END), l.id
+           ) AS rn
+    FROM read_parquet('${link}') l
+    JOIN read_parquet('${assessedPath}') a ON a.id = l.id
+    WHERE l.src = 'redlist' AND l.col_id IS NOT NULL AND l.match_method != 'iucn_synonym_covered'
+  )
+  SELECT col_id, assessed_id, assessed_name FROM links WHERE rn = 1`;
+
 // Attach CoL counts (colDescribed / colNe) to every node-children summary — same
 // universe + assessed-by-col_id logic as the per-group counts, filtered per node so
 // sub-groups (e.g. mammals → rodents) get real numbers instead of "—". Also attaches
@@ -332,7 +377,10 @@ async function attachColCounts(summaries: Record<string, NodeSummary[]>): Promis
   await createExEwAssessedTable(conn, link, assessedPath, "ex_ew_assessed");
   const universe = extantUniverseSql("ex_ew_assessed");
   const hasBackbone = fs.existsSync(backbonePath);
-  if (hasBackbone) await conn.run(SPLIT_CANDIDATES_SQL(backbonePath, assessedPath));
+  if (hasBackbone) {
+    await conn.run(SPLIT_CANDIDATES_SQL(backbonePath, assessedPath));
+    await conn.run(COL_TO_ASSESSED_SQL(link, assessedPath));
+  }
   let n = 0;
   let breakdownQueries = 0;
   for (const children of Object.values(summaries)) {
@@ -422,11 +470,22 @@ async function attachColCounts(summaries: Record<string, NodeSummary[]>): Promis
               pl.col_id AS linked_col_id,
               sp.scientific_name AS linked_name, sp.in_base AS linked_in_base, sp.extinct AS linked_extinct,
               w.winner_name AS winner_name, w.winner_id AS winner_id
+              ${hasBackbone ? `,
+              bk.rank AS bk_rank,
+              bkparent.scientific_name AS parent_name,
+              ca.assessed_id AS parent_assessed_id, ca.assessed_name AS parent_assessed_name` : ""}
             FROM matched_assessed ma
             LEFT JOIN primary_links pl ON pl.id = ma.id
             LEFT JOIN read_parquet('${speciesGlob}', hive_partitioning=true) sp ON sp.col_id = pl.col_id
             LEFT JOIN winners w ON w.col_id = pl.col_id
             LEFT JOIN candidate_links cl ON cl.id = ma.id AND cl.rn = 1
+            ${hasBackbone ? `
+            -- Only needed to explain species/-misses (sp.scientific_name IS NULL) more
+            -- precisely than a blanket "missing from backbone" — see classifyNoMatch's
+            -- infraspecific/provisional reasons.
+            LEFT JOIN read_parquet('${backbonePath}') bk ON bk.col_id = pl.col_id
+            LEFT JOIN read_parquet('${backbonePath}') bkparent ON bkparent.col_id = bk.parent_id
+            LEFT JOIN col_to_assessed ca ON ca.col_id = bk.parent_id` : ""}
             WHERE cl.id IS NULL`)).getRowObjects();
           // Note: trueAssessed - noMatchIds.length (the "CoL Match" count shown in the
           // popover) is NOT expected to equal count - neCount above — the latter's

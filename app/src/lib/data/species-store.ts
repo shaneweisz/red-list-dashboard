@@ -657,7 +657,7 @@ export interface NodeSummary {
 // See scripts/build-taxa-summary.ts's classifyNoMatch for what each reason means and
 // how it's derived. Modular/additive on top of noMatchIds — safe to ignore or drop
 // without touching the count-only CoL Match / No CoL Match mechanism.
-export type NoMatchReason = "no_link" | "missing_from_backbone" | "lumped" | "not_in_base" | "extinct_unconfirmed" | "classified_elsewhere";
+export type NoMatchReason = "no_link" | "missing_from_backbone" | "infraspecific" | "provisional" | "lumped" | "not_in_base" | "extinct_unconfirmed" | "classified_elsewhere";
 export interface NoMatchDetail {
   id: number;
   name: string;

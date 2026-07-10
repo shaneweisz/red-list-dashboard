@@ -23,6 +23,8 @@ type NoMatchDetail = { id: number; name: string; reason: string; detail?: string
 const NO_MATCH_REASON_LABEL: Record<string, string> = {
   no_link: "not yet matched to any Catalogue of Life name",
   missing_from_backbone: "its Catalogue of Life match isn't in the current backbone",
+  infraspecific: "Catalogue of Life doesn't recognize this as a distinct species — it's currently classified as part of",
+  provisional: "matched to a Catalogue of Life name that's only provisionally accepted, not yet fully accepted",
   lumped: "Catalogue of Life treats this as the same species as",
   not_in_base: "not yet in Catalogue of Life's curated checklist",
   extinct_unconfirmed: "Catalogue of Life flags this extinct, but IUCN hasn't confirmed Extinct/Extinct in the Wild",
