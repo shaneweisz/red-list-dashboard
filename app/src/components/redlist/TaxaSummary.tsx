@@ -416,17 +416,16 @@ function SpeciesListPanel({
     return filtered.filter((s) => s.scientific_name.toLowerCase().includes(q) || (s.common_name?.toLowerCase().includes(q) ?? false));
   }, [filtered, search]);
 
-  // "date" sorts by assessment date for assessed buckets, or by description year
-  // for the NE bucket (assessment_date is always null there) — whichever date
-  // dimension this view actually has, defaulting unassessed/undated rows to the
-  // bottom regardless of direction.
+  // "date" sorts by assessment year — not offered for the NE bucket (see the
+  // sort-button render below), so assessment_date is always meaningful here.
+  // Undated rows sort to the bottom regardless of direction.
   const sorted = useMemo(() => {
     if (!searched) return null;
     const arr = [...searched];
     if (sortBy === "name") {
       arr.sort((a, b) => a.scientific_name.localeCompare(b.scientific_name));
     } else {
-      const value = (s: RedListSpecies) => (isNe ? s.described_year : (s.assessment_date ? Date.parse(s.assessment_date) : null));
+      const value = (s: RedListSpecies) => (s.assessment_date ? Date.parse(s.assessment_date) : null);
       arr.sort((a, b) => {
         const va = value(a);
         const vb = value(b);
@@ -437,7 +436,7 @@ function SpeciesListPanel({
       });
     }
     return arr;
-  }, [searched, sortBy, sortDir, isNe]);
+  }, [searched, sortBy, sortDir]);
 
   const reasonBySisId = useMemo(() => {
     const m = new Map<number, NoMatchDetail>();
@@ -503,18 +502,29 @@ function SpeciesListPanel({
           >
             Name
           </button>
-          <button
-            type="button"
-            onClick={() => (sortBy === "date" ? setSortDir((d) => (d === "desc" ? "asc" : "desc")) : setSortBy("date"))}
-            className={`flex-shrink-0 ${sortBy === "date" ? "text-white underline" : "text-zinc-400 hover:text-white"}`}
-            title={isNe ? "Sort by description year" : "Sort by assessment date"}
-          >
-            {isNe ? "Described" : "Date"}{sortBy === "date" ? (sortDir === "desc" ? " ↓" : " ↑") : ""}
-          </button>
+          {/* Sorting by description year (the NE case) isn't offered — the recency
+              note is already inline per species; a sort on top of it wasn't wanted. */}
+          {!isNe && (
+            <button
+              type="button"
+              onClick={() => (sortBy === "date" ? setSortDir((d) => (d === "desc" ? "asc" : "desc")) : setSortBy("date"))}
+              className={`flex-shrink-0 ${sortBy === "date" ? "text-white underline" : "text-zinc-400 hover:text-white"}`}
+              title="Sort by assessment year"
+            >
+              Assess. Yr{sortBy === "date" ? (sortDir === "desc" ? " ↓" : " ↑") : ""}
+            </button>
+          )}
         </div>
       )}
       {error && <p className="text-red-300">{error}</p>}
-      {!error && rows === null && <p className="text-zinc-400">Loading…</p>}
+      {!error && rows === null && (
+        <div className="flex justify-center py-3">
+          <svg className="animate-spin h-4 w-4 text-zinc-400" viewBox="0 0 24 24" fill="none" aria-label="Loading">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+        </div>
+      )}
       {!error && filtered && filtered.length === 0 && <p className="text-zinc-400">No species.</p>}
       {!error && filtered && filtered.length > 0 && sorted && sorted.length === 0 && (
         <p className="text-zinc-400">No species match your search.</p>
@@ -661,9 +671,9 @@ function AssessedBreakdownRow({
             type="button"
             className="underline decoration-dotted underline-offset-2 hover:text-white"
             title="Assessed by IUCN, but doesn't cleanly correspond to one counted Catalogue of Life species here — most of these DO have a Catalogue of Life record (see the reason shown per species): a demoted subspecies, a provisionally-accepted name, a taxonomic split/lump, or a coverage gap. Only a small minority have no Catalogue of Life record at all."
-            onClick={() => onOpenPanel({ rank, name, bucket: "noColMatch", label: `${label} — No Clean CoL Match`, noMatchIds, noMatchDetails })}
+            onClick={() => onOpenPanel({ rank, name, bucket: "noColMatch", label: `${label} — No 1:1 CoL Match`, noMatchIds, noMatchDetails })}
           >
-            No Clean CoL Match ({noMatchIds.length})
+            No 1:1 CoL Match ({noMatchIds.length})
           </button>
         </li>
       </ul>
@@ -822,6 +832,44 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
     };
   }, [open]);
 
+  // Keeps the popup pinned to its trigger button (and, via the effect below, the
+  // panel pinned to the popup) while the page scrolls underneath — so it stays
+  // next to the SSC row it was opened from instead of drifting away as a
+  // viewport-fixed element normally would. Ignores scroll events whose target is
+  // inside the popover/panel's own overflow-y-auto content (still reachable here
+  // since this listens on the capture phase, even though such scrolls don't
+  // bubble) — scrolling a long species list shouldn't relocate the whole popup.
+  // rAF-throttled since scroll fires far more often than a repaint needs.
+  useEffect(() => {
+    if (!open) return;
+    let rafId: number | null = null;
+    const reposition = (e: Event) => {
+      if (e.type === "scroll") {
+        const target = e.target as Node;
+        if (popoverRef.current?.contains(target) || panelRef.current?.contains(target)) return;
+      }
+      if (rafId != null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        if (btnRef.current) setPos(computePopoverPos(btnRef.current.getBoundingClientRect()));
+      });
+    };
+    document.addEventListener("scroll", reposition, true);
+    return () => {
+      document.removeEventListener("scroll", reposition, true);
+      if (rafId != null) cancelAnimationFrame(rafId);
+    };
+  }, [open]);
+
+  // Keeps the species panel pinned to the popup's current rect — re-runs whenever
+  // the popup moves (pos changes, e.g. from the scroll-reposition effect above) or
+  // a different bucket is opened, so it never lags behind the popup it's beside.
+  useEffect(() => {
+    if (!open || !activePanel) return;
+    const rect = popoverRef.current?.getBoundingClientRect();
+    if (rect) setPanelPos(computePanelPos(rect)); // eslint-disable-line react-hooks/set-state-in-effect -- track the popup's DOM position, not React state
+  }, [open, activePanel, pos]);
+
   if (!node) return null;
   if (source === "iucn" && !node.estimatedSource) return null;
 
@@ -882,11 +930,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
                     rank={dim.rank}
                     label={dim.label}
                     breakdown={breakdown}
-                    onOpenPanel={(request) => {
-                      setActivePanel(request);
-                      const rect = popoverRef.current?.getBoundingClientRect();
-                      setPanelPos(rect ? computePanelPos(rect) : { top: pos.top, left: pos.left + PANEL_GAP, maxHeight: pos.maxHeight });
-                    }}
+                    onOpenPanel={setActivePanel}
                   />
                 ) : null;
               })() : null}
