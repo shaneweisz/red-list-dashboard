@@ -286,9 +286,11 @@ const PANEL_GAP = 8;
 // Takes the popup's ACTUAL rendered rect (not just its {top,left} origin) — the
 // popup's width varies with its content (it's max-w-[340px], not a fixed width), so
 // assuming the max width left a visible gap for any popup narrower than that.
-// Also clamps top/maxHeight so the panel's own bottom never runs off the viewport
-// the way the popup itself used to (see computePopoverPos below) — long species
-// lists scroll internally instead of extending past the visible area.
+// Also clamps maxHeight so the panel's own bottom never runs off the viewport the
+// way the popup itself used to (see computePopoverPos below) — long species lists
+// scroll internally instead of extending past the visible area. `top` is never
+// adjusted to fit — same "never flip/reposition, just clamp height" rule as the
+// popup, so the panel's position relative to the popup is always predictable.
 function computePanelPos(popupRect: { top: number; left: number; right: number }): { top: number; left: number; maxHeight: number } {
   const margin = 8;
   if (typeof window === "undefined") return { top: popupRect.top, left: popupRect.right, maxHeight: 400 };
@@ -305,7 +307,6 @@ function computePanelPos(popupRect: { top: number; left: number; right: number }
     left = Math.max(8, Math.min(popupRect.left, window.innerWidth - PANEL_WIDTH - 8));
   }
   const maxHeight = Math.max(100, Math.min(window.innerHeight * 0.7, window.innerHeight - top - margin));
-  top = Math.min(top, Math.max(margin, window.innerHeight - maxHeight - margin));
   return { top, left, maxHeight };
 }
 
@@ -314,19 +315,16 @@ function computePanelPos(popupRect: { top: number; left: number; right: number }
 // bottom edge below the viewport whenever the info icon was near the bottom of the
 // screen — the content below the fold was there but unreachable (no scroll target
 // visible, no way to see there was more). Now the max-height is derived from actual
-// space below the button, and if that space is too cramped, the popup opens
-// upward from the button instead of downward off-screen.
+// space below the button, so the popup's own internal scroll (not the viewport)
+// handles anything that doesn't fit. Always opens downward from the button — never
+// flips above it, so its position relative to the row that triggered it is always
+// predictable.
 function computePopoverPos(rect: { top: number; bottom: number; left: number }): { top: number; left: number; maxHeight: number } {
   const margin = 8;
   const left = Math.min(rect.left, window.innerWidth - 360);
   const preferredMaxHeight = window.innerHeight * 0.7;
   const spaceBelow = window.innerHeight - rect.bottom - 4 - margin;
-  const spaceAbove = rect.top - 4 - margin;
-  if (spaceBelow >= 150 || spaceBelow >= spaceAbove) {
-    return { top: rect.bottom + 4, left, maxHeight: Math.max(100, Math.min(preferredMaxHeight, spaceBelow)) };
-  }
-  const maxHeight = Math.max(100, Math.min(preferredMaxHeight, spaceAbove));
-  return { top: Math.max(margin, rect.top - 4 - maxHeight), left, maxHeight };
+  return { top: rect.bottom + 4, left, maxHeight: Math.max(100, Math.min(preferredMaxHeight, spaceBelow)) };
 }
 
 // Paginated species-level list rendered beside the main popup when a count row
@@ -343,11 +341,13 @@ function SpeciesListPanel({
   request,
   pos,
   onClose,
+  panelRef,
 }: {
   nodeId: string;
   request: PanelRequest;
   pos: { top: number; left: number; maxHeight: number };
   onClose: () => void;
+  panelRef: React.RefObject<HTMLDivElement | null>;
 }) {
   const isNe = request.bucket === "ne";
   const cacheRef = useRef<Map<string, RedListSpecies[]>>(new Map());
@@ -413,6 +413,7 @@ function SpeciesListPanel({
 
   return createPortal(
     <div
+      ref={panelRef}
       className="fixed z-[9999] overflow-y-auto px-3 py-2 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded-lg shadow-lg normal-case text-left"
       style={{ top: pos.top, left: pos.left, width: PANEL_WIDTH, maxHeight: pos.maxHeight }}
       onClick={(e) => e.stopPropagation()}
@@ -690,6 +691,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ top: 0, left: 0, maxHeight: 0 });
   // Species-level panel opened by clicking a count row (Assessed/Not Evaluated/CoL
   // Match/No CoL Match) — a sibling of the popup, not nested inside it, so it can
@@ -701,9 +703,19 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
     if (!open) return;
     const close = (e: Event) => {
       if (e instanceof KeyboardEvent && e.key !== "Escape") return;
-      if (e.type === "mousedown") {
+      // Both mousedown (outside click) and scroll (capture-phase, so it also
+      // fires for a scroll *inside* the popover/panel's own overflow-y-auto — the
+      // event's target is the scrolling element itself, not something that bubbles
+      // up to it) need to ignore anything originating inside the popover, the
+      // panel, or the trigger button — otherwise clicking a link or just scrolling
+      // to read more of a long list closes the whole thing before you get there.
+      if (e.type === "mousedown" || e.type === "scroll") {
         const target = e.target as Node;
-        if (popoverRef.current?.contains(target) || btnRef.current?.contains(target)) return;
+        if (
+          popoverRef.current?.contains(target) ||
+          panelRef.current?.contains(target) ||
+          btnRef.current?.contains(target)
+        ) return;
       }
       setOpen(false);
       setActivePanel(null);
@@ -711,7 +723,8 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
     document.addEventListener("mousedown", close);
     document.addEventListener("keydown", close);
     // Table body scrolls internally (overflow-x-auto) — a stale-positioned popover
-    // left open through a scroll is worse than just closing it.
+    // left open through a scroll of the PAGE is worse than just closing it (the
+    // containment check above exempts scrolling the popover/panel's own content).
     document.addEventListener("scroll", close, true);
     return () => {
       document.removeEventListener("mousedown", close);
@@ -809,6 +822,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
           request={activePanel}
           pos={panelPos}
           onClose={() => setActivePanel(null)}
+          panelRef={panelRef}
         />
       )}
     </>

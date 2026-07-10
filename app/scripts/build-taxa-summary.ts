@@ -255,22 +255,49 @@ export interface SplitDetail {
 // be wasteful). The heuristic: CoL keeps a subspecies/infraspecific synonym record
 // when a subspecies is promoted to full species status (e.g. "Gazella gazella
 // acaciae" survives as a synonym once "Gazella acaciae" becomes its own accepted
-// species) — so a synonym whose parent_id is a genuinely NOT-evaluated species, and
-// whose first two name tokens (genus + species) match an IUCN-assessed species, is
-// very likely that NE species' former parent. This only catches the "was a named
-// subspecies, got promoted" pattern (the common case in recent Bovidae splits) — it
-// won't catch a split into a segregate with no prior CoL subspecies record. One
-// arbitrary (but deterministic) candidate is kept per NE species via row_number when
-// more than one subspecies-rank synonym implies a different parent.
+// species) — so a synonym whose first two name tokens (genus + species) match an
+// IUCN-assessed species is very likely that promoted species' former parent.
+//
+// One extra wrinkle, found via Giraffa tippelskirchi (a masai giraffe, promoted from
+// subspecies to species — genuinely NE, split from the assessed Giraffa
+// camelopardalis): CoL doesn't always point the old synonym straight at the new
+// species. When the promoted species also got its own nominate subspecies (an
+// "autonym" — here "Giraffa tippelskirchi tippelskirchi"), the OLD synonym
+// ("Giraffa camelopardalis tippelskirchi") points at that new nominate SUBSPECIES,
+// not at the species itself. So a direct synonym->parent hop isn't enough — this
+// resolves one extra hop up (subspecies -> its own parent) whenever the synonym's
+// immediate parent turns out to be an accepted subspecies/infraspecific rank rather
+// than the species itself.
+//
+// This only catches the "was a named subspecies, got promoted" pattern (the common
+// case in recent Bovidae/Giraffidae splits) — it won't catch a split into a
+// segregate with no prior CoL subspecies record. One arbitrary (but deterministic)
+// candidate is kept per NE species via row_number when more than one subspecies-rank
+// synonym implies a different parent.
 const SPLIT_CANDIDATES_SQL = (bb: string, assessedPath: string) => `
   CREATE TEMP TABLE split_candidates AS
-  WITH candidate_synonyms AS (
+  WITH synonym_rows AS (
     SELECT
-      b.parent_id AS ne_col_id,
+      b.parent_id AS direct_parent_id,
       split_part(b.scientific_name, ' ', 1) || ' ' || split_part(b.scientific_name, ' ', 2) AS parent_binomial
     FROM read_parquet('${bb}') b
     WHERE b.status = 'synonym' AND b.rank IN ('subspecies', 'infraspecific name', 'variety')
-      AND b.parent_id NOT IN (SELECT col_id FROM assessed_cids)
+  ),
+  resolved AS (
+    SELECT
+      CASE
+        WHEN p.rank = 'species' THEN p.col_id
+        WHEN p.rank IN ('subspecies', 'infraspecific name', 'variety')
+             AND p.status IN ('accepted', 'provisionally accepted') THEN p.parent_id
+        ELSE NULL
+      END AS ne_col_id,
+      sr.parent_binomial
+    FROM synonym_rows sr
+    JOIN read_parquet('${bb}') p ON p.col_id = sr.direct_parent_id
+  ),
+  candidate_synonyms AS (
+    SELECT ne_col_id, parent_binomial FROM resolved
+    WHERE ne_col_id IS NOT NULL AND ne_col_id NOT IN (SELECT col_id FROM assessed_cids)
   ),
   matched AS (
     SELECT DISTINCT cs.ne_col_id, a.id AS parent_id, a.scientific_name AS parent_name, a.iucn_category AS parent_category
