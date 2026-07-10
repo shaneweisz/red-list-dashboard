@@ -651,7 +651,18 @@ export interface NodeSummary {
   // not CoL's) — comparing it to count-neCount surfaces likely splits/lumps/coverage
   // gaps a CoL-only view would hide (see BreakdownList in TaxaSummary.tsx). Undefined
   // when the CoL artifacts weren't present at build time.
-  colBreakdown?: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[] }[];
+  colBreakdown?: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[] }[];
+}
+
+// See scripts/build-taxa-summary.ts's classifyNoMatch for what each reason means and
+// how it's derived. Modular/additive on top of noMatchIds — safe to ignore or drop
+// without touching the count-only CoL Match / No CoL Match mechanism.
+export type NoMatchReason = "no_link" | "missing_from_backbone" | "lumped" | "not_in_base" | "extinct_unconfirmed" | "classified_elsewhere";
+export interface NoMatchDetail {
+  id: number;
+  name: string;
+  reason: NoMatchReason;
+  detail?: string;
 }
 
 const CURRENT_YEAR = new Date().getFullYear();

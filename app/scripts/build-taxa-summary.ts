@@ -193,6 +193,50 @@ function primaryDimension(filter: NodeFilter): PrimaryDim | null {
   return null;
 }
 
+// Why one assessed species (behind a breakdown row's "No CoL Match" count) doesn't
+// have a clean 1:1 CoL match — see classifyNoMatch. Modular/self-contained by design
+// (a single function producing an additive field, colBreakdown[].noMatchDetails) so
+// this can be reverted independently of the count-only noMatchIds mechanism it rides
+// alongside.
+export type NoMatchReason = "no_link" | "missing_from_backbone" | "lumped" | "not_in_base" | "extinct_unconfirmed" | "classified_elsewhere";
+export interface NoMatchDetail {
+  id: number;
+  name: string;
+  reason: NoMatchReason;
+  /** The species name it's lumped with (reason "lumped" only). */
+  detail?: string;
+}
+
+// Classifies one "no match" diagnosis row (see the diagRows query in attachColCounts)
+// into a human-explainable reason, cheapest/most-specific check first:
+//  - no_link: never matched to any CoL name at all.
+//  - missing_from_backbone: its linked col_id isn't in the current species/ build
+//    (e.g. a curated-checklist demotion — see build-backbone.ts's `demoted` table).
+//  - lumped: its linked col_id IS in the universe, but a DIFFERENT assessed species
+//    won the accepted-name tie-break for it (a genuine CoL synonymy/lump).
+//  - not_in_base: its linked col_id exists and matches this name, but isn't in CoL's
+//    curated Base checklist yet (freshly split/described, still XR-only).
+//  - extinct_unconfirmed: CoL flags its linked col_id extinct, but IUCN hasn't
+//    confirmed EX/EW for it (so it falls outside the extant-or-EX/EW universe).
+//  - classified_elsewhere: none of the above — the linked col_id is real, in_base,
+//    and extant, but CoL's own class/order/family for it doesn't match this name
+//    (a CoL-side reclassification, e.g. the pre-fix Ziphiidae/Hyperoodontidae case).
+function classifyNoMatch(row: Record<string, unknown>): NoMatchDetail {
+  const id = Number(row.id);
+  const name = String(row.name);
+  const linkedColId = row.linked_col_id as string | null;
+  const linkedName = row.linked_name as string | null;
+  const linkedInBase = row.linked_in_base as boolean | null;
+  const linkedExtinct = row.linked_extinct as boolean | null;
+  const winnerName = row.winner_name as string | null;
+  if (!linkedColId) return { id, name, reason: "no_link" };
+  if (!linkedName) return { id, name, reason: "missing_from_backbone" };
+  if (winnerName) return { id, name, reason: "lumped", detail: winnerName };
+  if (!linkedInBase) return { id, name, reason: "not_in_base" };
+  if (linkedExtinct) return { id, name, reason: "extinct_unconfirmed" };
+  return { id, name, reason: "classified_elsewhere" };
+}
+
 // Attach CoL counts (colDescribed / colNe) to every node-children summary — same
 // universe + assessed-by-col_id logic as the per-group counts, filtered per node so
 // sub-groups (e.g. mammals → rodents) get real numbers instead of "—". Also attaches
@@ -232,7 +276,10 @@ async function attachColCounts(summaries: Record<string, NodeSummary[]>): Promis
 
       const dim = COL_SPECIES_NAME_OVERRIDES[node.id] ? null : primaryDimension(node.filter);
       if (dim) {
-        const breakdown: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[] }[] = [];
+        const breakdown: {
+          name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[];
+          noMatchDetails?: NoMatchDetail[];
+        }[] = [];
         for (const name of dim.names) {
           const narrowed: NodeFilter = { ...node.filter, [dim.field]: [name] };
           const bRows = await (await conn.run(`
@@ -249,44 +296,61 @@ async function attachColCounts(summaries: Record<string, NodeSummary[]>): Promis
           // (see BreakdownList in TaxaSummary.tsx).
           const trueRows = await (await conn.run(`
             SELECT count(*) AS n FROM read_parquet('${assessedPath}') WHERE ${filterToSql(narrowed)}`)).getRowObjects();
-          // The specific assessed species (sis_taxon_id) behind that gap. Each CTE is
-          // scoped to a single table so filterToSql's bare column names (shared between
-          // species/ and assessed.parquet, e.g. scientific_name) never collide. Two
-          // assessed species can share one col_id (a genuine CoL lump — e.g. Wild Pig
-          // SG's Sus bucculentus (EX) is CoL-synonymized into Sus scrofa (LC), both
-          // linked to the same accepted col_id) — count(*) over distinct col_ids
-          // (bRows above) only "sees" that pair once, so trueAssessed can exceed
-          // count-neCount even when every assessed id technically has SOME link.
-          // ROW_NUMBER picks one canonical "CoL Match" winner per col_id (preferring
-          // an accepted-name match over a synonym-derived one); every other candidate
-          // for that col_id, and every id with no valid link at all, ends up in
-          // noMatchIds — making trueAssessed - noMatchIds.length exactly equal
-          // count - neCount (verified below in a --verify pass).
-          const noMatchRows = await (await conn.run(`
+          // The specific assessed species (sis_taxon_id) behind that gap, plus enough
+          // context (its own primary CoL link, and who "won" that link if it lost a
+          // tie) to classify WHY each one doesn't have a clean match — see
+          // classifyNoMatch below. Each CTE is scoped to a single table so
+          // filterToSql's bare column names (shared between species/ and
+          // assessed.parquet, e.g. scientific_name) never collide. Two assessed
+          // species can share one col_id (a genuine CoL lump — e.g. Wild Pig SG's Sus
+          // bucculentus (EX) is CoL-synonymized into Sus scrofa (LC), both linked to
+          // the same accepted col_id) — count(*) over distinct col_ids (bRows above)
+          // only "sees" that pair once, so trueAssessed can exceed count-neCount even
+          // when every assessed id technically has SOME link. ROW_NUMBER picks one
+          // canonical "CoL Match" winner per col_id (preferring an accepted-name
+          // match over a synonym-derived one); every other candidate for that col_id,
+          // and every id with no valid link at all, ends up unmatched — making
+          // trueAssessed - noMatchIds.length exactly equal the "CoL Match" count.
+          const diagRows = await (await conn.run(`
             WITH matched_species AS (
               SELECT col_id FROM read_parquet('${speciesGlob}', hive_partitioning=true)
               WHERE in_base AND ${universe} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL} AND ${filterToSql(narrowed, node.id)}
             ),
             matched_assessed AS (
-              SELECT id FROM read_parquet('${assessedPath}') WHERE ${filterToSql(narrowed)}
+              SELECT id, scientific_name FROM read_parquet('${assessedPath}') WHERE ${filterToSql(narrowed)}
             ),
-            candidate_links AS (
-              SELECT ma.id AS id,
-                     row_number() OVER (
-                       PARTITION BY l.col_id
-                       ORDER BY (CASE WHEN l.match_method IN ('accepted', 'accepted_homonym') THEN 0 ELSE 1 END), ma.id
-                     ) AS rn
-              FROM matched_assessed ma
+            primary_links AS (
               -- Primary link only (excludes 'iucn_synonym_covered' — a bookkeeping
               -- alias so an assessed species doesn't resurface as a new NE candidate
               -- under a second CoL name, not a real "this species also equals a
               -- second col_id" claim). Without this, an id with both a primary and a
               -- covered link would win TWO col_id partitions and inflate the
               -- apparent match count.
+              SELECT ma.id AS id, ma.scientific_name AS name, l.col_id AS col_id, l.match_method AS match_method
+              FROM matched_assessed ma
               JOIN read_parquet('${link}') l ON l.id = ma.id AND l.src = 'redlist' AND l.col_id IS NOT NULL AND l.match_method != 'iucn_synonym_covered'
-              WHERE l.col_id IN (SELECT col_id FROM matched_species)
+            ),
+            candidate_links AS (
+              SELECT id, name, col_id,
+                     row_number() OVER (
+                       PARTITION BY col_id
+                       ORDER BY (CASE WHEN match_method IN ('accepted', 'accepted_homonym') THEN 0 ELSE 1 END), id
+                     ) AS rn
+              FROM primary_links
+              WHERE col_id IN (SELECT col_id FROM matched_species)
+            ),
+            winners AS (
+              SELECT col_id, id AS winner_id, name AS winner_name FROM candidate_links WHERE rn = 1
             )
-            SELECT ma.id AS id FROM matched_assessed ma
+            SELECT
+              ma.id AS id, ma.scientific_name AS name,
+              pl.col_id AS linked_col_id,
+              sp.scientific_name AS linked_name, sp.in_base AS linked_in_base, sp.extinct AS linked_extinct,
+              w.winner_name AS winner_name
+            FROM matched_assessed ma
+            LEFT JOIN primary_links pl ON pl.id = ma.id
+            LEFT JOIN read_parquet('${speciesGlob}', hive_partitioning=true) sp ON sp.col_id = pl.col_id
+            LEFT JOIN winners w ON w.col_id = pl.col_id
             LEFT JOIN candidate_links cl ON cl.id = ma.id AND cl.rn = 1
             WHERE cl.id IS NULL`)).getRowObjects();
           // Note: trueAssessed - noMatchIds.length (the "CoL Match" count shown in the
@@ -298,9 +362,11 @@ async function attachColCounts(summaries: Record<string, NodeSummary[]>): Promis
           // col_ids at once. Both are correct; they answer different questions (CoL's
           // own described-vs-assessed split, vs. which specific IUCN-assessed species
           // have a clean 1:1 CoL match).
+          const noMatchDetails = diagRows.map((r) => classifyNoMatch(r));
           breakdown.push({
             name, count: Number(bRows[0].n), neCount: Number(bRows[0].ne), trueAssessed: Number(trueRows[0].n),
-            noMatchIds: noMatchRows.map((r) => Number(r.id)),
+            noMatchIds: noMatchDetails.map((d) => d.id),
+            ...(noMatchDetails.length ? { noMatchDetails } : {}),
           });
           breakdownQueries++;
         }

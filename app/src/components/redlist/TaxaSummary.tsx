@@ -13,6 +13,20 @@ import {
   type FilterRank, type DescribeFilterSegment,
 } from "@/lib/taxonomy-utils";
 import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
+
+// See scripts/build-taxa-summary.ts's classifyNoMatch for what each reason means.
+// Modular/additive on top of colBreakdown[].noMatchIds — safe to drop independently
+// of the count-only CoL Match / No CoL Match mechanism it rides alongside.
+type NoMatchDetail = { id: number; name: string; reason: string; detail?: string };
+const NO_MATCH_REASON_LABEL: Record<string, string> = {
+  no_link: "not yet matched to any Catalogue of Life name",
+  missing_from_backbone: "its Catalogue of Life match isn't in the current backbone",
+  lumped: "Catalogue of Life treats this as the same species as",
+  not_in_base: "not yet in Catalogue of Life's curated checklist",
+  extinct_unconfirmed: "Catalogue of Life flags this extinct, but IUCN hasn't confirmed Extinct/Extinct in the Wild",
+  classified_elsewhere: "Catalogue of Life classifies this under a different name here",
+};
+
 interface Table1aRowData {
   group: string;
   name: string;
@@ -29,7 +43,7 @@ interface Table1aRowData {
   medianGbifObsPerSpecies?: number;
   colDescribed?: number;
   colNe?: number;
-  colBreakdown?: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[] }[];
+  colBreakdown?: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[] }[];
 }
 
 interface Table1aSectionData {
@@ -76,7 +90,7 @@ interface SubGroupSummary {
   byCategory: Record<string, number>;
   colDescribed?: number;
   colNe?: number;
-  colBreakdown?: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[] }[];
+  colBreakdown?: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[] }[];
 }
 
 interface Props {
@@ -233,6 +247,53 @@ function navigateToNodeSpeciesList(
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
+// Jump straight to one species' own detail view (e.g. a single "No CoL Match" name
+// listed in the popover) — same navigation mechanism as navigateToNodeSpeciesList,
+// via the URL's standalone `species=` id param.
+function navigateToSpecies(nodeId: string, sisTaxonId: number) {
+  if (typeof window === "undefined") return;
+  const params = new URLSearchParams();
+  params.set("taxa", stripNodePrefix(nodeId));
+  params.set("species", String(sisTaxonId));
+  window.history.pushState(null, "", `/?${params.toString()}`);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
+// Caps how many "No CoL Match" species get listed by name inline in the popover —
+// a handful of nodes (e.g. Small Mammal SG's Rodentia, ~140 mismatches from a
+// large-scale CoL taxonomic split) would otherwise dump a huge wall of names into a
+// 340px-wide box. The "No CoL Match" button above this list still navigates to the
+// FULL filtered species list regardless of the cap.
+const NO_MATCH_DETAIL_CAP = 6;
+
+// Inline "why" list for a breakdown name's "No CoL Match" species — modular/additive
+// (renders nothing if the build didn't attach noMatchDetails, e.g. an older data
+// sync), so it can be removed without touching the count-only CoL Match/No CoL
+// Match navigation it sits below.
+function NoMatchDetailsList({ details, nodeId }: { details: NoMatchDetail[]; nodeId: string }) {
+  const shown = details.slice(0, NO_MATCH_DETAIL_CAP);
+  const hiddenCount = details.length - shown.length;
+  return (
+    <ul className="ml-4 mt-0.5 space-y-0.5 text-zinc-300">
+      {shown.map((d) => (
+        <li key={d.id}>
+          <button
+            type="button"
+            className="underline decoration-dotted underline-offset-2 hover:text-white text-left"
+            onClick={() => navigateToSpecies(nodeId, d.id)}
+          >
+            {d.name}
+          </button>
+          {" — "}
+          {NO_MATCH_REASON_LABEL[d.reason] ?? d.reason}
+          {d.detail ? ` ${d.detail}` : ""}
+        </li>
+      ))}
+      {hiddenCount > 0 && <li>+ {hiddenCount} more (see &quot;No CoL Match&quot; above)</li>}
+    </ul>
+  );
+}
+
 // The "Assessed" row within one breakdown name — a plain clickable leaf when CoL and
 // IUCN agree on the count (the common case), or its own nested expand into CoL
 // Match / No CoL Match when they don't, so the split is visible right where it
@@ -242,6 +303,7 @@ function AssessedBreakdownRow({
   name,
   trueAssessed,
   noMatchIds,
+  noMatchDetails,
   nodeId,
   onNavigate,
 }: {
@@ -249,6 +311,7 @@ function AssessedBreakdownRow({
   name: string;
   trueAssessed: number;
   noMatchIds: number[];
+  noMatchDetails?: NoMatchDetail[];
   nodeId: string;
   onNavigate: () => void;
 }) {
@@ -288,6 +351,7 @@ function AssessedBreakdownRow({
           >
             No CoL Match ({noMatchIds.length})
           </button>
+          {noMatchDetails?.length ? <NoMatchDetailsList details={noMatchDetails} nodeId={nodeId} /> : null}
         </li>
       </ul>
     </li>
@@ -329,7 +393,7 @@ function BreakdownList({
 }: {
   rank: FilterRank;
   label: string;
-  breakdown: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[] }[];
+  breakdown: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[] }[];
   nodeId: string;
   onNavigate: () => void;
 }) {
@@ -377,6 +441,7 @@ function BreakdownList({
                     name={b.name}
                     trueAssessed={b.trueAssessed}
                     noMatchIds={b.noMatchIds}
+                    noMatchDetails={b.noMatchDetails}
                     nodeId={nodeId}
                     onNavigate={onNavigate}
                   />
@@ -406,7 +471,7 @@ function BreakdownList({
 // between a hover trigger and its target does this, there's no CSS-only fix that
 // survives a real mouse gap. Portal-rendered (mirrors the column-visibility menu
 // pattern above) so it isn't clipped by the table's scroll/sticky ancestors.
-function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; source: "iucn" | "col"; breakdown?: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[] }[] }) {
+function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; source: "iucn" | "col"; breakdown?: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[] }[] }) {
   const node = findNode(nodeId);
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
