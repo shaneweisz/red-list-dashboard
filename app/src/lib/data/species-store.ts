@@ -651,7 +651,7 @@ export interface NodeSummary {
   // not CoL's) — comparing it to count-neCount surfaces likely splits/lumps/coverage
   // gaps a CoL-only view would hide (see BreakdownList in TaxaSummary.tsx). Undefined
   // when the CoL artifacts weren't present at build time.
-  colBreakdown?: { name: string; count: number; neCount: number; trueAssessed: number }[];
+  colBreakdown?: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[] }[];
 }
 
 const CURRENT_YEAR = new Date().getFullYear();

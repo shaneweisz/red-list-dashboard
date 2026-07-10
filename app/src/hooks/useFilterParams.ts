@@ -48,12 +48,30 @@ const FILTER_RANKS: FilterRank[] = ["class", "order", "family", "genus", "specie
 // implicitly meaning "the selected subgroup") so RedListView can gate the filter on
 // selectedSubgroups still containing that exact node — a stale bd= surviving into an
 // unrelated group's view becomes inert instead of silently hiding all its species.
-const parseBreakdownParam = (p: URLSearchParams): { nodeId: string; rank: FilterRank; name: string } | null => {
+// An optional `:only:id1,id2` or `:excl:id1,id2` suffix further narrows to/away-from
+// an explicit sis_taxon_id list (the "No CoL Match" / "CoL Match" split within one
+// breakdown name's Assessed count).
+export interface BreakdownParam {
+  nodeId: string;
+  rank: FilterRank;
+  name: string;
+  onlyIds?: number[];
+  excludeIds?: number[];
+}
+const parseBreakdownParam = (p: URLSearchParams): BreakdownParam | null => {
   const raw = p.get("bd");
   if (!raw) return null;
-  const [nodeId, rank, name] = raw.split(":");
+  const [nodeId, rank, name, mode, idsCsv] = raw.split(":");
   if (!nodeId || !name || !FILTER_RANKS.includes(rank as FilterRank)) return null;
-  return { nodeId, rank: rank as FilterRank, name };
+  const result: BreakdownParam = { nodeId, rank: rank as FilterRank, name };
+  if ((mode === "only" || mode === "excl") && idsCsv) {
+    const ids = idsCsv.split(",").map(Number).filter((n) => !Number.isNaN(n));
+    if (ids.length > 0) {
+      if (mode === "only") result.onlyIds = ids;
+      else result.excludeIds = ids;
+    }
+  }
+  return result;
 };
 
 export function parseParams(search: string) {
@@ -173,7 +191,7 @@ export function buildQs(state: {
   movementPatterns: Set<string>;
   threats: Set<string>;
   hasMap: "yes" | "no" | null;
-  breakdown?: { nodeId: string; rank: FilterRank; name: string } | null;
+  breakdown?: BreakdownParam | null;
   endemicsOnly: boolean;
   growthForms: Set<string>;
   assessors: Set<string>;
@@ -209,7 +227,12 @@ export function buildQs(state: {
   if (state.movementPatterns.size > 0) p.set("movement", [...state.movementPatterns].join(","));
   if (state.threats.size > 0) p.set("threats", [...state.threats].join(","));
   if (state.hasMap) p.set("hasMap", state.hasMap);
-  if (state.breakdown) p.set("bd", `${state.breakdown.nodeId}:${state.breakdown.rank}:${state.breakdown.name}`);
+  if (state.breakdown) {
+    let bd = `${state.breakdown.nodeId}:${state.breakdown.rank}:${state.breakdown.name}`;
+    if (state.breakdown.onlyIds?.length) bd += `:only:${state.breakdown.onlyIds.join(",")}`;
+    else if (state.breakdown.excludeIds?.length) bd += `:excl:${state.breakdown.excludeIds.join(",")}`;
+    p.set("bd", bd);
+  }
   if (state.endemicsOnly) p.set("endemics", "1");
   if (state.growthForms.size > 0) p.set("growthForms", [...state.growthForms].join(","));
   if (state.assessors.size > 0) p.set("assessors", [...state.assessors].join("|"));
@@ -498,7 +521,7 @@ export function useFilterParams() {
   );
 
   const setBreakdownFilter = useCallback(
-    (value: { nodeId: string; rank: FilterRank; name: string } | null) => {
+    (value: BreakdownParam | null) => {
       setState(prev => {
         const next = { ...prev, breakdown: value };
         queueMicrotask(() => syncUrl(next, false));

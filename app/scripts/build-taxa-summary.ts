@@ -232,7 +232,7 @@ async function attachColCounts(summaries: Record<string, NodeSummary[]>): Promis
 
       const dim = COL_SPECIES_NAME_OVERRIDES[node.id] ? null : primaryDimension(node.filter);
       if (dim) {
-        const breakdown: { name: string; count: number; neCount: number; trueAssessed: number }[] = [];
+        const breakdown: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[] }[] = [];
         for (const name of dim.names) {
           const narrowed: NodeFilter = { ...node.filter, [dim.field]: [name] };
           const bRows = await (await conn.run(`
@@ -249,7 +249,59 @@ async function attachColCounts(summaries: Record<string, NodeSummary[]>): Promis
           // (see BreakdownList in TaxaSummary.tsx).
           const trueRows = await (await conn.run(`
             SELECT count(*) AS n FROM read_parquet('${assessedPath}') WHERE ${filterToSql(narrowed)}`)).getRowObjects();
-          breakdown.push({ name, count: Number(bRows[0].n), neCount: Number(bRows[0].ne), trueAssessed: Number(trueRows[0].n) });
+          // The specific assessed species (sis_taxon_id) behind that gap. Each CTE is
+          // scoped to a single table so filterToSql's bare column names (shared between
+          // species/ and assessed.parquet, e.g. scientific_name) never collide. Two
+          // assessed species can share one col_id (a genuine CoL lump — e.g. Wild Pig
+          // SG's Sus bucculentus (EX) is CoL-synonymized into Sus scrofa (LC), both
+          // linked to the same accepted col_id) — count(*) over distinct col_ids
+          // (bRows above) only "sees" that pair once, so trueAssessed can exceed
+          // count-neCount even when every assessed id technically has SOME link.
+          // ROW_NUMBER picks one canonical "CoL Match" winner per col_id (preferring
+          // an accepted-name match over a synonym-derived one); every other candidate
+          // for that col_id, and every id with no valid link at all, ends up in
+          // noMatchIds — making trueAssessed - noMatchIds.length exactly equal
+          // count - neCount (verified below in a --verify pass).
+          const noMatchRows = await (await conn.run(`
+            WITH matched_species AS (
+              SELECT col_id FROM read_parquet('${speciesGlob}', hive_partitioning=true)
+              WHERE in_base AND ${universe} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL} AND ${filterToSql(narrowed, node.id)}
+            ),
+            matched_assessed AS (
+              SELECT id FROM read_parquet('${assessedPath}') WHERE ${filterToSql(narrowed)}
+            ),
+            candidate_links AS (
+              SELECT ma.id AS id,
+                     row_number() OVER (
+                       PARTITION BY l.col_id
+                       ORDER BY (CASE WHEN l.match_method IN ('accepted', 'accepted_homonym') THEN 0 ELSE 1 END), ma.id
+                     ) AS rn
+              FROM matched_assessed ma
+              -- Primary link only (excludes 'iucn_synonym_covered' — a bookkeeping
+              -- alias so an assessed species doesn't resurface as a new NE candidate
+              -- under a second CoL name, not a real "this species also equals a
+              -- second col_id" claim). Without this, an id with both a primary and a
+              -- covered link would win TWO col_id partitions and inflate the
+              -- apparent match count.
+              JOIN read_parquet('${link}') l ON l.id = ma.id AND l.src = 'redlist' AND l.col_id IS NOT NULL AND l.match_method != 'iucn_synonym_covered'
+              WHERE l.col_id IN (SELECT col_id FROM matched_species)
+            )
+            SELECT ma.id AS id FROM matched_assessed ma
+            LEFT JOIN candidate_links cl ON cl.id = ma.id AND cl.rn = 1
+            WHERE cl.id IS NULL`)).getRowObjects();
+          // Note: trueAssessed - noMatchIds.length (the "CoL Match" count shown in the
+          // popover) is NOT expected to equal count - neCount above — the latter's
+          // "linked" definition (assessed_cids) includes col_ids only reachable via an
+          // 'iucn_synonym_covered' bookkeeping alias (an NE-dedup mechanism, not a real
+          // second described species), which noMatchIds deliberately excludes so one
+          // assessed id can't appear as the "canonical" CoL match for two different
+          // col_ids at once. Both are correct; they answer different questions (CoL's
+          // own described-vs-assessed split, vs. which specific IUCN-assessed species
+          // have a clean 1:1 CoL match).
+          breakdown.push({
+            name, count: Number(bRows[0].n), neCount: Number(bRows[0].ne), trueAssessed: Number(trueRows[0].n),
+            noMatchIds: noMatchRows.map((r) => Number(r.id)),
+          });
           breakdownQueries++;
         }
         child.colBreakdown = breakdown;

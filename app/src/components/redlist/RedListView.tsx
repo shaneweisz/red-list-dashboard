@@ -719,6 +719,16 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     // cheap line of defense) becomes inert instead of silently hiding every species.
     if (breakdownFilter && selectedSubgroups.has(breakdownFilter.nodeId)) {
       filtered = filtered.filter(s => matchesBreakdownName(s, breakdownFilter.rank, breakdownFilter.name));
+      // CoL Match / No CoL Match split within this name's Assessed count (only
+      // meaningful for assessed species, which is all `species` is in reassessments
+      // mode — the id lists are only ever sent alongside view=reassessments).
+      if (breakdownFilter.onlyIds?.length) {
+        const ids = new Set(breakdownFilter.onlyIds);
+        filtered = filtered.filter(s => s.sis_taxon_id != null && ids.has(s.sis_taxon_id));
+      } else if (breakdownFilter.excludeIds?.length) {
+        const ids = new Set(breakdownFilter.excludeIds);
+        filtered = filtered.filter(s => s.sis_taxon_id == null || !ids.has(s.sis_taxon_id));
+      }
     }
     // Exact URL-only base filters (outdated / obs / assessment-year / described-year
     // bounds). Applied here on the base set so every chart AND the table inherit
@@ -3024,6 +3034,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
               >
                 {breakdownDisplayName(breakdownFilter.rank, breakdownFilter.name)}
+                {breakdownFilter.onlyIds?.length ? " — No CoL Match" : breakdownFilter.excludeIds?.length ? " — CoL Match" : ""}
                 <span className="text-xs">×</span>
               </button>
             )}
