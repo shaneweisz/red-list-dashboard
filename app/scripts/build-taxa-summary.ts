@@ -240,6 +240,47 @@ function classifyNoMatch(row: Record<string, unknown>): NoMatchDetail {
   return { id, name, reason: "classified_elsewhere" };
 }
 
+// Heuristic "split from" flag for Not Evaluated species — see SPLIT_CANDIDATES_SQL
+// below for the mechanism and its caveats. Keyed by col_id (NE species have no
+// sis_taxon_id), additive on top of colBreakdown, and independently droppable.
+export interface SplitDetail {
+  colId: string;
+  parentId: number;
+  parentName: string;
+  parentCategory: string;
+}
+
+// Precomputes a col_id → likely-former-parent lookup, once per build (not once per
+// breakdown name — backbone.parquet is ~3.8M rows, so re-scanning it per name would
+// be wasteful). The heuristic: CoL keeps a subspecies/infraspecific synonym record
+// when a subspecies is promoted to full species status (e.g. "Gazella gazella
+// acaciae" survives as a synonym once "Gazella acaciae" becomes its own accepted
+// species) — so a synonym whose parent_id is a genuinely NOT-evaluated species, and
+// whose first two name tokens (genus + species) match an IUCN-assessed species, is
+// very likely that NE species' former parent. This only catches the "was a named
+// subspecies, got promoted" pattern (the common case in recent Bovidae splits) — it
+// won't catch a split into a segregate with no prior CoL subspecies record. One
+// arbitrary (but deterministic) candidate is kept per NE species via row_number when
+// more than one subspecies-rank synonym implies a different parent.
+const SPLIT_CANDIDATES_SQL = (bb: string, assessedPath: string) => `
+  CREATE TEMP TABLE split_candidates AS
+  WITH candidate_synonyms AS (
+    SELECT
+      b.parent_id AS ne_col_id,
+      split_part(b.scientific_name, ' ', 1) || ' ' || split_part(b.scientific_name, ' ', 2) AS parent_binomial
+    FROM read_parquet('${bb}') b
+    WHERE b.status = 'synonym' AND b.rank IN ('subspecies', 'infraspecific name', 'variety')
+      AND b.parent_id NOT IN (SELECT col_id FROM assessed_cids)
+  ),
+  matched AS (
+    SELECT DISTINCT cs.ne_col_id, a.id AS parent_id, a.scientific_name AS parent_name, a.iucn_category AS parent_category
+    FROM candidate_synonyms cs
+    JOIN read_parquet('${assessedPath}') a ON lower(a.scientific_name) = lower(cs.parent_binomial)
+  )
+  SELECT ne_col_id, parent_id, parent_name, parent_category,
+         row_number() OVER (PARTITION BY ne_col_id ORDER BY parent_id) AS rn
+  FROM matched`;
+
 // Attach CoL counts (colDescribed / colNe) to every node-children summary — same
 // universe + assessed-by-col_id logic as the per-group counts, filtered per node so
 // sub-groups (e.g. mammals → rodents) get real numbers instead of "—". Also attaches
@@ -252,6 +293,7 @@ async function attachColCounts(summaries: Record<string, NodeSummary[]>): Promis
   const link = path.join(DATA_DIR, "species_link.parquet");
   const assessedPath = path.join(DATA_DIR, "assessed.parquet");
   const speciesGlob = path.join(DATA_DIR, "species", "**", "*.parquet");
+  const backbonePath = path.join(DATA_DIR, "backbone.parquet");
   if (!fs.existsSync(path.join(DATA_DIR, "species")) || !fs.existsSync(link)) {
     console.log("  CoL node counts: species/ or species_link.parquet missing — skipping.");
     return;
@@ -262,6 +304,8 @@ async function attachColCounts(summaries: Record<string, NodeSummary[]>): Promis
   );
   await createExEwAssessedTable(conn, link, assessedPath, "ex_ew_assessed");
   const universe = extantUniverseSql("ex_ew_assessed");
+  const hasBackbone = fs.existsSync(backbonePath);
+  if (hasBackbone) await conn.run(SPLIT_CANDIDATES_SQL(backbonePath, assessedPath));
   let n = 0;
   let breakdownQueries = 0;
   for (const children of Object.values(summaries)) {
@@ -282,6 +326,7 @@ async function attachColCounts(summaries: Record<string, NodeSummary[]>): Promis
         const breakdown: {
           name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[];
           noMatchDetails?: NoMatchDetail[];
+          splitDetails?: SplitDetail[];
         }[] = [];
         for (const name of dim.names) {
           const narrowed: NodeFilter = { ...node.filter, [dim.field]: [name] };
@@ -366,10 +411,30 @@ async function attachColCounts(summaries: Record<string, NodeSummary[]>): Promis
           // own described-vs-assessed split, vs. which specific IUCN-assessed species
           // have a clean 1:1 CoL match).
           const noMatchDetails = diagRows.map((r) => classifyNoMatch(r));
+          // "Split from" candidates for this name's NE species — a lookup against the
+          // once-per-build split_candidates table (see SPLIT_CANDIDATES_SQL), not a
+          // fresh backbone.parquet scan. Deliberately scoped to the SAME NE universe
+          // as bRows.ne (in_base, extant/EX-EW, narrowed filter), so an entry here is
+          // guaranteed to be one of this name's neCount species.
+          const splitDetails: SplitDetail[] = hasBackbone
+            ? (await (await conn.run(`
+                SELECT ns.col_id AS ne_col_id, sc.parent_id, sc.parent_name, sc.parent_category
+                FROM (
+                  SELECT col_id FROM read_parquet('${speciesGlob}', hive_partitioning=true)
+                  WHERE in_base AND ${universe} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL}
+                    AND ${filterToSql(narrowed, node.id)} AND col_id NOT IN (SELECT col_id FROM assessed_cids)
+                ) ns
+                JOIN split_candidates sc ON sc.ne_col_id = ns.col_id AND sc.rn = 1`)).getRowObjects())
+                .map((r) => ({
+                  colId: String(r.ne_col_id), parentId: Number(r.parent_id),
+                  parentName: String(r.parent_name), parentCategory: String(r.parent_category),
+                }))
+            : [];
           breakdown.push({
             name, count: Number(bRows[0].n), neCount: Number(bRows[0].ne), trueAssessed: Number(trueRows[0].n),
             noMatchIds: noMatchDetails.map((d) => d.id),
             ...(noMatchDetails.length ? { noMatchDetails } : {}),
+            ...(splitDetails.length ? { splitDetails } : {}),
           });
           breakdownQueries++;
         }

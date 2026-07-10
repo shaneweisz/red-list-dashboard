@@ -651,7 +651,7 @@ export interface NodeSummary {
   // not CoL's) — comparing it to count-neCount surfaces likely splits/lumps/coverage
   // gaps a CoL-only view would hide (see BreakdownList in TaxaSummary.tsx). Undefined
   // when the CoL artifacts weren't present at build time.
-  colBreakdown?: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[] }[];
+  colBreakdown?: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[]; splitDetails?: SplitDetail[] }[];
 }
 
 // See scripts/build-taxa-summary.ts's classifyNoMatch for what each reason means and
@@ -663,6 +663,18 @@ export interface NoMatchDetail {
   name: string;
   reason: NoMatchReason;
   detail?: string;
+  detailId?: number;
+}
+
+// Heuristic "split from" flag for Not Evaluated species — see
+// scripts/build-taxa-summary.ts's SPLIT_CANDIDATES_SQL for the mechanism and its
+// caveats. Keyed by col_id (NE species have no sis_taxon_id), additive on top of
+// colBreakdown, and independently droppable.
+export interface SplitDetail {
+  colId: string;
+  parentId: number;
+  parentName: string;
+  parentCategory: string;
 }
 
 const CURRENT_YEAR = new Date().getFullYear();

@@ -29,6 +29,13 @@ const NO_MATCH_REASON_LABEL: Record<string, string> = {
   classified_elsewhere: "Catalogue of Life classifies this under a different name here",
 };
 
+// See scripts/build-taxa-summary.ts's SPLIT_CANDIDATES_SQL for the mechanism and its
+// caveats — a name-pattern heuristic (former-subspecies synonym → promoted species),
+// not a confirmed taxonomic changelog, so it's worded as "likely" rather than stated
+// as fact. Modular/additive on top of colBreakdown[].splitDetails — keyed by col_id
+// since Not Evaluated species have no sis_taxon_id.
+type SplitDetail = { colId: string; parentId: number; parentName: string; parentCategory: string };
+
 interface Table1aRowData {
   group: string;
   name: string;
@@ -45,7 +52,7 @@ interface Table1aRowData {
   medianGbifObsPerSpecies?: number;
   colDescribed?: number;
   colNe?: number;
-  colBreakdown?: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[] }[];
+  colBreakdown?: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[]; splitDetails?: SplitDetail[] }[];
 }
 
 interface Table1aSectionData {
@@ -92,7 +99,7 @@ interface SubGroupSummary {
   byCategory: Record<string, number>;
   colDescribed?: number;
   colNe?: number;
-  colBreakdown?: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[] }[];
+  colBreakdown?: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[]; splitDetails?: SplitDetail[] }[];
 }
 
 interface Props {
@@ -266,6 +273,7 @@ interface PanelRequest {
   label: string;
   noMatchIds?: number[];
   noMatchDetails?: NoMatchDetail[];
+  splitDetails?: SplitDetail[];
 }
 
 const PANEL_PAGE_SIZE = 10;
@@ -278,15 +286,47 @@ const PANEL_GAP = 8;
 // Takes the popup's ACTUAL rendered rect (not just its {top,left} origin) — the
 // popup's width varies with its content (it's max-w-[340px], not a fixed width), so
 // assuming the max width left a visible gap for any popup narrower than that.
-function computePanelPos(popupRect: { top: number; left: number; right: number }): { top: number; left: number } {
-  if (typeof window === "undefined") return { top: popupRect.top, left: popupRect.right };
+// Also clamps top/maxHeight so the panel's own bottom never runs off the viewport
+// the way the popup itself used to (see computePopoverPos below) — long species
+// lists scroll internally instead of extending past the visible area.
+function computePanelPos(popupRect: { top: number; left: number; right: number }): { top: number; left: number; maxHeight: number } {
+  const margin = 8;
+  if (typeof window === "undefined") return { top: popupRect.top, left: popupRect.right, maxHeight: 400 };
+  let top: number;
+  let left: number;
   if (window.innerWidth - popupRect.right - PANEL_GAP >= PANEL_WIDTH) {
-    return { top: popupRect.top, left: popupRect.right + PANEL_GAP };
+    top = popupRect.top;
+    left = popupRect.right + PANEL_GAP;
+  } else if (popupRect.left - PANEL_GAP >= PANEL_WIDTH) {
+    top = popupRect.top;
+    left = popupRect.left - PANEL_WIDTH - PANEL_GAP;
+  } else {
+    top = popupRect.top + 220;
+    left = Math.max(8, Math.min(popupRect.left, window.innerWidth - PANEL_WIDTH - 8));
   }
-  if (popupRect.left - PANEL_GAP >= PANEL_WIDTH) {
-    return { top: popupRect.top, left: popupRect.left - PANEL_WIDTH - PANEL_GAP };
+  const maxHeight = Math.max(100, Math.min(window.innerHeight * 0.7, window.innerHeight - top - margin));
+  top = Math.min(top, Math.max(margin, window.innerHeight - maxHeight - margin));
+  return { top, left, maxHeight };
+}
+
+// Positions the "# Described Species" popup itself. Previously this only clamped
+// `left`, leaving `top` (and the fixed max-h-[70vh]) free to push the popup's
+// bottom edge below the viewport whenever the info icon was near the bottom of the
+// screen — the content below the fold was there but unreachable (no scroll target
+// visible, no way to see there was more). Now the max-height is derived from actual
+// space below the button, and if that space is too cramped, the popup opens
+// upward from the button instead of downward off-screen.
+function computePopoverPos(rect: { top: number; bottom: number; left: number }): { top: number; left: number; maxHeight: number } {
+  const margin = 8;
+  const left = Math.min(rect.left, window.innerWidth - 360);
+  const preferredMaxHeight = window.innerHeight * 0.7;
+  const spaceBelow = window.innerHeight - rect.bottom - 4 - margin;
+  const spaceAbove = rect.top - 4 - margin;
+  if (spaceBelow >= 150 || spaceBelow >= spaceAbove) {
+    return { top: rect.bottom + 4, left, maxHeight: Math.max(100, Math.min(preferredMaxHeight, spaceBelow)) };
   }
-  return { top: popupRect.top + 220, left: Math.max(8, Math.min(popupRect.left, window.innerWidth - PANEL_WIDTH - 8)) };
+  const maxHeight = Math.max(100, Math.min(preferredMaxHeight, spaceAbove));
+  return { top: Math.max(margin, rect.top - 4 - maxHeight), left, maxHeight };
 }
 
 // Paginated species-level list rendered beside the main popup when a count row
@@ -306,7 +346,7 @@ function SpeciesListPanel({
 }: {
   nodeId: string;
   request: PanelRequest;
-  pos: { top: number; left: number };
+  pos: { top: number; left: number; maxHeight: number };
   onClose: () => void;
 }) {
   const isNe = request.bucket === "ne";
@@ -354,6 +394,12 @@ function SpeciesListPanel({
     return m;
   }, [request.noMatchDetails]);
 
+  const splitByColId = useMemo(() => {
+    const m = new Map<string, SplitDetail>();
+    request.splitDetails?.forEach((d) => m.set(d.colId, d));
+    return m;
+  }, [request.splitDetails]);
+
   const total = filtered?.length ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PANEL_PAGE_SIZE));
   const pageRows = filtered ? filtered.slice((page - 1) * PANEL_PAGE_SIZE, page * PANEL_PAGE_SIZE) : [];
@@ -367,8 +413,8 @@ function SpeciesListPanel({
 
   return createPortal(
     <div
-      className="fixed z-[9999] max-h-[70vh] overflow-y-auto px-3 py-2 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded-lg shadow-lg normal-case text-left"
-      style={{ top: pos.top, left: pos.left, width: PANEL_WIDTH }}
+      className="fixed z-[9999] overflow-y-auto px-3 py-2 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded-lg shadow-lg normal-case text-left"
+      style={{ top: pos.top, left: pos.left, width: PANEL_WIDTH, maxHeight: pos.maxHeight }}
       onClick={(e) => e.stopPropagation()}
       // Not inside popoverRef (a portal sibling, not a DOM descendant) — the outside-
       // click listener in DescribedInfoIcon only checks popoverRef/btnRef, so stop the
@@ -396,6 +442,7 @@ function SpeciesListPanel({
           <ul className="space-y-1">
             {pageRows.map((s) => {
               const detail = s.sis_taxon_id != null ? reasonBySisId.get(s.sis_taxon_id) : undefined;
+              const split = s.col_id != null ? splitByColId.get(s.col_id) : undefined;
               return (
                 <li key={s.id}>
                   <a
@@ -425,6 +472,22 @@ function SpeciesListPanel({
                           </>
                         ) : ` ${detail.detail}`
                       )}
+                    </span>
+                  )}
+                  {split && (
+                    <span
+                      className="text-zinc-300"
+                      title="Heuristic: Catalogue of Life still records this name as a former subspecies of the linked species — not a confirmed taxonomic changelog."
+                    >
+                      {" — likely split from "}
+                      <a
+                        href={speciesHref(nodeId, split.parentId, "reassessments")}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-300 hover:text-blue-200 underline"
+                      >
+                        {split.parentName}
+                      </a>
                     </span>
                   )}
                 </li>
@@ -546,7 +609,7 @@ function BreakdownList({
 }: {
   rank: FilterRank;
   label: string;
-  breakdown: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[] }[];
+  breakdown: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[]; splitDetails?: SplitDetail[] }[];
   onOpenPanel: (request: PanelRequest) => void;
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -600,7 +663,7 @@ function BreakdownList({
                     <button
                       type="button"
                       className="underline decoration-dotted underline-offset-2 hover:text-white"
-                      onClick={() => onOpenPanel({ rank, name: b.name, bucket: "ne", label: `${breakdownDisplayName(rank, b.name)} — Not Evaluated` })}
+                      onClick={() => onOpenPanel({ rank, name: b.name, bucket: "ne", label: `${breakdownDisplayName(rank, b.name)} — Not Evaluated`, splitDetails: b.splitDetails })}
                     >
                       Not Evaluated ({b.neCount})
                     </button>
@@ -622,17 +685,17 @@ function BreakdownList({
 // between a hover trigger and its target does this, there's no CSS-only fix that
 // survives a real mouse gap. Portal-rendered (mirrors the column-visibility menu
 // pattern above) so it isn't clipped by the table's scroll/sticky ancestors.
-function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; source: "iucn" | "col"; breakdown?: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[] }[] }) {
+function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; source: "iucn" | "col"; breakdown?: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[]; splitDetails?: SplitDetail[] }[] }) {
   const node = findNode(nodeId);
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const [pos, setPos] = useState({ top: 0, left: 0, maxHeight: 0 });
   // Species-level panel opened by clicking a count row (Assessed/Not Evaluated/CoL
   // Match/No CoL Match) — a sibling of the popup, not nested inside it, so it can
   // sit beside rather than replace the counts view. Closes whenever the popup does.
   const [activePanel, setActivePanel] = useState<PanelRequest | null>(null);
-  const [panelPos, setPanelPos] = useState({ top: 0, left: 0 });
+  const [panelPos, setPanelPos] = useState({ top: 0, left: 0, maxHeight: 0 });
 
   useEffect(() => {
     if (!open) return;
@@ -676,8 +739,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
         onClick={(e) => {
           e.stopPropagation();
           if (!open && btnRef.current) {
-            const rect = btnRef.current.getBoundingClientRect();
-            setPos({ top: rect.bottom + 4, left: Math.min(rect.left, window.innerWidth - 360) });
+            setPos(computePopoverPos(btnRef.current.getBoundingClientRect()));
           }
           setOpen((v) => !v);
         }}
@@ -689,8 +751,8 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
         <div
           ref={popoverRef}
           onClick={(e) => e.stopPropagation()}
-          className="fixed z-[9999] px-3 py-2 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded-lg shadow-lg normal-case max-w-[340px] max-h-[70vh] overflow-y-auto text-left"
-          style={{ top: pos.top, left: pos.left }}
+          className="fixed z-[9999] px-3 py-2 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded-lg shadow-lg normal-case max-w-[340px] overflow-y-auto text-left"
+          style={{ top: pos.top, left: pos.left, maxHeight: pos.maxHeight }}
         >
           {source === "iucn" ? (
             <>
@@ -721,7 +783,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
                     onOpenPanel={(request) => {
                       setActivePanel(request);
                       const rect = popoverRef.current?.getBoundingClientRect();
-                      setPanelPos(rect ? computePanelPos(rect) : { top: pos.top, left: pos.left + PANEL_GAP });
+                      setPanelPos(rect ? computePanelPos(rect) : { top: pos.top, left: pos.left + PANEL_GAP, maxHeight: pos.maxHeight });
                     }}
                   />
                 ) : null;
