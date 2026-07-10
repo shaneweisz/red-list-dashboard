@@ -281,6 +281,12 @@ interface PanelRequest {
 const PANEL_PAGE_SIZE = 10;
 const PANEL_WIDTH = 300;
 const PANEL_GAP = 8;
+// A recently-described species not yet having an IUCN assessment is a genuine,
+// likely explanation for NE status (assessment backlog) — an old description year
+// doesn't reliably explain anything, so this is only surfaced within a recency
+// window, not shown for every NE row with a described_year. 10 years mirrors the
+// existing "# Outdated (>10 yrs old)" threshold used elsewhere in this dashboard.
+const RECENT_DESCRIPTION_YEARS = 10;
 
 // Positions the species-list panel beside the popup it was opened from: to the
 // right if there's room, else to the left, else (narrow viewports) directly under
@@ -493,6 +499,9 @@ function SpeciesListPanel({
                       </a>
                     </span>
                   )}
+                  {!split && isNe && s.described_year != null && new Date().getFullYear() - s.described_year <= RECENT_DESCRIPTION_YEARS && (
+                    <span className="text-zinc-300">{` (described in ${s.described_year})`}</span>
+                  )}
                 </li>
               );
             })}
@@ -558,19 +567,19 @@ function AssessedBreakdownRow({
           <button
             type="button"
             className="underline decoration-dotted underline-offset-2 hover:text-white"
-            onClick={() => onOpenPanel({ rank, name, bucket: "colMatch", label: `${label} — CoL Match`, noMatchIds })}
+            onClick={() => onOpenPanel({ rank, name, bucket: "colMatch", label: `${label} — Clean CoL Match`, noMatchIds })}
           >
-            CoL Match ({colMatchCount})
+            Clean CoL Match ({colMatchCount})
           </button>
         </li>
         <li>
           <button
             type="button"
             className="underline decoration-dotted underline-offset-2 hover:text-white"
-            title="Assessed by IUCN, but not linked to a described species on the Catalogue of Life side here — likely a taxonomic split/lump, a CoL coverage gap, or an unconfirmed extinction."
-            onClick={() => onOpenPanel({ rank, name, bucket: "noColMatch", label: `${label} — No CoL Match`, noMatchIds, noMatchDetails })}
+            title="Assessed by IUCN, but doesn't cleanly correspond to one counted Catalogue of Life species here — most of these DO have a Catalogue of Life record (see the reason shown per species): a demoted subspecies, a provisionally-accepted name, a taxonomic split/lump, or a coverage gap. Only a small minority have no Catalogue of Life record at all."
+            onClick={() => onOpenPanel({ rank, name, bucket: "noColMatch", label: `${label} — No Clean CoL Match`, noMatchIds, noMatchDetails })}
           >
-            No CoL Match ({noMatchIds.length})
+            No Clean CoL Match ({noMatchIds.length})
           </button>
         </li>
       </ul>
