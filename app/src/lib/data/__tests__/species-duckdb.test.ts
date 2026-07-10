@@ -64,7 +64,6 @@ describe("toSpeciesRow", () => {
       possibly_extinct_in_the_wild: false,
       criteria: "A2c",
       threat_codes: "1.1;2.2.1",
-      has_map: true,
       latest_assessors: "X, Y.",
       latest_reviewers: "Z, A.",
     });
@@ -77,7 +76,6 @@ describe("toSpeciesRow", () => {
     expect(row.gbif_occurrence_count).toBe(1273);
     expect(row.gbif_observations_after_assessment_year).toBe(42);
     expect(row.taxon_id).toBe("mammals"); // mapTaxonId fallthrough (display root)
-    expect(row.has_map).toBe(true);
     // latest assessors/reviewers are inline; full history is lazy (empty here).
     expect(row.latest_assessors).toBe("X, Y.");
     expect(row.latest_reviewers).toBe("Z, A.");
@@ -102,6 +100,5 @@ describe("toSpeciesRow", () => {
     expect(row.previous_assessments).toEqual([]);
     expect(row.taxon_id).toBe("invertebrates"); // mapTaxonId("beetles")
     expect(row.gbif_observations_after_assessment_year).toBeNull();
-    expect(row.has_map).toBe(false);
   });
 });

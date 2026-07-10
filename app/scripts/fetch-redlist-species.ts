@@ -65,7 +65,6 @@ export interface RedlistSpecies {
   possibly_extinct_in_the_wild: boolean;
   criteria: string | null; // e.g. "B1ab(ii,iii)+2ab(ii,iii)"
   threat_codes: string[]; // Full threat codes e.g. ["1.1","2.1.2","5.3.3"]
-  has_map: boolean; // Whether a range map exists in assessment_ranges
   /**
    * Scientific-name synonyms from the IUCN taxon_synonyms table, after
    * dropping (a) the species's own canonical name and (b) any synonym whose
@@ -158,7 +157,6 @@ export async function fetchFromIucnDb(
       possibly_extinct_in_the_wild: row.possibly_extinct_in_the_wild === true,
       criteria: row.criteria || null,
       threat_codes: [],
-      has_map: false,
       synonyms: [],
     });
     assessmentIds.push(assessmentId);
@@ -167,8 +165,8 @@ export async function fetchFromIucnDb(
   if (assessmentIds.length > 0) {
     const sisIds = species.map((s) => s.sis_taxon_id);
 
-    // Batch-fetch countries, systems, growth forms, movement patterns, threats, range maps, and synonyms
-    const [countriesResult, systemsResult, growthFormsResult, movementResult, threatsResult, rangeMapResult, synonymsResult] = await Promise.all([
+    // Batch-fetch countries, systems, growth forms, movement patterns, threats, and synonyms
+    const [countriesResult, systemsResult, growthFormsResult, movementResult, threatsResult, synonymsResult] = await Promise.all([
       pgClient.query(`
         SELECT a.id as assessment_id, ll.code as country_code
         FROM assessments a
@@ -203,15 +201,6 @@ export async function fetchFromIucnDb(
         FROM assessment_threats at2
         JOIN threat_lookup tl ON tl.id = at2.threat_id
         WHERE at2.assessment_id = ANY($1)
-      `, [assessmentIds]),
-      pgClient.query(`
-        SELECT DISTINCT assessment_id
-        FROM assessment_ranges
-        WHERE assessment_id = ANY($1)
-        UNION
-        SELECT DISTINCT assessment_id
-        FROM assessment_points
-        WHERE assessment_id = ANY($1)
       `, [assessmentIds]),
       // Synonyms with global ambiguity filtering. The CTEs scan all latest
       // taxa (not just this batch) because ambiguity is a global property:
@@ -322,15 +311,6 @@ export async function fetchFromIucnDb(
 
       const threats = threatsByAssessment.get(s.assessment_id);
       if (threats) s.threat_codes = Array.from(threats).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-    }
-
-    // Range maps (has_map boolean)
-    const assessmentsWithMaps = new Set<number>();
-    for (const row of rangeMapResult.rows) {
-      assessmentsWithMaps.add(Number(row.assessment_id));
-    }
-    for (const s of species) {
-      s.has_map = assessmentsWithMaps.has(s.assessment_id);
     }
 
     // Synonyms (deduplicated per sis_id, excluding the species's own canonical name).
@@ -452,7 +432,7 @@ const REDLIST_CSV_COLUMNS = [
   "family", "taxon_group_table1a", "assessment_id", "iucn_category", "assessment_date",
   "year_published", "population_trend", "countries", "systems", "growth_forms",
   "movement_pattern", "possibly_extinct", "possibly_extinct_in_the_wild",
-  "criteria", "threat_codes", "has_map", "synonyms",
+  "criteria", "threat_codes", "synonyms",
 ];
 
 /**
@@ -503,7 +483,6 @@ export function writeRedlistCsv(species: RedlistSpecies[], outputPath: string): 
       possibly_extinct_in_the_wild: s.possibly_extinct_in_the_wild ? "true" : "",
       criteria: s.criteria,
       threat_codes: s.threat_codes.join(";"),
-      has_map: s.has_map ? "true" : "",
       synonyms: encodeSynonyms(s.synonyms),
     }));
 
@@ -533,7 +512,6 @@ export function readRedlistCsv(taxonId: string): RedlistSpecies[] {
     possibly_extinct_in_the_wild: r.possibly_extinct_in_the_wild === "true",
     criteria: r.criteria || null,
     threat_codes: r.threat_codes ? r.threat_codes.split(";").filter(Boolean) : [],
-    has_map: r.has_map === "true",
     synonyms: decodeSynonyms(r.synonyms),
   }));
 }

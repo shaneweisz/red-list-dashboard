@@ -44,7 +44,6 @@ interface RedlistRow {
   possibly_extinct_in_the_wild: boolean;
   criteria: string | null;
   threat_codes: string[];
-  has_map: boolean;
 }
 
 export interface PreviousAssessment {
@@ -96,7 +95,6 @@ function parseRedlistRow(r: Record<string, string>): RedlistRow {
     possibly_extinct_in_the_wild: r.possibly_extinct_in_the_wild === "true",
     criteria: r.criteria || null,
     threat_codes: r.threat_codes ? r.threat_codes.split(";").filter(Boolean) : [],
-    has_map: r.has_map === "true",
   };
 }
 

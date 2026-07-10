@@ -5,7 +5,7 @@
  * client-side (the dashboard) and server-side (the /browse LLM endpoint).
  *
  * The *categorical* clauses (categories, threats, systems, population trend,
- * movement, growth form, hasMap, endemic) are declared once in the shared-filter
+ * movement, growth form, endemic) are declared once in the shared-filter
  * registry (@/lib/shared-filters) and matched here via matchSharedFilters, so the
  * predicate can't drift from the MCP schema or the dashboard URL. The clauses
  * that don't share that shape stay inline below: countries (entangled with the
@@ -32,7 +32,6 @@ export interface FilterableSpecies {
   population_trend: string | null;
   movement_pattern: string | null;
   threat_codes?: string[] | null;
-  has_map: boolean;
   growth_forms?: string[] | null;
   scientific_name: string;
   common_name: string | null;
@@ -48,7 +47,6 @@ export interface SpeciesFilterCriteria {
   populationTrends?: Set<string>;
   movementPatterns?: Set<string>;
   growthForms?: Set<string>;
-  hasMap?: "yes" | "no" | null;
   /** Only species endemic to a single country (occurring in exactly one). */
   endemicsOnly?: boolean;
   /** Already lowercased by the caller. */
@@ -65,7 +63,7 @@ const empty = (s?: Set<string>) => !s || s.size === 0;
 
 export function matchesSpeciesFilter(s: FilterableSpecies, f: SpeciesFilterCriteria): boolean {
   // Categorical clauses (categories, threats, systems, trend, movement, growth
-  // form, hasMap, endemic) — declared once in the shared-filter registry.
+  // form, endemic) — declared once in the shared-filter registry.
   if (!matchSharedFilters(s, f)) return false;
 
   const matchesCountry = empty(f.countries) || s.countries.some((c) => f.countries!.has(c));
