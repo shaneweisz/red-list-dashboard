@@ -10,9 +10,11 @@ import { CATEGORY_COLORS, CATEGORY_NAMES, CATEGORY_ORDER } from "@/config/taxa";
 import {
   hasChildren, findNode, getAncestors, stripNodePrefix, OFFICIAL_IUCN_DESCRIBED_NODE_IDS,
   describeFilter, COL_RELEASE_LABEL, COL_RELEASE_URL, primaryFilterRank, breakdownDisplayName, breakdownHref,
+  matchesBreakdownName, speciesMatchesNode,
   type FilterRank, type DescribeFilterSegment,
 } from "@/lib/taxonomy-utils";
 import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
+import type { RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 
 // See scripts/build-taxa-summary.ts's classifyNoMatch for what each reason means.
 // Modular/additive on top of colBreakdown[].noMatchIds — safe to drop independently
@@ -218,19 +220,16 @@ function DisabledAllTooltip() {
   );
 }
 
-// Navigate to a node's own species list in a given view — the same destination a
-// table-row click gives, from deep inside a portal-rendered popover that isn't a DOM
-// descendant of any row. Pushes taxa (+ view, if switching to Unassessed) in one
-// history entry and dispatches popstate, which both page.tsx's viewMode state and
-// RedListView's internal useFilterParams URL sync already listen for globally (see
-// the Assessed/Unassessed toggle in page.tsx, which does the same thing) — so this
-// needs no prop-drilling through RedListView/TaxaSummary to reach either one.
-function navigateToNodeSpeciesList(
+// Builds the URL for a node's full, filterable species list in RedListView (the same
+// destination a table-row click gives) — an escape hatch from SpeciesListPanel's
+// lighter-weight view to the full experience (sorting, charts, map, exact filters).
+// Opened with target="_blank" like every other popover link, so it doesn't replace
+// the caller's place in the current tab.
+function nodeSpeciesListHref(
   nodeId: string,
   view: "reassessments" | "new-assessments",
   breakdown?: { rank: FilterRank; name: string; only?: number[]; excl?: number[] },
-) {
-  if (typeof window === "undefined") return;
+): string {
   const params = new URLSearchParams();
   params.set("taxa", stripNodePrefix(nodeId));
   if (view === "new-assessments") params.set("view", "new-assessments");
@@ -243,85 +242,228 @@ function navigateToNodeSpeciesList(
     else if (breakdown.excl?.length) bd += `:excl:${breakdown.excl.join(",")}`;
     params.set("bd", bd);
   }
-  window.history.pushState(null, "", `/?${params.toString()}`);
-  window.dispatchEvent(new PopStateEvent("popstate"));
+  return `/?${params.toString()}`;
 }
 
-// Jump straight to one species' own detail view (e.g. a single "No CoL Match" name
-// listed in the popover) — same navigation mechanism as navigateToNodeSpeciesList,
-// via the URL's standalone `species=` id param.
-function navigateToSpecies(nodeId: string, sisTaxonId: number) {
-  if (typeof window === "undefined") return;
+// Builds a real URL (not a pushState-only path) for a single species' detail view —
+// used with target="_blank" so opening a species from the popover doesn't lose the
+// caller's place in the current tab.
+function speciesHref(nodeId: string, id: number, view: "reassessments" | "new-assessments"): string {
   const params = new URLSearchParams();
   params.set("taxa", stripNodePrefix(nodeId));
-  params.set("species", String(sisTaxonId));
-  window.history.pushState(null, "", `/?${params.toString()}`);
-  window.dispatchEvent(new PopStateEvent("popstate"));
+  if (view === "new-assessments") params.set("view", "new-assessments");
+  params.set("species", String(id));
+  return `/?${params.toString()}`;
 }
 
-// Caps how many "No CoL Match" species get listed by name inline in the popover —
-// a handful of nodes (e.g. Small Mammal SG's Rodentia, ~140 mismatches from a
-// large-scale CoL taxonomic split) would otherwise dump a huge wall of names into a
-// 340px-wide box. The "No CoL Match" button above this list still navigates to the
-// FULL filtered species list regardless of the cap.
-const NO_MATCH_DETAIL_CAP = 6;
+// What SpeciesListPanel is currently showing — captured at click time from the
+// specific breakdown row/bucket clicked, so the panel doesn't need to re-derive it.
+type PanelBucket = "assessed" | "ne" | "colMatch" | "noColMatch";
+interface PanelRequest {
+  rank: FilterRank;
+  name: string;
+  bucket: PanelBucket;
+  label: string;
+  noMatchIds?: number[];
+  noMatchDetails?: NoMatchDetail[];
+}
 
-// Inline "why" list for a breakdown name's "No CoL Match" species — modular/additive
-// (renders nothing if the build didn't attach noMatchDetails, e.g. an older data
-// sync), so it can be removed without touching the count-only CoL Match/No CoL
-// Match navigation it sits below.
-function NoMatchDetailsList({ details, nodeId }: { details: NoMatchDetail[]; nodeId: string }) {
-  const shown = details.slice(0, NO_MATCH_DETAIL_CAP);
-  const hiddenCount = details.length - shown.length;
-  return (
-    <ul className="ml-4 mt-0.5 space-y-0.5 text-zinc-300">
-      {shown.map((d) => (
-        <li key={d.id}>
-          <button
-            type="button"
-            className="underline decoration-dotted underline-offset-2 hover:text-white text-left"
-            onClick={() => navigateToSpecies(nodeId, d.id)}
-          >
-            {d.name}
-          </button>
-          {" — "}
-          {NO_MATCH_REASON_LABEL[d.reason] ?? d.reason}
-          {d.detail ? ` ${d.detail}` : ""}
-        </li>
-      ))}
-      {hiddenCount > 0 && <li>+ {hiddenCount} more (see &quot;No CoL Match&quot; above)</li>}
-    </ul>
+const PANEL_PAGE_SIZE = 10;
+const PANEL_WIDTH = 300;
+const PANEL_GAP = 8;
+
+// Positions the species-list panel beside the popup it was opened from: to the
+// right if there's room, else to the left, else (narrow viewports) directly under
+// it — same "best effort, not perfect" approach as the popup's own positioning.
+function computePanelPos(popupPos: { top: number; left: number }): { top: number; left: number } {
+  if (typeof window === "undefined") return popupPos;
+  const popupRight = popupPos.left + 340;
+  if (window.innerWidth - popupRight - PANEL_GAP >= PANEL_WIDTH) {
+    return { top: popupPos.top, left: popupRight + PANEL_GAP };
+  }
+  if (popupPos.left - PANEL_GAP >= PANEL_WIDTH) {
+    return { top: popupPos.top, left: popupPos.left - PANEL_WIDTH - PANEL_GAP };
+  }
+  return { top: popupPos.top + 220, left: Math.max(8, Math.min(popupPos.left, window.innerWidth - PANEL_WIDTH - 8)) };
+}
+
+// Paginated species-level list rendered beside the main popup when a count row
+// (Assessed / Not Evaluated / CoL Match / No CoL Match) is clicked — lets a
+// specialist scroll through every species in that bucket without leaving the page.
+// Fetches the SAME broad per-node species list RedListView itself fetches
+// (/api/redlist/species?taxon=...), then narrows client-side with the same
+// speciesMatchesNode/matchesBreakdownName functions RedListView uses — no new API
+// surface. Cached per (nodeId, assessed|NE) for the component's lifetime, so
+// switching between Assessed/CoL Match/No CoL Match (all drawn from the same
+// assessed fetch) never re-fetches.
+function SpeciesListPanel({
+  nodeId,
+  request,
+  pos,
+  onClose,
+}: {
+  nodeId: string;
+  request: PanelRequest;
+  pos: { top: number; left: number };
+  onClose: () => void;
+}) {
+  const isNe = request.bucket === "ne";
+  const cacheRef = useRef<Map<string, RedListSpecies[]>>(new Map());
+  const [rows, setRows] = useState<RedListSpecies[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    setPage(1); // eslint-disable-line react-hooks/set-state-in-effect -- reset pagination when bucket changes
+    const cacheKey = isNe ? "ne" : "assessed";
+    const cached = cacheRef.current.get(cacheKey);
+    if (cached) { setRows(cached); return; }
+    setRows(null);
+    setError(null);
+    const controller = new AbortController();
+    const qs = new URLSearchParams({ taxon: nodeId });
+    if (isNe) qs.set("category", "NE");
+    fetch(`/api/redlist/species?${qs.toString()}`, { signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`Species fetch failed (${res.status})`))))
+      .then((data: { species: RedListSpecies[] }) => {
+        cacheRef.current.set(cacheKey, data.species);
+        setRows(data.species);
+      })
+      .catch((err) => { if (!controller.signal.aborted) setError(err instanceof Error ? err.message : "Failed to load species"); });
+    return () => controller.abort();
+  }, [nodeId, isNe]);
+
+  const filtered = useMemo(() => {
+    if (!rows) return null;
+    let matched = rows.filter((s) => speciesMatchesNode(s, nodeId) && matchesBreakdownName(s, request.rank, request.name));
+    if (request.bucket === "colMatch" && request.noMatchIds?.length) {
+      const excl = new Set(request.noMatchIds);
+      matched = matched.filter((s) => s.sis_taxon_id == null || !excl.has(s.sis_taxon_id));
+    } else if (request.bucket === "noColMatch" && request.noMatchIds?.length) {
+      const only = new Set(request.noMatchIds);
+      matched = matched.filter((s) => s.sis_taxon_id != null && only.has(s.sis_taxon_id));
+    }
+    return matched;
+  }, [rows, nodeId, request]);
+
+  const reasonBySisId = useMemo(() => {
+    const m = new Map<number, NoMatchDetail>();
+    request.noMatchDetails?.forEach((d) => m.set(d.id, d));
+    return m;
+  }, [request.noMatchDetails]);
+
+  const total = filtered?.length ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PANEL_PAGE_SIZE));
+  const pageRows = filtered ? filtered.slice((page - 1) * PANEL_PAGE_SIZE, page * PANEL_PAGE_SIZE) : [];
+  const fullListHref = nodeSpeciesListHref(
+    nodeId,
+    isNe ? "new-assessments" : "reassessments",
+    request.bucket === "colMatch" || request.bucket === "noColMatch"
+      ? { rank: request.rank, name: request.name, [request.bucket === "colMatch" ? "excl" : "only"]: request.noMatchIds }
+      : { rank: request.rank, name: request.name },
+  );
+
+  return createPortal(
+    <div
+      className="fixed z-[9999] max-h-[70vh] overflow-y-auto px-3 py-2 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded-lg shadow-lg normal-case text-left"
+      style={{ top: pos.top, left: pos.left, width: PANEL_WIDTH }}
+      onClick={(e) => e.stopPropagation()}
+      // Not inside popoverRef (a portal sibling, not a DOM descendant) — the outside-
+      // click listener in DescribedInfoIcon only checks popoverRef/btnRef, so stop the
+      // mousedown here too (onClick's stopPropagation alone doesn't cover the
+      // mousedown phase that listener runs on) or every click inside the panel would
+      // close the whole popup+panel before it registers.
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      <div className="flex items-center justify-between gap-2 mb-1.5">
+        <p className="font-medium">{request.label}</p>
+        <button type="button" onClick={onClose} className="text-zinc-400 hover:text-white flex-shrink-0" aria-label="Close">
+          ✕
+        </button>
+      </div>
+      <a
+        href={fullListHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-blue-300 hover:text-blue-200 underline block mb-1.5"
+      >
+        Open full list ↗
+      </a>
+      {error && <p className="text-red-300">{error}</p>}
+      {!error && rows === null && <p className="text-zinc-400">Loading…</p>}
+      {!error && filtered && filtered.length === 0 && <p className="text-zinc-400">No species.</p>}
+      {!error && filtered && filtered.length > 0 && (
+        <>
+          <ul className="space-y-1">
+            {pageRows.map((s) => {
+              const detail = s.sis_taxon_id != null ? reasonBySisId.get(s.sis_taxon_id) : undefined;
+              return (
+                <li key={s.id}>
+                  <a
+                    href={speciesHref(nodeId, s.id, isNe ? "new-assessments" : "reassessments")}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-300 hover:text-blue-200 underline"
+                  >
+                    {s.scientific_name}
+                  </a>
+                  {detail && (
+                    <span className="text-zinc-300">
+                      {" — "}
+                      {NO_MATCH_REASON_LABEL[detail.reason] ?? detail.reason}
+                      {detail.detail ? ` ${detail.detail}` : ""}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-zinc-700">
+            <button type="button" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="disabled:opacity-30 hover:text-white">
+              ‹ Prev
+            </button>
+            <span className="text-zinc-400">
+              {(page - 1) * PANEL_PAGE_SIZE + 1}-{Math.min(page * PANEL_PAGE_SIZE, total)} of {total}
+            </span>
+            <button type="button" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} className="disabled:opacity-30 hover:text-white">
+              Next ›
+            </button>
+          </div>
+        </>
+      )}
+    </div>,
+    document.body
   );
 }
 
 // The "Assessed" row within one breakdown name — a plain clickable leaf when CoL and
 // IUCN agree on the count (the common case), or its own nested expand into CoL
 // Match / No CoL Match when they don't, so the split is visible right where it
-// happens instead of needing a separate warning affordance.
+// happens instead of needing a separate warning affordance. Clicking any count opens
+// the species-level panel (onOpenPanel) instead of navigating away.
 function AssessedBreakdownRow({
   rank,
   name,
   trueAssessed,
   noMatchIds,
   noMatchDetails,
-  nodeId,
-  onNavigate,
+  onOpenPanel,
 }: {
   rank: FilterRank;
   name: string;
   trueAssessed: number;
   noMatchIds: number[];
   noMatchDetails?: NoMatchDetail[];
-  nodeId: string;
-  onNavigate: () => void;
+  onOpenPanel: (request: PanelRequest) => void;
 }) {
+  const label = breakdownDisplayName(rank, name);
   if (noMatchIds.length === 0) {
     return (
       <li>
         <button
           type="button"
           className="underline decoration-dotted underline-offset-2 hover:text-white"
-          onClick={() => { navigateToNodeSpeciesList(nodeId, "reassessments", { rank, name }); onNavigate(); }}
+          onClick={() => onOpenPanel({ rank, name, bucket: "assessed", label: `${label} — Assessed` })}
         >
           Assessed ({trueAssessed})
         </button>
@@ -337,7 +479,7 @@ function AssessedBreakdownRow({
           <button
             type="button"
             className="underline decoration-dotted underline-offset-2 hover:text-white"
-            onClick={() => { navigateToNodeSpeciesList(nodeId, "reassessments", { rank, name, excl: noMatchIds }); onNavigate(); }}
+            onClick={() => onOpenPanel({ rank, name, bucket: "colMatch", label: `${label} — CoL Match`, noMatchIds })}
           >
             CoL Match ({colMatchCount})
           </button>
@@ -347,11 +489,10 @@ function AssessedBreakdownRow({
             type="button"
             className="underline decoration-dotted underline-offset-2 hover:text-white"
             title="Assessed by IUCN, but not linked to a described species on the Catalogue of Life side here — likely a taxonomic split/lump, a CoL coverage gap, or an unconfirmed extinction."
-            onClick={() => { navigateToNodeSpeciesList(nodeId, "reassessments", { rank, name, only: noMatchIds }); onNavigate(); }}
+            onClick={() => onOpenPanel({ rank, name, bucket: "noColMatch", label: `${label} — No CoL Match`, noMatchIds, noMatchDetails })}
           >
             No CoL Match ({noMatchIds.length})
           </button>
-          {noMatchDetails?.length ? <NoMatchDetailsList details={noMatchDetails} nodeId={nodeId} /> : null}
         </li>
       </ul>
     </li>
@@ -388,14 +529,12 @@ function BreakdownList({
   rank,
   label,
   breakdown,
-  nodeId,
-  onNavigate,
+  onOpenPanel,
 }: {
   rank: FilterRank;
   label: string;
   breakdown: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[] }[];
-  nodeId: string;
-  onNavigate: () => void;
+  onOpenPanel: (request: PanelRequest) => void;
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const toggle = (name: string) => setExpanded((prev) => {
@@ -442,14 +581,13 @@ function BreakdownList({
                     trueAssessed={b.trueAssessed}
                     noMatchIds={b.noMatchIds}
                     noMatchDetails={b.noMatchDetails}
-                    nodeId={nodeId}
-                    onNavigate={onNavigate}
+                    onOpenPanel={onOpenPanel}
                   />
                   <li>
                     <button
                       type="button"
                       className="underline decoration-dotted underline-offset-2 hover:text-white"
-                      onClick={() => { navigateToNodeSpeciesList(nodeId, "new-assessments", { rank, name: b.name }); onNavigate(); }}
+                      onClick={() => onOpenPanel({ rank, name: b.name, bucket: "ne", label: `${breakdownDisplayName(rank, b.name)} — Not Evaluated` })}
                     >
                       Not Evaluated ({b.neCount})
                     </button>
@@ -477,6 +615,11 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
   const btnRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ top: 0, left: 0 });
+  // Species-level panel opened by clicking a count row (Assessed/Not Evaluated/CoL
+  // Match/No CoL Match) — a sibling of the popup, not nested inside it, so it can
+  // sit beside rather than replace the counts view. Closes whenever the popup does.
+  const [activePanel, setActivePanel] = useState<PanelRequest | null>(null);
+  const [panelPos, setPanelPos] = useState({ top: 0, left: 0 });
 
   useEffect(() => {
     if (!open) return;
@@ -487,6 +630,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
         if (popoverRef.current?.contains(target) || btnRef.current?.contains(target)) return;
       }
       setOpen(false);
+      setActivePanel(null);
     };
     document.addEventListener("mousedown", close);
     document.addEventListener("keydown", close);
@@ -561,8 +705,10 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
                     rank={dim.rank}
                     label={dim.label}
                     breakdown={breakdown}
-                    nodeId={nodeId}
-                    onNavigate={() => setOpen(false)}
+                    onOpenPanel={(request) => {
+                      setActivePanel(request);
+                      setPanelPos(computePanelPos(pos));
+                    }}
                   />
                 ) : null;
               })() : null}
@@ -580,6 +726,14 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
           )}
         </div>,
         document.body
+      )}
+      {open && activePanel && typeof document !== "undefined" && (
+        <SpeciesListPanel
+          nodeId={nodeId}
+          request={activePanel}
+          pos={panelPos}
+          onClose={() => setActivePanel(null)}
+        />
       )}
     </>
   );
