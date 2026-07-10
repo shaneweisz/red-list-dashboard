@@ -362,9 +362,11 @@ function SpeciesListPanel({
   const [rows, setRows] = useState<RedListSpecies[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState<"name" | "date">("name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   useEffect(() => {
-    setPage(1); // eslint-disable-line react-hooks/set-state-in-effect -- reset pagination when bucket changes
     const cacheKey = isNe ? "ne" : "assessed";
     const cached = cacheRef.current.get(cacheKey);
     if (cached) { setRows(cached); return; }
@@ -383,6 +385,17 @@ function SpeciesListPanel({
     return () => controller.abort();
   }, [nodeId, isNe]);
 
+  // Reset pagination/search/sort whenever the *view* changes — keyed on the full
+  // bucket/name/rank identity, not just nodeId/isNe, so switching between (say)
+  // "1:1 CoL Match" and "No 1:1 CoL Match" (both non-NE, so isNe alone wouldn't
+  // change) still resets a stale page number or search term from the last view.
+  useEffect(() => {
+    setPage(1); // eslint-disable-line react-hooks/set-state-in-effect -- reset when switching bucket/name
+    setSearch("");
+    setSortBy("name");
+    setSortDir("desc");
+  }, [nodeId, request.bucket, request.name, request.rank]);
+
   const filtered = useMemo(() => {
     if (!rows) return null;
     let matched = rows.filter((s) => speciesMatchesNode(s, nodeId) && matchesBreakdownName(s, request.rank, request.name));
@@ -396,6 +409,36 @@ function SpeciesListPanel({
     return matched;
   }, [rows, nodeId, request]);
 
+  const searched = useMemo(() => {
+    if (!filtered) return null;
+    const q = search.trim().toLowerCase();
+    if (!q) return filtered;
+    return filtered.filter((s) => s.scientific_name.toLowerCase().includes(q) || (s.common_name?.toLowerCase().includes(q) ?? false));
+  }, [filtered, search]);
+
+  // "date" sorts by assessment date for assessed buckets, or by description year
+  // for the NE bucket (assessment_date is always null there) — whichever date
+  // dimension this view actually has, defaulting unassessed/undated rows to the
+  // bottom regardless of direction.
+  const sorted = useMemo(() => {
+    if (!searched) return null;
+    const arr = [...searched];
+    if (sortBy === "name") {
+      arr.sort((a, b) => a.scientific_name.localeCompare(b.scientific_name));
+    } else {
+      const value = (s: RedListSpecies) => (isNe ? s.described_year : (s.assessment_date ? Date.parse(s.assessment_date) : null));
+      arr.sort((a, b) => {
+        const va = value(a);
+        const vb = value(b);
+        if (va == null && vb == null) return 0;
+        if (va == null) return 1;
+        if (vb == null) return -1;
+        return sortDir === "desc" ? vb - va : va - vb;
+      });
+    }
+    return arr;
+  }, [searched, sortBy, sortDir, isNe]);
+
   const reasonBySisId = useMemo(() => {
     const m = new Map<number, NoMatchDetail>();
     request.noMatchDetails?.forEach((d) => m.set(d.id, d));
@@ -408,9 +451,9 @@ function SpeciesListPanel({
     return m;
   }, [request.splitDetails]);
 
-  const total = filtered?.length ?? 0;
+  const total = sorted?.length ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PANEL_PAGE_SIZE));
-  const pageRows = filtered ? filtered.slice((page - 1) * PANEL_PAGE_SIZE, page * PANEL_PAGE_SIZE) : [];
+  const pageRows = sorted ? sorted.slice((page - 1) * PANEL_PAGE_SIZE, page * PANEL_PAGE_SIZE) : [];
   const fullListHref = nodeSpeciesListHref(
     nodeId,
     isNe ? "new-assessments" : "reassessments",
@@ -443,10 +486,40 @@ function SpeciesListPanel({
           </button>
         </div>
       </div>
+      {!error && filtered && filtered.length > 0 && (
+        <div className="flex items-center gap-1.5 mb-1.5 text-[11px]">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            placeholder="Search…"
+            aria-label="Search species"
+            className="flex-1 min-w-0 px-1.5 py-0.5 rounded bg-zinc-900/40 dark:bg-zinc-950/40 text-white placeholder-zinc-500 outline-none focus:ring-1 focus:ring-zinc-500"
+          />
+          <button
+            type="button"
+            onClick={() => setSortBy("name")}
+            className={`flex-shrink-0 ${sortBy === "name" ? "text-white underline" : "text-zinc-400 hover:text-white"}`}
+          >
+            Name
+          </button>
+          <button
+            type="button"
+            onClick={() => (sortBy === "date" ? setSortDir((d) => (d === "desc" ? "asc" : "desc")) : setSortBy("date"))}
+            className={`flex-shrink-0 ${sortBy === "date" ? "text-white underline" : "text-zinc-400 hover:text-white"}`}
+            title={isNe ? "Sort by description year" : "Sort by assessment date"}
+          >
+            {isNe ? "Described" : "Date"}{sortBy === "date" ? (sortDir === "desc" ? " ↓" : " ↑") : ""}
+          </button>
+        </div>
+      )}
       {error && <p className="text-red-300">{error}</p>}
       {!error && rows === null && <p className="text-zinc-400">Loading…</p>}
       {!error && filtered && filtered.length === 0 && <p className="text-zinc-400">No species.</p>}
-      {!error && filtered && filtered.length > 0 && (
+      {!error && filtered && filtered.length > 0 && sorted && sorted.length === 0 && (
+        <p className="text-zinc-400">No species match your search.</p>
+      )}
+      {!error && sorted && sorted.length > 0 && (
         <>
           <ul className="space-y-1">
             {pageRows.map((s) => {
@@ -462,6 +535,17 @@ function SpeciesListPanel({
                   >
                     {s.scientific_name}
                   </a>
+                  {s.category && s.category !== "NE" && (
+                    <span
+                      className="ml-1 px-1 rounded text-[10px] font-medium"
+                      style={{ backgroundColor: `${CATEGORY_COLORS[s.category] || "#999"}33`, color: CATEGORY_COLORS[s.category] || "#999" }}
+                    >
+                      {s.category}
+                    </span>
+                  )}
+                  {s.assessment_date && (
+                    <span className="text-zinc-400">{` ${s.assessment_date.slice(0, 4)}`}</span>
+                  )}
                   {detail && (
                     <span className="text-zinc-300">
                       {" — "}
@@ -567,9 +651,9 @@ function AssessedBreakdownRow({
           <button
             type="button"
             className="underline decoration-dotted underline-offset-2 hover:text-white"
-            onClick={() => onOpenPanel({ rank, name, bucket: "colMatch", label: `${label} — Clean CoL Match`, noMatchIds })}
+            onClick={() => onOpenPanel({ rank, name, bucket: "colMatch", label: `${label} — 1:1 CoL Match`, noMatchIds })}
           >
-            Clean CoL Match ({colMatchCount})
+            1:1 CoL Match ({colMatchCount})
           </button>
         </li>
         <li>
