@@ -553,7 +553,7 @@ export default function RedListAssessments({
       <div className="text-[10px] text-zinc-400 dark:text-zinc-500 pt-2 space-y-1">
         <p>
           IUCN ({new Date().getFullYear()}).{" "}
-          <em>The IUCN Red List of Threatened Species.</em> Version 2025-2.{" "}
+          <em>The IUCN Red List of Threatened Species.</em> Version 2026-1.{" "}
           <a
             href="https://www.iucnredlist.org"
             target="_blank"

@@ -28,26 +28,31 @@ export interface TaxonConfig {
   icon?: string;
 }
 
-// Estimated described species from IUCN Red List Table 1a (version 2025-2)
-// Source: https://nc.iucnredlist.org/redlist/content/attachment_files/2025-2_RL_Table1a.pdf
-const IUCN_SOURCE = "IUCN 2025-2";
-const IUCN_SOURCE_URL = "https://nc.iucnredlist.org/redlist/content/attachment_files/2025-2_RL_Table1a.pdf";
+// Estimated described species from IUCN Red List Table 1a (version 2026-1)
+// Source: https://nc.iucnredlist.org/redlist/content/attachment_files/2026-1_RL_Table1a.pdf
+// Note: these estimatedDescribed/estimatedSource fields are no longer read for
+// display — the landing page's "# Described Species" now comes from
+// taxonomy-tree.ts's own estimatedDescribed via /api/redlist/taxa-summary (see
+// route.ts's use of findNode). Kept in sync anyway so this file (still used
+// elsewhere for id/name/color/gbif keys) doesn't carry stale numbers.
+const IUCN_SOURCE = "IUCN 2026-1";
+const IUCN_SOURCE_URL = "https://nc.iucnredlist.org/redlist/content/attachment_files/2026-1_RL_Table1a.pdf";
 
 export const TAXA: TaxonConfig[] = [
   {
     id: "all",
     name: "All Species",
     apiEndpoint: "kingdom/Animalia", // Not used directly
-    estimatedDescribed: 2174939, // Sum of all taxa
-    estimatedSource: "IUCN 2025-2",
-    estimatedSourceUrl: "https://nc.iucnredlist.org/redlist/content/attachment_files/2025-2_RL_Table1a.pdf",
+    estimatedDescribed: 2121262, // Sum of all taxa
+    estimatedSource: "IUCN 2026-1",
+    estimatedSourceUrl: "https://nc.iucnredlist.org/redlist/content/attachment_files/2026-1_RL_Table1a.pdf",
     color: "#dc2626", // red-600
   },
   {
     id: "mammals",
     name: "Mammals",
     apiEndpoint: "class/Mammalia",
-    estimatedDescribed: 6819,
+    estimatedDescribed: 6854,
     estimatedSource: IUCN_SOURCE,
     estimatedSourceUrl: IUCN_SOURCE_URL,
     gbifKingdomKey: 1,
@@ -69,7 +74,7 @@ export const TAXA: TaxonConfig[] = [
     id: "reptiles",
     name: "Reptiles",
     apiEndpoint: "class/Reptilia",
-    estimatedDescribed: 12502,
+    estimatedDescribed: 12568,
     estimatedSource: IUCN_SOURCE,
     estimatedSourceUrl: IUCN_SOURCE_URL,
     gbifKingdomKey: 1,
@@ -81,7 +86,7 @@ export const TAXA: TaxonConfig[] = [
     id: "amphibians",
     name: "Amphibians",
     apiEndpoint: "class/Amphibia",
-    estimatedDescribed: 8918,
+    estimatedDescribed: 9075,
     estimatedSource: IUCN_SOURCE,
     estimatedSourceUrl: IUCN_SOURCE_URL,
     gbifKingdomKey: 1,
@@ -93,7 +98,7 @@ export const TAXA: TaxonConfig[] = [
     name: "Fishes",
     apiEndpoint: "class/Actinopterygii",
     apiEndpoints: ["class/Actinopterygii", "class/Chondrichthyes"],
-    estimatedDescribed: 37288,
+    estimatedDescribed: 37630,
     estimatedSource: IUCN_SOURCE,
     estimatedSourceUrl: IUCN_SOURCE_URL,
     gbifKingdomKey: 1,
@@ -107,7 +112,7 @@ export const TAXA: TaxonConfig[] = [
     name: "Invertebrates",
     apiEndpoint: "class/Insecta",
     apiEndpoints: ["class/Insecta", "class/Arachnida", "class/Gastropoda", "class/Bivalvia", "class/Malacostraca", "class/Anthozoa"],
-    estimatedDescribed: 1508442, // IUCN invertebrates subtotal
+    estimatedDescribed: 1457195, // IUCN invertebrates subtotal
     estimatedSource: IUCN_SOURCE,
     estimatedSourceUrl: IUCN_SOURCE_URL,
     gbifKingdomKey: 1,
@@ -118,7 +123,7 @@ export const TAXA: TaxonConfig[] = [
     id: "plantae",
     name: "Plants",
     apiEndpoint: "kingdom/Plantae",
-    estimatedDescribed: 426132,
+    estimatedDescribed: 424003,
     estimatedSource: IUCN_SOURCE,
     estimatedSourceUrl: IUCN_SOURCE_URL,
     gbifKingdomKey: 6,
@@ -129,7 +134,7 @@ export const TAXA: TaxonConfig[] = [
     name: "Fungi & Protists",
     apiEndpoint: "phylum/Ascomycota",
     apiEndpoints: ["phylum/Ascomycota", "phylum/Basidiomycota"],
-    estimatedDescribed: 162653, // IUCN fungi & protists subtotal
+    estimatedDescribed: 162752, // IUCN fungi & protists subtotal
     estimatedSource: IUCN_SOURCE,
     estimatedSourceUrl: IUCN_SOURCE_URL,
     gbifKingdomKey: 5,

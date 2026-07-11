@@ -160,7 +160,7 @@ export default function RedListPage() {
           >
             IUCN Red List
           </a>
-          {" "}(version 2025-2),{" "}
+          {" "}(version 2026-1),{" "}
           <a
             href="https://www.gbif.org"
             target="_blank"
