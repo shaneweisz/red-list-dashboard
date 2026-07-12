@@ -576,6 +576,167 @@ describe("matchesFilter – excludeClasses filter", () => {
 });
 
 // =============================================================================
+// matchesFilter — genera / speciesNames filters (SSC Specialist Groups)
+// =============================================================================
+
+describe("matchesFilter – genera filter", () => {
+  it("matches species with genus (first token of scientific_name) in include list", () => {
+    const row = { class_name: "Mammalia", order_name: "Carnivora", family: "Ursidae", scientific_name: "Ursus arctos" };
+    const filter = { csvGroups: ["mammals"], genera: ["ursus", "helarctos"] };
+    expect(matchesFilter(row, filter)).toBe(true);
+  });
+
+  it("rejects species with genus not in include list", () => {
+    const row = { class_name: "Mammalia", order_name: "Carnivora", family: "Felidae", scientific_name: "Panthera leo" };
+    const filter = { csvGroups: ["mammals"], genera: ["ursus", "helarctos"] };
+    expect(matchesFilter(row, filter)).toBe(false);
+  });
+
+  it("excludeGenera rejects matching genus", () => {
+    const row = { class_name: "Mammalia", order_name: "Carnivora", family: "Mustelidae", scientific_name: "Lutra lutra" };
+    const filter = { csvGroups: ["mammals"], families: ["mustelidae"], excludeGenera: ["lutra", "pteronura"] };
+    expect(matchesFilter(row, filter)).toBe(false);
+  });
+
+  it("excludeGenera passes non-matching genus", () => {
+    const row = { class_name: "Mammalia", order_name: "Carnivora", family: "Mustelidae", scientific_name: "Mustela nivalis" };
+    const filter = { csvGroups: ["mammals"], families: ["mustelidae"], excludeGenera: ["lutra", "pteronura"] };
+    expect(matchesFilter(row, filter)).toBe(true);
+  });
+
+  it("treats a missing scientific_name as no genus (fails an include filter)", () => {
+    const row = { class_name: "Mammalia", order_name: "Carnivora", family: "Ursidae" };
+    const filter = { csvGroups: ["mammals"], genera: ["ursus"] };
+    expect(matchesFilter(row, filter)).toBe(false);
+  });
+});
+
+describe("matchesFilter – speciesNames filter", () => {
+  it("matches species with scientific_name in include list (case-insensitive)", () => {
+    const row = { class_name: "Mammalia", order_name: "Carnivora", family: "Ursidae", scientific_name: "Ursus Maritimus" };
+    const filter = { csvGroups: ["mammals"], speciesNames: ["ursus maritimus"] };
+    expect(matchesFilter(row, filter)).toBe(true);
+  });
+
+  it("rejects species with scientific_name not in include list", () => {
+    const row = { class_name: "Mammalia", order_name: "Carnivora", family: "Ursidae", scientific_name: "Ursus arctos" };
+    const filter = { csvGroups: ["mammals"], speciesNames: ["ursus maritimus"] };
+    expect(matchesFilter(row, filter)).toBe(false);
+  });
+
+  it("excludeSpeciesNames carves a single species out of a family-level filter", () => {
+    const polarBear = { class_name: "Mammalia", order_name: "Carnivora", family: "Ursidae", scientific_name: "Ursus maritimus" };
+    const brownBear = { class_name: "Mammalia", order_name: "Carnivora", family: "Ursidae", scientific_name: "Ursus arctos" };
+    const filter = { csvGroups: ["mammals"], families: ["ursidae"], excludeSpeciesNames: ["ursus maritimus"] };
+    expect(matchesFilter(polarBear, filter)).toBe(false);
+    expect(matchesFilter(brownBear, filter)).toBe(true);
+  });
+});
+
+// =============================================================================
+// SSC Specialist Groups (pilot: mammals)
+// =============================================================================
+
+describe("SSC Specialist Groups tree", () => {
+  const sscNode = findNode("ssc-groups");
+
+  it("ssc-groups exists, is not part of the default view, and has 36 children (35 pilot groups + remainder)", () => {
+    expect(sscNode).toBeDefined();
+    expect(sscNode?.children?.length).toBe(36);
+    expect(TAXONOMY_VIEWS.default.roots).not.toContain("ssc-groups");
+  });
+
+  it("ssc-other-mammals (the remainder row) doesn't overlap any of the 35 named groups", () => {
+    // Species that should land in each named group's scope must NOT also match
+    // the remainder filter — otherwise the remainder double-counts them.
+    const cases: Array<{ class_name: string; order_name: string; family: string; scientific_name: string }> = [
+      { class_name: "Mammalia", order_name: "Chiroptera", family: "Pteropodidae", scientific_name: "Pteropus vampyrus" },
+      { class_name: "Mammalia", order_name: "Carnivora", family: "Felidae", scientific_name: "Panthera tigris" },
+      { class_name: "Mammalia", order_name: "Artiodactyla", family: "Delphinidae", scientific_name: "Tursiops truncatus" },
+      { class_name: "Mammalia", order_name: "Artiodactyla", family: "Bovidae", scientific_name: "Bison bison" },
+      { class_name: "Mammalia", order_name: "Artiodactyla", family: "Bovidae", scientific_name: "Gazella dorcas" },
+      { class_name: "Mammalia", order_name: "Proboscidea", family: "Elephantidae", scientific_name: "Loxodonta africana" },
+      { class_name: "Mammalia", order_name: "Carnivora", family: "Ursidae", scientific_name: "Ursus maritimus" },
+      { class_name: "Mammalia", order_name: "Carnivora", family: "Mustelidae", scientific_name: "Lutra lutra" },
+      { class_name: "Mammalia", order_name: "Carnivora", family: "Mustelidae", scientific_name: "Mustela nivalis" },
+      { class_name: "Mammalia", order_name: "Artiodactyla", family: "Camelidae", scientific_name: "Vicugna vicugna" },
+    ];
+    for (const row of cases) {
+      expect(speciesMatchesNode({ ...row, taxon_group: "mammals" }, "ssc-other-mammals"), row.scientific_name).toBe(false);
+    }
+  });
+
+  it("ssc-other-mammals catches a genuinely uncovered species (wild Bactrian camel, deliberately excluded from Wild Camelid SG)", () => {
+    const camel = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Camelidae", scientific_name: "Camelus ferus", taxon_group: "mammals" };
+    expect(speciesMatchesNode(camel, "ssc-other-mammals")).toBe(true);
+    expect(speciesMatchesNode(camel, "ssc-wild-camelid")).toBe(false);
+  });
+
+  it("all SSC group children use the mammals csvGroup and have a unique id", () => {
+    const ids = new Set<string>();
+    for (const child of sscNode?.children ?? []) {
+      expect(child.filter.csvGroups).toEqual(["mammals"]);
+      expect(ids.has(child.id), `duplicate id ${child.id}`).toBe(false);
+      ids.add(child.id);
+    }
+  });
+
+  it("does not add any new children to the real 'mammals' node", () => {
+    const mammalNode = findNode("mammals");
+    const mammalChildIds = new Set(mammalNode?.children?.map(c => c.id) ?? []);
+    for (const child of sscNode?.children ?? []) {
+      expect(mammalChildIds.has(child.id)).toBe(false);
+    }
+  });
+
+  it("Bear SG and Polar Bear SG partition Ursidae without overlap", () => {
+    const polarBear = { class_name: "Mammalia", order_name: "Carnivora", family: "Ursidae", scientific_name: "Ursus maritimus" };
+    const brownBear = { class_name: "Mammalia", order_name: "Carnivora", family: "Ursidae", scientific_name: "Ursus arctos" };
+    expect(speciesMatchesNode({ ...polarBear, taxon_group: "mammals" }, "ssc-bear")).toBe(false);
+    expect(speciesMatchesNode({ ...polarBear, taxon_group: "mammals" }, "ssc-polar-bear")).toBe(true);
+    expect(speciesMatchesNode({ ...brownBear, taxon_group: "mammals" }, "ssc-bear")).toBe(true);
+    expect(speciesMatchesNode({ ...brownBear, taxon_group: "mammals" }, "ssc-polar-bear")).toBe(false);
+  });
+
+  it("Otter SG and Small Carnivore SG partition Mustelidae without overlap", () => {
+    const otter = { class_name: "Mammalia", order_name: "Carnivora", family: "Mustelidae", scientific_name: "Lutra lutra", taxon_group: "mammals" };
+    const weasel = { class_name: "Mammalia", order_name: "Carnivora", family: "Mustelidae", scientific_name: "Mustela nivalis", taxon_group: "mammals" };
+    expect(speciesMatchesNode(otter, "ssc-otter")).toBe(true);
+    expect(speciesMatchesNode(otter, "ssc-small-carnivore")).toBe(false);
+    expect(speciesMatchesNode(weasel, "ssc-otter")).toBe(false);
+    expect(speciesMatchesNode(weasel, "ssc-small-carnivore")).toBe(true);
+  });
+
+  it("Antelope SG excludes Caprinae, Bison and Wild Cattle genera within Bovidae", () => {
+    const gazelle = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Bovidae", scientific_name: "Gazella dorcas", taxon_group: "mammals" };
+    const ibex = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Bovidae", scientific_name: "Capra ibex", taxon_group: "mammals" };
+    const bison = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Bovidae", scientific_name: "Bison bison", taxon_group: "mammals" };
+    const gaur = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Bovidae", scientific_name: "Bos gaurus", taxon_group: "mammals" };
+    expect(speciesMatchesNode(gazelle, "ssc-antelope")).toBe(true);
+    expect(speciesMatchesNode(ibex, "ssc-antelope")).toBe(false);
+    expect(speciesMatchesNode(ibex, "ssc-caprinae")).toBe(true);
+    expect(speciesMatchesNode(bison, "ssc-antelope")).toBe(false);
+    expect(speciesMatchesNode(bison, "ssc-bison")).toBe(true);
+    expect(speciesMatchesNode(gaur, "ssc-antelope")).toBe(false);
+    expect(speciesMatchesNode(gaur, "ssc-afro-asian-wild-cattle")).toBe(true);
+  });
+
+  it("African buffalo (Syncerus) stays under Antelope SG, not Wild Cattle SG", () => {
+    const buffalo = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Bovidae", scientific_name: "Syncerus caffer", taxon_group: "mammals" };
+    expect(speciesMatchesNode(buffalo, "ssc-antelope")).toBe(true);
+    expect(speciesMatchesNode(buffalo, "ssc-afro-asian-wild-cattle")).toBe(false);
+  });
+
+  it("Cetacean SG matches by family since cetaceans share Artiodactyla's order_name", () => {
+    const dolphin = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Delphinidae", scientific_name: "Tursiops truncatus", taxon_group: "mammals" };
+    const deer = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Cervidae", scientific_name: "Cervus elaphus", taxon_group: "mammals" };
+    expect(speciesMatchesNode(dolphin, "ssc-cetacean")).toBe(true);
+    expect(speciesMatchesNode(deer, "ssc-cetacean")).toBe(false);
+    expect(speciesMatchesNode(deer, "ssc-deer")).toBe(true);
+  });
+});
+
+// =============================================================================
 // Partition coverage
 // =============================================================================
 
@@ -836,6 +997,7 @@ describe("flat taxa-token mapping is a bijection over the default view", () => {
       ["fishes", "sharks-rays"],
       ["plantae", "pl-flowering_plants"],
       ["fungi", "fu-mushrooms"],
+      ["mammals", "ssc-bear"],
     ];
     for (const [root, sg] of cases) {
       const tokens = collapseTaxaToTokens([root], [sg]);
@@ -844,5 +1006,17 @@ describe("flat taxa-token mapping is a bijection over the default view", () => {
       expect(taxa).toBe(root);
       expect(subgroup).toBe(sg);
     }
+  });
+
+  it("an SSC group survives a URL round-trip as a mammals sub-group (regression: ssc-groups sits outside the default view)", () => {
+    // onNavigateToSubgroup("mammals", "ssc-bear") is how the SSC groups mode
+    // click-through selects a group; the URL must reconstruct the same pair,
+    // not silently widen back out to all of mammals.
+    expect(getViewRootForNode("ssc-bear")).toBe("mammals");
+    const tokens = collapseTaxaToTokens(["mammals"], ["ssc-bear"]);
+    expect(tokens).toEqual(["ssc-bear"]);
+    const { taxa, subgroup } = expandTaxaToken(tokens[0]);
+    expect(taxa).toBe("mammals");
+    expect(subgroup).toBe("ssc-bear");
   });
 });

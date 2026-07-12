@@ -299,11 +299,15 @@ interface TaxonomyFilter {
   excludeClasses?: string[];
   excludeOrders?: string[];
   excludeFamilies?: string[];
+  genera?: string[];
+  excludeGenera?: string[];
+  speciesNames?: string[];
+  excludeSpeciesNames?: string[];
 }
 
 /** Check if a redlist row passes the taxonomy filter */
 function matchesTaxonomyFilter(
-  row: { class_name: string | null; order_name: string | null; family: string | null },
+  row: { class_name: string | null; order_name: string | null; family: string | null; scientific_name?: string | null },
   filter: TaxonomyFilter,
 ): boolean {
   if (filter.classNames && filter.classNames.length > 0) {
@@ -331,6 +335,16 @@ function matchesTaxonomyFilter(
   if (filter.excludeFamilies && filter.excludeFamilies.length > 0) {
     const fam = (row.family ?? "").toLowerCase();
     if (fam && filter.excludeFamilies.includes(fam)) return false;
+  }
+  if (filter.genera?.length || filter.excludeGenera?.length) {
+    const genus = (row.scientific_name ?? "").trim().split(/\s+/)[0]?.toLowerCase() ?? "";
+    if (filter.genera && filter.genera.length > 0 && !filter.genera.includes(genus)) return false;
+    if (filter.excludeGenera && filter.excludeGenera.length > 0 && genus && filter.excludeGenera.includes(genus)) return false;
+  }
+  if (filter.speciesNames?.length || filter.excludeSpeciesNames?.length) {
+    const name = (row.scientific_name ?? "").trim().toLowerCase();
+    if (filter.speciesNames && filter.speciesNames.length > 0 && !filter.speciesNames.includes(name)) return false;
+    if (filter.excludeSpeciesNames && filter.excludeSpeciesNames.length > 0 && name && filter.excludeSpeciesNames.includes(name)) return false;
   }
   return true;
 }
@@ -628,6 +642,39 @@ export interface NodeSummary {
   // artifacts weren't present at build time.
   colDescribed?: number;
   colNe?: number;
+  // Per-name breakdown of colDescribed/colNe, for every name in the node's primary
+  // include dimension (e.g. Pinniped SG's families [otariidae, phocidae, odobenidae],
+  // or a single-name dimension like Primate SG's [primates]) — each entry's count/
+  // neCount use the same filter (including excludes) narrowed to that one name, so
+  // they sum to colDescribed/colNe exactly. trueAssessed is IUCN's own assessed count
+  // for that one name (matched via assessed.parquet's own class/order/family fields,
+  // not CoL's) — comparing it to count-neCount surfaces likely splits/lumps/coverage
+  // gaps a CoL-only view would hide (see BreakdownList in TaxaSummary.tsx). Undefined
+  // when the CoL artifacts weren't present at build time.
+  colBreakdown?: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[]; splitDetails?: SplitDetail[] }[];
+}
+
+// See scripts/build-taxa-summary.ts's classifyNoMatch for what each reason means and
+// how it's derived. Modular/additive on top of noMatchIds — safe to ignore or drop
+// without touching the count-only CoL Match / No CoL Match mechanism.
+export type NoMatchReason = "no_link" | "missing_from_backbone" | "infraspecific" | "provisional" | "lumped" | "not_in_base" | "extinct_unconfirmed" | "classified_elsewhere";
+export interface NoMatchDetail {
+  id: number;
+  name: string;
+  reason: NoMatchReason;
+  detail?: string;
+  detailId?: number;
+}
+
+// Heuristic "split from" flag for Not Evaluated species — see
+// scripts/build-taxa-summary.ts's SPLIT_CANDIDATES_SQL for the mechanism and its
+// caveats. Keyed by col_id (NE species have no sis_taxon_id), additive on top of
+// colBreakdown, and independently droppable.
+export interface SplitDetail {
+  colId: string;
+  parentId: number;
+  parentName: string;
+  parentCategory: string;
 }
 
 const CURRENT_YEAR = new Date().getFullYear();

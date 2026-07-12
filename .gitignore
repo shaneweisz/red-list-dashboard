@@ -45,7 +45,9 @@ TODOs.txt
 # Claude Code
 skills-lock.json
 .agents/
-.claude/
+.claude/*
+!.claude/skills/
+!.claude/skills/**
 
 # Red List docs
 2025-1_RL_Table_1a.pdf

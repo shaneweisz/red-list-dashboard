@@ -12,7 +12,7 @@ import EolSummary from "../EolSummary";
 import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID, THREATENED_CATEGORIES } from "@/config/taxa";
-import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode } from "@/lib/taxonomy-utils";
+import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode, matchesBreakdownName, breakdownDisplayName } from "@/lib/taxonomy-utils";
 import ReviewerChart from "./ReviewerChart";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { iucnRegionCountries, countryToIucnRegion } from "@/lib/regions";
@@ -334,6 +334,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   }, []);
   // Filters synced with URL search params for shareable links
   const {
+    layoutMode, setLayoutMode,
+    navigateToTaxonSubgroup,
+    returnToLayoutMode,
     selectedTaxa, setSelectedTaxa,
     selectedSubgroups, setSelectedSubgroups,
     selectedCategories, setSelectedCategories,
@@ -347,6 +350,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     selectedMovementPatterns, setSelectedMovementPatterns,
     selectedThreats, setSelectedThreats,
     hasMapFilter, setHasMapFilter,
+    breakdownFilter, setBreakdownFilter,
     endemicsOnly, setEndemicsOnly,
     selectedGrowthForms, setSelectedGrowthForms,
     selectedAssessors, setSelectedAssessors,
@@ -403,8 +407,10 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     setTruncationByTaxon({});
     setNeSpecies([]);
     setNeSpeciesFetched(false);
-    // Clear assessment-specific filters (preserve search + species so search-bar navigation survives mode switch)
-    setSelectedSubgroups(new Set());
+    // Clear assessment-specific filters (preserve search + species so search-bar navigation survives mode
+    // switch; also preserve selectedSubgroups — new-assessments mode fetches a selected sub-group directly
+    // (see the fetch effect below), so e.g. toggling Unassessed while viewing an SSC group should stay
+    // scoped to that group, not fall back to all of Mammals)
     setSelectedCategories(new Set());
     setSelectedYearRanges(new Set());
     setSelectedAssessmentYears(new Set());
@@ -427,7 +433,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     if (viewMode === "new-assessments") {
       setSelectedTaxa(prev => prev.has("all") ? new Set<string>() : prev);
     }
-  }, [viewMode, setSelectedTaxa, setSelectedSubgroups, setSelectedCategories, setSelectedYearRanges, setSelectedAssessmentYears, setSelectedDescribedYears, setSelectedCountries, setSelectedObsRanges, setSelectedSystems, setSelectedPopulationTrends, setSelectedMovementPatterns, setSelectedThreats, setHasMapFilter, setEndemicsOnly, setSelectedGrowthForms, setSelectedAssessors, setSelectedReviewers, setSort]);
+  }, [viewMode, setSelectedTaxa, setSelectedCategories, setSelectedYearRanges, setSelectedAssessmentYears, setSelectedDescribedYears, setSelectedCountries, setSelectedObsRanges, setSelectedSystems, setSelectedPopulationTrends, setSelectedMovementPatterns, setSelectedThreats, setHasMapFilter, setEndemicsOnly, setSelectedGrowthForms, setSelectedAssessors, setSelectedReviewers, setSort]);
 
   // Taxon toggle handler (used by TaxaSummary)
   // Regular click: select only that taxon (or deselect if already sole selection)
@@ -706,6 +712,24 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         Array.from(selectedSubgroups).some(sg => speciesMatchesNode(s, sg))
       );
     }
+    // Narrow to one breakdown row from a described-species popover (bd= URL param —
+    // see TaxaSummary.tsx's BreakdownList). Gated on the filter's own nodeId still
+    // being selected: a stale bd= surviving a later, unrelated navigation (any
+    // setSelectedSubgroups/setSelectedTaxa call resets it, but this is a second,
+    // cheap line of defense) becomes inert instead of silently hiding every species.
+    if (breakdownFilter && selectedSubgroups.has(breakdownFilter.nodeId)) {
+      filtered = filtered.filter(s => matchesBreakdownName(s, breakdownFilter.rank, breakdownFilter.name));
+      // CoL Match / No CoL Match split within this name's Assessed count (only
+      // meaningful for assessed species, which is all `species` is in reassessments
+      // mode — the id lists are only ever sent alongside view=reassessments).
+      if (breakdownFilter.onlyIds?.length) {
+        const ids = new Set(breakdownFilter.onlyIds);
+        filtered = filtered.filter(s => s.sis_taxon_id != null && ids.has(s.sis_taxon_id));
+      } else if (breakdownFilter.excludeIds?.length) {
+        const ids = new Set(breakdownFilter.excludeIds);
+        filtered = filtered.filter(s => s.sis_taxon_id == null || !ids.has(s.sis_taxon_id));
+      }
+    }
     // Exact URL-only base filters (outdated / obs / assessment-year / described-year
     // bounds). Applied here on the base set so every chart AND the table inherit
     // them — and identically to the bucket-free /browse + MCP query, which is what
@@ -740,7 +764,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         && (maxDescribedYear == null || s.described_year <= maxDescribedYear));
     }
     return filtered;
-  }, [species, selectedTaxa, selectedSubgroups, isNewAssessments, exactFilters]);
+  }, [species, selectedTaxa, selectedSubgroups, isNewAssessments, exactFilters, breakdownFilter]);
 
   // Helper to check if species matches year range filter
   const matchesYearRangeFilter = useCallback((assessmentDate: string | null, yearRanges: Set<string> = selectedYearRanges): boolean => {
@@ -2109,9 +2133,18 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         selectedSubgroups={selectedSubgroups}
         disableAllSpecies={isNewAssessments}
         viewMode={viewMode}
+        layoutMode={layoutMode}
+        onLayoutModeChange={setLayoutMode}
         onToggleSubgroup={(sgId) => {
-          // Clicking a view root ancestor → clear subgroups to show its children
+          // Clicking a view root ancestor → clear subgroups to show its children.
+          // If the currently-selected subgroup is an SSC group, we got here by
+          // drilling out of SSC groups mode — return to that flat table instead
+          // of falling through to the plain taxon tree view.
           if (selectedTaxa.has(sgId)) {
+            if ([...selectedSubgroups].some(id => id.startsWith("ssc-"))) {
+              returnToLayoutMode("ssc");
+              return;
+            }
             setSelectedSubgroups(new Set());
             return;
           }
@@ -2132,10 +2165,11 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
           }
         }}
         onNavigateToSubgroup={(taxonId, subgroupId) => {
-          // Navigate directly to a taxon + subgroup atomically (avoids clearAllFilters race)
+          // Navigate directly to a taxon + subgroup atomically (avoids clearAllFilters race,
+          // and pushes a single history entry so one back-press undoes the whole navigation —
+          // including exiting Table 1a/SSC groups mode, which this also clears)
           skipClearOnTaxaChangeRef.current = true;
-          setSelectedTaxa(new Set([taxonId]));
-          setSelectedSubgroups(new Set([subgroupId]));
+          navigateToTaxonSubgroup(taxonId, subgroupId);
         }}
       />
 
@@ -3015,6 +3049,16 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 </button>
               );
             })}
+            {breakdownFilter && selectedSubgroups.has(breakdownFilter.nodeId) && (
+              <button
+                onClick={() => setBreakdownFilter(null)}
+                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
+              >
+                {breakdownDisplayName(breakdownFilter.rank, breakdownFilter.name)}
+                {breakdownFilter.onlyIds?.length ? " — No CoL Match" : breakdownFilter.excludeIds?.length ? " — CoL Match" : ""}
+                <span className="text-xs">×</span>
+              </button>
+            )}
             {!isNewAssessments && Array.from(selectedCategories).filter(cat => cat !== "NE").map(cat => (
               <button
                 key={cat}

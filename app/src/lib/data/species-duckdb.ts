@@ -62,8 +62,19 @@ function ensureNeHelpers(conn: DuckDBConnection): Promise<void> {
     neHelpersPromise = (async () => {
       const linkUri = parquetUri("species_link.parquet");
       const unassessedUri = parquetUri("unassessed.parquet");
+      const assessedUri = parquetUri("assessed.parquet");
       await conn.run(`CREATE TEMP TABLE ne_assessed_col_ids AS
         SELECT DISTINCT col_id FROM read_parquet('${linkUri}') WHERE src = 'redlist' AND col_id IS NOT NULL`);
+      // A species CoL flags extinct still belongs to the "described" universe if
+      // IUCN's own linked assessment agrees (EX/EW) — see the matching comment +
+      // rationale next to createExEwAssessedTable in scripts/build-taxa-summary.ts.
+      // Mirrored here so this runtime species list and the build-time colDescribed/
+      // colNe summary numbers never disagree with each other.
+      await conn.run(`CREATE TEMP TABLE ne_ex_ew_col_ids AS
+        SELECT DISTINCT l.col_id
+        FROM read_parquet('${linkUri}') l
+        JOIN read_parquet('${assessedUri}') a ON a.id = l.id
+        WHERE l.src = 'redlist' AND l.col_id IS NOT NULL AND a.iucn_category IN ('EX', 'EW')`);
       await conn.run(`CREATE TEMP TABLE ne_gbif_by_col AS
         SELECT sl.col_id AS col_id, any_value(un.gbif_species_key) AS gbif_species_key, max(un.gbif_occurrence_count) AS gbif_occurrence_count, any_value(un.countries) AS countries, any_value(un.common_name) AS common_name
         FROM read_parquet('${linkUri}') sl JOIN read_parquet('${unassessedUri}') un ON un.id = sl.id
@@ -249,7 +260,7 @@ export async function querySpecies(opts: {
     // The NE list IS the CoL extant universe under the taxon, not already assessed
     // (minus the small EXCLUDED_COL_IDS denylist). species/ is partitioned by taxon_group,
     // so the SAME `whereSql` used for the assessed parquet filters + prunes it.
-    const univFilter = `${whereSql} AND in_base AND extinct IS NOT TRUE AND col_id NOT IN ${assessedColIds} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL}`;
+    const univFilter = `${whereSql} AND in_base AND (extinct IS NOT TRUE OR col_id IN (SELECT col_id FROM ne_ex_ew_col_ids)) AND col_id NOT IN ${assessedColIds} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL}`;
 
     // Count first (cheap). A giant aggregate (insects ~935k, invertebrates ~1.3M) exceeds
     // the cap — serializing it is a 250MB+ payload the browser can't load. Flag `tooLarge`

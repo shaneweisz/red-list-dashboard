@@ -12,6 +12,8 @@
  *   Phase 7b: fetch-col-checklist   (curated CoL Checklist ColDP → demotion overlay, full sync only)
  *   Phase 8: build-backbone         (NameUsage.tsv → backbone.parquet + species/)
  *   Phase 9: build-matching         (→ species_link.parquet, IUCN/GBIF → col_id)
+ *   Phase 9b: build-synonym-index   (→ synonym-index.parquet, search)
+ *   Phase 9c: build-col-taxon-ids   (taxonomy tree + backbone.parquet → src/config/col-taxon-ids.json, committed to git)
  *   Phase 10: build-taxa-summary    (CSVs + CoL artifacts → taxa-summary.json, incl. col counts)
  *
  * Prerequisites:
@@ -38,6 +40,7 @@ import { run as fetchColChecklist } from "./fetch-col-checklist";
 import { run as buildBackbone } from "./build-backbone";
 import { run as buildMatching } from "./build-matching";
 import { run as buildSynonymIndex } from "./build-synonym-index";
+import { run as buildColTaxonIds } from "./build-col-taxon-ids";
 
 async function main() {
   loadEnvFiles();
@@ -113,6 +116,13 @@ async function main() {
       console.log("\nPhase 9b: build-synonym-index (→ synonym-index.parquet, search)");
       console.log("═".repeat(60));
       await buildSynonymIndex();
+
+      // Small + derived from committed source (the taxonomy tree), so this writes to
+      // src/config/ and gets committed to git, unlike the R2-published data/ outputs
+      // above — re-run whenever a node's filter changes, not just on every data sync.
+      console.log("\nPhase 9c: build-col-taxon-ids (→ src/config/col-taxon-ids.json)");
+      console.log("═".repeat(60));
+      await buildColTaxonIds();
     } else {
       console.log("\nPhases 7-9 (CoL backbone): skipped on a partial-taxa sync — run a full sync to refresh.");
     }

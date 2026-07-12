@@ -67,9 +67,12 @@ export default function RedListPage() {
                   onClick={() => {
                     if (viewMode === "reassessments") return;
                     setViewMode("reassessments");
-                    setSharedTaxa(new Set());
-                    setSharedSubgroups(new Set());
-                    window.history.pushState(null, "", "/");
+                    // Preserve the current taxa/subgroup/layout selection (and any other
+                    // URL-only filters) across the switch — only the `view` param changes.
+                    const params = new URLSearchParams(window.location.search);
+                    params.delete("view");
+                    const qs = params.toString();
+                    window.history.pushState(null, "", qs ? `/?${qs}` : "/");
                     window.dispatchEvent(new PopStateEvent("popstate"));
                   }}
                   className={`px-3 py-2 sm:py-1.5 font-medium transition-colors ${
@@ -84,9 +87,11 @@ export default function RedListPage() {
                   onClick={() => {
                     if (viewMode === "new-assessments") return;
                     setViewMode("new-assessments");
-                    setSharedTaxa(new Set());
-                    setSharedSubgroups(new Set());
-                    window.history.pushState(null, "", "/?view=new-assessments");
+                    // Preserve the current taxa/subgroup/layout selection (and any other
+                    // URL-only filters) across the switch — only the `view` param changes.
+                    const params = new URLSearchParams(window.location.search);
+                    params.set("view", "new-assessments");
+                    window.history.pushState(null, "", `/?${params.toString()}`);
                     window.dispatchEvent(new PopStateEvent("popstate"));
                   }}
                   className={`px-3 py-2 sm:py-1.5 font-medium transition-colors ${

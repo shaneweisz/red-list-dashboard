@@ -3,11 +3,16 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { canonicalizeTaxonId } from "@/lib/data/taxonomy-constants";
 import { resolveRegions } from "@/lib/regions";
-import { expandTaxaToken, collapseTaxaToTokens, getViewRootForNode } from "@/lib/taxonomy-utils";
+import { expandTaxaToken, collapseTaxaToTokens, getViewRootForNode, type FilterRank } from "@/lib/taxonomy-utils";
 
 // --- URL parsing helpers ---
 
 export type ViewMode = "reassessments" | "new-assessments";
+
+// Flat-table layout ("Table 1a mode" / "SSC groups mode") — URL-synced so it
+// survives reload/share and so the browser back button can return to it after
+// drilling into a group (see navigateToTaxonSubgroup below).
+export type LayoutMode = "table1a" | "ssc" | null;
 
 // Exact, URL-only base filters (no on-screen control — the charts use coarse
 // buckets). They let an agent/MCP dashboard link reproduce the exact /browse
@@ -35,10 +40,45 @@ const numParam = (p: URLSearchParams, key: string): number | null => {
   return Number.isNaN(n) ? null : n;
 };
 
+const FILTER_RANKS: FilterRank[] = ["class", "order", "family", "genus", "species"];
+
+// `bd=ssc-small-mammal:order:rodentia` — narrows a node's species list to one
+// breakdown row (see TaxaSummary.tsx's BreakdownList). nodeId:rank:name, colon-joined
+// like the rest of the URL scheme. Carries its own nodeId (rather than always
+// implicitly meaning "the selected subgroup") so RedListView can gate the filter on
+// selectedSubgroups still containing that exact node — a stale bd= surviving into an
+// unrelated group's view becomes inert instead of silently hiding all its species.
+// An optional `:only:id1,id2` or `:excl:id1,id2` suffix further narrows to/away-from
+// an explicit sis_taxon_id list (the "No CoL Match" / "CoL Match" split within one
+// breakdown name's Assessed count).
+export interface BreakdownParam {
+  nodeId: string;
+  rank: FilterRank;
+  name: string;
+  onlyIds?: number[];
+  excludeIds?: number[];
+}
+const parseBreakdownParam = (p: URLSearchParams): BreakdownParam | null => {
+  const raw = p.get("bd");
+  if (!raw) return null;
+  const [nodeId, rank, name, mode, idsCsv] = raw.split(":");
+  if (!nodeId || !name || !FILTER_RANKS.includes(rank as FilterRank)) return null;
+  const result: BreakdownParam = { nodeId, rank: rank as FilterRank, name };
+  if ((mode === "only" || mode === "excl") && idsCsv) {
+    const ids = idsCsv.split(",").map(Number).filter((n) => !Number.isNaN(n));
+    if (ids.length > 0) {
+      if (mode === "only") result.onlyIds = ids;
+      else result.excludeIds = ids;
+    }
+  }
+  return result;
+};
+
 export function parseParams(search: string) {
   const p = new URLSearchParams(search);
   const sortParam = p.get("sort");
   const viewParam = p.get("view");
+  const layoutParam = p.get("layout");
   // A `region` param expands to its country codes (the dashboard has no separate
   // region state — it stores a region AS its countries and re-derives the chip).
   const countryCodes = new Set<string>(
@@ -65,6 +105,7 @@ export function parseParams(search: string) {
   }
   return {
     viewMode: (viewParam === "new-assessments" ? "new-assessments" : "reassessments") as ViewMode,
+    layoutMode: (layoutParam === "table1a" || layoutParam === "ssc" ? layoutParam : null) as LayoutMode,
     // Expanded from the flat `taxa` token list (+ legacy `subgroups=`) above.
     taxa: taxaSet,
     subgroups: subgroupSet,
@@ -98,6 +139,7 @@ export function parseParams(search: string) {
       ? new Set(p.get("threats")!.split(",").filter(Boolean))
       : new Set<string>(),
     hasMap: p.get("hasMap") as "yes" | "no" | null,
+    breakdown: parseBreakdownParam(p),
     // Endemics-only: restrict to species occurring in exactly one country.
     endemicsOnly: p.get("endemics") === "1",
     growthForms: p.get("growthForms")
@@ -135,6 +177,7 @@ export function parseParams(search: string) {
 
 export function buildQs(state: {
   viewMode: ViewMode;
+  layoutMode?: LayoutMode;
   taxa: Set<string>;
   subgroups: Set<string>;
   categories: Set<string>;
@@ -148,6 +191,7 @@ export function buildQs(state: {
   movementPatterns: Set<string>;
   threats: Set<string>;
   hasMap: "yes" | "no" | null;
+  breakdown?: BreakdownParam | null;
   endemicsOnly: boolean;
   growthForms: Set<string>;
   assessors: Set<string>;
@@ -167,6 +211,7 @@ export function buildQs(state: {
 }): string {
   const p = new URLSearchParams();
   if (state.viewMode === "new-assessments") p.set("view", "new-assessments");
+  if (state.layoutMode) p.set("layout", state.layoutMode);
   // taxa + subgroups collapse to a single flat `taxa` token list (e.g.
   // invertebrates + inv-corals → taxa=corals); no separate subgroups param.
   const taxaTokens = collapseTaxaToTokens(state.taxa, state.subgroups);
@@ -182,6 +227,12 @@ export function buildQs(state: {
   if (state.movementPatterns.size > 0) p.set("movement", [...state.movementPatterns].join(","));
   if (state.threats.size > 0) p.set("threats", [...state.threats].join(","));
   if (state.hasMap) p.set("hasMap", state.hasMap);
+  if (state.breakdown) {
+    let bd = `${state.breakdown.nodeId}:${state.breakdown.rank}:${state.breakdown.name}`;
+    if (state.breakdown.onlyIds?.length) bd += `:only:${state.breakdown.onlyIds.join(",")}`;
+    else if (state.breakdown.excludeIds?.length) bd += `:excl:${state.breakdown.excludeIds.join(",")}`;
+    p.set("bd", bd);
+  }
   if (state.endemicsOnly) p.set("endemics", "1");
   if (state.growthForms.size > 0) p.set("growthForms", [...state.growthForms].join(","));
   if (state.assessors.size > 0) p.set("assessors", [...state.assessors].join("|"));
@@ -254,7 +305,14 @@ export function useFilterParams() {
     (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
       setState(prev => {
         const nextTaxa = typeof updater === "function" ? updater(prev.taxa) : updater;
-        const next = { ...prev, taxa: nextTaxa };
+        // A breakdown-name filter (bd=) is only ever set via the atomic URL push in
+        // TaxaSummary.tsx's navigateToNodeSpeciesList (which goes through parseParams
+        // on popstate, not this setter) — an actual taxa change here is a fresh
+        // selection, so drop a stale bd= rather than silently carrying it over. Guard
+        // on reference inequality (not just "this setter ran"): some callers invoke
+        // this as a conditional no-op (e.g. the view-mode-switch effect's `prev.has("all")
+        // ? new Set() : prev`), which must NOT clobber a bd= a same-tick popstate just set.
+        const next = nextTaxa === prev.taxa ? { ...prev, taxa: nextTaxa } : { ...prev, taxa: nextTaxa, breakdown: null };
         queueMicrotask(() => syncUrl(next, true)); // push so back button works
         return next;
       });
@@ -338,7 +396,52 @@ export function useFilterParams() {
     (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
       setState(prev => {
         const nextSubgroups = typeof updater === "function" ? updater(prev.subgroups) : updater;
-        const next = { ...prev, subgroups: nextSubgroups };
+        // See setSelectedTaxa above — drop a stale bd= on an actual subgroup change,
+        // but not a same-reference no-op.
+        const next = nextSubgroups === prev.subgroups ? { ...prev, subgroups: nextSubgroups } : { ...prev, subgroups: nextSubgroups, breakdown: null };
+        queueMicrotask(() => syncUrl(next, true));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
+  const setLayoutMode = useCallback(
+    (mode: LayoutMode) => {
+      setState(prev => {
+        const next = { ...prev, layoutMode: mode };
+        queueMicrotask(() => syncUrl(next, true)); // push so back button exits the mode
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
+  // Atomic taxon + sub-group navigation (used by Table 1a / SSC groups mode
+  // click-through). A single setState + single history push, so one back-press
+  // undoes the whole navigation instead of unwinding it one field at a time —
+  // and clearing layoutMode in the same update means back lands on the flat
+  // table the group was drilled into from, not a half-updated intermediate.
+  const navigateToTaxonSubgroup = useCallback(
+    (taxonId: string, subgroupId: string) => {
+      setState(prev => {
+        const next = { ...prev, taxa: new Set([taxonId]), subgroups: new Set([subgroupId]), layoutMode: null, breakdown: null };
+        queueMicrotask(() => syncUrl(next, true));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
+  // Reverse of navigateToTaxonSubgroup — clears taxa/subgroups back to the
+  // landing page and re-enters a flat-table layout mode, atomically (one
+  // history push). Used when clicking the "Mammals" ancestor row after
+  // drilling out of SSC groups mode should return to that table instead of
+  // falling through to the plain taxon tree view.
+  const returnToLayoutMode = useCallback(
+    (mode: LayoutMode) => {
+      setState(prev => {
+        const next = { ...prev, taxa: new Set<string>(), subgroups: new Set<string>(), layoutMode: mode, breakdown: null };
         queueMicrotask(() => syncUrl(next, true));
         return next;
       });
@@ -410,6 +513,17 @@ export function useFilterParams() {
     (value: "yes" | "no" | null) => {
       setState(prev => {
         const next = { ...prev, hasMap: value };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
+  const setBreakdownFilter = useCallback(
+    (value: BreakdownParam | null) => {
+      setState(prev => {
+        const next = { ...prev, breakdown: value };
         queueMicrotask(() => syncUrl(next, false));
         return next;
       });
@@ -548,6 +662,7 @@ export function useFilterParams() {
         movementPatterns: new Set<string>(),
         threats: new Set<string>(),
         hasMap: null,
+        breakdown: null,
         endemicsOnly: false,
         growthForms: new Set<string>(),
         assessors: new Set<string>(),
@@ -581,6 +696,7 @@ export function useFilterParams() {
         movementPatterns: new Set<string>(),
         threats: new Set<string>(),
         hasMap: null,
+        breakdown: null,
         endemicsOnly: false,
         growthForms: new Set<string>(),
         assessors: new Set<string>(),
@@ -599,6 +715,7 @@ export function useFilterParams() {
 
   return {
     viewMode: state.viewMode,
+    layoutMode: state.layoutMode,
     selectedTaxa: state.taxa,
     selectedSubgroups: state.subgroups,
     selectedCategories: state.categories,
@@ -612,6 +729,7 @@ export function useFilterParams() {
     selectedMovementPatterns: state.movementPatterns,
     selectedThreats: state.threats,
     hasMapFilter: state.hasMap,
+    breakdownFilter: state.breakdown,
     endemicsOnly: state.endemicsOnly,
     selectedGrowthForms: state.growthForms,
     selectedAssessors: state.assessors,
@@ -623,6 +741,9 @@ export function useFilterParams() {
     sortDirection: state.sortDirection,
 
     setViewMode,
+    setLayoutMode,
+    navigateToTaxonSubgroup,
+    returnToLayoutMode,
     setSelectedTaxa,
     setSelectedSubgroups,
     setSelectedCategories,
@@ -636,6 +757,7 @@ export function useFilterParams() {
     setSelectedMovementPatterns,
     setSelectedThreats,
     setHasMapFilter,
+    setBreakdownFilter,
     setEndemicsOnly,
     setSelectedGrowthForms,
     setSelectedAssessors,
