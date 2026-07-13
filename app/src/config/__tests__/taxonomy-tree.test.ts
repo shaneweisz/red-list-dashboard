@@ -660,16 +660,43 @@ describe("SSC Specialist Groups tree", () => {
       { class_name: "Mammalia", order_name: "Carnivora", family: "Mustelidae", scientific_name: "Lutra lutra" },
       { class_name: "Mammalia", order_name: "Carnivora", family: "Mustelidae", scientific_name: "Mustela nivalis" },
       { class_name: "Mammalia", order_name: "Artiodactyla", family: "Camelidae", scientific_name: "Vicugna vicugna" },
+      // extraSpeciesNames additions (Antelope SG) and the Ailuridae addition
+      // (Small Carnivore SG) — must not double-count into the remainder either.
+      { class_name: "Mammalia", order_name: "Artiodactyla", family: "Antilocapridae", scientific_name: "Antilocapra americana" },
+      { class_name: "Mammalia", order_name: "Artiodactyla", family: "Tragulidae", scientific_name: "Hyemoschus aquaticus" },
+      { class_name: "Mammalia", order_name: "Artiodactyla", family: "Camelidae", scientific_name: "Camelus ferus" },
+      { class_name: "Mammalia", order_name: "Carnivora", family: "Ailuridae", scientific_name: "Ailurus fulgens" },
     ];
     for (const row of cases) {
       expect(speciesMatchesNode({ ...row, taxon_group: "mammals" }, "ssc-other-mammals"), row.scientific_name).toBe(false);
     }
   });
 
-  it("ssc-other-mammals catches a genuinely uncovered species (wild Bactrian camel, deliberately excluded from Wild Camelid SG)", () => {
+  it("ssc-other-mammals catches a genuinely uncovered species (musk deer, no dedicated SSC group among the 35)", () => {
+    const muskDeer = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Moschidae", scientific_name: "Moschus moschiferus", taxon_group: "mammals" };
+    expect(speciesMatchesNode(muskDeer, "ssc-other-mammals")).toBe(true);
+  });
+
+  it("Antelope SG's extraSpeciesNames pulls in Pronghorn, Water Chevrotain, and Wild Camel despite them not being Bovidae", () => {
+    const pronghorn = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Antilocapridae", scientific_name: "Antilocapra americana", taxon_group: "mammals" };
+    const chevrotain = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Tragulidae", scientific_name: "Hyemoschus aquaticus", taxon_group: "mammals" };
     const camel = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Camelidae", scientific_name: "Camelus ferus", taxon_group: "mammals" };
-    expect(speciesMatchesNode(camel, "ssc-other-mammals")).toBe(true);
+    expect(speciesMatchesNode(pronghorn, "ssc-antelope")).toBe(true);
+    expect(speciesMatchesNode(chevrotain, "ssc-antelope")).toBe(true);
+    expect(speciesMatchesNode(camel, "ssc-antelope")).toBe(true);
+    // Wild Camel is still correctly excluded from Wild Camelid SG (South American
+    // camelids only — Lama/Vicugna) despite now belonging to Antelope SG.
     expect(speciesMatchesNode(camel, "ssc-wild-camelid")).toBe(false);
+    // A South American camelid must NOT be pulled into Antelope SG by the same
+    // escape hatch — extraSpeciesNames is a specific named list, not a rank filter.
+    const guanaco = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Camelidae", scientific_name: "Lama guanicoe", taxon_group: "mammals" };
+    expect(speciesMatchesNode(guanaco, "ssc-antelope")).toBe(false);
+    expect(speciesMatchesNode(guanaco, "ssc-wild-camelid")).toBe(true);
+  });
+
+  it("Small Carnivore SG includes red pandas (Ailuridae), confirmed via the group's own site", () => {
+    const redPanda = { class_name: "Mammalia", order_name: "Carnivora", family: "Ailuridae", scientific_name: "Ailurus fulgens", taxon_group: "mammals" };
+    expect(speciesMatchesNode(redPanda, "ssc-small-carnivore")).toBe(true);
   });
 
   it("all SSC group children use the mammals csvGroup and have a unique id", () => {

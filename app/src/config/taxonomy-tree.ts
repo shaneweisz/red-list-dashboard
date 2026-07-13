@@ -33,10 +33,22 @@ export interface SpeciesFilter {
   /** Exclude mode: exclude these genera */
   excludeGenera?: string[];
   /** Filter by full scientific name (lowercase "genus species") — for the rare case
-   * a specialist group's boundary is a single species (e.g. polar bear within Ursidae). */
+   * a specialist group's boundary is a single species (e.g. polar bear within Ursidae).
+   * ANDed with every other clause above, same as the rest of this interface — use
+   * this alone (no classNames/families/etc.) when the node IS just that species list. */
   speciesNames?: string[];
   /** Exclude mode: exclude these scientific names */
   excludeSpeciesNames?: string[];
+  /** OR escape hatch: species included regardless of every other clause above
+   * (bypasses classNames/orderNames/families/genera entirely, but still respects
+   * csvGroups and the CoL-only universe exclusions). For a group whose own stated
+   * remit includes named species outside its otherwise-clean taxonomic rule — e.g.
+   * the Antelope Specialist Group's own site names Pronghorn (Antilocapridae),
+   * Water Chevrotain (Tragulidae), and Wild Camel (Camelidae) as part of its remit
+   * "for practical reasons," alongside its Bovidae-based core. Without this, a
+   * species outside the node's family/order rule can never be included no matter
+   * what speciesNames says, since every clause in this interface is ANDed together. */
+  extraSpeciesNames?: string[];
 }
 
 export interface TaxonomyNode {
@@ -615,9 +627,34 @@ export const TAXONOMY_TREE: TaxonomyNode = {
               "capricornis", "oreamnos", "budorcas", "pantholops",
               "ammotragus", "hemitragus", "nilgiritragus",
             ],
+            // Verified against the group's own site (antelopesg.org), not just
+            // iucn.org: "ASG currently recognizes 93 antelope species... Its remit
+            // also covers five non-antelope species... for practical reasons" —
+            // named as Pronghorn, Tibetan antelope, African Buffalo, Water
+            // Chevrotain, and Wild Camel. ASG's own words: "there is in fact no
+            // clear definition of an antelope." Reconciled against our other 34
+            // groups' own filters:
+            //  - African Buffalo (Syncerus caffer) needs no change — family Bovidae,
+            //    genus not in the exclude list above, so it already matches this
+            //    node; confirmed Afro-Asian Wild Cattle SG's own site frames itself
+            //    as "Asia's nine wild cattle species" (Asia-only despite the "Afro-"
+            //    in its name), so there's no double-claim.
+            //  - Pronghorn (Antilocapridae), Water Chevrotain (Tragulidae), and Wild
+            //    Camel (Camelidae) aren't Bovidae at all, so the family rule above
+            //    can never match them — added via extraSpeciesNames below, the only
+            //    node in this tree that needs it so far.
+            //  - Tibetan antelope (Pantholops hodgsonii) is deliberately NOT moved
+            //    here despite ASG's claim: it stays under Caprinae SG, whose own
+            //    page names the formal subfamily "Caprinae" outright — a cleaner,
+            //    more specific claim than ASG's hedged "for practical reasons"
+            //    mention, and modern phylogenetics places Pantholops within
+            //    Caprinae. A real, acknowledged overlap between the two groups'
+            //    stated remits, not a bug — flagging here rather than duplicating
+            //    the species into both (this tree assumes one node per species).
+            extraSpeciesNames: ["antilocapra americana", "hyemoschus aquaticus", "camelus ferus"],
           },
-          estimatedDescribed: 90,
-          estimatedSource: MDD + " — Bovidae minus wild cattle/bison (Wild Cattle/Bison SG) and Caprinae (Caprinae SG) (approx.)",
+          estimatedDescribed: 93,
+          estimatedSource: MDD + " — Bovidae minus wild cattle/bison (Wild Cattle/Bison SG) and Caprinae (Caprinae SG), plus Pronghorn, Water Chevrotain, and Wild Camel per the group's own stated remit (approx.)",
           estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-antelope-specialist-group",
         },
@@ -844,11 +881,17 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           name: "Small Carnivore Specialist Group",
           filter: {
             csvGroups: ["mammals"],
-            families: ["mustelidae", "viverridae", "herpestidae", "eupleridae", "procyonidae", "mephitidae", "nandiniidae", "prionodontidae"],
+            // Verified against the group's own site (smallcarnivore.org), not just
+            // iucn.org: explicitly claims "red pandas, the Malagasy carnivores,
+            // mongooses, skunks and stink badgers, weasels, martens and badgers,
+            // civets and genets, linsangs, raccoons and coatis" and states "We do
+            // not cover any species of cat, dog, or otter" — confirming both the
+            // Ailuridae addition here and the otter exclusion below.
+            families: ["mustelidae", "viverridae", "herpestidae", "eupleridae", "procyonidae", "mephitidae", "nandiniidae", "prionodontidae", "ailuridae"],
             excludeGenera: ["lutra", "pteronura", "aonyx", "lutrogale", "enhydra", "hydrictis", "lontra"],
           },
-          estimatedDescribed: 158,
-          estimatedSource: MDD + " — small-carnivore families minus Lutrinae/otters (Otter SG) (approx.)",
+          estimatedDescribed: 159,
+          estimatedSource: MDD + " — small-carnivore families (incl. Ailuridae/red pandas) minus Lutrinae/otters (Otter SG) (approx.)",
           estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-small-carnivore-specialist-group",
         },
@@ -889,11 +932,14 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-wild-pig-specialist-group",
         },
         // Catch-all: mammal orders/families/genera not claimed by any of the 35
-        // groups above — e.g. treeshrew-adjacent oddities, moles' relatives with
-        // no dedicated group, and the wild Bactrian camel (Camelus, deliberately
-        // excluded from Wild Camelid SG's South-American-only remit). Kept in
-        // sync manually — if a 36th SSC group is added above, add its
-        // order/family/genus here too so it doesn't double-count into this row.
+        // groups above — e.g. treeshrew-adjacent oddities and moles' relatives with
+        // no dedicated group. Kept in sync manually — if a 36th SSC group is added
+        // above, add its order/family/genus here too so it doesn't double-count
+        // into this row. Species claimed via a group's extraSpeciesNames (an OR
+        // escape hatch outside the normal order/family/genus rules — see
+        // SpeciesFilter's doc comment) must be excluded here by name explicitly,
+        // since they don't share a family/order with anything else in this list:
+        // Pronghorn, Water Chevrotain, and Wild Camel are claimed by Antelope SG.
         {
           id: "ssc-other-mammals",
           name: "No SSC Group",
@@ -921,10 +967,12 @@ export const TAXONOMY_TREE: TaxonomyNode = {
               "hyperoodontidae", "neobalaenidae",
               "delphinidae", "monodontidae", "phocoenidae", "iniidae", "lipotidae", "platanistidae", "pontoporiidae",
               "mustelidae", "viverridae", "herpestidae", "eupleridae", "procyonidae", "mephitidae", "nandiniidae", "prionodontidae",
+              "ailuridae",
             ],
             excludeGenera: ["lama", "vicugna"],
+            excludeSpeciesNames: ["antilocapra americana", "hyemoschus aquaticus", "camelus ferus"],
           },
-          estimatedDescribed: 227,
+          estimatedDescribed: 223,
           estimatedSource: "Remainder of IUCN Table 1a mammals total (6,854) minus the 35 SSC pilot groups above (approx.)",
           estimatedSourceUrl: IUCN_SOURCE_URL,
         },

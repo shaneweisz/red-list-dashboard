@@ -716,7 +716,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     // setSelectedSubgroups/setSelectedTaxa call resets it, but this is a second,
     // cheap line of defense) becomes inert instead of silently hiding every species.
     if (breakdownFilter && selectedSubgroups.has(breakdownFilter.nodeId)) {
-      filtered = filtered.filter(s => matchesBreakdownName(s, breakdownFilter.rank, breakdownFilter.name));
+      filtered = filtered.filter(s => matchesBreakdownName(s, breakdownFilter.rank, breakdownFilter.name, breakdownFilter.nodeId));
       // CoL Match / No CoL Match split within this name's Assessed count (only
       // meaningful for assessed species, which is all `species` is in reassessments
       // mode — the id lists are only ever sent alongside view=reassessments).

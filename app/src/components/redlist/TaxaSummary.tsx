@@ -398,7 +398,7 @@ function SpeciesListPanel({
 
   const filtered = useMemo(() => {
     if (!rows) return null;
-    let matched = rows.filter((s) => speciesMatchesNode(s, nodeId) && matchesBreakdownName(s, request.rank, request.name));
+    let matched = rows.filter((s) => speciesMatchesNode(s, nodeId) && matchesBreakdownName(s, request.rank, request.name, nodeId));
     if (request.bucket === "colMatch" && request.noMatchIds?.length) {
       const excl = new Set(request.noMatchIds);
       matched = matched.filter((s) => s.sis_taxon_id == null || !excl.has(s.sis_taxon_id));
