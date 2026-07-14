@@ -672,9 +672,30 @@ describe("SSC Specialist Groups tree", () => {
     }
   });
 
-  it("ssc-other-mammals catches a genuinely uncovered species (musk deer, no dedicated SSC group among the 35)", () => {
+  it("ssc-other-mammals catches a genuinely uncovered species (colugo, no dedicated SSC group)", () => {
+    const colugo = { class_name: "Mammalia", order_name: "Dermoptera", family: "Cynocephalidae", scientific_name: "Galeopterus variegatus", taxon_group: "mammals" };
+    expect(speciesMatchesNode(colugo, "ssc-other-mammals")).toBe(true);
+  });
+
+  it("Deer SG's real remit extends to musk deer (Moschidae) and chevrotains (Tragulidae), not just true deer", () => {
     const muskDeer = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Moschidae", scientific_name: "Moschus moschiferus", taxon_group: "mammals" };
-    expect(speciesMatchesNode(muskDeer, "ssc-other-mammals")).toBe(true);
+    const chevrotain = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Tragulidae", scientific_name: "Tragulus javanicus", taxon_group: "mammals" };
+    expect(speciesMatchesNode(muskDeer, "ssc-deer")).toBe(true);
+    expect(speciesMatchesNode(chevrotain, "ssc-deer")).toBe(true);
+    expect(speciesMatchesNode(muskDeer, "ssc-other-mammals")).toBe(false);
+    // Water Chevrotain stays with Antelope SG (its own stated remit), not Deer SG.
+    const waterChevrotain = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Tragulidae", scientific_name: "Hyemoschus aquaticus", taxon_group: "mammals" };
+    expect(speciesMatchesNode(waterChevrotain, "ssc-deer")).toBe(false);
+    expect(speciesMatchesNode(waterChevrotain, "ssc-antelope")).toBe(true);
+  });
+
+  it("Caprinae SG includes Arabian Tahr and Bharal, not Antelope SG", () => {
+    const tahr = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Bovidae", scientific_name: "Arabitragus jayakari", taxon_group: "mammals" };
+    const bharal = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Bovidae", scientific_name: "Pseudois nayaur", taxon_group: "mammals" };
+    expect(speciesMatchesNode(tahr, "ssc-caprinae")).toBe(true);
+    expect(speciesMatchesNode(bharal, "ssc-caprinae")).toBe(true);
+    expect(speciesMatchesNode(tahr, "ssc-antelope")).toBe(false);
+    expect(speciesMatchesNode(bharal, "ssc-antelope")).toBe(false);
   });
 
   it("Antelope SG's extraSpeciesNames pulls in Pronghorn, Water Chevrotain, and Wild Camel despite them not being Bovidae", () => {
@@ -946,6 +967,14 @@ describe("SSC Specialist Groups tree (fishes)", () => {
     expect(speciesMatchesNode(chimaera, "ssc-shark")).toBe(true);
   });
 
+  it("Shark SG also matches unassessed sharks/rays, which carry 'elasmobranchii'/'holocephali' as class_name instead of 'chondrichthyes' (assessed-only label)", () => {
+    const unassessedShark = { class_name: "Elasmobranchii", order_name: "Carcharhiniformes", family: "Carcharhinidae", scientific_name: "Carcharhinus obscurior", taxon_group: "fishes" };
+    const unassessedChimaera = { class_name: "Holocephali", order_name: "Chimaeriformes", family: "Chimaeridae", scientific_name: "Chimaera bahamaensis", taxon_group: "fishes" };
+    expect(speciesMatchesNode(unassessedShark, "ssc-shark")).toBe(true);
+    expect(speciesMatchesNode(unassessedChimaera, "ssc-shark")).toBe(true);
+    expect(speciesMatchesNode(unassessedShark, "ssc-other-fish")).toBe(false);
+  });
+
   it("Grouper and Wrasse SG covers both grouper family labels (Serranidae and Epinephelidae) plus wrasses and parrotfishes", () => {
     const grouper1 = { class_name: "Actinopterygii", order_name: "Perciformes", family: "Serranidae", scientific_name: "Epinephelus marginatus", taxon_group: "fishes" };
     const grouper2 = { class_name: "Actinopterygii", order_name: "Perciformes", family: "Epinephelidae", scientific_name: "Epinephelus itajara", taxon_group: "fishes" };
@@ -1021,13 +1050,13 @@ describe("SSC Specialist Groups tree (fishes)", () => {
 describe("SSC Specialist Groups tree (invertebrates)", () => {
   const sscInvertNode = findNode("ssc-invertebrate-groups");
 
-  it("ssc-invertebrate-groups exists, is not part of the default view, and has 15 children (14 pilot groups + remainder)", () => {
+  it("ssc-invertebrate-groups exists, is not part of the default view, and has 16 children (15 pilot groups + remainder)", () => {
     expect(sscInvertNode).toBeDefined();
-    expect(sscInvertNode?.children?.length).toBe(15);
+    expect(sscInvertNode?.children?.length).toBe(16);
     expect(TAXONOMY_VIEWS.default.roots).not.toContain("ssc-invertebrate-groups");
   });
 
-  it("ssc-other-invertebrates (the remainder row) doesn't overlap any of the 14 named groups", () => {
+  it("ssc-other-invertebrates (the remainder row) doesn't overlap any of the 15 named groups", () => {
     const cases: Array<{ class_name: string; order_name: string; family: string; scientific_name: string; taxon_group: string }> = [
       { class_name: "Gastropoda", order_name: "Stylommatophora", family: "Helicidae", scientific_name: "Helix pomatia", taxon_group: "molluscs" },
       { class_name: "Cephalopoda", order_name: "Octopoda", family: "Octopodidae", scientific_name: "Octopus vulgaris", taxon_group: "molluscs" },
@@ -1048,10 +1077,19 @@ describe("SSC Specialist Groups tree (invertebrates)", () => {
       { class_name: "Insecta", order_name: "Coleoptera", family: "Lampyridae", scientific_name: "Photinus pyralis", taxon_group: "beetles" },
       { class_name: "Insecta", order_name: "Coleoptera", family: "Geotrupidae", scientific_name: "Geotrupes stercorarius", taxon_group: "beetles" },
       { class_name: "Merostomata", order_name: "Xiphosura", family: "Limulidae", scientific_name: "Limulus polyphemus", taxon_group: "horseshoe_crabs" },
+      { class_name: "Holothuroidea", order_name: "Holothuriida", family: "Holothuriidae", scientific_name: "Holothuria edulis", taxon_group: "other_invertebrates" },
     ];
     for (const row of cases) {
       expect(speciesMatchesNode(row, "ssc-other-invertebrates"), row.scientific_name).toBe(false);
     }
+  });
+
+  it("ssc-sea-cucumber claims class Holothuroidea, not shared with the mixed 'other_invertebrates' catch-all", () => {
+    const seaCucumber = { class_name: "Holothuroidea", order_name: "Holothuriida", family: "Holothuriidae", scientific_name: "Holothuria edulis", taxon_group: "other_invertebrates" };
+    const seaStar = { class_name: "Asteroidea", order_name: "Valvatida", family: "Oreasteridae", scientific_name: "Culcita novaeguineae", taxon_group: "other_invertebrates" };
+    expect(speciesMatchesNode(seaCucumber, "ssc-sea-cucumber")).toBe(true);
+    expect(speciesMatchesNode(seaStar, "ssc-sea-cucumber")).toBe(false);
+    expect(speciesMatchesNode(seaStar, "ssc-other-invertebrates")).toBe(true);
   });
 
   it("ssc-other-invertebrates catches genuinely uncovered species, including ones that would belong to the excluded habitat-based RLAs in reality", () => {
@@ -1273,9 +1311,9 @@ describe("SSC Specialist Groups tree (plants)", () => {
 describe("SSC Specialist Groups tree (fungi)", () => {
   const sscFungiNode = findNode("ssc-fungi-groups");
 
-  it("ssc-fungi-groups exists, is not part of the default view, and has 3 children (2 pilot groups + remainder)", () => {
+  it("ssc-fungi-groups exists, is not part of the default view, and has 6 children (5 pilot groups + remainder)", () => {
     expect(sscFungiNode).toBeDefined();
-    expect(sscFungiNode?.children?.length).toBe(3);
+    expect(sscFungiNode?.children?.length).toBe(6);
     expect(TAXONOMY_VIEWS.default.roots).not.toContain("ssc-fungi-groups");
   });
 
@@ -1286,9 +1324,33 @@ describe("SSC Specialist Groups tree (fungi)", () => {
     expect(speciesMatchesNode(truffle, "ssc-other-fungi")).toBe(false);
   });
 
-  it("ssc-other-fungi catches a genuinely uncovered species (a mushroom, no dedicated SSC group among the 2)", () => {
+  it("ssc-other-fungi catches a genuinely uncovered species (no dedicated SSC group among the 5)", () => {
+    const deadMansFingers = { class_name: "Sordariomycetes", order_name: "Xylariales", family: "Xylariaceae", scientific_name: "Xylaria polymorpha", taxon_group: "mushrooms" };
+    expect(speciesMatchesNode(deadMansFingers, "ssc-other-fungi")).toBe(true);
+  });
+
+  it("Lichen SG is scoped to class Lecanoromycetes, not the whole mushrooms group", () => {
+    const lichen = { class_name: "Lecanoromycetes", order_name: "Lecanorales", family: "Parmeliaceae", scientific_name: "Lobaria pulmonaria", taxon_group: "mushrooms" };
+    expect(speciesMatchesNode(lichen, "ssc-lichen")).toBe(true);
+    expect(speciesMatchesNode(lichen, "ssc-other-fungi")).toBe(false);
+  });
+
+  it("Mushroom, Bracket and Puffball SG is scoped to class Agaricomycetes", () => {
     const mushroom = { class_name: "Agaricomycetes", order_name: "Agaricales", family: "Amanitaceae", scientific_name: "Amanita muscaria", taxon_group: "mushrooms" };
-    expect(speciesMatchesNode(mushroom, "ssc-other-fungi")).toBe(true);
+    expect(speciesMatchesNode(mushroom, "ssc-mushroom-bracket-puffball")).toBe(true);
+    expect(speciesMatchesNode(mushroom, "ssc-other-fungi")).toBe(false);
+  });
+
+  it("Rusts and Smuts SG covers order Pucciniales (rusts) and the real orders within Ustilaginomycetes/Exobasidiomycetes (smuts)", () => {
+    const rust = { class_name: "Pucciniomycetes", order_name: "Pucciniales", family: "Pucciniaceae", scientific_name: "Puccinia graminis", taxon_group: "mushrooms" };
+    const smut = { class_name: "Ustilaginomycetes", order_name: "Ustilaginales", family: "Ustilaginaceae", scientific_name: "Ustilago maydis", taxon_group: "mushrooms" };
+    // A non-rust order within the same Pucciniomycetes class — correctly
+    // excluded (encoded by order, not the whole class).
+    const nonRustPucciniomycete = { class_name: "Pucciniomycetes", order_name: "Helicobasidiales", family: "Helicobasidiaceae", scientific_name: "Helicobasidium purpureum", taxon_group: "mushrooms" };
+    expect(speciesMatchesNode(rust, "ssc-rust-smut")).toBe(true);
+    expect(speciesMatchesNode(smut, "ssc-rust-smut")).toBe(true);
+    expect(speciesMatchesNode(nonRustPucciniomycete, "ssc-rust-smut")).toBe(false);
+    expect(speciesMatchesNode(nonRustPucciniomycete, "ssc-other-fungi")).toBe(true);
   });
 
   it("Cup-fungus, Truffle and Ally SG is scoped to order Pezizales", () => {

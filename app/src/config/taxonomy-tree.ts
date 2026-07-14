@@ -590,12 +590,18 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         },
         {
           id: "ssc-afro-asian-wild-cattle",
-          name: "Afro-Asian Wild Cattle Specialist Group",
+          // The group dropped "Afro-" from its own self-identification (see
+          // asianwildcattle.org, its own IUCN report PDFs, and social handles —
+          // all "Asian Wild Cattle Specialist Group"). Only the legacy iucn.org
+          // directory listing still uses the old "Afro-Asian" name. Keeping the
+          // "Afro-Asian" node id for stability, but the display name and source
+          // now reflect the group's own current branding.
+          name: "Asian Wild Cattle Specialist Group",
           filter: { csvGroups: ["mammals"], genera: ["bos", "bubalus", "pseudoryx"] },
           estimatedDescribed: 9,
           estimatedSource: MDD + " — Bos + Bubalus + Pseudoryx (approx.; excludes Syncerus caffer, covered by the Antelope SG)",
           estimatedSourceUrl: MDD_URL,
-          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-afro-asian-wild-cattle-specialist-group-0",
+          sourceUrl: "https://www.asianwildcattle.org/",
         },
         {
           id: "ssc-afrotheria",
@@ -625,7 +631,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
               "bos", "bubalus", "pseudoryx", "bison",
               "capra", "ovis", "ovibos", "rupicapra", "naemorhedus",
               "capricornis", "oreamnos", "budorcas", "pantholops",
-              "ammotragus", "hemitragus", "nilgiritragus",
+              "ammotragus", "hemitragus", "nilgiritragus", "arabitragus", "pseudois",
             ],
             // Verified against the group's own site (antelopesg.org), not just
             // iucn.org: "ASG currently recognizes 93 antelope species... Its remit
@@ -723,10 +729,10 @@ export const TAXONOMY_TREE: TaxonomyNode = {
             genera: [
               "capra", "ovis", "ovibos", "rupicapra", "naemorhedus",
               "capricornis", "oreamnos", "budorcas", "pantholops",
-              "ammotragus", "hemitragus", "nilgiritragus",
+              "ammotragus", "hemitragus", "nilgiritragus", "arabitragus", "pseudois",
             ],
           },
-          estimatedDescribed: 40,
+          estimatedDescribed: 42,
           estimatedSource: MDD + " — Caprinae genera within Bovidae (approx.)",
           estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-caprinae-specialist-group",
@@ -759,9 +765,18 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         {
           id: "ssc-deer",
           name: "Deer Specialist Group",
-          filter: { csvGroups: ["mammals"], families: ["cervidae"] },
-          estimatedDescribed: 55,
-          estimatedSource: MDD + " — Cervidae (approx.)",
+          filter: {
+            csvGroups: ["mammals"],
+            families: ["cervidae", "moschidae", "tragulidae"],
+            // Deer SG's own stated remit extends beyond true deer to musk deer
+            // (Moschidae) and chevrotains (Tragulidae). Hyemoschus aquaticus
+            // (Water Chevrotain) is the one exception: Antelope SG's own site
+            // claims it "for practical reasons" (see ssc-antelope's comment),
+            // so it stays there via extraSpeciesNames rather than double-counting.
+            excludeSpeciesNames: ["hyemoschus aquaticus"],
+          },
+          estimatedDescribed: 72,
+          estimatedSource: MDD + " — Cervidae + Moschidae + Tragulidae minus Water Chevrotain (Antelope SG) (approx.)",
           estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-deer-specialist-group",
         },
@@ -814,9 +829,9 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           id: "ssc-new-world-marsupial",
           name: "New World Marsupial Specialist Group",
           filter: { csvGroups: ["mammals"], orderNames: ["didelphimorphia", "paucituberculata", "microbiotheria"] },
-          estimatedDescribed: 128,
-          estimatedSource: MDD + " — Didelphimorphia + Paucituberculata + Microbiotheria (approx.)",
-          estimatedSourceUrl: MDD_URL,
+          estimatedDescribed: 108,
+          estimatedSource: "Martin et al. 2025, Mammal Review — the group's own unified taxonomic list for Didelphimorphia + Paucituberculata + Microbiotheria",
+          estimatedSourceUrl: "https://iucn.org/sites/default/files/2025-09/2024-2025-iucn-ssc-new-world-marsupial-sg-report_publication.pdf",
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-new-world-marsupial-specialist-group",
         },
         {
@@ -962,7 +977,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
               "ursidae", "canidae", "felidae", "cervidae", "equidae", "giraffidae",
               "hippopotamidae", "hyaenidae", "tayassuidae",
               "otariidae", "phocidae", "odobenidae",
-              "tapiridae", "rhinocerotidae", "bovidae", "suidae",
+              "tapiridae", "rhinocerotidae", "bovidae", "suidae", "moschidae", "tragulidae",
               "balaenidae", "balaenopteridae", "eschrichtiidae", "physeteridae", "kogiidae", "ziphiidae",
               "hyperoodontidae", "neobalaenidae",
               "delphinidae", "monodontidae", "phocoenidae", "iniidae", "lipotidae", "platanistidae", "pontoporiidae",
@@ -1371,7 +1386,10 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         {
           id: "sharks-rays",
           name: "Sharks & Rays",
-          filter: { csvGroups: ["fishes"], classNames: ["chondrichthyes"] },
+          // "chondrichthyes" is only used as a class label in assessed.parquet;
+          // unassessed species carry "elasmobranchii"/"holocephali" instead —
+          // all three are listed to match the full universe.
+          filter: { csvGroups: ["fishes"], classNames: ["chondrichthyes", "elasmobranchii", "holocephali"] },
           estimatedDescribed: 1_282,
           estimatedSource: ESCHMEYER,
           estimatedSourceUrl: ESCHMEYER_URL,
@@ -1416,7 +1434,11 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         {
           id: "ssc-shark",
           name: "Shark Specialist Group",
-          filter: { csvGroups: ["fishes"], classNames: ["chondrichthyes"] },
+          // "chondrichthyes" only appears as a class label in assessed.parquet;
+          // unassessed species use "elasmobranchii"/"holocephali" instead — all
+          // three are needed or the filter silently matches zero unassessed
+          // sharks (same fix as jawless-fish/sharks-rays above).
+          filter: { csvGroups: ["fishes"], classNames: ["chondrichthyes", "elasmobranchii", "holocephali"] },
           // Own site (iucnssg.org): "leading authority on the status of sharks,
           // rays, and chimaeras" — the entire class Chondrichthyes, repeatedly
           // and explicitly including chimaeras (not just elasmobranchs).
@@ -1475,7 +1497,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         },
         {
           id: "ssc-sciaenid",
-          name: "Sciaenid Red List Authority",
+          name: "Croaker and Drum Fishes Red List Authority",
           filter: { csvGroups: ["fishes"], families: ["sciaenidae"] },
           // Renamed by IUCN to "Croaker and Drum Fishes Red List Authority"
           // (our source DB still lists the legacy name) — iucn.org: "purposes
@@ -1539,14 +1561,16 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           id: "ssc-anguillid-eel",
           name: "Anguillid Eel Specialist Group",
           filter: { csvGroups: ["fishes"], families: ["anguillidae"] },
-          // Own site (hosted as a page of iucnffsg.org, but organizationally
-          // independent since a 2015 IUCN-SSC Leaders' Meeting decision, per
-          // its own materials): "all species within the family Anguillidae" —
-          // a monogeneric family (genus Anguilla), all 16 extant species.
+          // Organizationally independent since a 2015 IUCN-SSC Leaders' Meeting
+          // decision, per its own materials: "all species within the family
+          // Anguillidae" — a monogeneric family (genus Anguilla), all 16 extant
+          // species. Its own site (a page of iucnffsg.org) was found compromised
+          // with injected gambling/casino content during review, so sourceUrl
+          // points to the iucn.org directory listing instead.
           estimatedDescribed: 16,
           estimatedSource: ESCHMEYER + " — Anguillidae (genus Anguilla)",
           estimatedSourceUrl: ESCHMEYER_URL,
-          sourceUrl: "http://www.iucnffsg.org/about-ffsg/anguillid-specialist-sub-group/",
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-anguillid-eel-specialist-group",
         },
         // Catch-all: NOT a claim on behalf of Freshwater Fish SG (see the
         // exclusion note above) — a plain "no dedicated SSC group" remainder,
@@ -1557,7 +1581,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           name: "No SSC Group",
           filter: {
             csvGroups: ["fishes"],
-            excludeClasses: ["chondrichthyes"],
+            excludeClasses: ["chondrichthyes", "elasmobranchii", "holocephali"],
             excludeFamilies: [
               "serranidae", "epinephelidae", "labridae", "scaridae",
               "lutjanidae", "sparidae", "haemulidae", "nemipteridae", "lethrinidae", "caesionidae",
@@ -1677,30 +1701,39 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         },
         {
           id: "ssc-butterfly",
-          name: "Butterfly Specialist Group",
+          name: "Butterfly and Moth Specialist Group",
           filter: {
             csvGroups: ["butterflies_and_moths"],
             families: ["papilionidae", "pieridae", "nymphalidae", "lycaenidae", "riodinidae", "hesperiidae", "hedylidae", "saturniidae"],
           },
           // RENAMED by IUCN to "Butterfly and Moth Specialist Group" (our
-          // source DB still lists the legacy name) — and the rename isn't
-          // cosmetic: the group's own mission statement, unchanged since at
-          // least 2018, explicitly says "butterflies and moths," which taken
-          // literally could mean all of Lepidoptera (moths alone are
-          // ~145,000 of the ~160,000 species in this CSV group). But the
-          // group's DEMONSTRATED work is overwhelmingly butterfly-focused
-          // (comprehensive Papilionidae/swallowtail assessments, a broader
-          // butterfly Red List Index) plus exactly one named moth family as a
-          // starting point (Saturniidae, "e.g. emperor moths," ~100-species
-          // target). Encoded to this evidenced core — all 6 standard butterfly
-          // families (Papilionoidea) + Hedylidae (a small, sometimes-debated
-          // "moth-like butterfly" family never explicitly confirmed OR
-          // excluded by the group) + Saturniidae — rather than the full,
-          // functionally-uncapped "all Lepidoptera" reading of its own
-          // mission statement. Lower confidence, same class of judgment call
-          // as the reptile pilot's Boa and Python SG.
+          // source DB still lists the legacy name), and the group's own
+          // mission statement, unchanged since at least 2018, explicitly says
+          // "butterflies and moths," which taken literally could mean all of
+          // Lepidoptera (moths alone are ~145,000 of the ~160,000 species in
+          // this CSV group). The group's DEMONSTRATED work is overwhelmingly
+          // butterfly-focused (comprehensive Papilionidae/swallowtail
+          // assessments, a broader butterfly Red List Index) plus one named
+          // moth family as a starting point (Saturniidae, "e.g. emperor
+          // moths," ~100-species target). Its 2022 SSC annual report also
+          // credits it with 39 published moth assessments outside Saturniidae
+          // (30 Hawaiian endemics + 9 Korean species, spanning Noctuidae,
+          // Cosmopterigidae, Geometridae, and Crambidae) — real, but scattered
+          // single-region collaborations, NOT a stated whole-family claim on
+          // any of those 4 families (which together total ~23,000 species in
+          // our data — orders of magnitude more than the ~39 actually
+          // assessed). Encoded to the evidenced whole-family core —
+          // Papilionoidea (6 butterfly families) + Hedylidae (a small,
+          // sometimes-debated "moth-like butterfly" family never explicitly
+          // confirmed OR excluded by the group) + Saturniidae — rather than
+          // claiming the 4 additional families wholesale or the full,
+          // functionally-uncapped "all Lepidoptera" reading of its mission
+          // statement. Those ~39 already-assessed non-Saturniidae moth
+          // species currently fall to the catch-all rather than here — a
+          // known, small undercount, same class of judgment call as the
+          // reptile pilot's Boa and Python SG.
           estimatedDescribed: 14_269,
-          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Papilionoidea (6 butterfly families) + Hedylidae + Saturniidae (evidenced core; group's own mission statement literally says \"butterflies and moths\" but demonstrated work doesn't extend to moths broadly)",
+          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Papilionoidea (6 butterfly families) + Hedylidae + Saturniidae (evidenced core; group's own mission statement literally says \"butterflies and moths\" and it has published scattered assessments in 4 other moth families, but has never claimed those families wholesale — see comment)",
           estimatedSourceUrl: COL_2025_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-butterfly-and-moth-specialist-group",
         },
@@ -1727,7 +1760,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         },
         {
           id: "ssc-wild-bee",
-          name: "Bumblebee and Wild Bee Specialist Group",
+          name: "Wild Bee Specialist Group",
           filter: {
             csvGroups: ["bees_wasps_and_ants"],
             families: ["apidae", "halictidae", "megachilidae", "andrenidae", "colletidae", "melittidae", "stenotritidae"],
@@ -1826,11 +1859,22 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           id: "ssc-hoverfly",
           name: "Hoverfly Specialist Group",
           filter: { csvGroups: ["flies_and_mosquitoes"], families: ["syrphidae"] },
-          // Own site (iucn-hsg.pmf.uns.ac.rs): scope described directly
-          // around "Syrphidae (Order Diptera)" — the whole family, no
-          // narrower carve-out found.
+          // LOWER CONFIDENCE, flagged rather than guessed: the group's own
+          // current official mission statement (identical wording on both its
+          // iucn.org page and its 2024-2025 SSC annual report) explicitly
+          // scopes itself to "European hoverflies," not the whole global
+          // family — a real, geography-based narrowing our data model can't
+          // encode (no per-species range field reliable enough to draw a
+          // continent boundary, same class of blocker as the regional Plant
+          // Red List Authorities). Since no other group claims non-European
+          // Syrphidae, the whole family is kept here as the best available
+          // proxy rather than moved to the catch-all, but this is a
+          // real overclaim relative to the group's own current stated remit
+          // (whole-family ~2,330 species vs. a European-only true scope) —
+          // revisit if per-species range data ever becomes reliable enough to
+          // narrow this correctly.
           estimatedDescribed: 2_330,
-          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Syrphidae",
+          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Syrphidae (whole family; group's own current mission is explicitly \"European hoverflies\" only — see comment)",
           estimatedSourceUrl: COL_2025_URL,
           sourceUrl: "https://iucn-hsg.pmf.uns.ac.rs/",
         },
@@ -1867,25 +1911,94 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         {
           id: "ssc-dung-beetle",
           name: "Dung Beetle Specialist Group",
-          filter: { csvGroups: ["beetles"], families: ["geotrupidae"] },
+          filter: {
+            csvGroups: ["beetles"],
+            // families/genera AND together in this filter engine, so the
+            // whole-family Geotrupidae portion is expressed as its own
+            // (complete) genus list here rather than via `families`, folded
+            // into one array alongside the Scarabaeinae genus list below —
+            // same workaround used elsewhere (e.g. Seagrass SG).
+            genera: [
+              // Geotrupidae (whole family, all 64 genera present in our data).
+              "allotrypes", "anoplotrupes", "athyreus", "australobolbus", "blackbolbus", "blackburnium",
+              "bolbaffer", "bolbaffroides", "bolbapium", "bolbelasmus", "bolbobaineus", "bolbocerastes",
+              "bolboceratex", "bolbocerodema", "bolboceroides", "bolbocerosoma", "bolbochromus", "bolbogonium",
+              "bolbohamatum", "bolboleaus", "bolborhachium", "bolborhinum", "bolborhombus", "bolbotrypes",
+              "bradycinetulus", "ceratophyus", "ceratotrupes", "chelotrupes", "cnemotrupes", "elephastomus",
+              "enoplotrupes", "eubolbitus", "eucanthus", "frickius", "geohowdenius", "geotrupes",
+              "gilletinus", "halffterius", "haplogeotrupes", "jekelius", "lethrus", "megatrupes",
+              "meridiobolbus", "mimobolbus", "mycotrupes", "namibiobolbus", "namibiotrupes", "neoathyreus",
+              "odonteus", "odontotrypes", "onthotrupes", "peltotrupes", "pereirabolbus", "phelotrupes",
+              "prototrupes", "pseudoathyreus", "sericotrupes", "stenaspidius", "taurocerastes", "thorectes",
+              "trypocopris", "typhaeus", "zefevazia", "zuninoeus",
+              // Subfamily Scarabaeinae within Scarabaeidae ("true dung
+              // beetles" — 199 genera, cross-referenced against Catalogue of
+              // Life's Scarabaeinae subtree against every genus actually
+              // present in our data; genera left unresolved by that
+              // cross-reference are excluded, not guessed).
+              "afrodrepanus", "agamopus", "aliuscanthoniola", "allogymnopleurus", "amietina", "amphistomus",
+              "anisocanthon", "anomiopsoides", "anomiopus", "anonychonitis", "aphengium", "aphengoecus",
+              "apotolamprus", "aptenocanthon", "aptychonitis", "ateuchetus", "ateuchus", "attavicinus",
+              "aulacopris", "ausmontins", "bdelyropsis", "bdelyrus", "besourenga", "bohepilissus",
+              "bolbites", "boletoscapter", "boreocanthon", "bradypodidium", "bubas", "byrrhidium",
+              "caccobiomorphus", "caccobius", "cambefortius", "canthidium", "canthochilum", "canthodimorpha",
+              "canthon", "canthonella", "canthonidia", "catharsius", "cephalodesmius", "chalcocopris",
+              "chalconotus", "cheironitis", "circellium", "cleptocaccobius", "clypeodrepanus", "copris",
+              "coproecus", "coprophanaeus", "coptodactyla", "coptorhina", "cryptocanthon", "cyptochirus",
+              "delopleurus", "deltochilum", "deltorhinum", "deltorrhinum", "demarziella", "dendropaemon",
+              "diabroctis", "diastellopalpus", "dichotomius", "dicranocara", "digitonthophagus", "diorygopyx",
+              "drepanocerus", "drepanoplatynus", "drogo", "dwesasilvasedis", "endroedyolus", "eodrepanus",
+              "epilissus", "epirinus", "escarabaeus", "eucranium", "eudinopus", "euoniticellus",
+              "euonthophagus", "eurysternus", "eutrichillum", "feeridium", "frankenbergerius", "garreta",
+              "genieridium", "gilletellus", "glyphoderus", "gromphas", "gymnopleurus", "gyronotus",
+              "hammondantus", "hamonthophagus", "hansreia", "haroldius", "helictopleurus", "heliocopris",
+              "heteroclitopus", "heteronitis", "holocephalus", "homocopris", "hyalonthophagus", "isocopris",
+              "ixodina", "kheper", "kolbeellus", "kurtops", "latodrepanus", "lepanus",
+              "liatongus", "litocopris", "macroderes", "malagoniella", "martinezidium", "matthewsius",
+              "megalonitis", "megatharsis", "megathopa", "megathoposoma", "melanocanthon", "mentophilus",
+              "metacatharsius", "microcopris", "milichus", "mimonthophagus", "mnematidium", "mnematium",
+              "monoplistes", "namakwanus", "namaphilus", "nanos", "nebulasilvius", "neonitis",
+              "odontoloma", "oniticellus", "onitis", "onoreidium", "ontherus", "onthophagus",
+              "onychothecus", "oruscatus", "outenikwanus", "oxysternon", "pachylomera", "pachysoma",
+              "panelus", "paracanthon", "paragymnopleurus", "paraixodina", "paraphytus", "parascatonomus",
+              "parateuchus", "parvuhowdenius", "peckolus", "pedaria", "pedaridium", "phalops",
+              "phanaeus", "platyonitis", "proagoderus", "pseudocanthon", "pseudochironitis", "pseudopedaria",
+              "pseudosaproecius", "pycnopanelus", "saphobius", "sarophorus", "sauvagesinella", "scarabaeolus",
+              "scarabaeus", "scatimus", "scatonomus", "sceliages", "scybalocanthon", "scybalophagus",
+              "silvaphilus", "sinapisoma", "sisyphus", "stiptopodius", "sulcophanaeus", "sylvicanthon",
+              "synapsis", "temnoplectron", "tesserodon", "tesserodoniella", "thyregis", "tiaronthophagus",
+              "tibiodrepanus", "tiniocellus", "tomogonus", "tragiscus", "trichillidium", "trichillum",
+              "trichonthophagus", "tropidonitis", "upsa", "uroxys", "versicorpus", "xinidium", "zonocopris",
+            ],
+          },
           // Own co-chairs' founding announcement (Oryx 57(2), 2023): "dung
           // beetles (families Geotrupidae and Scarabaeidae)... over 6,000
-          // described species." A GENUINE PRECISION GAP, flagged rather than
-          // guessed: the group's real remit within Scarabaeidae is only the
-          // subfamily Scarabaeinae ("true dung beetles," ~5-6k species) — the
-          // family as a whole has >30,000 species (chafers, rhinoceros
-          // beetles, flower beetles, etc.), and our data has no
-          // subfamily-level field to isolate Scarabaeinae. Filtering by the
-          // whole family "Scarabaeidae" would overclaim by ~5x, so it's
-          // EXCLUDED here — only the clean, whole-family Geotrupidae portion
-          // is included, undercounting this group significantly rather than
-          // risking a much more visible overclaim (a rhinoceros beetle
-          // attributed to "dung beetles" would be an obvious, trust-breaking
-          // error to anyone who knows the group).
-          estimatedDescribed: 321,
-          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Geotrupidae only (excludes subfamily Scarabaeinae within Scarabaeidae — no subfamily-level data available to isolate it from the rest of that >30,000-species family; see comment)",
+          // described species." Previously encoded to Geotrupidae only,
+          // deliberately excluding Scarabaeidae for lack of subfamily-level
+          // data to isolate Scarabaeinae ("true dung beetles," ~5-6k species)
+          // from the >30,000-species family. Fixed by cross-referencing every
+          // Scarabaeidae genus actually present in our data (1,273 of them)
+          // against Catalogue of Life's Scarabaeinae subtree — 199 confirmed
+          // Scarabaeinae genera, 1,074 confirmed as other subfamilies
+          // (Aphodiinae, Cetoniinae, Dynastinae, Melolonthinae, Rutelinae,
+          // etc.), 0 left to guesswork.
+          estimatedDescribed: 2_605,
+          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Geotrupidae (whole family) + Scarabaeinae (subfamily of Scarabaeidae, resolved via genus-level Catalogue of Life cross-reference; see comment)",
           estimatedSourceUrl: COL_2025_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-dung-beetle-specialist-group",
+        },
+        {
+          id: "ssc-sea-cucumber",
+          name: "Sea Cucumber Specialist Group",
+          filter: { csvGroups: ["other_invertebrates"], classNames: ["holothuroidea"] },
+          // Real, active IUCN SSC group missed in the initial pass — clean
+          // whole-class mapping, same pattern as Mollusc SG. Class
+          // Holothuroidea (sea cucumbers) within the "other_invertebrates"
+          // Table 1a CSV group.
+          estimatedDescribed: 990,
+          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Holothuroidea",
+          estimatedSourceUrl: COL_2025_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-sea-cucumber-specialist-group",
         },
         {
           id: "ssc-horseshoe-crab",
@@ -1909,9 +2022,9 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         // horseshoe_crabs, dragonflies_and_damselflies, and
         // grasshoppers_crickets_locusts — the last is 100% order Orthoptera,
         // all of which Grasshopper SG already claims) rather than listing
-        // redundant excludes for them. Kept in sync manually — if an 18th
-        // invertebrate SSC group is added above, exclude its family/order
-        // here too (or omit its csvGroup entirely if fully claimed).
+        // redundant excludes for them. Kept in sync manually — if another
+        // invertebrate SSC group is added above, exclude its family/order/
+        // class here too (or omit its csvGroup entirely if fully claimed).
         {
           id: "ssc-other-invertebrates",
           name: "No SSC Group",
@@ -1930,9 +2043,49 @@ export const TAXONOMY_TREE: TaxonomyNode = {
               "atyidae", "gecarcinidae",
             ],
             excludeOrders: ["araneae", "scorpiones", "phasmida", "mantodea", "ephemeroptera", "plecoptera", "trichoptera", "scleractinia"],
+            excludeClasses: ["holothuroidea"],
+            // Subfamily Scarabaeinae within Scarabaeidae — claimed by Dung
+            // Beetle SG above (see its filter's comment); the rest of
+            // Scarabaeidae (chafers, rhinoceros beetles, flower beetles,
+            // etc.) still correctly falls through to this catch-all.
+            excludeGenera: [
+              "afrodrepanus", "agamopus", "aliuscanthoniola", "allogymnopleurus", "amietina", "amphistomus",
+              "anisocanthon", "anomiopsoides", "anomiopus", "anonychonitis", "aphengium", "aphengoecus",
+              "apotolamprus", "aptenocanthon", "aptychonitis", "ateuchetus", "ateuchus", "attavicinus",
+              "aulacopris", "ausmontins", "bdelyropsis", "bdelyrus", "besourenga", "bohepilissus",
+              "bolbites", "boletoscapter", "boreocanthon", "bradypodidium", "bubas", "byrrhidium",
+              "caccobiomorphus", "caccobius", "cambefortius", "canthidium", "canthochilum", "canthodimorpha",
+              "canthon", "canthonella", "canthonidia", "catharsius", "cephalodesmius", "chalcocopris",
+              "chalconotus", "cheironitis", "circellium", "cleptocaccobius", "clypeodrepanus", "copris",
+              "coproecus", "coprophanaeus", "coptodactyla", "coptorhina", "cryptocanthon", "cyptochirus",
+              "delopleurus", "deltochilum", "deltorhinum", "deltorrhinum", "demarziella", "dendropaemon",
+              "diabroctis", "diastellopalpus", "dichotomius", "dicranocara", "digitonthophagus", "diorygopyx",
+              "drepanocerus", "drepanoplatynus", "drogo", "dwesasilvasedis", "endroedyolus", "eodrepanus",
+              "epilissus", "epirinus", "escarabaeus", "eucranium", "eudinopus", "euoniticellus",
+              "euonthophagus", "eurysternus", "eutrichillum", "feeridium", "frankenbergerius", "garreta",
+              "genieridium", "gilletellus", "glyphoderus", "gromphas", "gymnopleurus", "gyronotus",
+              "hammondantus", "hamonthophagus", "hansreia", "haroldius", "helictopleurus", "heliocopris",
+              "heteroclitopus", "heteronitis", "holocephalus", "homocopris", "hyalonthophagus", "isocopris",
+              "ixodina", "kheper", "kolbeellus", "kurtops", "latodrepanus", "lepanus",
+              "liatongus", "litocopris", "macroderes", "malagoniella", "martinezidium", "matthewsius",
+              "megalonitis", "megatharsis", "megathopa", "megathoposoma", "melanocanthon", "mentophilus",
+              "metacatharsius", "microcopris", "milichus", "mimonthophagus", "mnematidium", "mnematium",
+              "monoplistes", "namakwanus", "namaphilus", "nanos", "nebulasilvius", "neonitis",
+              "odontoloma", "oniticellus", "onitis", "onoreidium", "ontherus", "onthophagus",
+              "onychothecus", "oruscatus", "outenikwanus", "oxysternon", "pachylomera", "pachysoma",
+              "panelus", "paracanthon", "paragymnopleurus", "paraixodina", "paraphytus", "parascatonomus",
+              "parateuchus", "parvuhowdenius", "peckolus", "pedaria", "pedaridium", "phalops",
+              "phanaeus", "platyonitis", "proagoderus", "pseudocanthon", "pseudochironitis", "pseudopedaria",
+              "pseudosaproecius", "pycnopanelus", "saphobius", "sarophorus", "sauvagesinella", "scarabaeolus",
+              "scarabaeus", "scatimus", "scatonomus", "sceliages", "scybalocanthon", "scybalophagus",
+              "silvaphilus", "sinapisoma", "sisyphus", "stiptopodius", "sulcophanaeus", "sylvicanthon",
+              "synapsis", "temnoplectron", "tesserodon", "tesserodoniella", "thyregis", "tiaronthophagus",
+              "tibiodrepanus", "tiniocellus", "tomogonus", "tragiscus", "trichillidium", "trichillum",
+              "trichonthophagus", "tropidonitis", "upsa", "uroxys", "versicorpus", "xinidium", "zonocopris",
+            ],
           },
-          estimatedDescribed: 255_758,
-          estimatedSource: "Invertebrate species (assessed + unassessed, per our own data) not in any of the 14 SSC groups above (approx.; includes species that would belong to Cave Invertebrate SG, the Terrestrial and Freshwater Invertebrate RLA, or the Marine Invertebrates RLA in reality — see exclusion note above)",
+          estimatedDescribed: 252_484,
+          estimatedSource: "Invertebrate species (assessed + unassessed, per our own data) not in any of the 15 SSC groups above (approx.; includes species that would belong to Cave Invertebrate SG, the Terrestrial and Freshwater Invertebrate RLA, or the Marine Invertebrates RLA in reality — see exclusion note above)",
           estimatedSourceUrl: COL_2025_URL,
         },
       ],
@@ -2140,17 +2293,21 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         },
         {
           id: "ssc-seagrass",
-          name: "Seagrass Specialist Group",
+          name: "Seagrass Species Specialist Group",
           filter: {
             csvGroups: ["flowering_plants"],
             genera: [
-              // 4 whole families (confirmed by direct query — every species
-              // under each of these family labels is in this genus list, no
-              // stray genera): Cymodoceaceae, Posidoniaceae, Zosteraceae,
-              // Ruppiaceae (Ruppia's taxonomy is "problematic" per the
-              // group's own assessment papers, but treated as in-scope
-              // regardless).
-              "amphibolis", "cymodocea", "halodule", "syringodium", "thalassodendron",
+              // 4 whole families (confirmed by direct query against our own
+              // redlist dataset — no stray genera currently present there):
+              // Cymodoceaceae, Posidoniaceae, Zosteraceae, Ruppiaceae
+              // (Ruppia's taxonomy is "problematic" per the group's own
+              // assessment papers, but treated as in-scope regardless).
+              // "oceana" is included too even though it doesn't currently
+              // match anything in our redlist dataset: Oceana serrulata
+              // (Clump Seagrass) was split out of Cymodocea into its own
+              // genus (~2018) and appears in GBIF's broader taxonomy, so
+              // this future-proofs the filter if it's ever added/assessed.
+              "amphibolis", "cymodocea", "halodule", "syringodium", "thalassodendron", "oceana",
               "posidonia",
               "heterozostera", "nanozostera", "phyllospadix", "zostera",
               "ruppia",
@@ -2192,7 +2349,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
             ],
             excludeOrders: ["pinales", "cycadales"],
             excludeGenera: [
-              "amphibolis", "cymodocea", "halodule", "syringodium", "thalassodendron",
+              "amphibolis", "cymodocea", "halodule", "syringodium", "thalassodendron", "oceana",
               "posidonia",
               "heterozostera", "nanozostera", "phyllospadix", "zostera",
               "ruppia",
@@ -2217,7 +2374,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
       children: [
         {
           id: "ssc-cup-fungus-truffle",
-          name: "Cup-fungus, Truffle and Ally Specialist Group",
+          name: "Cup-fungi, Truffles and Allies Specialist Group",
           filter: { csvGroups: ["mushrooms"], orderNames: ["pezizales"] },
           // RENAMED by IUCN to "Cup-fungi, Truffles and Allies Specialist
           // Group" (our source DB still lists the older singular name). Own
@@ -2245,7 +2402,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         },
         {
           id: "ssc-chytrid-zygomycete-downy-mildew-myxomycete",
-          name: "Chytrid, Zygomycete, Downy Mildew and Slime Mould Specialist Group",
+          name: "Chytrid, Zygomycete, Downy Mildew and Myxomycete Specialist Group",
           filter: { csvGroups: ["mushrooms"], classNames: ["chytridiomycetes", "mucoromycetes", "zoopagomycetes", "oomycetes", "myxomycetes"] },
           // RENAMED by IUCN to "...and Myxomycete Specialist Group" ("Slime
           // Mould" → "Myxomycete"; our source DB still lists the older name).
@@ -2286,19 +2443,123 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedSourceUrl: SPECIES_FUNGORUM_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-chytrid-zygomycete-downy-mildew-and-myxomycete-specialist",
         },
+        {
+          id: "ssc-lichen",
+          name: "Lichen Specialist Group",
+          filter: { csvGroups: ["mushrooms"], classNames: ["lecanoromycetes"] },
+          // No explicit class-level scope statement found in the group's own
+          // materials (2021 or 2024-2025 SSC annual reports, iucn.org page,
+          // or its associated Red List checklist), but every named target
+          // and example species in both reports is drawn exclusively from
+          // Lecanoromycetes (e.g. Parmeliaceae — order Lecanorales — is its
+          // flagship T-001 target). Encoded to this well-evidenced core.
+          // LOWER CONFIDENCE, flagged rather than guessed: the group's own
+          // associated checklist is titled "...lichen-forming, LICHENICOLOUS
+          // and allied fungi" — lichenicolous fungi (non-lichenized fungi
+          // living on lichens) are a real part of its working scope but are
+          // polyphyletic, scattered as individual genera across otherwise
+          // free-living classes (Dothideomycetes, Sordariomycetes,
+          // Eurotiomycetes) with no way to isolate them at class/order level.
+          // A handful of small, nearly-entirely-lichenized classes beyond
+          // Lecanoromycetes also exist in real fungal taxonomy (Arthoniomycetes,
+          // Lichinomycetes, Coniocybomycetes, Candelariomycetes) but weren't
+          // confirmed as explicitly in-scope by the group's own materials, so
+          // they're left to the catch-all rather than assumed.
+          estimatedDescribed: 7_301,
+          estimatedSource: SPECIES_FUNGORUM + " — Lecanoromycetes (evidenced core; see comment for flagged gaps)",
+          estimatedSourceUrl: SPECIES_FUNGORUM_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-lichen-specialist-group",
+        },
+        {
+          id: "ssc-mushroom-bracket-puffball",
+          name: "Mushroom, Bracket and Puffball Specialist Group",
+          filter: { csvGroups: ["mushrooms"], classNames: ["agaricomycetes"] },
+          // No single explicit "our scope is class X" statement found, but
+          // the group's own 2024-2025 SSC report treats the two labels as
+          // equivalent in its own reporting ("The 2025.1 Red List update
+          // comprised 1,300 fungal species, including 1,104 mushroom,
+          // brackets, and puffballs"), and every target/example species
+          // (Cantharellus/Craterellus — Cantharellales; polypores/brackets —
+          // Russulales/Polyporales; Termitomyces — Agaricales) sits within
+          // Agaricomycetes with no narrower restriction implied. Standard
+          // mycological usage: mushrooms/brackets/puffballs collectively
+          // describe class Agaricomycetes.
+          estimatedDescribed: 18_793,
+          estimatedSource: SPECIES_FUNGORUM + " — Agaricomycetes",
+          estimatedSourceUrl: SPECIES_FUNGORUM_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-mushroom-bracket-and-puffball-specialist-group",
+        },
+        {
+          id: "ssc-rust-smut",
+          name: "Rusts and Smuts Specialist Group",
+          filter: {
+            csvGroups: ["mushrooms"],
+            // orderNames/classNames AND together in this filter engine, so
+            // "rusts OR smuts" is expressed as one flat order list: order
+            // Pucciniales (rusts) + every order actually present in our data
+            // under classes Ustilaginomycetes/Exobasidiomycetes (smuts) —
+            // same workaround as Dung Beetle SG above. Misses the 1
+            // unassessed Exobasidiomycetes species in our data with a null
+            // order_name; undercounting rather than guessing its order.
+            orderNames: [
+              "pucciniales",
+              "ustilaginales", "urocystidales", "violaceomycetales",
+              "entylomatales", "exobasidiales", "tilletiales", "doassansiales",
+              "georgefischeriales", "microstromatales", "ceraceosorales", "robbauerales",
+            ],
+          },
+          // Own 2021-2025 target (T-002), quoted verbatim from its
+          // 2024-2025 SSC annual report: "Produce Red List assessments for
+          // 50 species of smut fungi (subphylum Ustilaginomycotina) and
+          // rust fungi (subphylum Pucciniomycotina)" — a clean, explicit,
+          // self-declared subphylum split. Subphylum Ustilaginomycotina
+          // (smuts) maps EXACTLY onto classes Ustilaginomycetes +
+          // Exobasidiomycetes, no more, no less. Subphylum Pucciniomycotina
+          // (rusts) is technically broader than order Pucciniales (it also
+          // contains several minor yeast-like sister classes that aren't
+          // "rust fungi" in any meaningful sense, e.g. Microbotryomycetes,
+          // Cystobasidiomycetes), and class Pucciniomycetes itself contains
+          // a few non-rust orders (Helicobasidiales, Platygloeales) — so
+          // "rusts" is encoded as order Pucciniales specifically (the
+          // universally-recognized "true rusts," ~8,000 species worldwide,
+          // and the dominant order within Pucciniomycetes), consistent with
+          // this codebase's precision-over-scope-creep convention (same
+          // reasoning as Cup-fungi SG's Pezizales-only scope). NOTE: the
+          // group's own report photo gallery shows Microbotryum duriaeanum
+          // as an example "smut" — but Microbotryum (order Microbotryales)
+          // is actually in Pucciniomycotina, not Ustilaginomycotina,
+          // confirming "smut" is a polyphyletic guild term in real usage
+          // that doesn't perfectly match even the group's own clean
+          // subphylum split. Not safely encodable beyond the core above.
+          estimatedDescribed: 2_764,
+          estimatedSource: SPECIES_FUNGORUM + " — Pucciniales + Ustilaginomycetes + Exobasidiomycetes",
+          estimatedSourceUrl: SPECIES_FUNGORUM_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-rusts-and-smuts-specialist-group",
+        },
         // Catch-all: a plain "No SSC Group" remainder. Kept in sync
-        // manually — if a 3rd fungi SSC group is added above, exclude its
+        // manually — if another fungi SSC group is added above, exclude its
         // order/class here too.
         {
           id: "ssc-other-fungi",
           name: "No SSC Group",
           filter: {
             csvGroups: ["mushrooms"],
-            excludeOrders: ["pezizales"],
-            excludeClasses: ["chytridiomycetes", "mucoromycetes", "zoopagomycetes", "oomycetes", "myxomycetes"],
+            // Rusts and Smuts SG is excluded by order (not class) below, on
+            // purpose — it matches by order too (see its filter's comment),
+            // so a species with a null order_name under Ustilaginomycetes/
+            // Exobasidiomycetes correctly falls through to here rather than
+            // vanishing from both nodes.
+            excludeOrders: [
+              "pezizales",
+              "pucciniales",
+              "ustilaginales", "urocystidales", "violaceomycetales",
+              "entylomatales", "exobasidiales", "tilletiales", "doassansiales",
+              "georgefischeriales", "microstromatales", "ceraceosorales", "robbauerales",
+            ],
+            excludeClasses: ["chytridiomycetes", "mucoromycetes", "zoopagomycetes", "oomycetes", "myxomycetes", "lecanoromycetes", "agaricomycetes"],
           },
-          estimatedDescribed: 52_693,
-          estimatedSource: SPECIES_FUNGORUM + " — fungi species (assessed + unassessed, per our own data) not in either SSC group above (approx.)",
+          estimatedDescribed: 23_835,
+          estimatedSource: SPECIES_FUNGORUM + " — fungi species (assessed + unassessed, per our own data) not in any of the 5 SSC groups above (approx.)",
           estimatedSourceUrl: SPECIES_FUNGORUM_URL,
         },
       ],
