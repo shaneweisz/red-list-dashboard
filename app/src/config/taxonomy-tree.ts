@@ -2206,6 +2206,104 @@ export const TAXONOMY_TREE: TaxonomyNode = {
       ],
     },
 
+    // ─── SSC SPECIALIST GROUPS (fungi) ──────────────────────────────────
+    // Same second lens as the mammal/reptile/fish/invertebrate/plant pilots
+    // above — the final taxon in this pilot. Both of IUCN's 2 taxon-based
+    // fungal SSC groups map onto our "mushrooms" CSV group.
+    {
+      id: "ssc-fungi-groups",
+      name: "SSC Specialist Groups",
+      filter: { csvGroups: ["mushrooms"] },
+      children: [
+        {
+          id: "ssc-cup-fungus-truffle",
+          name: "Cup-fungus, Truffle and Ally Specialist Group",
+          filter: { csvGroups: ["mushrooms"], orderNames: ["pezizales"] },
+          // RENAMED by IUCN to "Cup-fungi, Truffles and Allies Specialist
+          // Group" (our source DB still lists the older singular name). Own
+          // 2022 SSC report mission statement: "to promote the conservation
+          // of ascomycete fungi" with a target to document sources "for
+          // assessing non-lichen-forming ascomycetes" — i.e. its REAL remit
+          // is far broader than order Pezizales, essentially all of
+          // Ascomycota minus the lichenized fungi (confirmed by a real
+          // published assessment credited to this group for Ophiocordyceps
+          // sinensis, order Hypocreales — nowhere near Pezizales). Encoded to
+          // the well-evidenced eponymous core (order Pezizales: cup fungi,
+          // truffles, morels) rather than "all non-lichenized Ascomycota,"
+          // the same conservative-core judgment as the invertebrate pilot's
+          // Dung Beetle SG: reliably determining lichenized-vs-not status
+          // per species isn't possible with our data (some ascomycete
+          // classes, e.g. Eurotiomycetes, contain a genuine mix of both),
+          // and the full-scope reading would swallow a large fraction of
+          // the entire "mushrooms" CSV group under one group's banner —
+          // exactly the kind of overclaim this pilot has consistently
+          // avoided elsewhere.
+          estimatedDescribed: 1_463,
+          estimatedSource: SPECIES_FUNGORUM + " — Pezizales (the group's own remit is broader — non-lichenized Ascomycota generally — but not safely encodable without per-species lichenization data; see comment)",
+          estimatedSourceUrl: SPECIES_FUNGORUM_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-cup-fungi-truffles-and-allies-specialist-group",
+        },
+        {
+          id: "ssc-chytrid-zygomycete-downy-mildew-myxomycete",
+          name: "Chytrid, Zygomycete, Downy Mildew and Slime Mould Specialist Group",
+          filter: { csvGroups: ["mushrooms"], classNames: ["chytridiomycetes", "mucoromycetes", "zoopagomycetes", "oomycetes", "myxomycetes"] },
+          // RENAMED by IUCN to "...and Myxomycete Specialist Group" ("Slime
+          // Mould" → "Myxomycete"; our source DB still lists the older name).
+          // Own 2024-2025 SSC report mission statement, repeated verbatim
+          // across every target: "promote the conservation of chytrids,
+          // downy mildews, myxomycetes and zygomycetes" — confirmed to be
+          // EXACTLY these 4 lineages, no broader (explicitly does not extend
+          // to related early-diverging lineages like Blastocladiomycota,
+          // Neocallimastigomycota, Glomeromycota, or Entomophthoromycota).
+          // Two of the four ("downy mildews" = Oomycota, "myxomycetes"/slime
+          // moulds = Myxogastria) aren't even in kingdom Fungi taxonomically
+          // (Oomycota are stramenopiles; Myxogastria are Amoebozoa) — grouped
+          // here purely by the SSC's own real-world organizational choice,
+          // which existing conservation practice already treats this way.
+          //
+          // ESTIMATED 0 SPECIES CURRENTLY — verified directly against the
+          // full dataset (all taxon groups, not just "mushrooms"): zero
+          // species anywhere carry a class name from any of these 4
+          // lineages. This is NOT a bug or a scoping gap: a peer-reviewed
+          // fungal Red List survey (Mueller et al. 2022, Diversity 14(9))
+          // confirms "Chytridiomycota and Mucoromycota are not represented
+          // among currently published globally assessed fungal species on
+          // the IUCN Red List" — these lineages are genuinely almost
+          // entirely unassessed globally (the group's own 2024-2025 report
+          // describes only NATIONAL-level Cuban myxomycete assessments, not
+          // global ones). Built anyway, for the same reason small groups
+          // elsewhere in this pilot were built despite low counts (e.g.
+          // fish's Anguillid Eel SG, 16 species) — this node will correctly
+          // and automatically pick up real species the moment IUCN publishes
+          // any global assessments for these lineages, without needing
+          // another future update. The exact class-name spellings above are
+          // a best-effort standard set (chytrid, zygomycete-derived,
+          // oomycete, and myxomycete classes) — UNVERIFIED against real data
+          // since none currently exists to check against; revisit naming if
+          // this ever needs to match a real assessed species.
+          estimatedDescribed: 0,
+          estimatedSource: "No known described-species estimate published for this specific 4-lineage grouping; near-zero global IUCN Red List assessment activity confirmed for all 4 (see comment)",
+          estimatedSourceUrl: SPECIES_FUNGORUM_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-chytrid-zygomycete-downy-mildew-and-myxomycete-specialist",
+        },
+        // Catch-all: a plain "No SSC Group" remainder. Kept in sync
+        // manually — if a 3rd fungi SSC group is added above, exclude its
+        // order/class here too.
+        {
+          id: "ssc-other-fungi",
+          name: "No SSC Group",
+          filter: {
+            csvGroups: ["mushrooms"],
+            excludeOrders: ["pezizales"],
+            excludeClasses: ["chytridiomycetes", "mucoromycetes", "zoopagomycetes", "oomycetes", "myxomycetes"],
+          },
+          estimatedDescribed: 52_693,
+          estimatedSource: SPECIES_FUNGORUM + " — fungi species (assessed + unassessed, per our own data) not in either SSC group above (approx.)",
+          estimatedSourceUrl: SPECIES_FUNGORUM_URL,
+        },
+      ],
+    },
+
     // ─── VIRTUAL GROUPING NODES ────────────────────────────────────────
     // These aggregate Table 1a groups for the default view
 

@@ -1270,6 +1270,70 @@ describe("SSC Specialist Groups tree (plants)", () => {
   });
 });
 
+describe("SSC Specialist Groups tree (fungi)", () => {
+  const sscFungiNode = findNode("ssc-fungi-groups");
+
+  it("ssc-fungi-groups exists, is not part of the default view, and has 3 children (2 pilot groups + remainder)", () => {
+    expect(sscFungiNode).toBeDefined();
+    expect(sscFungiNode?.children?.length).toBe(3);
+    expect(TAXONOMY_VIEWS.default.roots).not.toContain("ssc-fungi-groups");
+  });
+
+  it("ssc-other-fungi (the remainder row) doesn't overlap Cup-fungus, Truffle and Ally SG", () => {
+    const cupFungus = { class_name: "Pezizomycetes", order_name: "Pezizales", family: "Pezizaceae", scientific_name: "Peziza vesiculosa", taxon_group: "mushrooms" };
+    const truffle = { class_name: "Pezizomycetes", order_name: "Pezizales", family: "Tuberaceae", scientific_name: "Tuber melanosporum", taxon_group: "mushrooms" };
+    expect(speciesMatchesNode(cupFungus, "ssc-other-fungi")).toBe(false);
+    expect(speciesMatchesNode(truffle, "ssc-other-fungi")).toBe(false);
+  });
+
+  it("ssc-other-fungi catches a genuinely uncovered species (a mushroom, no dedicated SSC group among the 2)", () => {
+    const mushroom = { class_name: "Agaricomycetes", order_name: "Agaricales", family: "Amanitaceae", scientific_name: "Amanita muscaria", taxon_group: "mushrooms" };
+    expect(speciesMatchesNode(mushroom, "ssc-other-fungi")).toBe(true);
+  });
+
+  it("Cup-fungus, Truffle and Ally SG is scoped to order Pezizales", () => {
+    const cupFungus = { class_name: "Pezizomycetes", order_name: "Pezizales", family: "Pezizaceae", scientific_name: "Peziza vesiculosa", taxon_group: "mushrooms" };
+    const truffle = { class_name: "Pezizomycetes", order_name: "Pezizales", family: "Tuberaceae", scientific_name: "Tuber melanosporum", taxon_group: "mushrooms" };
+    const morel = { class_name: "Pezizomycetes", order_name: "Pezizales", family: "Morchellaceae", scientific_name: "Morchella esculenta", taxon_group: "mushrooms" };
+    // A real assessed species credited to this group but outside Pezizales
+    // (order Hypocreales) — deliberately NOT covered by our conservative
+    // Pezizales-only encoding; falls to the catch-all instead of being
+    // guessed at via a broader "non-lichenized Ascomycota" filter.
+    const caterpillarFungus = { class_name: "Sordariomycetes", order_name: "Hypocreales", family: "Ophiocordycipitaceae", scientific_name: "Ophiocordyceps sinensis", taxon_group: "mushrooms" };
+    expect(speciesMatchesNode(cupFungus, "ssc-cup-fungus-truffle")).toBe(true);
+    expect(speciesMatchesNode(truffle, "ssc-cup-fungus-truffle")).toBe(true);
+    expect(speciesMatchesNode(morel, "ssc-cup-fungus-truffle")).toBe(true);
+    expect(speciesMatchesNode(caterpillarFungus, "ssc-cup-fungus-truffle")).toBe(false);
+    expect(speciesMatchesNode(caterpillarFungus, "ssc-other-fungi")).toBe(true);
+  });
+
+  it("Chytrid, Zygomycete, Downy Mildew and Slime Mould SG's filter is well-formed even though it currently matches nothing in our data", () => {
+    const chytridNode = findNode("ssc-chytrid-zygomycete-downy-mildew-myxomycete");
+    expect(chytridNode).toBeDefined();
+    expect(chytridNode?.filter.classNames).toEqual(["chytridiomycetes", "mucoromycetes", "zoopagomycetes", "oomycetes", "myxomycetes"]);
+    const hypotheticalChytrid = { class_name: "Chytridiomycetes", order_name: "Chytridiales", family: "Chytridiaceae", scientific_name: "Chytridium olla", taxon_group: "mushrooms" };
+    expect(speciesMatchesNode(hypotheticalChytrid, "ssc-chytrid-zygomycete-downy-mildew-myxomycete")).toBe(true);
+    expect(speciesMatchesNode(hypotheticalChytrid, "ssc-other-fungi")).toBe(false);
+  });
+
+  it("all ssc-fungi-groups children use the mushrooms csvGroup and have a unique id", () => {
+    const ids = new Set<string>();
+    for (const child of sscFungiNode?.children ?? []) {
+      expect(child.filter.csvGroups).toEqual(["mushrooms"]);
+      expect(ids.has(child.id), `duplicate id ${child.id}`).toBe(false);
+      ids.add(child.id);
+    }
+  });
+
+  it("does not add any new children to the real 'mushrooms' node", () => {
+    const mushroomsNode = findNode("mushrooms");
+    const mushroomChildIds = new Set(mushroomsNode?.children?.map(c => c.id) ?? []);
+    for (const child of sscFungiNode?.children ?? []) {
+      expect(mushroomChildIds.has(child.id)).toBe(false);
+    }
+  });
+});
+
 // =============================================================================
 // Partition coverage
 // =============================================================================

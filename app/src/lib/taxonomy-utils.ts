@@ -96,6 +96,7 @@ const VIEW_ROOT_OVERRIDES: Record<string, string> = {
   "ssc-fish-groups": "fishes",
   "ssc-invertebrate-groups": "invertebrates",
   "ssc-plant-groups": "plantae",
+  "ssc-fungi-groups": "fungi",
 };
 
 /** Find the default-view ancestor for a node (one of the 8 display roots). */
