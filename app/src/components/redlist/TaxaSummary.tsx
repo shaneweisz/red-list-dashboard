@@ -76,6 +76,7 @@ const SSC_SECTIONS: { nodeId: string; parentTaxon: string; title: string; catchA
   { nodeId: "ssc-reptile-groups", parentTaxon: "reptiles", title: "REPTILE SPECIALIST GROUPS", catchAllId: "ssc-snake-lizard-rla" },
   { nodeId: "ssc-fish-groups", parentTaxon: "fishes", title: "FISH SPECIALIST GROUPS", catchAllId: "ssc-other-fish" },
   { nodeId: "ssc-invertebrate-groups", parentTaxon: "invertebrates", title: "INVERTEBRATE SPECIALIST GROUPS", catchAllId: "ssc-other-invertebrates" },
+  { nodeId: "ssc-plant-groups", parentTaxon: "plantae", title: "PLANT SPECIALIST GROUPS", catchAllId: "ssc-other-plants" },
 ];
 
 // Ordered categories for the breakdown bar (most threatened first)
@@ -2721,7 +2722,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                     <FaInfoCircle size={10} />
                   </a>
                   <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover/ssc:opacity-100 group-hover/ssc:visible z-50 shadow-lg pointer-events-none">
-                    View IUCN SSC Specialist Groups (mammals + reptiles + fishes + invertebrates pilot)
+                    View IUCN SSC Specialist Groups (mammals + reptiles + fishes + invertebrates + plants pilot)
                   </span>
                 </span>
               </span>

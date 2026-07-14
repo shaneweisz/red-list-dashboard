@@ -1962,6 +1962,250 @@ export const TAXONOMY_TREE: TaxonomyNode = {
     // ─── MUSHROOMS ─────────────────────────────────────────────────────
     MUSHROOMS_NODE,
 
+    // ─── SSC SPECIALIST GROUPS (plants) ─────────────────────────────────
+    // Same second lens as the mammal/reptile/fish/invertebrate pilots above.
+    // Like invertebrates, plants aren't one Table 1a CSV group — this spans
+    // the 6 "plantae" CSV groups (flowering_plants, gymnosperms,
+    // ferns_and_allies, mosses, green_algae, red_algae; brown_algae is
+    // classified under "Fungi & Protists" in Table 1a, not plants, and none
+    // of these groups' remits touch it anyway).
+    //
+    // Of the 12 real taxon-based plant SSC groups (12 more geographic
+    // regional Plant Red List Authorities — Brazil, Southern African, West
+    // Africa, etc. — are separately blocked for the has_map-removal reason
+    // documented on the "mammals"/reptile/fish pilots' sibling PRs, and
+    // Botanic Gardens Conservation International isn't a taxonomic group at
+    // all), 4 are DELIBERATELY EXCLUDED — plants have by far the highest rate
+    // of non-taxonomic SSC groups of any taxon covered so far, reflecting
+    // real conservation-community priorities (agriculture, medicine,
+    // horticulture, growth form) rather than pure taxonomy:
+    //  - Crop Wild Relative SG: own materials define its remit as "wild
+    //    taxa genetically related to cultivated crops" — a functional/
+    //    agricultural category spanning hundreds of unrelated families
+    //    (Poaceae for cereals, Solanaceae for potato/tomato, Fabaceae for
+    //    legumes, etc.), with no closed family/genus list ever adopted as
+    //    official scope (the closest thing, the Harlan & de Wet CWR
+    //    Inventory, is an external prioritization product, not an IUCN SSC
+    //    published boundary).
+    //  - Freshwater Plant SG: own materials describe "all aquatic and
+    //    wetland plants, including vascular plants, bryophytes, lichens and
+    //    algae" — habitat-based and even broader than most excluded groups
+    //    elsewhere in this tree (it crosses kingdom boundaries, not just
+    //    family ones).
+    //  - Global Trees SG: "tree" is BGCI's own growth-form definition ("a
+    //    woody plant with usually a single stem... to a height of at least
+    //    two metres"), not a clade — its own GlobalTreeSearch checklist spans
+    //    ~58,000 species across hundreds of unrelated families. Our data has
+    //    no growth-habit field to distinguish tree-form species from
+    //    shrub/herb-form congeners within the same family.
+    //  - Medicinal Plant SG: own materials confirm a use-based category
+    //    (plants used medicinally) with only a rotating ~300-species
+    //    "priority" worklist assembled from trade/regulatory criteria, not a
+    //    taxonomic boundary — spans dozens of unrelated families by
+    //    construction.
+    // Same class of blocker as the fish pilot's Freshwater Fish SG and the
+    // invertebrate pilot's Cave Invertebrate SG / two catch-all RLAs: real,
+    // named entities whose remit needs a data dimension (growth habit, use,
+    // agricultural relationship) this tree's family/genus/order model can't
+    // express and our data can't reliably support across the whole species
+    // universe. The catch-all below is a plain "No SSC Group" remainder, not
+    // a claim on any of these four groups' behalf.
+    {
+      id: "ssc-plant-groups",
+      name: "SSC Specialist Groups",
+      filter: { csvGroups: ALL_PLANT_GROUPS },
+      children: [
+        {
+          id: "ssc-orchid",
+          name: "Orchid Specialist Group",
+          filter: { csvGroups: ["flowering_plants"], families: ["orchidaceae"] },
+          // Own site + iucn.org: taxonomic base described consistently as
+          // "Orchidaceae, one of the largest families of plants" — the whole
+          // family, no exceptions found (no page states this as a formal
+          // boundary in so many words, but it's implied consistently
+          // throughout).
+          estimatedDescribed: 12_767,
+          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Orchidaceae",
+          estimatedSourceUrl: COL_2025_URL,
+          sourceUrl: "https://www.orchidspecialistgroup.com/about",
+        },
+        {
+          id: "ssc-bryophyte",
+          name: "Bryophyte Specialist Group",
+          filter: { csvGroups: ["mosses"] },
+          // Own founding action plan is literally titled "Mosses, Liverworts,
+          // and Hornworts: Status Survey and Conservation Action Plan for
+          // Bryophytes" — all 3 bryophyte divisions. Our "mosses" Table 1a
+          // CSV group already spans all 3 (8 classes: true mosses, 2
+          // liverwort classes, hornworts, etc., confirmed by direct query) —
+          // a trivial whole-CSV-group match, no further restriction needed.
+          estimatedDescribed: 7_708,
+          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Bryophyta + Marchantiophyta + Anthocerotophyta (whole CSV group)",
+          estimatedSourceUrl: COL_2025_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-bryophyte-specialist-group",
+        },
+        {
+          id: "ssc-cactus-succulent",
+          name: "Cactus and Succulent Plant Specialist Group",
+          filter: { csvGroups: ["flowering_plants"], families: ["cactaceae", "didiereaceae"] },
+          // Own site (iucn-cssg.org) defines "succulent" functionally (water
+          // storage in leaves/stems/roots) and explicitly names member
+          // families spanning many unrelated lineages beyond Cactaceae —
+          // Euphorbiaceae, Apocynaceae, Asphodelaceae, Agavaceae,
+          // Portulacaceae, Crassulaceae, Fouquieriaceae, Didiereaceae — the
+          // same growth-form-based pattern as Freshwater Fish SG, just not
+          // total: unlike those 4 fully-excluded groups above, TWO of the
+          // named families ARE safely whole-family-encodable, because
+          // they're near-exclusively succulent with no large non-succulent
+          // majority to overclaim (Cactaceae; Didiereaceae, the small
+          // Madagascar "octopus tree" family). The rest — Euphorbiaceae
+          // (~6,500 species, vast majority non-succulent), Apocynaceae,
+          // Asphodelaceae, Agavaceae, Portulacaceae, Crassulaceae,
+          // Fouquieriaceae — would need a genus-level allowlist (Aloe,
+          // Agave, Pachypodium, Hoodia, Dudleya, Fouquieria, ...) that no
+          // source could verify with confidence, so they're deliberately
+          // left to the catch-all rather than guessed.
+          estimatedDescribed: 1_830,
+          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Cactaceae + Didiereaceae (the group's own remit is broader, growth-form-based, spanning several other mixed families we can't safely isolate — see comment)",
+          estimatedSourceUrl: COL_2025_URL,
+          sourceUrl: "https://iucn-cssg.org/en/cacti_and_succulents/",
+        },
+        {
+          id: "ssc-palm",
+          name: "Palm Specialist Group",
+          filter: { csvGroups: ["flowering_plants"], families: ["arecaceae"] },
+          // iucn.org: "dedicated to the conservation and sustainable use of
+          // palms... assessing the conservation status of palm species
+          // throughout the world" — the whole family Arecaceae, no
+          // exceptions found (no page uses the Latin family name verbatim,
+          // but activity spans every palm-growing region with no carve-out).
+          estimatedDescribed: 1_726,
+          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Arecaceae",
+          estimatedSourceUrl: COL_2025_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-palm-specialist-group",
+        },
+        {
+          id: "ssc-carnivorous-plant",
+          name: "Carnivorous Plant Specialist Group",
+          filter: {
+            csvGroups: ["flowering_plants"],
+            families: ["droseraceae", "nepenthaceae", "sarraceniaceae", "lentibulariaceae", "byblidaceae", "roridulaceae", "cephalotaceae", "drosophyllaceae"],
+          },
+          // Own site (cached, iucn-cpsg.org unreachable at research time) +
+          // iucn.org: "assisting in the conservation of all Genera of
+          // Carnivorous Plants" — the 8 standard carnivorous-plant families
+          // (a polyphyletic but well-established set), all present in our
+          // data. A handful of "protocarnivorous" genera in otherwise
+          // non-carnivorous families (Triphyophyllum/Dioncophyllaceae,
+          // Philcoxia/Plantaginaceae, Brocchinia+Catopsis/Bromeliaceae) were
+          // named in an unverifiable cached source — excluded here pending a
+          // first-party confirmation, consistent with treating the
+          // well-evidenced core as the safe default.
+          estimatedDescribed: 828,
+          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Droseraceae + Nepenthaceae + Sarraceniaceae + Lentibulariaceae + Byblidaceae + Roridulaceae + Cephalotaceae + Drosophyllaceae",
+          estimatedSourceUrl: COL_2025_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-carnivorous-plant-specialist-group",
+        },
+        {
+          id: "ssc-conifer",
+          name: "Conifer Specialist Group",
+          filter: { csvGroups: ["gymnosperms"], orderNames: ["pinales"] },
+          // Own dedicated site's species index (threatenedconifers.rbge.
+          // ac.uk) lists species across exactly the 7 families of order
+          // Pinales (Araucariaceae, Cephalotaxaceae, Cupressaceae, Pinaceae,
+          // Podocarpaceae, Sciadopityaceae, Taxaceae) — no Ginkgoaceae,
+          // Ephedraceae, Gnetaceae, or Welwitschiaceae species appear
+          // anywhere in it. Ginkgo and the gnetophytes (Ephedra, Gnetum,
+          // Welwitschia) are consequently NOT covered by this group, and no
+          // other group in our list claims them either — a genuine, open
+          // gap (3-4 species total) rather than an oversight; they fall to
+          // the catch-all.
+          estimatedDescribed: 672,
+          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Pinales (excludes Ginkgo + gnetophytes, which no SSC group in this pilot claims)",
+          estimatedSourceUrl: COL_2025_URL,
+          sourceUrl: "https://threatenedconifers.rbge.org.uk/",
+        },
+        {
+          id: "ssc-cycad",
+          name: "Cycad Specialist Group",
+          filter: { csvGroups: ["gymnosperms"], orderNames: ["cycadales"] },
+          // Own checklist, The World List of Cycads (cycadlist.org): "10
+          // accepted genera" across exactly the 2 families of order
+          // Cycadales (Cycadaceae, Zamiaceae) — matches our data exactly, no
+          // exceptions found.
+          estimatedDescribed: 358,
+          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Cycadales (Cycadaceae + Zamiaceae)",
+          estimatedSourceUrl: COL_2025_URL,
+          sourceUrl: "http://www.cycadgroup.org/",
+        },
+        {
+          id: "ssc-seagrass",
+          name: "Seagrass Specialist Group",
+          filter: {
+            csvGroups: ["flowering_plants"],
+            genera: [
+              // 4 whole families (confirmed by direct query — every species
+              // under each of these family labels is in this genus list, no
+              // stray genera): Cymodoceaceae, Posidoniaceae, Zosteraceae,
+              // Ruppiaceae (Ruppia's taxonomy is "problematic" per the
+              // group's own assessment papers, but treated as in-scope
+              // regardless).
+              "amphibolis", "cymodocea", "halodule", "syringodium", "thalassodendron",
+              "posidonia",
+              "heterozostera", "nanozostera", "phyllospadix", "zostera",
+              "ruppia",
+              // Hydrocharitaceae is genus-restricted, NOT a whole-family
+              // claim — that family is mostly freshwater plants (Najas,
+              // Ottelia, Blyxa, Vallisneria, Elodea, Hydrilla, ...), which
+              // are NOT seagrasses and correctly fall to the catch-all. Only
+              // the 3 genuinely marine seagrass genera are included.
+              "enhalus", "halophila", "thalassia",
+            ],
+          },
+          // No single explicit "our scope is these families" statement found
+          // from the group itself (no dedicated site exists) — inferred with
+          // high confidence from the group's own peer-reviewed output (Short
+          // et al. 2011, "Extinction risk assessment of the world's seagrass
+          // species," produced by the ~70-member group) and its ongoing 2025
+          // regional Red List reassessments, which consistently work from
+          // exactly this genus list.
+          estimatedDescribed: 76,
+          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — 4 whole seagrass families + the 3 marine genera within Hydrocharitaceae (Enhalus, Halophila, Thalassia); inferred from the group's own assessment practice, not a quoted scope statement",
+          estimatedSourceUrl: COL_2025_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-seagrass-species-specialist-group",
+        },
+        // Catch-all: a plain "No SSC Group" remainder (NOT a claim on behalf
+        // of Crop Wild Relative SG, Freshwater Plant SG, Global Trees SG, or
+        // Medicinal Plant SG — see the exclusion note above). Omits "mosses"
+        // entirely (100% claimed by Bryophyte SG) rather than listing a
+        // redundant exclude for it. Kept in sync manually — if a 9th plant
+        // SSC group is added above, exclude its family/order/genus here too.
+        {
+          id: "ssc-other-plants",
+          name: "No SSC Group",
+          filter: {
+            csvGroups: ["flowering_plants", "gymnosperms", "ferns_and_allies", "green_algae", "red_algae"],
+            excludeFamilies: [
+              "cactaceae", "didiereaceae",
+              "droseraceae", "nepenthaceae", "sarraceniaceae", "lentibulariaceae", "byblidaceae", "roridulaceae", "cephalotaceae", "drosophyllaceae",
+              "orchidaceae", "arecaceae",
+            ],
+            excludeOrders: ["pinales", "cycadales"],
+            excludeGenera: [
+              "amphibolis", "cymodocea", "halodule", "syringodium", "thalassodendron",
+              "posidonia",
+              "heterozostera", "nanozostera", "phyllospadix", "zostera",
+              "ruppia",
+              "enhalus", "halophila", "thalassia",
+            ],
+          },
+          estimatedDescribed: 209_795,
+          estimatedSource: "Plant species (assessed + unassessed, per our own data) not in any of the 8 SSC groups above (approx.; includes species that would belong to Crop Wild Relative SG, Freshwater Plant SG, Global Trees SG, or Medicinal Plant SG in reality — see exclusion note above)",
+          estimatedSourceUrl: COL_2025_URL,
+        },
+      ],
+    },
+
     // ─── VIRTUAL GROUPING NODES ────────────────────────────────────────
     // These aggregate Table 1a groups for the default view
 

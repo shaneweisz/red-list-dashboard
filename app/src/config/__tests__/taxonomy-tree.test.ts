@@ -1169,6 +1169,107 @@ describe("SSC Specialist Groups tree (invertebrates)", () => {
   });
 });
 
+describe("SSC Specialist Groups tree (plants)", () => {
+  const sscPlantNode = findNode("ssc-plant-groups");
+
+  it("ssc-plant-groups exists, is not part of the default view, and has 9 children (8 pilot groups + remainder)", () => {
+    expect(sscPlantNode).toBeDefined();
+    expect(sscPlantNode?.children?.length).toBe(9);
+    expect(TAXONOMY_VIEWS.default.roots).not.toContain("ssc-plant-groups");
+  });
+
+  it("ssc-other-plants (the remainder row) doesn't overlap any of the 8 named groups", () => {
+    const cases: Array<{ class_name: string; order_name: string; family: string; scientific_name: string; taxon_group: string }> = [
+      { class_name: "Liliopsida", order_name: "Asparagales", family: "Orchidaceae", scientific_name: "Vanilla planifolia", taxon_group: "flowering_plants" },
+      { class_name: "Bryopsida", order_name: "Hypnales", family: "Hypnaceae", scientific_name: "Hypnum cupressiforme", taxon_group: "mosses" },
+      { class_name: "Magnoliopsida", order_name: "Caryophyllales", family: "Cactaceae", scientific_name: "Carnegiea gigantea", taxon_group: "flowering_plants" },
+      { class_name: "Liliopsida", order_name: "Arecales", family: "Arecaceae", scientific_name: "Elaeis guineensis", taxon_group: "flowering_plants" },
+      { class_name: "Magnoliopsida", order_name: "Caryophyllales", family: "Droseraceae", scientific_name: "Dionaea muscipula", taxon_group: "flowering_plants" },
+      { class_name: "Pinopsida", order_name: "Pinales", family: "Pinaceae", scientific_name: "Pinus sylvestris", taxon_group: "gymnosperms" },
+      { class_name: "Cycadopsida", order_name: "Cycadales", family: "Zamiaceae", scientific_name: "Zamia furfuracea", taxon_group: "gymnosperms" },
+      { class_name: "Liliopsida", order_name: "Alismatales", family: "Zosteraceae", scientific_name: "Zostera marina", taxon_group: "flowering_plants" },
+    ];
+    for (const row of cases) {
+      expect(speciesMatchesNode(row, "ssc-other-plants"), row.scientific_name).toBe(false);
+    }
+  });
+
+  it("ssc-other-plants catches genuinely uncovered species, including ones that would belong to the excluded functional/growth-form-based groups in reality", () => {
+    // Would belong to Global Trees SG (any tree species) / Crop Wild Relative SG
+    // (wild relatives of crops) / Medicinal Plant SG in reality, but those are
+    // deliberately not built — see the exclusion note in taxonomy-tree.ts.
+    const oakTree = { class_name: "Magnoliopsida", order_name: "Fagales", family: "Fagaceae", scientific_name: "Quercus robur", taxon_group: "flowering_plants" };
+    const wildWheat = { class_name: "Liliopsida", order_name: "Poales", family: "Poaceae", scientific_name: "Aegilops tauschii", taxon_group: "flowering_plants" };
+    // Ginkgo — a genuine open gap: not claimed by Conifer SG (Pinales only)
+    // or any other group in this pilot.
+    const ginkgo = { class_name: "Ginkgoopsida", order_name: "Ginkgoales", family: "Ginkgoaceae", scientific_name: "Ginkgo biloba", taxon_group: "gymnosperms" };
+    // A freshwater (non-seagrass) genus within the same family Seagrass SG
+    // partially claims — must NOT be swept in by a whole-family filter.
+    const freshwaterHydrocharitaceae = { class_name: "Liliopsida", order_name: "Alismatales", family: "Hydrocharitaceae", scientific_name: "Elodea canadensis", taxon_group: "flowering_plants" };
+    for (const row of [oakTree, wildWheat, ginkgo, freshwaterHydrocharitaceae]) {
+      expect(speciesMatchesNode(row, "ssc-other-plants"), row.scientific_name).toBe(true);
+    }
+  });
+
+  it("Bryophyte SG matches its whole dedicated CSV group (mosses, liverworts, and hornworts together)", () => {
+    const moss = { class_name: "Bryopsida", order_name: "Hypnales", family: "Hypnaceae", scientific_name: "Hypnum cupressiforme", taxon_group: "mosses" };
+    const liverwort = { class_name: "Jungermanniopsida", order_name: "Jungermanniales", family: "Lepidoziaceae", scientific_name: "Bazzania trilobata", taxon_group: "mosses" };
+    expect(speciesMatchesNode(moss, "ssc-bryophyte")).toBe(true);
+    expect(speciesMatchesNode(liverwort, "ssc-bryophyte")).toBe(true);
+  });
+
+  it("Cactus and Succulent SG covers Cactaceae and Didiereaceae, but not other succulent-containing families it can't safely isolate", () => {
+    const cactus = { class_name: "Magnoliopsida", order_name: "Caryophyllales", family: "Cactaceae", scientific_name: "Carnegiea gigantea", taxon_group: "flowering_plants" };
+    const octopusTree = { class_name: "Magnoliopsida", order_name: "Caryophyllales", family: "Didiereaceae", scientific_name: "Alluaudia procera", taxon_group: "flowering_plants" };
+    const succulentSpurge = { class_name: "Magnoliopsida", order_name: "Malpighiales", family: "Euphorbiaceae", scientific_name: "Euphorbia obesa", taxon_group: "flowering_plants" };
+    expect(speciesMatchesNode(cactus, "ssc-cactus-succulent")).toBe(true);
+    expect(speciesMatchesNode(octopusTree, "ssc-cactus-succulent")).toBe(true);
+    expect(speciesMatchesNode(succulentSpurge, "ssc-cactus-succulent")).toBe(false);
+    expect(speciesMatchesNode(succulentSpurge, "ssc-other-plants")).toBe(true);
+  });
+
+  it("Conifer SG covers order Pinales but not Ginkgo or the gnetophytes", () => {
+    const pine = { class_name: "Pinopsida", order_name: "Pinales", family: "Pinaceae", scientific_name: "Pinus sylvestris", taxon_group: "gymnosperms" };
+    const ginkgo = { class_name: "Ginkgoopsida", order_name: "Ginkgoales", family: "Ginkgoaceae", scientific_name: "Ginkgo biloba", taxon_group: "gymnosperms" };
+    expect(speciesMatchesNode(pine, "ssc-conifer")).toBe(true);
+    expect(speciesMatchesNode(ginkgo, "ssc-conifer")).toBe(false);
+    expect(speciesMatchesNode(ginkgo, "ssc-other-plants")).toBe(true);
+  });
+
+  it("Cycad SG covers order Cycadales (both families)", () => {
+    const cycad1 = { class_name: "Cycadopsida", order_name: "Cycadales", family: "Zamiaceae", scientific_name: "Zamia furfuracea", taxon_group: "gymnosperms" };
+    const cycad2 = { class_name: "Cycadopsida", order_name: "Cycadales", family: "Cycadaceae", scientific_name: "Cycas revoluta", taxon_group: "gymnosperms" };
+    expect(speciesMatchesNode(cycad1, "ssc-cycad")).toBe(true);
+    expect(speciesMatchesNode(cycad2, "ssc-cycad")).toBe(true);
+  });
+
+  it("Seagrass SG covers 4 whole marine families plus only the 3 marine genera within the mostly-freshwater family Hydrocharitaceae", () => {
+    const trueSeagrass = { class_name: "Liliopsida", order_name: "Alismatales", family: "Zosteraceae", scientific_name: "Zostera marina", taxon_group: "flowering_plants" };
+    const marineHydrocharitaceae = { class_name: "Liliopsida", order_name: "Alismatales", family: "Hydrocharitaceae", scientific_name: "Halophila ovalis", taxon_group: "flowering_plants" };
+    const freshwaterHydrocharitaceae = { class_name: "Liliopsida", order_name: "Alismatales", family: "Hydrocharitaceae", scientific_name: "Elodea canadensis", taxon_group: "flowering_plants" };
+    expect(speciesMatchesNode(trueSeagrass, "ssc-seagrass")).toBe(true);
+    expect(speciesMatchesNode(marineHydrocharitaceae, "ssc-seagrass")).toBe(true);
+    expect(speciesMatchesNode(freshwaterHydrocharitaceae, "ssc-seagrass")).toBe(false);
+    expect(speciesMatchesNode(freshwaterHydrocharitaceae, "ssc-other-plants")).toBe(true);
+  });
+
+  it("all ssc-plant-groups children have a unique id", () => {
+    const ids = new Set<string>();
+    for (const child of sscPlantNode?.children ?? []) {
+      expect(ids.has(child.id), `duplicate id ${child.id}`).toBe(false);
+      ids.add(child.id);
+    }
+  });
+
+  it("does not add any new children to the real 'plantae' virtual grouping node", () => {
+    const plantaeNode = findNode("plantae");
+    const plantaeChildIds = new Set(plantaeNode?.children?.map(c => c.id) ?? []);
+    for (const child of sscPlantNode?.children ?? []) {
+      expect(plantaeChildIds.has(child.id)).toBe(false);
+    }
+  });
+});
+
 // =============================================================================
 // Partition coverage
 // =============================================================================
