@@ -55,6 +55,10 @@ interface Table1aRowData {
   colDescribed?: number;
   colNe?: number;
   colBreakdown?: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[]; splitDetails?: SplitDetail[] }[];
+  /** SSC groups mode only: which real view-root taxon this row's group is a
+   * sub-population of (e.g. "mammals", "reptiles") — used to navigate to the
+   * right root on click, since SSC group nodes span multiple taxa. */
+  parentTaxon?: string;
 }
 
 interface Table1aSectionData {
@@ -63,6 +67,14 @@ interface Table1aSectionData {
 }
 
 const IUCN_SOURCE_URL = "https://nc.iucnredlist.org/redlist/content/attachment_files/2026-1_RL_Table1a.pdf";
+
+// SSC groups mode — one section per taxon that has an SSC pilot built out.
+// Add an entry here (nodeId, parentTaxon, title, catch-all id) when a new
+// taxon's SSC groups are added.
+const SSC_SECTIONS: { nodeId: string; parentTaxon: string; title: string; catchAllId: string }[] = [
+  { nodeId: "ssc-groups", parentTaxon: "mammals", title: "MAMMAL SPECIALIST GROUPS", catchAllId: "ssc-other-mammals" },
+  { nodeId: "ssc-reptile-groups", parentTaxon: "reptiles", title: "REPTILE SPECIALIST GROUPS", catchAllId: "ssc-snake-lizard-rla" },
+];
 
 // Ordered categories for the breakdown bar (most threatened first)
 const BAR_CATEGORIES = Object.keys(CATEGORY_ORDER).sort(
@@ -1188,9 +1200,9 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       .finally(() => setTable1aLoading(false));
   }, [table1aMode, table1aData]);
 
-  // SSC groups mode (pilot: mammal Specialist Groups) — same flat-table layout as
-  // Table 1a mode, sourced from the precomputed "ssc-groups" node's children
-  // instead of the top-level Table 1a CSV groups.
+  // SSC groups mode — same flat-table layout as Table 1a mode, sourced from
+  // the precomputed SSC wrapper nodes' children instead of the top-level
+  // Table 1a CSV groups (see SSC_SECTIONS above).
   const [sscData, setSscData] = useState<Table1aSectionData[] | null>(null);
   const [sscLoading, setSscLoading] = useState(false);
   const sscFetchStartedRef = useRef(false);
@@ -1199,34 +1211,40 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     if (!sscMode || sscData || sscFetchStartedRef.current) return;
     sscFetchStartedRef.current = true;
     setSscLoading(true);
-    fetch("/api/redlist/taxa-subgroups?nodeId=ssc-groups")
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        if (!data) return;
-        const rows: Table1aRowData[] = (data.subgroups ?? []).map((sg: SubGroupSummary) => ({
-          group: sg.id,
-          name: sg.name,
-          estimatedDescribed: sg.estimatedDescribed,
-          totalAssessed: sg.totalAssessed,
-          percentAssessed: sg.estimatedDescribed > 0 ? (sg.totalAssessed / sg.estimatedDescribed) * 100 : 0,
-          outdated: sg.outdated,
-          percentOutdated: sg.totalAssessed > 0 ? (sg.outdated / sg.totalAssessed) * 100 : 0,
-          byCategory: sg.byCategory,
-          gbifNeSpeciesCount: sg.gbifNeSpeciesCount,
-          colDescribed: sg.colDescribed,
-          colNe: sg.colNe,
-          colBreakdown: sg.colBreakdown,
-        }));
-        // Sort by # assessed descending, but pin the remainder row ("not claimed
-        // by a named group") to the bottom regardless of its own count — it's a
-        // catch-all, not one of the 35 pilot groups, so it reads as an appendix.
-        rows.sort((a, b) => {
-          if (a.group === "ssc-other-mammals") return 1;
-          if (b.group === "ssc-other-mammals") return -1;
-          return b.totalAssessed - a.totalAssessed;
-        });
-        setSscData([{ title: "MAMMAL SPECIALIST GROUPS", rows }]);
-      })
+    Promise.all(
+      SSC_SECTIONS.map((section) =>
+        fetch(`/api/redlist/taxa-subgroups?nodeId=${section.nodeId}`)
+          .then(res => (res.ok ? res.json() : null))
+          .then((data): Table1aSectionData | null => {
+            if (!data) return null;
+            const rows: Table1aRowData[] = (data.subgroups ?? []).map((sg: SubGroupSummary) => ({
+              group: sg.id,
+              name: sg.name,
+              estimatedDescribed: sg.estimatedDescribed,
+              totalAssessed: sg.totalAssessed,
+              percentAssessed: sg.estimatedDescribed > 0 ? (sg.totalAssessed / sg.estimatedDescribed) * 100 : 0,
+              outdated: sg.outdated,
+              percentOutdated: sg.totalAssessed > 0 ? (sg.outdated / sg.totalAssessed) * 100 : 0,
+              byCategory: sg.byCategory,
+              gbifNeSpeciesCount: sg.gbifNeSpeciesCount,
+              colDescribed: sg.colDescribed,
+              colNe: sg.colNe,
+              colBreakdown: sg.colBreakdown,
+              parentTaxon: section.parentTaxon,
+            }));
+            // Sort by # assessed descending, but pin the remainder/catch-all row
+            // to the bottom regardless of its own count — it reads as an appendix,
+            // not one of the named specialist groups.
+            rows.sort((a, b) => {
+              if (a.group === section.catchAllId) return 1;
+              if (b.group === section.catchAllId) return -1;
+              return b.totalAssessed - a.totalAssessed;
+            });
+            return { title: section.title, rows };
+          })
+      )
+    )
+      .then((sections) => setSscData(sections.filter((s): s is Table1aSectionData => s != null)))
       .finally(() => setSscLoading(false));
   }, [sscMode, sscData]);
 
@@ -2337,13 +2355,13 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                           className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer"
                           onClick={(e) => {
                             if (sscMode) {
-                              // SSC groups are pre-filtered mammal sub-populations, not
-                              // display-root taxa — navigate straight to Mammals + this
-                              // group's filter (all 35 pilot groups are mammal-scoped).
-                              // onNavigateToSubgroup clears layoutMode atomically as part
-                              // of the same history push — don't also clear it here, or
-                              // the navigation splits into two separate back-button steps.
-                              onNavigateToSubgroup?.("mammals", row.group);
+                              // SSC groups are pre-filtered sub-populations of a real view-root
+                              // taxon (mammals, reptiles, ...), not display-root taxa themselves —
+                              // navigate straight to that root + this group's filter.
+                              // onNavigateToSubgroup clears layoutMode atomically as part of the
+                              // same history push — don't also clear it here, or the navigation
+                              // splits into two separate back-button steps.
+                              onNavigateToSubgroup?.(row.parentTaxon ?? "mammals", row.group);
                               return;
                             }
                             const defaultRoots = new Set(TAXONOMY_VIEWS.default.roots);
@@ -2534,10 +2552,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                         const intermediateAncestorIds: string[] = [];
                         for (const aId of ancestors) {
                           if (selectedTaxa.has(aId)) break; // Stop at view root
-                          // "ssc-groups" is a display-only wrapper (SSC groups mode) kept
-                          // outside the real tree so it doesn't show up as a breadcrumb —
-                          // its children navigate as if parented by "mammals" instead.
-                          if (aId === "ssc-groups") break;
+                          // SSC wrapper nodes (SSC groups mode) are display-only, kept
+                          // outside the real tree so they don't show up as a breadcrumb —
+                          // their children navigate as if parented by their real taxon
+                          // (mammals, reptiles, ...) instead — see SSC_SECTIONS.
+                          if (SSC_SECTIONS.some((s) => s.nodeId === aId)) break;
                           intermediateAncestorIds.push(aId);
                         }
 
@@ -2700,7 +2719,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                     <FaInfoCircle size={10} />
                   </a>
                   <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover/ssc:opacity-100 group-hover/ssc:visible z-50 shadow-lg pointer-events-none">
-                    View IUCN SSC Specialist Groups (mammals pilot)
+                    View IUCN SSC Specialist Groups (mammals + reptiles pilot)
                   </span>
                 </span>
               </span>

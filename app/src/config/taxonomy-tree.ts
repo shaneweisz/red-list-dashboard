@@ -979,6 +979,276 @@ export const TAXONOMY_TREE: TaxonomyNode = {
       ],
     },
 
+    // ─── SSC SPECIALIST GROUPS (reptiles) ───────────────────────────────
+    // Same second lens as "ssc-groups" (mammals) above, over the "reptiles"
+    // CSV group instead. Scope for each group was sourced from its own
+    // dedicated site (not just its iucn.org listing, which is often a bare
+    // contact page), cross-checked against the real family/genus
+    // distribution in our reptile data — see each node's comment for the
+    // specific source quote. estimatedDescribed below is our own
+    // assessed+unassessed species count matching each filter (Reptile
+    // Database-derived, same source as the "reptiles" node's own subgroup
+    // estimates) — a real count, not a third-party citation, since no
+    // external source publishes per-SSC-group described-species totals.
+    {
+      id: "ssc-reptile-groups",
+      name: "SSC Specialist Groups",
+      filter: { csvGroups: ["reptiles"] },
+      children: [
+        {
+          id: "ssc-crocodile",
+          name: "Crocodile Specialist Group",
+          filter: { csvGroups: ["reptiles"], families: ["crocodylidae", "alligatoridae", "gavialidae"] },
+          // Own site (iucncsg.org): "There are 26 recognised species of extant
+          // crocodilians... divided into three Families - Alligatoridae...
+          // Crocodylidae... and Gavialidae" — all of order Crocodylia, no exceptions.
+          estimatedDescribed: 27,
+          estimatedSource: REPTILE_DB + " — Crocodylidae + Alligatoridae + Gavialidae (all of Crocodylia)",
+          estimatedSourceUrl: REPTILE_DB_URL,
+          sourceUrl: "http://www.iucncsg.org/",
+        },
+        {
+          id: "ssc-tortoise-freshwater-turtle",
+          name: "Tortoise and Freshwater Turtle Specialist Group",
+          filter: {
+            csvGroups: ["reptiles"],
+            families: [
+              "geoemydidae", "testudinidae", "chelidae", "emydidae", "kinosternidae",
+              "trionychidae", "pelomedusidae", "podocnemididae", "chelydridae",
+              "platysternidae", "dermatemydidae", "carettochelyidae",
+            ],
+          },
+          // Own site (iucn-tftsg.org): mission covers "all species of tortoises
+          // and freshwater turtles" — i.e. every Testudines family except the 2
+          // marine turtle families (Cheloniidae, Dermochelyidae), which belong to
+          // the separate Marine Turtle SG below. No source states the marine
+          // exclusion in so many words; it's implied by "freshwater and
+          // terrestrial" plus the existence of a dedicated Marine Turtle SG.
+          estimatedDescribed: 357,
+          estimatedSource: REPTILE_DB + " — all Testudines families except Cheloniidae/Dermochelyidae (Marine Turtle SG)",
+          estimatedSourceUrl: REPTILE_DB_URL,
+          sourceUrl: "https://iucn-tftsg.org/",
+        },
+        {
+          id: "ssc-marine-turtle",
+          name: "Marine Turtle Specialist Group",
+          filter: { csvGroups: ["reptiles"], families: ["cheloniidae", "dermochelyidae"] },
+          // Own site (iucn-mtsg.org): "responsible for providing information on
+          // the seven species of sea turtles" — Cheloniidae (6) + Dermochelyidae
+          // (1, leatherback), all 7 recognized species, no exceptions.
+          estimatedDescribed: 7,
+          estimatedSource: REPTILE_DB + " — Cheloniidae + Dermochelyidae (all 7 sea turtle species)",
+          estimatedSourceUrl: REPTILE_DB_URL,
+          sourceUrl: "http://iucn-mtsg.org/",
+        },
+        {
+          id: "ssc-skink",
+          name: "Skink Specialist Group",
+          filter: { csvGroups: ["reptiles"], families: ["scincidae"] },
+          // Own site (skinks.org) + SSC annual report: "aims to complete Red
+          // List assessments for all skink species... 1,725 species are
+          // recognised by the SSG" — whole family Scincidae, no exceptions
+          // found. Dibamidae (legless "skink-like" lizards) is a separate
+          // family, not mentioned by the group either way — left out of scope.
+          estimatedDescribed: 1_704,
+          estimatedSource: REPTILE_DB + " — Scincidae",
+          estimatedSourceUrl: REPTILE_DB_URL,
+          sourceUrl: "https://www.skinks.org/",
+        },
+        {
+          id: "ssc-chameleon",
+          name: "Chameleon Specialist Group",
+          filter: { csvGroups: ["reptiles"], families: ["chamaeleonidae"] },
+          // Own site (iucnchameleons.org): "there are currently 228 species of
+          // chameleon recognized by the Chameleon Specialist Group" — whole
+          // family Chamaeleonidae, no carve-outs.
+          estimatedDescribed: 217,
+          estimatedSource: REPTILE_DB + " — Chamaeleonidae",
+          estimatedSourceUrl: REPTILE_DB_URL,
+          sourceUrl: "http://iucnchameleons.org/",
+        },
+        {
+          id: "ssc-monitor-lizard",
+          name: "Monitor Lizard Specialist Group",
+          filter: { csvGroups: ["reptiles"], families: ["varanidae", "lanthanotidae"] },
+          // Own site (iucn-mlsg.org): "the monotypic Lanthanotus borneensis is
+          // also dealt within the IUCN SSC Monitor Lizard Specialist Group...
+          // sole member of the family Lanthanotidae [Earless monitor lizards]
+          // ...together with the Varanidae reflect two families of the
+          // Superfamily Platynota" — explicit, both families.
+          estimatedDescribed: 87,
+          estimatedSource: REPTILE_DB + " — Varanidae + Lanthanotidae",
+          estimatedSourceUrl: REPTILE_DB_URL,
+          sourceUrl: "https://iucn-mlsg.org/",
+        },
+        {
+          id: "ssc-iguana",
+          name: "Iguana Specialist Group",
+          filter: { csvGroups: ["reptiles"], families: ["iguanidae"] },
+          // Own site's Iguana Taxonomy Working Group checklist: "A CHECKLIST OF
+          // THE IGUANAS OF THE WORLD (IGUANIDAE; IGUANINAE)" — 9 genera
+          // (Amblyrhynchus, Brachylophus, Cachryx, Conolophus, Ctenosaura,
+          // Cyclura, Dipsosaurus, Iguana, Sauromalus). Confirmed against our
+          // data: every species under the "iguanidae" family label is one of
+          // these 9 genera (no stray genus), so a plain family filter is exact.
+          estimatedDescribed: 48,
+          estimatedSource: REPTILE_DB + " — Iguanidae (confirmed = the 9 genera in the group's own checklist, no stray genera)",
+          estimatedSourceUrl: REPTILE_DB_URL,
+          sourceUrl: "http://www.iucn-isg.org/",
+        },
+        {
+          id: "ssc-anoline-lizard",
+          name: "Anoline Lizard Specialist Group",
+          filter: { csvGroups: ["reptiles"], genera: ["anolis"] },
+          // Own site (iucn.org): mission covers "Anolis (anole) lizards...
+          // across the entire distribution of Anolis" — genus-scoped, not
+          // family-scoped. Our data splits anoles across two synonymous family
+          // labels, "anolidae" (379 spp) and "dactyloidae" (53 spp) — both are
+          // entirely genus Anolis, confirmed by direct query, so filtering by
+          // genus (not family) is both more faithful to the group's own words
+          // and immune to the family-label split. A third family label,
+          // "polychrotidae" (9 spp), is entirely genus Polychrus — a related
+          // but distinct genus the group's own scope doesn't name — correctly
+          // NOT included (falls to the Snake and Lizard RLA catch-all below).
+          estimatedDescribed: 432,
+          estimatedSource: REPTILE_DB + " — genus Anolis (spans the anolidae/dactyloidae family-label split in our data; excludes Polychrus)",
+          estimatedSourceUrl: REPTILE_DB_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-anoline-lizard-specialist-group",
+        },
+        {
+          id: "ssc-viper",
+          name: "Viper Specialist Group",
+          filter: { csvGroups: ["reptiles"], families: ["viperidae"] },
+          // No first-party page could be fetched directly (the group's own
+          // domain, viperconservation.org, didn't resolve; the old Orianne
+          // Society URL on file now 404s). Scope confirmed instead via the
+          // neighboring Snake Specialist Group's own site (iucnsnake.org): "the
+          // SSG does not include vipers or elapids in the subfamily
+          // Hydrophiinae, which are covered by the IUCN SSC Viper and Sea Snake
+          // Specialist Groups, respectively" — i.e. Viperidae in full, no
+          // subfamily carve-out (covers Viperinae, Crotalinae, and Azemiopinae
+          // alike).
+          estimatedDescribed: 377,
+          estimatedSource: REPTILE_DB + " — Viperidae",
+          estimatedSourceUrl: REPTILE_DB_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-viper-specialist-group",
+        },
+        {
+          id: "ssc-sea-snake",
+          name: "Sea Snake Specialist Group",
+          filter: {
+            csvGroups: ["reptiles"],
+            genera: [
+              // "True sea snakes" and sea kraits (Elapidae subfamily
+              // Hydrophiinae, marine lineages only — NOT the many terrestrial
+              // Hydrophiinae genera like Naja, Bungarus, Dendroaspis, Micrurus,
+              // Oxyuranus, Notechis, etc., which stay in the catch-all below).
+              "hydrophis", "aipysurus", "emydocephalus", "laticauda", "microcephalophis",
+              "hydrelaps", "ephalophis", "parahydrophis", "enhydrina", "kerilia",
+              "kolpophis", "lapemis", "pelamis", "thalassophina",
+              // "Estuarine/marine mud snakes" — whole family Homalopsidae,
+              // expressed as its full genus list since SpeciesFilter's
+              // families+genera fields are ANDed, not OR'd, and this node
+              // already needs `genera` for the Elapidae subset above.
+              "enhydris", "homalopsis", "cerberus", "calamophis", "brachyorrhos",
+              "myron", "gyiophis", "myrrophis", "hypsiscopus", "homalophis",
+              "sumatranus", "subsessor", "raclitia", "pseudoferania", "phytolopsis",
+              "myanophis", "miralia", "mintonophis", "kualatahan", "heurnia",
+              "gerarda", "fordonia", "ferania", "erpeton", "djokoiskandarus",
+              "dieurostus", "cantoria", "bitia",
+              // "File snakes" — whole family Acrochordidae (1 genus).
+              "acrochordus",
+            ],
+          },
+          // Own mission statement (2024-25 SSC Annual Report, iucn.org): "the
+          // conservation of the world's marine and aquatic snakes — true sea
+          // snakes, sea kraits, estuarine/marine mud and file snakes" — spans
+          // 3 families (a genus-level subset of Elapidae + all of Homalopsidae
+          // + all of Acrochordidae), confirmed by the neighboring Snake
+          // Specialist Group's own exclusion statement (see Viper SG above).
+          estimatedDescribed: 130,
+          estimatedSource: REPTILE_DB + " — marine Elapidae genera + Homalopsidae + Acrochordidae",
+          estimatedSourceUrl: REPTILE_DB_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-sea-snake-specialist-group",
+        },
+        {
+          id: "ssc-boa-python",
+          name: "Boa and Python Specialist Group",
+          filter: {
+            csvGroups: ["reptiles"],
+            families: ["boidae", "pythonidae", "erycidae", "charinaidae", "candoiidae", "sanziniidae", "ungaliophiidae"],
+          },
+          // LOWER CONFIDENCE than the other reptile groups here — flagging
+          // explicitly rather than presenting this as settled. The group's
+          // current iucn.org page is an empty template and its only listed
+          // contact is a Facebook page; the only scope statement found is an
+          // undated, third-party-hosted brochure: "true boas and pythons,
+          // families Boidae and Pythonidae, represent about half of the
+          // overall remit" of "~186 species... distributed in 12 families."
+          // Boidae + Pythonidae plus the 5 genera IUCN's own Red List
+          // assessments still classify under "Boidae" (Erycidae, Charinaidae,
+          // Candoiidae, Sanziniidae, Ungaliophiidae — modern splits not yet
+          // reflected in IUCN's working taxonomy, confirmed via a real
+          // assessment PDF for Eryx johnii) are included with good confidence.
+          // The brochure's other ~10 relict families (Aniliidae, Anomochilidae,
+          // Bolyeriidae, Calabariidae, Cylindrophiidae, Loxocemidae,
+          // Tropidophiidae, Uropeltidae, Xenopeltidae, Xenophiidae) are
+          // DELIBERATELY left out of this filter and fall to the Snake and
+          // Lizard RLA catch-all instead: no source could confirm the brochure
+          // is current, no independent source corroborates it, and several of
+          // those families (e.g. Uropeltidae, shield-tailed snakes) aren't
+          // "boas or pythons" in any common or modern-phylogenetic sense. If a
+          // current, authoritative BPSG scope statement surfaces, revisit —
+          // this is the single lowest-confidence call in the reptile pilot.
+          estimatedDescribed: 112,
+          estimatedSource: REPTILE_DB + " — Boidae + Pythonidae + 5 genera IUCN's own assessments still classify under Boidae (approx.; excludes ~10 more distant families named in an unconfirmed brochure — see comment)",
+          estimatedSourceUrl: REPTILE_DB_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-boa-and-python-specialist-group",
+        },
+        // Catch-all: NOT a "no group" placeholder like ssc-other-mammals — this
+        // IS the real "IUCN SSC Snake and Lizard Red List Authority", confirmed
+        // via its own SSC annual report: "undertake and support IUCN Red List
+        // assessments for reptile groups not covered by other Specialist
+        // Groups, including most snakes and lizards and the New Zealand
+        // Tuatara (Sphenodon punctatus)" — a real, named, residual-by-design
+        // entity, not a gap in our coverage. The tuatara is a genuinely
+        // reported exception (Rhynchocephalia, not even Squamata) — added via
+        // extraSpeciesNames, the same escape hatch the mammal pilot's Antelope
+        // SG uses. Kept in sync manually — if a 13th reptile SSC group is
+        // added above, exclude its family/genus here too.
+        {
+          id: "ssc-snake-lizard-rla",
+          name: "Snake and Lizard Red List Authority",
+          filter: {
+            csvGroups: ["reptiles"],
+            excludeFamilies: [
+              "crocodylidae", "alligatoridae", "gavialidae",
+              "geoemydidae", "testudinidae", "chelidae", "emydidae", "kinosternidae",
+              "trionychidae", "pelomedusidae", "podocnemididae", "chelydridae",
+              "platysternidae", "dermatemydidae", "carettochelyidae",
+              "cheloniidae", "dermochelyidae",
+              "scincidae", "chamaeleonidae", "varanidae", "lanthanotidae", "iguanidae",
+              "anolidae", "dactyloidae",
+              "viperidae",
+              "homalopsidae", "acrochordidae",
+              "boidae", "pythonidae", "erycidae", "charinaidae", "candoiidae", "sanziniidae", "ungaliophiidae",
+              "sphenodontidae",
+            ],
+            excludeGenera: [
+              "hydrophis", "aipysurus", "emydocephalus", "laticauda", "microcephalophis",
+              "hydrelaps", "ephalophis", "parahydrophis", "enhydrina", "kerilia",
+              "kolpophis", "lapemis", "pelamis", "thalassophina",
+            ],
+            extraSpeciesNames: ["sphenodon punctatus"],
+          },
+          estimatedDescribed: 7_959,
+          estimatedSource: "Remainder of " + REPTILE_DB + " reptile total minus the 11 SSC groups above, plus the tuatara (approx.)",
+          estimatedSourceUrl: REPTILE_DB_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-snake-and-lizard-red-list-authority",
+        },
+      ],
+    },
+
     // ─── BIRDS ─────────────────────────────────────────────────────────
     {
       id: "birds",
