@@ -26,7 +26,7 @@ import {
 export const RESULT_CAP = 200;
 
 // The categorical filters (categories, threats, systems, trends, movement,
-// growthForms, hasMap, endemic) come from the shared-filter registry via
+// growthForms, endemic) come from the shared-filter registry via
 // SharedFilterInput; the fields below are the bespoke ones (taxa/search,
 // country+region, assessor/reviewer substring, and the exact numeric params).
 export interface BrowseInput extends SharedFilterInput {
@@ -93,7 +93,7 @@ export { resolveRegions } from "@/lib/regions";
 function searchHitToRow(h: SearchResult): Row {
   return {
     category: h.category, countries: h.countries ?? [], systems: null,
-    population_trend: null, movement_pattern: null, threat_codes: null, has_map: false,
+    population_trend: null, movement_pattern: null, threat_codes: null,
     growth_forms: null, scientific_name: h.scientific_name, common_name: h.common_name,
     gbif_occurrence_count: null, assessment_date: h.assessment_date, taxon_group: h.taxon_group,
     latest_assessors: null, latest_reviewers: null, described_year: null,

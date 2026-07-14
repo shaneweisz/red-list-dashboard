@@ -39,7 +39,6 @@ function makeSpecies(overrides: Partial<RedlistSpecies> = {}): RedlistSpecies {
     possibly_extinct_in_the_wild: false,
     criteria: null,
     threat_codes: [],
-    has_map: true,
     synonyms: [],
     ...overrides,
   };
@@ -130,13 +129,13 @@ describe("writeRedlistCsv / readRedlistCsv (synonyms column)", () => {
       "family", "taxon_group_table1a", "assessment_id", "iucn_category", "assessment_date",
       "year_published", "population_trend", "countries", "systems", "growth_forms",
       "movement_pattern", "possibly_extinct", "possibly_extinct_in_the_wild",
-      "criteria", "threat_codes", "has_map",
+      "criteria", "threat_codes",
     ].join(",");
     const row = [
       "58565", "Aquarana catesbeianus", "American Bullfrog", "amphibia", "anura",
       "ranidae", taxonId, "1", "LC", "2020-01-01",
       "2020", "Stable", "US;CA", "Freshwater", "",
-      "", "", "", "", "", "true",
+      "", "", "", "", "",
     ].join(",");
     fs.writeFileSync(csvPath, header + "\n" + row + "\n");
     try {

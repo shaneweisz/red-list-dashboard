@@ -62,7 +62,7 @@ interface Table1aSectionData {
   rows: Table1aRowData[];
 }
 
-const IUCN_SOURCE_URL = "https://nc.iucnredlist.org/redlist/content/attachment_files/2025-2_RL_Table1a.pdf";
+const IUCN_SOURCE_URL = "https://nc.iucnredlist.org/redlist/content/attachment_files/2026-1_RL_Table1a.pdf";
 
 // Ordered categories for the breakdown bar (most threatened first)
 const BAR_CATEGORIES = Object.keys(CATEGORY_ORDER).sort(
@@ -398,7 +398,7 @@ function SpeciesListPanel({
 
   const filtered = useMemo(() => {
     if (!rows) return null;
-    let matched = rows.filter((s) => speciesMatchesNode(s, nodeId) && matchesBreakdownName(s, request.rank, request.name));
+    let matched = rows.filter((s) => speciesMatchesNode(s, nodeId) && matchesBreakdownName(s, request.rank, request.name, nodeId));
     if (request.bucket === "colMatch" && request.noMatchIds?.length) {
       const excl = new Set(request.noMatchIds);
       matched = matched.filter((s) => s.sis_taxon_id == null || !excl.has(s.sis_taxon_id));
@@ -2128,7 +2128,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                 <span className="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible z-50 shadow-lg normal-case">
                   {describedSource === "col"
                     ? `Described species from the ${COL_RELEASE_LABEL} backbone`
-                    : "Estimates from IUCN Red List Table 1a (2025-2)"}
+                    : "Estimates from IUCN Red List Table 1a (2026-1)"}
                 </span>
               </span>
             </span>

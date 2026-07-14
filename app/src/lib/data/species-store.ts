@@ -44,7 +44,6 @@ interface RedlistRow {
   possibly_extinct_in_the_wild: boolean;
   criteria: string | null;
   threat_codes: string[];
-  has_map: boolean;
 }
 
 export interface PreviousAssessment {
@@ -96,7 +95,6 @@ function parseRedlistRow(r: Record<string, string>): RedlistRow {
     possibly_extinct_in_the_wild: r.possibly_extinct_in_the_wild === "true",
     criteria: r.criteria || null,
     threat_codes: r.threat_codes ? r.threat_codes.split(";").filter(Boolean) : [],
-    has_map: r.has_map === "true",
   };
 }
 
@@ -303,6 +301,7 @@ interface TaxonomyFilter {
   excludeGenera?: string[];
   speciesNames?: string[];
   excludeSpeciesNames?: string[];
+  extraSpeciesNames?: string[];
 }
 
 /** Check if a redlist row passes the taxonomy filter */
@@ -310,6 +309,12 @@ function matchesTaxonomyFilter(
   row: { class_name: string | null; order_name: string | null; family: string | null; scientific_name?: string | null },
   filter: TaxonomyFilter,
 ): boolean {
+  // extraSpeciesNames: mirrors matchesFilter's OR escape hatch (taxonomy-utils.ts) —
+  // species included regardless of every other clause below.
+  if (filter.extraSpeciesNames?.length) {
+    const name = (row.scientific_name ?? "").trim().toLowerCase();
+    if (filter.extraSpeciesNames.includes(name)) return true;
+  }
   if (filter.classNames && filter.classNames.length > 0) {
     const cls = (row.class_name ?? "").toLowerCase();
     if (!filter.classNames.includes(cls)) return false;

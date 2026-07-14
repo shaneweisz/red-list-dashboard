@@ -195,6 +195,16 @@ export function matchesFilter(
   },
   filter: SpeciesFilter,
 ): boolean {
+  const sciNameLower = (row.scientific_name ?? "").trim().toLowerCase();
+
+  // CoL-only universe exclusion applies unconditionally, even to extraSpeciesNames
+  // below — checked first so nothing can bypass it.
+  if (sciNameLower && COL_EXCLUDE_ALL_NODES.includes(sciNameLower)) return false;
+
+  // extraSpeciesNames: named species included regardless of every other clause in
+  // this filter — see the SpeciesFilter interface doc comment for why this exists.
+  if (filter.extraSpeciesNames?.length && filter.extraSpeciesNames.includes(sciNameLower)) return true;
+
   // Class include filter
   if (filter.classNames && filter.classNames.length > 0) {
     const cls = (row.class_name ?? "").toLowerCase();
@@ -247,17 +257,9 @@ export function matchesFilter(
     if (filter.excludeSpeciesNames && filter.excludeSpeciesNames.length > 0 && name && filter.excludeSpeciesNames.includes(name)) return false;
   }
 
-  // CoL-only universe exclusions (domestic/feral forms, e.g. Felis catus, + names
-  // reassigned to another node's species-name override, e.g. Bison) — never part of
-  // ANY node's species universe. Mirrors filterToSql's COL_EXCLUDE_ALL_NODES
-  // exclusion (build-taxa-summary.ts), which only ran server-side at build time; this
-  // client-side path is what actually filters the species LIST shown when a user
-  // drills into a node (e.g. clicking Cat SG's row) — without this, the "# Described"
-  // count and the displayed species list would disagree (found via user report: the
-  // count excluded Felis catus but the NE species list still showed it). Safe
-  // unconditionally: none of these names are ever IUCN-assessed (verified against
-  // assessed.parquet), so this can't hide a real assessed species.
-  if (row.scientific_name && COL_EXCLUDE_ALL_NODES.includes(row.scientific_name.trim().toLowerCase())) return false;
+  // (CoL-only universe exclusions — domestic/feral forms, e.g. Felis catus, + names
+  // reassigned to another node's species-name override, e.g. Bison — already
+  // checked at the top of this function, before the extraSpeciesNames bypass.)
 
   return true;
 }
@@ -387,12 +389,25 @@ export function breakdownHref(rank: FilterRank, name: string): string | undefine
  * breakdown row is clicked — see TaxaSummary.tsx's BreakdownList). Mirrors the same
  * order/class_name fallback matchesFilter() uses for the GBIF-taxonomy quirk where
  * order_name is sometimes empty.
+ *
+ * `nodeId` is optional but should be passed whenever the caller has it: a species
+ * pulled into the node via extraSpeciesNames (e.g. Antelope SG's Pronghorn, not
+ * Bovidae) would otherwise never match ANY breakdown name for that node — the
+ * node's whole primary dimension is "Family: Bovidae", so a strict rank/name check
+ * would silently drop it from the narrowed species list even though it's correctly
+ * counted in the node's total (the exact "count vs. displayed list disagree" bug
+ * class this file's COL_EXCLUDE_ALL_NODES check exists to prevent elsewhere).
  */
 export function matchesBreakdownName(
   row: { class_name: string | null; order_name: string | null; family?: string | null; scientific_name?: string | null },
   rank: FilterRank,
   name: string,
+  nodeId?: string,
 ): boolean {
+  if (nodeId) {
+    const extra = findNode(nodeId)?.filter.extraSpeciesNames;
+    if (extra?.length && extra.includes((row.scientific_name ?? "").trim().toLowerCase())) return true;
+  }
   const n = name.toLowerCase();
   switch (rank) {
     case "class":

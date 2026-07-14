@@ -67,9 +67,8 @@ describe("browseInputToDashboardQuery", () => {
     expect(p.get("reviewers")).toBe("Jones");
   });
 
-  it("emits hasMap / systems / trends", () => {
-    const p = params({ taxa: ["mammals"], hasMap: "yes", systems: ["Marine"], trends: ["Decreasing"] });
-    expect(p.get("hasMap")).toBe("yes");
+  it("emits systems / trends", () => {
+    const p = params({ taxa: ["mammals"], systems: ["Marine"], trends: ["Decreasing"] });
     expect(p.get("systems")).toBe("Marine");
     expect(p.get("trends")).toBe("Decreasing");
   });

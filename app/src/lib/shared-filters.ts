@@ -13,8 +13,8 @@
  * wired everywhere; a drift-guard test (shared-filters.test.ts) fails if the
  * dashboard URL layer can't round-trip any registry filter.
  *
- * Scope: this covers the *categorical* filters (sets of values, plus the hasMap
- * enum and the endemic flag). The genuinely-bespoke filters stay outside the
+ * Scope: this covers the *categorical* filters (sets of values, plus the
+ * endemic flag). The genuinely-bespoke filters stay outside the
  * registry because they don't share one shape across surfaces:
  *   - taxa           — expands to display-root + sub-group tokens
  *   - countries/region — region expands INTO the country set (one param)
@@ -41,7 +41,6 @@ export const SHARED_FILTER_SCHEMA = {
   trends: z.array(z.string()).optional().describe("Population trend: Increasing, Decreasing, Stable, Unknown."),
   movement: z.array(z.string()).optional().describe("Movement pattern, e.g. Migratory, Nomadic, Not a Migrant."),
   growthForms: z.array(z.string()).optional().describe("Plant/fungus growth form, e.g. Tree, Shrub, Herb."),
-  hasMap: z.enum(["yes", "no"]).optional().describe("Whether the species has an IUCN range map."),
   endemic: z.enum(["yes"]).optional().describe("Only species endemic to a single country (occurring in exactly one country)."),
 } as const;
 
@@ -207,22 +206,6 @@ export const SHARED_FILTERS: SharedFilterDef[] = [
       note: "free text; common values shown.",
     },
   }),
-  // hasMap — enum yes/no
-  {
-    mcpKey: "hasMap", urlKey: "hasMap", sample: "yes",
-    apply(raw, c) {
-      if (raw !== "yes" && raw !== "no") return null;
-      c.hasMap = raw;
-      return { unresolved: [], describe: `Has range map: ${raw}` };
-    },
-    readParam(sp) {
-      const v = sp.get("hasMap");
-      return v === "yes" || v === "no" ? v : undefined;
-    },
-    toParam(c, p) { if (c.hasMap) p.set("hasMap", c.hasMap); },
-    match(s, c) { return !c.hasMap || (c.hasMap === "yes" ? s.has_map : !s.has_map); },
-    vocab: { key: "hasMap", urlKey: "hasMap", label: "Has IUCN range map", values: ["yes", "no"] },
-  },
   // endemic — flag (single-country species). URL param is `endemics=1`.
   {
     mcpKey: "endemic", urlKey: "endemics", sample: "yes",

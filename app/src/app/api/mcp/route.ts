@@ -44,7 +44,7 @@ const withDashboard = (input: BrowseInput, data: object) =>
   asText({ ...data, dashboard_url: browseInputToDashboardUrl(getOrigin(), input), verify_note: VERIFY_NOTE });
 
 // Optional-filter schema for browse_taxon. The categorical filters
-// (categories, threats, systems, trends, movement, growthForms, hasMap,
+// (categories, threats, systems, trends, movement, growthForms,
 // endemic) come from the shared-filter registry — the single source of truth
 // shared with the dashboard URL, the predicate, and the dashboard-link builder,
 // so they can't drift. The fields here are the bespoke ones.

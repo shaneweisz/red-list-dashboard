@@ -176,7 +176,15 @@ function filterToSql(filter: NodeFilter, nodeId?: string): string {
   // excluded from every node's CoL count so they don't inflate one group's "described"
   // total or get double-counted between two groups.
   conds.push(`${sciName} NOT IN (${sqlStrList(COL_EXCLUDE_ALL_NODES)})`);
-  return conds.join(" AND ");
+  const normalClause = conds.join(" AND ");
+  // extraSpeciesNames: mirrors matchesFilter's OR escape hatch (taxonomy-utils.ts) —
+  // species included regardless of the class/order/family/genus rule above. Still
+  // scoped to this node's csvGroups and the CoL-only exclusions.
+  if (filter.extraSpeciesNames?.length) {
+    const extraClause = `taxon_group IN (${sqlStrList(filter.csvGroups)}) AND ${sciName} IN (${sqlStrList(filter.extraSpeciesNames)}) AND ${sciName} NOT IN (${sqlStrList(COL_EXCLUDE_ALL_NODES)})`;
+    return `((${normalClause}) OR (${extraClause}))`;
+  }
+  return normalClause;
 }
 
 type PrimaryDim = { field: keyof NodeFilter; rank: string; names: string[] };

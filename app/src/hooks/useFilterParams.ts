@@ -138,7 +138,6 @@ export function parseParams(search: string) {
     threats: p.get("threats")
       ? new Set(p.get("threats")!.split(",").filter(Boolean))
       : new Set<string>(),
-    hasMap: p.get("hasMap") as "yes" | "no" | null,
     breakdown: parseBreakdownParam(p),
     // Endemics-only: restrict to species occurring in exactly one country.
     endemicsOnly: p.get("endemics") === "1",
@@ -190,7 +189,6 @@ export function buildQs(state: {
   populationTrends: Set<string>;
   movementPatterns: Set<string>;
   threats: Set<string>;
-  hasMap: "yes" | "no" | null;
   breakdown?: BreakdownParam | null;
   endemicsOnly: boolean;
   growthForms: Set<string>;
@@ -226,7 +224,6 @@ export function buildQs(state: {
   if (state.populationTrends.size > 0) p.set("trends", [...state.populationTrends].join(","));
   if (state.movementPatterns.size > 0) p.set("movement", [...state.movementPatterns].join(","));
   if (state.threats.size > 0) p.set("threats", [...state.threats].join(","));
-  if (state.hasMap) p.set("hasMap", state.hasMap);
   if (state.breakdown) {
     let bd = `${state.breakdown.nodeId}:${state.breakdown.rank}:${state.breakdown.name}`;
     if (state.breakdown.onlyIds?.length) bd += `:only:${state.breakdown.onlyIds.join(",")}`;
@@ -509,17 +506,6 @@ export function useFilterParams() {
     [syncUrl]
   );
 
-  const setHasMapFilter = useCallback(
-    (value: "yes" | "no" | null) => {
-      setState(prev => {
-        const next = { ...prev, hasMap: value };
-        queueMicrotask(() => syncUrl(next, false));
-        return next;
-      });
-    },
-    [syncUrl]
-  );
-
   const setBreakdownFilter = useCallback(
     (value: BreakdownParam | null) => {
       setState(prev => {
@@ -661,7 +647,6 @@ export function useFilterParams() {
         populationTrends: new Set<string>(),
         movementPatterns: new Set<string>(),
         threats: new Set<string>(),
-        hasMap: null,
         breakdown: null,
         endemicsOnly: false,
         growthForms: new Set<string>(),
@@ -695,7 +680,6 @@ export function useFilterParams() {
         populationTrends: new Set<string>(),
         movementPatterns: new Set<string>(),
         threats: new Set<string>(),
-        hasMap: null,
         breakdown: null,
         endemicsOnly: false,
         growthForms: new Set<string>(),
@@ -728,7 +712,6 @@ export function useFilterParams() {
     selectedPopulationTrends: state.populationTrends,
     selectedMovementPatterns: state.movementPatterns,
     selectedThreats: state.threats,
-    hasMapFilter: state.hasMap,
     breakdownFilter: state.breakdown,
     endemicsOnly: state.endemicsOnly,
     selectedGrowthForms: state.growthForms,
@@ -756,7 +739,6 @@ export function useFilterParams() {
     setSelectedPopulationTrends,
     setSelectedMovementPatterns,
     setSelectedThreats,
-    setHasMapFilter,
     setBreakdownFilter,
     setEndemicsOnly,
     setSelectedGrowthForms,

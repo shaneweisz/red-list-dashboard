@@ -108,7 +108,7 @@ describe("registry predicate clauses", () => {
   const base = {
     category: "VU", countries: ["BR", "AR"], systems: ["Marine"],
     population_trend: "Decreasing", movement_pattern: "Migratory",
-    threat_codes: ["11.4"], has_map: true, growth_forms: ["Tree"],
+    threat_codes: ["11.4"], growth_forms: ["Tree"],
     scientific_name: "X", common_name: null,
   };
 
@@ -118,7 +118,6 @@ describe("registry predicate clauses", () => {
       categories: new Set(["VU"]), threats: new Set(["11"]),
       systems: new Set(["Marine"]), populationTrends: new Set(["Decreasing"]),
       movementPatterns: new Set(["Migratory"]), growthForms: new Set(["Tree"]),
-      hasMap: "yes",
     };
     expect(matchSharedFilters(base, c)).toBe(true);
     // Flip each and confirm it now fails — proves the clause is wired.
@@ -128,7 +127,6 @@ describe("registry predicate clauses", () => {
     expect(matchSharedFilters({ ...base, population_trend: "Stable" }, c)).toBe(false);
     expect(matchSharedFilters({ ...base, movement_pattern: "Nomadic" }, c)).toBe(false);
     expect(matchSharedFilters({ ...base, growth_forms: ["Shrub"] }, c)).toBe(false);
-    expect(matchSharedFilters({ ...base, has_map: false }, c)).toBe(false);
   });
 
   it("endemic filter keeps single-country species only", () => {
@@ -153,11 +151,10 @@ describe("applySharedFilters / emitSharedParams", () => {
 
   it("emits dashboard params from resolved criteria", () => {
     const c: SpeciesFilterCriteria = {};
-    applySharedFilters({ trends: ["Decreasing"], hasMap: "no", endemic: "yes" }, c);
+    applySharedFilters({ trends: ["Decreasing"], endemic: "yes" }, c);
     const p = new URLSearchParams();
     emitSharedParams(c, p);
     expect(p.get("trends")).toBe("Decreasing");
-    expect(p.get("hasMap")).toBe("no");
     expect(p.get("endemics")).toBe("1");
   });
 });

@@ -33,10 +33,22 @@ export interface SpeciesFilter {
   /** Exclude mode: exclude these genera */
   excludeGenera?: string[];
   /** Filter by full scientific name (lowercase "genus species") — for the rare case
-   * a specialist group's boundary is a single species (e.g. polar bear within Ursidae). */
+   * a specialist group's boundary is a single species (e.g. polar bear within Ursidae).
+   * ANDed with every other clause above, same as the rest of this interface — use
+   * this alone (no classNames/families/etc.) when the node IS just that species list. */
   speciesNames?: string[];
   /** Exclude mode: exclude these scientific names */
   excludeSpeciesNames?: string[];
+  /** OR escape hatch: species included regardless of every other clause above
+   * (bypasses classNames/orderNames/families/genera entirely, but still respects
+   * csvGroups and the CoL-only universe exclusions). For a group whose own stated
+   * remit includes named species outside its otherwise-clean taxonomic rule — e.g.
+   * the Antelope Specialist Group's own site names Pronghorn (Antilocapridae),
+   * Water Chevrotain (Tragulidae), and Wild Camel (Camelidae) as part of its remit
+   * "for practical reasons," alongside its Bovidae-based core. Without this, a
+   * species outside the node's family/order rule can never be included no matter
+   * what speciesNames says, since every clause in this interface is ANDed together. */
+  extraSpeciesNames?: string[];
 }
 
 export interface TaxonomyNode {
@@ -64,8 +76,8 @@ export interface TaxonomyNode {
 
 // ─── Sources ─────────────────────────────────────────────────────────
 
-const IUCN_SOURCE = "IUCN 2025-2";
-const IUCN_SOURCE_URL = "https://nc.iucnredlist.org/redlist/content/attachment_files/2025-2_RL_Table1a.pdf";
+const IUCN_SOURCE = "IUCN 2026-1";
+const IUCN_SOURCE_URL = "https://nc.iucnredlist.org/redlist/content/attachment_files/2026-1_RL_Table1a.pdf";
 const MDD = "Mammal Diversity Database (v2.0, 2025)";
 const MDD_URL = "https://www.mammaldiversity.org/explore/taxonomy-table/";
 const SSC_GROUP_URL_BASE = "https://iucn.org/our-union/commissions/group/";
@@ -156,7 +168,7 @@ const INSECTS_NODE: TaxonomyNode = {
   id: "insects",
   name: "Insects",
   filter: { csvGroups: ALL_INSECT_GROUPS },
-  estimatedDescribed: 1_003_469,
+  estimatedDescribed: 1_008_355,
   estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ")",
   estimatedSourceUrl: IUCN_SOURCE_URL,
   children: [
@@ -167,7 +179,7 @@ const INSECTS_NODE: TaxonomyNode = {
     { id: "true-bugs", name: "True Bugs", filter: { csvGroups: ["true_bugs"] }, estimatedDescribed: 82_000, estimatedSource: ZHANG_2011, estimatedSourceUrl: ZHANG_2011_URL },
     { id: "grasshoppers-crickets", name: "Grasshoppers, Crickets & Locusts", filter: { csvGroups: ["grasshoppers_crickets_locusts"] }, estimatedDescribed: 26_000, estimatedSource: "Orthoptera Species File, 2025", estimatedSourceUrl: "https://orthoptera.speciesfile.org/" },
     { id: "dragonflies-damselflies", name: "Dragonflies & Damselflies", filter: { csvGroups: ["dragonflies_and_damselflies"] }, estimatedDescribed: 6_400, estimatedSource: "World Odonata List, 2025", estimatedSourceUrl: "https://www.pugetsound.edu/puget-sound-museum-natural-history/biodiversity-resources/insects/dragonflies/world-odonata-list" },
-    { id: "other-insects", name: "Other Insects", filter: { csvGroups: ["other_insects"] }, estimatedDescribed: 29_069, estimatedSource: "Remainder from IUCN Table 1a total of 1,003,469 (" + COL_2025 + ")", estimatedSourceUrl: COL_2025_URL },
+    { id: "other-insects", name: "Other Insects", filter: { csvGroups: ["other_insects"] }, estimatedDescribed: 33_955, estimatedSource: "Remainder from IUCN Table 1a total of 1,008,355 (" + COL_2025 + ")", estimatedSourceUrl: COL_2025_URL },
   ],
 };
 
@@ -175,7 +187,7 @@ const ARACHNIDA_NODE: TaxonomyNode = {
   id: "arachnids",
   name: "Arachnids",
   filter: { csvGroups: ["arachnids"] },
-  estimatedDescribed: 97_085,
+  estimatedDescribed: 98_006,
   estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ")",
   estimatedSourceUrl: COL_2025_URL,
 };
@@ -184,7 +196,7 @@ const MOLLUSCA_NODE: TaxonomyNode = {
   id: "molluscs",
   name: "Molluscs",
   filter: { csvGroups: ["molluscs"] },
-  estimatedDescribed: 88_244,
+  estimatedDescribed: 89_129,
   estimatedSource: IUCN_SOURCE + " (MolluscaBase 2025)",
   estimatedSourceUrl: "http://www.molluscabase.org",
 };
@@ -193,7 +205,7 @@ const CRUSTACEA_NODE: TaxonomyNode = {
   id: "crustaceans",
   name: "Crustaceans",
   filter: { csvGroups: ["crustaceans"] },
-  estimatedDescribed: 83_263,
+  estimatedDescribed: 83_805,
   estimatedSource: IUCN_SOURCE + " (" + COL_2025 + "; World Ostracoda Database)",
   estimatedSourceUrl: COL_2025_URL,
 };
@@ -202,7 +214,7 @@ const CORALS_NODE: TaxonomyNode = {
   id: "corals",
   name: "Corals & Cnidarians",
   filter: { csvGroups: ["corals"] },
-  estimatedDescribed: 5_672,
+  estimatedDescribed: 5_695,
   estimatedSource: IUCN_SOURCE + " (WoRMS 2025)",
   estimatedSourceUrl: "https://www.marinespecies.org",
 };
@@ -224,7 +236,7 @@ const CORALS_NODE: TaxonomyNode = {
 const WORMS_URL = "https://www.marinespecies.org/";
 // IUCN Table 1a "Others" (invertebrates) described total — the parent estimate the
 // phylum children partition (the catch-all takes the remainder).
-const OTHER_INVERTEBRATES_DESCRIBED = 230_485;
+const OTHER_INVERTEBRATES_DESCRIBED = 171_981;
 const OTHER_INVERTEBRATE_PHYLA: { id: string; name: string; classes: string[]; estimatedDescribed?: number; estimatedSource?: string; estimatedSourceUrl?: string }[] = [
   { id: "flatworms", name: "Flatworms", classes: ["trematoda", "monogenea", "cestoda", "turbellaria", "rhabditophora", "catenulida"],
     estimatedDescribed: 29_000, estimatedSource: "~29,285 Platyhelminthes spp. (" + ZHANG_2011 + ")", estimatedSourceUrl: ZHANG_2011_URL },
@@ -329,7 +341,7 @@ const MOSSES_NODE: TaxonomyNode = {
   id: "mosses",
   name: "Mosses, Liverworts & Hornworts",
   filter: { csvGroups: ["mosses"] },
-  estimatedDescribed: 21_925,
+  estimatedDescribed: 19_539,
   estimatedSource: IUCN_SOURCE + " (" + CHRISTENHUSZ + ")",
   estimatedSourceUrl: CHRISTENHUSZ_URL,
 };
@@ -338,7 +350,7 @@ const GREEN_ALGAE_NODE: TaxonomyNode = {
   id: "green_algae",
   name: "Green Algae",
   filter: { csvGroups: ["green_algae"] },
-  estimatedDescribed: 14_550,
+  estimatedDescribed: 14_739,
   estimatedSource: IUCN_SOURCE,
   estimatedSourceUrl: IUCN_SOURCE_URL,
 };
@@ -347,7 +359,7 @@ const RED_ALGAE_NODE: TaxonomyNode = {
   id: "red_algae",
   name: "Red Algae",
   filter: { csvGroups: ["red_algae"] },
-  estimatedDescribed: 7_744,
+  estimatedDescribed: 7_812,
   estimatedSource: IUCN_SOURCE,
   estimatedSourceUrl: IUCN_SOURCE_URL,
 };
@@ -383,7 +395,7 @@ const BROWN_ALGAE_NODE: TaxonomyNode = {
   id: "brown_algae",
   name: "Brown Algae",
   filter: { csvGroups: ["brown_algae"] },
-  estimatedDescribed: 5_005,
+  estimatedDescribed: 5_104,
   estimatedSource: IUCN_SOURCE,
   estimatedSourceUrl: IUCN_SOURCE_URL,
 };
@@ -394,7 +406,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
   id: "all",
   name: "All Species",
   filter: { csvGroups: ALL_CSV_GROUPS },
-  estimatedDescribed: 2_173_939,
+  estimatedDescribed: 2_121_262,
   estimatedSource: IUCN_SOURCE,
   estimatedSourceUrl: IUCN_SOURCE_URL,
   color: "#dc2626",
@@ -404,7 +416,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
       id: "mammals",
       name: "Mammals",
       filter: { csvGroups: ["mammals"] },
-      estimatedDescribed: 6_819,
+      estimatedDescribed: 6_854,
       estimatedSource: IUCN_SOURCE,
       estimatedSourceUrl: IUCN_SOURCE_URL,
       color: "#f97316",
@@ -615,9 +627,34 @@ export const TAXONOMY_TREE: TaxonomyNode = {
               "capricornis", "oreamnos", "budorcas", "pantholops",
               "ammotragus", "hemitragus", "nilgiritragus",
             ],
+            // Verified against the group's own site (antelopesg.org), not just
+            // iucn.org: "ASG currently recognizes 93 antelope species... Its remit
+            // also covers five non-antelope species... for practical reasons" —
+            // named as Pronghorn, Tibetan antelope, African Buffalo, Water
+            // Chevrotain, and Wild Camel. ASG's own words: "there is in fact no
+            // clear definition of an antelope." Reconciled against our other 34
+            // groups' own filters:
+            //  - African Buffalo (Syncerus caffer) needs no change — family Bovidae,
+            //    genus not in the exclude list above, so it already matches this
+            //    node; confirmed Afro-Asian Wild Cattle SG's own site frames itself
+            //    as "Asia's nine wild cattle species" (Asia-only despite the "Afro-"
+            //    in its name), so there's no double-claim.
+            //  - Pronghorn (Antilocapridae), Water Chevrotain (Tragulidae), and Wild
+            //    Camel (Camelidae) aren't Bovidae at all, so the family rule above
+            //    can never match them — added via extraSpeciesNames below, the only
+            //    node in this tree that needs it so far.
+            //  - Tibetan antelope (Pantholops hodgsonii) is deliberately NOT moved
+            //    here despite ASG's claim: it stays under Caprinae SG, whose own
+            //    page names the formal subfamily "Caprinae" outright — a cleaner,
+            //    more specific claim than ASG's hedged "for practical reasons"
+            //    mention, and modern phylogenetics places Pantholops within
+            //    Caprinae. A real, acknowledged overlap between the two groups'
+            //    stated remits, not a bug — flagging here rather than duplicating
+            //    the species into both (this tree assumes one node per species).
+            extraSpeciesNames: ["antilocapra americana", "hyemoschus aquaticus", "camelus ferus"],
           },
-          estimatedDescribed: 90,
-          estimatedSource: MDD + " — Bovidae minus wild cattle/bison (Wild Cattle/Bison SG) and Caprinae (Caprinae SG) (approx.)",
+          estimatedDescribed: 93,
+          estimatedSource: MDD + " — Bovidae minus wild cattle/bison (Wild Cattle/Bison SG) and Caprinae (Caprinae SG), plus Pronghorn, Water Chevrotain, and Wild Camel per the group's own stated remit (approx.)",
           estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-antelope-specialist-group",
         },
@@ -844,11 +881,17 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           name: "Small Carnivore Specialist Group",
           filter: {
             csvGroups: ["mammals"],
-            families: ["mustelidae", "viverridae", "herpestidae", "eupleridae", "procyonidae", "mephitidae", "nandiniidae", "prionodontidae"],
+            // Verified against the group's own site (smallcarnivore.org), not just
+            // iucn.org: explicitly claims "red pandas, the Malagasy carnivores,
+            // mongooses, skunks and stink badgers, weasels, martens and badgers,
+            // civets and genets, linsangs, raccoons and coatis" and states "We do
+            // not cover any species of cat, dog, or otter" — confirming both the
+            // Ailuridae addition here and the otter exclusion below.
+            families: ["mustelidae", "viverridae", "herpestidae", "eupleridae", "procyonidae", "mephitidae", "nandiniidae", "prionodontidae", "ailuridae"],
             excludeGenera: ["lutra", "pteronura", "aonyx", "lutrogale", "enhydra", "hydrictis", "lontra"],
           },
-          estimatedDescribed: 158,
-          estimatedSource: MDD + " — small-carnivore families minus Lutrinae/otters (Otter SG) (approx.)",
+          estimatedDescribed: 159,
+          estimatedSource: MDD + " — small-carnivore families (incl. Ailuridae/red pandas) minus Lutrinae/otters (Otter SG) (approx.)",
           estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-small-carnivore-specialist-group",
         },
@@ -889,11 +932,14 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-wild-pig-specialist-group",
         },
         // Catch-all: mammal orders/families/genera not claimed by any of the 35
-        // groups above — e.g. treeshrew-adjacent oddities, moles' relatives with
-        // no dedicated group, and the wild Bactrian camel (Camelus, deliberately
-        // excluded from Wild Camelid SG's South-American-only remit). Kept in
-        // sync manually — if a 36th SSC group is added above, add its
-        // order/family/genus here too so it doesn't double-count into this row.
+        // groups above — e.g. treeshrew-adjacent oddities and moles' relatives with
+        // no dedicated group. Kept in sync manually — if a 36th SSC group is added
+        // above, add its order/family/genus here too so it doesn't double-count
+        // into this row. Species claimed via a group's extraSpeciesNames (an OR
+        // escape hatch outside the normal order/family/genus rules — see
+        // SpeciesFilter's doc comment) must be excluded here by name explicitly,
+        // since they don't share a family/order with anything else in this list:
+        // Pronghorn, Water Chevrotain, and Wild Camel are claimed by Antelope SG.
         {
           id: "ssc-other-mammals",
           name: "No SSC Group",
@@ -921,11 +967,13 @@ export const TAXONOMY_TREE: TaxonomyNode = {
               "hyperoodontidae", "neobalaenidae",
               "delphinidae", "monodontidae", "phocoenidae", "iniidae", "lipotidae", "platanistidae", "pontoporiidae",
               "mustelidae", "viverridae", "herpestidae", "eupleridae", "procyonidae", "mephitidae", "nandiniidae", "prionodontidae",
+              "ailuridae",
             ],
             excludeGenera: ["lama", "vicugna"],
+            excludeSpeciesNames: ["antilocapra americana", "hyemoschus aquaticus", "camelus ferus"],
           },
-          estimatedDescribed: 192,
-          estimatedSource: "Remainder of IUCN Table 1a mammals total (6,819) minus the 35 SSC pilot groups above (approx.)",
+          estimatedDescribed: 223,
+          estimatedSource: "Remainder of IUCN Table 1a mammals total (6,854) minus the 35 SSC pilot groups above (approx.)",
           estimatedSourceUrl: IUCN_SOURCE_URL,
         },
       ],
@@ -947,7 +995,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
       id: "reptiles",
       name: "Reptiles",
       filter: { csvGroups: ["reptiles"] },
-      estimatedDescribed: 12_502,
+      estimatedDescribed: 12_568,
       estimatedSource: IUCN_SOURCE,
       estimatedSourceUrl: IUCN_SOURCE_URL,
       color: "#84cc16",
@@ -992,7 +1040,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
       id: "amphibians",
       name: "Amphibians",
       filter: { csvGroups: ["amphibians"] },
-      estimatedDescribed: 8_918,
+      estimatedDescribed: 9_075,
       estimatedSource: IUCN_SOURCE,
       estimatedSourceUrl: IUCN_SOURCE_URL,
       color: "#14b8a6",
@@ -1029,7 +1077,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
       id: "fishes",
       name: "Fishes",
       filter: { csvGroups: ["fishes"] },
-      estimatedDescribed: 37_288,
+      estimatedDescribed: 37_630,
       estimatedSource: IUCN_SOURCE,
       estimatedSourceUrl: IUCN_SOURCE_URL,
       color: "#06b6d4",
@@ -1124,7 +1172,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
       id: "invertebrates",
       name: "Invertebrates",
       filter: { csvGroups: ALL_INVERTEBRATE_GROUPS },
-      estimatedDescribed: 1_508_442,
+      estimatedDescribed: 1_457_195,
       estimatedSource: IUCN_SOURCE,
       estimatedSourceUrl: IUCN_SOURCE_URL,
       color: "#78716c",
@@ -1144,7 +1192,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
       id: "plantae",
       name: "Plants",
       filter: { csvGroups: ALL_PLANT_GROUPS },
-      estimatedDescribed: 426_132,
+      estimatedDescribed: 424_003,
       estimatedSource: IUCN_SOURCE,
       estimatedSourceUrl: IUCN_SOURCE_URL,
       color: "#22c55e",
@@ -1162,7 +1210,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
       id: "fungi",
       name: "Fungi & Protists",
       filter: { csvGroups: ["mushrooms", "brown_algae"] },
-      estimatedDescribed: 162_653,
+      estimatedDescribed: 162_752,
       estimatedSource: IUCN_SOURCE,
       estimatedSourceUrl: IUCN_SOURCE_URL,
       color: "#d97706",

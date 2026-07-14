@@ -51,7 +51,7 @@ export function browseInputToDashboardQuery(input: BrowseInput): string {
   if (taxaIds.length) p.set("taxa", taxaIds.join(","));
 
   // Categorical filters (categories, threats, systems, trends, movement,
-  // growthForms, hasMap, endemic) — resolved + emitted by the shared registry,
+  // growthForms, endemic) — resolved + emitted by the shared registry,
   // so the URL keys here can't drift from the MCP schema or the predicate.
   const criteria: SpeciesFilterCriteria = {};
   applySharedFilters(input, criteria);

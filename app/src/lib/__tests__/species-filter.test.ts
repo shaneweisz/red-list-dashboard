@@ -9,7 +9,6 @@ function sp(overrides: Partial<FilterableSpecies> = {}): FilterableSpecies {
     population_trend: "Decreasing",
     movement_pattern: null,
     threat_codes: ["11.4"],
-    has_map: true,
     growth_forms: [],
     scientific_name: "Acropora cervicornis",
     common_name: "Staghorn coral",
@@ -60,12 +59,6 @@ describe("matchesSpeciesFilter", () => {
   it("matches population trend and movement", () => {
     expect(matchesSpeciesFilter(sp({ population_trend: "Decreasing" }), { populationTrends: new Set(["Decreasing"]) })).toBe(true);
     expect(matchesSpeciesFilter(sp({ population_trend: null }), { populationTrends: new Set(["Decreasing"]) })).toBe(false);
-  });
-
-  it("matches hasMap", () => {
-    expect(matchesSpeciesFilter(sp({ has_map: true }), { hasMap: "yes" })).toBe(true);
-    expect(matchesSpeciesFilter(sp({ has_map: true }), { hasMap: "no" })).toBe(false);
-    expect(matchesSpeciesFilter(sp({ has_map: false }), { hasMap: "no" })).toBe(true);
   });
 
   it("matches name search (scientific or common), needle pre-lowercased", () => {
