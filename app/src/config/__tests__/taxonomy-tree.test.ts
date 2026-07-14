@@ -1018,6 +1018,157 @@ describe("SSC Specialist Groups tree (fishes)", () => {
   });
 });
 
+describe("SSC Specialist Groups tree (invertebrates)", () => {
+  const sscInvertNode = findNode("ssc-invertebrate-groups");
+
+  it("ssc-invertebrate-groups exists, is not part of the default view, and has 15 children (14 pilot groups + remainder)", () => {
+    expect(sscInvertNode).toBeDefined();
+    expect(sscInvertNode?.children?.length).toBe(15);
+    expect(TAXONOMY_VIEWS.default.roots).not.toContain("ssc-invertebrate-groups");
+  });
+
+  it("ssc-other-invertebrates (the remainder row) doesn't overlap any of the 14 named groups", () => {
+    const cases: Array<{ class_name: string; order_name: string; family: string; scientific_name: string; taxon_group: string }> = [
+      { class_name: "Gastropoda", order_name: "Stylommatophora", family: "Helicidae", scientific_name: "Helix pomatia", taxon_group: "molluscs" },
+      { class_name: "Cephalopoda", order_name: "Octopoda", family: "Octopodidae", scientific_name: "Octopus vulgaris", taxon_group: "molluscs" },
+      { class_name: "Arachnida", order_name: "Araneae", family: "Theraphosidae", scientific_name: "Theraphosa blondi", taxon_group: "arachnids" },
+      { class_name: "Arachnida", order_name: "Scorpiones", family: "Buthidae", scientific_name: "Androctonus australis", taxon_group: "arachnids" },
+      { class_name: "Insecta", order_name: "Lepidoptera", family: "Nymphalidae", scientific_name: "Danaus plexippus", taxon_group: "butterflies_and_moths" },
+      { class_name: "Insecta", order_name: "Lepidoptera", family: "Saturniidae", scientific_name: "Attacus atlas", taxon_group: "butterflies_and_moths" },
+      { class_name: "Insecta", order_name: "Orthoptera", family: "Acrididae", scientific_name: "Schistocerca gregaria", taxon_group: "grasshoppers_crickets_locusts" },
+      { class_name: "Insecta", order_name: "Mantodea", family: "Mantidae", scientific_name: "Mantis religiosa", taxon_group: "other_insects" },
+      { class_name: "Insecta", order_name: "Phasmida", family: "Phasmatidae", scientific_name: "Extatosoma tiaratum", taxon_group: "other_insects" },
+      { class_name: "Insecta", order_name: "Hymenoptera", family: "Apidae", scientific_name: "Apis mellifera", taxon_group: "bees_wasps_and_ants" },
+      { class_name: "Insecta", order_name: "Hymenoptera", family: "Formicidae", scientific_name: "Atta cephalotes", taxon_group: "bees_wasps_and_ants" },
+      { class_name: "Insecta", order_name: "Ephemeroptera", family: "Baetidae", scientific_name: "Baetis rhodani", taxon_group: "other_insects" },
+      { class_name: "Insecta", order_name: "Odonata", family: "Libellulidae", scientific_name: "Libellula depressa", taxon_group: "dragonflies_and_damselflies" },
+      { class_name: "Malacostraca", order_name: "Decapoda", family: "Astacidae", scientific_name: "Astacus astacus", taxon_group: "crustaceans" },
+      { class_name: "Insecta", order_name: "Diptera", family: "Syrphidae", scientific_name: "Episyrphus balteatus", taxon_group: "flies_and_mosquitoes" },
+      { class_name: "Anthozoa", order_name: "Scleractinia", family: "Acroporidae", scientific_name: "Acropora palmata", taxon_group: "corals" },
+      { class_name: "Insecta", order_name: "Coleoptera", family: "Lampyridae", scientific_name: "Photinus pyralis", taxon_group: "beetles" },
+      { class_name: "Insecta", order_name: "Coleoptera", family: "Geotrupidae", scientific_name: "Geotrupes stercorarius", taxon_group: "beetles" },
+      { class_name: "Merostomata", order_name: "Xiphosura", family: "Limulidae", scientific_name: "Limulus polyphemus", taxon_group: "horseshoe_crabs" },
+    ];
+    for (const row of cases) {
+      expect(speciesMatchesNode(row, "ssc-other-invertebrates"), row.scientific_name).toBe(false);
+    }
+  });
+
+  it("ssc-other-invertebrates catches genuinely uncovered species, including ones that would belong to the excluded habitat-based RLAs in reality", () => {
+    // Would belong to Cave Invertebrate SG / TIRLA / MIRLA in reality, but those
+    // are deliberately not built (see the exclusion note in taxonomy-tree.ts).
+    const trueBug = { class_name: "Insecta", order_name: "Hemiptera", family: "Cicadidae", scientific_name: "Magicicada septendecim", taxon_group: "true_bugs" };
+    const mite = { class_name: "Arachnida", order_name: "Sarcoptiformes", family: "Oribatidae", scientific_name: "Oribatula tibialis", taxon_group: "arachnids" };
+    const seaAnemone = { class_name: "Anthozoa", order_name: "Actiniaria", family: "Actiniidae", scientific_name: "Actinia equina", taxon_group: "corals" };
+    const marineCrab = { class_name: "Malacostraca", order_name: "Decapoda", family: "Portunidae", scientific_name: "Callinectes sapidus", taxon_group: "crustaceans" };
+    const velvetWorm = { class_name: "Chilopoda", order_name: "Onychophora", family: "Peripatidae", scientific_name: "Epiperipatus biolleyi", taxon_group: "velvet_worms" };
+    for (const row of [trueBug, mite, seaAnemone, marineCrab, velvetWorm]) {
+      expect(speciesMatchesNode(row, "ssc-other-invertebrates"), row.scientific_name).toBe(true);
+    }
+  });
+
+  it("Mollusc SG covers the whole phylum, including cephalopods", () => {
+    const snail = { class_name: "Gastropoda", order_name: "Stylommatophora", family: "Helicidae", scientific_name: "Helix pomatia", taxon_group: "molluscs" };
+    const octopus = { class_name: "Cephalopoda", order_name: "Octopoda", family: "Octopodidae", scientific_name: "Octopus vulgaris", taxon_group: "molluscs" };
+    const bivalve = { class_name: "Bivalvia", order_name: "Mytilida", family: "Mytilidae", scientific_name: "Mytilus edulis", taxon_group: "molluscs" };
+    expect(speciesMatchesNode(snail, "ssc-mollusc")).toBe(true);
+    expect(speciesMatchesNode(octopus, "ssc-mollusc")).toBe(true);
+    expect(speciesMatchesNode(bivalve, "ssc-mollusc")).toBe(true);
+  });
+
+  it("Spider and Scorpion SG is scoped to Araneae + Scorpiones, excluding other arachnid orders (mites, harvestmen)", () => {
+    const spider = { class_name: "Arachnida", order_name: "Araneae", family: "Theraphosidae", scientific_name: "Theraphosa blondi", taxon_group: "arachnids" };
+    const scorpion = { class_name: "Arachnida", order_name: "Scorpiones", family: "Buthidae", scientific_name: "Androctonus australis", taxon_group: "arachnids" };
+    const harvestman = { class_name: "Arachnida", order_name: "Opiliones", family: "Phalangiidae", scientific_name: "Phalangium opilio", taxon_group: "arachnids" };
+    const mite = { class_name: "Arachnida", order_name: "Sarcoptiformes", family: "Oribatidae", scientific_name: "Oribatula tibialis", taxon_group: "arachnids" };
+    expect(speciesMatchesNode(spider, "ssc-spider-scorpion")).toBe(true);
+    expect(speciesMatchesNode(scorpion, "ssc-spider-scorpion")).toBe(true);
+    expect(speciesMatchesNode(harvestman, "ssc-spider-scorpion")).toBe(false);
+    expect(speciesMatchesNode(mite, "ssc-spider-scorpion")).toBe(false);
+    expect(speciesMatchesNode(harvestman, "ssc-other-invertebrates")).toBe(true);
+  });
+
+  it("Butterfly SG covers Papilionoidea (6 families) + Hedylidae + Saturniidae, but not other moth families despite the group's own broader 'butterflies and moths' mission", () => {
+    const monarch = { class_name: "Insecta", order_name: "Lepidoptera", family: "Nymphalidae", scientific_name: "Danaus plexippus", taxon_group: "butterflies_and_moths" };
+    const emperorMoth = { class_name: "Insecta", order_name: "Lepidoptera", family: "Saturniidae", scientific_name: "Attacus atlas", taxon_group: "butterflies_and_moths" };
+    const geometrid = { class_name: "Insecta", order_name: "Lepidoptera", family: "Geometridae", scientific_name: "Biston betularia", taxon_group: "butterflies_and_moths" };
+    expect(speciesMatchesNode(monarch, "ssc-butterfly")).toBe(true);
+    expect(speciesMatchesNode(emperorMoth, "ssc-butterfly")).toBe(true);
+    expect(speciesMatchesNode(geometrid, "ssc-butterfly")).toBe(false);
+    expect(speciesMatchesNode(geometrid, "ssc-other-invertebrates")).toBe(true);
+  });
+
+  it("Grasshopper SG spans 3 orders (Orthoptera, Phasmida, Mantodea), broader than its name suggests", () => {
+    const locust = { class_name: "Insecta", order_name: "Orthoptera", family: "Acrididae", scientific_name: "Schistocerca gregaria", taxon_group: "grasshoppers_crickets_locusts" };
+    const cricket = { class_name: "Insecta", order_name: "Orthoptera", family: "Gryllidae", scientific_name: "Acheta domesticus", taxon_group: "grasshoppers_crickets_locusts" };
+    const mantis = { class_name: "Insecta", order_name: "Mantodea", family: "Mantidae", scientific_name: "Mantis religiosa", taxon_group: "other_insects" };
+    const stickInsect = { class_name: "Insecta", order_name: "Phasmida", family: "Phasmatidae", scientific_name: "Extatosoma tiaratum", taxon_group: "other_insects" };
+    expect(speciesMatchesNode(locust, "ssc-grasshopper")).toBe(true);
+    expect(speciesMatchesNode(cricket, "ssc-grasshopper")).toBe(true);
+    expect(speciesMatchesNode(mantis, "ssc-grasshopper")).toBe(true);
+    expect(speciesMatchesNode(stickInsect, "ssc-grasshopper")).toBe(true);
+  });
+
+  it("Wild Bee SG (still named Bumblebee and Wild Bee SG in our data) covers all 7 bee families, not just Bombus", () => {
+    const honeybee = { class_name: "Insecta", order_name: "Hymenoptera", family: "Apidae", scientific_name: "Apis mellifera", taxon_group: "bees_wasps_and_ants" };
+    const miningBee = { class_name: "Insecta", order_name: "Hymenoptera", family: "Andrenidae", scientific_name: "Andrena fulva", taxon_group: "bees_wasps_and_ants" };
+    const ant = { class_name: "Insecta", order_name: "Hymenoptera", family: "Formicidae", scientific_name: "Atta cephalotes", taxon_group: "bees_wasps_and_ants" };
+    expect(speciesMatchesNode(honeybee, "ssc-wild-bee")).toBe(true);
+    expect(speciesMatchesNode(miningBee, "ssc-wild-bee")).toBe(true);
+    expect(speciesMatchesNode(ant, "ssc-wild-bee")).toBe(false);
+    expect(speciesMatchesNode(ant, "ssc-ant")).toBe(true);
+  });
+
+  it("Dung Beetle SG covers Geotrupidae only, excluding Scarabaeidae despite the group's own founding statement naming both families (subfamily-level precision gap)", () => {
+    const trueDungBeetle = { class_name: "Insecta", order_name: "Coleoptera", family: "Geotrupidae", scientific_name: "Geotrupes stercorarius", taxon_group: "beetles" };
+    const rhinocerosBeetle = { class_name: "Insecta", order_name: "Coleoptera", family: "Scarabaeidae", scientific_name: "Dynastes hercules", taxon_group: "beetles" };
+    expect(speciesMatchesNode(trueDungBeetle, "ssc-dung-beetle")).toBe(true);
+    expect(speciesMatchesNode(rhinocerosBeetle, "ssc-dung-beetle")).toBe(false);
+    expect(speciesMatchesNode(rhinocerosBeetle, "ssc-other-invertebrates")).toBe(true);
+  });
+
+  it("Coral SG is scoped to Scleractinia (reef-building corals), excluding other Anthozoa like sea anemones", () => {
+    const stonyCoral = { class_name: "Anthozoa", order_name: "Scleractinia", family: "Acroporidae", scientific_name: "Acropora palmata", taxon_group: "corals" };
+    const seaAnemone = { class_name: "Anthozoa", order_name: "Actiniaria", family: "Actiniidae", scientific_name: "Actinia equina", taxon_group: "corals" };
+    expect(speciesMatchesNode(stonyCoral, "ssc-coral")).toBe(true);
+    expect(speciesMatchesNode(seaAnemone, "ssc-coral")).toBe(false);
+    expect(speciesMatchesNode(seaAnemone, "ssc-other-invertebrates")).toBe(true);
+  });
+
+  it("Freshwater Crustacean SG covers crayfish, freshwater crabs, and land crabs, but deliberately excludes the mixed marine/freshwater family Palaemonidae", () => {
+    const crayfish = { class_name: "Malacostraca", order_name: "Decapoda", family: "Astacidae", scientific_name: "Astacus astacus", taxon_group: "crustaceans" };
+    const freshwaterCrab = { class_name: "Malacostraca", order_name: "Decapoda", family: "Potamidae", scientific_name: "Potamon fluviatile", taxon_group: "crustaceans" };
+    const landCrab = { class_name: "Malacostraca", order_name: "Decapoda", family: "Gecarcinidae", scientific_name: "Gecarcinus quadratus", taxon_group: "crustaceans" };
+    const mixedFamilyShrimp = { class_name: "Malacostraca", order_name: "Decapoda", family: "Palaemonidae", scientific_name: "Macrobrachium rosenbergii", taxon_group: "crustaceans" };
+    expect(speciesMatchesNode(crayfish, "ssc-freshwater-crustacean")).toBe(true);
+    expect(speciesMatchesNode(freshwaterCrab, "ssc-freshwater-crustacean")).toBe(true);
+    expect(speciesMatchesNode(landCrab, "ssc-freshwater-crustacean")).toBe(true);
+    expect(speciesMatchesNode(mixedFamilyShrimp, "ssc-freshwater-crustacean")).toBe(false);
+    expect(speciesMatchesNode(mixedFamilyShrimp, "ssc-other-invertebrates")).toBe(true);
+  });
+
+  it("Horseshoe Crab SG matches its whole dedicated CSV group", () => {
+    const horseshoeCrab = { class_name: "Merostomata", order_name: "Xiphosura", family: "Limulidae", scientific_name: "Limulus polyphemus", taxon_group: "horseshoe_crabs" };
+    expect(speciesMatchesNode(horseshoeCrab, "ssc-horseshoe-crab")).toBe(true);
+  });
+
+  it("all ssc-invertebrate-groups children have a unique id", () => {
+    const ids = new Set<string>();
+    for (const child of sscInvertNode?.children ?? []) {
+      expect(ids.has(child.id), `duplicate id ${child.id}`).toBe(false);
+      ids.add(child.id);
+    }
+  });
+
+  it("does not add any new children to the real 'invertebrates' virtual grouping node", () => {
+    const invertNode = findNode("invertebrates");
+    const invertChildIds = new Set(invertNode?.children?.map(c => c.id) ?? []);
+    for (const child of sscInvertNode?.children ?? []) {
+      expect(invertChildIds.has(child.id)).toBe(false);
+    }
+  });
+});
+
 // =============================================================================
 // Partition coverage
 // =============================================================================

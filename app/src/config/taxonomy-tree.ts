@@ -1599,6 +1599,345 @@ export const TAXONOMY_TREE: TaxonomyNode = {
     // ─── OTHER INVERTEBRATES (catch-all — kept last) ───────────────────
     OTHER_INVERTEBRATES_NODE,
 
+    // ─── SSC SPECIALIST GROUPS (invertebrates) ──────────────────────────
+    // Same second lens as "ssc-groups"/"ssc-reptile-groups"/"ssc-fish-groups"
+    // above, but architecturally different: invertebrates aren't one Table 1a
+    // CSV group, they're 15 (8 insect groups + arachnids/molluscs/
+    // crustaceans/corals/other_invertebrates/velvet_worms/horseshoe_crabs),
+    // so each child's filter spans however many of those its own remit
+    // touches, instead of a single shared csvGroups value.
+    //
+    // Of the 17 real invertebrate SSC/RLA groups, 3 are DELIBERATELY EXCLUDED
+    // for the same reason as the fish pilot's Freshwater Fish SG: their own
+    // remit is habitat/location-based, not taxonomic, and our data has no
+    // reliable way to determine that dimension across the whole species
+    // universe (no cave/subterranean field at all; the `systems` realm field
+    // that exists for FISH is fish-assessment-specific and doesn't apply
+    // here; even where a rough habitat proxy exists, e.g. class-level marine
+    // vs. terrestrial skew, several of the relevant groups (crustaceans
+    // especially — Amphipoda and Isopoda both have huge marine AND
+    // freshwater/terrestrial components) are genuinely mixed at every rank
+    // our data resolves, so guessing risks a highly visible, trust-breaking
+    // error (a terrestrial woodlouse attributed to a "marine invertebrates"
+    // group, or vice versa) — worse than not building the group at all:
+    //  - Cave Invertebrate SG: own site (caveinvertebrates.org) frames its
+    //    entire remit around karst/subterranean habitat, cutting across
+    //    arachnids, insects, crustaceans, molluscs, myriapods, etc.
+    //  - Terrestrial and Freshwater Invertebrate RLA (TIRLA): own SSC annual
+    //    report confirms it's a genuine residual/coordination body ("support
+    //    any invertebrate Red List assessment not currently covered by any
+    //    Specialist Group") for the terrestrial+freshwater realm specifically
+    //    — the SAME kind of real, named catch-all as reptiles' Snake and
+    //    Lizard RLA, but split from its marine counterpart (MIRLA) by a
+    //    habitat boundary we can't reliably draw.
+    //  - Marine Invertebrates RLA (MIRLA): the marine-realm counterpart to
+    //    TIRLA, confirmed via its own launch announcement ("all other marine
+    //    invertebrates now have a home in the remit of the new Marine
+    //    Invertebrate Red List Authority") — same blocker.
+    // The single catch-all below is a plain "No SSC Group" remainder (mirrors
+    // the fish pilot's shape), not a claim on any of these three groups'
+    // behalf — it holds species that would belong to TIRLA, MIRLA, or Cave
+    // Invertebrate SG in reality, alongside genuinely uncovered species.
+    {
+      id: "ssc-invertebrate-groups",
+      name: "SSC Specialist Groups",
+      filter: { csvGroups: ALL_INVERTEBRATE_GROUPS },
+      children: [
+        {
+          id: "ssc-mollusc",
+          name: "Mollusc Specialist Group",
+          filter: { csvGroups: ["molluscs"] },
+          // Own materials + its own SSC annual reports list cephalopod,
+          // cone-snail, and abalone assessments as the group's own achievements
+          // (no separate "Cephalopod RLA"/"Cone Snail RLA" exists as its own
+          // directory-listed group) — the group's real remit is the entire
+          // phylum Mollusca, matching our "Molluscs" Table 1a group exactly,
+          // no narrowing needed.
+          estimatedDescribed: 35_195,
+          estimatedSource: IUCN_SOURCE + " (MolluscaBase 2025) — Mollusca (whole phylum, incl. cephalopods)",
+          estimatedSourceUrl: "http://www.molluscabase.org",
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-mollusc-specialist-group",
+        },
+        {
+          id: "ssc-spider-scorpion",
+          name: "Spider and Scorpion Specialist Group",
+          filter: { csvGroups: ["arachnids"], orderNames: ["araneae", "scorpiones"] },
+          // Own site's mission language aspirationally says "protect all
+          // arachnids," but every concrete target in the group's own 2021
+          // annual report is exclusively about spiders or scorpions (trap-door
+          // spiders, Liphistiidae, Hogna, Malawi scorpions, etc.) — no mite,
+          // harvestman, Solifugae, or other minor-order activity found
+          // anywhere. Encoded to the evidenced core (Araneae + Scorpiones)
+          // rather than the aspirational "all Arachnida" framing, the same
+          // judgment call as the reptile pilot's Boa and Python SG.
+          estimatedDescribed: 16_053,
+          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Araneae + Scorpiones (evidenced core; own mission language claims broader \"all arachnids\" but no other order has any demonstrated group activity)",
+          estimatedSourceUrl: COL_2025_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-spider-and-scorpion-specialist-group",
+        },
+        {
+          id: "ssc-butterfly",
+          name: "Butterfly Specialist Group",
+          filter: {
+            csvGroups: ["butterflies_and_moths"],
+            families: ["papilionidae", "pieridae", "nymphalidae", "lycaenidae", "riodinidae", "hesperiidae", "hedylidae", "saturniidae"],
+          },
+          // RENAMED by IUCN to "Butterfly and Moth Specialist Group" (our
+          // source DB still lists the legacy name) — and the rename isn't
+          // cosmetic: the group's own mission statement, unchanged since at
+          // least 2018, explicitly says "butterflies and moths," which taken
+          // literally could mean all of Lepidoptera (moths alone are
+          // ~145,000 of the ~160,000 species in this CSV group). But the
+          // group's DEMONSTRATED work is overwhelmingly butterfly-focused
+          // (comprehensive Papilionidae/swallowtail assessments, a broader
+          // butterfly Red List Index) plus exactly one named moth family as a
+          // starting point (Saturniidae, "e.g. emperor moths," ~100-species
+          // target). Encoded to this evidenced core — all 6 standard butterfly
+          // families (Papilionoidea) + Hedylidae (a small, sometimes-debated
+          // "moth-like butterfly" family never explicitly confirmed OR
+          // excluded by the group) + Saturniidae — rather than the full,
+          // functionally-uncapped "all Lepidoptera" reading of its own
+          // mission statement. Lower confidence, same class of judgment call
+          // as the reptile pilot's Boa and Python SG.
+          estimatedDescribed: 14_269,
+          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Papilionoidea (6 butterfly families) + Hedylidae + Saturniidae (evidenced core; group's own mission statement literally says \"butterflies and moths\" but demonstrated work doesn't extend to moths broadly)",
+          estimatedSourceUrl: COL_2025_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-butterfly-and-moth-specialist-group",
+        },
+        {
+          id: "ssc-grasshopper",
+          name: "Grasshopper Specialist Group",
+          filter: {
+            csvGroups: ["grasshoppers_crickets_locusts", "other_insects"],
+            orderNames: ["orthoptera", "phasmida", "mantodea"],
+          },
+          // Own iucn.org page: "Our aim is to conserve Orthopteroid insects
+          // (grasshoppers, katydids, crickets, mantids, stick insects)... We
+          // want to increase the number of Orthoptera, Phasmida and Mantodea
+          // species on the IUCN Red List" — explicitly 3 orders, broader than
+          // its name suggests (crickets/katydids are already all Orthoptera;
+          // mantids/stick insects are separate orders entirely, sourced from
+          // the "other_insects" CSV group rather than "grasshoppers_crickets_
+          // locusts"). Locusts are explicitly just a behavioral subset of
+          // Acrididae (Orthoptera), not a separate taxon needing its own rule.
+          estimatedDescribed: 11_319,
+          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Orthoptera + Phasmida + Mantodea",
+          estimatedSourceUrl: COL_2025_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-grasshopper-specialist-group",
+        },
+        {
+          id: "ssc-wild-bee",
+          name: "Bumblebee and Wild Bee Specialist Group",
+          filter: {
+            csvGroups: ["bees_wasps_and_ants"],
+            families: ["apidae", "halictidae", "megachilidae", "andrenidae", "colletidae", "melittidae", "stenotritidae"],
+          },
+          // RENAMED by IUCN to "Wild Bee Specialist Group" (our source DB
+          // still lists the legacy name) — own materials: "In 2021, IUCN SSC
+          // widened the group to include all bees... expanding the number of
+          // species considered from ~290 to more than 20,000." ~290 matches
+          // the old Bombus-only scope; ~20,000 matches the full bee clade
+          // Anthophila (all 7 recognized families) — no single source states
+          // the 7 family names literally, but the species-count jump is
+          // strong confirmation. A "Bumble Bee working group" persists as a
+          // named internal sub-group (genus Bombus specifically), not a
+          // separate scope.
+          estimatedDescribed: 7_411,
+          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Apidae + Halictidae + Megachilidae + Andrenidae + Colletidae + Melittidae + Stenotritidae (clade Anthophila, all bees)",
+          estimatedSourceUrl: COL_2025_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-wild-bee-specialist-group",
+        },
+        {
+          id: "ssc-mayfly-stonefly-caddisfly",
+          name: "Mayfly, Stonefly and Caddisfly Specialist Group",
+          filter: { csvGroups: ["other_insects"], orderNames: ["ephemeroptera", "plecoptera", "trichoptera"] },
+          // iucn.org: "Mayflies (Ephemeroptera), stoneflies (Plecoptera) and
+          // caddisflies (Trichoptera) — EPT for short" — explicit, exactly
+          // these 3 orders, no exceptions found.
+          estimatedDescribed: 6_390,
+          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Ephemeroptera + Plecoptera + Trichoptera",
+          estimatedSourceUrl: COL_2025_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-mayfly-stonefly-and-caddisfly-specialist-group",
+        },
+        {
+          id: "ssc-dragonfly",
+          name: "Dragonfly Specialist Group",
+          filter: { csvGroups: ["dragonflies_and_damselflies"] },
+          // Own SSC annual report: "increase the knowledge on taxonomy,
+          // ecology and biogeography of all Odonata (damselflies and
+          // dragonflies)" — the entire order, both suborders (Anisoptera +
+          // Zygoptera), which is exactly this whole Table 1a CSV group (no
+          // other order appears in our "dragonflies_and_damselflies" data).
+          estimatedDescribed: 6_353,
+          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Odonata (whole CSV group)",
+          estimatedSourceUrl: COL_2025_URL,
+          sourceUrl: "https://worlddragonfly.org/",
+        },
+        {
+          id: "ssc-ant",
+          name: "Ant Specialist Group",
+          filter: { csvGroups: ["bees_wasps_and_ants"], families: ["formicidae"] },
+          // Own iucn.org page: "assess and monitor the conservation status of
+          // ant species around the world" — family Formicidae in full, no
+          // narrower carve-out found (a monotypic mapping — ants ARE
+          // Formicidae — so there's no competing claim to check against).
+          estimatedDescribed: 5_976,
+          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Formicidae",
+          estimatedSourceUrl: COL_2025_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-ant-specialist-group",
+        },
+        {
+          id: "ssc-freshwater-crustacean",
+          name: "Freshwater Crustacean Specialist Group",
+          filter: {
+            csvGroups: ["crustaceans"],
+            families: [
+              "astacidae", "cambaridae", "parastacidae", "aeglidae",
+              "potamidae", "potamonautidae", "gecarcinucidae", "pseudothelphusidae", "trichodactylidae",
+              "atyidae", "gecarcinidae",
+            ],
+          },
+          // Own 2024-2025 SSC annual report: "the long-term conservation of
+          // freshwater decapods – freshwater crabs, crayfish, freshwater
+          // shrimps and aeglids – worldwide" — narrower than its name
+          // suggests (order Decapoda specifically, not all Crustacea; no
+          // amphipods/isopods/copepods/etc.). Crayfish: Astacidae + Cambaridae
+          // + Parastacidae. Aeglids: Aeglidae (explicitly named). Freshwater
+          // crabs: the 5 standard freshwater-crab families (Potamidae,
+          // Potamonautidae, Gecarcinucidae, Pseudothelphusidae,
+          // Trichodactylidae — the report names specific genera within these
+          // but not the family names literally). Land crabs are also
+          // explicitly in scope (target: "25 species of land crabs") —
+          // Gecarcinidae. Freshwater shrimp (Atyidae — near-exclusively
+          // freshwater) included; Palaemonidae DELIBERATELY EXCLUDED despite
+          // containing freshwater genera like Macrobrachium, since the family
+          // also contains many marine species and the group's own report
+          // confirms marine decapods are deliberately out of scope (a
+          // "Marine Crustacean Specialist Group" is described as still being
+          // formed) — no family/genus-level way to safely split Palaemonidae
+          // without habitat data we don't have, so it's left to the catch-all
+          // rather than guessed either way.
+          estimatedDescribed: 2_649,
+          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — 3 crayfish families + Aeglidae + 5 freshwater-crab families + Atyidae + Gecarcinidae (land crabs); excludes the mixed marine/freshwater family Palaemonidae",
+          estimatedSourceUrl: COL_2025_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-freshwater-crustacean-specialist-group",
+        },
+        {
+          id: "ssc-hoverfly",
+          name: "Hoverfly Specialist Group",
+          filter: { csvGroups: ["flies_and_mosquitoes"], families: ["syrphidae"] },
+          // Own site (iucn-hsg.pmf.uns.ac.rs): scope described directly
+          // around "Syrphidae (Order Diptera)" — the whole family, no
+          // narrower carve-out found.
+          estimatedDescribed: 2_330,
+          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Syrphidae",
+          estimatedSourceUrl: COL_2025_URL,
+          sourceUrl: "https://iucn-hsg.pmf.uns.ac.rs/",
+        },
+        {
+          id: "ssc-coral",
+          name: "Coral Specialist Group",
+          filter: { csvGroups: ["corals"], orderNames: ["scleractinia"] },
+          // Own site (iucncoralsg.org): "maintains and refines the IUCN Red
+          // List of Threatened Species for reef-building corals" — narrower
+          // than our "Corals & Cnidarians" Table 1a group, which spans all of
+          // class Anthozoa (soft corals, sea anemones, black corals, sea
+          // pens, zoanthids, etc., none of which "reef-building" naturally
+          // includes). Mapped to order Scleractinia (stony/hard corals) —
+          // the standard technical term for "reef-building corals." No
+          // source confirms or denies broader Anthozoa inclusion, so the
+          // rest is left to the catch-all rather than guessed either way.
+          estimatedDescribed: 1_841,
+          estimatedSource: IUCN_SOURCE + " (WoRMS 2025) — Scleractinia (reef-building corals; narrower than all of Anthozoa)",
+          estimatedSourceUrl: "https://www.marinespecies.org",
+          sourceUrl: "https://iucncoralsg.org/",
+        },
+        {
+          id: "ssc-firefly",
+          name: "Firefly Specialist Group",
+          filter: { csvGroups: ["beetles"], families: ["lampyridae"] },
+          // Own site (fireflyersinternational.net/iucn): "Fireflies
+          // (Coleoptera: Lampyridae)" — the whole family, no narrower
+          // carve-out found.
+          estimatedDescribed: 538,
+          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Lampyridae",
+          estimatedSourceUrl: COL_2025_URL,
+          sourceUrl: "https://fireflyersinternational.net/iucn",
+        },
+        {
+          id: "ssc-dung-beetle",
+          name: "Dung Beetle Specialist Group",
+          filter: { csvGroups: ["beetles"], families: ["geotrupidae"] },
+          // Own co-chairs' founding announcement (Oryx 57(2), 2023): "dung
+          // beetles (families Geotrupidae and Scarabaeidae)... over 6,000
+          // described species." A GENUINE PRECISION GAP, flagged rather than
+          // guessed: the group's real remit within Scarabaeidae is only the
+          // subfamily Scarabaeinae ("true dung beetles," ~5-6k species) — the
+          // family as a whole has >30,000 species (chafers, rhinoceros
+          // beetles, flower beetles, etc.), and our data has no
+          // subfamily-level field to isolate Scarabaeinae. Filtering by the
+          // whole family "Scarabaeidae" would overclaim by ~5x, so it's
+          // EXCLUDED here — only the clean, whole-family Geotrupidae portion
+          // is included, undercounting this group significantly rather than
+          // risking a much more visible overclaim (a rhinoceros beetle
+          // attributed to "dung beetles" would be an obvious, trust-breaking
+          // error to anyone who knows the group).
+          estimatedDescribed: 321,
+          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Geotrupidae only (excludes subfamily Scarabaeinae within Scarabaeidae — no subfamily-level data available to isolate it from the rest of that >30,000-species family; see comment)",
+          estimatedSourceUrl: COL_2025_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-dung-beetle-specialist-group",
+        },
+        {
+          id: "ssc-horseshoe-crab",
+          name: "Horseshoe Crab Specialist Group",
+          filter: { csvGroups: ["horseshoe_crabs"] },
+          // Own iucn.org page names all 4 living species by name (Limulus
+          // polyphemus, Tachypleus tridentatus, T. gigas, Carcinoscorpius
+          // rotundicauda) — exactly this whole, already-dedicated Table 1a
+          // CSV group (horseshoe crabs are chelicerates, not true
+          // crustaceans, despite the common name — already modeled
+          // separately in this tree).
+          estimatedDescribed: 4,
+          estimatedSource: IUCN_SOURCE + " — all 4 living horseshoe crab species (whole CSV group)",
+          estimatedSourceUrl: IUCN_SOURCE_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-horseshoe-crab-specialist-group",
+        },
+        // Catch-all: a plain "No SSC Group" remainder (NOT a claim on behalf
+        // of Cave Invertebrate SG, Terrestrial and Freshwater Invertebrate
+        // RLA, or Marine Invertebrates RLA — see the exclusion note above).
+        // Omits csvGroups claimed in full by a named group above (molluscs,
+        // horseshoe_crabs, dragonflies_and_damselflies, and
+        // grasshoppers_crickets_locusts — the last is 100% order Orthoptera,
+        // all of which Grasshopper SG already claims) rather than listing
+        // redundant excludes for them. Kept in sync manually — if an 18th
+        // invertebrate SSC group is added above, exclude its family/order
+        // here too (or omit its csvGroup entirely if fully claimed).
+        {
+          id: "ssc-other-invertebrates",
+          name: "No SSC Group",
+          filter: {
+            csvGroups: [
+              "beetles", "butterflies_and_moths", "flies_and_mosquitoes", "bees_wasps_and_ants", "true_bugs", "other_insects",
+              "arachnids", "crustaceans", "corals", "other_invertebrates", "velvet_worms",
+            ],
+            excludeFamilies: [
+              "geotrupidae", "lampyridae",
+              "papilionidae", "pieridae", "nymphalidae", "lycaenidae", "riodinidae", "hesperiidae", "hedylidae", "saturniidae",
+              "syrphidae",
+              "formicidae", "apidae", "halictidae", "megachilidae", "andrenidae", "colletidae", "melittidae", "stenotritidae",
+              "astacidae", "cambaridae", "parastacidae", "aeglidae",
+              "potamidae", "potamonautidae", "gecarcinucidae", "pseudothelphusidae", "trichodactylidae",
+              "atyidae", "gecarcinidae",
+            ],
+            excludeOrders: ["araneae", "scorpiones", "phasmida", "mantodea", "ephemeroptera", "plecoptera", "trichoptera", "scleractinia"],
+          },
+          estimatedDescribed: 255_758,
+          estimatedSource: "Invertebrate species (assessed + unassessed, per our own data) not in any of the 14 SSC groups above (approx.; includes species that would belong to Cave Invertebrate SG, the Terrestrial and Freshwater Invertebrate RLA, or the Marine Invertebrates RLA in reality — see exclusion note above)",
+          estimatedSourceUrl: COL_2025_URL,
+        },
+      ],
+    },
+
     // ─── FLOWERING PLANTS ──────────────────────────────────────────────
     FLOWERING_PLANTS_NODE,
 
