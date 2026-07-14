@@ -775,6 +775,12 @@ describe("SSC Specialist Groups tree", () => {
     expect(speciesMatchesNode(buffalo, "ssc-afro-asian-wild-cattle")).toBe(false);
   });
 
+  it("Bos primigenius (extinct aurochs) is excluded from Asian Wild Cattle SG despite genus match — not one of its stated 9 species", () => {
+    const aurochs = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Bovidae", scientific_name: "Bos primigenius", taxon_group: "mammals" };
+    expect(speciesMatchesNode(aurochs, "ssc-afro-asian-wild-cattle")).toBe(false);
+    expect(speciesMatchesNode(aurochs, "ssc-other-mammals")).toBe(true);
+  });
+
   it("Cetacean SG matches by family since cetaceans share Artiodactyla's order_name", () => {
     const dolphin = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Delphinidae", scientific_name: "Tursiops truncatus", taxon_group: "mammals" };
     const deer = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Cervidae", scientific_name: "Cervus elaphus", taxon_group: "mammals" };
@@ -983,6 +989,18 @@ describe("SSC Specialist Groups tree (fishes)", () => {
     expect(speciesMatchesNode(unassessedShark, "ssc-other-fish")).toBe(false);
   });
 
+  it("Shark SG excludes extinct fossil species and unresolved-name placeholders found in the unassessed data", () => {
+    const fossil1 = { class_name: "Elasmobranchii", order_name: "Lamniformes", family: "Lamnidae", scientific_name: "Isurus desori", taxon_group: "fishes" };
+    const fossil2 = { class_name: "Elasmobranchii", order_name: "Lamniformes", family: "Lamnidae", scientific_name: "Oxyrhina hastalis", taxon_group: "fishes" };
+    const placeholder = { class_name: "Elasmobranchii", order_name: "Carcharhiniformes", family: "Carcharhinidae", scientific_name: "Carcharhinus spec", taxon_group: "fishes" };
+    for (const row of [fossil1, fossil2, placeholder]) {
+      expect(speciesMatchesNode(row, "ssc-shark"), row.scientific_name).toBe(false);
+      // Also excluded from the catch-all — these aren't real extant species
+      // that should appear anywhere in the dashboard.
+      expect(speciesMatchesNode(row, "ssc-other-fish"), row.scientific_name).toBe(false);
+    }
+  });
+
   it("Grouper and Wrasse SG covers both grouper family labels (Serranidae and Epinephelidae) plus wrasses and parrotfishes", () => {
     const grouper1 = { class_name: "Actinopterygii", order_name: "Perciformes", family: "Serranidae", scientific_name: "Epinephelus marginatus", taxon_group: "fishes" };
     const grouper2 = { class_name: "Actinopterygii", order_name: "Perciformes", family: "Epinephelidae", scientific_name: "Epinephelus itajara", taxon_group: "fishes" };
@@ -1058,13 +1076,13 @@ describe("SSC Specialist Groups tree (fishes)", () => {
 describe("SSC Specialist Groups tree (invertebrates)", () => {
   const sscInvertNode = findNode("ssc-invertebrate-groups");
 
-  it("ssc-invertebrate-groups exists, is not part of the default view, and has 16 children (15 pilot groups + remainder)", () => {
+  it("ssc-invertebrate-groups exists, is not part of the default view, and has 18 children (17 pilot groups + remainder)", () => {
     expect(sscInvertNode).toBeDefined();
-    expect(sscInvertNode?.children?.length).toBe(16);
+    expect(sscInvertNode?.children?.length).toBe(18);
     expect(TAXONOMY_VIEWS.default.roots).not.toContain("ssc-invertebrate-groups");
   });
 
-  it("ssc-other-invertebrates (the remainder row) doesn't overlap any of the 15 named groups", () => {
+  it("ssc-other-invertebrates (the remainder row) doesn't overlap any of the 17 named groups", () => {
     const cases: Array<{ class_name: string; order_name: string; family: string; scientific_name: string; taxon_group: string }> = [
       { class_name: "Gastropoda", order_name: "Stylommatophora", family: "Helicidae", scientific_name: "Helix pomatia", taxon_group: "molluscs" },
       { class_name: "Cephalopoda", order_name: "Octopoda", family: "Octopodidae", scientific_name: "Octopus vulgaris", taxon_group: "molluscs" },
@@ -1086,10 +1104,31 @@ describe("SSC Specialist Groups tree (invertebrates)", () => {
       { class_name: "Insecta", order_name: "Coleoptera", family: "Geotrupidae", scientific_name: "Geotrupes stercorarius", taxon_group: "beetles" },
       { class_name: "Merostomata", order_name: "Xiphosura", family: "Limulidae", scientific_name: "Limulus polyphemus", taxon_group: "horseshoe_crabs" },
       { class_name: "Holothuroidea", order_name: "Holothuriida", family: "Holothuriidae", scientific_name: "Holothuria edulis", taxon_group: "other_invertebrates" },
+      { class_name: "Clitellata", order_name: "Crassiclitellata", family: "Lumbricidae", scientific_name: "Lumbricus terrestris", taxon_group: "other_invertebrates" },
+      { class_name: "Demospongiae", order_name: "Dictyoceratida", family: "Spongiidae", scientific_name: "Spongia officinalis", taxon_group: "other_invertebrates" },
     ];
     for (const row of cases) {
       expect(speciesMatchesNode(row, "ssc-other-invertebrates"), row.scientific_name).toBe(false);
     }
+  });
+
+  it("ssc-earthworm covers Crassiclitellata + Moniligastrida, not leeches or aquatic oligochaetes", () => {
+    const earthworm = { class_name: "Clitellata", order_name: "Crassiclitellata", family: "Lumbricidae", scientific_name: "Lumbricus terrestris", taxon_group: "other_invertebrates" };
+    const asianEarthworm = { class_name: "Clitellata", order_name: "Moniligastrida", family: "Moniligastridae", scientific_name: "Moniligaster deshayesi", taxon_group: "other_invertebrates" };
+    const leech = { class_name: "Clitellata", order_name: "Arhynchobdellida", family: "Hirudinidae", scientific_name: "Hirudo medicinalis", taxon_group: "other_invertebrates" };
+    expect(speciesMatchesNode(earthworm, "ssc-earthworm")).toBe(true);
+    expect(speciesMatchesNode(asianEarthworm, "ssc-earthworm")).toBe(true);
+    expect(speciesMatchesNode(leech, "ssc-earthworm")).toBe(false);
+    expect(speciesMatchesNode(leech, "ssc-other-invertebrates")).toBe(true);
+  });
+
+  it("ssc-sponge covers Demospongiae/Hexactinellida/Calcarea, not other other_invertebrates classes", () => {
+    const sponge = { class_name: "Demospongiae", order_name: "Dictyoceratida", family: "Spongiidae", scientific_name: "Spongia officinalis", taxon_group: "other_invertebrates" };
+    const glassSponge = { class_name: "Hexactinellida", order_name: "Lyssacinosida", family: "Euplectellidae", scientific_name: "Euplectella aspergillum", taxon_group: "other_invertebrates" };
+    const seaStar = { class_name: "Asteroidea", order_name: "Valvatida", family: "Oreasteridae", scientific_name: "Culcita novaeguineae", taxon_group: "other_invertebrates" };
+    expect(speciesMatchesNode(sponge, "ssc-sponge")).toBe(true);
+    expect(speciesMatchesNode(glassSponge, "ssc-sponge")).toBe(true);
+    expect(speciesMatchesNode(seaStar, "ssc-sponge")).toBe(false);
   });
 
   it("ssc-sea-cucumber claims class Holothuroidea, not shared with the mixed 'other_invertebrates' catch-all", () => {

@@ -597,9 +597,19 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // "Afro-Asian" node id for stability, but the display name and source
           // now reflect the group's own current branding.
           name: "Asian Wild Cattle Specialist Group",
-          filter: { csvGroups: ["mammals"], genera: ["bos", "bubalus", "pseudoryx"] },
+          filter: {
+            csvGroups: ["mammals"],
+            genera: ["bos", "bubalus", "pseudoryx"],
+            // The group's own site is explicit: "Asia's nine wild cattle
+            // species... All nine of these species are threatened with
+            // extinction" — Bos primigenius (the aurochs, EX) is extinct,
+            // not Asia-endemic (ranged across Europe/N. Africa/Asia), and the
+            // ancestor of domestic cattle worldwide, not one of the 9 the
+            // group names. Excluded to avoid a genus-match false positive.
+            excludeSpeciesNames: ["bos primigenius"],
+          },
           estimatedDescribed: 9,
-          estimatedSource: MDD + " — Bos + Bubalus + Pseudoryx (approx.; excludes Syncerus caffer, covered by the Antelope SG)",
+          estimatedSource: MDD + " — Bos + Bubalus + Pseudoryx minus the extinct aurochs (approx.; excludes Syncerus caffer, covered by the Antelope SG)",
           estimatedSourceUrl: MDD_URL,
           sourceUrl: "https://www.asianwildcattle.org/",
         },
@@ -607,18 +617,25 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           id: "ssc-afrotheria",
           name: "Afrotheria Specialist Group",
           filter: { csvGroups: ["mammals"], orderNames: ["afrosoricida", "macroscelidea", "hyracoidea", "tubulidentata"] },
-          estimatedDescribed: 83,
-          estimatedSource: MDD + " — Afrosoricida + Macroscelidea + Hyracoidea + Tubulidentata (approx.)",
-          estimatedSourceUrl: MDD_URL,
+          // Own site (afrotheria.net): "1 aardvark, 6 hyraxes, 19 sengis, 21
+          // golden moles, 34 tenrecs" = 81 (golden moles + tenrecs are both
+          // subsumed under order Afrosoricida in our data, not separate
+          // "groups" as the group's own site describes them informally).
+          estimatedDescribed: 81,
+          estimatedSource: "Own site (afrotheria.net) — 1 aardvark + 6 hyraxes + 19 sengis + 21 golden moles + 34 tenrecs",
+          estimatedSourceUrl: "https://afrotheria.net/",
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-afrotheria-specialist-group",
         },
         {
           id: "ssc-anteater-sloth-armadillo",
           name: "Anteater, Sloth and Armadillo Specialist Group",
           filter: { csvGroups: ["mammals"], orderNames: ["pilosa", "cingulata"] },
-          estimatedDescribed: 31,
-          estimatedSource: MDD + " — Pilosa + Cingulata (Xenarthra, approx.)",
-          estimatedSourceUrl: MDD_URL,
+          // Own site (xenarthrans.org): "seven sloth species, ten anteater
+          // species, and 25 armadillo species" = 42; stale MDD-derived figure
+          // (31) reflected pre-2025 traditional Xenarthra taxonomy.
+          estimatedDescribed: 42,
+          estimatedSource: "Own site (xenarthrans.org) — 7 sloths + 10 anteaters + 25 armadillos",
+          estimatedSourceUrl: "https://xenarthrans.org/species/",
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-anteater-sloth-and-armadillo-specialist-group",
         },
         {
@@ -671,9 +688,13 @@ export const TAXONOMY_TREE: TaxonomyNode = {
             csvGroups: ["mammals"],
             orderNames: ["diprotodontia", "dasyuromorphia", "peramelemorphia", "notoryctemorphia", "monotremata"],
           },
-          estimatedDescribed: 250,
-          estimatedSource: MDD + " — Australasian marsupial orders + Monotremata (approx.)",
-          estimatedSourceUrl: MDD_URL,
+          // Own materials (IUCN 2024-2025 SSC report): "the world's five
+          // monotreme species and approximately 265 marsupial species of
+          // Australia, New Guinea, Indonesia and the Solomon Islands" = ~270;
+          // stale MDD-derived figure (250) undercounted.
+          estimatedDescribed: 270,
+          estimatedSource: "Own 2024-2025 SSC annual report — 5 monotremes + ~265 marsupials",
+          estimatedSourceUrl: "https://iucn.org/sites/default/files/2025-09/2024-2025-iucn-ssc-australasian-marsupial-and-monotreme-sg-report_post-pub-rev-r1.pdf",
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-australasian-marsupial-and-monotreme-specialist-group",
         },
         {
@@ -877,9 +898,13 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           id: "ssc-primate",
           name: "Primate Specialist Group",
           filter: { csvGroups: ["mammals"], orderNames: ["primates"] },
-          estimatedDescribed: 522,
-          estimatedSource: MDD + " — Primates",
-          estimatedSourceUrl: MDD_URL,
+          // MDD's figure (522) was logically impossible — lower than our own
+          // data's 527 assessed Primates rows (assessed can't exceed
+          // described). Corrected to the Primate SG's own self-reported
+          // count.
+          estimatedDescribed: 527,
+          estimatedSource: "IUCN SSC Primate Specialist Group's own count — \"there are 527 known species of primates\"",
+          estimatedSourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-primate-specialist-group",
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-primate-specialist-group",
         },
         {
@@ -991,6 +1016,13 @@ export const TAXONOMY_TREE: TaxonomyNode = {
             ],
             excludeGenera: ["lama", "vicugna"],
             excludeSpeciesNames: ["antilocapra americana", "hyemoschus aquaticus", "camelus ferus"],
+            // Bos primigenius (the extinct aurochs) is genus Bos/family
+            // Bovidae like every species Asian Wild Cattle SG claims, but
+            // that group's own site explicitly excludes it (see its filter's
+            // comment) — since bovidae is otherwise wholly claimed by named
+            // groups, it needs this explicit species-level exception to land
+            // here instead of vanishing from every node.
+            extraSpeciesNames: ["bos primigenius"],
           },
           estimatedDescribed: 223,
           estimatedSource: "Remainder of IUCN Table 1a mammals total (6,854) minus the 35 SSC pilot groups above (approx.)",
@@ -1133,7 +1165,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // species under the single family label "anolidae" (no
           // "dactyloidae" label exists in this dataset, despite it being a
           // synonym used elsewhere in the literature). A separate family
-          // label, "polychrotidae" (9 spp), is entirely genus Polychrus — a
+          // label, "polychrotidae" (7 spp), is entirely genus Polychrus — a
           // related but distinct genus the group's own scope doesn't name —
           // correctly NOT included (falls to the Snake and Lizard RLA
           // catch-all below). The estimatedDescribed gap below (432 vs. 379)
@@ -1249,10 +1281,19 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // "boas or pythons" in any common or modern-phylogenetic sense. If a
           // current, authoritative BPSG scope statement surfaces, revisit —
           // this is the single lowest-confidence call in the reptile pilot.
+          // Also flagged: the iucn.org directory profile above now returns a
+          // dead "No results were found" search page (was merely a thin
+          // empty template before, now broken outright); pointed sourceUrl
+          // instead at a live iucn.org content page that's actually about
+          // this group. Its long-time Executive Office, Fundación
+          // Biodiversidad, reportedly stepped down from that role in
+          // December 2020 — an organizational change not otherwise
+          // documented here, though the group appears to still be active per
+          // SSC quadrennium reporting.
           estimatedDescribed: 112,
           estimatedSource: REPTILE_DB + " — Boidae + Pythonidae + 5 genera IUCN's own assessments still classify under Boidae (approx.; excludes ~10 more distant families named in an unconfirmed brochure — see comment)",
           estimatedSourceUrl: REPTILE_DB_URL,
-          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-boa-and-python-specialist-group",
+          sourceUrl: "https://iucn.org/content/kering-and-iucn-boa-python-specialist-group-announce-first-report-captive-breeding",
         },
         // Catch-all: NOT a "no group" placeholder like ssc-other-mammals — this
         // IS the real "IUCN SSC Snake and Lizard Red List Authority", confirmed
@@ -1425,8 +1466,14 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           name: "Sharks & Rays",
           // "chondrichthyes" is only used as a class label in assessed.parquet;
           // unassessed species carry "elasmobranchii"/"holocephali" instead —
-          // all three are listed to match the full universe.
-          filter: { csvGroups: ["fishes"], classNames: ["chondrichthyes", "elasmobranchii", "holocephali"] },
+          // all three are listed to match the full universe. Excludes 2
+          // extinct fossil mako sharks + 1 unresolved-name placeholder found
+          // in the unassessed data (see ssc-shark's filter comment).
+          filter: {
+            csvGroups: ["fishes"],
+            classNames: ["chondrichthyes", "elasmobranchii", "holocephali"],
+            excludeSpeciesNames: ["isurus desori", "oxyrhina hastalis", "carcharhinus spec"],
+          },
           estimatedDescribed: 1_282,
           estimatedSource: ESCHMEYER,
           estimatedSourceUrl: ESCHMEYER_URL,
@@ -1482,7 +1529,15 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // unassessed species use "elasmobranchii"/"holocephali" instead — all
           // three are needed or the filter silently matches zero unassessed
           // sharks (same fix as jawless-fish/sharks-rays above).
-          filter: { csvGroups: ["fishes"], classNames: ["chondrichthyes", "elasmobranchii", "holocephali"] },
+          filter: {
+            csvGroups: ["fishes"],
+            classNames: ["chondrichthyes", "elasmobranchii", "holocephali"],
+            // Data-quality exclusions found in the unassessed universe: two
+            // extinct Oligocene/Miocene fossil mako sharks (not extant
+            // species) and one unresolved-name placeholder, all of which
+            // would otherwise appear in this group's species list.
+            excludeSpeciesNames: ["isurus desori", "oxyrhina hastalis", "carcharhinus spec"],
+          },
           // Own site (iucnssg.org): "leading authority on the status of sharks,
           // rays, and chimaeras" — the entire class Chondrichthyes, repeatedly
           // and explicitly including chimaeras (not just elasmobranchs).
@@ -1819,8 +1874,11 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // strong confirmation. A "Bumble Bee working group" persists as a
           // named internal sub-group (genus Bombus specifically), not a
           // separate scope.
-          estimatedDescribed: 7_411,
-          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Apidae + Halictidae + Megachilidae + Andrenidae + Colletidae + Melittidae + Stenotritidae (clade Anthophila, all bees)",
+          // estimatedDescribed corrected to match the group's own "more than
+          // 20,000" figure quoted directly above — the prior value (7,411)
+          // directly contradicted it.
+          estimatedDescribed: 20_400,
+          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Apidae + Halictidae + Megachilidae + Andrenidae + Colletidae + Melittidae + Stenotritidae (clade Anthophila, all bees; matches the group's own \">20,000\" claim)",
           estimatedSourceUrl: COL_2025_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-wild-bee-specialist-group",
         },
@@ -1831,9 +1889,12 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // iucn.org: "Mayflies (Ephemeroptera), stoneflies (Plecoptera) and
           // caddisflies (Trichoptera) — EPT for short" — explicit, exactly
           // these 3 orders, no exceptions found.
-          estimatedDescribed: 6_390,
-          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Ephemeroptera + Plecoptera + Trichoptera",
-          estimatedSourceUrl: COL_2025_URL,
+          // estimatedDescribed corrected — the COL_2025-derived figure
+          // (6,390) badly undercounted real diversity, especially Trichoptera
+          // (~16,000 species alone per the Trichoptera World Checklist).
+          estimatedDescribed: 23_000,
+          estimatedSource: "Trichoptera World Checklist (~16,000) + Ephemeroptera (~3,500) + Plecoptera (~3,700) literature figures",
+          estimatedSourceUrl: "https://trichopt.app.clemson.edu/welcome.php",
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-mayfly-stonefly-and-caddisfly-specialist-group",
         },
         {
@@ -1858,9 +1919,11 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // ant species around the world" — family Formicidae in full, no
           // narrower carve-out found (a monotypic mapping — ants ARE
           // Formicidae — so there's no competing claim to check against).
-          estimatedDescribed: 5_976,
-          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Formicidae",
-          estimatedSourceUrl: COL_2025_URL,
+          // estimatedDescribed corrected — the COL_2025-derived figure
+          // (5,976) undercounted real global ant diversity by ~2.7x.
+          estimatedDescribed: 16_308,
+          estimatedSource: "AntWiki — total valid extant ant species",
+          estimatedSourceUrl: "https://www.antwiki.org/wiki/Category:Extant_species",
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-ant-specialist-group",
         },
         {
@@ -1872,6 +1935,12 @@ export const TAXONOMY_TREE: TaxonomyNode = {
               "astacidae", "cambaridae", "parastacidae", "aeglidae",
               "potamidae", "potamonautidae", "gecarcinucidae", "pseudothelphusidae", "trichodactylidae",
               "atyidae", "gecarcinidae",
+              // 4 small, unambiguously freshwater-only Caridea families (per
+              // De Grave et al. 2015, "Dead Shrimp Blues," PLOS ONE — the
+              // same global freshwater-shrimp assessment cited below) —
+              // distinct from the deliberately-excluded, mixed-marine
+              // Palaemonidae.
+              "desmocarididae", "euryrhynchidae", "typhlocarididae", "xiphocarididae",
             ],
           },
           // Own 2024-2025 SSC annual report: "the long-term conservation of
@@ -1906,12 +1975,12 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // freshwater genus — but no FCSG first-party material was found
           // explicitly naming Macrobrachium as in-scope, and this filter
           // engine ANDs families/genera together, so adding just one genus
-          // would require re-expressing all 11 already-included families as
+          // would require re-expressing all 15 already-included families as
           // an explicit ~344-genus list (a large, error-prone rewrite for
           // one unconfirmed genus) rather than a small, low-risk addition.
           // Left to the catch-all pending a clearer first-party source.
-          estimatedDescribed: 2_649,
-          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — 3 crayfish families + Aeglidae + 5 freshwater-crab families + Atyidae + Gecarcinidae (land crabs); excludes the mixed marine/freshwater family Palaemonidae",
+          estimatedDescribed: 2_665,
+          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — 3 crayfish families + Aeglidae + 5 freshwater-crab families + Atyidae + Gecarcinidae (land crabs) + 4 small freshwater-shrimp families; excludes the mixed marine/freshwater family Palaemonidae",
           estimatedSourceUrl: COL_2025_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-freshwater-crustacean-specialist-group",
         },
@@ -1930,12 +1999,14 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Syrphidae, the whole family is kept here as the best available
           // proxy rather than moved to the catch-all, but this is a
           // real overclaim relative to the group's own current stated remit
-          // (whole-family ~2,330 species vs. a European-only true scope) —
+          // (whole-family ~6,535 species vs. a European-only true scope of
+          // 892, per the group's own 2022 European Red List of Hoverflies) —
           // revisit if per-species range data ever becomes reliable enough to
-          // narrow this correctly.
-          estimatedDescribed: 2_330,
-          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Syrphidae (whole family; group's own current mission is explicitly \"European hoverflies\" only — see comment)",
-          estimatedSourceUrl: COL_2025_URL,
+          // narrow this correctly. estimatedDescribed corrected — the prior
+          // figure (2,330) undercounted real global Syrphidae by ~2.8x.
+          estimatedDescribed: 6_535,
+          estimatedSource: "Syrphidae World Checklist — whole family (group's own current mission is explicitly \"European hoverflies\" only, ~892 species — see comment)",
+          estimatedSourceUrl: "https://www.syrphidae.com/checklist.php",
           sourceUrl: "https://iucn-hsg.pmf.uns.ac.rs/",
         },
         {
@@ -2081,6 +2152,43 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedSourceUrl: IUCN_SOURCE_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-horseshoe-crab-specialist-group",
         },
+        {
+          id: "ssc-earthworm",
+          name: "Earthworm Specialist Group",
+          filter: { csvGroups: ["other_invertebrates"], orderNames: ["crassiclitellata", "moniligastrida"] },
+          // Found missing entirely in a post-review pass — a real group
+          // (thin iucn.org page, no formal scope statement, but its name
+          // unambiguously maps to the 2 orders taxonomically recognized as
+          // "true earthworms" within class Clitellata) — Crassiclitellata
+          // (the main earthworm order) + Moniligastrida (Asian earthworms).
+          // Explicitly excludes every other Clitellata order present in our
+          // data: leeches (Arhynchobdellida, Rhynchobdellida,
+          // Acanthobdellida, Branchiobdellida) and aquatic
+          // oligochaetes/potworms (Tubificida, Lumbriculida, Enchytraeida,
+          // Haplotaxida, etc.) are not earthworms.
+          estimatedDescribed: 935,
+          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Crassiclitellata + Moniligastrida",
+          estimatedSourceUrl: COL_2025_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-earthworm-specialist-group",
+        },
+        {
+          id: "ssc-sponge",
+          name: "Sponge Specialist Group",
+          filter: { csvGroups: ["other_invertebrates"], classNames: ["demospongiae", "hexactinellida", "calcarea"] },
+          // Found missing entirely in a post-review pass — a real group
+          // (2021-2025 term page, live at a "-2021-2025" URL slug the
+          // dashboard's original directory-listing guess missed): mission is
+          // "protect sponge biodiversity... worldwide," no narrower
+          // taxonomic limitation stated. Maps to whole phylum Porifera via
+          // its 3 classes present in our data (a 4th recognized class,
+          // Homoscleromorpha, doesn't appear as a distinct label here — its
+          // species are filed under Demospongiae, the older classification
+          // still used by this dataset).
+          estimatedDescribed: 3_567,
+          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Demospongiae + Hexactinellida + Calcarea (whole phylum Porifera, per our data's class labels)",
+          estimatedSourceUrl: COL_2025_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-sponge-specialist-group-2021-2025",
+        },
         // Catch-all: a plain "No SSC Group" remainder (NOT a claim on behalf
         // of Cave Invertebrate SG, Terrestrial and Freshwater Invertebrate
         // RLA, or Marine Invertebrates RLA — see the exclusion note above).
@@ -2107,9 +2215,10 @@ export const TAXONOMY_TREE: TaxonomyNode = {
               "astacidae", "cambaridae", "parastacidae", "aeglidae",
               "potamidae", "potamonautidae", "gecarcinucidae", "pseudothelphusidae", "trichodactylidae",
               "atyidae", "gecarcinidae",
+              "desmocarididae", "euryrhynchidae", "typhlocarididae", "xiphocarididae",
             ],
-            excludeOrders: ["araneae", "scorpiones", "phasmida", "mantodea", "ephemeroptera", "plecoptera", "trichoptera", "scleractinia"],
-            excludeClasses: ["holothuroidea"],
+            excludeOrders: ["araneae", "scorpiones", "phasmida", "mantodea", "ephemeroptera", "plecoptera", "trichoptera", "scleractinia", "crassiclitellata", "moniligastrida"],
+            excludeClasses: ["holothuroidea", "demospongiae", "hexactinellida", "calcarea"],
             // Subfamily Scarabaeinae within Scarabaeidae — claimed by Dung
             // Beetle SG above (see its filter's comment); the rest of
             // Scarabaeidae (chafers, rhinoceros beetles, flower beetles,
@@ -2150,8 +2259,8 @@ export const TAXONOMY_TREE: TaxonomyNode = {
               "trichonthophagus", "tropidonitis", "upsa", "uroxys", "versicorpus", "xinidium", "zonocopris",
             ],
           },
-          estimatedDescribed: 252_484,
-          estimatedSource: "Invertebrate species (assessed + unassessed, per our own data) not in any of the 15 SSC groups above (approx.; includes species that would belong to Cave Invertebrate SG, the Terrestrial and Freshwater Invertebrate RLA, or the Marine Invertebrates RLA in reality — see exclusion note above)",
+          estimatedDescribed: 247_966,
+          estimatedSource: "Invertebrate species (assessed + unassessed, per our own data) not in any of the 17 SSC groups above (approx.; includes species that would belong to Cave Invertebrate SG, the Terrestrial and Freshwater Invertebrate RLA, or the Marine Invertebrates RLA in reality — see exclusion note above)",
           estimatedSourceUrl: COL_2025_URL,
         },
       ],
@@ -2189,15 +2298,24 @@ export const TAXONOMY_TREE: TaxonomyNode = {
     // classified under "Fungi & Protists" in Table 1a, not plants, and none
     // of these groups' remits touch it anyway).
     //
-    // Of the 12 real taxon-based plant SSC groups (12 more geographic
+    // Of the 13 real taxon-based plant SSC groups (12 more geographic
     // regional Plant Red List Authorities — Brazil, Southern African, West
     // Africa, etc. — are separately blocked for the has_map-removal reason
     // documented on the "mammals"/reptile/fish pilots' sibling PRs, and
     // Botanic Gardens Conservation International isn't a taxonomic group at
-    // all), 4 are DELIBERATELY EXCLUDED — plants have by far the highest rate
+    // all), 5 are DELIBERATELY EXCLUDED — plants have by far the highest rate
     // of non-taxonomic SSC groups of any taxon covered so far, reflecting
     // real conservation-community priorities (agriculture, medicine,
     // horticulture, growth form) rather than pure taxonomy:
+    //  - Seaweed SG (found in a post-review pass): own mission is "marine
+    //    macroalgae" generally, with a current emphasis on kelp — a
+    //    growth-form category, not a clade, spanning THREE unrelated algal
+    //    lineages (red algae, green algae, AND brown algae/kelp — the last
+    //    of which isn't even part of this tree's "plantae" branch at all;
+    //    it's classified under the "fungi" virtual node's csvGroups, per the
+    //    comment above). Encoding even the "safe" two-thirds (red + green
+    //    algae) would still miss the group's most-emphasized taxon (kelp),
+    //    misleadingly implying full coverage — worse than not building it.
     //  - Crop Wild Relative SG: own materials define its remit as "wild
     //    taxa genetically related to cultivated crops" — a functional/
     //    agricultural category spanning hundreds of unrelated families
@@ -2228,7 +2346,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
     // agricultural relationship) this tree's family/genus/order model can't
     // express and our data can't reliably support across the whole species
     // universe. The catch-all below is a plain "No SSC Group" remainder, not
-    // a claim on any of these four groups' behalf.
+    // a claim on any of these five groups' behalf.
     {
       id: "ssc-plant-groups",
       name: "SSC Specialist Groups",
@@ -2258,9 +2376,12 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // CSV group already spans all 3 (8 classes: true mosses, 2
           // liverwort classes, hornworts, etc., confirmed by direct query) —
           // a trivial whole-CSV-group match, no further restriction needed.
-          estimatedDescribed: 7_708,
-          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Bryophyta + Marchantiophyta + Anthocerotophyta (whole CSV group)",
-          estimatedSourceUrl: COL_2025_URL,
+                    // estimatedDescribed reconciled with MOSSES_NODE above — both use
+          // the identical csvGroups:["mosses"] filter and should never have
+          // diverged.
+          estimatedDescribed: 19_539,
+          estimatedSource: IUCN_SOURCE + " (" + CHRISTENHUSZ + ") — Bryophyta + Marchantiophyta + Anthocerotophyta (whole CSV group)",
+          estimatedSourceUrl: CHRISTENHUSZ_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-bryophyte-specialist-group",
         },
         {
@@ -2597,9 +2718,15 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // confirming "smut" is a polyphyletic guild term in real usage
           // that doesn't perfectly match even the group's own clean
           // subphylum split. Not safely encodable beyond the core above.
-          estimatedDescribed: 2_764,
-          estimatedSource: SPECIES_FUNGORUM + " — Pucciniales + Ustilaginomycetes + Exobasidiomycetes",
-          estimatedSourceUrl: SPECIES_FUNGORUM_URL,
+          // estimatedDescribed corrected — the prior figure (2,764) directly
+          // contradicted this very comment's own "~8,000 species worldwide"
+          // claim for Pucciniales alone (it was the count of rows the order
+          // filter happens to match in our own dataset, not a real-world
+          // described-species estimate — same category error as Dung Beetle
+          // SG's first-pass estimate).
+          estimatedDescribed: 10_200,
+          estimatedSource: "GBIF backbone (Pucciniales, ~8,500) + literature (Ustilaginomycotina smuts, ~1,700)",
+          estimatedSourceUrl: "https://www.gbif.org/species/search?q=Pucciniales&rank=ORDER",
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-rusts-and-smuts-specialist-group",
         },
         // Catch-all: a plain "No SSC Group" remainder. Kept in sync
