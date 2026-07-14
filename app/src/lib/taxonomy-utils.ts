@@ -93,6 +93,7 @@ export const OFFICIAL_IUCN_DESCRIBED_NODE_IDS = new Set([
 const VIEW_ROOT_OVERRIDES: Record<string, string> = {
   "ssc-groups": "mammals",
   "ssc-reptile-groups": "reptiles",
+  "ssc-fish-groups": "fishes",
 };
 
 /** Find the default-view ancestor for a node (one of the 8 display roots). */

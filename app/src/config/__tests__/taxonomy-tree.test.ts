@@ -894,6 +894,130 @@ describe("SSC Specialist Groups tree (reptiles)", () => {
   });
 });
 
+describe("SSC Specialist Groups tree (fishes)", () => {
+  const sscFishNode = findNode("ssc-fish-groups");
+
+  it("ssc-fish-groups exists, is not part of the default view, and has 10 children (9 pilot groups + remainder)", () => {
+    expect(sscFishNode).toBeDefined();
+    expect(sscFishNode?.children?.length).toBe(10);
+    expect(TAXONOMY_VIEWS.default.roots).not.toContain("ssc-fish-groups");
+  });
+
+  it("ssc-other-fish (the remainder row) doesn't overlap any of the 9 named groups", () => {
+    const cases: Array<{ class_name: string; order_name: string; family: string; scientific_name: string }> = [
+      { class_name: "Chondrichthyes", order_name: "Carcharhiniformes", family: "Carcharhinidae", scientific_name: "Carcharhinus leucas" },
+      { class_name: "Chondrichthyes", order_name: "Chimaeriformes", family: "Chimaeridae", scientific_name: "Chimaera monstrosa" },
+      { class_name: "Actinopterygii", order_name: "Perciformes", family: "Serranidae", scientific_name: "Epinephelus marginatus" },
+      { class_name: "Actinopterygii", order_name: "Perciformes", family: "Labridae", scientific_name: "Cheilinus undulatus" },
+      { class_name: "Actinopterygii", order_name: "Perciformes", family: "Lutjanidae", scientific_name: "Lutjanus campechanus" },
+      { class_name: "Actinopterygii", order_name: "Perciformes", family: "Sparidae", scientific_name: "Sparus aurata" },
+      { class_name: "Actinopterygii", order_name: "Syngnathiformes", family: "Syngnathidae", scientific_name: "Hippocampus kuda" },
+      { class_name: "Actinopterygii", order_name: "Syngnathiformes", family: "Solenostomidae", scientific_name: "Solenostomus paradoxus" },
+      { class_name: "Actinopterygii", order_name: "Acanthuriformes", family: "Sciaenidae", scientific_name: "Argyrosomus regius" },
+      { class_name: "Actinopterygii", order_name: "Salmoniformes", family: "Salmonidae", scientific_name: "Salmo salar" },
+      { class_name: "Actinopterygii", order_name: "Scombriformes", family: "Scombridae", scientific_name: "Thunnus albacares" },
+      { class_name: "Actinopterygii", order_name: "Istiophoriformes", family: "Istiophoridae", scientific_name: "Makaira nigricans" },
+      { class_name: "Actinopterygii", order_name: "Acipenseriformes", family: "Acipenseridae", scientific_name: "Acipenser sturio" },
+      { class_name: "Actinopterygii", order_name: "Acipenseriformes", family: "Polyodontidae", scientific_name: "Polyodon spathula" },
+      { class_name: "Actinopterygii", order_name: "Anguilliformes", family: "Anguillidae", scientific_name: "Anguilla anguilla" },
+    ];
+    for (const row of cases) {
+      expect(speciesMatchesNode({ ...row, taxon_group: "fishes" }, "ssc-other-fish"), row.scientific_name).toBe(false);
+    }
+  });
+
+  it("ssc-other-fish catches a genuinely uncovered species (a cyprinid, no dedicated SSC group among the 9)", () => {
+    const carp = { class_name: "Actinopterygii", order_name: "Cypriniformes", family: "Cyprinidae", scientific_name: "Cyprinus carpio", taxon_group: "fishes" };
+    expect(speciesMatchesNode(carp, "ssc-other-fish")).toBe(true);
+  });
+
+  it("ssc-other-fish also catches marine gobies etc. despite the Freshwater Fish SG's own remit claiming 'all freshwater fishes' — that group is deliberately not built (habitat data unavailable for unassessed species)", () => {
+    const goby = { class_name: "Actinopterygii", order_name: "Gobiiformes", family: "Gobiidae", scientific_name: "Gobius niger", taxon_group: "fishes" };
+    expect(speciesMatchesNode(goby, "ssc-other-fish")).toBe(true);
+    expect(findNode("ssc-freshwater-fish")).toBeUndefined();
+  });
+
+  it("Shark SG matches by class (Chondrichthyes), covering sharks, rays, skates, AND chimaeras", () => {
+    const shark = { class_name: "Chondrichthyes", order_name: "Carcharhiniformes", family: "Carcharhinidae", scientific_name: "Carcharhinus leucas", taxon_group: "fishes" };
+    const ray = { class_name: "Chondrichthyes", order_name: "Myliobatiformes", family: "Dasyatidae", scientific_name: "Dasyatis pastinaca", taxon_group: "fishes" };
+    const chimaera = { class_name: "Chondrichthyes", order_name: "Chimaeriformes", family: "Chimaeridae", scientific_name: "Chimaera monstrosa", taxon_group: "fishes" };
+    expect(speciesMatchesNode(shark, "ssc-shark")).toBe(true);
+    expect(speciesMatchesNode(ray, "ssc-shark")).toBe(true);
+    expect(speciesMatchesNode(chimaera, "ssc-shark")).toBe(true);
+  });
+
+  it("Grouper and Wrasse SG covers both grouper family labels (Serranidae and Epinephelidae) plus wrasses and parrotfishes", () => {
+    const grouper1 = { class_name: "Actinopterygii", order_name: "Perciformes", family: "Serranidae", scientific_name: "Epinephelus marginatus", taxon_group: "fishes" };
+    const grouper2 = { class_name: "Actinopterygii", order_name: "Perciformes", family: "Epinephelidae", scientific_name: "Epinephelus itajara", taxon_group: "fishes" };
+    const wrasse = { class_name: "Actinopterygii", order_name: "Perciformes", family: "Labridae", scientific_name: "Cheilinus undulatus", taxon_group: "fishes" };
+    const parrotfish = { class_name: "Actinopterygii", order_name: "Perciformes", family: "Scaridae", scientific_name: "Scarus vetula", taxon_group: "fishes" };
+    expect(speciesMatchesNode(grouper1, "ssc-grouper-wrasse")).toBe(true);
+    expect(speciesMatchesNode(grouper2, "ssc-grouper-wrasse")).toBe(true);
+    expect(speciesMatchesNode(wrasse, "ssc-grouper-wrasse")).toBe(true);
+    expect(speciesMatchesNode(parrotfish, "ssc-grouper-wrasse")).toBe(true);
+  });
+
+  it("Snapper, Seabream and Grunt SG covers all 6 families named in its own scope statement, not just the 3 in its name", () => {
+    const snapper = { class_name: "Actinopterygii", order_name: "Perciformes", family: "Lutjanidae", scientific_name: "Lutjanus campechanus", taxon_group: "fishes" };
+    const threadfinBream = { class_name: "Actinopterygii", order_name: "Perciformes", family: "Nemipteridae", scientific_name: "Nemipterus japonicus", taxon_group: "fishes" };
+    const emperor = { class_name: "Actinopterygii", order_name: "Perciformes", family: "Lethrinidae", scientific_name: "Lethrinus nebulosus", taxon_group: "fishes" };
+    const fusilier = { class_name: "Actinopterygii", order_name: "Perciformes", family: "Caesionidae", scientific_name: "Caesio cuning", taxon_group: "fishes" };
+    // Mojarras (Gerreidae) are a similar reef-fish family but NOT named in the
+    // group's own scope statement — deliberately excluded, falls to the catch-all.
+    const mojarra = { class_name: "Actinopterygii", order_name: "Perciformes", family: "Gerreidae", scientific_name: "Gerres cinereus", taxon_group: "fishes" };
+    expect(speciesMatchesNode(snapper, "ssc-snapper-seabream-grunt")).toBe(true);
+    expect(speciesMatchesNode(threadfinBream, "ssc-snapper-seabream-grunt")).toBe(true);
+    expect(speciesMatchesNode(emperor, "ssc-snapper-seabream-grunt")).toBe(true);
+    expect(speciesMatchesNode(fusilier, "ssc-snapper-seabream-grunt")).toBe(true);
+    expect(speciesMatchesNode(mojarra, "ssc-snapper-seabream-grunt")).toBe(false);
+    expect(speciesMatchesNode(mojarra, "ssc-other-fish")).toBe(true);
+  });
+
+  it("Seahorse, Pipefish and Seadragon SG covers the whole order Syngnathiformes (5 families), not just Syngnathidae", () => {
+    const seahorse = { class_name: "Actinopterygii", order_name: "Syngnathiformes", family: "Syngnathidae", scientific_name: "Hippocampus kuda", taxon_group: "fishes" };
+    const ghostPipefish = { class_name: "Actinopterygii", order_name: "Syngnathiformes", family: "Solenostomidae", scientific_name: "Solenostomus paradoxus", taxon_group: "fishes" };
+    const trumpetfish = { class_name: "Actinopterygii", order_name: "Syngnathiformes", family: "Aulostomidae", scientific_name: "Aulostomus chinensis", taxon_group: "fishes" };
+    expect(speciesMatchesNode(seahorse, "ssc-seahorse-pipefish-seadragon")).toBe(true);
+    expect(speciesMatchesNode(ghostPipefish, "ssc-seahorse-pipefish-seadragon")).toBe(true);
+    expect(speciesMatchesNode(trumpetfish, "ssc-seahorse-pipefish-seadragon")).toBe(true);
+  });
+
+  it("Tuna and Billfish SG covers the whole family Scombridae (mackerels/bonitos too, not just tuna genera) plus both billfish families", () => {
+    const tuna = { class_name: "Actinopterygii", order_name: "Scombriformes", family: "Scombridae", scientific_name: "Thunnus albacares", taxon_group: "fishes" };
+    const mackerel = { class_name: "Actinopterygii", order_name: "Scombriformes", family: "Scombridae", scientific_name: "Scomber scombrus", taxon_group: "fishes" };
+    const marlin = { class_name: "Actinopterygii", order_name: "Istiophoriformes", family: "Istiophoridae", scientific_name: "Makaira nigricans", taxon_group: "fishes" };
+    const swordfish = { class_name: "Actinopterygii", order_name: "Istiophoriformes", family: "Xiphiidae", scientific_name: "Xiphias gladius", taxon_group: "fishes" };
+    expect(speciesMatchesNode(tuna, "ssc-tuna-billfish")).toBe(true);
+    expect(speciesMatchesNode(mackerel, "ssc-tuna-billfish")).toBe(true);
+    expect(speciesMatchesNode(marlin, "ssc-tuna-billfish")).toBe(true);
+    expect(speciesMatchesNode(swordfish, "ssc-tuna-billfish")).toBe(true);
+  });
+
+  it("Sturgeon SG covers both families of order Acipenseriformes (sturgeons and paddlefish), not sturgeons alone", () => {
+    const sturgeon = { class_name: "Actinopterygii", order_name: "Acipenseriformes", family: "Acipenseridae", scientific_name: "Acipenser sturio", taxon_group: "fishes" };
+    const paddlefish = { class_name: "Actinopterygii", order_name: "Acipenseriformes", family: "Polyodontidae", scientific_name: "Polyodon spathula", taxon_group: "fishes" };
+    expect(speciesMatchesNode(sturgeon, "ssc-sturgeon")).toBe(true);
+    expect(speciesMatchesNode(paddlefish, "ssc-sturgeon")).toBe(true);
+  });
+
+  it("all ssc-fish-groups children use the fishes csvGroup and have a unique id", () => {
+    const ids = new Set<string>();
+    for (const child of sscFishNode?.children ?? []) {
+      expect(child.filter.csvGroups).toEqual(["fishes"]);
+      expect(ids.has(child.id), `duplicate id ${child.id}`).toBe(false);
+      ids.add(child.id);
+    }
+  });
+
+  it("does not add any new children to the real 'fishes' node", () => {
+    const fishesNode = findNode("fishes");
+    const fishChildIds = new Set(fishesNode?.children?.map(c => c.id) ?? []);
+    for (const child of sscFishNode?.children ?? []) {
+      expect(fishChildIds.has(child.id)).toBe(false);
+    }
+  });
+});
+
 // =============================================================================
 // Partition coverage
 // =============================================================================

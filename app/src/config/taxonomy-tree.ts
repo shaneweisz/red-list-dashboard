@@ -1387,6 +1387,194 @@ export const TAXONOMY_TREE: TaxonomyNode = {
       ],
     },
 
+    // ─── SSC SPECIALIST GROUPS (fishes) ─────────────────────────────────
+    // Same second lens as "ssc-groups"/"ssc-reptile-groups" above, over the
+    // "fishes" CSV group. Only 9 of the 10 fish/marine SSC groups are built
+    // here — the IUCN SSC Freshwater Fish Specialist Group (FFSG) is
+    // DELIBERATELY EXCLUDED. FFSG's own site states its remit as "all
+    // freshwater fishes (>15,000 species)" — a HABITAT-based scope (marine vs.
+    // freshwater), not a taxonomic one. Our data has a `systems` field
+    // ("Freshwater"/"Marine"/...) but it's only populated for ASSESSED species
+    // (assessed.parquet) — unassessed species (the majority of the ~33,000-row
+    // fish universe) have no `systems` value at all, so a habitat-based filter
+    // can't be built without either leaving most of the universe unclassified
+    // or guessing from family-level heuristics (many families, e.g. Gobiidae,
+    // span both marine and freshwater — too risky to encode as fact). This is
+    // the same class of blocker as the 12 geographic regional Plant Red List
+    // Authorities: real, named IUCN entities whose remit needs a data
+    // dimension (range/habitat) this snapshot doesn't reliably have across the
+    // whole species universe. Revisit if/when the pipeline gains reliable
+    // habitat data for unassessed species too. The Anguillid Eel group was
+    // historically a sub-page of FFSG's own site but is organizationally
+    // independent (per its own materials) and cleanly family-scoped, so it's
+    // included below on its own regardless of FFSG's absence.
+    {
+      id: "ssc-fish-groups",
+      name: "SSC Specialist Groups",
+      filter: { csvGroups: ["fishes"] },
+      children: [
+        {
+          id: "ssc-shark",
+          name: "Shark Specialist Group",
+          filter: { csvGroups: ["fishes"], classNames: ["chondrichthyes"] },
+          // Own site (iucnssg.org): "leading authority on the status of sharks,
+          // rays, and chimaeras" — the entire class Chondrichthyes, repeatedly
+          // and explicitly including chimaeras (not just elasmobranchs).
+          estimatedDescribed: 1_266,
+          estimatedSource: ESCHMEYER + " — Chondrichthyes (sharks, rays, skates, and chimaeras)",
+          estimatedSourceUrl: ESCHMEYER_URL,
+          sourceUrl: "https://www.iucnssg.org",
+        },
+        {
+          id: "ssc-grouper-wrasse",
+          name: "Grouper and Wrasse Specialist Group",
+          filter: { csvGroups: ["fishes"], families: ["serranidae", "epinephelidae", "labridae", "scaridae"] },
+          // iucn.org: "The GWSG works with groupers and wrasses and their
+          // relatives (Families: Epinephelidae; Serranidae; Labridae;
+          // Scaridae)" — explicit, both grouper family labels (Epinephelidae
+          // was split out of Serranidae, and our data still carries both) plus
+          // wrasses and parrotfishes.
+          estimatedDescribed: 1_066,
+          estimatedSource: ESCHMEYER + " — Serranidae + Epinephelidae + Labridae + Scaridae",
+          estimatedSourceUrl: ESCHMEYER_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-groupers-and-wrasses-specialist-group",
+        },
+        {
+          id: "ssc-snapper-seabream-grunt",
+          name: "Snapper, Seabream and Grunt Specialist Group",
+          filter: { csvGroups: ["fishes"], families: ["lutjanidae", "sparidae", "haemulidae", "nemipteridae", "lethrinidae", "caesionidae"] },
+          // Own iucn.org page names 6 families, not just the 3 in its name:
+          // "snappers, seabreams, grunts, threadfin breams, emperors and
+          // fusiliers" — Lutjanidae, Sparidae, Haemulidae, Nemipteridae,
+          // Lethrinidae, Caesionidae. Gerreidae (mojarras) is NOT named
+          // anywhere in the group's own materials despite being a similar
+          // reef-fish family — deliberately left out, falls to the catch-all.
+          estimatedDescribed: 547,
+          estimatedSource: ESCHMEYER + " — Lutjanidae + Sparidae + Haemulidae + Nemipteridae + Lethrinidae + Caesionidae",
+          estimatedSourceUrl: ESCHMEYER_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-snapper-seabream-and-grunt-specialist-group",
+        },
+        {
+          id: "ssc-seahorse-pipefish-seadragon",
+          name: "Seahorse, Pipefish and Seadragon Specialist Group",
+          filter: {
+            csvGroups: ["fishes"],
+            families: ["syngnathidae", "solenostomidae", "aulostomidae", "fistulariidae", "centriscidae"],
+          },
+          // Own site (iucn-seahorse.org): "dedicated to the conservation of
+          // seahorses, pipefishes, pipehorses and seadragons — as well as
+          // related species such as trumpetfishes, cornetfishes, and
+          // shrimpfishes" — order Syngnathiformes in full: Syngnathidae (the
+          // core family) plus Solenostomidae (ghost pipefish), Aulostomidae
+          // (trumpetfish), Fistulariidae (cornetfish), and Centriscidae
+          // (shrimpfish) — all explicitly named, not just the core family.
+          estimatedDescribed: 324,
+          estimatedSource: ESCHMEYER + " — Syngnathidae + Solenostomidae + Aulostomidae + Fistulariidae + Centriscidae (order Syngnathiformes)",
+          estimatedSourceUrl: ESCHMEYER_URL,
+          sourceUrl: "https://iucn-seahorse.org/",
+        },
+        {
+          id: "ssc-sciaenid",
+          name: "Sciaenid Red List Authority",
+          filter: { csvGroups: ["fishes"], families: ["sciaenidae"] },
+          // Renamed by IUCN to "Croaker and Drum Fishes Red List Authority"
+          // (our source DB still lists the legacy name) — iucn.org: "purposes
+          // include revising and submitting assessments of all 300 species of
+          // Croaker and Drum Fishes" — the whole family Sciaenidae, no
+          // exceptions found.
+          estimatedDescribed: 302,
+          estimatedSource: ESCHMEYER + " — Sciaenidae",
+          estimatedSourceUrl: ESCHMEYER_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-croaker-and-drum-fishes-red-list-authority",
+        },
+        {
+          id: "ssc-salmonid",
+          name: "Salmonid Specialist Group",
+          filter: { csvGroups: ["fishes"], families: ["salmonidae"] },
+          // The group's listed dedicated site (stateofthesalmon.org) is
+          // defunct (redirects to a broken tool, no scope statement) — scope
+          // confirmed via iucn.org instead: covers "salmonids (fishes in the
+          // family Salmonidae)... throughout their native range," naming
+          // genera across all 3 subfamilies (Salmoninae, Coregoninae,
+          // Thymallinae) — the whole family, no carve-outs found.
+          estimatedDescribed: 248,
+          estimatedSource: ESCHMEYER + " — Salmonidae",
+          estimatedSourceUrl: ESCHMEYER_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-salmonid-specialist-group",
+        },
+        {
+          id: "ssc-tuna-billfish",
+          name: "Tuna and Billfish Specialist Group",
+          filter: { csvGroups: ["fishes"], families: ["scombridae", "istiophoridae", "xiphiidae"] },
+          // No single explicit Latin-family statement found on iucn.org (thin
+          // page), but the group's own activity reports state a precise,
+          // self-declared total — "the first comprehensive extinction risk
+          // assessments for the 61 species of tunas, mackerels and
+          // billfishes" and "51 scombrids and 10 billfishes" — which matches
+          // exactly: 51 = the full accepted species count of family Scombridae
+          // (not just the tuna genera — includes mackerels/bonitos too), and
+          // 10 = Istiophoridae (9 species) + monotypic Xiphiidae (swordfish).
+          // 51 + 10 = 61, confirming full-family scope for all 3 families.
+          estimatedDescribed: 63,
+          estimatedSource: ESCHMEYER + " — Scombridae + Istiophoridae + Xiphiidae (matches the group's own self-declared total of 61 species)",
+          estimatedSourceUrl: ESCHMEYER_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-tuna-and-billfish-specialist-group",
+        },
+        {
+          id: "ssc-sturgeon",
+          name: "Sturgeon Specialist Group",
+          filter: { csvGroups: ["fishes"], families: ["acipenseridae", "polyodontidae"] },
+          // iucn.org mission: "conservation, management, recovery and
+          // sustainable use of sturgeon and paddlefish populations worldwide"
+          // — explicitly both families of order Acipenseriformes (Acipenseridae
+          // = sturgeons; Polyodontidae = paddlefish, only 2 species exist:
+          // American paddlefish + the now-extinct Chinese paddlefish), not
+          // sturgeons alone.
+          estimatedDescribed: 27,
+          estimatedSource: ESCHMEYER + " — Acipenseridae + Polyodontidae (order Acipenseriformes)",
+          estimatedSourceUrl: ESCHMEYER_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-sturgeon-specialist-group",
+        },
+        {
+          id: "ssc-anguillid-eel",
+          name: "Anguillid Eel Specialist Group",
+          filter: { csvGroups: ["fishes"], families: ["anguillidae"] },
+          // Own site (hosted as a page of iucnffsg.org, but organizationally
+          // independent since a 2015 IUCN-SSC Leaders' Meeting decision, per
+          // its own materials): "all species within the family Anguillidae" —
+          // a monogeneric family (genus Anguilla), all 16 extant species.
+          estimatedDescribed: 16,
+          estimatedSource: ESCHMEYER + " — Anguillidae (genus Anguilla)",
+          estimatedSourceUrl: ESCHMEYER_URL,
+          sourceUrl: "http://www.iucnffsg.org/about-ffsg/anguillid-specialist-sub-group/",
+        },
+        // Catch-all: NOT a claim on behalf of Freshwater Fish SG (see the
+        // exclusion note above) — a plain "no dedicated SSC group" remainder,
+        // same shape as ssc-other-mammals. Kept in sync manually — if a 10th
+        // fish SSC group is added above, exclude its family/class here too.
+        {
+          id: "ssc-other-fish",
+          name: "No SSC Group",
+          filter: {
+            csvGroups: ["fishes"],
+            excludeClasses: ["chondrichthyes"],
+            excludeFamilies: [
+              "serranidae", "epinephelidae", "labridae", "scaridae",
+              "lutjanidae", "sparidae", "haemulidae", "nemipteridae", "lethrinidae", "caesionidae",
+              "syngnathidae", "solenostomidae", "aulostomidae", "fistulariidae", "centriscidae",
+              "sciaenidae", "salmonidae",
+              "scombridae", "istiophoridae", "xiphiidae",
+              "acipenseridae", "polyodontidae",
+              "anguillidae",
+            ],
+          },
+          estimatedDescribed: 29_185,
+          estimatedSource: "Fish species (assessed + unassessed, per our own data) not in any of the 9 SSC groups above (approx.; does not include the Freshwater Fish SG's much broader habitat-defined remit — see exclusion note above)",
+          estimatedSourceUrl: ESCHMEYER_URL,
+        },
+      ],
+    },
+
     // ─── INSECTA ───────────────────────────────────────────────────────
     INSECTS_NODE,
 
