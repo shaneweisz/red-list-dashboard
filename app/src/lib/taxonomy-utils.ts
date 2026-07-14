@@ -81,13 +81,19 @@ export const OFFICIAL_IUCN_DESCRIBED_NODE_IDS = new Set([
   ...TAXONOMY_VIEWS.table1a.roots,
 ]);
 
-// SSC Specialist Group leaves live under "ssc-groups" — a separate wrapper kept
-// OUT of the "mammals" tree node (so it doesn't pollute the normal Mammals
-// subgroup list) and out of the default view (so it isn't a 9th landing-page
-// taxon). But for URL persistence + click-through navigation they behave like a
-// "mammals" sub-group (onNavigateToSubgroup("mammals", sscLeafId)) — so redirect
-// their view-root resolution to "mammals" without actually re-parenting them.
-const VIEW_ROOT_OVERRIDES: Record<string, string> = { "ssc-groups": "mammals" };
+// SSC Specialist Group leaves live under a per-taxon wrapper (e.g. "ssc-groups"
+// for mammals, "ssc-reptile-groups" for reptiles) — kept OUT of their real taxon's
+// tree node (so they don't pollute the normal subgroup list, e.g. Mammals'
+// rodents/bats/primates/...) and out of the default view (so they aren't extra
+// landing-page taxa). But for URL persistence + click-through navigation they
+// behave like a sub-group of their real taxon (onNavigateToSubgroup(taxonId,
+// sscLeafId)) — so redirect their view-root resolution there without actually
+// re-parenting them. Add an entry here whenever a new taxon's SSC wrapper is added
+// (see SSC_SECTIONS in TaxaSummary.tsx for the matching UI-side list).
+const VIEW_ROOT_OVERRIDES: Record<string, string> = {
+  "ssc-groups": "mammals",
+  "ssc-reptile-groups": "reptiles",
+};
 
 /** Find the default-view ancestor for a node (one of the 8 display roots). */
 export function getViewRootForNode(nodeId: string): string | null {

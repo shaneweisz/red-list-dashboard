@@ -763,6 +763,137 @@ describe("SSC Specialist Groups tree", () => {
   });
 });
 
+describe("SSC Specialist Groups tree (reptiles)", () => {
+  const sscReptileNode = findNode("ssc-reptile-groups");
+
+  it("ssc-reptile-groups exists, is not part of the default view, and has 12 children (11 pilot groups + Snake and Lizard RLA)", () => {
+    expect(sscReptileNode).toBeDefined();
+    expect(sscReptileNode?.children?.length).toBe(12);
+    expect(TAXONOMY_VIEWS.default.roots).not.toContain("ssc-reptile-groups");
+  });
+
+  it("ssc-snake-lizard-rla (the residual RLA) doesn't overlap any of the 11 named groups", () => {
+    const cases: Array<{ class_name: string; order_name: string; family: string; scientific_name: string }> = [
+      { class_name: "Reptilia", order_name: "Crocodylia", family: "Crocodylidae", scientific_name: "Crocodylus niloticus" },
+      { class_name: "Reptilia", order_name: "Testudines", family: "Testudinidae", scientific_name: "Chelonoidis nigra" },
+      { class_name: "Reptilia", order_name: "Testudines", family: "Cheloniidae", scientific_name: "Chelonia mydas" },
+      { class_name: "Reptilia", order_name: "Squamata", family: "Scincidae", scientific_name: "Tiliqua scincoides" },
+      { class_name: "Reptilia", order_name: "Squamata", family: "Chamaeleonidae", scientific_name: "Chamaeleo calyptratus" },
+      { class_name: "Reptilia", order_name: "Squamata", family: "Varanidae", scientific_name: "Varanus komodoensis" },
+      { class_name: "Reptilia", order_name: "Squamata", family: "Lanthanotidae", scientific_name: "Lanthanotus borneensis" },
+      { class_name: "Reptilia", order_name: "Squamata", family: "Iguanidae", scientific_name: "Iguana iguana" },
+      { class_name: "Reptilia", order_name: "Squamata", family: "Dactyloidae", scientific_name: "Anolis carolinensis" },
+      { class_name: "Reptilia", order_name: "Squamata", family: "Viperidae", scientific_name: "Vipera berus" },
+      { class_name: "Reptilia", order_name: "Squamata", family: "Elapidae", scientific_name: "Hydrophis platurus" },
+      { class_name: "Reptilia", order_name: "Squamata", family: "Homalopsidae", scientific_name: "Cerberus rynchops" },
+      { class_name: "Reptilia", order_name: "Squamata", family: "Acrochordidae", scientific_name: "Acrochordus javanicus" },
+      { class_name: "Reptilia", order_name: "Squamata", family: "Boidae", scientific_name: "Boa constrictor" },
+      { class_name: "Reptilia", order_name: "Squamata", family: "Pythonidae", scientific_name: "Python bivittatus" },
+      // The tuatara — claimed by the RLA itself via extraSpeciesNames, must not
+      // also match the RLA's own base (exclude-everything-else) filter twice.
+      { class_name: "Reptilia", order_name: "Rhynchocephalia", family: "Sphenodontidae", scientific_name: "Sphenodon punctatus" },
+    ];
+    for (const row of cases) {
+      const isTuatara = row.scientific_name === "Sphenodon punctatus";
+      const named = ["ssc-crocodile", "ssc-tortoise-freshwater-turtle", "ssc-marine-turtle", "ssc-skink", "ssc-chameleon", "ssc-monitor-lizard", "ssc-iguana", "ssc-anoline-lizard", "ssc-viper", "ssc-sea-snake", "ssc-boa-python"];
+      const matchesNamed = named.some((id) => speciesMatchesNode({ ...row, taxon_group: "reptiles" }, id));
+      expect(matchesNamed, row.scientific_name).toBe(!isTuatara);
+      // The RLA only claims the tuatara (via extraSpeciesNames) among these
+      // cases — everything else here is already claimed by a named group, so
+      // the RLA's exclude-everything-else base filter must not also match it.
+      expect(speciesMatchesNode({ ...row, taxon_group: "reptiles" }, "ssc-snake-lizard-rla")).toBe(isTuatara);
+    }
+  });
+
+  it("ssc-snake-lizard-rla catches a genuinely uncovered species (gecko, no dedicated SSC group among the 11)", () => {
+    const gecko = { class_name: "Reptilia", order_name: "Squamata", family: "Gekkonidae", scientific_name: "Gekko gecko", taxon_group: "reptiles" };
+    expect(speciesMatchesNode(gecko, "ssc-snake-lizard-rla")).toBe(true);
+  });
+
+  it("ssc-snake-lizard-rla explicitly claims the tuatara via extraSpeciesNames despite it not being Squamata", () => {
+    const tuatara = { class_name: "Reptilia", order_name: "Rhynchocephalia", family: "Sphenodontidae", scientific_name: "Sphenodon punctatus", taxon_group: "reptiles" };
+    expect(speciesMatchesNode(tuatara, "ssc-snake-lizard-rla")).toBe(true);
+  });
+
+  it("Anoline Lizard SG is genus-scoped to Anolis, correctly excluding the related genus Polychrus despite sharing a family-label lineage", () => {
+    const anole = { class_name: "Reptilia", order_name: "Squamata", family: "Dactyloidae", scientific_name: "Anolis carolinensis", taxon_group: "reptiles" };
+    const anole2 = { class_name: "Reptilia", order_name: "Squamata", family: "Anolidae", scientific_name: "Anolis sagrei", taxon_group: "reptiles" };
+    const bushAnole = { class_name: "Reptilia", order_name: "Squamata", family: "Polychrotidae", scientific_name: "Polychrus marmoratus", taxon_group: "reptiles" };
+    expect(speciesMatchesNode(anole, "ssc-anoline-lizard")).toBe(true);
+    expect(speciesMatchesNode(anole2, "ssc-anoline-lizard")).toBe(true);
+    expect(speciesMatchesNode(bushAnole, "ssc-anoline-lizard")).toBe(false);
+    expect(speciesMatchesNode(bushAnole, "ssc-snake-lizard-rla")).toBe(true);
+  });
+
+  it("Sea Snake SG's genus-level Elapidae filter excludes terrestrial elapids (cobras, mambas, coral snakes)", () => {
+    const seaSnake = { class_name: "Reptilia", order_name: "Squamata", family: "Elapidae", scientific_name: "Hydrophis platurus", taxon_group: "reptiles" };
+    const seaKrait = { class_name: "Reptilia", order_name: "Squamata", family: "Elapidae", scientific_name: "Laticauda colubrina", taxon_group: "reptiles" };
+    const cobra = { class_name: "Reptilia", order_name: "Squamata", family: "Elapidae", scientific_name: "Naja naja", taxon_group: "reptiles" };
+    const mamba = { class_name: "Reptilia", order_name: "Squamata", family: "Elapidae", scientific_name: "Dendroaspis polylepis", taxon_group: "reptiles" };
+    expect(speciesMatchesNode(seaSnake, "ssc-sea-snake")).toBe(true);
+    expect(speciesMatchesNode(seaKrait, "ssc-sea-snake")).toBe(true);
+    expect(speciesMatchesNode(cobra, "ssc-sea-snake")).toBe(false);
+    expect(speciesMatchesNode(cobra, "ssc-snake-lizard-rla")).toBe(true);
+    expect(speciesMatchesNode(mamba, "ssc-sea-snake")).toBe(false);
+    expect(speciesMatchesNode(mamba, "ssc-snake-lizard-rla")).toBe(true);
+  });
+
+  it("Sea Snake SG also claims all of Homalopsidae (mud snakes) and Acrochordidae (file snakes), unrelated families to Elapidae", () => {
+    const mudSnake = { class_name: "Reptilia", order_name: "Squamata", family: "Homalopsidae", scientific_name: "Cerberus rynchops", taxon_group: "reptiles" };
+    const fileSnake = { class_name: "Reptilia", order_name: "Squamata", family: "Acrochordidae", scientific_name: "Acrochordus javanicus", taxon_group: "reptiles" };
+    expect(speciesMatchesNode(mudSnake, "ssc-sea-snake")).toBe(true);
+    expect(speciesMatchesNode(fileSnake, "ssc-sea-snake")).toBe(true);
+  });
+
+  it("Monitor Lizard SG includes Lanthanotidae (earless monitor lizard) alongside Varanidae, per the group's own site", () => {
+    const komodo = { class_name: "Reptilia", order_name: "Squamata", family: "Varanidae", scientific_name: "Varanus komodoensis", taxon_group: "reptiles" };
+    const earless = { class_name: "Reptilia", order_name: "Squamata", family: "Lanthanotidae", scientific_name: "Lanthanotus borneensis", taxon_group: "reptiles" };
+    expect(speciesMatchesNode(komodo, "ssc-monitor-lizard")).toBe(true);
+    expect(speciesMatchesNode(earless, "ssc-monitor-lizard")).toBe(true);
+  });
+
+  it("Marine Turtle SG and Tortoise/Freshwater Turtle SG partition Testudines without overlap", () => {
+    const seaTurtle = { class_name: "Reptilia", order_name: "Testudines", family: "Cheloniidae", scientific_name: "Chelonia mydas", taxon_group: "reptiles" };
+    const leatherback = { class_name: "Reptilia", order_name: "Testudines", family: "Dermochelyidae", scientific_name: "Dermochelys coriacea", taxon_group: "reptiles" };
+    const tortoise = { class_name: "Reptilia", order_name: "Testudines", family: "Testudinidae", scientific_name: "Chelonoidis nigra", taxon_group: "reptiles" };
+    expect(speciesMatchesNode(seaTurtle, "ssc-marine-turtle")).toBe(true);
+    expect(speciesMatchesNode(seaTurtle, "ssc-tortoise-freshwater-turtle")).toBe(false);
+    expect(speciesMatchesNode(leatherback, "ssc-marine-turtle")).toBe(true);
+    expect(speciesMatchesNode(leatherback, "ssc-tortoise-freshwater-turtle")).toBe(false);
+    expect(speciesMatchesNode(tortoise, "ssc-marine-turtle")).toBe(false);
+    expect(speciesMatchesNode(tortoise, "ssc-tortoise-freshwater-turtle")).toBe(true);
+  });
+
+  it("Boa and Python SG covers modern Boidae splits (sand boas etc.) but not the ~10 more distant relict families left to the RLA", () => {
+    const boa = { class_name: "Reptilia", order_name: "Squamata", family: "Boidae", scientific_name: "Boa constrictor", taxon_group: "reptiles" };
+    const python = { class_name: "Reptilia", order_name: "Squamata", family: "Pythonidae", scientific_name: "Python bivittatus", taxon_group: "reptiles" };
+    const sandBoa = { class_name: "Reptilia", order_name: "Squamata", family: "Erycidae", scientific_name: "Eryx johnii", taxon_group: "reptiles" };
+    const shieldTail = { class_name: "Reptilia", order_name: "Squamata", family: "Uropeltidae", scientific_name: "Uropeltis melanogaster", taxon_group: "reptiles" };
+    expect(speciesMatchesNode(boa, "ssc-boa-python")).toBe(true);
+    expect(speciesMatchesNode(python, "ssc-boa-python")).toBe(true);
+    expect(speciesMatchesNode(sandBoa, "ssc-boa-python")).toBe(true);
+    expect(speciesMatchesNode(shieldTail, "ssc-boa-python")).toBe(false);
+    expect(speciesMatchesNode(shieldTail, "ssc-snake-lizard-rla")).toBe(true);
+  });
+
+  it("all ssc-reptile-groups children use the reptiles csvGroup and have a unique id", () => {
+    const ids = new Set<string>();
+    for (const child of sscReptileNode?.children ?? []) {
+      expect(child.filter.csvGroups).toEqual(["reptiles"]);
+      expect(ids.has(child.id), `duplicate id ${child.id}`).toBe(false);
+      ids.add(child.id);
+    }
+  });
+
+  it("does not add any new children to the real 'reptiles' node", () => {
+    const reptilesNode = findNode("reptiles");
+    const reptileChildIds = new Set(reptilesNode?.children?.map(c => c.id) ?? []);
+    for (const child of sscReptileNode?.children ?? []) {
+      expect(reptileChildIds.has(child.id)).toBe(false);
+    }
+  });
+});
+
 // =============================================================================
 // Partition coverage
 // =============================================================================
