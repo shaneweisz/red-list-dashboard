@@ -787,13 +787,13 @@ describe("SSC Specialist Groups tree", () => {
 describe("SSC Specialist Groups tree (reptiles)", () => {
   const sscReptileNode = findNode("ssc-reptile-groups");
 
-  it("ssc-reptile-groups exists, is not part of the default view, and has 12 children (11 pilot groups + Snake and Lizard RLA)", () => {
+  it("ssc-reptile-groups exists, is not part of the default view, and has 13 children (12 pilot groups + Snake and Lizard RLA)", () => {
     expect(sscReptileNode).toBeDefined();
-    expect(sscReptileNode?.children?.length).toBe(12);
+    expect(sscReptileNode?.children?.length).toBe(13);
     expect(TAXONOMY_VIEWS.default.roots).not.toContain("ssc-reptile-groups");
   });
 
-  it("ssc-snake-lizard-rla (the residual RLA) doesn't overlap any of the 11 named groups", () => {
+  it("ssc-snake-lizard-rla (the residual RLA) doesn't overlap any of the 12 named groups", () => {
     const cases: Array<{ class_name: string; order_name: string; family: string; scientific_name: string }> = [
       { class_name: "Reptilia", order_name: "Crocodylia", family: "Crocodylidae", scientific_name: "Crocodylus niloticus" },
       { class_name: "Reptilia", order_name: "Testudines", family: "Testudinidae", scientific_name: "Chelonoidis nigra" },
@@ -816,7 +816,7 @@ describe("SSC Specialist Groups tree (reptiles)", () => {
     ];
     for (const row of cases) {
       const isTuatara = row.scientific_name === "Sphenodon punctatus";
-      const named = ["ssc-crocodile", "ssc-tortoise-freshwater-turtle", "ssc-marine-turtle", "ssc-skink", "ssc-chameleon", "ssc-monitor-lizard", "ssc-iguana", "ssc-anoline-lizard", "ssc-viper", "ssc-sea-snake", "ssc-boa-python"];
+      const named = ["ssc-crocodile", "ssc-tortoise-freshwater-turtle", "ssc-marine-turtle", "ssc-skink", "ssc-chameleon", "ssc-monitor-lizard", "ssc-iguana", "ssc-anoline-lizard", "ssc-gekkota", "ssc-viper", "ssc-sea-snake", "ssc-boa-python"];
       const matchesNamed = named.some((id) => speciesMatchesNode({ ...row, taxon_group: "reptiles" }, id));
       expect(matchesNamed, row.scientific_name).toBe(!isTuatara);
       // The RLA only claims the tuatara (via extraSpeciesNames) among these
@@ -826,9 +826,17 @@ describe("SSC Specialist Groups tree (reptiles)", () => {
     }
   });
 
-  it("ssc-snake-lizard-rla catches a genuinely uncovered species (gecko, no dedicated SSC group among the 11)", () => {
+  it("ssc-snake-lizard-rla catches a genuinely uncovered species (whiptail lizard, no dedicated SSC group among the 12)", () => {
+    const whiptail = { class_name: "Reptilia", order_name: "Squamata", family: "Teiidae", scientific_name: "Ameiva ameiva", taxon_group: "reptiles" };
+    expect(speciesMatchesNode(whiptail, "ssc-snake-lizard-rla")).toBe(true);
+  });
+
+  it("Gekkota Lizard SG covers all 7 gecko families, not the Snake and Lizard RLA", () => {
     const gecko = { class_name: "Reptilia", order_name: "Squamata", family: "Gekkonidae", scientific_name: "Gekko gecko", taxon_group: "reptiles" };
-    expect(speciesMatchesNode(gecko, "ssc-snake-lizard-rla")).toBe(true);
+    const legless = { class_name: "Reptilia", order_name: "Squamata", family: "Pygopodidae", scientific_name: "Lialis burtonis", taxon_group: "reptiles" };
+    expect(speciesMatchesNode(gecko, "ssc-gekkota")).toBe(true);
+    expect(speciesMatchesNode(legless, "ssc-gekkota")).toBe(true);
+    expect(speciesMatchesNode(gecko, "ssc-snake-lizard-rla")).toBe(false);
   });
 
   it("ssc-snake-lizard-rla explicitly claims the tuatara via extraSpeciesNames despite it not being Squamata", () => {

@@ -930,7 +930,12 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         },
         {
           id: "ssc-wild-camelid",
-          name: "Wild Camelid Specialist Group",
+          // The group's own site (camelid.org) brands itself in English as
+          // "South American Camelid Specialist Group" (GECS) — IUCN's own
+          // directory listing still uses "Wild Camelid," so the node id and
+          // sourceUrl slug are kept for stability, same treatment as Asian
+          // Wild Cattle SG above.
+          name: "South American Camelid Specialist Group",
           filter: { csvGroups: ["mammals"], genera: ["lama", "vicugna"] },
           estimatedDescribed: 2,
           estimatedSource: MDD + " — Lama + Vicugna (South American camelids; excludes wild Bactrian camel, Camelus ferus, not part of this group's remit)",
@@ -1054,7 +1059,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           estimatedDescribed: 7,
           estimatedSource: REPTILE_DB + " — Cheloniidae + Dermochelyidae (all 7 sea turtle species)",
           estimatedSourceUrl: REPTILE_DB_URL,
-          sourceUrl: "http://iucn-mtsg.org/",
+          sourceUrl: "https://www.iucn-mtsg.org/",
         },
         {
           id: "ssc-skink",
@@ -1090,7 +1095,12 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // also dealt within the IUCN SSC Monitor Lizard Specialist Group...
           // sole member of the family Lanthanotidae [Earless monitor lizards]
           // ...together with the Varanidae reflect two families of the
-          // Superfamily Platynota" — explicit, both families.
+          // Superfamily Platynota" — explicit, both families. NOTE:
+          // iucn-mlsg.org currently serves a broken self-signed/placeholder
+          // TLS certificate (confirmed live and legitimate content once
+          // bypassed) — users clicking through may see a browser security
+          // warning; this is a hosting issue on the group's end, not a data
+          // problem here.
           estimatedDescribed: 87,
           estimatedSource: REPTILE_DB + " — Varanidae + Lanthanotidae",
           estimatedSourceUrl: REPTILE_DB_URL,
@@ -1117,16 +1127,21 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           filter: { csvGroups: ["reptiles"], genera: ["anolis"] },
           // Own site (iucn.org): mission covers "Anolis (anole) lizards...
           // across the entire distribution of Anolis" — genus-scoped, not
-          // family-scoped. Our data splits anoles across two synonymous family
-          // labels, "anolidae" (379 spp) and "dactyloidae" (53 spp) — both are
-          // entirely genus Anolis, confirmed by direct query, so filtering by
-          // genus (not family) is both more faithful to the group's own words
-          // and immune to the family-label split. A third family label,
-          // "polychrotidae" (9 spp), is entirely genus Polychrus — a related
-          // but distinct genus the group's own scope doesn't name — correctly
-          // NOT included (falls to the Snake and Lizard RLA catch-all below).
+          // family-scoped, so filtering by genus (not family) is most
+          // faithful to the group's own words and immune to any future
+          // family-label churn. Our data currently files all 379 Anolis-genus
+          // species under the single family label "anolidae" (no
+          // "dactyloidae" label exists in this dataset, despite it being a
+          // synonym used elsewhere in the literature). A separate family
+          // label, "polychrotidae" (9 spp), is entirely genus Polychrus — a
+          // related but distinct genus the group's own scope doesn't name —
+          // correctly NOT included (falls to the Snake and Lizard RLA
+          // catch-all below). The estimatedDescribed gap below (432 vs. 379)
+          // reflects Reptile Database's larger global described-species count
+          // vs. this file's assessed/candidate subset, not an in-file
+          // family-label split.
           estimatedDescribed: 432,
-          estimatedSource: REPTILE_DB + " — genus Anolis (spans the anolidae/dactyloidae family-label split in our data; excludes Polychrus)",
+          estimatedSource: REPTILE_DB + " — genus Anolis (filed under family \"anolidae\" in our data; excludes Polychrus)",
           estimatedSourceUrl: REPTILE_DB_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-anoline-lizard-specialist-group",
         },
@@ -1187,6 +1202,25 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-sea-snake-specialist-group",
         },
         {
+          id: "ssc-gekkota",
+          name: "Gekkota Lizard Specialist Group",
+          filter: {
+            csvGroups: ["reptiles"],
+            families: ["gekkonidae", "eublepharidae", "phyllodactylidae", "sphaerodactylidae", "diplodactylidae", "carphodactylidae", "pygopodidae"],
+          },
+          // Found missing entirely in a post-review pass — a real group
+          // (formed 2025, after the DB's ssc_group_lookup snapshot was
+          // taken) confirmed via its own iucn.org page: "ensure the
+          // long-term survival of all Gekkota species... over 2,300 species
+          // distributed across seven families" — the 7 standard,
+          // universally-recognized Gekkota families (all geckos), all
+          // present in our data.
+          estimatedDescribed: 2_300,
+          estimatedSource: IUCN_SOURCE + " — Gekkota (7 families, per the group's own stated scope)",
+          estimatedSourceUrl: IUCN_SOURCE_URL,
+          sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-gekkota-lizard-specialist-group",
+        },
+        {
           id: "ssc-boa-python",
           name: "Boa and Python Specialist Group",
           filter: {
@@ -1229,8 +1263,10 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         // entity, not a gap in our coverage. The tuatara is a genuinely
         // reported exception (Rhynchocephalia, not even Squamata) — added via
         // extraSpeciesNames, the same escape hatch the mammal pilot's Antelope
-        // SG uses. Kept in sync manually — if a 13th reptile SSC group is
-        // added above, exclude its family/genus here too.
+        // SG uses. Kept in sync manually — if a 14th reptile SSC group is
+        // added above, exclude its family/genus here too (this already
+        // happened once: Gekkota Lizard SG was a real group formed in 2025
+        // that got missed in the initial build, found in a later review).
         {
           id: "ssc-snake-lizard-rla",
           name: "Snake and Lizard Red List Authority",
@@ -1244,6 +1280,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
               "cheloniidae", "dermochelyidae",
               "scincidae", "chamaeleonidae", "varanidae", "lanthanotidae", "iguanidae",
               "anolidae", "dactyloidae",
+              "gekkonidae", "eublepharidae", "phyllodactylidae", "sphaerodactylidae", "diplodactylidae", "carphodactylidae", "pygopodidae",
               "viperidae",
               "homalopsidae", "acrochordidae",
               "boidae", "pythonidae", "erycidae", "charinaidae", "candoiidae", "sanziniidae", "ungaliophiidae",
@@ -1256,8 +1293,8 @@ export const TAXONOMY_TREE: TaxonomyNode = {
             ],
             extraSpeciesNames: ["sphenodon punctatus"],
           },
-          estimatedDescribed: 7_959,
-          estimatedSource: "Remainder of " + REPTILE_DB + " reptile total minus the 11 SSC groups above, plus the tuatara (approx.)",
+          estimatedDescribed: 5_659,
+          estimatedSource: "Remainder of " + REPTILE_DB + " reptile total minus the 12 SSC groups above, plus the tuatara (approx.)",
           estimatedSourceUrl: REPTILE_DB_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-snake-and-lizard-red-list-authority",
         },
@@ -1408,15 +1445,22 @@ export const TAXONOMY_TREE: TaxonomyNode = {
     // ─── SSC SPECIALIST GROUPS (fishes) ─────────────────────────────────
     // Same second lens as "ssc-groups"/"ssc-reptile-groups" above, over the
     // "fishes" CSV group. Only 9 of the 10 fish/marine SSC groups are built
-    // here — the IUCN SSC Freshwater Fish Specialist Group (FFSG) is
-    // DELIBERATELY EXCLUDED. FFSG's own site states its remit as "all
-    // freshwater fishes (>15,000 species)" — a HABITAT-based scope (marine vs.
-    // freshwater), not a taxonomic one. Our data has a `systems` field
-    // ("Freshwater"/"Marine"/...) but it's only populated for ASSESSED species
-    // (assessed.parquet) — unassessed species (the majority of the ~33,000-row
-    // fish universe) have no `systems` value at all, so a habitat-based filter
-    // can't be built without either leaving most of the universe unclassified
-    // or guessing from family-level heuristics (many families, e.g. Gobiidae,
+    // here — TWO real, named, HABITAT-based groups are DELIBERATELY EXCLUDED
+    // (found via a post-review pass that the second one, MFRLA, had gone
+    // undocumented despite being the same class of blocker as the first):
+    //  - Freshwater Fish Specialist Group (FFSG): own site states its remit
+    //    as "all freshwater fishes (>15,000 species)".
+    //  - Marine Fishes Red List Authority (MFRLA): own iucn.org page states
+    //    its mission as "completing Red List assessments for all marine
+    //    fishes" (>17,000 species) — meaning most of what lands in the
+    //    catch-all below would, in reality, be MFRLA's remit.
+    // Both are HABITAT-based scopes (marine vs. freshwater), not taxonomic
+    // ones. Our data has a `systems` field ("Freshwater"/"Marine"/...) but
+    // it's only populated for ASSESSED species (assessed.parquet) —
+    // unassessed species (the majority of the ~33,000-row fish universe)
+    // have no `systems` value at all, so a habitat-based filter can't be
+    // built without either leaving most of the universe unclassified or
+    // guessing from family-level heuristics (many families, e.g. Gobiidae,
     // span both marine and freshwater — too risky to encode as fact). This is
     // the same class of blocker as the 12 geographic regional Plant Red List
     // Authorities: real, named IUCN entities whose remit needs a data
@@ -1425,7 +1469,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
     // habitat data for unassessed species too. The Anguillid Eel group was
     // historically a sub-page of FFSG's own site but is organizationally
     // independent (per its own materials) and cleanly family-scoped, so it's
-    // included below on its own regardless of FFSG's absence.
+    // included below on its own regardless of FFSG's/MFRLA's absence.
     {
       id: "ssc-fish-groups",
       name: "SSC Specialist Groups",
@@ -1593,7 +1637,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
             ],
           },
           estimatedDescribed: 29_185,
-          estimatedSource: "Fish species (assessed + unassessed, per our own data) not in any of the 9 SSC groups above (approx.; does not include the Freshwater Fish SG's much broader habitat-defined remit — see exclusion note above)",
+          estimatedSource: "Fish species (assessed + unassessed, per our own data) not in any of the 9 SSC groups above (approx.; includes species that would belong to the Freshwater Fish SG or Marine Fishes RLA's much broader habitat-defined remits in reality — see exclusion note above)",
           estimatedSourceUrl: ESCHMEYER_URL,
         },
       ],
@@ -1839,17 +1883,33 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // crabs: the 5 standard freshwater-crab families (Potamidae,
           // Potamonautidae, Gecarcinucidae, Pseudothelphusidae,
           // Trichodactylidae — the report names specific genera within these
-          // but not the family names literally). Land crabs are also
-          // explicitly in scope (target: "25 species of land crabs") —
-          // Gecarcinidae. Freshwater shrimp (Atyidae — near-exclusively
-          // freshwater) included; Palaemonidae DELIBERATELY EXCLUDED despite
-          // containing freshwater genera like Macrobrachium, since the family
-          // also contains many marine species and the group's own report
-          // confirms marine decapods are deliberately out of scope (a
-          // "Marine Crustacean Specialist Group" is described as still being
-          // formed) — no family/genus-level way to safely split Palaemonidae
-          // without habitat data we don't have, so it's left to the catch-all
-          // rather than guessed either way.
+          // but not the family names literally). A post-review pass checked
+          // whether "Deckeniidae" (a freshwater-crab family whose own
+          // rediscovery, Afrithelphusa leonensis, is featured in the group's
+          // 2024-2025 report) was missing — it isn't: our data doesn't use
+          // the "Deckeniidae" label at all, and files every one of those
+          // genera (Afrithelphusa, Deckenia, Hydrothelphusa, Malagasya,
+          // Platythelphusa) under "Potamonautidae" instead, which is already
+          // included above — confirmed by direct query, no gap. Land crabs
+          // are also explicitly in scope (target: "25 species of land
+          // crabs") — Gecarcinidae. Freshwater shrimp (Atyidae —
+          // near-exclusively freshwater) included; Palaemonidae DELIBERATELY
+          // EXCLUDED despite containing freshwater genera like Macrobrachium,
+          // since the family also contains many marine species and the
+          // group's own report confirms marine decapods are deliberately out
+          // of scope (a "Marine Crustacean Specialist Group" is described as
+          // still being formed). LOWER CONFIDENCE, flagged rather than
+          // guessed: a global freshwater-shrimp Red List assessment (De
+          // Grave et al. 2015, "Dead Shrimp Blues," PLOS ONE) does treat
+          // Palaemonidae as a major freshwater-shrimp family alongside
+          // Atyidae, and Macrobrachium (river prawns) is its dominant
+          // freshwater genus — but no FCSG first-party material was found
+          // explicitly naming Macrobrachium as in-scope, and this filter
+          // engine ANDs families/genera together, so adding just one genus
+          // would require re-expressing all 11 already-included families as
+          // an explicit ~344-genus list (a large, error-prone rewrite for
+          // one unconfirmed genus) rather than a small, low-risk addition.
+          // Left to the catch-all pending a clearer first-party source.
           estimatedDescribed: 2_649,
           estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — 3 crayfish families + Aeglidae + 5 freshwater-crab families + Atyidae + Gecarcinidae (land crabs); excludes the mixed marine/freshwater family Palaemonidae",
           estimatedSourceUrl: COL_2025_URL,
@@ -1903,9 +1963,9 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Own site (fireflyersinternational.net/iucn): "Fireflies
           // (Coleoptera: Lampyridae)" — the whole family, no narrower
           // carve-out found.
-          estimatedDescribed: 538,
-          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Lampyridae",
-          estimatedSourceUrl: COL_2025_URL,
+          estimatedDescribed: 2_400,
+          estimatedSource: "Wikipedia (Lampyridae) — \"more than 2,400 described species\"; previous estimate of 538 was a stale undercount",
+          estimatedSourceUrl: "https://en.wikipedia.org/wiki/Firefly",
           sourceUrl: "https://fireflyersinternational.net/iucn",
         },
         {
@@ -1981,10 +2041,16 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // against Catalogue of Life's Scarabaeinae subtree — 199 confirmed
           // Scarabaeinae genera, 1,074 confirmed as other subfamilies
           // (Aphodiinae, Cetoniinae, Dynastinae, Melolonthinae, Rutelinae,
-          // etc.), 0 left to guesswork.
-          estimatedDescribed: 2_605,
-          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Geotrupidae (whole family) + Scarabaeinae (subfamily of Scarabaeidae, resolved via genus-level Catalogue of Life cross-reference; see comment)",
-          estimatedSourceUrl: COL_2025_URL,
+          // etc.), 0 left to guesswork. NOTE: estimatedDescribed reflects the
+          // group's own real-world described-species claim (>6,000), not the
+          // count of rows the genus filter happens to match in our own
+          // dataset (2,605) — our data's described-species coverage for
+          // Scarabaeinae is real but incomplete relative to true global
+          // diversity (Wikipedia: "The Scarabaeinae alone comprises more
+          // than 5,000 species").
+          estimatedDescribed: 6_000,
+          estimatedSource: "Own co-chairs' founding announcement (Oryx 57(2), 2023) — \"over 6,000 described species\" across Geotrupidae + Scarabaeinae",
+          estimatedSourceUrl: "https://doi.org/10.1017/S0030605323000032",
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-dung-beetle-specialist-group",
         },
         {
@@ -2199,7 +2265,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         },
         {
           id: "ssc-cactus-succulent",
-          name: "Cactus and Succulent Plant Specialist Group",
+          name: "Cactus and Succulent Plants Specialist Group",
           filter: { csvGroups: ["flowering_plants"], families: ["cactaceae", "didiereaceae"] },
           // Own site (iucn-cssg.org) defines "succulent" functionally (water
           // storage in leaves/stems/roots) and explicitly names member
@@ -2503,7 +2569,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
             // order_name; undercounting rather than guessing its order.
             orderNames: [
               "pucciniales",
-              "ustilaginales", "urocystidales", "violaceomycetales",
+              "ustilaginales", "urocystidales", "violaceomycetales", "uleiellales",
               "entylomatales", "exobasidiales", "tilletiales", "doassansiales",
               "georgefischeriales", "microstromatales", "ceraceosorales", "robbauerales",
             ],
@@ -2552,7 +2618,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
             excludeOrders: [
               "pezizales",
               "pucciniales",
-              "ustilaginales", "urocystidales", "violaceomycetales",
+              "ustilaginales", "urocystidales", "violaceomycetales", "uleiellales",
               "entylomatales", "exobasidiales", "tilletiales", "doassansiales",
               "georgefischeriales", "microstromatales", "ceraceosorales", "robbauerales",
             ],
