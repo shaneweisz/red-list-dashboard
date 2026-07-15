@@ -994,7 +994,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         // Pronghorn, Water Chevrotain, and Wild Camel are claimed by Antelope SG.
         {
           id: "ssc-other-mammals",
-          name: "No SSC Group",
+          name: "No / Other SSC Group",
           filter: {
             csvGroups: ["mammals"],
             excludeOrders: [
@@ -1701,7 +1701,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         // fish SSC group is added above, exclude its family/class here too.
         {
           id: "ssc-other-fish",
-          name: "No SSC Group",
+          name: "No / Other SSC Group",
           filter: {
             csvGroups: ["fishes"],
             excludeClasses: ["chondrichthyes", "elasmobranchii", "holocephali"],
@@ -2323,7 +2323,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         // class here too (or omit its csvGroup entirely if fully claimed).
         {
           id: "ssc-other-invertebrates",
-          name: "No SSC Group",
+          name: "No / Other SSC Group",
           filter: {
             csvGroups: [
               "beetles", "butterflies_and_moths", "flies_and_mosquitoes", "bees_wasps_and_ants", "true_bugs", "other_insects",
@@ -2748,7 +2748,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         // SSC group is added above, exclude its family/order/genus here too.
         {
           id: "ssc-other-plants",
-          name: "No SSC Group",
+          name: "No / Other SSC Group",
           filter: {
             csvGroups: ["flowering_plants", "gymnosperms", "ferns_and_allies", "green_algae", "red_algae"],
             excludeFamilies: [
@@ -2961,7 +2961,7 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         // order/class here too.
         {
           id: "ssc-other-fungi",
-          name: "No SSC Group",
+          name: "No / Other SSC Group",
           filter: {
             csvGroups: ["mushrooms"],
             // Rusts and Smuts SG is excluded by order (not class) below, on
