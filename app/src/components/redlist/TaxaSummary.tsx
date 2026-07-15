@@ -64,6 +64,10 @@ interface Table1aRowData {
 interface Table1aSectionData {
   title: string;
   rows: Table1aRowData[];
+  /** SSC mode only — the section's catch-all row id (e.g. "ssc-other-mammals"),
+   * so the collapse-to-5 UI can always keep it visible regardless of collapse
+   * state. Undefined in Table 1a mode, which has no catch-all concept. */
+  catchAllId?: string;
 }
 
 const IUCN_SOURCE_URL = "https://nc.iucnredlist.org/redlist/content/attachment_files/2026-1_RL_Table1a.pdf";
@@ -71,6 +75,9 @@ const IUCN_SOURCE_URL = "https://nc.iucnredlist.org/redlist/content/attachment_f
 // SSC groups mode — one section per taxon that has an SSC pilot built out.
 // Add an entry here (nodeId, parentTaxon, title, catch-all id) when a new
 // taxon's SSC groups are added.
+// Named groups shown per section before collapsing behind "Show all" — the
+// catch-all row is never counted against this and always stays visible.
+const SSC_SECTION_COLLAPSE_SIZE = 5;
 const SSC_SECTIONS: { nodeId: string; parentTaxon: string; title: string; catchAllId: string }[] = [
   { nodeId: "ssc-groups", parentTaxon: "mammals", title: "MAMMAL SPECIALIST GROUPS", catchAllId: "ssc-other-mammals" },
   { nodeId: "ssc-reptile-groups", parentTaxon: "reptiles", title: "REPTILE SPECIALIST GROUPS", catchAllId: "ssc-snake-lizard-rla" },
@@ -1206,6 +1213,19 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   // the precomputed SSC wrapper nodes' children instead of the top-level
   // Table 1a CSV groups (see SSC_SECTIONS above).
   const [sscData, setSscData] = useState<Table1aSectionData[] | null>(null);
+  // Which SSC sections (keyed by title) are expanded past the first
+  // SSC_SECTION_COLLAPSE_SIZE rows — collapsed by default so a taxon with 36
+  // groups (mammals) doesn't dwarf the page; the catch-all row always shows
+  // regardless of this state (see the render loop below).
+  const [expandedSscSections, setExpandedSscSections] = useState<Set<string>>(new Set());
+  const toggleSscSection = useCallback((title: string) => {
+    setExpandedSscSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(title)) next.delete(title);
+      else next.add(title);
+      return next;
+    });
+  }, []);
   const [sscLoading, setSscLoading] = useState(false);
   const sscFetchStartedRef = useRef(false);
 
@@ -1242,7 +1262,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               if (b.group === section.catchAllId) return -1;
               return b.totalAssessed - a.totalAssessed;
             });
-            return { title: section.title, rows };
+            return { title: section.title, rows, catchAllId: section.catchAllId };
           })
       )
     )
@@ -2350,8 +2370,21 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                           <td className={flexTdClasses}>{renderBreakdownBar(subByCategory)}</td>
                         )}
                       </tr>
-                      {/* Section rows */}
-                      {rows.map((row) => (
+                      {/* Section rows — collapsed to SSC_SECTION_COLLAPSE_SIZE named
+                          groups by default in SSC mode (a 36-row mammal section would
+                          otherwise dwarf every other taxon); the catch-all row is
+                          pulled out of the collapse/expand entirely and always shown,
+                          since it's usually the largest, most load-bearing row. Table
+                          1a mode has no catch-all concept (section.catchAllId is
+                          undefined there), so it always renders every row. */}
+                      {(() => {
+                        const isSscSection = sscMode && section.catchAllId != null;
+                        const catchAllRow = isSscSection ? rows.find(r => r.group === section.catchAllId) : undefined;
+                        const namedRows = catchAllRow ? rows.filter(r => r.group !== section.catchAllId) : rows;
+                        const isExpanded = expandedSscSections.has(section.title);
+                        const visibleNamedRows = isSscSection && !isExpanded ? namedRows.slice(0, SSC_SECTION_COLLAPSE_SIZE) : namedRows;
+                        const hiddenCount = namedRows.length - visibleNamedRows.length;
+                        const renderGroupRow = (row: (typeof rows)[number]) => (
                         <tr
                           key={row.group}
                           className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer"
@@ -2482,7 +2515,36 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                             </td>
                           )}
                         </tr>
-                      ))}
+                        );
+                        return (
+                          <>
+                            {visibleNamedRows.map(renderGroupRow)}
+                            {isSscSection && hiddenCount > 0 && (
+                              <tr
+                                className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer"
+                                onClick={() => toggleSscSection(section.title)}
+                              >
+                                <td colSpan={visibleColCount} className={`${cellPad} text-center`}>
+                                  <span className="text-xs text-blue-600 dark:text-blue-400 hover:underline">
+                                    Show all {namedRows.length} groups ({hiddenCount} more)
+                                  </span>
+                                </td>
+                              </tr>
+                            )}
+                            {isSscSection && isExpanded && namedRows.length > SSC_SECTION_COLLAPSE_SIZE && (
+                              <tr
+                                className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer"
+                                onClick={() => toggleSscSection(section.title)}
+                              >
+                                <td colSpan={visibleColCount} className={`${cellPad} text-center`}>
+                                  <span className="text-xs text-blue-600 dark:text-blue-400 hover:underline">Show less</span>
+                                </td>
+                              </tr>
+                            )}
+                            {catchAllRow && renderGroupRow(catchAllRow)}
+                          </>
+                        );
+                      })()}
                       {/* Gap between sections */}
                       {si < flatData.length - 1 && (
                         <tr><td colSpan={visibleColCount} className="p-0"><div className="h-1" /></td></tr>
