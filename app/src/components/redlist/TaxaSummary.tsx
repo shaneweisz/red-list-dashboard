@@ -2663,14 +2663,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               onClick={() => onLayoutModeChange(null)}
               className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
             >
-              Exit Table 1a mode
+              Exit Table 1a View
             </button>
           ) : sscMode ? (
             <button
               onClick={() => onLayoutModeChange(null)}
               className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
             >
-              Exit SSC groups mode
+              Exit SSC Groups View
             </button>
           ) : (
             <>
@@ -2687,7 +2687,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                   onClick={() => onLayoutModeChange("table1a")}
                   className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
                 >
-                  Table 1a mode
+                  Table 1a View
                 </button>
                 <span className="relative group/t1a">
                   <a
@@ -2710,7 +2710,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                   onClick={() => onLayoutModeChange("ssc")}
                   className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
                 >
-                  SSC groups mode
+                  SSC Groups View
                 </button>
                 <span className="relative group/ssc">
                   <a

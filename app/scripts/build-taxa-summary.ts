@@ -23,6 +23,7 @@ import type { NodeSummary } from "../src/lib/data/species-store";
 import {
   COL_SPECIES_NAME_OVERRIDES,
   COL_EXCLUDE_ALL_NODES,
+  COL_DOMESTIC_EXCLUDE_NAMES,
 } from "../src/config/col-described-overrides";
 
 const CURRENT_YEAR = new Date().getFullYear();
@@ -102,10 +103,19 @@ async function colCountsByGroup(): Promise<Map<string, { col_described: number; 
   const conn = await (await DuckDBInstance.create(":memory:")).connect();
   await createExEwAssessedTable(conn, link, assessedPath, "ex_ew_assessed");
   const universe = extantUniverseSql("ex_ew_assessed");
+  // Same domestic-form exclusion every SSC group's own CoL count already applies (see
+  // filterToSql/COL_DOMESTIC_EXCLUDE_NAMES below) — without it, this per-taxon_group
+  // total (used for the top-level "Mammals" row etc.) counts a domestic form alongside
+  // its wild sibling species, diverging from the sum of that taxon's SSC group rows.
+  // Deliberately COL_DOMESTIC_EXCLUDE_NAMES here, not the wider COL_EXCLUDE_ALL_NODES —
+  // the extra bison-name overrides in that list exist only to stop sibling SSC nodes
+  // (Bison SG vs. Asian Wild Cattle SG) double-counting each other, which doesn't apply
+  // to this flat, single-group scan; excluding them here would just undercount bison.
+  const notDomestic = `coalesce(lower(scientific_name), '') NOT IN (${sqlStrList(COL_DOMESTIC_EXCLUDE_NAMES)})`;
   const rows = await (await conn.run(`
     SELECT taxon_group,
-           count(*) FILTER (in_base AND ${universe} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL}) AS col_described,
-           count(*) FILTER (in_base AND ${universe} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL} AND col_id NOT IN (
+           count(*) FILTER (in_base AND ${universe} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL} AND ${notDomestic}) AS col_described,
+           count(*) FILTER (in_base AND ${universe} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL} AND ${notDomestic} AND col_id NOT IN (
              SELECT col_id FROM read_parquet('${link}') WHERE src = 'redlist' AND col_id IS NOT NULL
            )) AS col_ne
     FROM read_parquet('${speciesGlob}', hive_partitioning=true)
