@@ -850,9 +850,16 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           id: "ssc-new-world-marsupial",
           name: "New World Marsupial Specialist Group",
           filter: { csvGroups: ["mammals"], orderNames: ["didelphimorphia", "paucituberculata", "microbiotheria"] },
-          estimatedDescribed: 108,
-          estimatedSource: "Martin et al. 2025, Mammal Review — the group's own unified taxonomic list for Didelphimorphia + Paucituberculata + Microbiotheria",
-          estimatedSourceUrl: "https://iucn.org/sites/default/files/2025-09/2024-2025-iucn-ssc-new-world-marsupial-sg-report_publication.pdf",
+          // estimatedDescribed corrected — a prior fix misread this same
+          // paper's figure as 108 (which suspiciously matched how many rows
+          // happen to be in our own dataset, not the paper's own stated
+          // total). The paper's abstract states verbatim: "New World
+          // Marsupials (NWMs) comprise over 135 species... classified within
+          // the orders Didelphimorphia, Microbiotheria and Paucituberculata"
+          // — Didelphimorphia 127 + Microbiotheria 1 + Paucituberculata 7 = 135.
+          estimatedDescribed: 135,
+          estimatedSource: "Martin & Carmignotto 2024, Mammal Review — \"over 135 species\" (127 Didelphimorphia + 1 Microbiotheria + 7 Paucituberculata)",
+          estimatedSourceUrl: "https://iucn.org/sites/default/files/2024-06/2024-martin-carmignotto-new-world-marsupials.pdf",
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-new-world-marsupial-specialist-group",
         },
         {
@@ -1024,7 +1031,13 @@ export const TAXONOMY_TREE: TaxonomyNode = {
             // here instead of vanishing from every node.
             extraSpeciesNames: ["bos primigenius"],
           },
-          estimatedDescribed: 223,
+          // estimatedDescribed recomputed — the prior figure (223) had
+          // drifted out of sync with its own stated formula after several
+          // sibling groups' estimates were corrected in later review rounds
+          // (e.g. Primate SG 522→527, Anteater/Sloth/Armadillo SG 31→42,
+          // Australasian Marsupial SG 250→270). Recomputed as the actual sum
+          // of all 35 sibling nodes' current estimatedDescribed values.
+          estimatedDescribed: 163,
           estimatedSource: "Remainder of IUCN Table 1a mammals total (6,854) minus the 35 SSC pilot groups above (approx.)",
           estimatedSourceUrl: IUCN_SOURCE_URL,
         },
@@ -1334,7 +1347,12 @@ export const TAXONOMY_TREE: TaxonomyNode = {
             ],
             extraSpeciesNames: ["sphenodon punctatus"],
           },
-          estimatedDescribed: 5_659,
+          // estimatedDescribed recomputed — the prior figure (5,659) was a
+          // quick subtraction done when Gekkota SG was added that didn't
+          // account for other sibling groups' own estimates changing since.
+          // Recomputed as the actual sum of all 12 sibling nodes' current
+          // estimatedDescribed values.
+          estimatedDescribed: 6_770,
           estimatedSource: "Remainder of " + REPTILE_DB + " reptile total minus the 12 SSC groups above, plus the tuatara (approx.)",
           estimatedSourceUrl: REPTILE_DB_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-snake-and-lizard-red-list-authority",
@@ -1776,9 +1794,14 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // directory-listed group) — the group's real remit is the entire
           // phylum Mollusca, matching our "Molluscs" Table 1a group exactly,
           // no narrowing needed.
-          estimatedDescribed: 35_195,
-          estimatedSource: IUCN_SOURCE + " (MolluscaBase 2025) — Mollusca (whole phylum, incl. cephalopods)",
-          estimatedSourceUrl: "http://www.molluscabase.org",
+          // estimatedDescribed corrected — the prior figure (35,195)
+          // undercounted real Mollusca diversity by ~2.5x; MolluscaBase's own
+          // homepage reports 145,412 accepted names, and this app's own
+          // COL_2025 data for taxon_group=molluscs totals ~89,648 rows,
+          // matching independent literature (~90,000 valid Recent species).
+          estimatedDescribed: 89_648,
+          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Mollusca (whole phylum, incl. cephalopods)",
+          estimatedSourceUrl: COL_2025_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-mollusc-specialist-group",
         },
         {
@@ -1793,7 +1816,12 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // anywhere. Encoded to the evidenced core (Araneae + Scorpiones)
           // rather than the aspirational "all Arachnida" framing, the same
           // judgment call as the reptile pilot's Boa and Python SG.
-          estimatedDescribed: 16_053,
+          // estimatedDescribed corrected — the prior figure (16,053)
+          // undercounted real diversity by ~3.5x; World Spider Catalog
+          // reports ~53,000-53,700 described spider species alone, plus
+          // ~2,600-2,900 scorpions, matching this app's own COL_2025 data
+          // (~54,938 Araneae + 2,955 Scorpiones).
+          estimatedDescribed: 57_893,
           estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Araneae + Scorpiones (evidenced core; own mission language claims broader \"all arachnids\" but no other order has any demonstrated group activity)",
           estimatedSourceUrl: COL_2025_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-spider-and-scorpion-specialist-group",
@@ -1831,7 +1859,10 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // species currently fall to the catch-all rather than here — a
           // known, small undercount, same class of judgment call as the
           // reptile pilot's Boa and Python SG.
-          estimatedDescribed: 14_269,
+          // estimatedDescribed corrected — the prior figure (14,269)
+          // undercounted by ~1.5x against this app's own COL_2025 data for
+          // the exact 8-family filter (~21,600-23,000 rows).
+          estimatedDescribed: 21_631,
           estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Papilionoidea (6 butterfly families) + Hedylidae + Saturniidae (evidenced core; group's own mission statement literally says \"butterflies and moths\" and it has published scattered assessments in 4 other moth families, but has never claimed those families wholesale — see comment)",
           estimatedSourceUrl: COL_2025_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-butterfly-and-moth-specialist-group",
@@ -1852,7 +1883,11 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // the "other_insects" CSV group rather than "grasshoppers_crickets_
           // locusts"). Locusts are explicitly just a behavioral subset of
           // Acrididae (Orthoptera), not a separate taxon needing its own rule.
-          estimatedDescribed: 11_319,
+          // estimatedDescribed corrected — the prior figure (11,319)
+          // undercounted by ~3x; Orthoptera Species File alone lists
+          // ~28,000-29,500 valid species, matching this app's own COL_2025
+          // data (~28,701 Orthoptera + 3,439 Phasmida + 2,522 Mantodea).
+          estimatedDescribed: 34_662,
           estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Orthoptera + Phasmida + Mantodea",
           estimatedSourceUrl: COL_2025_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-grasshopper-specialist-group",
@@ -1942,6 +1977,85 @@ export const TAXONOMY_TREE: TaxonomyNode = {
               // Palaemonidae.
               "desmocarididae", "euryrhynchidae", "typhlocarididae", "xiphocarididae",
             ],
+            // Palaemonidae is a mixed marine/freshwater family, so it isn't
+            // in the `families` list above — but its freshwater members
+            // (dominated by Macrobrachium, river prawns) are named
+            // individually via extraSpeciesNames instead, using this
+            // dataset's own `systems` field to identify them precisely: of
+            // 301 assessed Palaemonidae species, 300 are tagged purely
+            // "Freshwater" (1 "Freshwater;Marine") — the same near-total
+            // freshwater purity as the already-included Atyidae (442/445
+            // "Freshwater") — so this is a real, data-backed inclusion, not
+            // a guess. `systems` is only populated for assessed species, so
+            // this can't extend to the unassessed Palaemonidae universe; any
+            // unassessed Palaemonidae species still falls to the catch-all.
+            extraSpeciesNames: [
+              "arachnochium kulsiense", "arachnochium mirabile", "calathaemon holthuisi", "coutierella tonkinensis", "creaseria morleyi",
+              "cryphiops brasiliensis", "cryphiops caementarius", "cryphiops luscus", "cryphiops perspicax", "cryphiops sbordonii", "cryphiops villalobosi",
+              "exopalaemon annandalei", "exopalaemon mani", "exopalaemon modestus", "exopalaemon xinjiangensis",
+              "leptocarpus fluminicola", "leptocarpus kempi", "leptocarpus potamiscus",
+              "leptopalaemon gagadjui", "leptopalaemon gibbosus", "leptopalaemon glabrus", "leptopalaemon gudjangah", "leptopalaemon magelensis",
+              "macrobrachium acanthochirus", "macrobrachium acanthurus", "macrobrachium acherontium", "macrobrachium aemulum", "macrobrachium agwi",
+              "macrobrachium ahkowi", "macrobrachium altifrons", "macrobrachium amazonicum", "macrobrachium americanum", "macrobrachium amplimanus",
+              "macrobrachium andamanicum", "macrobrachium aracamuni", "macrobrachium asperulum", "macrobrachium assamense", "macrobrachium atabapense",
+              "macrobrachium auratum", "macrobrachium australe", "macrobrachium australiense", "macrobrachium banjarae", "macrobrachium bariense",
+              "macrobrachium birmanicum", "macrobrachium bombayense", "macrobrachium borellii", "macrobrachium brasiliense", "macrobrachium brevicarpum",
+              "macrobrachium bullatum", "macrobrachium cacharense", "macrobrachium caledonicum", "macrobrachium callirrhoe", "macrobrachium canarae",
+              "macrobrachium carcinus", "macrobrachium catonium", "macrobrachium cavernicola", "macrobrachium chevalieri", "macrobrachium clymene",
+              "macrobrachium cocoense", "macrobrachium cortezi", "macrobrachium cosolapaense", "macrobrachium cowlesi", "macrobrachium crebrum",
+              "macrobrachium crenulatum", "macrobrachium dalatense", "macrobrachium dayanum", "macrobrachium denticulatum", "macrobrachium depressimanum",
+              "macrobrachium dienbienphuense", "macrobrachium dierythrum", "macrobrachium digitus", "macrobrachium digueti", "macrobrachium dolatum",
+              "macrobrachium dolichodactylus", "macrobrachium duri", "macrobrachium dux", "macrobrachium edentatum", "macrobrachium elatum",
+              "macrobrachium elegantum", "macrobrachium empulipke", "macrobrachium equidens", "macrobrachium esculentum", "macrobrachium faustinum",
+              "macrobrachium felicinum", "macrobrachium ferreirai", "macrobrachium feunteuni", "macrobrachium foai", "macrobrachium forcipatum",
+              "macrobrachium formosense", "macrobrachium fukienense", "macrobrachium gallus", "macrobrachium gangeticum", "macrobrachium glabrum",
+              "macrobrachium gracilirostre", "macrobrachium grandimanus", "macrobrachium gua", "macrobrachium guangxiense", "macrobrachium gurudeve",
+              "macrobrachium hainanense", "macrobrachium hancocki", "macrobrachium handschini", "macrobrachium hendersodayanum", "macrobrachium hendersoni",
+              "macrobrachium heterochirus", "macrobrachium heterorhynchos", "macrobrachium hildebrandti", "macrobrachium hirsutimanus", "macrobrachium hirtimanus",
+              "macrobrachium hobbsi", "macrobrachium horstii", "macrobrachium hungi", "macrobrachium idae", "macrobrachium idella",
+              "macrobrachium iheringi", "macrobrachium inca", "macrobrachium indicum", "macrobrachium inflatum", "macrobrachium inpa",
+              "macrobrachium insulare", "macrobrachium jacatepecense", "macrobrachium jacobsoni", "macrobrachium japonicum", "macrobrachium jaroense",
+              "macrobrachium jayasreei", "macrobrachium jelskii", "macrobrachium jiangxiense", "macrobrachium johnsoni", "macrobrachium joppae",
+              "macrobrachium kelianense", "macrobrachium kempi", "macrobrachium kistnense", "macrobrachium koombooloomba", "macrobrachium kulkarnii",
+              "macrobrachium kunjuramani", "macrobrachium lamarrei", "macrobrachium lanatum", "macrobrachium lanceifrons", "macrobrachium lanchesteri",
+              "macrobrachium lar", "macrobrachium latidactylus", "macrobrachium latimanus", "macrobrachium lepidactyloides", "macrobrachium lepidactylus",
+              "macrobrachium leptodactylus", "macrobrachium leucodactylus", "macrobrachium lingyunense", "macrobrachium lopopodus", "macrobrachium lorentzi",
+              "macrobrachium lucifugum", "macrobrachium lujae", "macrobrachium macrobrachion", "macrobrachium maculatum", "macrobrachium madhusoodani",
+              "macrobrachium malayanum", "macrobrachium malcolmsonii", "macrobrachium mammillodactylus", "macrobrachium manipurense", "macrobrachium manningi",
+              "macrobrachium mazatecum", "macrobrachium meridionale", "macrobrachium michoacanus", "macrobrachium microps", "macrobrachium mieni",
+              "macrobrachium minutum", "macrobrachium miyakoense", "macrobrachium moorei", "macrobrachium naso", "macrobrachium nattereri",
+              "macrobrachium natulorum", "macrobrachium neglectum", "macrobrachium nepalense", "macrobrachium niloticum", "macrobrachium niphanae",
+              "macrobrachium nipponense", "macrobrachium nobilii", "macrobrachium novaehollandiae", "macrobrachium oaxacae", "macrobrachium occidentale",
+              "macrobrachium oenone", "macrobrachium ohione", "macrobrachium olfersii", "macrobrachium oxyphilus", "macrobrachium panamense",
+              "macrobrachium patheinense", "macrobrachium patsa", "macrobrachium pectinatum", "macrobrachium peguense", "macrobrachium pentazona",
+              "macrobrachium petersii", "macrobrachium petiti", "macrobrachium pilimanus", "macrobrachium pilosum", "macrobrachium placidulum",
+              "macrobrachium placidum", "macrobrachium platycheles", "macrobrachium platyrostris", "macrobrachium poeti", "macrobrachium potiuna",
+              "macrobrachium prabhakarani", "macrobrachium praecox", "macrobrachium pumilum", "macrobrachium purpureamanus", "macrobrachium quelchi",
+              "macrobrachium raridens", "macrobrachium rathbunae", "macrobrachium reyesi", "macrobrachium rhodochir", "macrobrachium rodriguezi",
+              "macrobrachium rogersi", "macrobrachium rosenbergii", "macrobrachium rostratum", "macrobrachium rude", "macrobrachium sabanus",
+              "macrobrachium saigonense", "macrobrachium sankollii", "macrobrachium santanderensis", "macrobrachium sbordonii", "macrobrachium scabriculum",
+              "macrobrachium scorteccii", "macrobrachium shaoi", "macrobrachium shokitai", "macrobrachium sintangense", "macrobrachium sirindhorn",
+              "macrobrachium siwalikense", "macrobrachium sollaudii", "macrobrachium spinipes", "macrobrachium spinosum", "macrobrachium srilankense",
+              "macrobrachium striatum", "macrobrachium sulcatus", "macrobrachium sulcicarpale", "macrobrachium sundaicum", "macrobrachium suongae",
+              "macrobrachium superbum", "macrobrachium surinamicum", "macrobrachium tenellum", "macrobrachium tenuirostrum", "macrobrachium thai",
+              "macrobrachium therezieni", "macrobrachium thuylami", "macrobrachium thysi", "macrobrachium tiwarii", "macrobrachium tolmerum",
+              "macrobrachium totonacum", "macrobrachium transandicum", "macrobrachium tratense", "macrobrachium trichodactylum", "macrobrachium tuxtlaense",
+              "macrobrachium unikarnatakae", "macrobrachium urayang", "macrobrachium veliense", "macrobrachium venustum", "macrobrachium vicconi",
+              "macrobrachium vietnamiense", "macrobrachium villalobosi", "macrobrachium villosimanus", "macrobrachium vollenhoveni", "macrobrachium walvanense",
+              "macrobrachium wannanense", "macrobrachium weberi", "macrobrachium yui", "macrobrachium zariquieyi",
+              "neopalaemon nahuatlus",
+              "palaemon antennarius", "palaemon capensis", "palaemon minos",
+              "palaemonetes antrorum", "palaemonetes argentinus", "palaemonetes australis", "palaemonetes carteri", "palaemonetes cummingi",
+              "palaemonetes hobbsi", "palaemonetes ivonicus", "palaemonetes kadiakensis", "palaemonetes lindsayi", "palaemonetes mercedae",
+              "palaemonetes mesogenitor", "palaemonetes mesopotamicus", "palaemonetes mexicanus", "palaemonetes paludosus", "palaemonetes sinensis",
+              "palaemonetes suttkusi", "palaemonetes texanus", "palaemonetes turcorum",
+              "pseudopalaemon amazonensis", "pseudopalaemon bouvieri", "pseudopalaemon chryseus", "pseudopalaemon funchiae", "pseudopalaemon gouldingi",
+              "pseudopalaemon iquitoensis", "pseudopalaemon nigramnis",
+              "tenuipedium palaemonoides",
+              "troglindicus phreaticus",
+              "troglocubanus calcis", "troglocubanus eigenmanni", "troglocubanus gibarensis", "troglocubanus inermis", "troglocubanus jamaicensis",
+              "troglomexicanus huastecae", "troglomexicanus perezfarfanteae", "troglomexicanus tamaulipasensis",
+            ],
           },
           // Own 2024-2025 SSC annual report: "the long-term conservation of
           // freshwater decapods – freshwater crabs, crayfish, freshwater
@@ -1962,25 +2076,21 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // included above — confirmed by direct query, no gap. Land crabs
           // are also explicitly in scope (target: "25 species of land
           // crabs") — Gecarcinidae. Freshwater shrimp (Atyidae —
-          // near-exclusively freshwater) included; Palaemonidae DELIBERATELY
-          // EXCLUDED despite containing freshwater genera like Macrobrachium,
-          // since the family also contains many marine species and the
-          // group's own report confirms marine decapods are deliberately out
-          // of scope (a "Marine Crustacean Specialist Group" is described as
-          // still being formed). LOWER CONFIDENCE, flagged rather than
-          // guessed: a global freshwater-shrimp Red List assessment (De
-          // Grave et al. 2015, "Dead Shrimp Blues," PLOS ONE) does treat
-          // Palaemonidae as a major freshwater-shrimp family alongside
-          // Atyidae, and Macrobrachium (river prawns) is its dominant
-          // freshwater genus — but no FCSG first-party material was found
-          // explicitly naming Macrobrachium as in-scope, and this filter
-          // engine ANDs families/genera together, so adding just one genus
-          // would require re-expressing all 15 already-included families as
-          // an explicit ~344-genus list (a large, error-prone rewrite for
-          // one unconfirmed genus) rather than a small, low-risk addition.
-          // Left to the catch-all pending a clearer first-party source.
-          estimatedDescribed: 2_665,
-          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — 3 crayfish families + Aeglidae + 5 freshwater-crab families + Atyidae + Gecarcinidae (land crabs) + 4 small freshwater-shrimp families; excludes the mixed marine/freshwater family Palaemonidae",
+          // near-exclusively freshwater) included; Palaemonidae as a WHOLE
+          // FAMILY is still not in the `families` list (it also contains
+          // marine genera the group's own report confirms are out of scope —
+          // a "Marine Crustacean Specialist Group" is described as still
+          // being formed). Earlier drafts left the family's freshwater
+          // members (dominated by Macrobrachium, per the group's own
+          // materials and De Grave et al. 2015, "Dead Shrimp Blues," PLOS
+          // ONE) to the catch-all, reasoning there was no practical way to
+          // split one family without an ~344-genus rewrite. That was wrong —
+          // this dataset's own `systems` field lets the freshwater members
+          // be identified directly and named individually via
+          // extraSpeciesNames instead (see below), the same OR escape hatch
+          // already used for Antelope SG's out-of-family exceptions.
+          estimatedDescribed: 2_965,
+          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — 3 crayfish families + Aeglidae + 5 freshwater-crab families + Atyidae + Gecarcinidae (land crabs) + 4 small freshwater-shrimp families + 300 freshwater-tagged Palaemonidae species",
           estimatedSourceUrl: COL_2025_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-freshwater-crustacean-specialist-group",
         },
@@ -2258,8 +2368,78 @@ export const TAXONOMY_TREE: TaxonomyNode = {
               "tibiodrepanus", "tiniocellus", "tomogonus", "tragiscus", "trichillidium", "trichillum",
               "trichonthophagus", "tropidonitis", "upsa", "uroxys", "versicorpus", "xinidium", "zonocopris",
             ],
+            // The freshwater-tagged Palaemonidae species claimed by
+            // Freshwater Crustacean SG above via extraSpeciesNames (same
+            // list) — excluded here so they aren't double-counted.
+            excludeSpeciesNames: [
+              "arachnochium kulsiense", "arachnochium mirabile", "calathaemon holthuisi", "coutierella tonkinensis", "creaseria morleyi",
+              "cryphiops brasiliensis", "cryphiops caementarius", "cryphiops luscus", "cryphiops perspicax", "cryphiops sbordonii", "cryphiops villalobosi",
+              "exopalaemon annandalei", "exopalaemon mani", "exopalaemon modestus", "exopalaemon xinjiangensis",
+              "leptocarpus fluminicola", "leptocarpus kempi", "leptocarpus potamiscus",
+              "leptopalaemon gagadjui", "leptopalaemon gibbosus", "leptopalaemon glabrus", "leptopalaemon gudjangah", "leptopalaemon magelensis",
+              "macrobrachium acanthochirus", "macrobrachium acanthurus", "macrobrachium acherontium", "macrobrachium aemulum", "macrobrachium agwi",
+              "macrobrachium ahkowi", "macrobrachium altifrons", "macrobrachium amazonicum", "macrobrachium americanum", "macrobrachium amplimanus",
+              "macrobrachium andamanicum", "macrobrachium aracamuni", "macrobrachium asperulum", "macrobrachium assamense", "macrobrachium atabapense",
+              "macrobrachium auratum", "macrobrachium australe", "macrobrachium australiense", "macrobrachium banjarae", "macrobrachium bariense",
+              "macrobrachium birmanicum", "macrobrachium bombayense", "macrobrachium borellii", "macrobrachium brasiliense", "macrobrachium brevicarpum",
+              "macrobrachium bullatum", "macrobrachium cacharense", "macrobrachium caledonicum", "macrobrachium callirrhoe", "macrobrachium canarae",
+              "macrobrachium carcinus", "macrobrachium catonium", "macrobrachium cavernicola", "macrobrachium chevalieri", "macrobrachium clymene",
+              "macrobrachium cocoense", "macrobrachium cortezi", "macrobrachium cosolapaense", "macrobrachium cowlesi", "macrobrachium crebrum",
+              "macrobrachium crenulatum", "macrobrachium dalatense", "macrobrachium dayanum", "macrobrachium denticulatum", "macrobrachium depressimanum",
+              "macrobrachium dienbienphuense", "macrobrachium dierythrum", "macrobrachium digitus", "macrobrachium digueti", "macrobrachium dolatum",
+              "macrobrachium dolichodactylus", "macrobrachium duri", "macrobrachium dux", "macrobrachium edentatum", "macrobrachium elatum",
+              "macrobrachium elegantum", "macrobrachium empulipke", "macrobrachium equidens", "macrobrachium esculentum", "macrobrachium faustinum",
+              "macrobrachium felicinum", "macrobrachium ferreirai", "macrobrachium feunteuni", "macrobrachium foai", "macrobrachium forcipatum",
+              "macrobrachium formosense", "macrobrachium fukienense", "macrobrachium gallus", "macrobrachium gangeticum", "macrobrachium glabrum",
+              "macrobrachium gracilirostre", "macrobrachium grandimanus", "macrobrachium gua", "macrobrachium guangxiense", "macrobrachium gurudeve",
+              "macrobrachium hainanense", "macrobrachium hancocki", "macrobrachium handschini", "macrobrachium hendersodayanum", "macrobrachium hendersoni",
+              "macrobrachium heterochirus", "macrobrachium heterorhynchos", "macrobrachium hildebrandti", "macrobrachium hirsutimanus", "macrobrachium hirtimanus",
+              "macrobrachium hobbsi", "macrobrachium horstii", "macrobrachium hungi", "macrobrachium idae", "macrobrachium idella",
+              "macrobrachium iheringi", "macrobrachium inca", "macrobrachium indicum", "macrobrachium inflatum", "macrobrachium inpa",
+              "macrobrachium insulare", "macrobrachium jacatepecense", "macrobrachium jacobsoni", "macrobrachium japonicum", "macrobrachium jaroense",
+              "macrobrachium jayasreei", "macrobrachium jelskii", "macrobrachium jiangxiense", "macrobrachium johnsoni", "macrobrachium joppae",
+              "macrobrachium kelianense", "macrobrachium kempi", "macrobrachium kistnense", "macrobrachium koombooloomba", "macrobrachium kulkarnii",
+              "macrobrachium kunjuramani", "macrobrachium lamarrei", "macrobrachium lanatum", "macrobrachium lanceifrons", "macrobrachium lanchesteri",
+              "macrobrachium lar", "macrobrachium latidactylus", "macrobrachium latimanus", "macrobrachium lepidactyloides", "macrobrachium lepidactylus",
+              "macrobrachium leptodactylus", "macrobrachium leucodactylus", "macrobrachium lingyunense", "macrobrachium lopopodus", "macrobrachium lorentzi",
+              "macrobrachium lucifugum", "macrobrachium lujae", "macrobrachium macrobrachion", "macrobrachium maculatum", "macrobrachium madhusoodani",
+              "macrobrachium malayanum", "macrobrachium malcolmsonii", "macrobrachium mammillodactylus", "macrobrachium manipurense", "macrobrachium manningi",
+              "macrobrachium mazatecum", "macrobrachium meridionale", "macrobrachium michoacanus", "macrobrachium microps", "macrobrachium mieni",
+              "macrobrachium minutum", "macrobrachium miyakoense", "macrobrachium moorei", "macrobrachium naso", "macrobrachium nattereri",
+              "macrobrachium natulorum", "macrobrachium neglectum", "macrobrachium nepalense", "macrobrachium niloticum", "macrobrachium niphanae",
+              "macrobrachium nipponense", "macrobrachium nobilii", "macrobrachium novaehollandiae", "macrobrachium oaxacae", "macrobrachium occidentale",
+              "macrobrachium oenone", "macrobrachium ohione", "macrobrachium olfersii", "macrobrachium oxyphilus", "macrobrachium panamense",
+              "macrobrachium patheinense", "macrobrachium patsa", "macrobrachium pectinatum", "macrobrachium peguense", "macrobrachium pentazona",
+              "macrobrachium petersii", "macrobrachium petiti", "macrobrachium pilimanus", "macrobrachium pilosum", "macrobrachium placidulum",
+              "macrobrachium placidum", "macrobrachium platycheles", "macrobrachium platyrostris", "macrobrachium poeti", "macrobrachium potiuna",
+              "macrobrachium prabhakarani", "macrobrachium praecox", "macrobrachium pumilum", "macrobrachium purpureamanus", "macrobrachium quelchi",
+              "macrobrachium raridens", "macrobrachium rathbunae", "macrobrachium reyesi", "macrobrachium rhodochir", "macrobrachium rodriguezi",
+              "macrobrachium rogersi", "macrobrachium rosenbergii", "macrobrachium rostratum", "macrobrachium rude", "macrobrachium sabanus",
+              "macrobrachium saigonense", "macrobrachium sankollii", "macrobrachium santanderensis", "macrobrachium sbordonii", "macrobrachium scabriculum",
+              "macrobrachium scorteccii", "macrobrachium shaoi", "macrobrachium shokitai", "macrobrachium sintangense", "macrobrachium sirindhorn",
+              "macrobrachium siwalikense", "macrobrachium sollaudii", "macrobrachium spinipes", "macrobrachium spinosum", "macrobrachium srilankense",
+              "macrobrachium striatum", "macrobrachium sulcatus", "macrobrachium sulcicarpale", "macrobrachium sundaicum", "macrobrachium suongae",
+              "macrobrachium superbum", "macrobrachium surinamicum", "macrobrachium tenellum", "macrobrachium tenuirostrum", "macrobrachium thai",
+              "macrobrachium therezieni", "macrobrachium thuylami", "macrobrachium thysi", "macrobrachium tiwarii", "macrobrachium tolmerum",
+              "macrobrachium totonacum", "macrobrachium transandicum", "macrobrachium tratense", "macrobrachium trichodactylum", "macrobrachium tuxtlaense",
+              "macrobrachium unikarnatakae", "macrobrachium urayang", "macrobrachium veliense", "macrobrachium venustum", "macrobrachium vicconi",
+              "macrobrachium vietnamiense", "macrobrachium villalobosi", "macrobrachium villosimanus", "macrobrachium vollenhoveni", "macrobrachium walvanense",
+              "macrobrachium wannanense", "macrobrachium weberi", "macrobrachium yui", "macrobrachium zariquieyi",
+              "neopalaemon nahuatlus",
+              "palaemon antennarius", "palaemon capensis", "palaemon minos",
+              "palaemonetes antrorum", "palaemonetes argentinus", "palaemonetes australis", "palaemonetes carteri", "palaemonetes cummingi",
+              "palaemonetes hobbsi", "palaemonetes ivonicus", "palaemonetes kadiakensis", "palaemonetes lindsayi", "palaemonetes mercedae",
+              "palaemonetes mesogenitor", "palaemonetes mesopotamicus", "palaemonetes mexicanus", "palaemonetes paludosus", "palaemonetes sinensis",
+              "palaemonetes suttkusi", "palaemonetes texanus", "palaemonetes turcorum",
+              "pseudopalaemon amazonensis", "pseudopalaemon bouvieri", "pseudopalaemon chryseus", "pseudopalaemon funchiae", "pseudopalaemon gouldingi",
+              "pseudopalaemon iquitoensis", "pseudopalaemon nigramnis",
+              "tenuipedium palaemonoides",
+              "troglindicus phreaticus",
+              "troglocubanus calcis", "troglocubanus eigenmanni", "troglocubanus gibarensis", "troglocubanus inermis", "troglocubanus jamaicensis",
+              "troglomexicanus huastecae", "troglomexicanus perezfarfanteae", "troglomexicanus tamaulipasensis",
+            ],
           },
-          estimatedDescribed: 247_966,
+          estimatedDescribed: 247_666,
           estimatedSource: "Invertebrate species (assessed + unassessed, per our own data) not in any of the 17 SSC groups above (approx.; includes species that would belong to Cave Invertebrate SG, the Terrestrial and Freshwater Invertebrate RLA, or the Marine Invertebrates RLA in reality — see exclusion note above)",
           estimatedSourceUrl: COL_2025_URL,
         },
@@ -2361,7 +2541,10 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // family, no exceptions found (no page states this as a formal
           // boundary in so many words, but it's implied consistently
           // throughout).
-          estimatedDescribed: 12_767,
+          // estimatedDescribed corrected — the prior figure (12,767)
+          // undercounted by ~2.5x against both literature (Christenhusz &
+          // Byng 2016 cite >28,000) and this app's own COL_2025 data.
+          estimatedDescribed: 31_992,
           estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Orchidaceae",
           estimatedSourceUrl: COL_2025_URL,
           sourceUrl: "https://www.orchidspecialistgroup.com/about",
@@ -2419,7 +2602,11 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // throughout the world" — the whole family Arecaceae, no
           // exceptions found (no page uses the Latin family name verbatim,
           // but activity spans every palm-growing region with no carve-out).
-          estimatedDescribed: 1_726,
+          // estimatedDescribed corrected — the prior figure (1,726)
+          // undercounted by ~30-35% against both literature (Dransfield et
+          // al., Genera Palmarum, ~2,600 species) and this app's own
+          // COL_2025 data.
+          estimatedDescribed: 2_538,
           estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Arecaceae",
           estimatedSourceUrl: COL_2025_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-palm-specialist-group",
@@ -2543,7 +2730,12 @@ export const TAXONOMY_TREE: TaxonomyNode = {
               "enhalus", "halophila", "thalassia",
             ],
           },
-          estimatedDescribed: 209_795,
+          // estimatedDescribed recomputed — the prior figure (209,795) was
+          // ~176,000 species (46%) short of what this tree's own top-level
+          // CSV-group totals (flowering_plants + gymnosperms +
+          // ferns_and_allies + green_algae + red_algae = 404,464) imply once
+          // the 8 named sibling groups' current estimates are subtracted.
+          estimatedDescribed: 346_631,
           estimatedSource: "Plant species (assessed + unassessed, per our own data) not in any of the 8 SSC groups above (approx.; includes species that would belong to Crop Wild Relative SG, Freshwater Plant SG, Global Trees SG, or Medicinal Plant SG in reality — see exclusion note above)",
           estimatedSourceUrl: COL_2025_URL,
         },

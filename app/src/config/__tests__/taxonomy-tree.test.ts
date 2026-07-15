@@ -1220,16 +1220,24 @@ describe("SSC Specialist Groups tree (invertebrates)", () => {
     expect(speciesMatchesNode(seaAnemone, "ssc-other-invertebrates")).toBe(true);
   });
 
-  it("Freshwater Crustacean SG covers crayfish, freshwater crabs, and land crabs, but deliberately excludes the mixed marine/freshwater family Palaemonidae", () => {
+  it("Freshwater Crustacean SG covers crayfish, freshwater crabs, and land crabs, but deliberately excludes the mixed marine/freshwater family Palaemonidae by default", () => {
     const crayfish = { class_name: "Malacostraca", order_name: "Decapoda", family: "Astacidae", scientific_name: "Astacus astacus", taxon_group: "crustaceans" };
     const freshwaterCrab = { class_name: "Malacostraca", order_name: "Decapoda", family: "Potamidae", scientific_name: "Potamon fluviatile", taxon_group: "crustaceans" };
     const landCrab = { class_name: "Malacostraca", order_name: "Decapoda", family: "Gecarcinidae", scientific_name: "Gecarcinus quadratus", taxon_group: "crustaceans" };
-    const mixedFamilyShrimp = { class_name: "Malacostraca", order_name: "Decapoda", family: "Palaemonidae", scientific_name: "Macrobrachium rosenbergii", taxon_group: "crustaceans" };
+    // A marine/brackish Palaemonidae genus not in the freshwater-tagged
+    // extraSpeciesNames list — correctly stays excluded.
+    const marineShrimp = { class_name: "Malacostraca", order_name: "Decapoda", family: "Palaemonidae", scientific_name: "Palaemon serratus", taxon_group: "crustaceans" };
     expect(speciesMatchesNode(crayfish, "ssc-freshwater-crustacean")).toBe(true);
     expect(speciesMatchesNode(freshwaterCrab, "ssc-freshwater-crustacean")).toBe(true);
     expect(speciesMatchesNode(landCrab, "ssc-freshwater-crustacean")).toBe(true);
-    expect(speciesMatchesNode(mixedFamilyShrimp, "ssc-freshwater-crustacean")).toBe(false);
-    expect(speciesMatchesNode(mixedFamilyShrimp, "ssc-other-invertebrates")).toBe(true);
+    expect(speciesMatchesNode(marineShrimp, "ssc-freshwater-crustacean")).toBe(false);
+    expect(speciesMatchesNode(marineShrimp, "ssc-other-invertebrates")).toBe(true);
+  });
+
+  it("Freshwater Crustacean SG includes freshwater-tagged Palaemonidae species (dominated by Macrobrachium) via extraSpeciesNames, since the family itself is mixed marine/freshwater", () => {
+    const riverPrawn = { class_name: "Malacostraca", order_name: "Decapoda", family: "Palaemonidae", scientific_name: "Macrobrachium rosenbergii", taxon_group: "crustaceans" };
+    expect(speciesMatchesNode(riverPrawn, "ssc-freshwater-crustacean")).toBe(true);
+    expect(speciesMatchesNode(riverPrawn, "ssc-other-invertebrates")).toBe(false);
   });
 
   it("Horseshoe Crab SG matches its whole dedicated CSV group", () => {
