@@ -2525,7 +2525,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                                 onClick={() => toggleSscSection(section.title)}
                               >
                                 <td colSpan={visibleColCount} className={`${cellPad} text-center`}>
-                                  <span className="text-xs text-blue-600 dark:text-blue-400 hover:underline">
+                                  <span className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors">
                                     Show all {namedRows.length} groups ({hiddenCount} more)
                                   </span>
                                 </td>
@@ -2537,7 +2537,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                                 onClick={() => toggleSscSection(section.title)}
                               >
                                 <td colSpan={visibleColCount} className={`${cellPad} text-center`}>
-                                  <span className="text-xs text-blue-600 dark:text-blue-400 hover:underline">Show less</span>
+                                  <span className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors">Show less</span>
                                 </td>
                               </tr>
                             )}
