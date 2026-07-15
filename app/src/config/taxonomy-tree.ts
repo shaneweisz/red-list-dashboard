@@ -1225,12 +1225,18 @@ export const TAXONOMY_TREE: TaxonomyNode = {
               // expressed as its full genus list since SpeciesFilter's
               // families+genera fields are ANDed, not OR'd, and this node
               // already needs `genera` for the Elapidae subset above.
+              // Karnsophis (a monotypic genus described 2013, in the same
+              // fangless-homalopsid clade as Brachyorrhos/Calamophis) was
+              // missing from this list — found by diffing the real CoL
+              // taxonomic backbone against every reptile SSC node's match set
+              // and finding one Homalopsidae species (Karnsophis siantaris)
+              // that fell through all 13 nodes.
               "enhydris", "homalopsis", "cerberus", "calamophis", "brachyorrhos",
               "myron", "gyiophis", "myrrophis", "hypsiscopus", "homalophis",
               "sumatranus", "subsessor", "raclitia", "pseudoferania", "phytolopsis",
               "myanophis", "miralia", "mintonophis", "kualatahan", "heurnia",
               "gerarda", "fordonia", "ferania", "erpeton", "djokoiskandarus",
-              "dieurostus", "cantoria", "bitia",
+              "dieurostus", "cantoria", "bitia", "karnsophis",
               // "File snakes" — whole family Acrochordidae (1 genus).
               "acrochordus",
             ],
@@ -2160,7 +2166,13 @@ export const TAXONOMY_TREE: TaxonomyNode = {
             // into one array alongside the Scarabaeinae genus list below —
             // same workaround used elsewhere (e.g. Seagrass SG).
             genera: [
-              // Geotrupidae (whole family, all 64 genera present in our data).
+              // Geotrupidae (whole family — the 64 genera present in our own
+              // redlist/unassessed data, plus 4 more found only in the live
+              // CoL backbone: Baraudia, Pseudotrypocopris, Renaudtrupes,
+              // Silphotrupes — real Geotrupidae genera per CoL's own family
+              // label, just not yet represented by any IUCN-assessed or
+              // -candidate species in our own dataset).
+              "baraudia", "pseudotrypocopris", "renaudtrupes", "silphotrupes",
               "allotrypes", "anoplotrupes", "athyreus", "australobolbus", "blackbolbus", "blackburnium",
               "bolbaffer", "bolbaffroides", "bolbapium", "bolbelasmus", "bolbobaineus", "bolbocerastes",
               "bolboceratex", "bolbocerodema", "bolboceroides", "bolbocerosoma", "bolbochromus", "bolbogonium",
@@ -2367,6 +2379,29 @@ export const TAXONOMY_TREE: TaxonomyNode = {
               "synapsis", "temnoplectron", "tesserodon", "tesserodoniella", "thyregis", "tiaronthophagus",
               "tibiodrepanus", "tiniocellus", "tomogonus", "tragiscus", "trichillidium", "trichillum",
               "trichonthophagus", "tropidonitis", "upsa", "uroxys", "versicorpus", "xinidium", "zonocopris",
+              // Geotrupidae genera claimed by Dung Beetle SG above (same list
+              // as its filter) — needed at genus level, not just via
+              // excludeFamilies: "geotrupidae" above, because the live CoL
+              // backbone classifies most of them under a split-out family,
+              // "Bolboceratidae" (found via a live-data cross-check: 34 of
+              // these 64 genera return family="bolboceratidae" in CoL, not
+              // "geotrupidae", so the family-only exclusion silently missed
+              // them and they were double-counted in both nodes). Also
+              // includes 4 genera (Baraudia, Pseudotrypocopris, Renaudtrupes,
+              // Silphotrupes) present only in CoL's broader backbone, not our
+              // own redlist/unassessed data — see Dung Beetle SG's comment.
+              "baraudia", "pseudotrypocopris", "renaudtrupes", "silphotrupes",
+              "allotrypes", "anoplotrupes", "athyreus", "australobolbus", "blackbolbus", "blackburnium",
+              "bolbaffer", "bolbaffroides", "bolbapium", "bolbelasmus", "bolbobaineus", "bolbocerastes",
+              "bolboceratex", "bolbocerodema", "bolboceroides", "bolbocerosoma", "bolbochromus", "bolbogonium",
+              "bolbohamatum", "bolboleaus", "bolborhachium", "bolborhinum", "bolborhombus", "bolbotrypes",
+              "bradycinetulus", "ceratophyus", "ceratotrupes", "chelotrupes", "cnemotrupes", "elephastomus",
+              "enoplotrupes", "eubolbitus", "eucanthus", "frickius", "geohowdenius", "geotrupes",
+              "gilletinus", "halffterius", "haplogeotrupes", "jekelius", "lethrus", "megatrupes",
+              "meridiobolbus", "mimobolbus", "mycotrupes", "namibiobolbus", "namibiotrupes", "neoathyreus",
+              "odonteus", "odontotrypes", "onthotrupes", "peltotrupes", "pereirabolbus", "phelotrupes",
+              "prototrupes", "pseudoathyreus", "sericotrupes", "stenaspidius", "taurocerastes", "thorectes",
+              "trypocopris", "typhaeus", "zefevazia", "zuninoeus",
             ],
             // The freshwater-tagged Palaemonidae species claimed by
             // Freshwater Crustacean SG above via extraSpeciesNames (same

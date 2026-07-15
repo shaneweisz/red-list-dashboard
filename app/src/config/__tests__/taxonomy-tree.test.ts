@@ -880,6 +880,12 @@ describe("SSC Specialist Groups tree (reptiles)", () => {
     expect(speciesMatchesNode(fileSnake, "ssc-sea-snake")).toBe(true);
   });
 
+  it("Sea Snake SG's Homalopsidae genus list includes Karnsophis (a monotypic genus missing from an earlier draft, found via a live CoL cross-check)", () => {
+    const karnsophis = { class_name: "Reptilia", order_name: "Squamata", family: "Homalopsidae", scientific_name: "Karnsophis siantaris", taxon_group: "reptiles" };
+    expect(speciesMatchesNode(karnsophis, "ssc-sea-snake")).toBe(true);
+    expect(speciesMatchesNode(karnsophis, "ssc-snake-lizard-rla")).toBe(false);
+  });
+
   it("Monitor Lizard SG includes Lanthanotidae (earless monitor lizard) alongside Varanidae, per the group's own site", () => {
     const komodo = { class_name: "Reptilia", order_name: "Squamata", family: "Varanidae", scientific_name: "Varanus komodoensis", taxon_group: "reptiles" };
     const earless = { class_name: "Reptilia", order_name: "Squamata", family: "Lanthanotidae", scientific_name: "Lanthanotus borneensis", taxon_group: "reptiles" };
@@ -1204,12 +1210,24 @@ describe("SSC Specialist Groups tree (invertebrates)", () => {
     expect(speciesMatchesNode(ant, "ssc-ant")).toBe(true);
   });
 
-  it("Dung Beetle SG covers Geotrupidae only, excluding Scarabaeidae despite the group's own founding statement naming both families (subfamily-level precision gap)", () => {
+  it("Dung Beetle SG covers Geotrupidae + Scarabaeinae, excluding other Scarabaeidae subfamilies like rhinoceros beetles (Dynastinae)", () => {
     const trueDungBeetle = { class_name: "Insecta", order_name: "Coleoptera", family: "Geotrupidae", scientific_name: "Geotrupes stercorarius", taxon_group: "beetles" };
     const rhinocerosBeetle = { class_name: "Insecta", order_name: "Coleoptera", family: "Scarabaeidae", scientific_name: "Dynastes hercules", taxon_group: "beetles" };
     expect(speciesMatchesNode(trueDungBeetle, "ssc-dung-beetle")).toBe(true);
     expect(speciesMatchesNode(rhinocerosBeetle, "ssc-dung-beetle")).toBe(false);
     expect(speciesMatchesNode(rhinocerosBeetle, "ssc-other-invertebrates")).toBe(true);
+  });
+
+  it("Dung Beetle SG's Geotrupidae genus list includes genera the live CoL backbone splits into family Bolboceratidae, and 4 genera absent from our own redlist/unassessed data", () => {
+    // CoL classifies this genus under "Bolboceratidae", not "geotrupidae" —
+    // family-only exclusion on the catch-all would have double-counted it.
+    const bolboceratid = { class_name: "Insecta", order_name: "Coleoptera", family: "Bolboceratidae", scientific_name: "Athyreus armatus", taxon_group: "beetles" };
+    // A genus present only in CoL's broader backbone (Baraudia), not in our
+    // own redlist/unassessed data — matches by genus regardless.
+    const colOnlyGenus = { class_name: "Insecta", order_name: "Coleoptera", family: "Geotrupidae", scientific_name: "Baraudia geminata", taxon_group: "beetles" };
+    expect(speciesMatchesNode(bolboceratid, "ssc-dung-beetle")).toBe(true);
+    expect(speciesMatchesNode(bolboceratid, "ssc-other-invertebrates")).toBe(false);
+    expect(speciesMatchesNode(colOnlyGenus, "ssc-dung-beetle")).toBe(true);
   });
 
   it("Coral SG is scoped to Scleractinia (reef-building corals), excluding other Anthozoa like sea anemones", () => {
