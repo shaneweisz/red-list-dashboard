@@ -432,16 +432,17 @@ function SpeciesListPanel({
     return filtered.filter((s) => s.scientific_name.toLowerCase().includes(q) || (s.common_name?.toLowerCase().includes(q) ?? false));
   }, [filtered, search]);
 
-  // "date" sorts by assessment year — not offered for the NE bucket (see the
-  // sort-button render below), so assessment_date is always meaningful here.
-  // Undated rows sort to the bottom regardless of direction.
+  // "date" sorts by assessment year for the assessed/CoL-match buckets, or by CoL
+  // description year for the NE bucket (assessment_date is always null there — NE
+  // species haven't been assessed). Undated rows sort to the bottom regardless of
+  // direction.
   const sorted = useMemo(() => {
     if (!searched) return null;
     const arr = [...searched];
     if (sortBy === "name") {
       arr.sort((a, b) => a.scientific_name.localeCompare(b.scientific_name));
     } else {
-      const value = (s: RedListSpecies) => (s.assessment_date ? Date.parse(s.assessment_date) : null);
+      const value = (s: RedListSpecies) => (isNe ? s.described_year : s.assessment_date ? Date.parse(s.assessment_date) : null);
       arr.sort((a, b) => {
         const va = value(a);
         const vb = value(b);
@@ -452,7 +453,7 @@ function SpeciesListPanel({
       });
     }
     return arr;
-  }, [searched, sortBy, sortDir]);
+  }, [searched, sortBy, sortDir, isNe]);
 
   const reasonBySisId = useMemo(() => {
     const m = new Map<number, NoMatchDetail>();
@@ -518,18 +519,15 @@ function SpeciesListPanel({
           >
             Name
           </button>
-          {/* Sorting by description year (the NE case) isn't offered — the recency
-              note is already inline per species; a sort on top of it wasn't wanted. */}
-          {!isNe && (
-            <button
-              type="button"
-              onClick={() => (sortBy === "date" ? setSortDir((d) => (d === "desc" ? "asc" : "desc")) : setSortBy("date"))}
-              className={`flex-shrink-0 ${sortBy === "date" ? "text-white underline" : "text-zinc-400 hover:text-white"}`}
-              title="Sort by assessment year"
-            >
-              Assess. Yr{sortBy === "date" ? (sortDir === "desc" ? " ↓" : " ↑") : ""}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => (sortBy === "date" ? setSortDir((d) => (d === "desc" ? "asc" : "desc")) : setSortBy("date"))}
+            className={`flex-shrink-0 ${sortBy === "date" ? "text-white underline" : "text-zinc-400 hover:text-white"}`}
+            title={isNe ? "Sort by CoL description year" : "Sort by assessment year"}
+          >
+            {isNe ? "Described Yr" : "Assess. Yr"}
+            {sortBy === "date" ? (sortDir === "desc" ? " ↓" : " ↑") : ""}
+          </button>
         </div>
       )}
       {error && <p className="text-red-300">{error}</p>}
