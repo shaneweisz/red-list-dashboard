@@ -504,7 +504,12 @@ async function attachColCounts(summaries: Record<string, NodeSummary[]>): Promis
             LEFT JOIN read_parquet('${backbonePath}') bk ON bk.col_id = pl.col_id
             LEFT JOIN read_parquet('${backbonePath}') bkparent ON bkparent.col_id = bk.parent_id
             LEFT JOIN col_to_assessed ca ON ca.col_id = bk.parent_id` : ""}
-            WHERE cl.id IS NULL`)).getRowObjects();
+            WHERE cl.id IS NULL
+            -- Deterministic order — this JOIN chain has no natural order, and without
+            -- one DuckDB's parallel scan returns diagRows (and so noMatchIds /
+            -- noMatchDetails) in a different order on every run, turning every
+            -- unrelated data sync into a huge same-set reordering diff.
+            ORDER BY ma.id`)).getRowObjects();
           // Note: trueAssessed - noMatchIds.length (the "CoL Match" count shown in the
           // popover) is NOT expected to equal count - neCount above — the latter's
           // "linked" definition (assessed_cids) includes col_ids only reachable via an

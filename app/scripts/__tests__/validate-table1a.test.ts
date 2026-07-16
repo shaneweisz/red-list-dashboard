@@ -12,12 +12,15 @@ const DATA_DIR = path.join(__dirname, "../../data");
 
 // Assessed-species counts per CSV group, from the official 2026-1 Table 1a
 // (https://nc.iucnredlist.org/redlist/content/attachment_files/2026-1_RL_Table1a.pdf,
-// "last updated 09 July 2026") cross-checked against our own synced totals —
-// every group matched exactly except crustaceans (off by 2, and the grand
-// total is off by exactly 2 too), consistent with ~10 days of live-database
-// drift between our snapshot (2026-06-30) and Table 1a's publish date. The
-// IUCN Table 1a "Insects" row (14,531) is split across the 8 order-based
-// groups; they sum back to 14,531.
+// "last updated 09 July 2026") cross-checked against our own synced totals.
+// Originally every group matched exactly except crustaceans, off by 2 — not
+// live-database drift as first assumed (both missing species are 1996 DD
+// assessments, not recent ones), but a real bug: IUCN's SIS DB had already
+// split 2 barnacle species out of the legacy "MAXILLOPODA" class into its
+// own "THEOCOSTRACA" class (their misspelling of Thecostraca), which
+// taxa.ts's crustaceans filterValues didn't list. Fixed in taxa.ts; see its
+// crustaceans comment. The IUCN Table 1a "Insects" row (14,531) is split
+// across the 8 order-based groups; they sum back to 14,531.
 const TABLE_1A_2026_1: Record<string, number> = {
   mammals: 6054,
   birds: 11185,
@@ -34,7 +37,7 @@ const TABLE_1A_2026_1: Record<string, number> = {
   dragonflies_and_damselflies: 6229,
   other_insects: 308,
   molluscs: 9957,
-  crustaceans: 3408,
+  crustaceans: 3410,
   corals: 916,
   arachnids: 1057,
   velvet_worms: 11,
@@ -50,7 +53,7 @@ const TABLE_1A_2026_1: Record<string, number> = {
   brown_algae: 18,
 };
 
-const TOTAL_EXPECTED = 175907;
+const TOTAL_EXPECTED = 175909;
 
 describe("taxa_summary vs Table 1a (2026-1)", () => {
   it("total_assessed per table1a_taxon_group matches Table 1a expected values", () => {

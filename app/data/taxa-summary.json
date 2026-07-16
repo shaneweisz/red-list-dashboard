@@ -316,12 +316,12 @@
   },
   {
     "table1a_taxon_group": "crustaceans",
-    "total_assessed": 3408,
-    "outdated": 3060,
+    "total_assessed": 3410,
+    "outdated": 3062,
     "by_category": {
       "VU": 429,
       "CR": 182,
-      "DD": 1212,
+      "DD": 1214,
       "EN": 195,
       "EX": 11,
       "LR/cd": 9,
@@ -337,7 +337,7 @@
     "mean_gbif_obs": 734.1297420333839,
     "median_gbif_obs": 6,
     "col_described": 69280,
-    "col_ne": 65959
+    "col_ne": 65958
   },
   {
     "table1a_taxon_group": "arachnids",

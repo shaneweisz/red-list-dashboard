@@ -220,7 +220,17 @@ export const TAXA: Taxon[] = [
   },
   {
     id: "crustaceans", name: "Crustaceans", kingdomKey: 1,
-    redlist: [{ filterColumn: "class_name", filterValues: ["MALACOSTRACA", "MAXILLOPODA", "BRANCHIOPODA", "OSTRACODA", "HEXANAUPLIA"] }],
+    // IUCN's Table 1a note 6 defines crustaceans as 7 classes — Maxillopoda has
+    // since been split (Copepoda/Thecostraca/Hexanauplia/Ichthyostraca), and the
+    // IUCN SIS database has already moved a few species out of the legacy
+    // Maxillopoda bucket into "THEOCOSTRACA" (their own misspelling of
+    // Thecostraca — verified against the live DB, not a typo here). Copepoda and
+    // Ichthyostraca have no SIS-assessed species yet (verified: 0 taxons rows),
+    // so they're omitted rather than added speculatively — add them if/when SIS
+    // starts using those class names. Missing THEOCOSTRACA silently dropped 2
+    // barnacle species (Armatobalanus nefrens, Menesiniella aquila) from every
+    // crustaceans fetch.
+    redlist: [{ filterColumn: "class_name", filterValues: ["MALACOSTRACA", "MAXILLOPODA", "BRANCHIOPODA", "OSTRACODA", "HEXANAUPLIA", "THEOCOSTRACA"] }],
     gbif: [{ keyType: "classKey", keyValue: 229 }],
   },
   {
