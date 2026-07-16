@@ -2373,32 +2373,15 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                     );
                   })()}
                   {!(isSingleSpecies && singleSpecies) && (
-                    <div className="inline-flex rounded-md bg-zinc-100 dark:bg-zinc-800 p-0.5" role="group" aria-label="Year chart view">
-                      <button
-                        type="button"
-                        onClick={() => setYearsChartMode("range")}
-                        className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
-                          yearsChartMode === "range"
-                            ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
-                            : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
-                        }`}
-                        aria-pressed={yearsChartMode === "range"}
-                      >
-                        Range
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setYearsChartMode("year")}
-                        className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
-                          yearsChartMode === "year"
-                            ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
-                            : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
-                        }`}
-                        aria-pressed={yearsChartMode === "year"}
-                      >
-                        Year
-                      </button>
-                    </div>
+                    <select
+                      value={yearsChartMode}
+                      onChange={(e) => setYearsChartMode(e.target.value as "range" | "year")}
+                      aria-label="Year chart view"
+                      className="text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                    >
+                      <option value="range">By Range</option>
+                      <option value="year">By Year</option>
+                    </select>
                   )}
                 </div>
               </div>
