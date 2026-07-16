@@ -682,16 +682,4 @@ export interface SplitDetail {
   parentCategory: string;
 }
 
-const CURRENT_YEAR = new Date().getFullYear();
-const OUTDATED_THRESHOLD_YEARS = 10;
-
-/**
- * Is an assessment outdated? Uses the same logic as build-taxa-summary.ts:
- * outdated if assessment_date is >10 years ago, or if assessment_date is missing.
- */
-export function isOutdated(assessmentDate: string | null, currentYear = CURRENT_YEAR): boolean {
-  if (!assessmentDate) return true; // No date → treat as outdated
-  const year = parseInt(assessmentDate.slice(0, 4), 10);
-  if (isNaN(year)) return true;
-  return currentYear - year > OUTDATED_THRESHOLD_YEARS;
-}
+export { isOutdated, outdatedCutoffDate } from "@/lib/outdated";

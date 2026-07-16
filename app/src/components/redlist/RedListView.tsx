@@ -18,6 +18,7 @@ import { parseAssessors } from "@/lib/parseAssessors";
 import { iucnRegionCountries, countryToIucnRegion } from "@/lib/regions";
 import { useFilterParams } from "@/hooks/useFilterParams";
 import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
+import { isOutdated, outdatedCutoffDate } from "@/lib/outdated";
 
 import AssessorCandidatesTable from "../AssessorCandidatesTable";
 import ReviewerCandidatesTable from "../ReviewerCandidatesTable";
@@ -735,15 +736,10 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     // bounds). Applied here on the base set so every chart AND the table inherit
     // them — and identically to the bucket-free /browse + MCP query, which is what
     // makes an agent's dashboard link reproduce the same species set. Mirrors
-    // species-store.isOutdated (calendar-year) + species-filter numeric bounds.
+    // species-store.isOutdated + species-filter numeric bounds.
     const { outdated, minObs, maxObs, minAssessmentYear, maxAssessmentYear, minDescribedYear, maxDescribedYear } = exactFilters;
     if (outdated) {
-      const nowYear = new Date().getFullYear();
-      filtered = filtered.filter(s => {
-        const y = s.assessment_date ? parseInt(s.assessment_date.slice(0, 4), 10) : NaN;
-        const isOld = Number.isNaN(y) || nowYear - y > 10;
-        return isOld === (outdated === "yes");
-      });
+      filtered = filtered.filter(s => isOutdated(s.assessment_date) === (outdated === "yes"));
     }
     if (minObs != null || maxObs != null) {
       filtered = filtered.filter(s => {
@@ -1336,10 +1332,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesAssessorsFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
-      // Mirrors species-store.isOutdated (calendar-year, >10yr or missing date), gated on NE
-      // the same way the assessment-year filters above are, since NE species have no assessment.
-      const assessmentYear = s.assessment_date ? parseInt(s.assessment_date.slice(0, 4), 10) : NaN;
-      const outdated = s.category !== "NE" && (isNaN(assessmentYear) || new Date().getFullYear() - assessmentYear > 10);
+      // Gated on NE the same way the assessment-year filters above are, since NE species have no assessment.
+      const outdated = s.category !== "NE" && isOutdated(s.assessment_date);
       s.countries.forEach(code => {
         counts[code] = (counts[code] || 0) + 1;
         if (outdated) outdatedCounts[code] = (outdatedCounts[code] || 0) + 1;
@@ -2330,7 +2324,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                           : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
                       }`}
                       aria-pressed={isOutdatedSelected}
-                      title="Filter to species assessed more than 10 years ago"
+                      title={`Filter to species not reassessed since before ${outdatedCutoffDate().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`}
                     >
                       Outdated
                     </button>
@@ -3371,7 +3365,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 const speciesKey = isNewAssessments ? Math.abs(s.id) : (s.sis_taxon_id ?? s.gbif_species_key ?? s.id);
                 const assessmentDateObj = s.assessment_date ? new Date(s.assessment_date) : null;
                 const assessmentYear = assessmentDateObj ? assessmentDateObj.getFullYear() : null;
-                const yearsSinceAssessment = assessmentYear ? currentYear - assessmentYear : null;
+                const yearsSinceAssessment = assessmentDateObj
+                  ? Math.floor((Date.now() - assessmentDateObj.getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+                  : null;
                 const details = speciesDetails[s.id];
                 const gbifSpeciesKey = s.gbif_species_key || (details?.gbifUrl ? parseInt(details.gbifUrl.split('/').pop() || '0') : null);
                 const isPinned = pinnedSet.has(speciesKey);
@@ -3512,7 +3508,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                 : "—"}
                             </span>
                           </HoverTooltip>
-                          {yearsSinceAssessment !== null && yearsSinceAssessment > 10 && (
+                          {yearsSinceAssessment !== null && isOutdated(s.assessment_date) && (
                             <span className="ml-1 text-xs text-amber-600">({yearsSinceAssessment}y ago)</span>
                           )}
                         </>

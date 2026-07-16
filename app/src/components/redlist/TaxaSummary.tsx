@@ -15,6 +15,7 @@ import {
 } from "@/lib/taxonomy-utils";
 import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
 import type { RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
+import { outdatedCutoffDate } from "@/lib/outdated";
 
 // See scripts/build-taxa-summary.ts's classifyNoMatch for what each reason means.
 // Modular/additive on top of colBreakdown[].noMatchIds — safe to drop independently
@@ -164,6 +165,22 @@ const getAssessedBarColor = (percent: number) =>
 
 const getOutdatedBarColor = (percent: number) =>
   percent < 10 ? "#22c55e" : percent < 50 ? "#eab308" : "#ef4444";
+
+// Info icon for the "# Outdated" header: states the exact rolling cutoff date
+// (today minus 10 years) so the ">10 yrs old" threshold isn't just an abstract rule.
+function OutdatedInfoIcon() {
+  const cutoffLabel = outdatedCutoffDate().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  return (
+    <span className="relative group normal-case font-normal">
+      <FaInfoCircle size={11} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300" />
+      {/* Opens leftward — this header sits at (or near) the right edge of the table,
+          so an opening-right tooltip would clip against the viewport. */}
+      <span className="absolute right-full top-1/2 -translate-y-1/2 mr-2 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible z-50 shadow-lg">
+        Not reassessed since before {cutoffLabel}
+      </span>
+    </span>
+  );
+}
 
 // Sticky cell classes for the pinned taxon column
 const stickyClasses = "sticky left-0 z-10";
@@ -1433,7 +1450,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               {isVisible("described") && <th className={numericThNoDividerClasses}># Described Species</th>}
               {isVisible("colDescribed") && <th className={numericThClasses}># Described Species (CoL)</th>}
               {isVisible("assessed") && <th className={centeredThClasses}># Red List Assessed</th>}
-              {isVisible("outdated") && <th className={centeredThClasses}># Outdated (&gt;10 yrs old)</th>}
+              {isVisible("outdated") && (
+                <th className={centeredThClasses}>
+                  <span className="inline-flex items-center gap-1"># Outdated (&gt;10 yrs old) <OutdatedInfoIcon /></span>
+                </th>
+              )}
               {isVisible("gbifUnassessed") && <th className={centeredThClasses}># Unassessed, 1+ GBIF Obs</th>}
               {isVisible("colNe") && <th className={centeredThClasses}># Not Evaluated</th>}
               {isVisible("totalGbifObs") && <th className={numericThClasses}>Total Obs</th>}
@@ -2181,7 +2202,9 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           <th className={centeredThClasses}># Red List Assessed</th>
         )}
         {isVisible("outdated") && (
-          <th className={centeredThClasses}># Outdated (&gt;10 yrs old)</th>
+          <th className={centeredThClasses}>
+            <span className="inline-flex items-center gap-1"># Outdated (&gt;10 yrs old) <OutdatedInfoIcon /></span>
+          </th>
         )}
         {isVisible("gbifUnassessed") && (
           <th className={centeredThClasses}># Unassessed, 1+ GBIF Obs</th>
