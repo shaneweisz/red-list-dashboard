@@ -24,7 +24,7 @@ import {
   readCsv,
   REDLIST_DIR,
 } from "./utils";
-import { getTaxa, type RedlistQuery, type Taxon } from "./taxa";
+import { getTaxa, TAXA, type RedlistQuery, type Taxon } from "./taxa";
 
 const POPULATION_TRENDS: Record<string, string> = {
   "0": "Increasing",
@@ -346,6 +346,76 @@ export async function fetchFromIucnDb(
 }
 
 // =============================================================================
+// TAXON COVERAGE CHECK
+// =============================================================================
+
+const FILTER_COLUMN_TO_TAXON_FIELD: Record<RedlistQuery["filterColumn"], "kingdom_name" | "phylum_name" | "class_name" | "order_name"> = {
+  kingdom_name: "kingdom_name",
+  phylum_name: "phylum_name",
+  class_name: "class_name",
+  order_name: "order_name",
+};
+
+/**
+ * Sanity-checks that every (kingdom, phylum, class, order) combination with
+ * currently-assessed species is matched by exactly one Taxon's redlist
+ * filter — zero matches means those species are silently missing from every
+ * CSV; more than one means they're double-counted across CSVs. Runs against
+ * the SAME base "currently assessed" predicate as fetchFromIucnDb (minus the
+ * class/order/phylum filter), so it's just one extra query per sync, not a
+ * new DB round trip pattern.
+ *
+ * This is how the crustaceans gap was found: IUCN's SIS DB had already split
+ * 2 barnacle species out of the legacy "MAXILLOPODA" class into its own
+ * (misspelled) "THEOCOSTRACA" class, which no taxon's filterValues listed —
+ * see taxa.ts's crustaceans comment. The IUCN DB only refreshes ~every 6
+ * months, so this is cheap insurance against the same class of drift
+ * recurring silently at the next sync.
+ */
+async function checkTaxonCoverage(pgClient: Client): Promise<void> {
+  const result = await pgClient.query(`
+    SELECT t.kingdom_name, t.phylum_name, t.class_name, t.order_name, count(*) AS n
+    FROM taxons t
+    JOIN assessments a ON a.taxon_id = t.id
+    JOIN assessment_scopes ascope ON ascope.assessment_id = a.id
+    WHERE t.latest = true
+      AND (a.latest = true OR a.id = 288151174)
+      AND a.suppress = false
+      AND ascope.scope_lookup_id = 15
+      AND t.infra_name IS NULL
+      AND t.subpopulation_name IS NULL
+    GROUP BY 1, 2, 3, 4
+  `);
+
+  const unmatched: string[] = [];
+  const doubleMatched: string[] = [];
+  for (const row of result.rows) {
+    const hits = TAXA.filter((taxon) =>
+      taxon.redlist.some((q) => {
+        const value: string | null = row[FILTER_COLUMN_TO_TAXON_FIELD[q.filterColumn]];
+        return value != null && q.filterValues.includes(value.toUpperCase());
+      }),
+    ).map((t) => t.id);
+
+    const label = `kingdom=${row.kingdom_name} phylum=${row.phylum_name} class=${row.class_name} order=${row.order_name} (${row.n} species)`;
+    if (hits.length === 0) unmatched.push(label);
+    else if (hits.length > 1) doubleMatched.push(`${label} -> ${hits.join(", ")}`);
+  }
+
+  if (unmatched.length > 0) {
+    console.warn(`\n⚠️  taxon coverage: ${unmatched.length} group(s) matched by ZERO taxa — entirely missing from every CSV:`);
+    unmatched.forEach((l) => console.warn(`   ${l}`));
+  }
+  if (doubleMatched.length > 0) {
+    console.warn(`\n⚠️  taxon coverage: ${doubleMatched.length} group(s) matched by MULTIPLE taxa — species double-counted across CSVs:`);
+    doubleMatched.forEach((l) => console.warn(`   ${l}`));
+  }
+  if (unmatched.length === 0 && doubleMatched.length === 0) {
+    console.log("\n✓ taxon coverage: every currently-assessed species is matched by exactly one taxon.");
+  }
+}
+
+// =============================================================================
 // ASSESSMENT HISTORY
 // =============================================================================
 
@@ -542,6 +612,12 @@ export async function run(opts: {
   try {
     await pgClient.connect();
     console.log("Connected to IUCN database\n");
+
+    // Only on a full sync (no taxon filter) — a single-taxon debug run
+    // shouldn't spam warnings about all the OTHER taxa it didn't touch.
+    if (!opts.taxa && !historyOnly) {
+      await checkTaxonCoverage(pgClient);
+    }
 
     logger.log("fetch_redlist_species_start", {
       taxa: taxaToSync.map((t) => t.id),
