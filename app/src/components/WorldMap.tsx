@@ -97,7 +97,14 @@ interface CountryStats {
   [countryCode: string]: {
     occurrences: number;
     species: number;
+    outdated?: number;
   };
+}
+
+// Threshold color scale for % outdated: matches TaxaSummary's getOutdatedBarColor
+// (green <10%, amber <50%, red >=50%) so the two views read the same way.
+function getOutdatedColor(percent: number): string {
+  return percent < 10 ? "#22c55e" : percent < 50 ? "#eab308" : "#ef4444";
 }
 
 // Color scale for heatmap: pale green -> medium green -> dark green
@@ -141,7 +148,7 @@ function formatNumber(num: number): string {
   return num.toString();
 }
 
-type ColorMode = "species" | "occurrences";
+type ColorMode = "species" | "occurrences" | "outdated";
 
 const ALL_TAXA_IDS = ["mammals", "birds", "reptiles", "amphibians", "fishes", "invertebrates", "plantae", "fungi"];
 
@@ -165,6 +172,9 @@ interface WorldMapProps {
   footer?: React.ReactNode;
   // Whether to show the Species/GBIF color mode toggle (only accurate for top-level taxa)
   showGbifToggle?: boolean;
+  // Whether the "% Outdated" color mode is meaningful (false for unassessed/NE species views,
+  // where every species has no assessment date rather than an outdated one)
+  showOutdatedMode?: boolean;
 }
 
 const DEFAULT_CENTER: [number, number] = [10, 10];
@@ -172,7 +182,7 @@ const DEFAULT_ZOOM = 1.0;
 const MIN_ZOOM = 1.0;
 const MAX_ZOOM = 8.0;
 
-function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, endemicsOnly = false, onEndemicsToggle, footer, showGbifToggle = true }: WorldMapProps) {
+function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, endemicsOnly = false, onEndemicsToggle, footer, showGbifToggle = true, showOutdatedMode = true }: WorldMapProps) {
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoveredCountryCode, setHoveredCountryCode] = useState<string | null>(null);
   const [speciesStats, setSpeciesStats] = useState<CountryStats>(precomputedStats || {});
@@ -181,10 +191,16 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
   const [occurrenceLoading, setOccurrenceLoading] = useState(false);
   const [colorMode, setColorMode] = useState<ColorMode>("species");
 
-  // Reset to species mode when GBIF toggle is hidden
+  // Reset to species mode if GBIF is hidden while it's the active mode
+  // (Species and % Outdated stay available regardless of showGbifToggle,
+  // since unlike GBIF occurrence counts they already reflect active filters.)
   useEffect(() => {
-    if (!showGbifToggle) setColorMode("species");
-  }, [showGbifToggle]);
+    setColorMode(mode => {
+      if (mode === "occurrences" && !showGbifToggle) return "species";
+      if (mode === "outdated" && !showOutdatedMode) return "species";
+      return mode;
+    });
+  }, [showGbifToggle, showOutdatedMode]);
 
   // Zoom & pan state
   const [center, setCenter] = useState<[number, number]>(DEFAULT_CENTER);
@@ -338,10 +354,11 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
     setOccurrenceStats(occurrenceCacheRef.current[taxaKey] || null);
   }, [taxaKey]);
 
-  // Active stats for coloring based on mode
-  const activeStats = colorMode === "species" ? speciesStats : (occurrenceStats || {});
+  // Active stats for coloring based on mode ("outdated" reuses the species stats,
+  // since outdated counts are computed alongside species counts, not fetched separately)
+  const activeStats = colorMode === "occurrences" ? (occurrenceStats || {}) : speciesStats;
 
-  // Calculate max value for heatmap scaling
+  // Calculate max value for heatmap scaling (unused in "outdated" mode, which uses fixed thresholds)
   const maxValue = Object.values(activeStats).reduce(
     (max, stat) => Math.max(max, colorMode === "species" ? stat.species : stat.occurrences),
     0
@@ -353,6 +370,11 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
 
     const stats = activeStats[alpha2];
     if (!stats) return "#f4f4f5";
+
+    if (colorMode === "outdated") {
+      if (!stats.species) return "#f4f4f5";
+      return getOutdatedColor(((stats.outdated || 0) / stats.species) * 100);
+    }
 
     const value = colorMode === "species" ? stats.species : stats.occurrences;
     return getHeatmapColor(value, maxValue);
@@ -420,23 +442,17 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
               </div>
             )}
           </div>
-          {/* Color mode toggle (only shown when GBIF numbers are accurate for the current view) */}
-          {showGbifToggle && (
-          <div className="flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md p-0.5 text-[10px]">
-            <button
-              onClick={() => setColorMode("species")}
-              className={`px-1.5 py-0.5 rounded transition-colors ${colorMode === "species" ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm font-medium" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
-            >
-              Species
-            </button>
-            <button
-              onClick={() => setColorMode("occurrences")}
-              className={`px-1.5 py-0.5 rounded transition-colors ${colorMode === "occurrences" ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm font-medium" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
-            >
-              GBIF
-            </button>
-          </div>
-          )}
+          {/* Color mode: Species and % Outdated are always accurate; GBIF only when
+              no extra filters are active (its counts aren't filterable per-country) */}
+          <select
+            value={colorMode}
+            onChange={(e) => setColorMode(e.target.value as ColorMode)}
+            className="text-[10px] bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          >
+            <option value="species">Species</option>
+            {showOutdatedMode && <option value="outdated">% Outdated</option>}
+            {showGbifToggle && <option value="occurrences">GBIF</option>}
+          </select>
           {onEndemicsToggle && (
             <button
               onClick={onEndemicsToggle}
@@ -491,6 +507,14 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
                 <div className="flex justify-between gap-4 text-xs">
                   <span className="text-zinc-500">{speciesLabel}</span>
                   <span className="font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">{formatNumber(hoveredSpeciesStats.species)}</span>
+                </div>
+              )}
+              {showOutdatedMode && hoveredSpeciesStats && hoveredSpeciesStats.species > 0 && (
+                <div className="flex justify-between gap-4 text-xs">
+                  <span className="text-zinc-500">% Outdated</span>
+                  <span className="font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">
+                    {(((hoveredSpeciesStats.outdated || 0) / hoveredSpeciesStats.species) * 100).toFixed(1)}%
+                  </span>
                 </div>
               )}
               {showGbifToggle && (

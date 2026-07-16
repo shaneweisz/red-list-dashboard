@@ -551,6 +551,26 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const abortRefs = useRef<Record<string, AbortController>>({});
   const prefetchPromiseRef = useRef<Promise<void> | null>(null);
 
+  // Prefetch all species on mount so taxa clicks feel instant (skip for new-assessments — NE dataset too large).
+  // Declared before the taxa-fetch effect below so that on initial mount (e.g. landing directly on
+  // "All Species"), prefetchPromiseRef is already set by the time that effect runs — avoiding a
+  // duplicate concurrent fetch of the same "all" data and letting it attach to this one instead.
+  useEffect(() => {
+    if (isNewAssessments) return;
+    const controller = new AbortController();
+    const promise = fetch(`${SPECIES_API}?taxon=all`, { signal: controller.signal })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data && !controller.signal.aborted) {
+          setSpeciesByTaxon(prev => prev["all"] ? prev : { ...prev, all: data.species });
+        }
+      })
+      .catch(() => {})
+      .finally(() => { prefetchPromiseRef.current = null; });
+    prefetchPromiseRef.current = promise;
+    return () => { controller.abort(); prefetchPromiseRef.current = null; };
+  }, [isNewAssessments]);
+
   // Determine which taxa need fetching
   useEffect(() => {
     if (selectedTaxa.size === 0) return;
@@ -623,23 +643,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         });
     }
   }, [selectedTaxa, selectedSubgroups, speciesByTaxon, loadingTaxa, isNewAssessments]);
-
-  // Prefetch all species on mount so taxa clicks feel instant (skip for new-assessments — NE dataset too large)
-  useEffect(() => {
-    if (isNewAssessments) return;
-    const controller = new AbortController();
-    const promise = fetch(`${SPECIES_API}?taxon=all`, { signal: controller.signal })
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        if (data && !controller.signal.aborted) {
-          setSpeciesByTaxon(prev => prev["all"] ? prev : { ...prev, all: data.species });
-        }
-      })
-      .catch(() => {})
-      .finally(() => { prefetchPromiseRef.current = null; });
-    prefetchPromiseRef.current = promise;
-    return () => { controller.abort(); prefetchPromiseRef.current = null; };
-  }, [isNewAssessments]);
 
   const speciesLoading = loadingTaxa.size > 0;
 
@@ -1318,6 +1321,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // Country chart: apply all filters EXCEPT country
   const { countryStatsForMap } = useMemo(() => {
     const counts: Record<string, number> = {};
+    const outdatedCounts: Record<string, number> = {};
     taxaFilteredSpecies.forEach(s => {
       if (!matchesSearch(s)) return;
       if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
@@ -1332,8 +1336,13 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesAssessorsFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
+      // Mirrors species-store.isOutdated (calendar-year, >10yr or missing date), gated on NE
+      // the same way the assessment-year filters above are, since NE species have no assessment.
+      const assessmentYear = s.assessment_date ? parseInt(s.assessment_date.slice(0, 4), 10) : NaN;
+      const outdated = s.category !== "NE" && (isNaN(assessmentYear) || new Date().getFullYear() - assessmentYear > 10);
       s.countries.forEach(code => {
         counts[code] = (counts[code] || 0) + 1;
+        if (outdated) outdatedCounts[code] = (outdatedCounts[code] || 0) + 1;
       });
     });
     const sorted = Object.entries(counts)
@@ -1346,7 +1355,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     const statsForMap = Object.fromEntries(
       Object.entries(counts).map(([code, count]) => [
         code,
-        { occurrences: 0, species: count }
+        { occurrences: 0, species: count, outdated: outdatedCounts[code] || 0 }
       ])
     );
     return { countryCounts: counts, uniqueCountries: sorted, countryStatsForMap: statsForMap };
@@ -2477,6 +2486,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   precomputedStats={countryStatsForMap}
                   selectedTaxa={selectedTaxa}
                   speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
+                  showOutdatedMode={!isNewAssessments}
                   onRegionFilter={handleRegionFilter}
                   endemicsOnly={endemicsOnly}
                   onEndemicsToggle={() => setEndemicsOnly(!endemicsOnly)}
@@ -2936,6 +2946,18 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
+            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || endemicsOnly || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred || exactFilters.outdated || exactFilters.minObs != null || exactFilters.maxObs != null || exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null || exactFilters.minDescribedYear != null || exactFilters.maxDescribedYear != null) && (
+              <button
+                onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setSelectedSubgroups(new Set()); setSelectedObsRanges(new Set()); setSelectedSystems(new Set()); setEndemicsOnly(false); setSelectedGrowthForms(new Set()); setSelectedPopulationTrends(new Set()); setSelectedMovementPatterns(new Set()); setSelectedThreats(new Set()); setExpandedThreat(null); setSelectedAssessors(new Set()); setSelectedReviewers(new Set()); setShowOnlyStarred(false); }}
+                title="Reset all filters and taxa"
+                className="px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1 md:gap-1.5 bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700 shrink-0"
+              >
+                <svg className="w-3.5 h-3.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span className="hidden sm:inline">Clear all</span>
+              </button>
+            )}
             {pinnedSpecies.length > 0 && (
               <>
                 <button
@@ -3183,14 +3205,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 </button>
               ));
             })()}
-            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || endemicsOnly || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred || exactFilters.outdated || exactFilters.minObs != null || exactFilters.maxObs != null || exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null || exactFilters.minDescribedYear != null || exactFilters.maxDescribedYear != null) && (
-              <button
-                onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setSelectedSubgroups(new Set()); setSelectedObsRanges(new Set()); setSelectedSystems(new Set()); setEndemicsOnly(false); setSelectedGrowthForms(new Set()); setSelectedPopulationTrends(new Set()); setSelectedMovementPatterns(new Set()); setSelectedThreats(new Set()); setExpandedThreat(null); setSelectedAssessors(new Set()); setSelectedReviewers(new Set()); setShowOnlyStarred(false); }}
-                className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 underline"
-              >
-                Clear all
-              </button>
-            )}
             <span className="ml-auto text-sm md:text-base font-semibold text-zinc-700 dark:text-zinc-300 tabular-nums flex items-center gap-2">
               {speciesLoading && totalFiltered === 0 && !singleSpeciesPreview ? (
                 <Spinner className="h-4 w-4" />
