@@ -168,15 +168,31 @@ const getOutdatedBarColor = (percent: number) =>
 
 // Info icon for the "# Outdated" header: states the exact rolling cutoff date
 // (today minus 10 years) so the ">10 yrs old" threshold isn't just an abstract rule.
+// This column's counts come from the static data/taxa-summary.json build
+// artifact (see README § Data Sync Pipeline), computed as of the last data
+// sync — not live, unlike the rest of the dashboard. So the cutoff date shown
+// here must be anchored to that sync date, not "today": otherwise, the longer
+// it's been since the last rebuild, the more the displayed cutoff would drift
+// from the one actually used to compute the count next to it.
 function OutdatedInfoIcon() {
-  const cutoffLabel = outdatedCutoffDate().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  const [dataAsOf, setDataAsOf] = useState<Date | null>(null);
+  useEffect(() => {
+    fetch("/api/data-sync-date")
+      .then(res => res.ok ? res.json() : null)
+      .then(data => { if (data?.dataAsOf) setDataAsOf(new Date(data.dataAsOf)); })
+      .catch(() => {});
+  }, []);
+  const dateFormat = { day: "numeric", month: "short", year: "numeric" } as const;
+  const cutoffLabel = outdatedCutoffDate(dataAsOf ?? undefined).toLocaleDateString("en-GB", dateFormat);
   return (
     <span className="relative group normal-case font-normal">
       <FaInfoCircle size={11} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300" />
       {/* Opens leftward — this header sits at (or near) the right edge of the table,
           so an opening-right tooltip would clip against the viewport. */}
       <span className="absolute right-full top-1/2 -translate-y-1/2 mr-2 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible z-50 shadow-lg">
-        Not reassessed since before {cutoffLabel}
+        {dataAsOf
+          ? <>Data as of {dataAsOf.toLocaleDateString("en-GB", dateFormat)} — not reassessed since before {cutoffLabel}</>
+          : <>Not reassessed since before {cutoffLabel}</>}
       </span>
     </span>
   );
