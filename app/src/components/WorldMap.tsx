@@ -449,9 +449,9 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
             onChange={(e) => setColorMode(e.target.value as ColorMode)}
             className="text-[10px] bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
           >
-            <option value="species">Species</option>
+            <option value="species">{speciesLabel}</option>
             {showOutdatedMode && <option value="outdated">% Outdated</option>}
-            {showGbifToggle && <option value="occurrences">GBIF</option>}
+            {showGbifToggle && <option value="occurrences"># GBIF Obs</option>}
           </select>
           {onEndemicsToggle && (
             <button
@@ -519,7 +519,7 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
               )}
               {showGbifToggle && (
               <div className="flex justify-between gap-4 text-xs">
-                <span className="text-zinc-500">GBIF Obs</span>
+                <span className="text-zinc-500"># GBIF Obs</span>
                 {occurrenceLoading ? (
                   <span className="text-zinc-400 tabular-nums">...</span>
                 ) : hoveredOccurrenceStats ? (
