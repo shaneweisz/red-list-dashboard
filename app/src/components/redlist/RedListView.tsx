@@ -2358,8 +2358,10 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   {yearsChartMode === "range" ? "Years Since Assessed" : "Year of Latest Assessment"}
                 </span>
                 <div className="flex items-center gap-2">
-                  {/* Outdated shortcut: filter to species assessed >10 years ago (mirrors the Threatened button) */}
-                  {!(isSingleSpecies && singleSpecies) && (
+                  {/* Outdated shortcut: filter to species assessed >10 years ago (mirrors the Threatened button).
+                      Range-view only — the Year view's muting is only year-granular, so the button's precise
+                      cutoff date doesn't line up as cleanly there. */}
+                  {!(isSingleSpecies && singleSpecies) && yearsChartMode === "range" && (
                     <button
                       type="button"
                       onClick={handleOutdatedClick}
