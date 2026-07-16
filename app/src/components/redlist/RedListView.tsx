@@ -691,7 +691,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const neCount = neSpecies.length;
 
   // Filter by selected taxa + subgroup
-  const taxaFilteredSpecies = useMemo(() => {
+  const taxaFilteredSpeciesExceptOutdated = useMemo(() => {
     let filtered = species;
     // In new-assessments mode with a sub-group selected, species were fetched per sub-group
     // (taxon_id = the sub-group), so the speciesMatchesNode filter below is authoritative —
@@ -732,15 +732,12 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         filtered = filtered.filter(s => s.sis_taxon_id == null || !ids.has(s.sis_taxon_id));
       }
     }
-    // Exact URL-only base filters (outdated / obs / assessment-year / described-year
-    // bounds). Applied here on the base set so every chart AND the table inherit
-    // them — and identically to the bucket-free /browse + MCP query, which is what
-    // makes an agent's dashboard link reproduce the same species set. Mirrors
-    // species-store.isOutdated + species-filter numeric bounds.
-    const { outdated, minObs, maxObs, minAssessmentYear, maxAssessmentYear, minDescribedYear, maxDescribedYear } = exactFilters;
-    if (outdated) {
-      filtered = filtered.filter(s => isOutdated(s.assessment_date) === (outdated === "yes"));
-    }
+    // Exact URL-only base filters (obs / assessment-year / described-year bounds —
+    // outdated is applied separately below, not here). Applied here on the base set
+    // so every chart AND the table inherit them — and identically to the bucket-free
+    // /browse + MCP query, which is what makes an agent's dashboard link reproduce
+    // the same species set. Mirrors species-filter numeric bounds.
+    const { minObs, maxObs, minAssessmentYear, maxAssessmentYear, minDescribedYear, maxDescribedYear } = exactFilters;
     if (minObs != null || maxObs != null) {
       filtered = filtered.filter(s => {
         const obs = s.gbif_occurrence_count ?? 0;
@@ -763,6 +760,19 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     return filtered;
   }, [species, selectedTaxa, selectedSubgroups, isNewAssessments, exactFilters, breakdownFilter]);
 
+  // Outdated is excluded from taxaFilteredSpeciesExceptOutdated (above) so the
+  // Range/Year chart (which shares this same "when was this species assessed"
+  // dimension) can show the full distribution and mute — not remove — bars that
+  // don't match the Outdated toggle, mirroring how the Conservation Status chart
+  // mutes bars for selectedCategories rather than dropping them. Every other
+  // memo/the table uses this outdated-filtered version, so the Outdated button
+  // behaves like a real, dashboard-wide filter everywhere except its own chart.
+  const taxaFilteredSpecies = useMemo(() => {
+    if (!exactFilters.outdated) return taxaFilteredSpeciesExceptOutdated;
+    const wantOutdated = exactFilters.outdated === "yes";
+    return taxaFilteredSpeciesExceptOutdated.filter(s => isOutdated(s.assessment_date) === wantOutdated);
+  }, [taxaFilteredSpeciesExceptOutdated, exactFilters.outdated]);
+
   // Helper to check if species matches year range filter
   const matchesYearRangeFilter = useCallback((assessmentDate: string | null, yearRanges: Set<string> = selectedYearRanges): boolean => {
     if (yearRanges.size === 0) return true;
@@ -772,10 +782,10 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     for (const range of yearRanges) {
       switch (range) {
         case "<1 year": if (yearsSince < 1) return true; break;
-        case "1-5 years": if (yearsSince >= 1 && yearsSince < 6) return true; break;
-        case "6-10 years": if (yearsSince >= 6 && yearsSince < 11) return true; break;
-        case "11-20 years": if (yearsSince >= 11 && yearsSince < 21) return true; break;
-        case "20+ years": if (yearsSince >= 21) return true; break;
+        case "1-5 years": if (yearsSince >= 1 && yearsSince < 5) return true; break;
+        case "5-10 years": if (yearsSince >= 5 && yearsSince < 10) return true; break;
+        case "10-20 years": if (yearsSince >= 10 && yearsSince < 20) return true; break;
+        case "20+ years": if (yearsSince >= 20) return true; break;
       }
     }
     return false;
@@ -1143,18 +1153,21 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     }));
   }, [taxaFilteredSpecies, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
-  // Year chart: apply all filters EXCEPT year range
+  // Year chart: apply all filters EXCEPT year range AND outdated (see
+  // taxaFilteredSpeciesExceptOutdated above) — buckets align exactly with the
+  // isOutdated() threshold (>10 years) so the Outdated toggle mutes rather than
+  // zeroes out the buckets that don't match.
   const assessmentYearData = useMemo(() => {
     const now = Date.now();
     const msPerYear = 365.25 * 24 * 60 * 60 * 1000;
     const ranges = [
       { range: "<1 year", shortRange: "<1y", count: 0, minYear: 0 },
       { range: "1-5 years", shortRange: "1-5y", count: 0, minYear: 1 },
-      { range: "6-10 years", shortRange: "6-10y", count: 0, minYear: 6 },
-      { range: "11-20 years", shortRange: "11-20y", count: 0, minYear: 11 },
-      { range: "20+ years", shortRange: ">20y", count: 0, minYear: 21 },
+      { range: "5-10 years", shortRange: "5-10y", count: 0, minYear: 5 },
+      { range: "10-20 years", shortRange: "10-20y", count: 0, minYear: 10 },
+      { range: "20+ years", shortRange: ">20y", count: 0, minYear: 20 },
     ];
-    taxaFilteredSpecies.forEach(s => {
+    taxaFilteredSpeciesExceptOutdated.forEach(s => {
       if (!s.assessment_date || s.category === "NE") return;
       if (!matchesSearch(s)) return;
       if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
@@ -1170,9 +1183,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       if (!matchesReviewersFilter(s)) return;
       const yearsSince = (now - new Date(s.assessment_date).getTime()) / msPerYear;
       if (yearsSince < 1) ranges[0].count++;
-      else if (yearsSince < 6) ranges[1].count++;
-      else if (yearsSince < 11) ranges[2].count++;
-      else if (yearsSince < 21) ranges[3].count++;
+      else if (yearsSince < 5) ranges[1].count++;
+      else if (yearsSince < 10) ranges[2].count++;
+      else if (yearsSince < 20) ranges[3].count++;
       else ranges[4].count++;
     });
     const total = ranges.reduce((sum, r) => sum + r.count, 0);
@@ -1180,17 +1193,19 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       ...r,
       label: `${r.count.toLocaleString()} (${total > 0 ? ((r.count / total) * 100).toFixed(1) : 0}%)`,
     }));
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter]);
+  }, [taxaFilteredSpeciesExceptOutdated, selectedCategories, selectedCountries, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter]);
 
-  // Assessments-by-year chart: apply all filters EXCEPT the two year-based ones.
-  // The Range bucket chart and the Year chart share a single cross-filter facet
-  // ("when was this species assessed"), so we exclude BOTH selectedYearRanges and
-  // selectedAssessmentYears here — the by-year chart should always show the full
-  // timeline so users can switch/expand their year selection regardless of what
-  // they picked in the range view, and vice-versa.
+  // Assessments-by-year chart: apply all filters EXCEPT the year-based ones
+  // (selectedYearRanges, selectedAssessmentYears) AND outdated. The Range bucket
+  // chart and the Year chart share a single cross-filter facet ("when was this
+  // species assessed"), so we exclude selectedYearRanges/selectedAssessmentYears
+  // here — the by-year chart should always show the full timeline so users can
+  // switch/expand their year selection regardless of what they picked in the
+  // range view, and vice-versa — and we exclude outdated for the same reason
+  // isOutdated is excluded from assessmentYearData above.
   const assessmentYearsByYearData = useMemo(() => {
     const counts: Record<string, number> = {};
-    taxaFilteredSpecies.forEach(s => {
+    taxaFilteredSpeciesExceptOutdated.forEach(s => {
       if (!s.assessment_date || s.category === "NE") return;
       if (!matchesSearch(s)) return;
       if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
@@ -1216,7 +1231,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         count,
         label: `${count.toLocaleString()} (${total > 0 ? ((count / total) * 100).toFixed(1) : 0}%)`,
       }));
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter]);
+  }, [taxaFilteredSpeciesExceptOutdated, selectedCategories, selectedCountries, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter]);
 
   const yearsTotalPages = Math.max(1, Math.ceil(assessmentYearsByYearData.length / YEARS_PAGE_SIZE));
   const paginatedAssessmentYearsData = useMemo(
@@ -1957,6 +1972,36 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     setExactFilters({ outdated: isOutdatedSelected ? null : "yes" });
   };
 
+  // Mutes (doesn't remove) the Range/Year chart bars that don't match the Outdated
+  // toggle — mirrors how selectedCategories mutes bars in the Conservation Status
+  // chart rather than dropping them. An actual bar click (selectedYearRanges) takes
+  // priority if present, since that's a more specific user choice.
+  const yearRangeSelectedItems = useMemo(() => {
+    if (selectedYearRanges.size > 0) return selectedYearRanges;
+    if (!exactFilters.outdated) return selectedYearRanges;
+    return new Set(
+      exactFilters.outdated === "yes"
+        ? ["10-20 years", "20+ years"]
+        : ["<1 year", "1-5 years", "5-10 years"]
+    );
+  }, [selectedYearRanges, exactFilters.outdated]);
+
+  // Same idea for the by-year chart — a whole calendar year is treated as
+  // "outdated" if it's on or before the cutoff year (coarser than the precise
+  // isOutdated() threshold, since this chart only has year-level granularity).
+  const assessmentYearSelectedItems = useMemo(() => {
+    if (selectedAssessmentYears.size > 0) return selectedAssessmentYears;
+    if (!exactFilters.outdated) return selectedAssessmentYears;
+    const cutoffYear = outdatedCutoffDate().getFullYear();
+    const wantOutdated = exactFilters.outdated === "yes";
+    const matching = new Set<string>();
+    assessmentYearsByYearData.forEach(d => {
+      const isYearOutdated = Number(d.code) <= cutoffYear;
+      if (isYearOutdated === wantOutdated) matching.add(d.code);
+    });
+    return matching;
+  }, [selectedAssessmentYears, exactFilters.outdated, assessmentYearsByYearData]);
+
   // Handle year range bar click (Cmd/Ctrl+click for multi-select, regular click replaces)
   const handleYearClick = (data: { payload?: { range?: string } }, event: React.MouseEvent) => {
     const range = data.payload?.range;
@@ -2373,8 +2418,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                       aria-label="Year chart view"
                       className="text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
                     >
-                      <option value="range">By Range</option>
-                      <option value="year">By Year</option>
+                      <option value="range">Range</option>
+                      <option value="year">Year</option>
                     </select>
                   )}
                 </div>
@@ -2390,8 +2435,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                       );
                       const msPerYear = 365.25 * 24 * 60 * 60 * 1000;
                       const elapsed = Date.now() - new Date(singleSpecies.assessment_date).getTime();
-                      const yearsSince = Math.floor(elapsed / msPerYear);
-                      const range = yearsSince < 1 ? "<1y" : yearsSince <= 5 ? "1-5y" : yearsSince <= 10 ? "6-10y" : yearsSince <= 20 ? "11-20y" : ">20y";
+                      const yearsSince = elapsed / msPerYear;
+                      const range = yearsSince < 1 ? "<1y" : yearsSince < 5 ? "1-5y" : yearsSince < 10 ? "5-10y" : yearsSince < 20 ? "10-20y" : ">20y";
                       return (
                         <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">
                           {range}
@@ -2405,7 +2450,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                       <FilterBarChart
                         data={assessmentYearData}
                         dataKey="shortRange"
-                        selectedItems={selectedYearRanges}
+                        selectedItems={yearRangeSelectedItems}
                         onBarClick={handleYearClick}
                         barColor="#3b82f6"
                         yAxisWidth={36}
@@ -2417,7 +2462,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   <div className="flex-1">
                     <YearBarChart
                       data={paginatedAssessmentYearsData}
-                      selectedItems={selectedAssessmentYears}
+                      selectedItems={assessmentYearSelectedItems}
                       onBarClick={handleAssessmentYearClick}
                       barColor="#3b82f6"
                       yMax={yearsGlobalMax}
