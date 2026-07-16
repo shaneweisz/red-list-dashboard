@@ -68,11 +68,7 @@ const NAME_TO_ALPHA2: Record<string, string> = {
   "Marshall Is.": "MH",
   // Additional territories present as their own shape in the 50m TopoJSON that
   // had no entry at all before (always rendered as "No data" regardless of the
-  // underlying Red List data). Deliberately NOT included: Somaliland and
-  // N. Cyprus, which the TopoJSON also draws separately, but the Red List data
-  // has no distinct code for either (both fold into Somalia/Cyprus) — coloring
-  // them would misattribute data to a disputed territory, so they're left as
-  // "No data" pending a check with the Red List Unit.
+  // underlying Red List data).
   "American Samoa": "AS", "Anguilla": "AI", "Aruba": "AW", "Bermuda": "BM",
   "Br. Indian Ocean Ter.": "IO", "British Virgin Is.": "VG", "Cayman Is.": "KY",
   "Cook Is.": "CK", "Curaçao": "CW", "Faeroe Is.": "FO", "Fr. Polynesia": "PF",
@@ -83,6 +79,15 @@ const NAME_TO_ALPHA2: Record<string, string> = {
   "St-Barthélemy": "BL", "St-Martin": "MF", "St. Pierre and Miquelon": "PM",
   "Turks and Caicos Is.": "TC", "U.S. Virgin Is.": "VI", "Wallis and Futuna Is.": "WF",
   "Åland": "AX",
+  // Somaliland and N. Cyprus are drawn as their own shape in the TopoJSON, but
+  // IUCN's own Red List country standard (ISO 3166-1 + UN country names, per
+  // redlist.org/resources/country-codes) has no distinct code for either —
+  // both fold into Somalia/Cyprus, the same way IUCN's own species assessments
+  // do (e.g. the Gerenuk assessment's formal country field lists "Somalia",
+  // even though its range-description text separately mentions "Somaliland").
+  // Mapping them to their parent's code matches IUCN's own data model, rather
+  // than leaving a "no data" gap that reads as a bug.
+  "Somaliland": "SO", "N. Cyprus": "CY",
 };
 
 // Complete ISO 3166-1 alpha-2 to country name mapping (for display)
@@ -107,6 +112,7 @@ export const ALPHA2_TO_NAME: Record<string, string> = {
   "NF": "Norfolk Island", "NR": "Nauru", "NU": "Niue", "PF": "French Polynesia",
   "PM": "Saint Pierre and Miquelon", "PN": "Pitcairn", "PW": "Palau", "RE": "Réunion",
   "SC": "Seychelles", "SH": "Saint Helena", "SJ": "Svalbard", "SM": "San Marino",
+  "SO": "Somalia", "CY": "Cyprus",
   "ST": "São Tomé and Príncipe", "SV": "El Salvador", "SX": "Sint Maarten",
   "TC": "Turks and Caicos", "TK": "Tokelau", "TO": "Tonga", "TV": "Tuvalu",
   "UM": "U.S. Minor Outlying Islands", "VA": "Vatican City", "VC": "Saint Vincent and the Grenadines",
@@ -257,7 +263,7 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
     if (coords) {
       setCenter(coords);
       // Zoom level depends on country size - small countries zoom more
-      const smallCountries = new Set(["Singapore", "Luxembourg", "Cyprus", "Jamaica", "Trinidad and Tobago", "Brunei", "Qatar", "Kuwait", "Lebanon", "Djibouti", "eSwatini", "Lesotho", "Gambia", "Guinea-Bissau", "Slovenia", "Montenegro", "Kosovo", "Macedonia", "Andorra", "Antigua and Barb.", "Bahrain", "Barbados", "Belize", "Cabo Verde", "Comoros", "Dominica", "Grenada", "Kiribati", "Liechtenstein", "Maldives", "Malta", "Marshall Is.", "Mauritius", "Micronesia", "Monaco", "Nauru", "Palau", "Samoa", "San Marino", "São Tomé and Principe", "Seychelles", "St. Kitts and Nevis", "Saint Lucia", "St. Vin. and Gren.", "Tonga", "Tuvalu", "Vatican", "American Samoa", "Anguilla", "Aruba", "Bermuda", "British Virgin Is.", "Cayman Is.", "Curaçao", "Faeroe Is.", "Guernsey", "Hong Kong", "Isle of Man", "Jersey", "Macao", "Montserrat", "N. Mariana Is.", "Niue", "Norfolk Island", "Pitcairn Is.", "Saint Helena", "Sint Maarten", "St-Barthélemy", "St-Martin", "St. Pierre and Miquelon", "Turks and Caicos Is.", "U.S. Virgin Is.", "Wallis and Futuna Is.", "Åland"]);
+      const smallCountries = new Set(["Singapore", "Luxembourg", "Cyprus", "Jamaica", "Trinidad and Tobago", "Brunei", "Qatar", "Kuwait", "Lebanon", "Djibouti", "eSwatini", "Lesotho", "Gambia", "Guinea-Bissau", "Slovenia", "Montenegro", "Kosovo", "Macedonia", "Andorra", "Antigua and Barb.", "Bahrain", "Barbados", "Belize", "Cabo Verde", "Comoros", "Dominica", "Grenada", "Kiribati", "Liechtenstein", "Maldives", "Malta", "Marshall Is.", "Mauritius", "Micronesia", "Monaco", "Nauru", "Palau", "Samoa", "San Marino", "São Tomé and Principe", "Seychelles", "St. Kitts and Nevis", "Saint Lucia", "St. Vin. and Gren.", "Tonga", "Tuvalu", "Vatican", "American Samoa", "Anguilla", "Aruba", "Bermuda", "British Virgin Is.", "Cayman Is.", "Curaçao", "Faeroe Is.", "Guernsey", "Hong Kong", "Isle of Man", "Jersey", "Macao", "Montserrat", "N. Mariana Is.", "Niue", "Norfolk Island", "Pitcairn Is.", "Saint Helena", "Sint Maarten", "St-Barthélemy", "St-Martin", "St. Pierre and Miquelon", "Turks and Caicos Is.", "U.S. Virgin Is.", "Wallis and Futuna Is.", "Åland", "N. Cyprus"]);
       const largeCountries = new Set(["Russia", "Canada", "United States of America", "China", "Brazil", "Australia", "India", "Argentina"]);
       const zoomLevel = smallCountries.has(countryName) ? 6 : largeCountries.has(countryName) ? 2.5 : 4;
       setZoom(zoomLevel);
