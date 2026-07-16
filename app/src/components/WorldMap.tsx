@@ -101,10 +101,18 @@ interface CountryStats {
   };
 }
 
-// Threshold color scale for % outdated: matches TaxaSummary's getOutdatedBarColor
-// (green <10%, amber <50%, red >=50%) so the two views read the same way.
+// Linear gradient for % outdated: green (0%) -> amber (50%) -> red (100%).
+// Unlike the species/occurrence heatmap, % is already bounded and roughly
+// uniformly distributed, so a plain linear scale (no log) keeps countries
+// distinguishable across the full range instead of clumping most into one bucket.
 function getOutdatedColor(percent: number): string {
-  return percent < 10 ? "#22c55e" : percent < 50 ? "#eab308" : "#ef4444";
+  const p = Math.max(0, Math.min(100, percent));
+  const green: [number, number, number] = [34, 197, 94]; // #22c55e
+  const amber: [number, number, number] = [234, 179, 8]; // #eab308
+  const red: [number, number, number] = [239, 68, 68]; // #ef4444
+  const [from, to, t] = p <= 50 ? [green, amber, p / 50] : [amber, red, (p - 50) / 50];
+  const [r, g, b] = from.map((c, i) => Math.round(c + (to[i] - c) * t));
+  return `rgb(${r}, ${g}, ${b})`;
 }
 
 // Color scale for heatmap: pale green -> medium green -> dark green
@@ -358,7 +366,7 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
   // since outdated counts are computed alongside species counts, not fetched separately)
   const activeStats = colorMode === "occurrences" ? (occurrenceStats || {}) : speciesStats;
 
-  // Calculate max value for heatmap scaling (unused in "outdated" mode, which uses fixed thresholds)
+  // Calculate max value for heatmap scaling (unused in "outdated" mode, which uses a fixed 0-100% gradient)
   const maxValue = Object.values(activeStats).reduce(
     (max, stat) => Math.max(max, colorMode === "species" ? stat.species : stat.occurrences),
     0
