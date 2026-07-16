@@ -672,9 +672,30 @@ describe("SSC Specialist Groups tree", () => {
     }
   });
 
-  it("ssc-other-mammals catches a genuinely uncovered species (musk deer, no dedicated SSC group among the 35)", () => {
+  it("ssc-other-mammals catches a genuinely uncovered species (colugo, no dedicated SSC group)", () => {
+    const colugo = { class_name: "Mammalia", order_name: "Dermoptera", family: "Cynocephalidae", scientific_name: "Galeopterus variegatus", taxon_group: "mammals" };
+    expect(speciesMatchesNode(colugo, "ssc-other-mammals")).toBe(true);
+  });
+
+  it("Deer SG's real remit extends to musk deer (Moschidae) and chevrotains (Tragulidae), not just true deer", () => {
     const muskDeer = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Moschidae", scientific_name: "Moschus moschiferus", taxon_group: "mammals" };
-    expect(speciesMatchesNode(muskDeer, "ssc-other-mammals")).toBe(true);
+    const chevrotain = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Tragulidae", scientific_name: "Tragulus javanicus", taxon_group: "mammals" };
+    expect(speciesMatchesNode(muskDeer, "ssc-deer")).toBe(true);
+    expect(speciesMatchesNode(chevrotain, "ssc-deer")).toBe(true);
+    expect(speciesMatchesNode(muskDeer, "ssc-other-mammals")).toBe(false);
+    // Water Chevrotain stays with Antelope SG (its own stated remit), not Deer SG.
+    const waterChevrotain = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Tragulidae", scientific_name: "Hyemoschus aquaticus", taxon_group: "mammals" };
+    expect(speciesMatchesNode(waterChevrotain, "ssc-deer")).toBe(false);
+    expect(speciesMatchesNode(waterChevrotain, "ssc-antelope")).toBe(true);
+  });
+
+  it("Caprinae SG includes Arabian Tahr and Bharal, not Antelope SG", () => {
+    const tahr = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Bovidae", scientific_name: "Arabitragus jayakari", taxon_group: "mammals" };
+    const bharal = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Bovidae", scientific_name: "Pseudois nayaur", taxon_group: "mammals" };
+    expect(speciesMatchesNode(tahr, "ssc-caprinae")).toBe(true);
+    expect(speciesMatchesNode(bharal, "ssc-caprinae")).toBe(true);
+    expect(speciesMatchesNode(tahr, "ssc-antelope")).toBe(false);
+    expect(speciesMatchesNode(bharal, "ssc-antelope")).toBe(false);
   });
 
   it("Antelope SG's extraSpeciesNames pulls in Pronghorn, Water Chevrotain, and Wild Camel despite them not being Bovidae", () => {
@@ -754,12 +775,697 @@ describe("SSC Specialist Groups tree", () => {
     expect(speciesMatchesNode(buffalo, "ssc-afro-asian-wild-cattle")).toBe(false);
   });
 
+  it("Bos primigenius (extinct aurochs) is excluded from Asian Wild Cattle SG despite genus match — not one of its stated 9 species", () => {
+    const aurochs = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Bovidae", scientific_name: "Bos primigenius", taxon_group: "mammals" };
+    expect(speciesMatchesNode(aurochs, "ssc-afro-asian-wild-cattle")).toBe(false);
+    expect(speciesMatchesNode(aurochs, "ssc-other-mammals")).toBe(true);
+  });
+
   it("Cetacean SG matches by family since cetaceans share Artiodactyla's order_name", () => {
     const dolphin = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Delphinidae", scientific_name: "Tursiops truncatus", taxon_group: "mammals" };
     const deer = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Cervidae", scientific_name: "Cervus elaphus", taxon_group: "mammals" };
     expect(speciesMatchesNode(dolphin, "ssc-cetacean")).toBe(true);
     expect(speciesMatchesNode(deer, "ssc-cetacean")).toBe(false);
     expect(speciesMatchesNode(deer, "ssc-deer")).toBe(true);
+  });
+});
+
+describe("SSC Specialist Groups tree (reptiles)", () => {
+  const sscReptileNode = findNode("ssc-reptile-groups");
+
+  it("ssc-reptile-groups exists, is not part of the default view, and has 13 children (12 pilot groups + Snake and Lizard RLA)", () => {
+    expect(sscReptileNode).toBeDefined();
+    expect(sscReptileNode?.children?.length).toBe(13);
+    expect(TAXONOMY_VIEWS.default.roots).not.toContain("ssc-reptile-groups");
+  });
+
+  it("ssc-snake-lizard-rla (the residual RLA) doesn't overlap any of the 12 named groups", () => {
+    const cases: Array<{ class_name: string; order_name: string; family: string; scientific_name: string }> = [
+      { class_name: "Reptilia", order_name: "Crocodylia", family: "Crocodylidae", scientific_name: "Crocodylus niloticus" },
+      { class_name: "Reptilia", order_name: "Testudines", family: "Testudinidae", scientific_name: "Chelonoidis nigra" },
+      { class_name: "Reptilia", order_name: "Testudines", family: "Cheloniidae", scientific_name: "Chelonia mydas" },
+      { class_name: "Reptilia", order_name: "Squamata", family: "Scincidae", scientific_name: "Tiliqua scincoides" },
+      { class_name: "Reptilia", order_name: "Squamata", family: "Chamaeleonidae", scientific_name: "Chamaeleo calyptratus" },
+      { class_name: "Reptilia", order_name: "Squamata", family: "Varanidae", scientific_name: "Varanus komodoensis" },
+      { class_name: "Reptilia", order_name: "Squamata", family: "Lanthanotidae", scientific_name: "Lanthanotus borneensis" },
+      { class_name: "Reptilia", order_name: "Squamata", family: "Iguanidae", scientific_name: "Iguana iguana" },
+      { class_name: "Reptilia", order_name: "Squamata", family: "Dactyloidae", scientific_name: "Anolis carolinensis" },
+      { class_name: "Reptilia", order_name: "Squamata", family: "Viperidae", scientific_name: "Vipera berus" },
+      { class_name: "Reptilia", order_name: "Squamata", family: "Elapidae", scientific_name: "Hydrophis platurus" },
+      { class_name: "Reptilia", order_name: "Squamata", family: "Homalopsidae", scientific_name: "Cerberus rynchops" },
+      { class_name: "Reptilia", order_name: "Squamata", family: "Acrochordidae", scientific_name: "Acrochordus javanicus" },
+      { class_name: "Reptilia", order_name: "Squamata", family: "Boidae", scientific_name: "Boa constrictor" },
+      { class_name: "Reptilia", order_name: "Squamata", family: "Pythonidae", scientific_name: "Python bivittatus" },
+      // The tuatara — claimed by the RLA itself via extraSpeciesNames, must not
+      // also match the RLA's own base (exclude-everything-else) filter twice.
+      { class_name: "Reptilia", order_name: "Rhynchocephalia", family: "Sphenodontidae", scientific_name: "Sphenodon punctatus" },
+    ];
+    for (const row of cases) {
+      const isTuatara = row.scientific_name === "Sphenodon punctatus";
+      const named = ["ssc-crocodile", "ssc-tortoise-freshwater-turtle", "ssc-marine-turtle", "ssc-skink", "ssc-chameleon", "ssc-monitor-lizard", "ssc-iguana", "ssc-anoline-lizard", "ssc-gekkota", "ssc-viper", "ssc-sea-snake", "ssc-boa-python"];
+      const matchesNamed = named.some((id) => speciesMatchesNode({ ...row, taxon_group: "reptiles" }, id));
+      expect(matchesNamed, row.scientific_name).toBe(!isTuatara);
+      // The RLA only claims the tuatara (via extraSpeciesNames) among these
+      // cases — everything else here is already claimed by a named group, so
+      // the RLA's exclude-everything-else base filter must not also match it.
+      expect(speciesMatchesNode({ ...row, taxon_group: "reptiles" }, "ssc-snake-lizard-rla")).toBe(isTuatara);
+    }
+  });
+
+  it("ssc-snake-lizard-rla catches a genuinely uncovered species (whiptail lizard, no dedicated SSC group among the 12)", () => {
+    const whiptail = { class_name: "Reptilia", order_name: "Squamata", family: "Teiidae", scientific_name: "Ameiva ameiva", taxon_group: "reptiles" };
+    expect(speciesMatchesNode(whiptail, "ssc-snake-lizard-rla")).toBe(true);
+  });
+
+  it("Gekkota Lizard SG covers all 7 gecko families, not the Snake and Lizard RLA", () => {
+    const gecko = { class_name: "Reptilia", order_name: "Squamata", family: "Gekkonidae", scientific_name: "Gekko gecko", taxon_group: "reptiles" };
+    const legless = { class_name: "Reptilia", order_name: "Squamata", family: "Pygopodidae", scientific_name: "Lialis burtonis", taxon_group: "reptiles" };
+    expect(speciesMatchesNode(gecko, "ssc-gekkota")).toBe(true);
+    expect(speciesMatchesNode(legless, "ssc-gekkota")).toBe(true);
+    expect(speciesMatchesNode(gecko, "ssc-snake-lizard-rla")).toBe(false);
+  });
+
+  it("ssc-snake-lizard-rla explicitly claims the tuatara via extraSpeciesNames despite it not being Squamata", () => {
+    const tuatara = { class_name: "Reptilia", order_name: "Rhynchocephalia", family: "Sphenodontidae", scientific_name: "Sphenodon punctatus", taxon_group: "reptiles" };
+    expect(speciesMatchesNode(tuatara, "ssc-snake-lizard-rla")).toBe(true);
+  });
+
+  it("Anoline Lizard SG is genus-scoped to Anolis, correctly excluding the related genus Polychrus despite sharing a family-label lineage", () => {
+    const anole = { class_name: "Reptilia", order_name: "Squamata", family: "Dactyloidae", scientific_name: "Anolis carolinensis", taxon_group: "reptiles" };
+    const anole2 = { class_name: "Reptilia", order_name: "Squamata", family: "Anolidae", scientific_name: "Anolis sagrei", taxon_group: "reptiles" };
+    const bushAnole = { class_name: "Reptilia", order_name: "Squamata", family: "Polychrotidae", scientific_name: "Polychrus marmoratus", taxon_group: "reptiles" };
+    expect(speciesMatchesNode(anole, "ssc-anoline-lizard")).toBe(true);
+    expect(speciesMatchesNode(anole2, "ssc-anoline-lizard")).toBe(true);
+    expect(speciesMatchesNode(bushAnole, "ssc-anoline-lizard")).toBe(false);
+    expect(speciesMatchesNode(bushAnole, "ssc-snake-lizard-rla")).toBe(true);
+  });
+
+  it("Sea Snake SG's genus-level Elapidae filter excludes terrestrial elapids (cobras, mambas, coral snakes)", () => {
+    const seaSnake = { class_name: "Reptilia", order_name: "Squamata", family: "Elapidae", scientific_name: "Hydrophis platurus", taxon_group: "reptiles" };
+    const seaKrait = { class_name: "Reptilia", order_name: "Squamata", family: "Elapidae", scientific_name: "Laticauda colubrina", taxon_group: "reptiles" };
+    const cobra = { class_name: "Reptilia", order_name: "Squamata", family: "Elapidae", scientific_name: "Naja naja", taxon_group: "reptiles" };
+    const mamba = { class_name: "Reptilia", order_name: "Squamata", family: "Elapidae", scientific_name: "Dendroaspis polylepis", taxon_group: "reptiles" };
+    expect(speciesMatchesNode(seaSnake, "ssc-sea-snake")).toBe(true);
+    expect(speciesMatchesNode(seaKrait, "ssc-sea-snake")).toBe(true);
+    expect(speciesMatchesNode(cobra, "ssc-sea-snake")).toBe(false);
+    expect(speciesMatchesNode(cobra, "ssc-snake-lizard-rla")).toBe(true);
+    expect(speciesMatchesNode(mamba, "ssc-sea-snake")).toBe(false);
+    expect(speciesMatchesNode(mamba, "ssc-snake-lizard-rla")).toBe(true);
+  });
+
+  it("Sea Snake SG also claims all of Homalopsidae (mud snakes) and Acrochordidae (file snakes), unrelated families to Elapidae", () => {
+    const mudSnake = { class_name: "Reptilia", order_name: "Squamata", family: "Homalopsidae", scientific_name: "Cerberus rynchops", taxon_group: "reptiles" };
+    const fileSnake = { class_name: "Reptilia", order_name: "Squamata", family: "Acrochordidae", scientific_name: "Acrochordus javanicus", taxon_group: "reptiles" };
+    expect(speciesMatchesNode(mudSnake, "ssc-sea-snake")).toBe(true);
+    expect(speciesMatchesNode(fileSnake, "ssc-sea-snake")).toBe(true);
+  });
+
+  it("Sea Snake SG's Homalopsidae genus list includes Karnsophis (a monotypic genus missing from an earlier draft, found via a live CoL cross-check)", () => {
+    const karnsophis = { class_name: "Reptilia", order_name: "Squamata", family: "Homalopsidae", scientific_name: "Karnsophis siantaris", taxon_group: "reptiles" };
+    expect(speciesMatchesNode(karnsophis, "ssc-sea-snake")).toBe(true);
+    expect(speciesMatchesNode(karnsophis, "ssc-snake-lizard-rla")).toBe(false);
+  });
+
+  it("Monitor Lizard SG includes Lanthanotidae (earless monitor lizard) alongside Varanidae, per the group's own site", () => {
+    const komodo = { class_name: "Reptilia", order_name: "Squamata", family: "Varanidae", scientific_name: "Varanus komodoensis", taxon_group: "reptiles" };
+    const earless = { class_name: "Reptilia", order_name: "Squamata", family: "Lanthanotidae", scientific_name: "Lanthanotus borneensis", taxon_group: "reptiles" };
+    expect(speciesMatchesNode(komodo, "ssc-monitor-lizard")).toBe(true);
+    expect(speciesMatchesNode(earless, "ssc-monitor-lizard")).toBe(true);
+  });
+
+  it("Marine Turtle SG and Tortoise/Freshwater Turtle SG partition Testudines without overlap", () => {
+    const seaTurtle = { class_name: "Reptilia", order_name: "Testudines", family: "Cheloniidae", scientific_name: "Chelonia mydas", taxon_group: "reptiles" };
+    const leatherback = { class_name: "Reptilia", order_name: "Testudines", family: "Dermochelyidae", scientific_name: "Dermochelys coriacea", taxon_group: "reptiles" };
+    const tortoise = { class_name: "Reptilia", order_name: "Testudines", family: "Testudinidae", scientific_name: "Chelonoidis nigra", taxon_group: "reptiles" };
+    expect(speciesMatchesNode(seaTurtle, "ssc-marine-turtle")).toBe(true);
+    expect(speciesMatchesNode(seaTurtle, "ssc-tortoise-freshwater-turtle")).toBe(false);
+    expect(speciesMatchesNode(leatherback, "ssc-marine-turtle")).toBe(true);
+    expect(speciesMatchesNode(leatherback, "ssc-tortoise-freshwater-turtle")).toBe(false);
+    expect(speciesMatchesNode(tortoise, "ssc-marine-turtle")).toBe(false);
+    expect(speciesMatchesNode(tortoise, "ssc-tortoise-freshwater-turtle")).toBe(true);
+  });
+
+  it("Boa and Python SG covers modern Boidae splits (sand boas etc.) but not the ~10 more distant relict families left to the RLA", () => {
+    const boa = { class_name: "Reptilia", order_name: "Squamata", family: "Boidae", scientific_name: "Boa constrictor", taxon_group: "reptiles" };
+    const python = { class_name: "Reptilia", order_name: "Squamata", family: "Pythonidae", scientific_name: "Python bivittatus", taxon_group: "reptiles" };
+    const sandBoa = { class_name: "Reptilia", order_name: "Squamata", family: "Erycidae", scientific_name: "Eryx johnii", taxon_group: "reptiles" };
+    const shieldTail = { class_name: "Reptilia", order_name: "Squamata", family: "Uropeltidae", scientific_name: "Uropeltis melanogaster", taxon_group: "reptiles" };
+    expect(speciesMatchesNode(boa, "ssc-boa-python")).toBe(true);
+    expect(speciesMatchesNode(python, "ssc-boa-python")).toBe(true);
+    expect(speciesMatchesNode(sandBoa, "ssc-boa-python")).toBe(true);
+    expect(speciesMatchesNode(shieldTail, "ssc-boa-python")).toBe(false);
+    expect(speciesMatchesNode(shieldTail, "ssc-snake-lizard-rla")).toBe(true);
+  });
+
+  it("all ssc-reptile-groups children use the reptiles csvGroup and have a unique id", () => {
+    const ids = new Set<string>();
+    for (const child of sscReptileNode?.children ?? []) {
+      expect(child.filter.csvGroups).toEqual(["reptiles"]);
+      expect(ids.has(child.id), `duplicate id ${child.id}`).toBe(false);
+      ids.add(child.id);
+    }
+  });
+
+  it("does not add any new children to the real 'reptiles' node", () => {
+    const reptilesNode = findNode("reptiles");
+    const reptileChildIds = new Set(reptilesNode?.children?.map(c => c.id) ?? []);
+    for (const child of sscReptileNode?.children ?? []) {
+      expect(reptileChildIds.has(child.id)).toBe(false);
+    }
+  });
+});
+
+describe("SSC Specialist Groups tree (fishes)", () => {
+  const sscFishNode = findNode("ssc-fish-groups");
+
+  it("ssc-fish-groups exists, is not part of the default view, and has 10 children (9 pilot groups + remainder)", () => {
+    expect(sscFishNode).toBeDefined();
+    expect(sscFishNode?.children?.length).toBe(10);
+    expect(TAXONOMY_VIEWS.default.roots).not.toContain("ssc-fish-groups");
+  });
+
+  it("ssc-other-fish (the remainder row) doesn't overlap any of the 9 named groups", () => {
+    const cases: Array<{ class_name: string; order_name: string; family: string; scientific_name: string }> = [
+      { class_name: "Chondrichthyes", order_name: "Carcharhiniformes", family: "Carcharhinidae", scientific_name: "Carcharhinus leucas" },
+      { class_name: "Chondrichthyes", order_name: "Chimaeriformes", family: "Chimaeridae", scientific_name: "Chimaera monstrosa" },
+      { class_name: "Actinopterygii", order_name: "Perciformes", family: "Serranidae", scientific_name: "Epinephelus marginatus" },
+      { class_name: "Actinopterygii", order_name: "Perciformes", family: "Labridae", scientific_name: "Cheilinus undulatus" },
+      { class_name: "Actinopterygii", order_name: "Perciformes", family: "Lutjanidae", scientific_name: "Lutjanus campechanus" },
+      { class_name: "Actinopterygii", order_name: "Perciformes", family: "Sparidae", scientific_name: "Sparus aurata" },
+      { class_name: "Actinopterygii", order_name: "Syngnathiformes", family: "Syngnathidae", scientific_name: "Hippocampus kuda" },
+      { class_name: "Actinopterygii", order_name: "Syngnathiformes", family: "Solenostomidae", scientific_name: "Solenostomus paradoxus" },
+      { class_name: "Actinopterygii", order_name: "Acanthuriformes", family: "Sciaenidae", scientific_name: "Argyrosomus regius" },
+      { class_name: "Actinopterygii", order_name: "Salmoniformes", family: "Salmonidae", scientific_name: "Salmo salar" },
+      { class_name: "Actinopterygii", order_name: "Scombriformes", family: "Scombridae", scientific_name: "Thunnus albacares" },
+      { class_name: "Actinopterygii", order_name: "Istiophoriformes", family: "Istiophoridae", scientific_name: "Makaira nigricans" },
+      { class_name: "Actinopterygii", order_name: "Acipenseriformes", family: "Acipenseridae", scientific_name: "Acipenser sturio" },
+      { class_name: "Actinopterygii", order_name: "Acipenseriformes", family: "Polyodontidae", scientific_name: "Polyodon spathula" },
+      { class_name: "Actinopterygii", order_name: "Anguilliformes", family: "Anguillidae", scientific_name: "Anguilla anguilla" },
+    ];
+    for (const row of cases) {
+      expect(speciesMatchesNode({ ...row, taxon_group: "fishes" }, "ssc-other-fish"), row.scientific_name).toBe(false);
+    }
+  });
+
+  it("ssc-other-fish catches a genuinely uncovered species (a cyprinid, no dedicated SSC group among the 9)", () => {
+    const carp = { class_name: "Actinopterygii", order_name: "Cypriniformes", family: "Cyprinidae", scientific_name: "Cyprinus carpio", taxon_group: "fishes" };
+    expect(speciesMatchesNode(carp, "ssc-other-fish")).toBe(true);
+  });
+
+  it("ssc-other-fish also catches marine gobies etc. despite the Freshwater Fish SG's own remit claiming 'all freshwater fishes' — that group is deliberately not built (habitat data unavailable for unassessed species)", () => {
+    const goby = { class_name: "Actinopterygii", order_name: "Gobiiformes", family: "Gobiidae", scientific_name: "Gobius niger", taxon_group: "fishes" };
+    expect(speciesMatchesNode(goby, "ssc-other-fish")).toBe(true);
+    expect(findNode("ssc-freshwater-fish")).toBeUndefined();
+  });
+
+  it("Shark SG matches by class (Chondrichthyes), covering sharks, rays, skates, AND chimaeras", () => {
+    const shark = { class_name: "Chondrichthyes", order_name: "Carcharhiniformes", family: "Carcharhinidae", scientific_name: "Carcharhinus leucas", taxon_group: "fishes" };
+    const ray = { class_name: "Chondrichthyes", order_name: "Myliobatiformes", family: "Dasyatidae", scientific_name: "Dasyatis pastinaca", taxon_group: "fishes" };
+    const chimaera = { class_name: "Chondrichthyes", order_name: "Chimaeriformes", family: "Chimaeridae", scientific_name: "Chimaera monstrosa", taxon_group: "fishes" };
+    expect(speciesMatchesNode(shark, "ssc-shark")).toBe(true);
+    expect(speciesMatchesNode(ray, "ssc-shark")).toBe(true);
+    expect(speciesMatchesNode(chimaera, "ssc-shark")).toBe(true);
+  });
+
+  it("Shark SG also matches unassessed sharks/rays, which carry 'elasmobranchii'/'holocephali' as class_name instead of 'chondrichthyes' (assessed-only label)", () => {
+    const unassessedShark = { class_name: "Elasmobranchii", order_name: "Carcharhiniformes", family: "Carcharhinidae", scientific_name: "Carcharhinus obscurior", taxon_group: "fishes" };
+    const unassessedChimaera = { class_name: "Holocephali", order_name: "Chimaeriformes", family: "Chimaeridae", scientific_name: "Chimaera bahamaensis", taxon_group: "fishes" };
+    expect(speciesMatchesNode(unassessedShark, "ssc-shark")).toBe(true);
+    expect(speciesMatchesNode(unassessedChimaera, "ssc-shark")).toBe(true);
+    expect(speciesMatchesNode(unassessedShark, "ssc-other-fish")).toBe(false);
+  });
+
+  it("Shark SG excludes extinct fossil species and unresolved-name placeholders found in the unassessed data", () => {
+    const fossil1 = { class_name: "Elasmobranchii", order_name: "Lamniformes", family: "Lamnidae", scientific_name: "Isurus desori", taxon_group: "fishes" };
+    const fossil2 = { class_name: "Elasmobranchii", order_name: "Lamniformes", family: "Lamnidae", scientific_name: "Oxyrhina hastalis", taxon_group: "fishes" };
+    const placeholder = { class_name: "Elasmobranchii", order_name: "Carcharhiniformes", family: "Carcharhinidae", scientific_name: "Carcharhinus spec", taxon_group: "fishes" };
+    for (const row of [fossil1, fossil2, placeholder]) {
+      expect(speciesMatchesNode(row, "ssc-shark"), row.scientific_name).toBe(false);
+      // Also excluded from the catch-all — these aren't real extant species
+      // that should appear anywhere in the dashboard.
+      expect(speciesMatchesNode(row, "ssc-other-fish"), row.scientific_name).toBe(false);
+    }
+  });
+
+  it("Grouper and Wrasse SG covers both grouper family labels (Serranidae and Epinephelidae) plus wrasses and parrotfishes", () => {
+    const grouper1 = { class_name: "Actinopterygii", order_name: "Perciformes", family: "Serranidae", scientific_name: "Epinephelus marginatus", taxon_group: "fishes" };
+    const grouper2 = { class_name: "Actinopterygii", order_name: "Perciformes", family: "Epinephelidae", scientific_name: "Epinephelus itajara", taxon_group: "fishes" };
+    const wrasse = { class_name: "Actinopterygii", order_name: "Perciformes", family: "Labridae", scientific_name: "Cheilinus undulatus", taxon_group: "fishes" };
+    const parrotfish = { class_name: "Actinopterygii", order_name: "Perciformes", family: "Scaridae", scientific_name: "Scarus vetula", taxon_group: "fishes" };
+    expect(speciesMatchesNode(grouper1, "ssc-grouper-wrasse")).toBe(true);
+    expect(speciesMatchesNode(grouper2, "ssc-grouper-wrasse")).toBe(true);
+    expect(speciesMatchesNode(wrasse, "ssc-grouper-wrasse")).toBe(true);
+    expect(speciesMatchesNode(parrotfish, "ssc-grouper-wrasse")).toBe(true);
+  });
+
+  it("Snapper, Seabream and Grunt SG covers all 6 families named in its own scope statement, not just the 3 in its name", () => {
+    const snapper = { class_name: "Actinopterygii", order_name: "Perciformes", family: "Lutjanidae", scientific_name: "Lutjanus campechanus", taxon_group: "fishes" };
+    const threadfinBream = { class_name: "Actinopterygii", order_name: "Perciformes", family: "Nemipteridae", scientific_name: "Nemipterus japonicus", taxon_group: "fishes" };
+    const emperor = { class_name: "Actinopterygii", order_name: "Perciformes", family: "Lethrinidae", scientific_name: "Lethrinus nebulosus", taxon_group: "fishes" };
+    const fusilier = { class_name: "Actinopterygii", order_name: "Perciformes", family: "Caesionidae", scientific_name: "Caesio cuning", taxon_group: "fishes" };
+    // Mojarras (Gerreidae) are a similar reef-fish family but NOT named in the
+    // group's own scope statement — deliberately excluded, falls to the catch-all.
+    const mojarra = { class_name: "Actinopterygii", order_name: "Perciformes", family: "Gerreidae", scientific_name: "Gerres cinereus", taxon_group: "fishes" };
+    expect(speciesMatchesNode(snapper, "ssc-snapper-seabream-grunt")).toBe(true);
+    expect(speciesMatchesNode(threadfinBream, "ssc-snapper-seabream-grunt")).toBe(true);
+    expect(speciesMatchesNode(emperor, "ssc-snapper-seabream-grunt")).toBe(true);
+    expect(speciesMatchesNode(fusilier, "ssc-snapper-seabream-grunt")).toBe(true);
+    expect(speciesMatchesNode(mojarra, "ssc-snapper-seabream-grunt")).toBe(false);
+    expect(speciesMatchesNode(mojarra, "ssc-other-fish")).toBe(true);
+  });
+
+  it("Seahorse, Pipefish and Seadragon SG covers the whole order Syngnathiformes (5 families), not just Syngnathidae", () => {
+    const seahorse = { class_name: "Actinopterygii", order_name: "Syngnathiformes", family: "Syngnathidae", scientific_name: "Hippocampus kuda", taxon_group: "fishes" };
+    const ghostPipefish = { class_name: "Actinopterygii", order_name: "Syngnathiformes", family: "Solenostomidae", scientific_name: "Solenostomus paradoxus", taxon_group: "fishes" };
+    const trumpetfish = { class_name: "Actinopterygii", order_name: "Syngnathiformes", family: "Aulostomidae", scientific_name: "Aulostomus chinensis", taxon_group: "fishes" };
+    expect(speciesMatchesNode(seahorse, "ssc-seahorse-pipefish-seadragon")).toBe(true);
+    expect(speciesMatchesNode(ghostPipefish, "ssc-seahorse-pipefish-seadragon")).toBe(true);
+    expect(speciesMatchesNode(trumpetfish, "ssc-seahorse-pipefish-seadragon")).toBe(true);
+  });
+
+  it("Tuna and Billfish SG covers the whole family Scombridae (mackerels/bonitos too, not just tuna genera) plus both billfish families", () => {
+    const tuna = { class_name: "Actinopterygii", order_name: "Scombriformes", family: "Scombridae", scientific_name: "Thunnus albacares", taxon_group: "fishes" };
+    const mackerel = { class_name: "Actinopterygii", order_name: "Scombriformes", family: "Scombridae", scientific_name: "Scomber scombrus", taxon_group: "fishes" };
+    const marlin = { class_name: "Actinopterygii", order_name: "Istiophoriformes", family: "Istiophoridae", scientific_name: "Makaira nigricans", taxon_group: "fishes" };
+    const swordfish = { class_name: "Actinopterygii", order_name: "Istiophoriformes", family: "Xiphiidae", scientific_name: "Xiphias gladius", taxon_group: "fishes" };
+    expect(speciesMatchesNode(tuna, "ssc-tuna-billfish")).toBe(true);
+    expect(speciesMatchesNode(mackerel, "ssc-tuna-billfish")).toBe(true);
+    expect(speciesMatchesNode(marlin, "ssc-tuna-billfish")).toBe(true);
+    expect(speciesMatchesNode(swordfish, "ssc-tuna-billfish")).toBe(true);
+  });
+
+  it("Sturgeon SG covers both families of order Acipenseriformes (sturgeons and paddlefish), not sturgeons alone", () => {
+    const sturgeon = { class_name: "Actinopterygii", order_name: "Acipenseriformes", family: "Acipenseridae", scientific_name: "Acipenser sturio", taxon_group: "fishes" };
+    const paddlefish = { class_name: "Actinopterygii", order_name: "Acipenseriformes", family: "Polyodontidae", scientific_name: "Polyodon spathula", taxon_group: "fishes" };
+    expect(speciesMatchesNode(sturgeon, "ssc-sturgeon")).toBe(true);
+    expect(speciesMatchesNode(paddlefish, "ssc-sturgeon")).toBe(true);
+  });
+
+  it("all ssc-fish-groups children use the fishes csvGroup and have a unique id", () => {
+    const ids = new Set<string>();
+    for (const child of sscFishNode?.children ?? []) {
+      expect(child.filter.csvGroups).toEqual(["fishes"]);
+      expect(ids.has(child.id), `duplicate id ${child.id}`).toBe(false);
+      ids.add(child.id);
+    }
+  });
+
+  it("does not add any new children to the real 'fishes' node", () => {
+    const fishesNode = findNode("fishes");
+    const fishChildIds = new Set(fishesNode?.children?.map(c => c.id) ?? []);
+    for (const child of sscFishNode?.children ?? []) {
+      expect(fishChildIds.has(child.id)).toBe(false);
+    }
+  });
+});
+
+describe("SSC Specialist Groups tree (invertebrates)", () => {
+  const sscInvertNode = findNode("ssc-invertebrate-groups");
+
+  it("ssc-invertebrate-groups exists, is not part of the default view, and has 18 children (17 pilot groups + remainder)", () => {
+    expect(sscInvertNode).toBeDefined();
+    expect(sscInvertNode?.children?.length).toBe(18);
+    expect(TAXONOMY_VIEWS.default.roots).not.toContain("ssc-invertebrate-groups");
+  });
+
+  it("ssc-other-invertebrates (the remainder row) doesn't overlap any of the 17 named groups", () => {
+    const cases: Array<{ class_name: string; order_name: string; family: string; scientific_name: string; taxon_group: string }> = [
+      { class_name: "Gastropoda", order_name: "Stylommatophora", family: "Helicidae", scientific_name: "Helix pomatia", taxon_group: "molluscs" },
+      { class_name: "Cephalopoda", order_name: "Octopoda", family: "Octopodidae", scientific_name: "Octopus vulgaris", taxon_group: "molluscs" },
+      { class_name: "Arachnida", order_name: "Araneae", family: "Theraphosidae", scientific_name: "Theraphosa blondi", taxon_group: "arachnids" },
+      { class_name: "Arachnida", order_name: "Scorpiones", family: "Buthidae", scientific_name: "Androctonus australis", taxon_group: "arachnids" },
+      { class_name: "Insecta", order_name: "Lepidoptera", family: "Nymphalidae", scientific_name: "Danaus plexippus", taxon_group: "butterflies_and_moths" },
+      { class_name: "Insecta", order_name: "Lepidoptera", family: "Saturniidae", scientific_name: "Attacus atlas", taxon_group: "butterflies_and_moths" },
+      { class_name: "Insecta", order_name: "Orthoptera", family: "Acrididae", scientific_name: "Schistocerca gregaria", taxon_group: "grasshoppers_crickets_locusts" },
+      { class_name: "Insecta", order_name: "Mantodea", family: "Mantidae", scientific_name: "Mantis religiosa", taxon_group: "other_insects" },
+      { class_name: "Insecta", order_name: "Phasmida", family: "Phasmatidae", scientific_name: "Extatosoma tiaratum", taxon_group: "other_insects" },
+      { class_name: "Insecta", order_name: "Hymenoptera", family: "Apidae", scientific_name: "Apis mellifera", taxon_group: "bees_wasps_and_ants" },
+      { class_name: "Insecta", order_name: "Hymenoptera", family: "Formicidae", scientific_name: "Atta cephalotes", taxon_group: "bees_wasps_and_ants" },
+      { class_name: "Insecta", order_name: "Ephemeroptera", family: "Baetidae", scientific_name: "Baetis rhodani", taxon_group: "other_insects" },
+      { class_name: "Insecta", order_name: "Odonata", family: "Libellulidae", scientific_name: "Libellula depressa", taxon_group: "dragonflies_and_damselflies" },
+      { class_name: "Malacostraca", order_name: "Decapoda", family: "Astacidae", scientific_name: "Astacus astacus", taxon_group: "crustaceans" },
+      { class_name: "Insecta", order_name: "Diptera", family: "Syrphidae", scientific_name: "Episyrphus balteatus", taxon_group: "flies_and_mosquitoes" },
+      { class_name: "Anthozoa", order_name: "Scleractinia", family: "Acroporidae", scientific_name: "Acropora palmata", taxon_group: "corals" },
+      { class_name: "Insecta", order_name: "Coleoptera", family: "Lampyridae", scientific_name: "Photinus pyralis", taxon_group: "beetles" },
+      { class_name: "Insecta", order_name: "Coleoptera", family: "Geotrupidae", scientific_name: "Geotrupes stercorarius", taxon_group: "beetles" },
+      { class_name: "Merostomata", order_name: "Xiphosura", family: "Limulidae", scientific_name: "Limulus polyphemus", taxon_group: "horseshoe_crabs" },
+      { class_name: "Holothuroidea", order_name: "Holothuriida", family: "Holothuriidae", scientific_name: "Holothuria edulis", taxon_group: "other_invertebrates" },
+      { class_name: "Clitellata", order_name: "Crassiclitellata", family: "Lumbricidae", scientific_name: "Lumbricus terrestris", taxon_group: "other_invertebrates" },
+      { class_name: "Demospongiae", order_name: "Dictyoceratida", family: "Spongiidae", scientific_name: "Spongia officinalis", taxon_group: "other_invertebrates" },
+    ];
+    for (const row of cases) {
+      expect(speciesMatchesNode(row, "ssc-other-invertebrates"), row.scientific_name).toBe(false);
+    }
+  });
+
+  it("ssc-earthworm covers Crassiclitellata + Moniligastrida, not leeches or aquatic oligochaetes", () => {
+    const earthworm = { class_name: "Clitellata", order_name: "Crassiclitellata", family: "Lumbricidae", scientific_name: "Lumbricus terrestris", taxon_group: "other_invertebrates" };
+    const asianEarthworm = { class_name: "Clitellata", order_name: "Moniligastrida", family: "Moniligastridae", scientific_name: "Moniligaster deshayesi", taxon_group: "other_invertebrates" };
+    const leech = { class_name: "Clitellata", order_name: "Arhynchobdellida", family: "Hirudinidae", scientific_name: "Hirudo medicinalis", taxon_group: "other_invertebrates" };
+    expect(speciesMatchesNode(earthworm, "ssc-earthworm")).toBe(true);
+    expect(speciesMatchesNode(asianEarthworm, "ssc-earthworm")).toBe(true);
+    expect(speciesMatchesNode(leech, "ssc-earthworm")).toBe(false);
+    expect(speciesMatchesNode(leech, "ssc-other-invertebrates")).toBe(true);
+  });
+
+  it("ssc-sponge covers Demospongiae/Hexactinellida/Calcarea, not other other_invertebrates classes", () => {
+    const sponge = { class_name: "Demospongiae", order_name: "Dictyoceratida", family: "Spongiidae", scientific_name: "Spongia officinalis", taxon_group: "other_invertebrates" };
+    const glassSponge = { class_name: "Hexactinellida", order_name: "Lyssacinosida", family: "Euplectellidae", scientific_name: "Euplectella aspergillum", taxon_group: "other_invertebrates" };
+    const seaStar = { class_name: "Asteroidea", order_name: "Valvatida", family: "Oreasteridae", scientific_name: "Culcita novaeguineae", taxon_group: "other_invertebrates" };
+    expect(speciesMatchesNode(sponge, "ssc-sponge")).toBe(true);
+    expect(speciesMatchesNode(glassSponge, "ssc-sponge")).toBe(true);
+    expect(speciesMatchesNode(seaStar, "ssc-sponge")).toBe(false);
+  });
+
+  it("ssc-sea-cucumber claims class Holothuroidea, not shared with the mixed 'other_invertebrates' catch-all", () => {
+    const seaCucumber = { class_name: "Holothuroidea", order_name: "Holothuriida", family: "Holothuriidae", scientific_name: "Holothuria edulis", taxon_group: "other_invertebrates" };
+    const seaStar = { class_name: "Asteroidea", order_name: "Valvatida", family: "Oreasteridae", scientific_name: "Culcita novaeguineae", taxon_group: "other_invertebrates" };
+    expect(speciesMatchesNode(seaCucumber, "ssc-sea-cucumber")).toBe(true);
+    expect(speciesMatchesNode(seaStar, "ssc-sea-cucumber")).toBe(false);
+    expect(speciesMatchesNode(seaStar, "ssc-other-invertebrates")).toBe(true);
+  });
+
+  it("ssc-other-invertebrates catches genuinely uncovered species, including ones that would belong to the excluded habitat-based RLAs in reality", () => {
+    // Would belong to Cave Invertebrate SG / TIRLA / MIRLA in reality, but those
+    // are deliberately not built (see the exclusion note in taxonomy-tree.ts).
+    const trueBug = { class_name: "Insecta", order_name: "Hemiptera", family: "Cicadidae", scientific_name: "Magicicada septendecim", taxon_group: "true_bugs" };
+    const mite = { class_name: "Arachnida", order_name: "Sarcoptiformes", family: "Oribatidae", scientific_name: "Oribatula tibialis", taxon_group: "arachnids" };
+    const seaAnemone = { class_name: "Anthozoa", order_name: "Actiniaria", family: "Actiniidae", scientific_name: "Actinia equina", taxon_group: "corals" };
+    const marineCrab = { class_name: "Malacostraca", order_name: "Decapoda", family: "Portunidae", scientific_name: "Callinectes sapidus", taxon_group: "crustaceans" };
+    const velvetWorm = { class_name: "Chilopoda", order_name: "Onychophora", family: "Peripatidae", scientific_name: "Epiperipatus biolleyi", taxon_group: "velvet_worms" };
+    for (const row of [trueBug, mite, seaAnemone, marineCrab, velvetWorm]) {
+      expect(speciesMatchesNode(row, "ssc-other-invertebrates"), row.scientific_name).toBe(true);
+    }
+  });
+
+  it("Mollusc SG covers the whole phylum, including cephalopods", () => {
+    const snail = { class_name: "Gastropoda", order_name: "Stylommatophora", family: "Helicidae", scientific_name: "Helix pomatia", taxon_group: "molluscs" };
+    const octopus = { class_name: "Cephalopoda", order_name: "Octopoda", family: "Octopodidae", scientific_name: "Octopus vulgaris", taxon_group: "molluscs" };
+    const bivalve = { class_name: "Bivalvia", order_name: "Mytilida", family: "Mytilidae", scientific_name: "Mytilus edulis", taxon_group: "molluscs" };
+    expect(speciesMatchesNode(snail, "ssc-mollusc")).toBe(true);
+    expect(speciesMatchesNode(octopus, "ssc-mollusc")).toBe(true);
+    expect(speciesMatchesNode(bivalve, "ssc-mollusc")).toBe(true);
+  });
+
+  it("Spider and Scorpion SG is scoped to Araneae + Scorpiones, excluding other arachnid orders (mites, harvestmen)", () => {
+    const spider = { class_name: "Arachnida", order_name: "Araneae", family: "Theraphosidae", scientific_name: "Theraphosa blondi", taxon_group: "arachnids" };
+    const scorpion = { class_name: "Arachnida", order_name: "Scorpiones", family: "Buthidae", scientific_name: "Androctonus australis", taxon_group: "arachnids" };
+    const harvestman = { class_name: "Arachnida", order_name: "Opiliones", family: "Phalangiidae", scientific_name: "Phalangium opilio", taxon_group: "arachnids" };
+    const mite = { class_name: "Arachnida", order_name: "Sarcoptiformes", family: "Oribatidae", scientific_name: "Oribatula tibialis", taxon_group: "arachnids" };
+    expect(speciesMatchesNode(spider, "ssc-spider-scorpion")).toBe(true);
+    expect(speciesMatchesNode(scorpion, "ssc-spider-scorpion")).toBe(true);
+    expect(speciesMatchesNode(harvestman, "ssc-spider-scorpion")).toBe(false);
+    expect(speciesMatchesNode(mite, "ssc-spider-scorpion")).toBe(false);
+    expect(speciesMatchesNode(harvestman, "ssc-other-invertebrates")).toBe(true);
+  });
+
+  it("Butterfly SG covers Papilionoidea (6 families) + Hedylidae + Saturniidae, but not other moth families despite the group's own broader 'butterflies and moths' mission", () => {
+    const monarch = { class_name: "Insecta", order_name: "Lepidoptera", family: "Nymphalidae", scientific_name: "Danaus plexippus", taxon_group: "butterflies_and_moths" };
+    const emperorMoth = { class_name: "Insecta", order_name: "Lepidoptera", family: "Saturniidae", scientific_name: "Attacus atlas", taxon_group: "butterflies_and_moths" };
+    const geometrid = { class_name: "Insecta", order_name: "Lepidoptera", family: "Geometridae", scientific_name: "Biston betularia", taxon_group: "butterflies_and_moths" };
+    expect(speciesMatchesNode(monarch, "ssc-butterfly")).toBe(true);
+    expect(speciesMatchesNode(emperorMoth, "ssc-butterfly")).toBe(true);
+    expect(speciesMatchesNode(geometrid, "ssc-butterfly")).toBe(false);
+    expect(speciesMatchesNode(geometrid, "ssc-other-invertebrates")).toBe(true);
+  });
+
+  it("Grasshopper SG spans 3 orders (Orthoptera, Phasmida, Mantodea), broader than its name suggests", () => {
+    const locust = { class_name: "Insecta", order_name: "Orthoptera", family: "Acrididae", scientific_name: "Schistocerca gregaria", taxon_group: "grasshoppers_crickets_locusts" };
+    const cricket = { class_name: "Insecta", order_name: "Orthoptera", family: "Gryllidae", scientific_name: "Acheta domesticus", taxon_group: "grasshoppers_crickets_locusts" };
+    const mantis = { class_name: "Insecta", order_name: "Mantodea", family: "Mantidae", scientific_name: "Mantis religiosa", taxon_group: "other_insects" };
+    const stickInsect = { class_name: "Insecta", order_name: "Phasmida", family: "Phasmatidae", scientific_name: "Extatosoma tiaratum", taxon_group: "other_insects" };
+    expect(speciesMatchesNode(locust, "ssc-grasshopper")).toBe(true);
+    expect(speciesMatchesNode(cricket, "ssc-grasshopper")).toBe(true);
+    expect(speciesMatchesNode(mantis, "ssc-grasshopper")).toBe(true);
+    expect(speciesMatchesNode(stickInsect, "ssc-grasshopper")).toBe(true);
+  });
+
+  it("Wild Bee SG (still named Bumblebee and Wild Bee SG in our data) covers all 7 bee families, not just Bombus", () => {
+    const honeybee = { class_name: "Insecta", order_name: "Hymenoptera", family: "Apidae", scientific_name: "Apis mellifera", taxon_group: "bees_wasps_and_ants" };
+    const miningBee = { class_name: "Insecta", order_name: "Hymenoptera", family: "Andrenidae", scientific_name: "Andrena fulva", taxon_group: "bees_wasps_and_ants" };
+    const ant = { class_name: "Insecta", order_name: "Hymenoptera", family: "Formicidae", scientific_name: "Atta cephalotes", taxon_group: "bees_wasps_and_ants" };
+    expect(speciesMatchesNode(honeybee, "ssc-wild-bee")).toBe(true);
+    expect(speciesMatchesNode(miningBee, "ssc-wild-bee")).toBe(true);
+    expect(speciesMatchesNode(ant, "ssc-wild-bee")).toBe(false);
+    expect(speciesMatchesNode(ant, "ssc-ant")).toBe(true);
+  });
+
+  it("Dung Beetle SG covers Geotrupidae + Scarabaeinae, excluding other Scarabaeidae subfamilies like rhinoceros beetles (Dynastinae)", () => {
+    const trueDungBeetle = { class_name: "Insecta", order_name: "Coleoptera", family: "Geotrupidae", scientific_name: "Geotrupes stercorarius", taxon_group: "beetles" };
+    const rhinocerosBeetle = { class_name: "Insecta", order_name: "Coleoptera", family: "Scarabaeidae", scientific_name: "Dynastes hercules", taxon_group: "beetles" };
+    expect(speciesMatchesNode(trueDungBeetle, "ssc-dung-beetle")).toBe(true);
+    expect(speciesMatchesNode(rhinocerosBeetle, "ssc-dung-beetle")).toBe(false);
+    expect(speciesMatchesNode(rhinocerosBeetle, "ssc-other-invertebrates")).toBe(true);
+  });
+
+  it("Dung Beetle SG's Geotrupidae genus list includes genera the live CoL backbone splits into family Bolboceratidae, and 4 genera absent from our own redlist/unassessed data", () => {
+    // CoL classifies this genus under "Bolboceratidae", not "geotrupidae" —
+    // family-only exclusion on the catch-all would have double-counted it.
+    const bolboceratid = { class_name: "Insecta", order_name: "Coleoptera", family: "Bolboceratidae", scientific_name: "Athyreus armatus", taxon_group: "beetles" };
+    // A genus present only in CoL's broader backbone (Baraudia), not in our
+    // own redlist/unassessed data — matches by genus regardless.
+    const colOnlyGenus = { class_name: "Insecta", order_name: "Coleoptera", family: "Geotrupidae", scientific_name: "Baraudia geminata", taxon_group: "beetles" };
+    expect(speciesMatchesNode(bolboceratid, "ssc-dung-beetle")).toBe(true);
+    expect(speciesMatchesNode(bolboceratid, "ssc-other-invertebrates")).toBe(false);
+    expect(speciesMatchesNode(colOnlyGenus, "ssc-dung-beetle")).toBe(true);
+  });
+
+  it("Coral SG is scoped to Scleractinia (reef-building corals), excluding other Anthozoa like sea anemones", () => {
+    const stonyCoral = { class_name: "Anthozoa", order_name: "Scleractinia", family: "Acroporidae", scientific_name: "Acropora palmata", taxon_group: "corals" };
+    const seaAnemone = { class_name: "Anthozoa", order_name: "Actiniaria", family: "Actiniidae", scientific_name: "Actinia equina", taxon_group: "corals" };
+    expect(speciesMatchesNode(stonyCoral, "ssc-coral")).toBe(true);
+    expect(speciesMatchesNode(seaAnemone, "ssc-coral")).toBe(false);
+    expect(speciesMatchesNode(seaAnemone, "ssc-other-invertebrates")).toBe(true);
+  });
+
+  it("Freshwater Crustacean SG covers crayfish, freshwater crabs, and land crabs, but deliberately excludes the mixed marine/freshwater family Palaemonidae by default", () => {
+    const crayfish = { class_name: "Malacostraca", order_name: "Decapoda", family: "Astacidae", scientific_name: "Astacus astacus", taxon_group: "crustaceans" };
+    const freshwaterCrab = { class_name: "Malacostraca", order_name: "Decapoda", family: "Potamidae", scientific_name: "Potamon fluviatile", taxon_group: "crustaceans" };
+    const landCrab = { class_name: "Malacostraca", order_name: "Decapoda", family: "Gecarcinidae", scientific_name: "Gecarcinus quadratus", taxon_group: "crustaceans" };
+    // A marine/brackish Palaemonidae genus not in the freshwater-tagged
+    // extraSpeciesNames list — correctly stays excluded.
+    const marineShrimp = { class_name: "Malacostraca", order_name: "Decapoda", family: "Palaemonidae", scientific_name: "Palaemon serratus", taxon_group: "crustaceans" };
+    expect(speciesMatchesNode(crayfish, "ssc-freshwater-crustacean")).toBe(true);
+    expect(speciesMatchesNode(freshwaterCrab, "ssc-freshwater-crustacean")).toBe(true);
+    expect(speciesMatchesNode(landCrab, "ssc-freshwater-crustacean")).toBe(true);
+    expect(speciesMatchesNode(marineShrimp, "ssc-freshwater-crustacean")).toBe(false);
+    expect(speciesMatchesNode(marineShrimp, "ssc-other-invertebrates")).toBe(true);
+  });
+
+  it("Freshwater Crustacean SG includes freshwater-tagged Palaemonidae species (dominated by Macrobrachium) via extraSpeciesNames, since the family itself is mixed marine/freshwater", () => {
+    const riverPrawn = { class_name: "Malacostraca", order_name: "Decapoda", family: "Palaemonidae", scientific_name: "Macrobrachium rosenbergii", taxon_group: "crustaceans" };
+    expect(speciesMatchesNode(riverPrawn, "ssc-freshwater-crustacean")).toBe(true);
+    expect(speciesMatchesNode(riverPrawn, "ssc-other-invertebrates")).toBe(false);
+  });
+
+  it("Horseshoe Crab SG matches its whole dedicated CSV group", () => {
+    const horseshoeCrab = { class_name: "Merostomata", order_name: "Xiphosura", family: "Limulidae", scientific_name: "Limulus polyphemus", taxon_group: "horseshoe_crabs" };
+    expect(speciesMatchesNode(horseshoeCrab, "ssc-horseshoe-crab")).toBe(true);
+  });
+
+  it("all ssc-invertebrate-groups children have a unique id", () => {
+    const ids = new Set<string>();
+    for (const child of sscInvertNode?.children ?? []) {
+      expect(ids.has(child.id), `duplicate id ${child.id}`).toBe(false);
+      ids.add(child.id);
+    }
+  });
+
+  it("does not add any new children to the real 'invertebrates' virtual grouping node", () => {
+    const invertNode = findNode("invertebrates");
+    const invertChildIds = new Set(invertNode?.children?.map(c => c.id) ?? []);
+    for (const child of sscInvertNode?.children ?? []) {
+      expect(invertChildIds.has(child.id)).toBe(false);
+    }
+  });
+});
+
+describe("SSC Specialist Groups tree (plants)", () => {
+  const sscPlantNode = findNode("ssc-plant-groups");
+
+  it("ssc-plant-groups exists, is not part of the default view, and has 9 children (8 pilot groups + remainder)", () => {
+    expect(sscPlantNode).toBeDefined();
+    expect(sscPlantNode?.children?.length).toBe(9);
+    expect(TAXONOMY_VIEWS.default.roots).not.toContain("ssc-plant-groups");
+  });
+
+  it("ssc-other-plants (the remainder row) doesn't overlap any of the 8 named groups", () => {
+    const cases: Array<{ class_name: string; order_name: string; family: string; scientific_name: string; taxon_group: string }> = [
+      { class_name: "Liliopsida", order_name: "Asparagales", family: "Orchidaceae", scientific_name: "Vanilla planifolia", taxon_group: "flowering_plants" },
+      { class_name: "Bryopsida", order_name: "Hypnales", family: "Hypnaceae", scientific_name: "Hypnum cupressiforme", taxon_group: "mosses" },
+      { class_name: "Magnoliopsida", order_name: "Caryophyllales", family: "Cactaceae", scientific_name: "Carnegiea gigantea", taxon_group: "flowering_plants" },
+      { class_name: "Liliopsida", order_name: "Arecales", family: "Arecaceae", scientific_name: "Elaeis guineensis", taxon_group: "flowering_plants" },
+      { class_name: "Magnoliopsida", order_name: "Caryophyllales", family: "Droseraceae", scientific_name: "Dionaea muscipula", taxon_group: "flowering_plants" },
+      { class_name: "Pinopsida", order_name: "Pinales", family: "Pinaceae", scientific_name: "Pinus sylvestris", taxon_group: "gymnosperms" },
+      { class_name: "Cycadopsida", order_name: "Cycadales", family: "Zamiaceae", scientific_name: "Zamia furfuracea", taxon_group: "gymnosperms" },
+      { class_name: "Liliopsida", order_name: "Alismatales", family: "Zosteraceae", scientific_name: "Zostera marina", taxon_group: "flowering_plants" },
+    ];
+    for (const row of cases) {
+      expect(speciesMatchesNode(row, "ssc-other-plants"), row.scientific_name).toBe(false);
+    }
+  });
+
+  it("ssc-other-plants catches genuinely uncovered species, including ones that would belong to the excluded functional/growth-form-based groups in reality", () => {
+    // Would belong to Global Trees SG (any tree species) / Crop Wild Relative SG
+    // (wild relatives of crops) / Medicinal Plant SG in reality, but those are
+    // deliberately not built — see the exclusion note in taxonomy-tree.ts.
+    const oakTree = { class_name: "Magnoliopsida", order_name: "Fagales", family: "Fagaceae", scientific_name: "Quercus robur", taxon_group: "flowering_plants" };
+    const wildWheat = { class_name: "Liliopsida", order_name: "Poales", family: "Poaceae", scientific_name: "Aegilops tauschii", taxon_group: "flowering_plants" };
+    // Ginkgo — a genuine open gap: not claimed by Conifer SG (Pinales only)
+    // or any other group in this pilot.
+    const ginkgo = { class_name: "Ginkgoopsida", order_name: "Ginkgoales", family: "Ginkgoaceae", scientific_name: "Ginkgo biloba", taxon_group: "gymnosperms" };
+    // A freshwater (non-seagrass) genus within the same family Seagrass SG
+    // partially claims — must NOT be swept in by a whole-family filter.
+    const freshwaterHydrocharitaceae = { class_name: "Liliopsida", order_name: "Alismatales", family: "Hydrocharitaceae", scientific_name: "Elodea canadensis", taxon_group: "flowering_plants" };
+    for (const row of [oakTree, wildWheat, ginkgo, freshwaterHydrocharitaceae]) {
+      expect(speciesMatchesNode(row, "ssc-other-plants"), row.scientific_name).toBe(true);
+    }
+  });
+
+  it("Bryophyte SG matches its whole dedicated CSV group (mosses, liverworts, and hornworts together)", () => {
+    const moss = { class_name: "Bryopsida", order_name: "Hypnales", family: "Hypnaceae", scientific_name: "Hypnum cupressiforme", taxon_group: "mosses" };
+    const liverwort = { class_name: "Jungermanniopsida", order_name: "Jungermanniales", family: "Lepidoziaceae", scientific_name: "Bazzania trilobata", taxon_group: "mosses" };
+    expect(speciesMatchesNode(moss, "ssc-bryophyte")).toBe(true);
+    expect(speciesMatchesNode(liverwort, "ssc-bryophyte")).toBe(true);
+  });
+
+  it("Cactus and Succulent SG covers Cactaceae and Didiereaceae, but not other succulent-containing families it can't safely isolate", () => {
+    const cactus = { class_name: "Magnoliopsida", order_name: "Caryophyllales", family: "Cactaceae", scientific_name: "Carnegiea gigantea", taxon_group: "flowering_plants" };
+    const octopusTree = { class_name: "Magnoliopsida", order_name: "Caryophyllales", family: "Didiereaceae", scientific_name: "Alluaudia procera", taxon_group: "flowering_plants" };
+    const succulentSpurge = { class_name: "Magnoliopsida", order_name: "Malpighiales", family: "Euphorbiaceae", scientific_name: "Euphorbia obesa", taxon_group: "flowering_plants" };
+    expect(speciesMatchesNode(cactus, "ssc-cactus-succulent")).toBe(true);
+    expect(speciesMatchesNode(octopusTree, "ssc-cactus-succulent")).toBe(true);
+    expect(speciesMatchesNode(succulentSpurge, "ssc-cactus-succulent")).toBe(false);
+    expect(speciesMatchesNode(succulentSpurge, "ssc-other-plants")).toBe(true);
+  });
+
+  it("Conifer SG covers order Pinales but not Ginkgo or the gnetophytes", () => {
+    const pine = { class_name: "Pinopsida", order_name: "Pinales", family: "Pinaceae", scientific_name: "Pinus sylvestris", taxon_group: "gymnosperms" };
+    const ginkgo = { class_name: "Ginkgoopsida", order_name: "Ginkgoales", family: "Ginkgoaceae", scientific_name: "Ginkgo biloba", taxon_group: "gymnosperms" };
+    expect(speciesMatchesNode(pine, "ssc-conifer")).toBe(true);
+    expect(speciesMatchesNode(ginkgo, "ssc-conifer")).toBe(false);
+    expect(speciesMatchesNode(ginkgo, "ssc-other-plants")).toBe(true);
+  });
+
+  it("Cycad SG covers order Cycadales (both families)", () => {
+    const cycad1 = { class_name: "Cycadopsida", order_name: "Cycadales", family: "Zamiaceae", scientific_name: "Zamia furfuracea", taxon_group: "gymnosperms" };
+    const cycad2 = { class_name: "Cycadopsida", order_name: "Cycadales", family: "Cycadaceae", scientific_name: "Cycas revoluta", taxon_group: "gymnosperms" };
+    expect(speciesMatchesNode(cycad1, "ssc-cycad")).toBe(true);
+    expect(speciesMatchesNode(cycad2, "ssc-cycad")).toBe(true);
+  });
+
+  it("Seagrass SG covers 4 whole marine families plus only the 3 marine genera within the mostly-freshwater family Hydrocharitaceae", () => {
+    const trueSeagrass = { class_name: "Liliopsida", order_name: "Alismatales", family: "Zosteraceae", scientific_name: "Zostera marina", taxon_group: "flowering_plants" };
+    const marineHydrocharitaceae = { class_name: "Liliopsida", order_name: "Alismatales", family: "Hydrocharitaceae", scientific_name: "Halophila ovalis", taxon_group: "flowering_plants" };
+    const freshwaterHydrocharitaceae = { class_name: "Liliopsida", order_name: "Alismatales", family: "Hydrocharitaceae", scientific_name: "Elodea canadensis", taxon_group: "flowering_plants" };
+    expect(speciesMatchesNode(trueSeagrass, "ssc-seagrass")).toBe(true);
+    expect(speciesMatchesNode(marineHydrocharitaceae, "ssc-seagrass")).toBe(true);
+    expect(speciesMatchesNode(freshwaterHydrocharitaceae, "ssc-seagrass")).toBe(false);
+    expect(speciesMatchesNode(freshwaterHydrocharitaceae, "ssc-other-plants")).toBe(true);
+  });
+
+  it("all ssc-plant-groups children have a unique id", () => {
+    const ids = new Set<string>();
+    for (const child of sscPlantNode?.children ?? []) {
+      expect(ids.has(child.id), `duplicate id ${child.id}`).toBe(false);
+      ids.add(child.id);
+    }
+  });
+
+  it("does not add any new children to the real 'plantae' virtual grouping node", () => {
+    const plantaeNode = findNode("plantae");
+    const plantaeChildIds = new Set(plantaeNode?.children?.map(c => c.id) ?? []);
+    for (const child of sscPlantNode?.children ?? []) {
+      expect(plantaeChildIds.has(child.id)).toBe(false);
+    }
+  });
+});
+
+describe("SSC Specialist Groups tree (fungi)", () => {
+  const sscFungiNode = findNode("ssc-fungi-groups");
+
+  it("ssc-fungi-groups exists, is not part of the default view, and has 6 children (5 pilot groups + remainder)", () => {
+    expect(sscFungiNode).toBeDefined();
+    expect(sscFungiNode?.children?.length).toBe(6);
+    expect(TAXONOMY_VIEWS.default.roots).not.toContain("ssc-fungi-groups");
+  });
+
+  it("ssc-other-fungi (the remainder row) doesn't overlap Cup-fungus, Truffle and Ally SG", () => {
+    const cupFungus = { class_name: "Pezizomycetes", order_name: "Pezizales", family: "Pezizaceae", scientific_name: "Peziza vesiculosa", taxon_group: "mushrooms" };
+    const truffle = { class_name: "Pezizomycetes", order_name: "Pezizales", family: "Tuberaceae", scientific_name: "Tuber melanosporum", taxon_group: "mushrooms" };
+    expect(speciesMatchesNode(cupFungus, "ssc-other-fungi")).toBe(false);
+    expect(speciesMatchesNode(truffle, "ssc-other-fungi")).toBe(false);
+  });
+
+  it("ssc-other-fungi catches a genuinely uncovered species (no dedicated SSC group among the 5)", () => {
+    const deadMansFingers = { class_name: "Sordariomycetes", order_name: "Xylariales", family: "Xylariaceae", scientific_name: "Xylaria polymorpha", taxon_group: "mushrooms" };
+    expect(speciesMatchesNode(deadMansFingers, "ssc-other-fungi")).toBe(true);
+  });
+
+  it("Lichen SG is scoped to class Lecanoromycetes, not the whole mushrooms group", () => {
+    const lichen = { class_name: "Lecanoromycetes", order_name: "Lecanorales", family: "Parmeliaceae", scientific_name: "Lobaria pulmonaria", taxon_group: "mushrooms" };
+    expect(speciesMatchesNode(lichen, "ssc-lichen")).toBe(true);
+    expect(speciesMatchesNode(lichen, "ssc-other-fungi")).toBe(false);
+  });
+
+  it("Mushroom, Bracket and Puffball SG is scoped to class Agaricomycetes", () => {
+    const mushroom = { class_name: "Agaricomycetes", order_name: "Agaricales", family: "Amanitaceae", scientific_name: "Amanita muscaria", taxon_group: "mushrooms" };
+    expect(speciesMatchesNode(mushroom, "ssc-mushroom-bracket-puffball")).toBe(true);
+    expect(speciesMatchesNode(mushroom, "ssc-other-fungi")).toBe(false);
+  });
+
+  it("Rusts and Smuts SG covers order Pucciniales (rusts) and the real orders within Ustilaginomycetes/Exobasidiomycetes (smuts)", () => {
+    const rust = { class_name: "Pucciniomycetes", order_name: "Pucciniales", family: "Pucciniaceae", scientific_name: "Puccinia graminis", taxon_group: "mushrooms" };
+    const smut = { class_name: "Ustilaginomycetes", order_name: "Ustilaginales", family: "Ustilaginaceae", scientific_name: "Ustilago maydis", taxon_group: "mushrooms" };
+    // A non-rust order within the same Pucciniomycetes class — correctly
+    // excluded (encoded by order, not the whole class).
+    const nonRustPucciniomycete = { class_name: "Pucciniomycetes", order_name: "Helicobasidiales", family: "Helicobasidiaceae", scientific_name: "Helicobasidium purpureum", taxon_group: "mushrooms" };
+    expect(speciesMatchesNode(rust, "ssc-rust-smut")).toBe(true);
+    expect(speciesMatchesNode(smut, "ssc-rust-smut")).toBe(true);
+    expect(speciesMatchesNode(nonRustPucciniomycete, "ssc-rust-smut")).toBe(false);
+    expect(speciesMatchesNode(nonRustPucciniomycete, "ssc-other-fungi")).toBe(true);
+  });
+
+  it("Cup-fungus, Truffle and Ally SG is scoped to order Pezizales", () => {
+    const cupFungus = { class_name: "Pezizomycetes", order_name: "Pezizales", family: "Pezizaceae", scientific_name: "Peziza vesiculosa", taxon_group: "mushrooms" };
+    const truffle = { class_name: "Pezizomycetes", order_name: "Pezizales", family: "Tuberaceae", scientific_name: "Tuber melanosporum", taxon_group: "mushrooms" };
+    const morel = { class_name: "Pezizomycetes", order_name: "Pezizales", family: "Morchellaceae", scientific_name: "Morchella esculenta", taxon_group: "mushrooms" };
+    // A real assessed species credited to this group but outside Pezizales
+    // (order Hypocreales) — deliberately NOT covered by our conservative
+    // Pezizales-only encoding; falls to the catch-all instead of being
+    // guessed at via a broader "non-lichenized Ascomycota" filter.
+    const caterpillarFungus = { class_name: "Sordariomycetes", order_name: "Hypocreales", family: "Ophiocordycipitaceae", scientific_name: "Ophiocordyceps sinensis", taxon_group: "mushrooms" };
+    expect(speciesMatchesNode(cupFungus, "ssc-cup-fungus-truffle")).toBe(true);
+    expect(speciesMatchesNode(truffle, "ssc-cup-fungus-truffle")).toBe(true);
+    expect(speciesMatchesNode(morel, "ssc-cup-fungus-truffle")).toBe(true);
+    expect(speciesMatchesNode(caterpillarFungus, "ssc-cup-fungus-truffle")).toBe(false);
+    expect(speciesMatchesNode(caterpillarFungus, "ssc-other-fungi")).toBe(true);
+  });
+
+  it("Chytrid, Zygomycete, Downy Mildew and Slime Mould SG's filter is well-formed even though it currently matches nothing in our data", () => {
+    const chytridNode = findNode("ssc-chytrid-zygomycete-downy-mildew-myxomycete");
+    expect(chytridNode).toBeDefined();
+    expect(chytridNode?.filter.classNames).toEqual(["chytridiomycetes", "mucoromycetes", "zoopagomycetes", "oomycetes", "myxomycetes"]);
+    const hypotheticalChytrid = { class_name: "Chytridiomycetes", order_name: "Chytridiales", family: "Chytridiaceae", scientific_name: "Chytridium olla", taxon_group: "mushrooms" };
+    expect(speciesMatchesNode(hypotheticalChytrid, "ssc-chytrid-zygomycete-downy-mildew-myxomycete")).toBe(true);
+    expect(speciesMatchesNode(hypotheticalChytrid, "ssc-other-fungi")).toBe(false);
+  });
+
+  it("all ssc-fungi-groups children use the mushrooms csvGroup and have a unique id", () => {
+    const ids = new Set<string>();
+    for (const child of sscFungiNode?.children ?? []) {
+      expect(child.filter.csvGroups).toEqual(["mushrooms"]);
+      expect(ids.has(child.id), `duplicate id ${child.id}`).toBe(false);
+      ids.add(child.id);
+    }
+  });
+
+  it("does not add any new children to the real 'mushrooms' node", () => {
+    const mushroomsNode = findNode("mushrooms");
+    const mushroomChildIds = new Set(mushroomsNode?.children?.map(c => c.id) ?? []);
+    for (const child of sscFungiNode?.children ?? []) {
+      expect(mushroomChildIds.has(child.id)).toBe(false);
+    }
   });
 });
 
