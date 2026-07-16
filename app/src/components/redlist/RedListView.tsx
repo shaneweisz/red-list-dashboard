@@ -50,7 +50,7 @@ const FilterBarChart = dynamic(
   { ssr: false, loading: () => <div className="h-full animate-pulse bg-zinc-200 dark:bg-zinc-800 rounded" /> }
 );
 
-// Dedicated vertical bar chart for "Assessments by Year" view
+// Dedicated vertical bar chart for "Year of Latest Assessment" view
 const YearBarChart = dynamic(
   () => import("./YearBarChart"),
   { ssr: false, loading: () => <div className="h-full animate-pulse bg-zinc-200 dark:bg-zinc-800 rounded" /> }
@@ -1957,6 +1957,12 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     setSelectedCategories(isThreatenedSelected ? new Set() : new Set<string>(THREATENED_CATEGORIES));
   };
 
+  // "Outdated" shortcut: filter to species assessed >10 years ago (mirrors isOutdated in species-store.ts)
+  const isOutdatedSelected = exactFilters.outdated === "yes";
+  const handleOutdatedClick = () => {
+    setExactFilters({ outdated: isOutdatedSelected ? null : "yes" });
+  };
+
   // Handle year range bar click (Cmd/Ctrl+click for multi-select, regular click replaces)
   const handleYearClick = (data: { payload?: { range?: string } }, event: React.MouseEvent) => {
     const range = data.payload?.range;
@@ -2306,13 +2312,29 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
               </div>
             </div>
 
-            {/* Years Since Assessed / Assessments by Year */}
+            {/* Years Since Assessed / Year of Latest Assessment */}
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
-              <div className="flex items-center justify-between mb-1 gap-2">
-                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                  {yearsChartMode === "range" ? "Years Since Assessed" : "Assessments by Year"}
+              <div className="flex flex-wrap items-center justify-between mb-1 gap-x-2 gap-y-1">
+                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 whitespace-nowrap">
+                  {yearsChartMode === "range" ? "Years Since Assessed" : "Year of Latest Assessment"}
                 </span>
                 <div className="flex items-center gap-2">
+                  {/* Outdated shortcut: filter to species assessed >10 years ago (mirrors the Threatened button) */}
+                  {!(isSingleSpecies && singleSpecies) && (
+                    <button
+                      type="button"
+                      onClick={handleOutdatedClick}
+                      className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
+                        isOutdatedSelected
+                          ? "bg-red-600 text-white shadow-sm"
+                          : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+                      }`}
+                      aria-pressed={isOutdatedSelected}
+                      title="Filter to species assessed more than 10 years ago"
+                    >
+                      Outdated
+                    </button>
+                  )}
                   {/* Pagination controls (year view only, and only when multiple pages) */}
                   {!(isSingleSpecies && singleSpecies) && yearsChartMode === "year" && yearsTotalPages > 1 && (() => {
                     const firstYear = paginatedAssessmentYearsData[0]?.code;
