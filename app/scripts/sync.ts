@@ -23,6 +23,12 @@
  * Usage:
  *   npx tsx scripts/sync.ts                     # Full sync, all taxa
  *   npx tsx scripts/sync.ts mammalia aves        # Specific taxa only
+ *   npx tsx scripts/sync.ts --skip-redlist       # Skip phase 1 (no DB access needed) —
+ *                                                # reuses data/redlist/*.csv from the last
+ *                                                # fetch. See .github/workflows/monthly-sync.yml,
+ *                                                # which runs on a schedule without DB
+ *                                                # credentials, refreshing everything phase 1
+ *                                                # feeds EXCEPT the Red List data itself.
  */
 
 import * as fs from "fs";
@@ -46,12 +52,14 @@ async function main() {
   loadEnvFiles();
 
   const args = process.argv.slice(2);
-  const taxa = args.map((a) => a.toLowerCase());
+  const skipRedlist = args.includes("--skip-redlist");
+  const taxa = args.filter((a) => a !== "--skip-redlist").map((a) => a.toLowerCase());
   const taxaFilter = taxa.length > 0 ? taxa : undefined;
 
   console.log("sync: Full CSV pipeline");
   console.log("=".repeat(60));
   console.log(`Taxa: ${taxaFilter ? taxaFilter.join(", ") : "all"}`);
+  if (skipRedlist) console.log("Phase 1 (fetch-redlist-species): skipped (--skip-redlist)");
   console.log();
 
   const startTime = Date.now();
@@ -60,12 +68,17 @@ async function main() {
   let checklistTsv: string | null = null;
 
   try {
-    logger.log("sync_start", { taxa: taxaFilter ?? "all" });
+    logger.log("sync_start", { taxa: taxaFilter ?? "all", skipRedlist });
 
-    // Phase 1: Red List
-    console.log("Phase 1: fetch-redlist-species");
-    console.log("═".repeat(60));
-    await fetchRedlistSpecies({ taxa: taxaFilter, logger });
+    // Phase 1: Red List — the only phase needing IUCN Postgres access. Skippable
+    // for schedule-driven refreshes (e.g. CI, which never has DB credentials)
+    // that only need to pick up new GBIF/CoL data against the existing Red List
+    // snapshot, not a fresh DB pull (that's a separate, manual, ~6-monthly step).
+    if (!skipRedlist) {
+      console.log("Phase 1: fetch-redlist-species");
+      console.log("═".repeat(60));
+      await fetchRedlistSpecies({ taxa: taxaFilter, logger });
+    }
 
     // Phase 2: GBIF species
     console.log("\nPhase 2: fetch-gbif-species");
