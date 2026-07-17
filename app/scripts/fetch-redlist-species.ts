@@ -5,8 +5,10 @@
  * species data to data/redlist/{taxonId}.csv.
  *
  * Prerequisites:
- *   1. DB connectivity — set DB_HOST/DB_PORT to the server directly if
- *      reachable, otherwise SSH-tunnel it to localhost:5433
+ *   1. DB connectivity — primary is a local Postgres restored from
+ *      ~/Data/RedList/*.bkp (`brew services start postgresql@16`), pointed
+ *      at on the default port. Fallback: SSH-tunnel the remote SIS DB to
+ *      localhost:5433 if you need data newer than your last local restore.
  *   2. Environment variables: DB_HOST, DB_NAME, DB_USER, DB_PASSWORD
  *
  * Usage:
@@ -166,6 +168,17 @@ export async function fetchFromIucnDb(
     const sisIds = species.map((s) => s.sis_taxon_id);
 
     // Batch-fetch countries, systems, growth forms, movement patterns, threats, and synonyms
+    //
+    // Country codes: location_lookup has both plain ISO alpha-2 codes and a
+    // legacy subnational-breakdown layer (longer codes like FRA-FR "France
+    // (mainland)", RU-EU "European Russia") that duplicates its parent's
+    // 2-char code on the same assessment, so LENGTH = 2 filters those out
+    // safely. Kosovo is the one exception: IUCN never assigned it a 2-char
+    // code, so YUG-KO is its *only* location tag (audited 2026-07-17 — 2,765
+    // assessments carry it, 2,760 alongside RS/Serbia, only 5 without).
+    // Without this explicit allowance Kosovo's ~2,765 species are silently
+    // dropped and the country renders as "No data" despite being genuinely
+    // assessed. Remapped to XK below to match the dashboard's Kosovo code.
     const [countriesResult, systemsResult, growthFormsResult, movementResult, threatsResult, synonymsResult] = await Promise.all([
       pgClient.query(`
         SELECT a.id as assessment_id, ll.code as country_code
@@ -176,7 +189,7 @@ export async function fetchFromIucnDb(
         WHERE a.id = ANY($1)
           AND leg.origin = 'Native'
           AND leg.presence = 'Extant'
-          AND LENGTH(ll.code) = 2
+          AND (LENGTH(ll.code) = 2 OR ll.code = 'YUG-KO')
       `, [assessmentIds]),
       pgClient.query(`
         SELECT asys.assessment_id, sl.description->>'en' as system_name
@@ -261,7 +274,8 @@ export async function fetchFromIucnDb(
     for (const row of countriesResult.rows) {
       const aid = Number(row.assessment_id);
       if (!countriesByAssessment.has(aid)) countriesByAssessment.set(aid, new Set());
-      countriesByAssessment.get(aid)!.add(row.country_code);
+      const code = row.country_code === "YUG-KO" ? "XK" : row.country_code;
+      countriesByAssessment.get(aid)!.add(code);
     }
 
     // Systems (realm)
