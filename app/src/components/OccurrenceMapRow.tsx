@@ -79,6 +79,15 @@ const UNCERTAINTY_OPTIONS = [
   { label: "\u2264 50km", value: 50000 },
 ] as const;
 
+// Format a meters value for display, e.g. in the custom-uncertainty badge
+function formatUncertainty(meters: number): string {
+  if (meters >= 1000) {
+    const km = meters / 1000;
+    return `${Number.isInteger(km) ? km : km.toFixed(1)}km`;
+  }
+  return `${meters}m`;
+}
+
 // Sample size options
 const SAMPLE_SIZE_OPTIONS = [100, 300, 500, 1000, 2000] as const;
 
@@ -559,6 +568,9 @@ export default function OccurrenceMapRow({
 
   // Advanced filter state
   const [maxUncertainty, setMaxUncertainty] = useState<number | null>(null);
+  // Custom max-uncertainty entry, shown instead of the preset <select> when active
+  const [customUncertaintyMode, setCustomUncertaintyMode] = useState(false);
+  const [customUncertaintyInput, setCustomUncertaintyInput] = useState("");
   // Coordinate-cleaning checks (zero/equal coords, GBIF HQ, duplicates — see
   // src/lib/coordinate-cleaning.ts), individually toggleable. Default all applied,
   // matching how GBIF's own hasGeospatialIssue=false already hides its own flagged
@@ -1596,8 +1608,7 @@ export default function OccurrenceMapRow({
                   Coordinate cleaning
                   <span className="text-[10px] text-zinc-400 tabular-nums">
                     {flagDefs.filter((d) => appliedChecks[d.key]).length}/{flagDefs.length}
-                    {maxUncertainty != null &&
-                      ` · ${UNCERTAINTY_OPTIONS.find((o) => o.value === maxUncertainty)?.label}`}
+                    {maxUncertainty != null && ` · ≤ ${formatUncertainty(maxUncertainty)}`}
                   </span>
                   <svg className={`w-3 h-3 text-zinc-400 transition-transform ${cleaningFilterOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
@@ -1608,17 +1619,60 @@ export default function OccurrenceMapRow({
                     <div className="flex items-center gap-2 px-3 py-1.5 text-xs" title="Only show records with a GPS uncertainty at or below this radius">
                       <span className="w-3 shrink-0" />
                       <span className="text-zinc-700 dark:text-zinc-200">Max GPS uncertainty</span>
-                      <select
-                        value={maxUncertainty ?? ""}
-                        onChange={(e) => setMaxUncertainty(e.target.value ? parseInt(e.target.value) : null)}
-                        className="ml-auto text-xs px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
-                      >
-                        {UNCERTAINTY_OPTIONS.map((opt) => (
-                          <option key={opt.label} value={opt.value ?? ""}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
+                      {customUncertaintyMode ? (
+                        <span className="ml-auto flex items-center gap-1">
+                          <input
+                            type="number"
+                            min={0}
+                            step={1}
+                            autoFocus
+                            value={customUncertaintyInput}
+                            placeholder="meters"
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              setCustomUncertaintyInput(raw);
+                              const n = raw === "" ? null : Math.max(0, parseInt(raw));
+                              setMaxUncertainty(n != null && !Number.isNaN(n) ? n : null);
+                            }}
+                            className="w-16 text-xs px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
+                          />
+                          <span className="text-zinc-400">m</span>
+                          <button
+                            onClick={() => {
+                              setCustomUncertaintyMode(false);
+                              setCustomUncertaintyInput("");
+                              setMaxUncertainty(null);
+                            }}
+                            title="Back to preset options"
+                            className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                          >
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </span>
+                      ) : (
+                        <select
+                          value={maxUncertainty ?? ""}
+                          onChange={(e) => {
+                            if (e.target.value === "custom") {
+                              setCustomUncertaintyMode(true);
+                              setCustomUncertaintyInput("");
+                              setMaxUncertainty(null);
+                            } else {
+                              setMaxUncertainty(e.target.value ? parseInt(e.target.value) : null);
+                            }
+                          }}
+                          className="ml-auto text-xs px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
+                        >
+                          {UNCERTAINTY_OPTIONS.map((opt) => (
+                            <option key={opt.label} value={opt.value ?? ""}>
+                              {opt.label}
+                            </option>
+                          ))}
+                          <option value="custom">Custom…</option>
+                        </select>
+                      )}
                     </div>
                     <div className="my-1 border-t border-zinc-100 dark:border-zinc-800" />
                     {flagDefs.map((def) => {
