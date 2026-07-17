@@ -10,9 +10,17 @@ import {
   isZeroCoordinate,
   isEqualLatLon,
   isNearGbifHeadquarters,
+  isNearCapital,
+  isNearCentroid,
+  isNearInstitution,
   flagDuplicateCoordinates,
   getQualityFlags,
 } from "../coordinate-cleaning";
+
+// A point in the Southern Ocean, ~3,300-3,700km from the nearest capital, country
+// centroid, and biodiversity institution in the reference data (verified against the
+// real datasets) — a reliable "clean" fixture for all three phase-2 checks at once.
+const FAR_FROM_EVERYTHING = { lon: -140, lat: -60 };
 
 describe("isZeroCoordinate", () => {
   it("upstream example: flags lon==0, lat==0, and (0,0), clears a real point", () => {
@@ -66,6 +74,57 @@ describe("isNearGbifHeadquarters", () => {
   });
 });
 
+describe("isNearCapital", () => {
+  it("flags a point exactly at a real capital (London)", () => {
+    expect(isNearCapital({ lat: 51.49999, lon: -0.11672 })).toBe(true);
+  });
+
+  it("flags within the default 10km buffer, clears within a tighter custom buffer", () => {
+    // ~1112m from London — inside the 10km default, outside a 1000m custom buffer
+    const nearLondon = { lat: 51.50999, lon: -0.11672 };
+    expect(isNearCapital(nearLondon)).toBe(true);
+    expect(isNearCapital(nearLondon, 1000)).toBe(false);
+  });
+
+  it("clears a point far from every capital", () => {
+    expect(isNearCapital(FAR_FROM_EVERYTHING)).toBe(false);
+  });
+});
+
+describe("isNearCentroid", () => {
+  it("flags a point exactly at a real country centroid (France)", () => {
+    expect(isNearCentroid({ lat: 46, lon: 2 })).toBe(true);
+  });
+
+  it("flags within the default 1km buffer, clears within a tighter custom buffer", () => {
+    // ~556m from France's centroid — inside the 1000m default, outside a 100m custom buffer
+    const nearCentroid = { lat: 46.005, lon: 2 };
+    expect(isNearCentroid(nearCentroid)).toBe(true);
+    expect(isNearCentroid(nearCentroid, 100)).toBe(false);
+  });
+
+  it("clears a point far from every centroid", () => {
+    expect(isNearCentroid(FAR_FROM_EVERYTHING)).toBe(false);
+  });
+});
+
+describe("isNearInstitution", () => {
+  it("flags a point exactly at a real institution", () => {
+    expect(isNearInstitution({ lat: 45.1578, lon: 10.79772 })).toBe(true);
+  });
+
+  it("flags within the default 100m buffer, clears within a tighter custom buffer", () => {
+    // ~55.6m from the institution — inside the 100m default, outside a 10m custom buffer
+    const nearInst = { lat: 45.1583, lon: 10.79772 };
+    expect(isNearInstitution(nearInst)).toBe(true);
+    expect(isNearInstitution(nearInst, 10)).toBe(false);
+  });
+
+  it("clears a point far from every institution", () => {
+    expect(isNearInstitution(FAR_FROM_EVERYTHING)).toBe(false);
+  });
+});
+
 describe("flagDuplicateCoordinates", () => {
   it("flags every repeat of a coordinate pair after the first", () => {
     const records = [
@@ -90,11 +149,17 @@ describe("getQualityFlags", () => {
       { lon: 12.58, lat: 55.67 }, // gbif hq
       { lon: 12.58, lat: 55.67 }, // gbif hq + duplicate of the record above
       { lon: 10, lat: 20 }, // clean
+      { lon: -0.11672, lat: 51.49999 }, // London capital
     ];
     const flags = getQualityFlags(records);
-    expect(flags[0].sort()).toEqual(["EQUAL_COORDINATES", "ZERO_COORDINATE"].sort());
-    expect(flags[1]).toEqual(["GBIF_HEADQUARTERS"]);
-    expect(flags[2].sort()).toEqual(["DUPLICATE", "GBIF_HEADQUARTERS"].sort());
+    // (0,0) also happens to be ~7m from a real GRSciColl institution whose own
+    // coordinates are themselves defaulted to null island, and GBIF's Copenhagen HQ
+    // is genuinely ~1.4km from Denmark's real national capital point — both are
+    // honest overlaps in the live reference data, not bugs in this test.
+    expect(flags[0].sort()).toEqual(["EQUAL_COORDINATES", "NEAR_INSTITUTION", "ZERO_COORDINATE"].sort());
+    expect(flags[1].sort()).toEqual(["GBIF_HEADQUARTERS", "NEAR_CAPITAL"].sort());
+    expect(flags[2].sort()).toEqual(["DUPLICATE", "GBIF_HEADQUARTERS", "NEAR_CAPITAL"].sort());
     expect(flags[3]).toEqual([]);
+    expect(flags[4]).toEqual(["NEAR_CAPITAL"]);
   });
 });

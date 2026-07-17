@@ -580,6 +580,9 @@ export default function OccurrenceMapRow({
     EQUAL_COORDINATES: true,
     GBIF_HEADQUARTERS: true,
     DUPLICATE: true,
+    NEAR_CAPITAL: true,
+    NEAR_CENTROID: true,
+    NEAR_INSTITUTION: true,
   });
   const [colorByDate, setColorByDate] = useState(false);
   const [basemap, setBasemap] = useState<BasemapKey>("streets");

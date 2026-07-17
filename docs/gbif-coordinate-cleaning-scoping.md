@@ -34,13 +34,13 @@ Zizka et al.'s own numbers: ~3.6% of GBIF plant records flagged at the record le
 
 | Function | Detects | Reference data needed | Verdict |
 |---|---|---|---|
-| `cc_zero` | Exact (0,0), or lone-axis zero, within a small buffer | none | **Port** — trivial |
-| `cc_equ` | lat == lon (data-entry artifact) | none | **Port** — trivial |
-| `cc_gbif` | Point at GBIF's Copenhagen HQ (~55.67, 12.58) | 1 hardcoded point | **Port** — trivial |
-| `cc_dupl` | Exact/near-duplicate records | none (self-referential) | **Port** — cheap, dedupes within a page/species |
-| `cc_cap` | Near a country's political capital | small capitals table | **Port (phase 2)** — source independently, see §4 |
-| `cc_cen` | Near a country/province centroid | small centroids table | **Port (phase 2)** |
-| `cc_inst` | Near a biodiversity institution (museum/herbarium/zoo) | ~11.6k-row gazetteer | **Port (phase 2)** — use GBIF's own GRSciColl API instead of CoordinateCleaner's bundled table (see §4) |
+| `cc_zero` | Exact (0,0), or lone-axis zero, within a small buffer | none | **Ported** (phase 1) |
+| `cc_equ` | lat == lon (data-entry artifact) | none | **Ported** (phase 1) |
+| `cc_gbif` | Point at GBIF's Copenhagen HQ (~55.67, 12.58) | 1 hardcoded point | **Ported** (phase 1) |
+| `cc_dupl` | Exact/near-duplicate records | none (self-referential) | **Ported** (phase 1) |
+| `cc_cap` | Near a country's political capital | small capitals table | **Ported** (phase 2) — 200 capitals, Natural Earth, see §4 |
+| `cc_cen` | Near a country centroid | small centroids table | **Ported** (phase 2) — 250 country centroids, mledoze/countries; province-level centroids out of scope (see §4) |
+| `cc_inst` | Near a biodiversity institution (museum/herbarium/zoo) | ~11.6k-row gazetteer | **Ported** (phase 2) — 6,062-point gazetteer from GBIF's own GRSciColl API instead of CoordinateCleaner's bundled table (see §4) |
 | `cc_sea` | Terrestrial point falls in the ocean | Natural Earth land polygons | **Port (phase 3)** — needs `@turf/turf` + bundled GeoJSON |
 | `cc_urb` | Point falls in an urban area | Natural Earth urban-areas polygons | **Port (phase 3)** |
 | `cc_coun` | Point outside the record's reported country | Natural Earth country polygons | **Lower priority** — GBIF's `COUNTRY_COORDINATE_MISMATCH` already covers most of this |
@@ -53,8 +53,9 @@ Zizka et al.'s own numbers: ~3.6% of GBIF plant records flagged at the record le
 
 CoordinateCleaner's `countryref`/`institutions`/`aohi` data objects are bundled with the package under its GPL-3 license. Rather than extracting and redistributing those R data objects verbatim (murky for a repo with no stated license of its own), source equivalents independently:
 
-- **Capitals/centroids**: Natural Earth's `ne_10m_admin_0_countries` layer carries label-point/centroid fields; capital-city lat/lon is available from public geonames-derived CSVs. Small (hundreds of KB), public domain / CC-BY.
-- **Institutions**: GBIF operates the **GRSciColl** registry itself (`api.gbif.org/v1/grscicoll/institution`) — pull coordinates from GBIF's own API at build time instead of needing CoordinateCleaner's compiled table. Keeps the whole pipeline sourced from GBIF, and sidesteps the licensing question entirely.
+- **Capitals** (phase 2, shipped): Natural Earth 1:50m populated places, via the [martynafford/natural-earth-geojson](https://github.com/martynafford/natural-earth-geojson) GeoJSON mirror, filtered to `ADM0CAP === 1` — 200 capitals, public domain. See `app/src/lib/coordinate-cleaning-refdata/README.md`.
+- **Centroids** (phase 2, shipped): [mledoze/countries](https://github.com/mledoze/countries) (MIT), each country's `latlng` field — 250 country centroids. Province-level centroids (part of upstream `cc_cen`'s default `test="both"`) are out of scope — no independently-sourced province-centroid dataset was worth the added complexity for phase 2.
+- **Institutions** (phase 2, shipped): GBIF operates the **GRSciColl** registry itself (`api.gbif.org/v1/grscicoll/institution`) — pulled 6,062 institutions with valid coordinates from GBIF's own API instead of needing CoordinateCleaner's compiled table. Keeps the whole pipeline sourced from GBIF, sidesteps the licensing question entirely, and can be refreshed with `npx tsx scripts/fetch-coordinate-cleaning-refdata.ts` since GRSciColl grows over time (unlike capitals/centroids, which are static).
 - **Land/sea mask, urban areas, country borders**: [Natural Earth](https://www.naturalearthdata.com/) ships these directly as public-domain GeoJSON/Shapefile (110m scale land polygon is a few hundred KB; 50m urban areas / countries are a few MB) — no CoordinateCleaner dependency at all, same primary source it uses internally via `rnaturalearth`.
 - **`aohi`** (Artificial Hotspot Occurrence Inventory): bespoke to CoordinateCleaner with no independent source found — skip unless it turns out to matter after phases 1–3 ship.
 
