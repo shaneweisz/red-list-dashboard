@@ -690,8 +690,11 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const species = useMemo(() => isNewAssessments ? assessedSpecies : [...assessedSpecies, ...neSpecies], [assessedSpecies, neSpecies, isNewAssessments]);
   const neCount = neSpecies.length;
 
-  // Filter by selected taxa + subgroup
-  const taxaFilteredSpeciesExceptOutdated = useMemo(() => {
+  // Filter by selected taxa + subgroup only — no other filters applied. This is
+  // the "true total" baseline the Country map tooltip shows alongside its fully
+  // filtered count (see countryStatsForMapTotal below), since every memo past
+  // this point narrows further.
+  const taxaFilteredSpeciesBase = useMemo(() => {
     let filtered = species;
     // In new-assessments mode with a sub-group selected, species were fetched per sub-group
     // (taxon_id = the sub-group), so the speciesMatchesNode filter below is authoritative —
@@ -732,11 +735,16 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         filtered = filtered.filter(s => s.sis_taxon_id == null || !ids.has(s.sis_taxon_id));
       }
     }
-    // Exact URL-only base filters (obs / assessment-year / described-year bounds —
-    // outdated is applied separately below, not here). Applied here on the base set
-    // so every chart AND the table inherit them — and identically to the bucket-free
-    // /browse + MCP query, which is what makes an agent's dashboard link reproduce
-    // the same species set. Mirrors species-filter numeric bounds.
+    return filtered;
+  }, [species, selectedTaxa, selectedSubgroups, isNewAssessments, breakdownFilter]);
+
+  // Exact URL-only base filters (obs / assessment-year / described-year bounds —
+  // outdated is applied separately below, not here). Applied here on the base set
+  // so every chart AND the table inherit them — and identically to the bucket-free
+  // /browse + MCP query, which is what makes an agent's dashboard link reproduce
+  // the same species set. Mirrors species-filter numeric bounds.
+  const taxaFilteredSpeciesExceptOutdated = useMemo(() => {
+    let filtered = taxaFilteredSpeciesBase;
     const { minObs, maxObs, minAssessmentYear, maxAssessmentYear, minDescribedYear, maxDescribedYear } = exactFilters;
     if (minObs != null || maxObs != null) {
       filtered = filtered.filter(s => {
@@ -758,7 +766,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         && (maxDescribedYear == null || s.described_year <= maxDescribedYear));
     }
     return filtered;
-  }, [species, selectedTaxa, selectedSubgroups, isNewAssessments, exactFilters, breakdownFilter]);
+  }, [taxaFilteredSpeciesBase, exactFilters]);
 
   // Outdated is excluded from taxaFilteredSpeciesExceptOutdated (above) so the
   // Range/Year chart (which shares this same "when was this species assessed"
@@ -1369,6 +1377,29 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     );
     return { countryCounts: counts, uniqueCountries: sorted, countryStatsForMap: statsForMap };
   }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
+
+  // True per-country totals — taxon/subgroup selection only, no other filters —
+  // so the Country map tooltip can show "142 of 3,847 total" instead of just
+  // "142" when a filter (e.g. Outdated, a category) narrows the country's
+  // species count. Without this, e.g. "% Outdated: 100%" while the Outdated
+  // toggle is on reads as a fact about the country instead of a tautology.
+  const countryStatsForMapTotal = useMemo(() => {
+    const counts: Record<string, number> = {};
+    const outdatedCounts: Record<string, number> = {};
+    taxaFilteredSpeciesBase.forEach(s => {
+      const outdated = s.category !== "NE" && isOutdated(s.assessment_date);
+      s.countries.forEach(code => {
+        counts[code] = (counts[code] || 0) + 1;
+        if (outdated) outdatedCounts[code] = (outdatedCounts[code] || 0) + 1;
+      });
+    });
+    return Object.fromEntries(
+      Object.entries(counts).map(([code, count]) => [
+        code,
+        { occurrences: 0, species: count, outdated: outdatedCounts[code] || 0 }
+      ])
+    );
+  }, [taxaFilteredSpeciesBase]);
 
   // Realm counts: apply all filters EXCEPT systems (for realm button tooltips)
   const realmCounts = useMemo(() => {
@@ -2530,6 +2561,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   selectedCountries={selectedCountries}
                   onCountrySelect={handleCountrySelect}
                   precomputedStats={countryStatsForMap}
+                  precomputedStatsTotal={countryStatsForMapTotal}
                   selectedTaxa={selectedTaxa}
                   speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
                   showOutdatedMode={!isNewAssessments}
