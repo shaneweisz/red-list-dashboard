@@ -1,4 +1,4 @@
-name: Monthly data sync
+name: Weekly data sync
 
 # Refreshes GBIF occurrence counts, the Catalogue of Life backbone, and the
 # derived taxa-summary stats (incl. isOutdated, which drifts stale over time
@@ -7,6 +7,13 @@ name: Monthly data sync
 # only phase 1, fetch-redlist-species, needs DB access). The Red List data
 # itself stays on its own manual ~6-month refresh cadence (README § Data Sync
 # Pipeline) — this job only refreshes everything downstream of it.
+#
+# Weekly (not monthly) so the resulting PR lands Sunday night and can be
+# reviewed/merged Monday morning. Note the CoL backbone (phases 7-9) refetches
+# its ~3.4GB ColDP export every run regardless of whether CoL has actually
+# published anything new — CoL releases aren't weekly, so most weeks that step
+# is pure overhead. Worth revisiting (e.g. skip phases 7-9 on some runs) if
+# that turns out to be wasteful in practice.
 #
 # Safety notes (this repo is public — see README, IUCN license terms):
 #   - schedule/workflow_dispatch only, never pull_request/pull_request_target,
@@ -24,7 +31,10 @@ name: Monthly data sync
 
 on:
   schedule:
-    - cron: "0 3 1 * *" # 03:00 UTC on the 1st of each month
+    # 20:00 UTC every Sunday — Sunday evening in the UK (BST/GMT depending on
+    # DST, so ~9pm or ~8pm local), leaving the resulting PR ready to review
+    # and merge Monday morning.
+    - cron: "0 20 * * 0"
   workflow_dispatch: {} # allows a manual test run from the Actions tab
 
 permissions:
@@ -105,6 +115,6 @@ jobs:
           git push origin "$BRANCH"
           gh pr create \
             --title "Bump data sync to $TS" \
-            --body "Automated monthly sync (phases 2-10: GBIF occurrence counts, CoL backbone, matching, taxa-summary). The Red List DB fetch (phase 1) is skipped and stays on its own manual ~6-month cadence. Review the diff before merging — merging is what flips production to this sync." \
+            --body "Automated weekly sync (phases 2-10: GBIF occurrence counts, CoL backbone, matching, taxa-summary). The Red List DB fetch (phase 1) is skipped and stays on its own manual ~6-month cadence. Review the diff before merging — merging is what flips production to this sync." \
             --base main \
             --head "$BRANCH"
