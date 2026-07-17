@@ -985,6 +985,29 @@ export default function OccurrenceMapRow({
     setCheckedTypes((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  // Per-category counts among the currently loaded occurrences: how many are in this
+  // basis-of-record category at all ("loaded"), and of those, how many also survive
+  // every other active filter — uncertainty, year range, coordinate cleaning — but not
+  // the basis-of-record checkboxes themselves ("shown"). Distinct from pillDefs' counts,
+  // which are true GBIF-wide totals from a separate server aggregation.
+  const basisLoadedShownCounts = useMemo(() => {
+    const counts: Record<string, { loaded: number; shown: number }> = {};
+    for (const o of occurrences) {
+      const cat = classifyOccurrence(o);
+      const entry = counts[cat] ?? (counts[cat] = { loaded: 0, shown: 0 });
+      entry.loaded++;
+      if (maxUncertainty != null) {
+        const u = o.properties.coordinateUncertaintyInMeters;
+        if (u == null || u > maxUncertainty) continue;
+      }
+      const y = o.properties.year;
+      if (y != null && (y < yearRange[0] || y > yearRange[1])) continue;
+      if (o.properties.qualityFlags?.some((f) => appliedChecks[f as QualityFlag])) continue;
+      entry.shown++;
+    }
+    return counts;
+  }, [occurrences, maxUncertainty, yearRange, appliedChecks]);
+
   // Build GeoJSON FeatureCollection with computed styling properties for the circle layer
   const buildStyledFeatureCollection = useCallback((
     panelOccurrences: OccurrenceFeature[],
@@ -1398,30 +1421,6 @@ export default function OccurrenceMapRow({
             </div>
           )}
         </div>
-        {/* Sample size bar (only in single view) */}
-        {!splitView && totalOccurrences != null && totalOccurrences > occurrences.length && (
-          <div className="flex items-center justify-between px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 border-t border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-300">
-            <span>
-              Showing{" "}
-              {filteredOccurrences.length < occurrences.length ? (
-                <><strong>{filteredOccurrences.length.toLocaleString()}</strong> of <strong>{occurrences.length.toLocaleString()}</strong> loaded (filtered) &mdash; </>
-              ) : null}
-              <strong>{occurrences.length.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> total records
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span>Load more:</span>
-              <select
-                value={sampleSize}
-                onChange={(e) => setSampleSize(parseInt(e.target.value))}
-                className="text-xs px-1.5 py-0.5 rounded border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-300"
-              >
-                {SAMPLE_SIZE_OPTIONS.map((n) => (
-                  <option key={n} value={n}>{n.toLocaleString()}</option>
-                ))}
-              </select>
-            </span>
-          </div>
-        )}
       </div>
     );
   };
@@ -1432,6 +1431,30 @@ export default function OccurrenceMapRow({
     <div className="bg-zinc-50 dark:bg-zinc-800/50">
       <div className="p-2">
         <div className="flex flex-col gap-2">
+          {/* Sample size summary — up top so it's clear how much of the true GBIF
+              total is actually loaded before you start filtering it */}
+          {!splitView && totalOccurrences != null && totalOccurrences > occurrences.length && (
+            <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-300">
+              <span>
+                Loaded <strong>{occurrences.length.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> total GBIF records.
+                {filteredOccurrences.length < occurrences.length && (
+                  <> Showing <strong>{filteredOccurrences.length.toLocaleString()}</strong> after filters.</>
+                )}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span>Load more:</span>
+                <select
+                  value={sampleSize}
+                  onChange={(e) => setSampleSize(parseInt(e.target.value))}
+                  className="text-xs px-1.5 py-0.5 rounded border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-300"
+                >
+                  {SAMPLE_SIZE_OPTIONS.map((n) => (
+                    <option key={n} value={n}>{n.toLocaleString()}</option>
+                  ))}
+                </select>
+              </span>
+            </div>
+          )}
           {/* ── Filter Bar ── */}
           <div className="p-2 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700">
             <div className="flex flex-wrap items-center gap-2">
@@ -1462,12 +1485,14 @@ export default function OccurrenceMapRow({
                   <div className="absolute left-0 top-full mt-1 z-50 w-80 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
                     {pillDefs.map((pill) => {
                       const active = checkedTypes[pill.key];
+                      const loadedShown = basisLoadedShownCounts[pill.key];
                       return (
                         <label
                           key={pill.key}
                           className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
                           onMouseEnter={() => setHoveredType(pill.key)}
                           onMouseLeave={() => setHoveredType(null)}
+                          title={loadedShown ? `${loadedShown.shown.toLocaleString()} of ${loadedShown.loaded.toLocaleString()} loaded records in this category also pass your other active filters` : undefined}
                         >
                           <input
                             type="checkbox"
@@ -1478,8 +1503,15 @@ export default function OccurrenceMapRow({
                           <span className={active ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-400 dark:text-zinc-500"}>
                             {pill.label}
                           </span>
-                          <span className={`ml-auto tabular-nums shrink-0 ${active ? "text-emerald-500 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"}`}>
-                            {pill.count.toLocaleString()}
+                          <span className="ml-auto flex flex-col items-end shrink-0 leading-tight">
+                            <span className={`tabular-nums ${active ? "text-emerald-500 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"}`}>
+                              {pill.count.toLocaleString()}
+                            </span>
+                            {loadedShown && (
+                              <span className="text-[10px] tabular-nums text-zinc-400 dark:text-zinc-500">
+                                {loadedShown.shown.toLocaleString()} of {loadedShown.loaded.toLocaleString()} shown
+                              </span>
+                            )}
                           </span>
                         </label>
                       );
