@@ -60,6 +60,7 @@ interface OccurrenceFeature {
     year?: number | null;
     month?: number | null;
     institutionCode?: string;
+    qualityFlags?: string[];
   };
   geometry: {
     type: "Point";
@@ -557,6 +558,10 @@ export default function OccurrenceMapRow({
 
   // Advanced filter state
   const [maxUncertainty, setMaxUncertainty] = useState<number | null>(null);
+  // Hide records flagged by coordinate-cleaning checks (zero/equal coords, GBIF HQ,
+  // duplicates — see src/lib/coordinate-cleaning.ts). Default hidden, matching how
+  // GBIF's own hasGeospatialIssue=false already hides its own flagged records.
+  const [hideFlagged, setHideFlagged] = useState(true);
   const [colorByDate, setColorByDate] = useState(false);
   const [basemap, setBasemap] = useState<BasemapKey>("streets");
   const [showProtectedAreas, setShowProtectedAreas] = useState(false);
@@ -744,8 +749,17 @@ export default function OccurrenceMapRow({
       if (y == null) return true; // keep records without year data
       return y >= yearRange[0] && y <= yearRange[1];
     });
+    // 4. Coordinate-quality flags (zero/equal coords, GBIF HQ, duplicates)
+    if (hideFlagged) {
+      result = result.filter((o) => !o.properties.qualityFlags?.length);
+    }
     return result;
-  }, [occurrences, checkedTypes, maxUncertainty, yearRange]);
+  }, [occurrences, checkedTypes, maxUncertainty, yearRange, hideFlagged]);
+
+  const flaggedCount = useMemo(
+    () => occurrences.filter((o) => o.properties.qualityFlags?.length).length,
+    [occurrences]
+  );
 
   // Continuous date range for animation (every day from earliest to latest)
   const animationDateRange = useMemo(() => {
@@ -1440,6 +1454,7 @@ export default function OccurrenceMapRow({
                       const u = o.properties.coordinateUncertaintyInMeters;
                       if (u == null || u > maxUncertainty) return false;
                     }
+                    if (hideFlagged && o.properties.qualityFlags?.length) return false;
                     return true;
                   })}
                   yearRange={yearRange}
@@ -1532,6 +1547,28 @@ export default function OccurrenceMapRow({
                   ))}
                 </select>
               </div>
+
+              {flaggedCount > 0 && (
+                <>
+                  {/* Separator */}
+                  <div className="w-px h-5 bg-zinc-200 dark:bg-zinc-700 mx-0.5 hidden sm:block" />
+
+                  {/* Flagged coordinates toggle */}
+                  <label
+                    className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer"
+                    title="Records flagged by coordinate-quality checks (e.g. zero coordinates, GBIF headquarters, duplicates)"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={hideFlagged}
+                      onChange={(e) => setHideFlagged(e.target.checked)}
+                      className="w-3 h-3 rounded accent-emerald-500 shrink-0"
+                    />
+                    Hide flagged
+                    <span className="tabular-nums">({flaggedCount.toLocaleString()})</span>
+                  </label>
+                </>
+              )}
 
             </div>
           </div>
