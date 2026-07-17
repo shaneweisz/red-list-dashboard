@@ -1616,6 +1616,31 @@ export default function OccurrenceMapRow({
                 </button>
                 {cleaningFilterOpen && (
                   <div className="absolute left-0 top-full mt-1 z-50 w-80 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
+                    {flagDefs.map((def) => {
+                      const active = appliedChecks[def.key];
+                      const hasRecords = def.count > 0;
+                      return (
+                        <label
+                          key={def.key}
+                          className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
+                          title={def.description}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={active}
+                            onChange={() => toggleCheck(def.key)}
+                            className="w-3 h-3 rounded accent-emerald-500 shrink-0"
+                          />
+                          <span className={active && hasRecords ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-400 dark:text-zinc-500"}>
+                            {def.label}
+                          </span>
+                          <span className={`ml-auto tabular-nums shrink-0 ${active && hasRecords ? "text-emerald-500 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"}`}>
+                            {def.count.toLocaleString()}
+                          </span>
+                        </label>
+                      );
+                    })}
+                    <div className="my-1 border-t border-zinc-100 dark:border-zinc-800" />
                     <div className="flex items-center gap-2 px-3 py-1.5 text-xs" title="Only show records with a GPS uncertainty at or below this radius">
                       <span className="w-3 shrink-0" />
                       <span className="text-zinc-700 dark:text-zinc-200">Max GPS uncertainty</span>
@@ -1674,31 +1699,6 @@ export default function OccurrenceMapRow({
                         </select>
                       )}
                     </div>
-                    <div className="my-1 border-t border-zinc-100 dark:border-zinc-800" />
-                    {flagDefs.map((def) => {
-                      const active = appliedChecks[def.key];
-                      const hasRecords = def.count > 0;
-                      return (
-                        <label
-                          key={def.key}
-                          className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
-                          title={def.description}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={active}
-                            onChange={() => toggleCheck(def.key)}
-                            className="w-3 h-3 rounded accent-emerald-500 shrink-0"
-                          />
-                          <span className={active && hasRecords ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-400 dark:text-zinc-500"}>
-                            {def.label}
-                          </span>
-                          <span className={`ml-auto tabular-nums shrink-0 ${active && hasRecords ? "text-emerald-500 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"}`}>
-                            {def.count.toLocaleString()}
-                          </span>
-                        </label>
-                      );
-                    })}
                   </div>
                 )}
               </div>
