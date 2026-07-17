@@ -27,12 +27,27 @@ export interface CleanableCoordinate {
   lat: number;
 }
 
-// Human-readable labels for each check, in the order they're evaluated.
+// Human-readable labels for each check, in the order they're evaluated. Kept short
+// for the hover tooltip; see QUALITY_FLAG_DESCRIPTIONS for the longer explanation
+// shown in the coordinate-cleaning checkbox list.
 export const QUALITY_FLAG_LABELS: Record<QualityFlag, string> = {
-  ZERO_COORDINATE: "Zero coordinate",
-  EQUAL_COORDINATES: "Equal lat/lon",
-  GBIF_HEADQUARTERS: "GBIF headquarters",
-  DUPLICATE: "Duplicate coordinates",
+  ZERO_COORDINATE: "Zero / null-island coordinates",
+  EQUAL_COORDINATES: "Latitude equals longitude",
+  GBIF_HEADQUARTERS: "Near GBIF's Copenhagen office",
+  DUPLICATE: "Repeated coordinates",
+};
+
+// One-sentence explanation of exactly what each check does and doesn't do —
+// shown as a tooltip on the checkbox in the coordinate-cleaning filter.
+export const QUALITY_FLAG_DESCRIPTIONS: Record<QualityFlag, string> = {
+  ZERO_COORDINATE:
+    "Coordinates at exactly (0, 0), with latitude or longitude equal to 0, or within 0.5° of the origin — usually a GPS/data-entry default, not a real location.",
+  EQUAL_COORDINATES:
+    "Longitude equals latitude (or its negation), e.g. (12, 12) or (12, -12) — a classic data-entry mix-up.",
+  GBIF_HEADQUARTERS:
+    "Within 1km of GBIF's Copenhagen office (12.58°E, 55.67°N) — a common default when the true locality wasn't recorded. Can false-positive on species genuinely observed in Copenhagen.",
+  DUPLICATE:
+    "An exact repeat of another record's coordinates for this species. Only the repeat is hidden — the first occurrence at that location stays visible.",
 };
 
 function haversineMeters(a: CleanableCoordinate, b: CleanableCoordinate): number {
