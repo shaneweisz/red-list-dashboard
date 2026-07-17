@@ -1215,6 +1215,7 @@ export default function OccurrenceMapRow({
                     coordinateUncertaintyInMeters={hoveredFeature.properties.coordinateUncertaintyInMeters}
                     imageUrl={hInat?.imageUrl ?? null}
                     observer={hInat?.observer ?? null}
+                    qualityFlags={hoveredFeature.properties.qualityFlags}
                   />
                 );
               })()}

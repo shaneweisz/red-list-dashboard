@@ -14,7 +14,16 @@ interface MapOccurrenceTooltipProps {
   coordinateUncertaintyInMeters?: number | null;
   imageUrl?: string | null;
   observer?: string | null;
+  qualityFlags?: string[];
 }
+
+// Human-readable labels for coordinate-quality flags (see src/lib/coordinate-cleaning.ts)
+const QUALITY_FLAG_LABELS: Record<string, string> = {
+  ZERO_COORDINATE: "Zero coordinate",
+  EQUAL_COORDINATES: "Equal lat/lon",
+  GBIF_HEADQUARTERS: "GBIF headquarters",
+  DUPLICATE: "Duplicate coordinates",
+};
 
 // Format basisOfRecord to human-readable string
 function formatBasis(basis?: string): string {
@@ -130,6 +139,11 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
           <div className="text-zinc-400 tabular-nums">
             {props.lat.toFixed(4)}, {props.lng.toFixed(4)}
           </div>
+          {props.qualityFlags && props.qualityFlags.length > 0 && (
+            <div className="text-amber-600 dark:text-amber-400 font-medium pt-0.5">
+              ⚠ Flagged: {props.qualityFlags.map((f) => QUALITY_FLAG_LABELS[f] || f).join(", ")}
+            </div>
+          )}
         </div>
       </div>
       {/* Arrow */}
