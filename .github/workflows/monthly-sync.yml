@@ -1,0 +1,110 @@
+name: Monthly data sync
+
+# Refreshes GBIF occurrence counts, the Catalogue of Life backbone, and the
+# derived taxa-summary stats (incl. isOutdated, which drifts stale over time
+# even when no new data has arrived — see src/lib/outdated.ts) on a schedule,
+# without needing the IUCN Postgres DB (see scripts/sync.ts's --skip-redlist:
+# only phase 1, fetch-redlist-species, needs DB access). The Red List data
+# itself stays on its own manual ~6-month refresh cadence (README § Data Sync
+# Pipeline) — this job only refreshes everything downstream of it.
+#
+# Safety notes (this repo is public — see README, IUCN license terms):
+#   - schedule/workflow_dispatch only, never pull_request/pull_request_target,
+#     so a malicious fork PR can never run with access to the secrets below
+#     or tamper with this file (scheduled runs always use main's workflow).
+#   - Only R2 credentials are needed — every GBIF/CoL API this pipeline calls
+#     is public/unauthenticated (verified: no script here reads a GBIF/CoL
+#     API key or token).
+#   - The PR step stages an explicit file allowlist, never `git add -A`/`.`,
+#     so the ~400MB of raw per-species data (gitignored, private-R2-only)
+#     can never accidentally end up in a commit — only the two small
+#     aggregate JSON files (already committed today) plus col-taxon-ids.json.
+#   - Every script in this pipeline only logs aggregate counts/durations,
+#     never per-species rows, so the (publicly-visible) Action logs are safe.
+
+on:
+  schedule:
+    - cron: "0 3 1 * *" # 03:00 UTC on the 1st of each month
+  workflow_dispatch: {} # allows a manual test run from the Actions tab
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+  R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+  R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+  R2_DATA_BUCKET_NAME: ${{ secrets.R2_DATA_BUCKET_NAME }}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: app
+
+      - name: Fetch current data from R2
+        run: npm run fetch-data-from-r2
+        working-directory: app
+
+      - name: Run sync (phases 2-10 — GBIF, CoL backbone, matching, taxa-summary)
+        run: npx tsx scripts/sync.ts --skip-redlist
+        working-directory: app
+
+      - name: Diff vs the live R2 sync
+        id: diff
+        run: |
+          npm run diff-data-vs-r2 | tee /tmp/diff-output.txt
+          if grep -q "No differences" /tmp/diff-output.txt; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+        working-directory: app
+
+      - name: Upload new sync to R2
+        if: steps.diff.outputs.changed == 'true'
+        run: npm run upload-data-to-r2
+        working-directory: app
+
+      - name: Open a PR bumping the sync pointer
+        if: steps.diff.outputs.changed == 'true'
+        working-directory: app
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          TS=$(cat latest-sync.txt)
+          BRANCH="data-sync/$TS"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+
+          # Explicit allowlist ONLY — see the safety notes above. Never `git add
+          # -A`/`.` here: data/ holds ~400MB of raw per-species data that must
+          # never touch git, only these small, already-committed aggregate files.
+          git add latest-sync.txt data/taxa-summary.json data/node-children-summaries.json
+          git add src/config/col-taxon-ids.json
+
+          if git diff --cached --quiet; then
+            echo "Nothing to commit — skipping PR."
+            exit 0
+          fi
+
+          git commit -m "Bump data sync to $TS"
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "Bump data sync to $TS" \
+            --body "Automated monthly sync (phases 2-10: GBIF occurrence counts, CoL backbone, matching, taxa-summary). The Red List DB fetch (phase 1) is skipped and stays on its own manual ~6-month cadence. Review the diff before merging — merging is what flips production to this sync." \
+            --base main \
+            --head "$BRANCH"
