@@ -27,6 +27,14 @@ export interface CleanableCoordinate {
   lat: number;
 }
 
+// Human-readable labels for each check, in the order they're evaluated.
+export const QUALITY_FLAG_LABELS: Record<QualityFlag, string> = {
+  ZERO_COORDINATE: "Zero coordinate",
+  EQUAL_COORDINATES: "Equal lat/lon",
+  GBIF_HEADQUARTERS: "GBIF headquarters",
+  DUPLICATE: "Duplicate coordinates",
+};
+
 function haversineMeters(a: CleanableCoordinate, b: CleanableCoordinate): number {
   const toRad = (deg: number) => (deg * Math.PI) / 180;
   const dLat = toRad(b.lat - a.lat);

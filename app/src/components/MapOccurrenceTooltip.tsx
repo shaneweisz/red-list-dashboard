@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useMap } from "react-map-gl/maplibre";
+import { QUALITY_FLAG_LABELS, type QualityFlag } from "@/lib/coordinate-cleaning";
 
 interface MapOccurrenceTooltipProps {
   lat: number;
@@ -16,14 +17,6 @@ interface MapOccurrenceTooltipProps {
   observer?: string | null;
   qualityFlags?: string[];
 }
-
-// Human-readable labels for coordinate-quality flags (see src/lib/coordinate-cleaning.ts)
-const QUALITY_FLAG_LABELS: Record<string, string> = {
-  ZERO_COORDINATE: "Zero coordinate",
-  EQUAL_COORDINATES: "Equal lat/lon",
-  GBIF_HEADQUARTERS: "GBIF headquarters",
-  DUPLICATE: "Duplicate coordinates",
-};
 
 // Format basisOfRecord to human-readable string
 function formatBasis(basis?: string): string {
@@ -141,7 +134,7 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
           </div>
           {props.qualityFlags && props.qualityFlags.length > 0 && (
             <div className="text-amber-600 dark:text-amber-400 font-medium pt-0.5">
-              ⚠ Flagged: {props.qualityFlags.map((f) => QUALITY_FLAG_LABELS[f] || f).join(", ")}
+              ⚠ Flagged: {props.qualityFlags.map((f) => QUALITY_FLAG_LABELS[f as QualityFlag] || f).join(", ")}
             </div>
           )}
         </div>
