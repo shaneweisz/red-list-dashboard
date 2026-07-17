@@ -37,7 +37,7 @@ export const NAME_TO_ALPHA2: Record<string, string> = {
   "Turkey": "TR", "Turkmenistan": "TM", "Uganda": "UG", "Ukraine": "UA",
   "United Arab Emirates": "AE", "United Kingdom": "GB", "United States of America": "US",
   "Uruguay": "UY", "Uzbekistan": "UZ", "Vanuatu": "VU", "Venezuela": "VE", "Vietnam": "VN",
-  "Yemen": "YE", "Zambia": "ZM", "Zimbabwe": "ZW", "Palestine": "PS", "Kosovo": "XK",
+  "Yemen": "YE", "Zambia": "ZM", "Zimbabwe": "ZW", "Palestine": "PS",
   "North Macedonia": "MK", "New Caledonia": "NC", "W. Sahara": "EH", "Fr. S. Antarctic Lands": "TF",
   "Falkland Is.": "FK",
   // Small/micro nations not in 110m TopoJSON but useful for search
@@ -48,6 +48,12 @@ export const NAME_TO_ALPHA2: Record<string, string> = {
   "Samoa": "WS", "San Marino": "SM", "São Tomé and Príncipe": "ST", "Seychelles": "SC",
   "Saint Kitts and Nevis": "KN", "Saint Lucia": "LC", "Saint Vincent and the Grenadines": "VC",
   "Tonga": "TO", "Tuvalu": "TV", "Vatican City": "VA",
+  // Somaliland, N. Cyprus, and Kosovo: IUCN's own public presentation doesn't
+  // treat any of these as a distinct country of occurrence, so they resolve
+  // to their parent here too, matching NAME_TO_ALPHA2 in WorldMap.tsx (see
+  // that file for the full reasoning, incl. the Kosovo-specific check
+  // against IUCN's "Geographic Range" field for a Kosovo-tagged species).
+  "Somaliland": "SO", "N. Cyprus": "CY", "Kosovo": "RS",
 };
 
 // Complete ISO 3166-1 alpha-2 to country name mapping (for display)
@@ -55,6 +61,9 @@ export const NAME_TO_ALPHA2: Record<string, string> = {
 export const ALPHA2_TO_NAME: Record<string, string> = {
   // From TopoJSON (use these names for map consistency)
   ...Object.fromEntries(Object.entries(NAME_TO_ALPHA2).map(([name, code]) => [code, name])),
+  // Display-name overrides for the fold-ins above (must come after the spread
+  // so they win over "Somaliland"/"N. Cyprus"/"Kosovo" as the last writer).
+  "SO": "Somalia", "CY": "Cyprus", "RS": "Serbia",
   // Additional countries and territories not in TopoJSON
   "AD": "Andorra", "AG": "Antigua and Barbuda", "AI": "Anguilla", "AQ": "Antarctica",
   "AS": "American Samoa", "AW": "Aruba", "AX": "Åland Islands", "BB": "Barbados",

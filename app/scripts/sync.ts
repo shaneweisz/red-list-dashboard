@@ -17,7 +17,9 @@
  *   Phase 10: build-taxa-summary    (CSVs + CoL artifacts → taxa-summary.json, incl. col counts)
  *
  * Prerequisites:
- *   1. DB connectivity to IUCN Postgres (direct via DB_HOST/DB_PORT, or SSH-tunneled to localhost:5433)
+ *   1. DB connectivity to IUCN Postgres — primary is a local restore from
+ *      ~/Data/RedList/*.bkp (`brew services start postgresql@16`); fallback
+ *      is an SSH tunnel to the remote SIS DB on localhost:5433
  *   2. Environment variables (see .env.example)
  *
  * Usage:
