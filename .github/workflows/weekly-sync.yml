@@ -19,6 +19,15 @@ name: Weekly data sync
 #   - schedule/workflow_dispatch only, never pull_request/pull_request_target,
 #     so a malicious fork PR can never run with access to the secrets below
 #     or tamper with this file (scheduled runs always use main's workflow).
+#   - The R2 secrets live on the `data-sync` GitHub Environment (required
+#     reviewer: the repo owner only), NOT as plain repo secrets — repo
+#     secrets are usable by anyone with push access (here: 3 other
+#     collaborators besides the owner), including via a workflow pushed to a
+#     throwaway branch and run with workflow_dispatch, which never touches
+#     main/PR review at all. Environment protection closes that gap: ANY job
+#     that declares `environment: data-sync` — regardless of which branch or
+#     how the workflow got there — pauses for the owner's manual approval
+#     before the secrets are released to it.
 #   - Only R2 credentials are needed — every GBIF/CoL API this pipeline calls
 #     is public/unauthenticated (verified: no script here reads a GBIF/CoL
 #     API key or token).
@@ -50,6 +59,11 @@ env:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    # Gates this whole job behind the data-sync environment's required-reviewer
+    # rule — see the safety notes above. Every run (scheduled, dispatched, or
+    # from any branch) pauses here until the owner approves it in the Actions
+    # tab, which is also where you'd notice an unexpected/unfamiliar run.
+    environment: data-sync
     steps:
       - uses: actions/checkout@v4
 
