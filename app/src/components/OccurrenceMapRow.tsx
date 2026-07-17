@@ -1579,26 +1579,7 @@ export default function OccurrenceMapRow({
               {/* Separator */}
               <div className="w-px h-5 bg-zinc-200 dark:bg-zinc-700 mx-0.5 hidden sm:block" />
 
-              {/* GPS Uncertainty */}
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-zinc-500 dark:text-zinc-400">GPS Uncertainty:</span>
-                <select
-                  value={maxUncertainty ?? ""}
-                  onChange={(e) => setMaxUncertainty(e.target.value ? parseInt(e.target.value) : null)}
-                  className="text-xs px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
-                >
-                  {UNCERTAINTY_OPTIONS.map((opt) => (
-                    <option key={opt.label} value={opt.value ?? ""}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Separator */}
-              <div className="w-px h-5 bg-zinc-200 dark:bg-zinc-700 mx-0.5 hidden sm:block" />
-
-              {/* Coordinate cleaning — dropdown checklist, one checkbox per check */}
+              {/* Coordinate cleaning — dropdown: max GPS uncertainty + one checkbox per check */}
               <div className="relative" ref={cleaningFilterRef}>
                 <button
                   onClick={() => setCleaningFilterOpen(!cleaningFilterOpen)}
@@ -1607,7 +1588,7 @@ export default function OccurrenceMapRow({
                       ? "bg-zinc-100 dark:bg-zinc-800 border-zinc-400 dark:border-zinc-500"
                       : "border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-800"
                   } text-zinc-700 dark:text-zinc-300`}
-                  title="Hide records flagged by coordinate-cleaning checks (e.g. zero coordinates, GBIF headquarters, duplicates)"
+                  title="Filter by GPS uncertainty and hide records flagged by coordinate-cleaning checks (e.g. zero coordinates, GBIF headquarters, duplicates)"
                 >
                   <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
@@ -1615,6 +1596,8 @@ export default function OccurrenceMapRow({
                   Coordinate cleaning
                   <span className="text-[10px] text-zinc-400 tabular-nums">
                     {flagDefs.filter((d) => appliedChecks[d.key]).length}/{flagDefs.length}
+                    {maxUncertainty != null &&
+                      ` · ${UNCERTAINTY_OPTIONS.find((o) => o.value === maxUncertainty)?.label}`}
                   </span>
                   <svg className={`w-3 h-3 text-zinc-400 transition-transform ${cleaningFilterOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
@@ -1622,6 +1605,22 @@ export default function OccurrenceMapRow({
                 </button>
                 {cleaningFilterOpen && (
                   <div className="absolute left-0 top-full mt-1 z-50 w-80 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
+                    <div className="flex items-center gap-2 px-3 py-1.5 text-xs" title="Only show records with a GPS uncertainty at or below this radius">
+                      <span className="w-3 shrink-0" />
+                      <span className="text-zinc-700 dark:text-zinc-200">Max GPS uncertainty</span>
+                      <select
+                        value={maxUncertainty ?? ""}
+                        onChange={(e) => setMaxUncertainty(e.target.value ? parseInt(e.target.value) : null)}
+                        className="ml-auto text-xs px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
+                      >
+                        {UNCERTAINTY_OPTIONS.map((opt) => (
+                          <option key={opt.label} value={opt.value ?? ""}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="my-1 border-t border-zinc-100 dark:border-zinc-800" />
                     {flagDefs.map((def) => {
                       const active = appliedChecks[def.key];
                       const hasRecords = def.count > 0;
