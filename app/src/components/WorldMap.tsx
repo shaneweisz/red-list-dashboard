@@ -196,6 +196,11 @@ interface WorldMapProps {
   selectedTaxon?: string | null;
   // Optional pre-computed stats (for Red List species counts - avoids API call)
   precomputedStats?: CountryStats;
+  // Same shape as precomputedStats, but with no filters applied beyond taxon/
+  // subgroup selection — the "true total" shown in the tooltip alongside the
+  // (possibly filtered) precomputedStats count, so e.g. "100% outdated" while
+  // the Outdated filter is on doesn't read as a fact about the country.
+  precomputedStatsTotal?: CountryStats;
   // Which taxa are selected (determines which GBIF occurrence stats to fetch)
   selectedTaxa?: Set<string>;
   // Label for the species count in tooltips (default: "# Assessed")
@@ -220,7 +225,7 @@ const DEFAULT_ZOOM = 1.0;
 const MIN_ZOOM = 1.0;
 const MAX_ZOOM = 8.0;
 
-function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, endemicsOnly = false, onEndemicsToggle, footer, showGbifToggle = true, showOutdatedMode = true }: WorldMapProps) {
+function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, precomputedStatsTotal, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, endemicsOnly = false, onEndemicsToggle, footer, showGbifToggle = true, showOutdatedMode = true }: WorldMapProps) {
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoveredCountryCode, setHoveredCountryCode] = useState<string | null>(null);
   const [speciesStats, setSpeciesStats] = useState<CountryStats>(precomputedStats || {});
@@ -419,6 +424,7 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
   };
 
   const hoveredSpeciesStats = hoveredCountryCode ? speciesStats[hoveredCountryCode] : null;
+  const hoveredTotalStats = hoveredCountryCode ? precomputedStatsTotal?.[hoveredCountryCode] : null;
   const hoveredOccurrenceStats = hoveredCountryCode && occurrenceStats ? occurrenceStats[hoveredCountryCode] : null;
   return (
     <div className="relative bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 p-3 h-full flex flex-col">
@@ -544,14 +550,21 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
               {hoveredSpeciesStats && (
                 <div className="flex justify-between gap-4 text-xs">
                   <span className="text-zinc-500">{speciesLabel}</span>
-                  <span className="font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">{formatNumber(hoveredSpeciesStats.species)}</span>
+                  <span className="font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">
+                    {formatNumber(hoveredSpeciesStats.species)}
+                    {/* Filters (e.g. Outdated, a category) can narrow this below the country's
+                        true total — show that total too so the count doesn't read as absolute. */}
+                    {hoveredTotalStats && hoveredTotalStats.species !== hoveredSpeciesStats.species && (
+                      <span className="text-zinc-400 font-normal"> (of {formatNumber(hoveredTotalStats.species)})</span>
+                    )}
+                  </span>
                 </div>
               )}
               {showOutdatedMode && hoveredSpeciesStats && hoveredSpeciesStats.species > 0 && (
                 <div className="flex justify-between gap-4 text-xs">
-                  <span className="text-zinc-500">% Outdated</span>
+                  <span className="text-zinc-500"># Outdated</span>
                   <span className="font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">
-                    {(((hoveredSpeciesStats.outdated || 0) / hoveredSpeciesStats.species) * 100).toFixed(1)}%
+                    {formatNumber(hoveredSpeciesStats.outdated || 0)} ({(((hoveredSpeciesStats.outdated || 0) / hoveredSpeciesStats.species) * 100).toFixed(1)}%)
                   </span>
                 </div>
               )}

@@ -2,7 +2,7 @@
   {
     "table1a_taxon_group": "mammals",
     "total_assessed": 6054,
-    "outdated": 1038,
+    "outdated": 2590,
     "by_category": {
       "CR": 236,
       "VU": 571,
@@ -47,7 +47,7 @@
   {
     "table1a_taxon_group": "reptiles",
     "total_assessed": 10371,
-    "outdated": 5533,
+    "outdated": 5727,
     "by_category": {
       "EN": 804,
       "LR/nt": 9,
@@ -72,7 +72,7 @@
   {
     "table1a_taxon_group": "amphibians",
     "total_assessed": 8095,
-    "outdated": 773,
+    "outdated": 1110,
     "by_category": {
       "LC": 3772,
       "EN": 1300,
@@ -94,7 +94,7 @@
   {
     "table1a_taxon_group": "fishes",
     "total_assessed": 29371,
-    "outdated": 10969,
+    "outdated": 11232,
     "by_category": {
       "CR": 898,
       "EX": 96,
@@ -118,7 +118,7 @@
   {
     "table1a_taxon_group": "beetles",
     "total_assessed": 2639,
-    "outdated": 951,
+    "outdated": 1025,
     "by_category": {
       "VU": 160,
       "EN": 259,
@@ -184,7 +184,7 @@
   {
     "table1a_taxon_group": "bees_wasps_and_ants",
     "total_assessed": 934,
-    "outdated": 227,
+    "outdated": 229,
     "by_category": {
       "VU": 193,
       "CR": 19,
@@ -228,7 +228,7 @@
   {
     "table1a_taxon_group": "grasshoppers_crickets_locusts",
     "total_assessed": 1501,
-    "outdated": 834,
+    "outdated": 977,
     "by_category": {
       "VU": 215,
       "EN": 195,
@@ -251,7 +251,7 @@
   {
     "table1a_taxon_group": "dragonflies_and_damselflies",
     "total_assessed": 6229,
-    "outdated": 2428,
+    "outdated": 3070,
     "by_category": {
       "EN": 313,
       "DD": 1829,
@@ -272,7 +272,7 @@
   {
     "table1a_taxon_group": "other_insects",
     "total_assessed": 308,
-    "outdated": 66,
+    "outdated": 72,
     "by_category": {
       "EX": 12,
       "LC": 109,
@@ -293,7 +293,7 @@
   {
     "table1a_taxon_group": "molluscs",
     "total_assessed": 9957,
-    "outdated": 4612,
+    "outdated": 5187,
     "by_category": {
       "CR": 782,
       "EN": 771,
@@ -317,7 +317,7 @@
   {
     "table1a_taxon_group": "crustaceans",
     "total_assessed": 3410,
-    "outdated": 3062,
+    "outdated": 3097,
     "by_category": {
       "VU": 429,
       "CR": 182,
@@ -342,7 +342,7 @@
   {
     "table1a_taxon_group": "arachnids",
     "total_assessed": 1057,
-    "outdated": 208,
+    "outdated": 247,
     "by_category": {
       "EN": 165,
       "VU": 104,
@@ -402,7 +402,7 @@
   {
     "table1a_taxon_group": "horseshoe_crabs",
     "total_assessed": 4,
-    "outdated": 2,
+    "outdated": 3,
     "by_category": {
       "DD": 2,
       "VU": 1,
@@ -419,7 +419,7 @@
   {
     "table1a_taxon_group": "other_invertebrates",
     "total_assessed": 1153,
-    "outdated": 570,
+    "outdated": 578,
     "by_category": {
       "CR": 67,
       "VU": 50,
@@ -441,7 +441,7 @@
   {
     "table1a_taxon_group": "mosses",
     "total_assessed": 327,
-    "outdated": 86,
+    "outdated": 98,
     "by_category": {
       "CR": 48,
       "NT": 35,
@@ -463,7 +463,7 @@
   {
     "table1a_taxon_group": "ferns_and_allies",
     "total_assessed": 839,
-    "outdated": 447,
+    "outdated": 530,
     "by_category": {
       "DD": 110,
       "NT": 55,
@@ -485,7 +485,7 @@
   {
     "table1a_taxon_group": "gymnosperms",
     "total_assessed": 1061,
-    "outdated": 623,
+    "outdated": 628,
     "by_category": {
       "LC": 443,
       "EN": 200,
@@ -506,7 +506,7 @@
   {
     "table1a_taxon_group": "flowering_plants",
     "total_assessed": 76102,
-    "outdated": 17193,
+    "outdated": 18306,
     "by_category": {
       "LR/cd": 102,
       "VU": 10376,
@@ -567,7 +567,7 @@
   {
     "table1a_taxon_group": "mushrooms",
     "total_assessed": 1351,
-    "outdated": 45,
+    "outdated": 56,
     "by_category": {
       "EN": 130,
       "CR": 48,

@@ -25,9 +25,7 @@ import {
   COL_EXCLUDE_ALL_NODES,
   COL_DOMESTIC_EXCLUDE_NAMES,
 } from "../src/config/col-described-overrides";
-
-const CURRENT_YEAR = new Date().getFullYear();
-const OUTDATED_THRESHOLD_YEARS = 10;
+import { isOutdated } from "../src/lib/outdated";
 
 // CoL species kept out of the universe (like the domesticated-GBIF exclusion). Homo sapiens
 // — IUCN omits humans from its Red List export. Keep in sync with species-duckdb.ts.
@@ -583,13 +581,7 @@ export async function run(): Promise<void> {
 
     for (const s of redlistSpecies) {
       // Count outdated
-      if (s.assessment_date) {
-        const year = parseInt(s.assessment_date.slice(0, 4), 10);
-        if (!isNaN(year) && CURRENT_YEAR - year > OUTDATED_THRESHOLD_YEARS) {
-          outdated++;
-        }
-      } else {
-        // No assessment date = treat as outdated
+      if (isOutdated(s.assessment_date)) {
         outdated++;
       }
 
@@ -669,13 +661,6 @@ export async function run(): Promise<void> {
     2441022, 2435035, 2441110, 2441056, 2440886, 7422937, 2440891,
     9055455, 2441238, 5220190, 7515593, 2441019, 5219702, 10694102, 2436436,
   ]);
-
-  function isOutdated(assessmentDate: string | null): boolean {
-    if (!assessmentDate) return true;
-    const year = parseInt(assessmentDate.slice(0, 4), 10);
-    if (isNaN(year)) return true;
-    return CURRENT_YEAR - year > OUTDATED_THRESHOLD_YEARS;
-  }
 
   function computeNodeSummary(node: TaxonomyNode): NodeSummary {
     const filter = node.filter;
