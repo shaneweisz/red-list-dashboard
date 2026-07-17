@@ -6,6 +6,7 @@ import type { MapRef, ViewStateChangeEvent, MapLayerMouseEvent } from "react-map
 import type maplibregl from "maplibre-gl";
 import { mapTaxonId } from "@/lib/data/taxonomy-constants";
 import { InatObservation, getThumbUrl, InatPhotoWithPreview } from "./InatPhotoCard";
+import { QualityFlag, QUALITY_FLAG_LABELS, QUALITY_FLAG_DESCRIPTIONS } from "@/lib/coordinate-cleaning";
 
 // Fixed page size for iNat photo grid (5 columns x 2 rows)
 const INAT_PAGE_SIZE = 10;
@@ -60,6 +61,7 @@ interface OccurrenceFeature {
     year?: number | null;
     month?: number | null;
     institutionCode?: string;
+    qualityFlags?: string[];
   };
   geometry: {
     type: "Point";
@@ -76,6 +78,15 @@ const UNCERTAINTY_OPTIONS = [
   { label: "\u2264 10km", value: 10000 },
   { label: "\u2264 50km", value: 50000 },
 ] as const;
+
+// Format a meters value for display, e.g. in the custom-uncertainty badge
+function formatUncertainty(meters: number): string {
+  if (meters >= 1000) {
+    const km = meters / 1000;
+    return `${Number.isInteger(km) ? km : km.toFixed(1)}km`;
+  }
+  return `${meters}m`;
+}
 
 // Sample size options
 const SAMPLE_SIZE_OPTIONS = [100, 300, 500, 1000, 2000] as const;
@@ -557,6 +568,19 @@ export default function OccurrenceMapRow({
 
   // Advanced filter state
   const [maxUncertainty, setMaxUncertainty] = useState<number | null>(null);
+  // Custom max-uncertainty entry, shown instead of the preset <select> when active
+  const [customUncertaintyMode, setCustomUncertaintyMode] = useState(false);
+  const [customUncertaintyInput, setCustomUncertaintyInput] = useState("");
+  // Coordinate-cleaning checks (zero/equal coords, GBIF HQ, duplicates — see
+  // src/lib/coordinate-cleaning.ts), individually toggleable. Default all applied,
+  // matching how GBIF's own hasGeospatialIssue=false already hides its own flagged
+  // records.
+  const [appliedChecks, setAppliedChecks] = useState<Record<QualityFlag, boolean>>({
+    ZERO_COORDINATE: true,
+    EQUAL_COORDINATES: true,
+    GBIF_HEADQUARTERS: true,
+    DUPLICATE: true,
+  });
   const [colorByDate, setColorByDate] = useState(false);
   const [basemap, setBasemap] = useState<BasemapKey>("streets");
   const [showProtectedAreas, setShowProtectedAreas] = useState(false);
@@ -570,6 +594,10 @@ export default function OccurrenceMapRow({
   // Filters dropdown state
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersRef = useRef<HTMLDivElement>(null);
+
+  // Coordinate-cleaning checks dropdown state
+  const [cleaningFilterOpen, setCleaningFilterOpen] = useState(false);
+  const cleaningFilterRef = useRef<HTMLDivElement>(null);
 
   // Fixed page size for filmstrip
   const pageSize = INAT_PAGE_SIZE;
@@ -591,6 +619,18 @@ export default function OccurrenceMapRow({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [filtersOpen]);
+
+  // Close coordinate-cleaning popover on outside click
+  useEffect(() => {
+    if (!cleaningFilterOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (cleaningFilterRef.current && !cleaningFilterRef.current.contains(e.target as Node)) {
+        setCleaningFilterOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [cleaningFilterOpen]);
 
   // Hovered iNat observation (for map highlight)
   const [hoveredObs, setHoveredObs] = useState<InatObservation | null>(null);
@@ -744,8 +784,40 @@ export default function OccurrenceMapRow({
       if (y == null) return true; // keep records without year data
       return y >= yearRange[0] && y <= yearRange[1];
     });
+    // 4. Coordinate-cleaning checks (zero/equal coords, GBIF HQ, duplicates)
+    result = result.filter((o) => !o.properties.qualityFlags?.some((f) => appliedChecks[f as QualityFlag]));
     return result;
-  }, [occurrences, checkedTypes, maxUncertainty, yearRange]);
+  }, [occurrences, checkedTypes, maxUncertainty, yearRange, appliedChecks]);
+
+  // Per-check counts among the currently loaded occurrences (independent of whether
+  // that check is applied), for the coordinate-cleaning dropdown
+  const flagCounts = useMemo(() => {
+    const counts: Partial<Record<QualityFlag, number>> = {};
+    for (const o of occurrences) {
+      for (const f of o.properties.qualityFlags ?? []) {
+        const key = f as QualityFlag;
+        counts[key] = (counts[key] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }, [occurrences]);
+
+  // Always list every check, even ones with zero flagged records in the current
+  // sample, so the available cleaning options are discoverable up front.
+  const flagDefs = useMemo(
+    () =>
+      (Object.keys(QUALITY_FLAG_LABELS) as QualityFlag[]).map((key) => ({
+        key,
+        label: QUALITY_FLAG_LABELS[key],
+        description: QUALITY_FLAG_DESCRIPTIONS[key],
+        count: flagCounts[key] ?? 0,
+      })),
+    [flagCounts]
+  );
+
+  const toggleCheck = (key: QualityFlag) => {
+    setAppliedChecks((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
 
   // Continuous date range for animation (every day from earliest to latest)
   const animationDateRange = useMemo(() => {
@@ -912,6 +984,29 @@ export default function OccurrenceMapRow({
   const toggleType = (key: keyof typeof checkedTypes) => {
     setCheckedTypes((prev) => ({ ...prev, [key]: !prev[key] }));
   };
+
+  // Per-category counts among the currently loaded occurrences: how many are in this
+  // basis-of-record category at all ("loaded"), and of those, how many also survive
+  // every other active filter — uncertainty, year range, coordinate cleaning — but not
+  // the basis-of-record checkboxes themselves ("shown"). Distinct from pillDefs' counts,
+  // which are true GBIF-wide totals from a separate server aggregation.
+  const basisLoadedShownCounts = useMemo(() => {
+    const counts: Record<string, { loaded: number; shown: number }> = {};
+    for (const o of occurrences) {
+      const cat = classifyOccurrence(o);
+      const entry = counts[cat] ?? (counts[cat] = { loaded: 0, shown: 0 });
+      entry.loaded++;
+      if (maxUncertainty != null) {
+        const u = o.properties.coordinateUncertaintyInMeters;
+        if (u == null || u > maxUncertainty) continue;
+      }
+      const y = o.properties.year;
+      if (y != null && (y < yearRange[0] || y > yearRange[1])) continue;
+      if (o.properties.qualityFlags?.some((f) => appliedChecks[f as QualityFlag])) continue;
+      entry.shown++;
+    }
+    return counts;
+  }, [occurrences, maxUncertainty, yearRange, appliedChecks]);
 
   // Build GeoJSON FeatureCollection with computed styling properties for the circle layer
   const buildStyledFeatureCollection = useCallback((
@@ -1201,6 +1296,7 @@ export default function OccurrenceMapRow({
                     coordinateUncertaintyInMeters={hoveredFeature.properties.coordinateUncertaintyInMeters}
                     imageUrl={hInat?.imageUrl ?? null}
                     observer={hInat?.observer ?? null}
+                    qualityFlags={hoveredFeature.properties.qualityFlags}
                   />
                 );
               })()}
@@ -1325,30 +1421,6 @@ export default function OccurrenceMapRow({
             </div>
           )}
         </div>
-        {/* Sample size bar (only in single view) */}
-        {!splitView && totalOccurrences != null && totalOccurrences > occurrences.length && (
-          <div className="flex items-center justify-between px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 border-t border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-300">
-            <span>
-              Showing{" "}
-              {filteredOccurrences.length < occurrences.length ? (
-                <><strong>{filteredOccurrences.length.toLocaleString()}</strong> of <strong>{occurrences.length.toLocaleString()}</strong> loaded (filtered) &mdash; </>
-              ) : null}
-              <strong>{occurrences.length.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> total records
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span>Load more:</span>
-              <select
-                value={sampleSize}
-                onChange={(e) => setSampleSize(parseInt(e.target.value))}
-                className="text-xs px-1.5 py-0.5 rounded border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-300"
-              >
-                {SAMPLE_SIZE_OPTIONS.map((n) => (
-                  <option key={n} value={n}>{n.toLocaleString()}</option>
-                ))}
-              </select>
-            </span>
-          </div>
-        )}
       </div>
     );
   };
@@ -1359,6 +1431,30 @@ export default function OccurrenceMapRow({
     <div className="bg-zinc-50 dark:bg-zinc-800/50">
       <div className="p-2">
         <div className="flex flex-col gap-2">
+          {/* Sample size summary — up top so it's clear how much of the true GBIF
+              total is actually loaded before you start filtering it */}
+          {!splitView && totalOccurrences != null && totalOccurrences > occurrences.length && (
+            <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-300">
+              <span>
+                Loaded <strong>{occurrences.length.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> total GBIF records.
+                {filteredOccurrences.length < occurrences.length && (
+                  <> Showing <strong>{filteredOccurrences.length.toLocaleString()}</strong> after filters.</>
+                )}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span>Load more:</span>
+                <select
+                  value={sampleSize}
+                  onChange={(e) => setSampleSize(parseInt(e.target.value))}
+                  className="text-xs px-1.5 py-0.5 rounded border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-300"
+                >
+                  {SAMPLE_SIZE_OPTIONS.map((n) => (
+                    <option key={n} value={n}>{n.toLocaleString()}</option>
+                  ))}
+                </select>
+              </span>
+            </div>
+          )}
           {/* ── Filter Bar ── */}
           <div className="p-2 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700">
             <div className="flex flex-wrap items-center gap-2">
@@ -1389,12 +1485,14 @@ export default function OccurrenceMapRow({
                   <div className="absolute left-0 top-full mt-1 z-50 w-80 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
                     {pillDefs.map((pill) => {
                       const active = checkedTypes[pill.key];
+                      const loadedShown = basisLoadedShownCounts[pill.key];
                       return (
                         <label
                           key={pill.key}
                           className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
                           onMouseEnter={() => setHoveredType(pill.key)}
                           onMouseLeave={() => setHoveredType(null)}
+                          title={loadedShown ? `${loadedShown.shown.toLocaleString()} of ${loadedShown.loaded.toLocaleString()} loaded records in this category also pass your other active filters` : undefined}
                         >
                           <input
                             type="checkbox"
@@ -1405,8 +1503,15 @@ export default function OccurrenceMapRow({
                           <span className={active ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-400 dark:text-zinc-500"}>
                             {pill.label}
                           </span>
-                          <span className={`ml-auto tabular-nums shrink-0 ${active ? "text-emerald-500 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"}`}>
-                            {pill.count.toLocaleString()}
+                          <span className="ml-auto flex flex-col items-end shrink-0 leading-tight">
+                            <span className={`tabular-nums ${active ? "text-emerald-500 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"}`}>
+                              {pill.count.toLocaleString()}
+                            </span>
+                            {loadedShown && (
+                              <span className="text-[10px] tabular-nums text-zinc-400 dark:text-zinc-500">
+                                {loadedShown.shown.toLocaleString()} of {loadedShown.loaded.toLocaleString()} shown
+                              </span>
+                            )}
                           </span>
                         </label>
                       );
@@ -1440,6 +1545,7 @@ export default function OccurrenceMapRow({
                       const u = o.properties.coordinateUncertaintyInMeters;
                       if (u == null || u > maxUncertainty) return false;
                     }
+                    if (o.properties.qualityFlags?.some((f) => appliedChecks[f as QualityFlag])) return false;
                     return true;
                   })}
                   yearRange={yearRange}
@@ -1517,20 +1623,116 @@ export default function OccurrenceMapRow({
               {/* Separator */}
               <div className="w-px h-5 bg-zinc-200 dark:bg-zinc-700 mx-0.5 hidden sm:block" />
 
-              {/* GPS Uncertainty */}
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-zinc-500 dark:text-zinc-400">GPS Uncertainty:</span>
-                <select
-                  value={maxUncertainty ?? ""}
-                  onChange={(e) => setMaxUncertainty(e.target.value ? parseInt(e.target.value) : null)}
-                  className="text-xs px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
+              {/* Coordinate cleaning — dropdown: max GPS uncertainty + one checkbox per check */}
+              <div className="relative" ref={cleaningFilterRef}>
+                <button
+                  onClick={() => setCleaningFilterOpen(!cleaningFilterOpen)}
+                  className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border text-xs transition-colors ${
+                    cleaningFilterOpen
+                      ? "bg-zinc-100 dark:bg-zinc-800 border-zinc-400 dark:border-zinc-500"
+                      : "border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                  } text-zinc-700 dark:text-zinc-300`}
+                  title="Filter by GPS uncertainty and hide records flagged by coordinate-cleaning checks (e.g. zero coordinates, GBIF headquarters, duplicates)"
                 >
-                  {UNCERTAINTY_OPTIONS.map((opt) => (
-                    <option key={opt.label} value={opt.value ?? ""}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
+                  <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                  </svg>
+                  Coordinate cleaning
+                  <span className="text-[10px] text-zinc-400 tabular-nums">
+                    {flagDefs.filter((d) => appliedChecks[d.key]).length}/{flagDefs.length}
+                    {maxUncertainty != null && ` · ≤ ${formatUncertainty(maxUncertainty)}`}
+                  </span>
+                  <svg className={`w-3 h-3 text-zinc-400 transition-transform ${cleaningFilterOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {cleaningFilterOpen && (
+                  <div className="absolute left-0 top-full mt-1 z-50 w-80 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
+                    {flagDefs.map((def) => {
+                      const active = appliedChecks[def.key];
+                      const hasRecords = def.count > 0;
+                      return (
+                        <label
+                          key={def.key}
+                          className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
+                          title={def.description}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={active}
+                            onChange={() => toggleCheck(def.key)}
+                            className="w-3 h-3 rounded accent-emerald-500 shrink-0"
+                          />
+                          <span className={active && hasRecords ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-400 dark:text-zinc-500"}>
+                            {def.label}
+                          </span>
+                          <span className={`ml-auto tabular-nums shrink-0 ${active && hasRecords ? "text-emerald-500 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"}`}>
+                            {def.count.toLocaleString()}
+                          </span>
+                        </label>
+                      );
+                    })}
+                    <div className="my-1 border-t border-zinc-100 dark:border-zinc-800" />
+                    <div className="flex items-center gap-2 px-3 py-1.5 text-xs" title="Only show records with a GPS uncertainty at or below this radius">
+                      <span className="w-3 shrink-0" />
+                      <span className="text-zinc-700 dark:text-zinc-200">Max GPS uncertainty</span>
+                      {customUncertaintyMode ? (
+                        <span className="ml-auto flex items-center gap-1">
+                          <input
+                            type="number"
+                            min={0}
+                            step={1}
+                            autoFocus
+                            value={customUncertaintyInput}
+                            placeholder="meters"
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              setCustomUncertaintyInput(raw);
+                              const n = raw === "" ? null : Math.max(0, parseInt(raw));
+                              setMaxUncertainty(n != null && !Number.isNaN(n) ? n : null);
+                            }}
+                            className="w-16 text-xs px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
+                          />
+                          <span className="text-zinc-400">m</span>
+                          <button
+                            onClick={() => {
+                              setCustomUncertaintyMode(false);
+                              setCustomUncertaintyInput("");
+                              setMaxUncertainty(null);
+                            }}
+                            title="Back to preset options"
+                            className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                          >
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </span>
+                      ) : (
+                        <select
+                          value={maxUncertainty ?? ""}
+                          onChange={(e) => {
+                            if (e.target.value === "custom") {
+                              setCustomUncertaintyMode(true);
+                              setCustomUncertaintyInput("");
+                              setMaxUncertainty(null);
+                            } else {
+                              setMaxUncertainty(e.target.value ? parseInt(e.target.value) : null);
+                            }
+                          }}
+                          className="ml-auto text-xs px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
+                        >
+                          {UNCERTAINTY_OPTIONS.map((opt) => (
+                            <option key={opt.label} value={opt.value ?? ""}>
+                              {opt.label}
+                            </option>
+                          ))}
+                          <option value="custom">Custom…</option>
+                        </select>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
             </div>

@@ -1,0 +1,80 @@
+# Scoping: GBIF coordinate cleaning (CoordinateCleaner-style)
+
+Investigation into integrating R's [CoordinateCleaner](https://github.com/ropensci/CoordinateCleaner) (Zizka et al. 2019) — or equivalent logic — to flag/clean bad GBIF occurrence records in the dashboard.
+
+## TL;DR recommendation
+
+- **Don't shell out to R.** Reimplement the relevant checks as pure, well-tested TypeScript, validated against CoordinateCleaner's own `testthat` fixtures. No R/Python runtime exists in this pipeline today, and the only place coordinate cleaning would matter (`/api/occurrences`) is a Vercel serverless function — not a good place to add an R dependency.
+- **Only one code path has real coordinates**: `app/src/app/api/occurrences/route.ts` → `OccurrenceMapRow.tsx`. The batch sync pipeline (`sync.ts` and friends) never touches lat/lon — it only ever sums GBIF's server-side facet *counts*, so CoordinateCleaner-style geometric tests don't apply there at all.
+- **Ship it in phases**, ordered by reference-data cost — cheap/no-reference tests first (zero coords, equal coords, duplicates, GBIF-HQ point), then small point-gazetteers (capitals, centroids, institutions), then polygon-based tests (sea, urban, country) which need bundled Natural Earth GeoJSON + a point-in-polygon lib. Skip `cc_iucn` (needs licensed IUCN range polygons) and the fossil-level `cf_*` tests (not relevant — `basisOfRecord` is already a user-facing filter toggle, not something we auto-clean).
+
+## 1. Where this would plug in
+
+This repo has two independent GBIF integrations, and it matters which one we're cleaning:
+
+| Path | What it fetches | Has coordinates? |
+|---|---|---|
+| Batch pipeline (`app/scripts/fetch-gbif-species.ts`, `fetch-gbif-country-data.ts`, `fetch-gbif-new-counts.ts`) | GBIF `/occurrence/search` with `facet=speciesKey`/`country`, `limit=0` — server-side aggregation | **No** — only species/country + count ever lands in `data/*.csv` → `assessed.parquet` |
+| Live per-occurrence route (`app/src/app/api/occurrences/route.ts`) | GBIF `/occurrence/search` fetched fresh per page request, converted to GeoJSON, rendered by `OccurrenceMapRow.tsx` | **Yes** — `decimalLatitude/decimalLongitude`, `basisOfRecord`, `coordinateUncertaintyInMeters`, `institutionCode`, `country`, etc. |
+
+There's no on-disk/queryable table of individual occurrence points anywhere — the live route is stateless (`cache: "no-store"` upstream, short HTTP cache on the response). So a cleaning step here is necessarily a **per-request, per-page computation**, not a batch precompute — unless we deliberately add a new storage layer (out of scope for a first pass; flag as an open question below).
+
+`OccurrenceMapRow.tsx` already has the right shape of UI for this: it classifies every record into togglable categories (`iNaturalist`, `humanOther`, `fossilSpecimen`, `preservedSpecimen`, …) and has a numeric coordinate-uncertainty threshold filter. A "flagged" category (or a few, one per failed test) slots into that existing pattern rather than requiring new UI scaffolding.
+
+## 2. What GBIF already gives us for free
+
+GBIF's own occurrence records carry an `issues` array (60+ possible values, see [GBIF issues/flags docs](https://techdocs.gbif.org/en/data-use/occurrence-issues-and-flags)), and the fetch code already requests `hasCoordinate=true&hasGeospatialIssue=false`. These are **parsing/interpretation** diagnostics, not plausibility checks — e.g. `ZERO_COORDINATE`, `COORDINATE_OUT_OF_RANGE`, `COUNTRY_COORDINATE_MISMATCH`. Rough mapping to CoordinateCleaner:
+
+- Already covered by GBIF, low value to reimplement: `cc_val` (validity), most of `cc_zero` (GBIF's `ZERO_COORDINATE` is exact 0,0; CoordinateCleaner adds a 0.5° buffer + lone-axis-zero case, which is a genuine small addition).
+- **Not covered by GBIF at all — this is where CoordinateCleaner earns its keep**: coordinates that are valid, self-consistent, and in the right country, but sitting on a capital city, a country/province centroid, a museum/herbarium, GBIF's own Copenhagen HQ, or in the ocean/an urban area for a terrestrial species. These require an external gazetteer or land/sea mask GBIF doesn't maintain.
+
+Zizka et al.'s own numbers: ~3.6% of GBIF plant records flagged at the record level; in the package's GBIF vignette, ~7% of a lion dataset failed the coordinate tests. Worth setting rough expectations that this is a modest-percentage cleanup, not a major rewrite of what's shown.
+
+## 3. Every CoordinateCleaner test, and whether it's worth porting
+
+| Function | Detects | Reference data needed | Verdict |
+|---|---|---|---|
+| `cc_zero` | Exact (0,0), or lone-axis zero, within a small buffer | none | **Port** — trivial |
+| `cc_equ` | lat == lon (data-entry artifact) | none | **Port** — trivial |
+| `cc_gbif` | Point at GBIF's Copenhagen HQ (~55.67, 12.58) | 1 hardcoded point | **Port** — trivial |
+| `cc_dupl` | Exact/near-duplicate records | none (self-referential) | **Port** — cheap, dedupes within a page/species |
+| `cc_cap` | Near a country's political capital | small capitals table | **Port (phase 2)** — source independently, see §4 |
+| `cc_cen` | Near a country/province centroid | small centroids table | **Port (phase 2)** |
+| `cc_inst` | Near a biodiversity institution (museum/herbarium/zoo) | ~11.6k-row gazetteer | **Port (phase 2)** — use GBIF's own GRSciColl API instead of CoordinateCleaner's bundled table (see §4) |
+| `cc_sea` | Terrestrial point falls in the ocean | Natural Earth land polygons | **Port (phase 3)** — needs `@turf/turf` + bundled GeoJSON |
+| `cc_urb` | Point falls in an urban area | Natural Earth urban-areas polygons | **Port (phase 3)** |
+| `cc_coun` | Point outside the record's reported country | Natural Earth country polygons | **Lower priority** — GBIF's `COUNTRY_COORDINATE_MISMATCH` already covers most of this |
+| `cc_outl` | Per-species geographic outlier vs. that species' other records | none, but needs the *whole* species' point set, not one page | **Deferred** — current route is paginated per-request; needs either a full-species prefetch or architecture change |
+| `cd_ddmm` / `cd_round` | Dataset-level degree-minute conversion bias / rasterization bias | none (statistical) | **Deferred** — dataset-level, same full-dataset requirement as `cc_outl` |
+| `cc_iucn` | Point outside species' known range | **Licensed** IUCN range polygons, not bundled with the package | **Skip** — access/licensing blocker independent of this project; revisit only if the app already has an IUCN spatial-data agreement |
+| `cf_*` (fossil age checks) | Fossil-specific temporal errors | — | **Skip** — `basisOfRecord` is already a user-facing filter, and fossils are excluded entirely from the batch pipeline's queries |
+
+## 4. Reference data — sourcing without copying CoordinateCleaner's bundled tables
+
+CoordinateCleaner's `countryref`/`institutions`/`aohi` data objects are bundled with the package under its GPL-3 license. Rather than extracting and redistributing those R data objects verbatim (murky for a repo with no stated license of its own), source equivalents independently:
+
+- **Capitals/centroids**: Natural Earth's `ne_10m_admin_0_countries` layer carries label-point/centroid fields; capital-city lat/lon is available from public geonames-derived CSVs. Small (hundreds of KB), public domain / CC-BY.
+- **Institutions**: GBIF operates the **GRSciColl** registry itself (`api.gbif.org/v1/grscicoll/institution`) — pull coordinates from GBIF's own API at build time instead of needing CoordinateCleaner's compiled table. Keeps the whole pipeline sourced from GBIF, and sidesteps the licensing question entirely.
+- **Land/sea mask, urban areas, country borders**: [Natural Earth](https://www.naturalearthdata.com/) ships these directly as public-domain GeoJSON/Shapefile (110m scale land polygon is a few hundred KB; 50m urban areas / countries are a few MB) — no CoordinateCleaner dependency at all, same primary source it uses internally via `rnaturalearth`.
+- **`aohi`** (Artificial Hotspot Occurrence Inventory): bespoke to CoordinateCleaner with no independent source found — skip unless it turns out to matter after phases 1–3 ship.
+
+## 5. Testing strategy ("well tested to match that package")
+
+CoordinateCleaner has a `testthat` suite on GitHub (`tests/testthat/test_coordinatelevel_functions.R` etc.) with small synthetic data.frames and expected boolean flag vectors per function — plain, human-readable R. Recommended approach:
+
+1. For each ported `cc_*` function, read its upstream test file and **hand-transcribe the input points + expected pass/fail outcomes** into a TS/vitest table-driven test (don't commit the raw GPL-3 R source into this repo — reimplement the *cases*, not copy the file).
+2. Cross-check a handful of cases against a live `Rscript` run of the real package during development (one-time, not part of CI) to catch any transcription drift.
+3. Follow this repo's existing test pattern: pure exported functions with explicit inputs (mirrors `match-redlist-species-to-gbif.ts`'s `MatchFn`-injection pattern in `app/scripts/__tests__/match-redlist-species-to-gbif.test.ts`), so each check is testable without a live GBIF or network call.
+
+## 6. Proposed shape (phase 1)
+
+- New module, e.g. `app/src/lib/coordinate-cleaning.ts`: pure functions `isZeroCoordinate`, `isEqualLatLon`, `isNearGbifHq`, `isDuplicate`, etc., each returning a flag reason; a `cleanOccurrence(record): string[]` that runs the active set and returns failed-check names.
+- Apply in `app/src/app/api/occurrences/route.ts` when building GeoJSON features — attach `properties.qualityFlags: string[]`.
+- Extend `OccurrenceMapRow.tsx`'s existing checkbox-filter pattern with a "flagged records" toggle (default: hidden, matching how `hasGeospatialIssue=false` already hides GBIF's own flags today), and a count badge — similar precedent to the recently-added "# Outdated" tooltip treatment.
+
+## 7. Open questions before implementation
+
+- **Scope for v1**: just phase 1 (zero/equal/GBIF-HQ/duplicates — no reference data, ships fast) plus phase 2 (capitals/centroids/institutions), or push straight through phase 3 (sea/urban, needs `@turf/turf` + bundled Natural Earth GeoJSON as a new dependency)?
+- **UI**: hide flagged records by default (extra cleaning, matches current `hasGeospatialIssue=false` behavior) or show them dimmed/distinct with an opt-in toggle to hide (more transparent, lets users judge borderline cases)?
+- **`cc_outl` / dataset-level checks**: worth a follow-up architecture change (prefetch a full species' points instead of paginated pages) or out of scope entirely for now?
+- Confirm no plan to actually shell out to R — everything above assumes a from-scratch TS reimplementation validated against upstream test fixtures.

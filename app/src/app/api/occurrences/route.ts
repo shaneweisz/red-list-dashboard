@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CACHE_5M } from "@/lib/cache-headers";
+import { getQualityFlags } from "@/lib/coordinate-cleaning";
 
 export const dynamic = "force-dynamic";
 
@@ -98,30 +99,37 @@ export async function GET(request: NextRequest) {
     const { results: allResults, totalCount } = await fetchPaginated(baseParams, limit);
 
     // Convert to GeoJSON
-    const features = allResults
-      .filter((r) => r.decimalLatitude != null && r.decimalLongitude != null)
-      .map((r) => ({
-        type: "Feature",
-        properties: {
-          gbifID: r.key,
-          species: r.species || r.scientificName,
-          eventDate: r.eventDate,
-          recordedBy: r.recordedBy,
-          country: r.country,
-          basisOfRecord: r.basisOfRecord,
-          datasetKey: r.datasetKey,
-          datasetName: r.datasetName,
-          publishingOrgKey: r.publishingOrgKey,
-          coordinateUncertaintyInMeters: r.coordinateUncertaintyInMeters ?? null,
-          year: r.year ?? null,
-          month: r.month ?? null,
-          institutionCode: r.institutionCode,
-        },
-        geometry: {
-          type: "Point",
-          coordinates: [r.decimalLongitude, r.decimalLatitude],
-        },
-      }));
+    const validResults = allResults.filter(
+      (r) => r.decimalLatitude != null && r.decimalLongitude != null
+    );
+    // Computed over this request's result set (a single species, per cc_dupl's species
+    // key), not the species' full GBIF record — see docs/gbif-coordinate-cleaning-scoping.md
+    const qualityFlags = getQualityFlags(
+      validResults.map((r) => ({ lon: r.decimalLongitude, lat: r.decimalLatitude }))
+    );
+    const features = validResults.map((r, i) => ({
+      type: "Feature",
+      properties: {
+        gbifID: r.key,
+        species: r.species || r.scientificName,
+        eventDate: r.eventDate,
+        recordedBy: r.recordedBy,
+        country: r.country,
+        basisOfRecord: r.basisOfRecord,
+        datasetKey: r.datasetKey,
+        datasetName: r.datasetName,
+        publishingOrgKey: r.publishingOrgKey,
+        coordinateUncertaintyInMeters: r.coordinateUncertaintyInMeters ?? null,
+        year: r.year ?? null,
+        month: r.month ?? null,
+        institutionCode: r.institutionCode,
+        qualityFlags: qualityFlags[i],
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [r.decimalLongitude, r.decimalLatitude],
+      },
+    }));
 
     // Calculate bbox from features
     let minLon = Infinity,
