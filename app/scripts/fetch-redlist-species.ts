@@ -5,8 +5,10 @@
  * species data to data/redlist/{taxonId}.csv.
  *
  * Prerequisites:
- *   1. DB connectivity — set DB_HOST/DB_PORT to the server directly if
- *      reachable, otherwise SSH-tunnel it to localhost:5433
+ *   1. DB connectivity — primary is a local Postgres restored from
+ *      ~/Data/RedList/*.bkp (`brew services start postgresql@16`), pointed
+ *      at on the default port. Fallback: SSH-tunnel the remote SIS DB to
+ *      localhost:5433 if you need data newer than your last local restore.
  *   2. Environment variables: DB_HOST, DB_NAME, DB_USER, DB_PASSWORD
  *
  * Usage:

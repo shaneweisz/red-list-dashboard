@@ -48,7 +48,7 @@ const NAME_TO_ALPHA2: Record<string, string> = {
   "Turkey": "TR", "Turkmenistan": "TM", "Uganda": "UG", "Ukraine": "UA",
   "United Arab Emirates": "AE", "United Kingdom": "GB", "United States of America": "US",
   "Uruguay": "UY", "Uzbekistan": "UZ", "Vanuatu": "VU", "Venezuela": "VE", "Vietnam": "VN",
-  "Yemen": "YE", "Zambia": "ZM", "Zimbabwe": "ZW", "Palestine": "PS", "Kosovo": "XK",
+  "Yemen": "YE", "Zambia": "ZM", "Zimbabwe": "ZW", "Palestine": "PS",
   "Macedonia": "MK", "New Caledonia": "NC", "W. Sahara": "EH", "Fr. S. Antarctic Lands": "TF",
   "Falkland Is.": "FK",
   // Small/micro nations not in the 50m TopoJSON at all — kept spelled out since
@@ -79,15 +79,32 @@ const NAME_TO_ALPHA2: Record<string, string> = {
   "St-Barthélemy": "BL", "St-Martin": "MF", "St. Pierre and Miquelon": "PM",
   "Turks and Caicos Is.": "TC", "U.S. Virgin Is.": "VI", "Wallis and Futuna Is.": "WF",
   "Åland": "AX",
-  // Somaliland and N. Cyprus are drawn as their own shape in the TopoJSON, but
-  // IUCN's own Red List country standard (ISO 3166-1 + UN country names, per
-  // redlist.org/resources/country-codes) has no distinct code for either —
-  // both fold into Somalia/Cyprus, the same way IUCN's own species assessments
-  // do (e.g. the Gerenuk assessment's formal country field lists "Somalia",
-  // even though its range-description text separately mentions "Somaliland").
-  // Mapping them to their parent's code matches IUCN's own data model, rather
-  // than leaving a "no data" gap that reads as a bug.
-  "Somaliland": "SO", "N. Cyprus": "CY",
+  // Somaliland, N. Cyprus, and Kosovo are drawn as their own shape in the
+  // TopoJSON, but IUCN's public presentation doesn't treat any of them as a
+  // distinct country — fold each into its parent rather than leaving a
+  // "no data" gap that reads as a bug.
+  //
+  // Somaliland/N. Cyprus: IUCN's own Red List country standard (ISO 3166-1 +
+  // UN country names, per redlist.org/resources/country-codes) has no
+  // distinct code for either — both fold into Somalia/Cyprus, the same way
+  // IUCN's own species assessments do (e.g. the Gerenuk assessment's formal
+  // country field lists "Somalia", even though its range-description text
+  // separately mentions "Somaliland").
+  //
+  // Kosovo: unlike those two, IUCN's internal SIS database *does* carry a
+  // distinct location code (YUG-KO, a legacy former-Yugoslavia sub-code, not
+  // a modern ISO alpha-2) — which looked at first like grounds to treat it
+  // as its own country. But checking IUCN's own public page for a
+  // Kosovo-tagged species (Terranigra kosovica, iucnredlist.org/species/
+  // 155681/222427224) shows the official "Geographic Range" field lists only
+  // "Serbia" — Kosovo appears solely in the free-text range description,
+  // exactly how other legacy sub-codes (RU-EU "European Russia", FRA-FR
+  // "France (mainland)") behave: real in the internal data model, but never
+  // surfaced as their own entry in IUCN's own public country-of-occurrence
+  // presentation. So it gets the same treatment as Somaliland/N. Cyprus, not
+  // the Palestine/Taiwan/W. Sahara treatment (which do have their own
+  // "Geographic Range" line).
+  "Somaliland": "SO", "N. Cyprus": "CY", "Kosovo": "RS",
 };
 
 // Complete ISO 3166-1 alpha-2 to country name mapping (for display)
@@ -112,7 +129,7 @@ export const ALPHA2_TO_NAME: Record<string, string> = {
   "NF": "Norfolk Island", "NR": "Nauru", "NU": "Niue", "PF": "French Polynesia",
   "PM": "Saint Pierre and Miquelon", "PN": "Pitcairn", "PW": "Palau", "RE": "Réunion",
   "SC": "Seychelles", "SH": "Saint Helena", "SJ": "Svalbard", "SM": "San Marino",
-  "SO": "Somalia", "CY": "Cyprus",
+  "SO": "Somalia", "CY": "Cyprus", "RS": "Serbia",
   "ST": "São Tomé and Príncipe", "SV": "El Salvador", "SX": "Sint Maarten",
   "TC": "Turks and Caicos", "TK": "Tokelau", "TO": "Tonga", "TV": "Tuvalu",
   "UM": "U.S. Minor Outlying Islands", "VA": "Vatican City", "VC": "Saint Vincent and the Grenadines",
