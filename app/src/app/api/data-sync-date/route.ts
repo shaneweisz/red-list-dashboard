@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDataSyncDate } from "@/lib/data/species-store";
+import { getDataSyncDate } from "@/lib/data-sync-date";
 import { CACHE_1H } from "@/lib/cache-headers";
 
 export async function GET() {
