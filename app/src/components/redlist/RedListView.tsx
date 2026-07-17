@@ -2402,7 +2402,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                           : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
                       }`}
                       aria-pressed={isOutdatedSelected}
-                      title={`Filter to species not reassessed since before ${outdatedCutoffDate().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`}
+                      title={`Filter to species last assessed before ${outdatedCutoffDate().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`}
                     >
                       Outdated
                     </button>

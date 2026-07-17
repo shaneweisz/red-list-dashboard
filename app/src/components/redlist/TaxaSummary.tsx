@@ -187,12 +187,13 @@ function OutdatedInfoIcon() {
   return (
     <span className="relative group normal-case font-normal">
       <FaInfoCircle size={11} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300" />
-      {/* Opens leftward — this header sits at (or near) the right edge of the table,
-          so an opening-right tooltip would clip against the viewport. */}
-      <span className="absolute right-full top-1/2 -translate-y-1/2 mr-2 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible z-50 shadow-lg">
+      {/* Opens downward, right-aligned to the icon — opening sideways either blocks
+          the neighboring column header (left) or clips against the viewport edge
+          (right), since this header sits at the right edge of the table. */}
+      <span className="absolute top-full right-0 mt-2 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible z-50 shadow-lg">
         {dataAsOf
-          ? <>Data as of {dataAsOf.toLocaleDateString("en-GB", dateFormat)} — not reassessed since before {cutoffLabel}</>
-          : <>Not reassessed since before {cutoffLabel}</>}
+          ? <>Data as of {dataAsOf.toLocaleDateString("en-GB", dateFormat)} — last assessed before {cutoffLabel}</>
+          : <>Last assessed before {cutoffLabel}</>}
       </span>
     </span>
   );
