@@ -16,14 +16,17 @@ import {
   isInOcean,
   isInUrbanArea,
   isNearArtificialHotspot,
+  isOutsideReportedCountry,
   flagDuplicateCoordinates,
   getQualityFlags,
 } from "../coordinate-cleaning";
 
 // A point in the Southern Ocean, ~3,300-3,700km from the nearest capital, country
 // centroid, biodiversity institution, and artificial hotspot in the reference data
-// (verified against the real datasets), also outside every land/urban-area polygon —
-// a reliable "clean" fixture for all six point-gazetteer/polygon checks at once.
+// (verified against the real datasets), also outside every land/urban-area polygon
+// and every country polygon — a reliable "clean" fixture for all point-gazetteer/
+// polygon checks at once (isOutsideReportedCountry needs a countryCode passed in
+// separately to actually flag, since an unset countryCode is never flagged).
 const FAR_FROM_EVERYTHING = { lon: -140, lat: -60 };
 
 describe("isZeroCoordinate", () => {
@@ -187,6 +190,33 @@ describe("isNearArtificialHotspot", () => {
 
   it("clears a point far from every artificial hotspot", () => {
     expect(isNearArtificialHotspot(FAR_FROM_EVERYTHING)).toBe(false);
+  });
+});
+
+describe("isOutsideReportedCountry", () => {
+  it("clears a point inside its correctly-reported country (London, GB)", () => {
+    expect(isOutsideReportedCountry({ lat: 51.49999, lon: -0.11672, countryCode: "GB" })).toBe(false);
+  });
+
+  it("flags a point reported as the wrong country (Paris claimed as GB)", () => {
+    expect(isOutsideReportedCountry({ lat: 48.8566, lon: 2.3522, countryCode: "GB" })).toBe(true);
+  });
+
+  it("regression: France and Norway resolve correctly despite Natural Earth's own -99 ISO_A2 data quirk for these two countries (see coordinate-cleaning-refdata/README.md)", () => {
+    expect(isOutsideReportedCountry({ lat: 48.8566, lon: 2.3522, countryCode: "FR" })).toBe(false); // Paris
+    expect(isOutsideReportedCountry({ lat: 59.9139, lon: 10.7522, countryCode: "NO" })).toBe(false); // Oslo
+  });
+
+  it("doesn't flag a record with no reported country — nothing to contradict", () => {
+    expect(isOutsideReportedCountry({ lat: 48.8566, lon: 2.3522 })).toBe(false);
+  });
+
+  it("doesn't flag a record whose reported country code has no matching reference polygon", () => {
+    expect(isOutsideReportedCountry({ lat: 48.8566, lon: 2.3522, countryCode: "ZZ" })).toBe(false);
+  });
+
+  it("flags a point outside every country when one is reported", () => {
+    expect(isOutsideReportedCountry({ ...FAR_FROM_EVERYTHING, countryCode: "US" })).toBe(true);
   });
 });
 

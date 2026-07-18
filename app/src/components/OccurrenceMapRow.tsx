@@ -315,6 +315,7 @@ export default function OccurrenceMapRow({
     OCEAN: false,
     URBAN_AREA: false,
     ARTIFICIAL_HOTSPOT: false,
+    OUTSIDE_REPORTED_COUNTRY: false,
   });
   const [colorByDate, setColorByDate] = useState(true);
   const [basemap, setBasemap] = useState<BasemapKey>("streets");

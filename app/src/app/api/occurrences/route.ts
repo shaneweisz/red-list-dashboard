@@ -15,6 +15,7 @@ type GbifRecord = {
   decimalLongitude: number;
   decimalLatitude: number;
   country?: string;
+  countryCode?: string;
   basisOfRecord?: string;
   datasetKey?: string;
   datasetName?: string;
@@ -115,7 +116,7 @@ export async function GET(request: NextRequest) {
     // Computed over this request's result set (a single species, per cc_dupl's species
     // key), not the species' full GBIF record — see docs/gbif-coordinate-cleaning-scoping.md
     const qualityFlags = getQualityFlags(
-      validResults.map((r) => ({ lon: r.decimalLongitude, lat: r.decimalLatitude }))
+      validResults.map((r) => ({ lon: r.decimalLongitude, lat: r.decimalLatitude, countryCode: r.countryCode }))
     );
     const features = validResults.map((r, i) => ({
       type: "Feature",
@@ -125,6 +126,7 @@ export async function GET(request: NextRequest) {
         eventDate: r.eventDate,
         recordedBy: r.recordedBy,
         country: r.country,
+        countryCode: r.countryCode,
         basisOfRecord: r.basisOfRecord,
         datasetKey: r.datasetKey,
         datasetName: r.datasetName,

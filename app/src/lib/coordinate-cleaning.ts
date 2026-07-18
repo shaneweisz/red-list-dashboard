@@ -26,6 +26,10 @@
  *                                 matches upstream's own defaults; see coordinate-cleaning-refdata/README.md
  *                                 for why this one's reference data comes straight from the AHOI
  *                                 authors' own CC0 deposit rather than CoordinateCleaner's bundled copy)
+ * - isOutsideReportedCountry -> cc_coun (no buffer — matches upstream's own default, both standalone
+ *                                 and via clean_coordinates(); point-in-polygon against the specific
+ *                                 country named in the record's own countryCode field, not "any
+ *                                 country" like cc_cap/cc_cen/cc_inst/cc_aohi test)
  *
  * None of the checks below implement upstream's optional `verify` step (re-checking whether a
  * flagged point is the *only* record for that species nearby, which would unflag it) — matches
@@ -44,6 +48,7 @@ import institutions from "./coordinate-cleaning-refdata/institutions.json";
 import landPolygons from "./coordinate-cleaning-refdata/land-polygons.json";
 import urbanAreas from "./coordinate-cleaning-refdata/urban-areas.json";
 import artificialHotspots from "./coordinate-cleaning-refdata/aohi.json";
+import countryPolygons from "./coordinate-cleaning-refdata/countries.json";
 
 const EARTH_RADIUS_METERS = 6371000;
 
@@ -59,11 +64,16 @@ export type QualityFlag =
   | "NEAR_INSTITUTION"
   | "OCEAN"
   | "URBAN_AREA"
-  | "ARTIFICIAL_HOTSPOT";
+  | "ARTIFICIAL_HOTSPOT"
+  | "OUTSIDE_REPORTED_COUNTRY";
 
 export interface CleanableCoordinate {
   lon: number;
   lat: number;
+  // ISO 3166-1 alpha-2 country code reported for this specific record (GBIF's own
+  // `countryCode` field), used only by isOutsideReportedCountry. Optional — records
+  // without one simply can't be checked by that test.
+  countryCode?: string;
 }
 
 // Human-readable labels for each check, in the order they're evaluated. Kept short
@@ -80,6 +90,7 @@ export const QUALITY_FLAG_LABELS: Record<QualityFlag, string> = {
   OCEAN: "In the ocean",
   URBAN_AREA: "Inside an urban area",
   ARTIFICIAL_HOTSPOT: "Known artificial coordinate hotspot",
+  OUTSIDE_REPORTED_COUNTRY: "Outside its reported country",
 };
 
 // One-sentence explanation of exactly what each check does and doesn't do —
@@ -105,6 +116,8 @@ export const QUALITY_FLAG_DESCRIPTIONS: Record<QualityFlag, string> = {
     "Falls within a Natural Earth-mapped urban area — often a specimen defaulted to a city/town address rather than the true find location, though correct for genuinely urban-adapted or captive species.",
   ARTIFICIAL_HOTSPOT:
     "Within 10km of a coordinate independently confirmed by Park et al. (2023) as an artificial aggregation point — grid/geopolitical centroids and similar recurring defaults that accumulated thousands of unrelated records, not real observation sites.",
+  OUTSIDE_REPORTED_COUNTRY:
+    "Falls outside the political borders of the country GBIF reports for this specific record — often a sign of a longitude/latitude swap or a sign error. Independent of, and can catch cases missed by, GBIF's own COUNTRY_COORDINATE_MISMATCH issue flag. Records with no reported country can't be checked and are never flagged.",
 };
 
 // External source for each check's reference data — only present where the check actually
@@ -135,6 +148,10 @@ export const QUALITY_FLAG_SOURCES: Partial<Record<QualityFlag, { label: string; 
   ARTIFICIAL_HOTSPOT: {
     label: "Park et al. (2023) AHOI dataset",
     url: "https://zenodo.org/records/7268229",
+  },
+  OUTSIDE_REPORTED_COUNTRY: {
+    label: "Natural Earth 1:50m admin-0 countries",
+    url: "https://www.naturalearthdata.com/downloads/50m-cultural-vectors/50m-admin-0-countries/",
   },
 };
 
@@ -250,6 +267,22 @@ function indexPolygons(polygons: readonly RawPolygon[]): IndexedPolygon[] {
 const indexedLandPolygons = indexPolygons(landPolygons as RawPolygon[]);
 const indexedUrbanAreas = indexPolygons(urbanAreas as RawPolygon[]);
 
+interface CountryPolygon {
+  iso_a2: string;
+  polygon: RawPolygon;
+}
+
+// Countries with disjoint territory (islands, exclaves) contribute multiple polygon parts
+// under the same iso_a2 — grouped here so isOutsideReportedCountry can test "is this point
+// inside ANY part of the specific reported country" without scanning every country's polygons.
+const indexedCountryPolygons = new Map<string, IndexedPolygon[]>();
+for (const { iso_a2, polygon } of countryPolygons as CountryPolygon[]) {
+  const indexed = indexPolygons([polygon])[0];
+  const existing = indexedCountryPolygons.get(iso_a2);
+  if (existing) existing.push(indexed);
+  else indexedCountryPolygons.set(iso_a2, [indexed]);
+}
+
 function isInsideAny(coord: CleanableCoordinate, indexed: readonly IndexedPolygon[]): boolean {
   for (const { polygon, bbox } of indexed) {
     const [minLon, minLat, maxLon, maxLat] = bbox;
@@ -289,6 +322,24 @@ export function isNearArtificialHotspot(coord: CleanableCoordinate, bufferMeters
 }
 
 /**
+ * Port of cc_coun (buffer=NULL, the package default — no tolerance around the border):
+ * flags points falling outside the specific country reported for this record (matched
+ * on ISO 3166-1 alpha-2 `countryCode`, e.g. GBIF's own field of that name), rather than
+ * near any country like the other gazetteer checks in this file. Records with no
+ * reported country, or one this reference data has no polygon for, aren't flagged —
+ * there's nothing to contradict, and flagging on our own data gaps would be a false
+ * positive, not a finding. Complements rather than replaces GBIF's own
+ * COUNTRY_COORDINATE_MISMATCH issue flag (already excluded upstream of this check via
+ * hasGeospatialIssue=false), which doesn't catch every mismatch.
+ */
+export function isOutsideReportedCountry(coord: CleanableCoordinate): boolean {
+  if (!coord.countryCode) return false;
+  const parts = indexedCountryPolygons.get(coord.countryCode.toUpperCase());
+  if (!parts || parts.length === 0) return false;
+  return !isInsideAny(coord, parts);
+}
+
+/**
  * Runs all checks over a single species' occurrence records and returns each record's
  * failed-check names, mirroring clean_coordinates()'s per-test flag columns. Callers
  * should pass all records for one species (cc_dupl's duplicate key includes species,
@@ -308,6 +359,7 @@ export function getQualityFlags<T extends CleanableCoordinate>(records: readonly
     if (isInOcean(record)) flags.push("OCEAN");
     if (isInUrbanArea(record)) flags.push("URBAN_AREA");
     if (isNearArtificialHotspot(record)) flags.push("ARTIFICIAL_HOTSPOT");
+    if (isOutsideReportedCountry(record)) flags.push("OUTSIDE_REPORTED_COUNTRY");
     return flags;
   });
 }

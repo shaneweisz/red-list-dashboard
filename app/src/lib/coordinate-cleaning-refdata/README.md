@@ -1,6 +1,6 @@
 # Coordinate-cleaning reference data
 
-Point gazetteers and polygon layers used by `../coordinate-cleaning.ts`'s `cc_cap`/`cc_cen`/`cc_inst`/`cc_sea`/`cc_urb`/`cc_aohi` ports. Sourced independently of CoordinateCleaner's own bundled `countryref`/`institutions`/`landmass`/`urban_areas`/`aohi` R data objects (GPL-3) — see `docs/gbif-coordinate-cleaning-scoping.md` §4 for why.
+Point gazetteers and polygon layers used by `../coordinate-cleaning.ts`'s `cc_cap`/`cc_cen`/`cc_inst`/`cc_sea`/`cc_urb`/`cc_aohi`/`cc_coun` ports. Sourced independently of CoordinateCleaner's own bundled `countryref`/`institutions`/`landmass`/`urban_areas`/`aohi` R data objects (GPL-3) — see `docs/gbif-coordinate-cleaning-scoping.md` §4 for why.
 
 All of this data is imported only by `coordinate-cleaning.ts`, which is used both server-side (`/api/occurrences`) and by a couple of client components for just their label/description exports (`QUALITY_FLAG_LABELS`/`QUALITY_FLAG_DESCRIPTIONS`). Verified via a production build that the bundler tree-shakes the actual point/polygon data out of the client bundle — only the flag label strings ship to the browser.
 
@@ -27,6 +27,12 @@ Land/ocean mask. Extracted from Natural Earth's 1:50m land layer (public domain)
 ## `urban-areas.json` (2,143 polygons)
 
 Urban area footprints. Extracted from Natural Earth's 1:50m urban areas layer (public domain), via the martynafford mirror (`50m/cultural/ne_50m_urban_areas.json`), same stripping/rounding treatment (4 decimal places, ~11m precision; 1.97MB → 730KB). Extracted by hand once (2026-07); no refresh script, same rationale as land polygons.
+
+## `countries.json` (1,612 polygon parts, 236 country codes)
+
+Country border polygons, keyed by ISO 3166-1 alpha-2 code (matching GBIF's own `countryCode` field). Extracted from Natural Earth's 1:50m admin-0 countries layer (public domain), via the martynafford mirror (`50m/cultural/ne_50m_admin_0_countries.json`), same stripping/rounding treatment as the land mask (3 decimal places, ~110m precision; 4.68MB → 1.7MB). MultiPolygon countries (islands, exclaves) are split into individual same-code Polygon parts, matching the pattern already used for land/urban polygons.
+
+**Known data quirk, patched during extraction**: this Natural Earth layer has a long-standing bug where a handful of features carry `ISO_A2 = "-99"` instead of a real code. Most are genuinely uncoded disputed territories (Somaliland, Northern Cyprus, Siachen Glacier, two small Australian dependencies) and are simply excluded — no GBIF record would report their non-standard codes anyway. But **France and Norway are also affected**, despite being real, heavily-GBIF-represented countries — without a fix, every French/Norwegian occurrence would fail to match any reference polygon and get flagged as a false "country mismatch". Patched via each feature's stable `ADM0_A3` code (`FRA` → `FR`, `NOR` → `NO`) rather than its display name. Verified against live GBIF data (France- and Norway-filtered `Vulpes vulpes` queries) that this fixes the mass-false-positive case, leaving only a small, plausible fraction flagged — coastal/border points where the 50m coastline simplification clips a genuinely in-country point (e.g. deep in a Norwegian fjord), the same caveat CoordinateCleaner's own docs give for this check. Extracted by hand once (2026-07); no refresh script, same rationale as land polygons.
 
 ## `aohi.json` (231 points)
 
