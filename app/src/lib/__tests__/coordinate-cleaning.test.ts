@@ -140,6 +140,16 @@ describe("isInOcean", () => {
   it("clears a point far from every land polygon's own reference", () => {
     expect(isInOcean(FAR_FROM_EVERYTHING)).toBe(true); // Southern Ocean
   });
+
+  it("regression: flags a real offshore GBIF record the coarser 110m data missed", () => {
+    // A real Breviceps macrops (Desert Rain Frog) occurrence off the Namibian coast,
+    // confirmed several km out in open water via satellite imagery. At Natural Earth's
+    // 110m land scale (this check's original resolution), the coastline was simplified
+    // several km out to sea at this exact spot, so this point read as "on land" and the
+    // record went unflagged. Upgrading to 50m (see coordinate-cleaning-refdata/README.md)
+    // fixed it — this test pins that fix so a future resolution downgrade doesn't regress it.
+    expect(isInOcean({ lon: 16.812475, lat: -29.285752 })).toBe(true);
+  });
 });
 
 describe("isInUrbanArea", () => {
@@ -190,12 +200,14 @@ describe("getQualityFlags", () => {
     // (0,0) also happens to be ~7m from a real GRSciColl institution whose own
     // coordinates are themselves defaulted to null island (and, being in the Gulf of
     // Guinea, it's also in the ocean); GBIF's Copenhagen HQ is genuinely ~1.4km from
-    // Denmark's real national capital point; and London's capital point falls inside
-    // its own real urban-area polygon — all honest overlaps in the live reference
-    // data, not bugs in this test.
+    // Denmark's real national capital point, and its own (12.58, 55.67) coordinate —
+    // only 2 decimal places, ~1km precision — lands in Copenhagen's harbor rather than
+    // on the building itself, so it also reads as OCEAN even at 50m; and London's
+    // capital point falls inside its own real urban-area polygon — all honest overlaps
+    // in the live reference data, not bugs in this test.
     expect(flags[0].sort()).toEqual(["EQUAL_COORDINATES", "NEAR_INSTITUTION", "OCEAN", "ZERO_COORDINATE"].sort());
-    expect(flags[1].sort()).toEqual(["GBIF_HEADQUARTERS", "NEAR_CAPITAL"].sort());
-    expect(flags[2].sort()).toEqual(["DUPLICATE", "GBIF_HEADQUARTERS", "NEAR_CAPITAL"].sort());
+    expect(flags[1].sort()).toEqual(["GBIF_HEADQUARTERS", "NEAR_CAPITAL", "OCEAN"].sort());
+    expect(flags[2].sort()).toEqual(["DUPLICATE", "GBIF_HEADQUARTERS", "NEAR_CAPITAL", "OCEAN"].sort());
     expect(flags[3]).toEqual([]);
     expect(flags[4].sort()).toEqual(["NEAR_CAPITAL", "URBAN_AREA"].sort());
   });

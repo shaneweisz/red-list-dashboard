@@ -20,9 +20,9 @@ Biodiversity institutions (museums, herbaria, zoos, universities, etc.) with kno
 npx tsx scripts/fetch-coordinate-cleaning-refdata.ts
 ```
 
-## `land-polygons.json` (127 polygons)
+## `land-polygons.json` (1,420 polygons)
 
-Land/ocean mask. Extracted from Natural Earth's 1:110m land layer (public domain), via the martynafford mirror (`110m/physical/ne_110m_land.json`), stripped to bare `{type, coordinates}` geometries and coordinates rounded to 3 decimal places (~110m precision) to cut file size (237KB → 90KB). 110m is Natural Earth's coarsest scale — a deliberate trade-off for bundle size; fine for "clearly in the ocean" but won't resolve small islands or narrow coastal strips. Extracted by hand once (2026-07); coastlines don't change on any timescale this matters for, so no refresh script.
+Land/ocean mask. Extracted from Natural Earth's 1:50m land layer (public domain), via the martynafford mirror (`50m/physical/ne_50m_land.json`), stripped to bare `{type, coordinates}` geometries and coordinates rounded to 3 decimal places (~110m precision) to cut file size (2.76MB → 1.07MB). Originally shipped at Natural Earth's coarsest 110m scale (matching CoordinateCleaner's own `cc_sea` default), but upgraded to 50m after a real GBIF record (a coastal-dwelling desert frog species, *Breviceps macrops*) showed 110m was too coarse for a species that lives right at the shoreline: several genuinely-offshore points (confirmed by satellite imagery, several km out in open water) went undetected because the 110m coastline was simplified out to sea at that location — verified 50m correctly resolves those same points as ocean. Extracted by hand once (2026-07); coastlines don't change on any timescale this matters for, so no refresh script.
 
 ## `urban-areas.json` (2,143 polygons)
 

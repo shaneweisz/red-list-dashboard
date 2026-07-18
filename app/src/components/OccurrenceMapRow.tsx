@@ -586,7 +586,7 @@ export default function OccurrenceMapRow({
     OCEAN: true,
     URBAN_AREA: true,
   });
-  const [colorByDate, setColorByDate] = useState(false);
+  const [colorByDate, setColorByDate] = useState(true);
   const [basemap, setBasemap] = useState<BasemapKey>("streets");
   const [showProtectedAreas, setShowProtectedAreas] = useState(false);
   const [splitView, setSplitView] = useState(false);
@@ -807,6 +807,31 @@ export default function OccurrenceMapRow({
     return counts;
   }, [occurrences]);
 
+  // For each check: of the loaded records it flags, how many would actually appear on
+  // the map if just this one check were switched off (i.e. they still pass every other
+  // active filter — basis of record, uncertainty, year range, and every other applied
+  // coordinate-cleaning check). Mirrors basisLoadedShownCounts's "shown of loaded"
+  // semantics so both dropdowns read the same way.
+  const flagShownCounts = useMemo(() => {
+    const counts: Partial<Record<QualityFlag, number>> = {};
+    for (const o of occurrences) {
+      if (!checkedTypes[classifyOccurrence(o) as keyof typeof checkedTypes]) continue;
+      if (maxUncertainty != null) {
+        const u = o.properties.coordinateUncertaintyInMeters;
+        if (u == null || u > maxUncertainty) continue;
+      }
+      const y = o.properties.year;
+      if (y != null && (y < yearRange[0] || y > yearRange[1])) continue;
+      const flags = o.properties.qualityFlags ?? [];
+      for (const f of flags) {
+        const key = f as QualityFlag;
+        const blockedByOtherCheck = flags.some((f2) => f2 !== key && appliedChecks[f2 as QualityFlag]);
+        if (!blockedByOtherCheck) counts[key] = (counts[key] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }, [occurrences, checkedTypes, maxUncertainty, yearRange, appliedChecks]);
+
   // Always list every check, even ones with zero flagged records in the current
   // sample, so the available cleaning options are discoverable up front.
   const flagDefs = useMemo(
@@ -816,8 +841,9 @@ export default function OccurrenceMapRow({
         label: QUALITY_FLAG_LABELS[key],
         description: QUALITY_FLAG_DESCRIPTIONS[key],
         count: flagCounts[key] ?? 0,
+        shown: flagShownCounts[key] ?? 0,
       })),
-    [flagCounts]
+    [flagCounts, flagShownCounts]
   );
 
   const toggleCheck = (key: QualityFlag) => {
@@ -1489,6 +1515,9 @@ export default function OccurrenceMapRow({
                 </button>
                 {filtersOpen && !loadingBreakdown && (
                   <div className="absolute left-0 top-full mt-1 z-50 w-80 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
+                    <div className="px-3 pb-1.5 mb-1 border-b border-zinc-100 dark:border-zinc-800 text-[10px] text-zinc-400 dark:text-zinc-500">
+                      Bold: total across all of GBIF. Small: shown of your {occurrences.length.toLocaleString()} loaded records.
+                    </div>
                     {pillDefs.map((pill) => {
                       const active = checkedTypes[pill.key];
                       const loadedShown = basisLoadedShownCounts[pill.key];
@@ -1498,7 +1527,7 @@ export default function OccurrenceMapRow({
                           className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
                           onMouseEnter={() => setHoveredType(pill.key)}
                           onMouseLeave={() => setHoveredType(null)}
-                          title={loadedShown ? `${loadedShown.shown.toLocaleString()} of ${loadedShown.loaded.toLocaleString()} loaded records in this category also pass your other active filters` : undefined}
+                          title={`${pill.count.toLocaleString()} total in GBIF.${loadedShown ? ` ${loadedShown.shown.toLocaleString()} of ${loadedShown.loaded.toLocaleString()} loaded records in this category also pass your other active filters.` : ""}`}
                         >
                           <input
                             type="checkbox"
@@ -1654,6 +1683,9 @@ export default function OccurrenceMapRow({
                 </button>
                 {cleaningFilterOpen && (
                   <div className="absolute left-0 top-full mt-1 z-50 w-80 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
+                    <div className="px-3 pb-1.5 mb-1 border-b border-zinc-100 dark:border-zinc-800 text-[10px] text-zinc-400 dark:text-zinc-500">
+                      Counts are among your {occurrences.length.toLocaleString()} loaded records. Small number: how many would still show if just this check were switched off.
+                    </div>
                     {flagDefs.map((def) => {
                       const active = appliedChecks[def.key];
                       const hasRecords = def.count > 0;
@@ -1661,7 +1693,7 @@ export default function OccurrenceMapRow({
                         <label
                           key={def.key}
                           className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
-                          title={def.description}
+                          title={`${def.description} ${hasRecords ? `${def.shown.toLocaleString()} of ${def.count.toLocaleString()} flagged records would still show if this check were off.` : ""}`}
                         >
                           <input
                             type="checkbox"
@@ -1672,8 +1704,15 @@ export default function OccurrenceMapRow({
                           <span className={active && hasRecords ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-400 dark:text-zinc-500"}>
                             {def.label}
                           </span>
-                          <span className={`ml-auto tabular-nums shrink-0 ${active && hasRecords ? "text-emerald-500 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"}`}>
-                            {def.count.toLocaleString()}
+                          <span className="ml-auto flex flex-col items-end shrink-0 leading-tight">
+                            <span className={`tabular-nums ${active && hasRecords ? "text-emerald-500 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"}`}>
+                              {def.count.toLocaleString()}
+                            </span>
+                            {hasRecords && (
+                              <span className="text-[10px] tabular-nums text-zinc-400 dark:text-zinc-500">
+                                {def.shown.toLocaleString()} of {def.count.toLocaleString()} shown
+                              </span>
+                            )}
                           </span>
                         </label>
                       );

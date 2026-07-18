@@ -221,9 +221,11 @@ function isInsideAny(coord: CleanableCoordinate, indexed: readonly IndexedPolygo
 
 /**
  * Port of cc_sea: flags points that fall outside every Natural Earth land polygon, i.e. in
- * the ocean. Land polygons are 110m-scale (Natural Earth's coarsest), which is a deliberate
- * trade-off for bundle size — fine for "clearly in the ocean" but won't catch a point that's
- * technically on a small island or narrow coastal strip too fine for that resolution.
+ * the ocean. Land polygons are 50m-scale — upgraded from Natural Earth's coarsest 110m
+ * scale after a real GBIF record (a coastal-dwelling frog species) showed 110m was too
+ * coarse: several genuinely-offshore points went undetected because the 110m coastline was
+ * simplified several km out to sea at that location. 50m still won't resolve every small
+ * island or narrow inlet, but is a meaningfully better trade-off for coastal species.
  */
 export function isInOcean(coord: CleanableCoordinate): boolean {
   return !isInsideAny(coord, indexedLandPolygons);
