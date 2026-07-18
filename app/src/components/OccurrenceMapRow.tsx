@@ -1096,32 +1096,6 @@ export default function OccurrenceMapRow({
               the left) — sit above the map itself, not a separate header bar */}
           <div className="p-2 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700">
             <div className="flex flex-wrap items-center gap-2">
-              {!splitView && totalOccurrences != null && (
-                <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-300">
-                  <span>
-                    {isFullSample ? (
-                      <>All <strong>{totalOccurrences.toLocaleString()}</strong> GBIF records loaded.</>
-                    ) : (
-                      <>Loaded <strong>{occurrences.length.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> total GBIF records.</>
-                    )}
-                    {filteredOccurrences.length < occurrences.length && (
-                      <> Showing <strong>{filteredOccurrences.length.toLocaleString()}</strong> after filters.</>
-                    )}
-                  </span>
-                  {!isFullSample && (
-                    <select
-                      value={sampleSize}
-                      onChange={(e) => setSampleSize(parseInt(e.target.value))}
-                      className="text-xs px-1.5 py-0.5 rounded border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-300"
-                      title="Load more records"
-                    >
-                      {SAMPLE_SIZE_OPTIONS.map((n) => (
-                        <option key={n} value={n}>{n.toLocaleString()}</option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              )}
               {/* Basis of Record — dropdown checklist */}
               <div className="relative" ref={filtersRef}>
                 <button
@@ -1146,7 +1120,7 @@ export default function OccurrenceMapRow({
                   </svg>
                 </button>
                 {filtersOpen && !loadingBreakdown && (
-                  <div className="absolute left-0 top-full mt-1 z-50 w-[36rem] bg-white/90 dark:bg-zinc-900/90 backdrop-blur-sm rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
+                  <div className="absolute left-0 top-full mt-1 z-50 w-[36rem] bg-white/75 dark:bg-zinc-900/75 backdrop-blur-sm rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
                     <div className="flex items-center gap-2 px-3 pb-1 text-[10px] font-medium text-zinc-400 dark:text-zinc-500">
                       <button
                         onClick={() => {
@@ -1264,7 +1238,7 @@ export default function OccurrenceMapRow({
                   </svg>
                 </button>
                 {cleaningFilterOpen && (
-                  <div className="absolute left-0 top-full mt-1 z-50 w-80 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-sm rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
+                  <div className="absolute left-0 top-full mt-1 z-50 w-80 bg-white/75 dark:bg-zinc-900/75 backdrop-blur-sm rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
                     <div className="flex items-center px-3 pb-1 text-[10px] font-medium text-zinc-400 dark:text-zinc-500">
                       <button
                         onClick={() => {
@@ -1371,6 +1345,32 @@ export default function OccurrenceMapRow({
                   </div>
                 )}
               </div>
+              {!splitView && totalOccurrences != null && (
+                <div className="ml-auto flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-300">
+                  <span>
+                    {isFullSample ? (
+                      <>All <strong>{totalOccurrences.toLocaleString()}</strong> GBIF records loaded.</>
+                    ) : (
+                      <>Loaded <strong>{occurrences.length.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> total GBIF records.</>
+                    )}
+                    {filteredOccurrences.length < occurrences.length && (
+                      <> Showing <strong>{filteredOccurrences.length.toLocaleString()}</strong> after filters.</>
+                    )}
+                  </span>
+                  {!isFullSample && (
+                    <select
+                      value={sampleSize}
+                      onChange={(e) => setSampleSize(parseInt(e.target.value))}
+                      className="text-xs px-1.5 py-0.5 rounded border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-300"
+                      title="Load more records"
+                    >
+                      {SAMPLE_SIZE_OPTIONS.map((n) => (
+                        <option key={n} value={n}>{n.toLocaleString()}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
