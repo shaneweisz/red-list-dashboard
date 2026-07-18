@@ -303,9 +303,11 @@ export default function OccurrenceMapRow({
   // src/lib/coordinate-cleaning.ts), individually toggleable. Default all off —
   // opt-in, since these are plausibility heuristics with real false-positive risk
   // (documented per-check), not the same as GBIF's own hasGeospatialIssue=false
-  // parsing-error filter, which stays on unconditionally upstream of this.
+  // parsing-error filter, which stays on unconditionally upstream of this. Zero/
+  // null-island coordinates are the one exception — there's no plausible reading
+  // of (0,0) or an axis-zero point as a real location, so it's on by default.
   const [appliedChecks, setAppliedChecks] = useState<Record<QualityFlag, boolean>>({
-    ZERO_COORDINATE: false,
+    ZERO_COORDINATE: true,
     EQUAL_COORDINATES: false,
     GBIF_HEADQUARTERS: false,
     DUPLICATE: false,
@@ -646,7 +648,7 @@ export default function OccurrenceMapRow({
   const pillDefs = useMemo(() => {
     if (!breakdown) return [];
     return [
-      { key: "humanObservation" as const, label: "Human observation (e.g. iNaturalist, eBird, field surveys)", count: breakdown.humanObservation },
+      { key: "humanObservation" as const, label: "Human observation (e.g. iNaturalist, eBird)", count: breakdown.humanObservation },
       { key: "machineObservation" as const, label: "Machine observation (e.g. camera traps)", count: breakdown.machineObservation },
       { key: "observation" as const, label: "Observation", count: breakdown.observation },
       { key: "preservedSpecimen" as const, label: "Preserved specimen (e.g. herbaria, museums)", count: breakdown.preservedSpecimen },
@@ -1090,9 +1092,36 @@ export default function OccurrenceMapRow({
     <div className="bg-zinc-50 dark:bg-zinc-800/50">
       <div className="p-2">
         <div className="flex flex-col gap-2">
-          {/* Filter dropdowns — sit above the map itself, not a separate header bar */}
+          {/* Filter dropdowns + sample-size summary, merged into one row (summary on
+              the left) — sit above the map itself, not a separate header bar */}
           <div className="p-2 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700">
             <div className="flex flex-wrap items-center gap-2">
+              {!splitView && totalOccurrences != null && (
+                <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-300">
+                  <span>
+                    {isFullSample ? (
+                      <>All <strong>{totalOccurrences.toLocaleString()}</strong> GBIF records loaded.</>
+                    ) : (
+                      <>Loaded <strong>{occurrences.length.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> total GBIF records.</>
+                    )}
+                    {filteredOccurrences.length < occurrences.length && (
+                      <> Showing <strong>{filteredOccurrences.length.toLocaleString()}</strong> after filters.</>
+                    )}
+                  </span>
+                  {!isFullSample && (
+                    <select
+                      value={sampleSize}
+                      onChange={(e) => setSampleSize(parseInt(e.target.value))}
+                      className="text-xs px-1.5 py-0.5 rounded border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-300"
+                      title="Load more records"
+                    >
+                      {SAMPLE_SIZE_OPTIONS.map((n) => (
+                        <option key={n} value={n}>{n.toLocaleString()}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )}
               {/* Basis of Record — dropdown checklist */}
               <div className="relative" ref={filtersRef}>
                 <button
@@ -1117,7 +1146,7 @@ export default function OccurrenceMapRow({
                   </svg>
                 </button>
                 {filtersOpen && !loadingBreakdown && (
-                  <div className="absolute left-0 top-full mt-1 z-50 w-[30rem] bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
+                  <div className="absolute left-0 top-full mt-1 z-50 w-[36rem] bg-white/90 dark:bg-zinc-900/90 backdrop-blur-sm rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
                     <div className="flex items-center gap-2 px-3 pb-1 text-[10px] font-medium text-zinc-400 dark:text-zinc-500">
                       <button
                         onClick={() => {
@@ -1143,16 +1172,16 @@ export default function OccurrenceMapRow({
                       const isLoadingMore = loadingMoreCategory === pill.key;
                       const loadMoreCount = Math.min(BASIS_OF_RECORD_LOAD_MORE_BATCH, pill.count - loadedShown.loaded);
                       return (
-                        <div key={pill.key}>
                         <label
-                          className="flex items-start gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
+                          key={pill.key}
+                          className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
                           title={`${pill.count.toLocaleString()} total across all of GBIF. ${loadedShown.loaded.toLocaleString()} loaded in your current sample. ${loadedShown.shown.toLocaleString()} of those also pass your other active filters (cleaned).`}
                         >
                           <input
                             type="checkbox"
                             checked={active}
                             onChange={() => toggleType(pill.key)}
-                            className="w-3 h-3 rounded accent-emerald-500 shrink-0 mt-0.5"
+                            className="w-3 h-3 rounded accent-emerald-500 shrink-0"
                           />
                           <span className={`flex-1 min-w-0 ${active ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-400 dark:text-zinc-500"}`}>
                             {pill.label}
@@ -1162,27 +1191,26 @@ export default function OccurrenceMapRow({
                               {pill.count.toLocaleString()}
                             </span>
                           )}
-                          <span className="w-16 text-right tabular-nums shrink-0 text-zinc-400 dark:text-zinc-500">
-                            {(isFullSample ? pill.count : loadedShown.loaded).toLocaleString()}
+                          <span className="shrink-0 text-right text-zinc-400 dark:text-zinc-500 whitespace-nowrap">
+                            <span className="w-16 inline-block tabular-nums">{(isFullSample ? pill.count : loadedShown.loaded).toLocaleString()}</span>
+                            {canLoadMore && (
+                              <button
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  loadMoreForCategory(pill.key);
+                                }}
+                                disabled={loadingMoreCategory != null}
+                                className="ml-1 text-[10px] hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                              >
+                                {isLoadingMore ? "(loading…)" : `(load ${loadMoreCount.toLocaleString()} more)`}
+                              </button>
+                            )}
                           </span>
                           <span className={`w-12 text-right tabular-nums shrink-0 ${active ? "text-emerald-500 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"}`}>
                             {loadedShown.shown.toLocaleString()}
                           </span>
                         </label>
-                        {canLoadMore && (
-                          <button
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              loadMoreForCategory(pill.key);
-                            }}
-                            disabled={loadingMoreCategory != null}
-                            className="block pl-8 pr-3 -mt-1 pb-1.5 text-[10px] text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                          >
-                            {isLoadingMore ? "(loading…)" : `(load ${loadMoreCount.toLocaleString()} more)`}
-                          </button>
-                        )}
-                        </div>
                       );
                     })}
                     {(() => {
@@ -1236,7 +1264,7 @@ export default function OccurrenceMapRow({
                   </svg>
                 </button>
                 {cleaningFilterOpen && (
-                  <div className="absolute left-0 top-full mt-1 z-50 w-80 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
+                  <div className="absolute left-0 top-full mt-1 z-50 w-80 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-sm rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
                     <div className="flex items-center px-3 pb-1 text-[10px] font-medium text-zinc-400 dark:text-zinc-500">
                       <button
                         onClick={() => {
@@ -1345,38 +1373,6 @@ export default function OccurrenceMapRow({
               </div>
             </div>
           </div>
-
-          {/* Sample size summary — above both the photo gallery and the map, so it's
-              always clear how many records are loaded and how many are currently
-              showing after filters, whether or not this is a partial sample */}
-          {!splitView && totalOccurrences != null && (
-            <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-300">
-              <span>
-                {isFullSample ? (
-                  <>All <strong>{totalOccurrences.toLocaleString()}</strong> GBIF records loaded.</>
-                ) : (
-                  <>Loaded <strong>{occurrences.length.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> total GBIF records.</>
-                )}
-                {filteredOccurrences.length < occurrences.length && (
-                  <> Showing <strong>{filteredOccurrences.length.toLocaleString()}</strong> after filters.</>
-                )}
-              </span>
-              {!isFullSample && (
-                <span className="flex items-center gap-1.5">
-                  <span>Load more:</span>
-                  <select
-                    value={sampleSize}
-                    onChange={(e) => setSampleSize(parseInt(e.target.value))}
-                    className="text-xs px-1.5 py-0.5 rounded border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-300"
-                  >
-                    {SAMPLE_SIZE_OPTIONS.map((n) => (
-                      <option key={n} value={n}>{n.toLocaleString()}</option>
-                    ))}
-                  </select>
-                </span>
-              )}
-            </div>
-          )}
 
           {/* ── Left sidebar (iNat photos + contributors) + Map (right) ── */}
           <div className="flex flex-col sm:flex-row sm:items-stretch gap-2">
