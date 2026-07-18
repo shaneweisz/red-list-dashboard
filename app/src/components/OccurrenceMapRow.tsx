@@ -300,19 +300,20 @@ export default function OccurrenceMapRow({
   const [customUncertaintyMode, setCustomUncertaintyMode] = useState(false);
   const [customUncertaintyInput, setCustomUncertaintyInput] = useState("");
   // Coordinate-cleaning checks (zero/equal coords, GBIF HQ, duplicates — see
-  // src/lib/coordinate-cleaning.ts), individually toggleable. Default all applied,
-  // matching how GBIF's own hasGeospatialIssue=false already hides its own flagged
-  // records.
+  // src/lib/coordinate-cleaning.ts), individually toggleable. Default all off —
+  // opt-in, since these are plausibility heuristics with real false-positive risk
+  // (documented per-check), not the same as GBIF's own hasGeospatialIssue=false
+  // parsing-error filter, which stays on unconditionally upstream of this.
   const [appliedChecks, setAppliedChecks] = useState<Record<QualityFlag, boolean>>({
-    ZERO_COORDINATE: true,
-    EQUAL_COORDINATES: true,
-    GBIF_HEADQUARTERS: true,
-    DUPLICATE: true,
-    NEAR_CAPITAL: true,
-    NEAR_CENTROID: true,
-    NEAR_INSTITUTION: true,
-    OCEAN: true,
-    URBAN_AREA: true,
+    ZERO_COORDINATE: false,
+    EQUAL_COORDINATES: false,
+    GBIF_HEADQUARTERS: false,
+    DUPLICATE: false,
+    NEAR_CAPITAL: false,
+    NEAR_CENTROID: false,
+    NEAR_INSTITUTION: false,
+    OCEAN: false,
+    URBAN_AREA: false,
   });
   const [colorByDate, setColorByDate] = useState(true);
   const [basemap, setBasemap] = useState<BasemapKey>("streets");
@@ -387,7 +388,7 @@ export default function OccurrenceMapRow({
   // Check for coarse pointer (phone/tablet) rather than maxTouchPoints which is true on Mac trackpads
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   useEffect(() => {
-    setIsTouchDevice(window.matchMedia("(pointer: coarse)").matches && !window.matchMedia("(pointer: fine)").matches); // eslint-disable-line react-hooks/set-state-in-effect -- detect on mount
+    setIsTouchDevice(window.matchMedia("(pointer: coarse)").matches && !window.matchMedia("(pointer: fine)").matches);
   }, []);
 
   // Lookup: gbifID → InatObservation (for showing photos in map popups)
@@ -406,7 +407,7 @@ export default function OccurrenceMapRow({
 
   // Fetch occurrences (re-fetches when sample size changes)
   useEffect(() => {
-    setLoadingOccurrences(true); // eslint-disable-line react-hooks/set-state-in-effect -- loading state for fetch
+    setLoadingOccurrences(true);
     const params = new URLSearchParams({
       speciesKey: speciesKey.toString(),
       limit: sampleSize.toString(),
@@ -466,7 +467,7 @@ export default function OccurrenceMapRow({
 
   // Fetch breakdown data
   useEffect(() => {
-    setLoadingBreakdown(true); // eslint-disable-line react-hooks/set-state-in-effect -- loading state for fetch
+    setLoadingBreakdown(true);
     const params = new URLSearchParams();
     if (countryCode) {
       params.set("country", countryCode);
@@ -515,7 +516,7 @@ export default function OccurrenceMapRow({
   // Re-fetch when screen size changes (page size changes)
   useEffect(() => {
     // Reset to page 0 and re-fetch with new page size
-    setInatPage(0); // eslint-disable-line react-hooks/set-state-in-effect -- reset pagination on resize
+    setInatPage(0);
     fetchInatPhotos(0, pageSize);
   }, [pageSize, fetchInatPhotos]);
 
@@ -572,8 +573,6 @@ export default function OccurrenceMapRow({
     return counts;
   }, [occurrences, checkedTypes, maxUncertainty, appliedChecks]);
 
-  // Always list every check, even ones with zero flagged records in the current
-  // sample, so the available cleaning options are discoverable up front.
   const flagDefs = useMemo(
     () =>
       (Object.keys(QUALITY_FLAG_LABELS) as QualityFlag[]).map((key) => ({
@@ -585,6 +584,10 @@ export default function OccurrenceMapRow({
       })),
     [flagCounts, flagShownCounts]
   );
+
+  // Only list checks that actually flag something in the loaded sample — an empty
+  // row can't be hovered to reveal anything on the map, so it's just clutter.
+  const visibleFlagDefs = useMemo(() => flagDefs.filter((d) => d.count > 0), [flagDefs]);
 
   const toggleCheck = (key: QualityFlag) => {
     setAppliedChecks((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -611,7 +614,7 @@ export default function OccurrenceMapRow({
   useEffect(() => {
     if (!isPlaying) return;
     if (animatingDateIdx == null) {
-      setAnimatingDateIdx(0); // eslint-disable-line react-hooks/set-state-in-effect -- init animation index
+      setAnimatingDateIdx(0);
     }
     const totalDays = animationDateRange.totalDays;
     // Base step: aim for ~20s animation at 1x, scale with speed
@@ -651,6 +654,38 @@ export default function OccurrenceMapRow({
     }
     return filteredBeforeAnimation;
   }, [filteredBeforeAnimation, animatingDate]);
+
+  // Records hidden by the currently-hovered row's own filter, but which would be
+  // visible if just that filter were relaxed (i.e. they still pass every other
+  // active filter) — the same "impact" set the dropdown row's own count describes.
+  // Hovering a row should reveal these on the map even though they're otherwise
+  // hidden, so you can see what a checkbox is actually excluding.
+  const hoverRevealedOccurrences = useMemo(() => {
+    if (hoveredFlag == null && hoveredType == null) return [];
+    return occurrences.filter((o) => {
+      if (maxUncertainty != null) {
+        const u = o.properties.coordinateUncertaintyInMeters;
+        if (u == null || u > maxUncertainty) return false;
+      }
+      if (hoveredFlag != null) {
+        const flags = o.properties.qualityFlags ?? [];
+        if (!flags.includes(hoveredFlag)) return false;
+        if (!checkedTypes[classifyOccurrence(o) as keyof typeof checkedTypes]) return false;
+        return !flags.some((f) => f !== hoveredFlag && appliedChecks[f as QualityFlag]);
+      }
+      if (classifyOccurrence(o) !== hoveredType) return false;
+      return !o.properties.qualityFlags?.some((f) => appliedChecks[f as QualityFlag]);
+    });
+  }, [hoveredFlag, hoveredType, occurrences, checkedTypes, maxUncertainty, appliedChecks]);
+
+  // Occurrences actually passed to the map: the real filtered set, plus anything
+  // the current hover should reveal that isn't already in it.
+  const hoverAugmentedOccurrences = useMemo(() => {
+    if (hoverRevealedOccurrences.length === 0) return filteredOccurrences;
+    const seen = new Set(filteredOccurrences.map((o) => o.properties.gbifID));
+    const extra = hoverRevealedOccurrences.filter((o) => !seen.has(o.properties.gbifID));
+    return extra.length === 0 ? filteredOccurrences : [...filteredOccurrences, ...extra];
+  }, [filteredOccurrences, hoverRevealedOccurrences]);
 
   // Bounding box from filtered occurrences
   const filteredBbox = useMemo<[number, number, number, number] | null>(() => {
@@ -732,6 +767,11 @@ export default function OccurrenceMapRow({
       { key: "occurrence" as const, label: "Occurrence", count: breakdown.occurrence },
     ];
   }, [breakdown]);
+
+  // Only list categories that actually have records in GBIF for this species —
+  // e.g. no point showing a "Fossil specimen" row (and it can't be meaningfully
+  // hovered either) for a species with none.
+  const visiblePillDefs = useMemo(() => pillDefs.filter((p) => p.count > 0), [pillDefs]);
 
   const toggleType = (key: keyof typeof checkedTypes) => {
     setCheckedTypes((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -938,6 +978,10 @@ export default function OccurrenceMapRow({
     panelBbox: [number, number, number, number] | null,
     label: string | null,
     panelId: string = "main",
+    // Count shown in the legend/animating badges — separate from panelOccurrences
+    // since that can include hover-revealed records temporarily added just for
+    // rendering, which shouldn't make the displayed counts jump around.
+    displayCount: number = panelOccurrences.length,
   ) => {
     const styledGeoJson = buildStyledFeatureCollection(panelOccurrences);
 
@@ -1076,7 +1120,7 @@ export default function OccurrenceMapRow({
                     <div className="w-3 h-3 rounded-full" style={{ background: dateToColor(maxDateNum).fill, border: `2px solid ${dateToColor(maxDateNum).stroke}` }} />
                     <span>{maxDateLabel}</span>
                   </div>
-                  <span className="text-zinc-400">({panelOccurrences.length})</span>
+                  <span className="text-zinc-400">({displayCount})</span>
                 </>
               ) : (
                 <>
@@ -1088,7 +1132,7 @@ export default function OccurrenceMapRow({
                     <div className="w-3 h-3 rounded-full bg-green-400 border-2 border-green-600" />
                     <span>After {assessmentDate?.split("T")[0] ?? assessmentYear}</span>
                   </div>
-                  <span className="text-zinc-400">({panelOccurrences.length})</span>
+                  <span className="text-zinc-400">({displayCount})</span>
                 </>
               )}
               {/* Toggle color mode / split view (only when assessment year is available) */}
@@ -1189,7 +1233,7 @@ export default function OccurrenceMapRow({
           {!splitView && animatingDate != null && (
             <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[1000] bg-amber-500 text-white text-sm font-bold px-3 py-1 rounded-full shadow-md tabular-nums flex items-center gap-2">
               <span>{animatingDate}</span>
-              <span className="text-xs font-normal text-amber-100">{panelOccurrences.length} / {filteredBeforeAnimation.length}</span>
+              <span className="text-xs font-normal text-amber-100">{displayCount} / {filteredBeforeAnimation.length}</span>
             </div>
           )}
           {/* Label badge for split view */}
@@ -1272,7 +1316,7 @@ export default function OccurrenceMapRow({
                   Basis of Record
                   {!loadingBreakdown && (
                     <span className="text-[10px] text-zinc-400 tabular-nums">
-                      {pillDefs.filter(p => checkedTypes[p.key]).length}/{pillDefs.length}
+                      {visiblePillDefs.filter(p => checkedTypes[p.key]).length}/{visiblePillDefs.length}
                     </span>
                   )}
                   <svg className={`w-3 h-3 text-zinc-400 transition-transform ${filtersOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -1287,7 +1331,7 @@ export default function OccurrenceMapRow({
                       <span className="w-12 text-right shrink-0">{isFullSample ? "Total" : "Loaded"}</span>
                       <span className="w-12 text-right shrink-0">Cleaned</span>
                     </div>
-                    {pillDefs.map((pill) => {
+                    {visiblePillDefs.map((pill) => {
                       const active = checkedTypes[pill.key];
                       const loadedShown = basisLoadedShownCounts[pill.key] ?? { loaded: 0, shown: 0 };
                       const canLoadMore = pill.count > loadedShown.loaded;
@@ -1296,7 +1340,7 @@ export default function OccurrenceMapRow({
                         <div key={pill.key}>
                           <label
                             className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
-                            onMouseEnter={() => setHoveredType(pill.key)}
+                            onMouseEnter={loadedShown.shown > 0 ? () => setHoveredType(pill.key) : undefined}
                             onMouseLeave={() => setHoveredType(null)}
                             title={`${pill.count.toLocaleString()} total across all of GBIF. ${loadedShown.loaded.toLocaleString()} loaded in your current sample. ${loadedShown.shown.toLocaleString()} of those also pass your other active filters (cleaned).`}
                           >
@@ -1339,9 +1383,9 @@ export default function OccurrenceMapRow({
                       );
                     })}
                     {(() => {
-                      const totalCount = pillDefs.reduce((sum, p) => sum + p.count, 0);
-                      const totalLoaded = pillDefs.reduce((sum, p) => sum + (basisLoadedShownCounts[p.key]?.loaded ?? 0), 0);
-                      const totalShown = pillDefs.reduce((sum, p) => sum + (basisLoadedShownCounts[p.key]?.shown ?? 0), 0);
+                      const totalCount = visiblePillDefs.reduce((sum, p) => sum + p.count, 0);
+                      const totalLoaded = visiblePillDefs.reduce((sum, p) => sum + (basisLoadedShownCounts[p.key]?.loaded ?? 0), 0);
+                      const totalShown = visiblePillDefs.reduce((sum, p) => sum + (basisLoadedShownCounts[p.key]?.shown ?? 0), 0);
                       return (
                         <div className="flex items-center gap-2 px-3 py-1.5 mt-1 border-t border-zinc-100 dark:border-zinc-800 text-xs font-medium">
                           <span className="w-3 shrink-0" />
@@ -1363,15 +1407,6 @@ export default function OccurrenceMapRow({
                   </div>
                 )}
               </div>
-              {loadingBreakdown && (
-                <div className="flex items-center gap-2 text-zinc-400 text-xs">
-                  <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  Loading...
-                </div>
-              )}
               {/* Separator */}
               <div className="w-px h-5 bg-zinc-200 dark:bg-zinc-700 mx-0.5 hidden sm:block" />
               {/* Coordinate cleaning — dropdown: max GPS uncertainty + one checkbox per check */}
@@ -1390,7 +1425,7 @@ export default function OccurrenceMapRow({
                   </svg>
                   Coordinate cleaning
                   <span className="text-[10px] text-zinc-400 tabular-nums">
-                    {flagDefs.filter((d) => appliedChecks[d.key]).length}/{flagDefs.length}
+                    {visibleFlagDefs.filter((d) => appliedChecks[d.key]).length}/{visibleFlagDefs.length}
                     {maxUncertainty != null && ` · ≤ ${formatUncertainty(maxUncertainty)}`}
                   </span>
                   <svg className={`w-3 h-3 text-zinc-400 transition-transform ${cleaningFilterOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -1399,7 +1434,7 @@ export default function OccurrenceMapRow({
                 </button>
                 {cleaningFilterOpen && (
                   <div className="absolute left-0 top-full mt-1 z-50 w-80 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
-                    {flagDefs.map((def) => {
+                    {visibleFlagDefs.map((def) => {
                       const active = appliedChecks[def.key]; // checked = currently hides matching records
                       const impact = flagShownCounts[def.key] ?? 0; // how many would flip visibility if toggled
                       const hasImpact = impact > 0;
@@ -1407,7 +1442,7 @@ export default function OccurrenceMapRow({
                         <label
                           key={def.key}
                           className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
-                          onMouseEnter={() => setHoveredFlag(def.key)}
+                          onMouseEnter={hasImpact ? () => setHoveredFlag(def.key) : undefined}
                           onMouseLeave={() => setHoveredFlag(null)}
                           title={def.description}
                         >
@@ -1640,7 +1675,7 @@ export default function OccurrenceMapRow({
                   </div>
                 </div>
               ) : (
-                renderMapPanel(filteredOccurrences, filteredBbox, null)
+                renderMapPanel(hoverAugmentedOccurrences, filteredBbox, null, "main", filteredOccurrences.length)
               )}
             </div>
           </div>
