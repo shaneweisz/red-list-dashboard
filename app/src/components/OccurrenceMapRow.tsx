@@ -81,9 +81,6 @@ function formatUncertainty(meters: number): string {
   return `${meters}m`;
 }
 
-// Sample size options
-const SAMPLE_SIZE_OPTIONS = [100, 300, 500, 1000, 2000] as const;
-
 // Basemap style options for MapLibre GL
 function makeRasterStyle(tileUrl: string, attribution: string): maplibregl.StyleSpecification {
   return {
@@ -324,7 +321,9 @@ export default function OccurrenceMapRow({
   const [splitDate, setSplitDate] = useState<string>(assessmentDate?.split("T")[0] || "");
   const [sharedViewState, setSharedViewState] = useState({ longitude: 0, latitude: 20, zoom: 1.5 });
   const mapRef = useRef<MapRef>(null);
-  const [sampleSize, setSampleSize] = useState(300);
+  // Initial fetch size — no longer user-adjustable; loading more of a specific
+  // basis-of-record category is handled by loadMoreForCategory below instead.
+  const sampleSize = 300;
 
   // Filters dropdown state
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -1120,21 +1119,31 @@ export default function OccurrenceMapRow({
                   </svg>
                 </button>
                 {filtersOpen && !loadingBreakdown && (
-                  <div className="absolute left-0 top-full mt-1 z-50 w-[36rem] bg-white/75 dark:bg-zinc-900/75 backdrop-blur-sm rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
+                  <div className="absolute left-0 top-full mt-1 z-50 w-[36rem] bg-white/75 dark:bg-zinc-900/75 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
                     <div className="flex items-center gap-2 px-3 pb-1 text-[10px] font-medium text-zinc-400 dark:text-zinc-500">
-                      <button
-                        onClick={() => {
-                          const allChecked = pillDefs.every((p) => checkedTypes[p.key]);
-                          setCheckedTypes((prev) => {
+                      <span className="flex-1 min-w-0 flex items-center gap-2">
+                        <button
+                          onClick={() => setCheckedTypes((prev) => {
                             const next = { ...prev };
-                            for (const p of pillDefs) next[p.key] = !allChecked;
+                            for (const p of pillDefs) next[p.key] = true;
                             return next;
-                          });
-                        }}
-                        className="flex-1 min-w-0 text-left hover:text-zinc-600 dark:hover:text-zinc-300 hover:underline"
-                      >
-                        {pillDefs.every((p) => checkedTypes[p.key]) ? "Deselect all" : "Select all"}
-                      </button>
+                          })}
+                          className="hover:text-zinc-600 dark:hover:text-zinc-300 hover:underline"
+                        >
+                          Select all
+                        </button>
+                        <span className="text-zinc-300 dark:text-zinc-600">·</span>
+                        <button
+                          onClick={() => setCheckedTypes((prev) => {
+                            const next = { ...prev };
+                            for (const p of pillDefs) next[p.key] = false;
+                            return next;
+                          })}
+                          className="hover:text-zinc-600 dark:hover:text-zinc-300 hover:underline"
+                        >
+                          Deselect all
+                        </button>
+                      </span>
                       {!isFullSample && <span className="w-14 text-right shrink-0">Total</span>}
                       <span className="w-16 text-right shrink-0">{isFullSample ? "Total" : "Loaded"}</span>
                       <span className="w-12 text-right shrink-0">Cleaned</span>
@@ -1239,20 +1248,28 @@ export default function OccurrenceMapRow({
                   </svg>
                 </button>
                 {cleaningFilterOpen && (
-                  <div className="absolute left-0 top-full mt-1 z-50 w-80 bg-white/75 dark:bg-zinc-900/75 backdrop-blur-sm rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
+                  <div className="absolute left-0 top-full mt-1 z-50 w-80 bg-white/75 dark:bg-zinc-900/75 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
                     <div className="flex items-center px-3 pb-1 text-[10px] font-medium text-zinc-400 dark:text-zinc-500">
                       <button
-                        onClick={() => {
-                          const allChecked = flagDefs.every((d) => appliedChecks[d.key]);
-                          setAppliedChecks((prev) => {
-                            const next = { ...prev };
-                            for (const d of flagDefs) next[d.key] = !allChecked;
-                            return next;
-                          });
-                        }}
+                        onClick={() => setAppliedChecks((prev) => {
+                          const next = { ...prev };
+                          for (const d of flagDefs) next[d.key] = true;
+                          return next;
+                        })}
                         className="hover:text-zinc-600 dark:hover:text-zinc-300 hover:underline"
                       >
-                        {flagDefs.every((d) => appliedChecks[d.key]) ? "Deselect all" : "Select all"}
+                        Select all
+                      </button>
+                      <span className="text-zinc-300 dark:text-zinc-600 mx-2">·</span>
+                      <button
+                        onClick={() => setAppliedChecks((prev) => {
+                          const next = { ...prev };
+                          for (const d of flagDefs) next[d.key] = false;
+                          return next;
+                        })}
+                        className="hover:text-zinc-600 dark:hover:text-zinc-300 hover:underline"
+                      >
+                        Deselect all
                       </button>
                     </div>
                     {flagDefs.map((def) => {
@@ -1358,18 +1375,6 @@ export default function OccurrenceMapRow({
                       <> Showing <strong>{filteredOccurrences.length.toLocaleString()}</strong> after filters.</>
                     )}
                   </span>
-                  {!isFullSample && (
-                    <select
-                      value={sampleSize}
-                      onChange={(e) => setSampleSize(parseInt(e.target.value))}
-                      className="text-xs px-1.5 py-0.5 rounded border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-300"
-                      title="Load more records"
-                    >
-                      {SAMPLE_SIZE_OPTIONS.map((n) => (
-                        <option key={n} value={n}>{n.toLocaleString()}</option>
-                      ))}
-                    </select>
-                  )}
                 </div>
               )}
             </div>
