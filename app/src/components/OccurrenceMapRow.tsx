@@ -368,12 +368,6 @@ export default function OccurrenceMapRow({
   // Hovered iNat observation (for map highlight)
   const [hoveredObs, setHoveredObs] = useState<InatObservation | null>(null);
 
-  // Hovered observation type pill (for linked brushing)
-  const [hoveredType, setHoveredType] = useState<string | null>(null);
-  // Hovered coordinate-cleaning check (for linked brushing) — mutually exclusive
-  // with hoveredType, since only one dropdown row can be hovered at a time
-  const [hoveredFlag, setHoveredFlag] = useState<QualityFlag | null>(null);
-
   // Hovered occurrence on map (for hover tooltip)
   const [hoveredFeature, setHoveredFeature] = useState<OccurrenceFeature | null>(null);
   const [hoveredPanel, setHoveredPanel] = useState<string | null>(null);
@@ -695,24 +689,11 @@ export default function OccurrenceMapRow({
     panelOccurrences: OccurrenceFeature[],
   ): GeoJSON.FeatureCollection => {
     const features = panelOccurrences.map((feature) => {
-      // Only one of hoveredType (Basis of Record row) / hoveredFlag (Coordinate
-      // cleaning row) is ever set at a time, since only one dropdown row can be
-      // hovered at once — whichever is set decides the match test below.
-      const matchesHovered = hoveredType != null
-        ? classifyOccurrence(feature) === hoveredType
-        : hoveredFlag != null
-          ? (feature.properties.qualityFlags?.includes(hoveredFlag) ?? false)
-          : null;
-      const isBrushed = matchesHovered === true;
-      const isDimmed = matchesHovered === false;
       const isFeatureHovered = hoveredFeature?.properties.gbifID === feature.properties.gbifID;
 
       let strokeColor: string;
       let fillColor: string;
-      if (isBrushed) {
-        strokeColor = "#d97706";
-        fillColor = "#f59e0b";
-      } else if (colorByDate) {
+      if (colorByDate) {
         const dNum = dateToNumeric(feature.properties.eventDate, feature.properties.year);
         if (dNum != null) {
           const colors = dateToColor(dNum);
@@ -729,11 +710,8 @@ export default function OccurrenceMapRow({
         fillColor = isNew ? "#4ade80" : "#9ca3af";
       }
 
-      // Dimmed markers are just muted via opacity — not also shrunk/thinned, which
-      // read as more distracting flicker than clarifying emphasis.
-      const radius = isFeatureHovered || isBrushed ? 6 : 5;
-      const strokeWidth = isFeatureHovered || isBrushed ? 3 : 2;
-      const opacity = isDimmed ? 0.15 : 1;
+      const radius = isFeatureHovered ? 6 : 5;
+      const strokeWidth = isFeatureHovered ? 3 : 2;
 
       return {
         type: "Feature" as const,
@@ -743,13 +721,13 @@ export default function OccurrenceMapRow({
           _strokeColor: strokeColor,
           _radius: radius,
           _strokeWidth: strokeWidth,
-          _opacity: opacity,
+          _opacity: 1,
         },
         geometry: feature.geometry,
       };
     });
     return { type: "FeatureCollection", features };
-  }, [hoveredType, hoveredFlag, hoveredFeature, colorByDate, assessmentDate, assessmentYear]);
+  }, [hoveredFeature, colorByDate, assessmentDate, assessmentYear]);
 
   // FitBounds helper using map ref
   const fitMapToBbox = useCallback((bbox: [number, number, number, number]) => {
@@ -1141,7 +1119,19 @@ export default function OccurrenceMapRow({
                 {filtersOpen && !loadingBreakdown && (
                   <div className="absolute left-0 top-full mt-1 z-50 w-96 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
                     <div className="flex items-center gap-2 px-3 pb-1 text-[10px] font-medium text-zinc-400 dark:text-zinc-500">
-                      <span className="flex-1 min-w-0" />
+                      <button
+                        onClick={() => {
+                          const allChecked = pillDefs.every((p) => checkedTypes[p.key]);
+                          setCheckedTypes((prev) => {
+                            const next = { ...prev };
+                            for (const p of pillDefs) next[p.key] = !allChecked;
+                            return next;
+                          });
+                        }}
+                        className="flex-1 min-w-0 text-left hover:text-zinc-600 dark:hover:text-zinc-300 hover:underline"
+                      >
+                        {pillDefs.every((p) => checkedTypes[p.key]) ? "Deselect all" : "Select all"}
+                      </button>
                       {!isFullSample && <span className="w-14 text-right shrink-0">Total</span>}
                       <span className="w-16 text-right shrink-0">{isFullSample ? "Total" : "Loaded"}</span>
                       <span className="w-12 text-right shrink-0">Cleaned</span>
@@ -1153,20 +1143,18 @@ export default function OccurrenceMapRow({
                       const isLoadingMore = loadingMoreCategory === pill.key;
                       const loadMoreCount = Math.min(BASIS_OF_RECORD_LOAD_MORE_BATCH, pill.count - loadedShown.loaded);
                       return (
+                        <div key={pill.key}>
                         <label
-                          key={pill.key}
-                          className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
-                          onMouseEnter={loadedShown.shown > 0 ? () => setHoveredType(pill.key) : undefined}
-                          onMouseLeave={() => setHoveredType(null)}
+                          className="flex items-start gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
                           title={`${pill.count.toLocaleString()} total across all of GBIF. ${loadedShown.loaded.toLocaleString()} loaded in your current sample. ${loadedShown.shown.toLocaleString()} of those also pass your other active filters (cleaned).`}
                         >
                           <input
                             type="checkbox"
                             checked={active}
                             onChange={() => toggleType(pill.key)}
-                            className="w-3 h-3 rounded accent-emerald-500 shrink-0"
+                            className="w-3 h-3 rounded accent-emerald-500 shrink-0 mt-0.5"
                           />
-                          <span className={`flex-1 min-w-0 truncate ${active ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-400 dark:text-zinc-500"}`}>
+                          <span className={`flex-1 min-w-0 ${active ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-400 dark:text-zinc-500"}`}>
                             {pill.label}
                           </span>
                           {!isFullSample && (
@@ -1174,36 +1162,27 @@ export default function OccurrenceMapRow({
                               {pill.count.toLocaleString()}
                             </span>
                           )}
-                          <span className="w-16 shrink-0 flex items-center justify-end gap-0.5 text-zinc-400 dark:text-zinc-500">
-                            <span className="tabular-nums">{(isFullSample ? pill.count : loadedShown.loaded).toLocaleString()}</span>
-                            {canLoadMore && (
-                              <button
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  loadMoreForCategory(pill.key);
-                                }}
-                                disabled={loadingMoreCategory != null}
-                                title={`Load ${loadMoreCount.toLocaleString()} more`}
-                                className="shrink-0 p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                              >
-                                {isLoadingMore ? (
-                                  <svg className="w-2.5 h-2.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                  </svg>
-                                ) : (
-                                  <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                                  </svg>
-                                )}
-                              </button>
-                            )}
+                          <span className="w-16 text-right tabular-nums shrink-0 text-zinc-400 dark:text-zinc-500">
+                            {(isFullSample ? pill.count : loadedShown.loaded).toLocaleString()}
                           </span>
                           <span className={`w-12 text-right tabular-nums shrink-0 ${active ? "text-emerald-500 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"}`}>
                             {loadedShown.shown.toLocaleString()}
                           </span>
                         </label>
+                        {canLoadMore && (
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              loadMoreForCategory(pill.key);
+                            }}
+                            disabled={loadingMoreCategory != null}
+                            className="block pl-8 pr-3 -mt-1 pb-1.5 text-[10px] text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          >
+                            {isLoadingMore ? "(loading…)" : `(load ${loadMoreCount.toLocaleString()} more)`}
+                          </button>
+                        )}
+                        </div>
                       );
                     })}
                     {(() => {
@@ -1258,6 +1237,21 @@ export default function OccurrenceMapRow({
                 </button>
                 {cleaningFilterOpen && (
                   <div className="absolute left-0 top-full mt-1 z-50 w-80 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
+                    <div className="flex items-center px-3 pb-1 text-[10px] font-medium text-zinc-400 dark:text-zinc-500">
+                      <button
+                        onClick={() => {
+                          const allChecked = flagDefs.every((d) => appliedChecks[d.key]);
+                          setAppliedChecks((prev) => {
+                            const next = { ...prev };
+                            for (const d of flagDefs) next[d.key] = !allChecked;
+                            return next;
+                          });
+                        }}
+                        className="hover:text-zinc-600 dark:hover:text-zinc-300 hover:underline"
+                      >
+                        {flagDefs.every((d) => appliedChecks[d.key]) ? "Deselect all" : "Select all"}
+                      </button>
+                    </div>
                     {flagDefs.map((def) => {
                       const active = appliedChecks[def.key]; // checked = currently hides matching records
                       const impact = flagShownCounts[def.key] ?? 0; // how many would flip visibility if toggled
@@ -1266,8 +1260,6 @@ export default function OccurrenceMapRow({
                         <label
                           key={def.key}
                           className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
-                          onMouseEnter={hasImpact ? () => setHoveredFlag(def.key) : undefined}
-                          onMouseLeave={() => setHoveredFlag(null)}
                           title={def.description}
                         >
                           <input
@@ -1355,27 +1347,34 @@ export default function OccurrenceMapRow({
           </div>
 
           {/* Sample size summary — above both the photo gallery and the map, so it's
-              clear how much of the true GBIF total is loaded before filtering it */}
-          {!splitView && totalOccurrences != null && totalOccurrences > occurrences.length && (
+              always clear how many records are loaded and how many are currently
+              showing after filters, whether or not this is a partial sample */}
+          {!splitView && totalOccurrences != null && (
             <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-300">
               <span>
-                Loaded <strong>{occurrences.length.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> total GBIF records.
+                {isFullSample ? (
+                  <>All <strong>{totalOccurrences.toLocaleString()}</strong> GBIF records loaded.</>
+                ) : (
+                  <>Loaded <strong>{occurrences.length.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> total GBIF records.</>
+                )}
                 {filteredOccurrences.length < occurrences.length && (
                   <> Showing <strong>{filteredOccurrences.length.toLocaleString()}</strong> after filters.</>
                 )}
               </span>
-              <span className="flex items-center gap-1.5">
-                <span>Load more:</span>
-                <select
-                  value={sampleSize}
-                  onChange={(e) => setSampleSize(parseInt(e.target.value))}
-                  className="text-xs px-1.5 py-0.5 rounded border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-300"
-                >
-                  {SAMPLE_SIZE_OPTIONS.map((n) => (
-                    <option key={n} value={n}>{n.toLocaleString()}</option>
-                  ))}
-                </select>
-              </span>
+              {!isFullSample && (
+                <span className="flex items-center gap-1.5">
+                  <span>Load more:</span>
+                  <select
+                    value={sampleSize}
+                    onChange={(e) => setSampleSize(parseInt(e.target.value))}
+                    className="text-xs px-1.5 py-0.5 rounded border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-300"
+                  >
+                    {SAMPLE_SIZE_OPTIONS.map((n) => (
+                      <option key={n} value={n}>{n.toLocaleString()}</option>
+                    ))}
+                  </select>
+                </span>
+              )}
             </div>
           )}
 
