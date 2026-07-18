@@ -1,0 +1,1202 @@
+[
+{
+"name": "Pristina",
+"iso_a2": "-99",
+"lat": 42.66671,
+"lon": 21.16598
+},
+{
+"name": "Hargeysa",
+"iso_a2": "-99",
+"lat": 9.56002,
+"lon": 44.06531
+},
+{
+"name": "Andorra",
+"iso_a2": "AD",
+"lat": 42.5,
+"lon": 1.51649
+},
+{
+"name": "Abu Dhabi",
+"iso_a2": "AE",
+"lat": 24.46668,
+"lon": 54.36659
+},
+{
+"name": "Kabul",
+"iso_a2": "AF",
+"lat": 34.51669,
+"lon": 69.18326
+},
+{
+"name": "Saint John's",
+"iso_a2": "AG",
+"lat": 17.11804,
+"lon": -61.85003
+},
+{
+"name": "Tirana",
+"iso_a2": "AL",
+"lat": 41.32754,
+"lon": 19.81888
+},
+{
+"name": "Yerevan",
+"iso_a2": "AM",
+"lat": 40.18115,
+"lon": 44.51355
+},
+{
+"name": "Luanda",
+"iso_a2": "AO",
+"lat": -8.83829,
+"lon": 13.23443
+},
+{
+"name": "Buenos Aires",
+"iso_a2": "AR",
+"lat": -34.6025,
+"lon": -58.39753
+},
+{
+"name": "Vienna",
+"iso_a2": "AT",
+"lat": 48.20002,
+"lon": 16.36664
+},
+{
+"name": "Canberra",
+"iso_a2": "AU",
+"lat": -35.28303,
+"lon": 149.12903
+},
+{
+"name": "Baku",
+"iso_a2": "AZ",
+"lat": 40.39527,
+"lon": 49.86222
+},
+{
+"name": "Sarajevo",
+"iso_a2": "BA",
+"lat": 43.85002,
+"lon": 18.383
+},
+{
+"name": "Bridgetown",
+"iso_a2": "BB",
+"lat": 13.102,
+"lon": -59.61653
+},
+{
+"name": "Dhaka",
+"iso_a2": "BD",
+"lat": 23.72306,
+"lon": 90.40858
+},
+{
+"name": "Brussels",
+"iso_a2": "BE",
+"lat": 50.83332,
+"lon": 4.33332
+},
+{
+"name": "Ouagadougou",
+"iso_a2": "BF",
+"lat": 12.37032,
+"lon": -1.52472
+},
+{
+"name": "Sofia",
+"iso_a2": "BG",
+"lat": 42.68335,
+"lon": 23.31665
+},
+{
+"name": "Manama",
+"iso_a2": "BH",
+"lat": 26.23614,
+"lon": 50.58305
+},
+{
+"name": "Bujumbura",
+"iso_a2": "BI",
+"lat": -3.37609,
+"lon": 29.36001
+},
+{
+"name": "Cotonou",
+"iso_a2": "BJ",
+"lat": 6.40001,
+"lon": 2.51999
+},
+{
+"name": "Hamilton",
+"iso_a2": "BM",
+"lat": 32.29419,
+"lon": -64.78394
+},
+{
+"name": "Bandar Seri Begawan",
+"iso_a2": "BN",
+"lat": 4.88333,
+"lon": 114.93328
+},
+{
+"name": "Sucre",
+"iso_a2": "BO",
+"lat": -19.04097,
+"lon": -65.25952
+},
+{
+"name": "La Paz",
+"iso_a2": "BO",
+"lat": -16.49797,
+"lon": -68.14999
+},
+{
+"name": "Bras\u00edlia",
+"iso_a2": "BR",
+"lat": -15.78334,
+"lon": -47.91605
+},
+{
+"name": "Nassau",
+"iso_a2": "BS",
+"lat": 25.08339,
+"lon": -77.35004
+},
+{
+"name": "Thimphu",
+"iso_a2": "BT",
+"lat": 27.47299,
+"lon": 89.63901
+},
+{
+"name": "Gaborone",
+"iso_a2": "BW",
+"lat": -24.64631,
+"lon": 25.91195
+},
+{
+"name": "Minsk",
+"iso_a2": "BY",
+"lat": 53.89998,
+"lon": 27.56663
+},
+{
+"name": "Belmopan",
+"iso_a2": "BZ",
+"lat": 17.25203,
+"lon": -88.76707
+},
+{
+"name": "Ottawa",
+"iso_a2": "CA",
+"lat": 45.4167,
+"lon": -75.70002
+},
+{
+"name": "Kinshasa",
+"iso_a2": "CD",
+"lat": -4.32972,
+"lon": 15.31497
+},
+{
+"name": "Bangui",
+"iso_a2": "CF",
+"lat": 4.36664,
+"lon": 18.55829
+},
+{
+"name": "Brazzaville",
+"iso_a2": "CG",
+"lat": -4.25919,
+"lon": 15.28469
+},
+{
+"name": "Bern",
+"iso_a2": "CH",
+"lat": 46.91668,
+"lon": 7.46698
+},
+{
+"name": "Yamoussoukro",
+"iso_a2": "CI",
+"lat": 6.81838,
+"lon": -5.2755
+},
+{
+"name": "Abidjan",
+"iso_a2": "CI",
+"lat": 5.32,
+"lon": -4.04005
+},
+{
+"name": "Santiago",
+"iso_a2": "CL",
+"lat": -33.45001,
+"lon": -70.66704
+},
+{
+"name": "Yaounde",
+"iso_a2": "CM",
+"lat": 3.8667,
+"lon": 11.51665
+},
+{
+"name": "Beijing",
+"iso_a2": "CN",
+"lat": 39.92889,
+"lon": 116.38829
+},
+{
+"name": "Bogota",
+"iso_a2": "CO",
+"lat": 4.59642,
+"lon": -74.08334
+},
+{
+"name": "San Jos\u00e9",
+"iso_a2": "CR",
+"lat": 9.93501,
+"lon": -84.08405
+},
+{
+"name": "Havana",
+"iso_a2": "CU",
+"lat": 23.13196,
+"lon": -82.36418
+},
+{
+"name": "Praia",
+"iso_a2": "CV",
+"lat": 14.9167,
+"lon": -23.51669
+},
+{
+"name": "Nicosia",
+"iso_a2": "CY",
+"lat": 35.16668,
+"lon": 33.36663
+},
+{
+"name": "Prague",
+"iso_a2": "CZ",
+"lat": 50.08334,
+"lon": 14.46598
+},
+{
+"name": "Berlin",
+"iso_a2": "DE",
+"lat": 52.52182,
+"lon": 13.40155
+},
+{
+"name": "Djibouti",
+"iso_a2": "DJ",
+"lat": 11.59501,
+"lon": 43.148
+},
+{
+"name": "K\u00f8benhavn",
+"iso_a2": "DK",
+"lat": 55.67856,
+"lon": 12.56349
+},
+{
+"name": "Roseau",
+"iso_a2": "DM",
+"lat": 15.30102,
+"lon": -61.38701
+},
+{
+"name": "Santo Domingo",
+"iso_a2": "DO",
+"lat": 18.47007,
+"lon": -69.90009
+},
+{
+"name": "Algiers",
+"iso_a2": "DZ",
+"lat": 36.76306,
+"lon": 3.05055
+},
+{
+"name": "Quito",
+"iso_a2": "EC",
+"lat": -0.21499,
+"lon": -78.50005
+},
+{
+"name": "Tallinn",
+"iso_a2": "EE",
+"lat": 59.43388,
+"lon": 24.72804
+},
+{
+"name": "Cairo",
+"iso_a2": "EG",
+"lat": 30.04996,
+"lon": 31.24997
+},
+{
+"name": "Asmara",
+"iso_a2": "ER",
+"lat": 15.33334,
+"lon": 38.93332
+},
+{
+"name": "Madrid",
+"iso_a2": "ES",
+"lat": 40.40003,
+"lon": -3.68335
+},
+{
+"name": "Addis Ababa",
+"iso_a2": "ET",
+"lat": 9.03331,
+"lon": 38.7
+},
+{
+"name": "Helsinki",
+"iso_a2": "FI",
+"lat": 60.17556,
+"lon": 24.93413
+},
+{
+"name": "Suva",
+"iso_a2": "FJ",
+"lat": -18.13302,
+"lon": 178.44171
+},
+{
+"name": "Palikir",
+"iso_a2": "FM",
+"lat": 6.91664,
+"lon": 158.14997
+},
+{
+"name": "Paris",
+"iso_a2": "FR",
+"lat": 48.86669,
+"lon": 2.33334
+},
+{
+"name": "Libreville",
+"iso_a2": "GA",
+"lat": 0.38539,
+"lon": 9.45797
+},
+{
+"name": "London",
+"iso_a2": "GB",
+"lat": 51.49999,
+"lon": -0.11672
+},
+{
+"name": "Saint George's",
+"iso_a2": "GD",
+"lat": 12.05263,
+"lon": -61.74164
+},
+{
+"name": "Tbilisi",
+"iso_a2": "GE",
+"lat": 41.72501,
+"lon": 44.7908
+},
+{
+"name": "Accra",
+"iso_a2": "GH",
+"lat": 5.55003,
+"lon": -0.21672
+},
+{
+"name": "Banjul",
+"iso_a2": "GM",
+"lat": 13.45388,
+"lon": -16.5917
+},
+{
+"name": "Conakry",
+"iso_a2": "GN",
+"lat": 9.53152,
+"lon": -13.68024
+},
+{
+"name": "Malabo",
+"iso_a2": "GQ",
+"lat": 3.75002,
+"lon": 8.78328
+},
+{
+"name": "Athens",
+"iso_a2": "GR",
+"lat": 37.98333,
+"lon": 23.73332
+},
+{
+"name": "Guatemala",
+"iso_a2": "GT",
+"lat": 14.62113,
+"lon": -90.52697
+},
+{
+"name": "Bissau",
+"iso_a2": "GW",
+"lat": 11.86502,
+"lon": -15.59836
+},
+{
+"name": "Georgetown",
+"iso_a2": "GY",
+"lat": 6.80197,
+"lon": -58.16703
+},
+{
+"name": "Tegucigalpa",
+"iso_a2": "HN",
+"lat": 14.10204,
+"lon": -87.21753
+},
+{
+"name": "Zagreb",
+"iso_a2": "HR",
+"lat": 45.80001,
+"lon": 15.99999
+},
+{
+"name": "Port-au-Prince",
+"iso_a2": "HT",
+"lat": 18.54102,
+"lon": -72.33603
+},
+{
+"name": "Budapest",
+"iso_a2": "HU",
+"lat": 47.50001,
+"lon": 19.08332
+},
+{
+"name": "Jakarta",
+"iso_a2": "ID",
+"lat": -6.17442,
+"lon": 106.82944
+},
+{
+"name": "Dublin",
+"iso_a2": "IE",
+"lat": 53.33306,
+"lon": -6.24891
+},
+{
+"name": "Jerusalem",
+"iso_a2": "IL",
+"lat": 31.77841,
+"lon": 35.20663
+},
+{
+"name": "New Delhi",
+"iso_a2": "IN",
+"lat": 28.60002,
+"lon": 77.19998
+},
+{
+"name": "Baghdad",
+"iso_a2": "IQ",
+"lat": 33.33865,
+"lon": 44.39387
+},
+{
+"name": "Tehran",
+"iso_a2": "IR",
+"lat": 35.67194,
+"lon": 51.42434
+},
+{
+"name": "Reykjav\u00edk",
+"iso_a2": "IS",
+"lat": 64.15002,
+"lon": -21.95001
+},
+{
+"name": "Rome",
+"iso_a2": "IT",
+"lat": 41.89596,
+"lon": 12.48326
+},
+{
+"name": "Kingston",
+"iso_a2": "JM",
+"lat": 17.97708,
+"lon": -76.76743
+},
+{
+"name": "Amman",
+"iso_a2": "JO",
+"lat": 31.95003,
+"lon": 35.9333
+},
+{
+"name": "Tokyo",
+"iso_a2": "JP",
+"lat": 35.68502,
+"lon": 139.75141
+},
+{
+"name": "Nairobi",
+"iso_a2": "KE",
+"lat": -1.28335,
+"lon": 36.81666
+},
+{
+"name": "Bishkek",
+"iso_a2": "KG",
+"lat": 42.87308,
+"lon": 74.5852
+},
+{
+"name": "Phnom Penh",
+"iso_a2": "KH",
+"lat": 11.55003,
+"lon": 104.91663
+},
+{
+"name": "Tarawa",
+"iso_a2": "KI",
+"lat": 1.33819,
+"lon": 173.01757
+},
+{
+"name": "Moroni",
+"iso_a2": "KM",
+"lat": -11.70416,
+"lon": 43.24024
+},
+{
+"name": "Basseterre",
+"iso_a2": "KN",
+"lat": 17.30203,
+"lon": -62.71701
+},
+{
+"name": "Pyongyang",
+"iso_a2": "KP",
+"lat": 39.01944,
+"lon": 125.75469
+},
+{
+"name": "Seoul",
+"iso_a2": "KR",
+"lat": 37.56635,
+"lon": 126.99973
+},
+{
+"name": "Kuwait",
+"iso_a2": "KW",
+"lat": 29.36972,
+"lon": 47.9783
+},
+{
+"name": "Astana",
+"iso_a2": "KZ",
+"lat": 51.18113,
+"lon": 71.42777
+},
+{
+"name": "Vientiane",
+"iso_a2": "LA",
+"lat": 17.96669,
+"lon": 102.59998
+},
+{
+"name": "Beirut",
+"iso_a2": "LB",
+"lat": 33.87198,
+"lon": 35.50971
+},
+{
+"name": "Castries",
+"iso_a2": "LC",
+"lat": 14.00197,
+"lon": -61.00001
+},
+{
+"name": "Vaduz",
+"iso_a2": "LI",
+"lat": 47.13372,
+"lon": 9.51667
+},
+{
+"name": "Colombo",
+"iso_a2": "LK",
+"lat": 6.93197,
+"lon": 79.85775
+},
+{
+"name": "Monrovia",
+"iso_a2": "LR",
+"lat": 6.31056,
+"lon": -10.80475
+},
+{
+"name": "Maseru",
+"iso_a2": "LS",
+"lat": -29.31667,
+"lon": 27.48327
+},
+{
+"name": "Vilnius",
+"iso_a2": "LT",
+"lat": 54.68337,
+"lon": 25.31664
+},
+{
+"name": "Luxembourg",
+"iso_a2": "LU",
+"lat": 49.61166,
+"lon": 6.13
+},
+{
+"name": "Riga",
+"iso_a2": "LV",
+"lat": 56.95002,
+"lon": 24.09997
+},
+{
+"name": "Tripoli",
+"iso_a2": "LY",
+"lat": 32.8925,
+"lon": 13.18001
+},
+{
+"name": "Rabat",
+"iso_a2": "MA",
+"lat": 34.0253,
+"lon": -6.83613
+},
+{
+"name": "Monaco",
+"iso_a2": "MC",
+"lat": 43.73965,
+"lon": 7.40691
+},
+{
+"name": "Chi\u0219in\u0103u",
+"iso_a2": "MD",
+"lat": 47.00502,
+"lon": 28.85771
+},
+{
+"name": "Podgorica",
+"iso_a2": "ME",
+"lat": 42.46597,
+"lon": 19.26631
+},
+{
+"name": "Antananarivo",
+"iso_a2": "MG",
+"lat": -18.91664,
+"lon": 47.51662
+},
+{
+"name": "Majuro",
+"iso_a2": "MH",
+"lat": 7.103,
+"lon": 171.38
+},
+{
+"name": "Skopje",
+"iso_a2": "MK",
+"lat": 42.00001,
+"lon": 21.43346
+},
+{
+"name": "Bamako",
+"iso_a2": "ML",
+"lat": 12.65001,
+"lon": -8.00004
+},
+{
+"name": "Naypyidaw",
+"iso_a2": "MM",
+"lat": 19.76656,
+"lon": 96.11862
+},
+{
+"name": "Ulaanbaatar",
+"iso_a2": "MN",
+"lat": 47.91667,
+"lon": 106.91662
+},
+{
+"name": "Nouakchott",
+"iso_a2": "MR",
+"lat": 18.08643,
+"lon": -15.97534
+},
+{
+"name": "Valletta",
+"iso_a2": "MT",
+"lat": 35.89973,
+"lon": 14.51471
+},
+{
+"name": "Port Louis",
+"iso_a2": "MU",
+"lat": -20.16664,
+"lon": 57.49999
+},
+{
+"name": "Mal\u00e9",
+"iso_a2": "MV",
+"lat": 4.16671,
+"lon": 73.49995
+},
+{
+"name": "Lilongwe",
+"iso_a2": "MW",
+"lat": -13.9833,
+"lon": 33.7833
+},
+{
+"name": "Mexico City",
+"iso_a2": "MX",
+"lat": 19.44244,
+"lon": -99.13099
+},
+{
+"name": "Kuala Lumpur",
+"iso_a2": "MY",
+"lat": 3.16667,
+"lon": 101.69998
+},
+{
+"name": "Maputo",
+"iso_a2": "MZ",
+"lat": -25.95528,
+"lon": 32.58916
+},
+{
+"name": "Windhoek",
+"iso_a2": "NA",
+"lat": -22.57001,
+"lon": 17.08355
+},
+{
+"name": "Niamey",
+"iso_a2": "NE",
+"lat": 13.51671,
+"lon": 2.11666
+},
+{
+"name": "Abuja",
+"iso_a2": "NG",
+"lat": 9.08333,
+"lon": 7.53333
+},
+{
+"name": "Managua",
+"iso_a2": "NI",
+"lat": 12.15302,
+"lon": -86.26849
+},
+{
+"name": "Amsterdam",
+"iso_a2": "NL",
+"lat": 52.34997,
+"lon": 4.91664
+},
+{
+"name": "Oslo",
+"iso_a2": "NO",
+"lat": 59.91669,
+"lon": 10.74998
+},
+{
+"name": "Kathmandu",
+"iso_a2": "NP",
+"lat": 27.71669,
+"lon": 85.31664
+},
+{
+"name": "Wellington",
+"iso_a2": "NZ",
+"lat": -41.29999,
+"lon": 174.78327
+},
+{
+"name": "Muscat",
+"iso_a2": "OM",
+"lat": 23.61332,
+"lon": 58.59331
+},
+{
+"name": "Panama City",
+"iso_a2": "PA",
+"lat": 8.96802,
+"lon": -79.53304
+},
+{
+"name": "Lima",
+"iso_a2": "PE",
+"lat": -12.04801,
+"lon": -77.05006
+},
+{
+"name": "Port Moresby",
+"iso_a2": "PG",
+"lat": -9.46471,
+"lon": 147.1925
+},
+{
+"name": "Manila",
+"iso_a2": "PH",
+"lat": 14.60416,
+"lon": 120.98222
+},
+{
+"name": "Islamabad",
+"iso_a2": "PK",
+"lat": 33.7,
+"lon": 73.16663
+},
+{
+"name": "Warsaw",
+"iso_a2": "PL",
+"lat": 52.25,
+"lon": 21.0
+},
+{
+"name": "Lisbon",
+"iso_a2": "PT",
+"lat": 38.72272,
+"lon": -9.14487
+},
+{
+"name": "Melekeok",
+"iso_a2": "PW",
+"lat": 7.4874,
+"lon": 134.62655
+},
+{
+"name": "Asunci\u00f3n",
+"iso_a2": "PY",
+"lat": -25.2964,
+"lon": -57.64151
+},
+{
+"name": "Doha",
+"iso_a2": "QA",
+"lat": 25.28656,
+"lon": 51.53297
+},
+{
+"name": "Bucharest",
+"iso_a2": "RO",
+"lat": 44.43337,
+"lon": 26.09995
+},
+{
+"name": "Belgrade",
+"iso_a2": "RS",
+"lat": 44.81865,
+"lon": 20.46799
+},
+{
+"name": "Moscow",
+"iso_a2": "RU",
+"lat": 55.75216,
+"lon": 37.61552
+},
+{
+"name": "Kigali",
+"iso_a2": "RW",
+"lat": -1.95359,
+"lon": 30.06053
+},
+{
+"name": "Riyadh",
+"iso_a2": "SA",
+"lat": 24.64083,
+"lon": 46.77274
+},
+{
+"name": "Honiara",
+"iso_a2": "SB",
+"lat": -9.43799,
+"lon": 159.94977
+},
+{
+"name": "Victoria",
+"iso_a2": "SC",
+"lat": -4.61663,
+"lon": 55.44999
+},
+{
+"name": "Khartoum",
+"iso_a2": "SD",
+"lat": 15.58808,
+"lon": 32.53418
+},
+{
+"name": "Stockholm",
+"iso_a2": "SE",
+"lat": 59.35076,
+"lon": 18.09733
+},
+{
+"name": "Singapore",
+"iso_a2": "SG",
+"lat": 1.29303,
+"lon": 103.85582
+},
+{
+"name": "Ljubljana",
+"iso_a2": "SI",
+"lat": 46.05529,
+"lon": 14.51497
+},
+{
+"name": "Bratislava",
+"iso_a2": "SK",
+"lat": 48.15002,
+"lon": 17.11698
+},
+{
+"name": "Freetown",
+"iso_a2": "SL",
+"lat": 8.47001,
+"lon": -13.23422
+},
+{
+"name": "San Marino",
+"iso_a2": "SM",
+"lat": 43.91715,
+"lon": 12.46667
+},
+{
+"name": "Dakar",
+"iso_a2": "SN",
+"lat": 14.71583,
+"lon": -17.47313
+},
+{
+"name": "Mogadishu",
+"iso_a2": "SO",
+"lat": 2.06668,
+"lon": 45.36668
+},
+{
+"name": "Paramaribo",
+"iso_a2": "SR",
+"lat": 5.83503,
+"lon": -55.16703
+},
+{
+"name": "S\u00e3o Tom\u00e9",
+"iso_a2": "ST",
+"lat": 0.3334,
+"lon": 6.73333
+},
+{
+"name": "San Salvador",
+"iso_a2": "SV",
+"lat": 13.71,
+"lon": -89.20304
+},
+{
+"name": "Damascus",
+"iso_a2": "SY",
+"lat": 33.50003,
+"lon": 36.3
+},
+{
+"name": "Mbabane",
+"iso_a2": "SZ",
+"lat": -26.31665,
+"lon": 31.13333
+},
+{
+"name": "Ndjamena",
+"iso_a2": "TD",
+"lat": 12.1131,
+"lon": 15.04915
+},
+{
+"name": "Lom\u00e9",
+"iso_a2": "TG",
+"lat": 6.13194,
+"lon": 1.22276
+},
+{
+"name": "Bangkok",
+"iso_a2": "TH",
+"lat": 13.75,
+"lon": 100.51664
+},
+{
+"name": "Dushanbe",
+"iso_a2": "TJ",
+"lat": 38.56004,
+"lon": 68.77388
+},
+{
+"name": "Dili",
+"iso_a2": "TL",
+"lat": -8.55939,
+"lon": 125.57946
+},
+{
+"name": "Ashgabat",
+"iso_a2": "TM",
+"lat": 37.94999,
+"lon": 58.3833
+},
+{
+"name": "Tunis",
+"iso_a2": "TN",
+"lat": 36.80278,
+"lon": 10.17968
+},
+{
+"name": "Nukualofa",
+"iso_a2": "TO",
+"lat": -21.13851,
+"lon": -175.22056
+},
+{
+"name": "Ankara",
+"iso_a2": "TR",
+"lat": 39.92724,
+"lon": 32.86439
+},
+{
+"name": "Port-of-Spain",
+"iso_a2": "TT",
+"lat": 10.652,
+"lon": -61.51703
+},
+{
+"name": "Funafuti",
+"iso_a2": "TV",
+"lat": -8.51665,
+"lon": 179.21665
+},
+{
+"name": "Taipei",
+"iso_a2": "TW",
+"lat": 25.03583,
+"lon": 121.56833
+},
+{
+"name": "Dar es Salaam",
+"iso_a2": "TZ",
+"lat": -6.80001,
+"lon": 39.26834
+},
+{
+"name": "Kiev",
+"iso_a2": "UA",
+"lat": 50.43337,
+"lon": 30.51663
+},
+{
+"name": "Kampala",
+"iso_a2": "UG",
+"lat": 0.31666,
+"lon": 32.58332
+},
+{
+"name": "Washington, D.C.",
+"iso_a2": "US",
+"lat": 38.89955,
+"lon": -77.00942
+},
+{
+"name": "Montevideo",
+"iso_a2": "UY",
+"lat": -34.85804,
+"lon": -56.17105
+},
+{
+"name": "Tashkent",
+"iso_a2": "UZ",
+"lat": 41.3117,
+"lon": 69.29493
+},
+{
+"name": "Vatican City",
+"iso_a2": "VA",
+"lat": 41.90001,
+"lon": 12.44781
+},
+{
+"name": "Kingstown",
+"iso_a2": "VC",
+"lat": 13.14828,
+"lon": -61.21206
+},
+{
+"name": "Caracas",
+"iso_a2": "VE",
+"lat": 10.501,
+"lon": -66.91704
+},
+{
+"name": "Hanoi",
+"iso_a2": "VN",
+"lat": 21.03333,
+"lon": 105.85001
+},
+{
+"name": "Port Vila",
+"iso_a2": "VU",
+"lat": -17.73335,
+"lon": 168.31664
+},
+{
+"name": "Apia",
+"iso_a2": "WS",
+"lat": -13.84155,
+"lon": -171.73864
+},
+{
+"name": "Sanaa",
+"iso_a2": "YE",
+"lat": 15.35473,
+"lon": 44.20659
+},
+{
+"name": "Bloemfontein",
+"iso_a2": "ZA",
+"lat": -29.11999,
+"lon": 26.22991
+},
+{
+"name": "Pretoria",
+"iso_a2": "ZA",
+"lat": -25.70692,
+"lon": 28.22943
+},
+{
+"name": "Cape Town",
+"iso_a2": "ZA",
+"lat": -33.92001,
+"lon": 18.43499
+},
+{
+"name": "Lusaka",
+"iso_a2": "ZM",
+"lat": -15.41664,
+"lon": 28.28333
+},
+{
+"name": "Harare",
+"iso_a2": "ZW",
+"lat": -17.81779,
+"lon": 31.04471
+}
+]

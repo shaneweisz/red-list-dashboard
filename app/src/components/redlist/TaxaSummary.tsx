@@ -192,8 +192,8 @@ function OutdatedInfoIcon() {
           (right), since this header sits at the right edge of the table. */}
       <span className="absolute top-full right-0 mt-2 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible z-50 shadow-lg">
         {dataAsOf
-          ? <>Data as of {dataAsOf.toLocaleDateString("en-GB", dateFormat)} — last assessed before {cutoffLabel}</>
-          : <>Last assessed before {cutoffLabel}</>}
+          ? <>Not assessed since {cutoffLabel} (Last sync date: {dataAsOf.toLocaleDateString("en-GB", dateFormat)})</>
+          : <>Not assessed since {cutoffLabel}</>}
       </span>
     </span>
   );

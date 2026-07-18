@@ -21,6 +21,7 @@
     "@duckdb/node-api": "^1.5.3-r.3",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@sentry/nextjs": "^10.43.0",
+    "@turf/boolean-point-in-polygon": "^7.3.5",
     "@vercel/analytics": "^1.6.1",
     "@vercel/speed-insights": "^2.0.0",
     "maplibre-gl": "^5.21.1",

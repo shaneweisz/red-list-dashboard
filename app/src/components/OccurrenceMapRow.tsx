@@ -1,14 +1,15 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useMemo, useId } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
 import type { MapRef, ViewStateChangeEvent, MapLayerMouseEvent } from "react-map-gl/maplibre";
 import type maplibregl from "maplibre-gl";
 import { mapTaxonId } from "@/lib/data/taxonomy-constants";
 import { InatObservation, getThumbUrl, InatPhotoWithPreview } from "./InatPhotoCard";
-import { QualityFlag, QUALITY_FLAG_LABELS, QUALITY_FLAG_DESCRIPTIONS } from "@/lib/coordinate-cleaning";
+import { QualityFlag, QUALITY_FLAG_LABELS, QUALITY_FLAG_DESCRIPTIONS, QUALITY_FLAG_SOURCES } from "@/lib/coordinate-cleaning";
+import { FaInfoCircle } from "react-icons/fa";
 
-// Fixed page size for iNat photo grid (5 columns x 2 rows)
+// Fixed page size for iNat photo grid (2 columns x 5 rows)
 const INAT_PAGE_SIZE = 10;
 
 // Dynamically import MapLibre GL components
@@ -40,13 +41,6 @@ const MapOccurrenceTooltip = dynamic(
   () => import("./MapOccurrenceTooltip"),
   { ssr: false }
 );
-const InatContributorsChart = dynamic(
-  () => import("./InatContributorsChart"),
-  { ssr: false }
-);
-
-const INAT_DATASET_KEY = "50c9509d-22c7-4a22-a47d-8c48425ef4a7";
-
 interface OccurrenceFeature {
   type: "Feature";
   properties: {
@@ -87,9 +81,6 @@ function formatUncertainty(meters: number): string {
   }
   return `${meters}m`;
 }
-
-// Sample size options
-const SAMPLE_SIZE_OPTIONS = [100, 300, 500, 1000, 2000] as const;
 
 // Basemap style options for MapLibre GL
 function makeRasterStyle(tileUrl: string, attribution: string): maplibregl.StyleSpecification {
@@ -201,26 +192,10 @@ function dateToColor(dateNum: number): { stroke: string; fill: string } {
   };
 }
 
-// Category labels for tooltip display
-const CATEGORY_LABELS: Record<string, string> = {
-  iNaturalist: "iNaturalist",
-  humanOther: "Other Human Obs.",
-  machineObservation: "Machine Obs.",
-  observation: "Observation",
-  preservedSpecimen: "Preserved",
-  fossilSpecimen: "Fossil",
-  livingSpecimen: "Living",
-  materialSample: "Material",
-  materialCitation: "Citation",
-  occurrence: "Occurrence",
-};
-
-// Classify an occurrence into one of the checkbox categories (standalone for YearRangeTrimmer)
+// Classify an occurrence into one of the basis-of-record checkbox categories.
 function classifyOccurrence(o: OccurrenceFeature): string {
   const basis = o.properties.basisOfRecord;
-  if (basis === "HUMAN_OBSERVATION") {
-    return o.properties.datasetKey === INAT_DATASET_KEY ? "iNaturalist" : "humanOther";
-  }
+  if (basis === "HUMAN_OBSERVATION") return "humanObservation";
   if (basis === "MACHINE_OBSERVATION") return "machineObservation";
   if (basis === "OBSERVATION") return "observation";
   if (basis === "PRESERVED_SPECIMEN") return "preservedSpecimen";
@@ -232,270 +207,22 @@ function classifyOccurrence(o: OccurrenceFeature): string {
   return "observation"; // fallback
 }
 
-// Inline year range bar chart with draggable trim handles (like editing a video clip)
-function YearRangeTrimmer({
-  features,
-  yearRange,
-  onRangeChange,
-  assessmentYear,
-  hoveredYear,
-  onHoverYear,
-  animatingYear,
-  onAnimationScrub,
-  className,
-}: {
-  features: OccurrenceFeature[];
-  yearRange: [number, number];
-  onRangeChange: (range: [number, number]) => void;
-  assessmentYear?: number | null;
-  hoveredYear?: number | null;
-  onHoverYear?: (year: number | null) => void;
-  animatingYear?: number | null;
-  onAnimationScrub?: (year: number) => void;
-  className?: string;
-}) {
-  const svgRef = useRef<SVGSVGElement>(null);
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  const dragging = useRef<"start" | "end" | "animation" | null>(null);
-  const clipId = `trim-${useId().replace(/:/g, "")}`;
+// Inverse of classifyOccurrence — the GBIF basisOfRecord value to filter
+// /api/occurrences by when loading more of just this category.
+const GBIF_BASIS_OF_RECORD: Record<string, string> = {
+  humanObservation: "HUMAN_OBSERVATION",
+  machineObservation: "MACHINE_OBSERVATION",
+  observation: "OBSERVATION",
+  preservedSpecimen: "PRESERVED_SPECIMEN",
+  fossilSpecimen: "FOSSIL_SPECIMEN",
+  livingSpecimen: "LIVING_SPECIMEN",
+  materialSample: "MATERIAL_SAMPLE",
+  materialCitation: "MATERIAL_CITATION",
+  occurrence: "OCCURRENCE",
+};
 
-  const yearBreakdown = useMemo(() => {
-    const breakdown = new Map<number, { total: number; categories: Record<string, number> }>();
-    for (const f of features) {
-      const y = f.properties.year;
-      if (y == null) continue;
-      let entry = breakdown.get(y);
-      if (!entry) {
-        entry = { total: 0, categories: {} };
-        breakdown.set(y, entry);
-      }
-      entry.total++;
-      const cat = classifyOccurrence(f);
-      entry.categories[cat] = (entry.categories[cat] || 0) + 1;
-    }
-    return breakdown;
-  }, [features]);
-
-  const chartW = 200;
-  const chartH = 32;
-  const pad = 6; // left/right padding for handle overhang
-
-  const chartData = useMemo(() => {
-    const allYears = Array.from(yearBreakdown.keys()).sort((a, b) => a - b);
-    if (allYears.length < 2) return null;
-
-    // Use the union of data range and yearRange so handles are always on-screen
-    const dataMinY = allYears[0];
-    const dataMaxY = allYears[allYears.length - 1];
-    const minY = Math.min(dataMinY, yearRange[0]);
-    const maxY = Math.max(dataMaxY, yearRange[1]);
-    const maxCount = Math.max(...Array.from(yearBreakdown.values()).map((v) => v.total));
-
-    const yearToX = (year: number) => pad + ((year - minY) / (maxY - minY)) * (chartW - pad * 2);
-    const totalSpan = maxY - minY + 1;
-    const barW = (chartW - pad * 2) / totalSpan; // flush histogram bars, no gaps
-
-    const bars: { year: number; x: number; barH: number; total: number }[] = [];
-    for (let y = dataMinY; y <= dataMaxY; y++) {
-      const entry = yearBreakdown.get(y);
-      const count = entry?.total || 0;
-      const x = yearToX(y);
-      const barH = maxCount > 0 ? (count / maxCount) * (chartH - 4) : 0;
-      bars.push({ year: y, x, barH, total: count });
-    }
-
-    return { minY, maxY, bars, barW, yearToX };
-  }, [yearBreakdown, yearRange]);
-
-  // Keep yearRange in a ref so drag handlers always see the latest value
-  const rangeRef = useRef(yearRange);
-  rangeRef.current = yearRange; // eslint-disable-line react-hooks/refs -- sync ref for drag event handlers
-
-  const scrubRef = useRef(onAnimationScrub);
-  scrubRef.current = onAnimationScrub; // eslint-disable-line react-hooks/refs -- sync ref for drag event handlers
-
-  const startDrag = useCallback((handle: "start" | "end" | "animation") => {
-    dragging.current = handle;
-
-    const onMove = (e: PointerEvent) => {
-      if (!svgRef.current) return;
-      const rect = svgRef.current.getBoundingClientRect();
-      const x = ((e.clientX - rect.left) / rect.width) * chartW;
-      if (!chartData) return;
-      const t = Math.max(0, Math.min(1, (x - pad) / (chartW - pad * 2)));
-      const year = Math.round(chartData.minY + t * (chartData.maxY - chartData.minY));
-      const cur = rangeRef.current;
-      if (handle === "start") {
-        onRangeChange([Math.min(year, cur[1]), cur[1]]);
-      } else if (handle === "end") {
-        onRangeChange([cur[0], Math.max(year, cur[0])]);
-      } else if (handle === "animation") {
-        const clamped = Math.max(cur[0], Math.min(year, cur[1]));
-        scrubRef.current?.(clamped);
-      }
-    };
-
-    const onUp = () => {
-      dragging.current = null;
-      document.removeEventListener("pointermove", onMove);
-      document.removeEventListener("pointerup", onUp);
-    };
-
-    document.addEventListener("pointermove", onMove);
-    document.addEventListener("pointerup", onUp);
-  }, [chartData, onRangeChange]);
-
-  // Compute tooltip position (percentage from left) for the hovered bar
-  const tooltipInfo = useMemo(() => {
-    if (hoveredYear == null || !chartData) return null;
-    const entry = yearBreakdown.get(hoveredYear);
-    if (!entry) return null;
-    const x = chartData.yearToX(hoveredYear);
-    const pct = (x / chartW) * 100;
-    return { pct, year: hoveredYear, total: entry.total, categories: entry.categories };
-  }, [hoveredYear, chartData, yearBreakdown]);
-
-  if (!chartData) return null;
-
-  const { minY, maxY, bars, barW, yearToX } = chartData;
-  const startX = yearToX(yearRange[0]);
-  const endX = yearToX(yearRange[1]);
-
-  return (
-    <div className={`relative ${className || ""}`} ref={wrapperRef}>
-      <svg
-        ref={svgRef}
-        viewBox={`0 0 ${chartW} ${chartH}`}
-        className="w-full h-full select-none"
-        preserveAspectRatio="none"
-      >
-        {/* Dimmed bars */}
-        {bars.map((b) => (
-          <rect
-            key={b.year}
-            x={b.x - barW / 2}
-            y={chartH - 2 - b.barH}
-            width={barW}
-            height={b.barH}
-            fill="currentColor"
-            className="text-zinc-300 dark:text-zinc-600"
-            opacity={0.4}
-          />
-        ))}
-        {/* Highlighted bars in selected range — clip to the range */}
-        <clipPath id={clipId}>
-          <rect x={startX} y={0} width={Math.max(endX - startX, 0)} height={chartH} />
-        </clipPath>
-        {bars.map((b) => (
-          <rect
-            key={b.year}
-            x={b.x - barW / 2}
-            y={chartH - 2 - b.barH}
-            width={barW}
-            height={b.barH}
-            fill="currentColor"
-            className="text-emerald-500 dark:text-emerald-400"
-            opacity={0.7}
-            clipPath={`url(#${clipId})`}
-          />
-        ))}
-        {/* Invisible wider hit targets for hover */}
-        {bars.map((b) => {
-          const hitW = Math.max(barW + 2, (chartW - pad * 2) / bars.length);
-          return (
-            <rect
-              key={`hit-${b.year}`}
-              x={b.x - hitW / 2}
-              y={0}
-              width={hitW}
-              height={chartH}
-              fill="transparent"
-              onMouseEnter={() => onHoverYear?.(b.year)}
-              onMouseLeave={() => onHoverYear?.(null)}
-            />
-          );
-        })}
-        {/* Assessment year marker */}
-        {assessmentYear != null && assessmentYear >= minY && assessmentYear <= maxY && (
-          <line
-            x1={yearToX(assessmentYear)}
-            y1={0}
-            x2={yearToX(assessmentYear)}
-            y2={chartH}
-            stroke="#3b82f6"
-            strokeWidth={1}
-            strokeDasharray="3,2"
-            opacity={0.5}
-          />
-        )}
-        {/* Animation year indicator (draggable) */}
-        {animatingYear != null && animatingYear >= minY && animatingYear <= maxY && (
-          <>
-            <line
-              x1={yearToX(animatingYear)}
-              y1={0}
-              x2={yearToX(animatingYear)}
-              y2={chartH}
-              stroke="#f59e0b"
-              strokeWidth={2}
-              opacity={0.9}
-            />
-            <rect
-              x={yearToX(animatingYear) - 8}
-              y={0}
-              width={16}
-              height={chartH}
-              fill="transparent"
-              className="cursor-ew-resize"
-              onPointerDown={(e) => { e.preventDefault(); startDrag("animation"); }}
-            />
-          </>
-        )}
-        {/* Start handle */}
-        <line x1={startX} y1={0} x2={startX} y2={chartH} stroke="currentColor" className="text-emerald-600 dark:text-emerald-400" strokeWidth={2} />
-        <rect
-          x={startX - 8}
-          y={0}
-          width={16}
-          height={chartH}
-          fill="transparent"
-          className="cursor-ew-resize"
-          onPointerDown={(e) => { e.preventDefault(); startDrag("start"); }}
-        />
-        {/* End handle */}
-        <line x1={endX} y1={0} x2={endX} y2={chartH} stroke="currentColor" className="text-emerald-600 dark:text-emerald-400" strokeWidth={2} />
-        <rect
-          x={endX - 8}
-          y={0}
-          width={16}
-          height={chartH}
-          fill="transparent"
-          className="cursor-ew-resize"
-          onPointerDown={(e) => { e.preventDefault(); startDrag("end"); }}
-        />
-      </svg>
-      {/* Hover tooltip */}
-      {tooltipInfo && (
-        <div
-          className="absolute top-full mt-1 z-50 pointer-events-none"
-          style={{ left: `${tooltipInfo.pct}%`, transform: "translateX(-50%)" }}
-        >
-          <div className="bg-zinc-900 dark:bg-zinc-800 text-white text-[10px] rounded px-2 py-1.5 shadow-lg whitespace-nowrap">
-            <div className="font-medium text-[11px] mb-0.5">{tooltipInfo.year} — {tooltipInfo.total} obs.</div>
-            {Object.entries(tooltipInfo.categories)
-              .sort(([, a], [, b]) => b - a)
-              .map(([cat, count]) => (
-                <div key={cat} className="flex justify-between gap-3 text-zinc-300">
-                  <span>{CATEGORY_LABELS[cat] || cat}</span>
-                  <span className="tabular-nums">{count}</span>
-                </div>
-              ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+// How many additional records to fetch per "Load more" click on a Basis of Record row.
+const BASIS_OF_RECORD_LOAD_MORE_BATCH = 200;
 
 interface RecordTypeBreakdown {
   humanObservation: number;
@@ -554,8 +281,7 @@ export default function OccurrenceMapRow({
 
   // Checkbox state for each observation type category (default: all checked except specimens, citations & occurrence)
   const [checkedTypes, setCheckedTypes] = useState({
-    iNaturalist: true,
-    humanOther: true,
+    humanObservation: true,
     machineObservation: true,
     observation: false,
     preservedSpecimen: isPlantOrFungiTaxonGroup(taxonGroup),
@@ -572,24 +298,35 @@ export default function OccurrenceMapRow({
   const [customUncertaintyMode, setCustomUncertaintyMode] = useState(false);
   const [customUncertaintyInput, setCustomUncertaintyInput] = useState("");
   // Coordinate-cleaning checks (zero/equal coords, GBIF HQ, duplicates — see
-  // src/lib/coordinate-cleaning.ts), individually toggleable. Default all applied,
-  // matching how GBIF's own hasGeospatialIssue=false already hides its own flagged
-  // records.
+  // src/lib/coordinate-cleaning.ts), individually toggleable. Default all off —
+  // opt-in, since these are plausibility heuristics with real false-positive risk
+  // (documented per-check), not the same as GBIF's own hasGeospatialIssue=false
+  // parsing-error filter, which stays on unconditionally upstream of this. Zero/
+  // null-island coordinates are the one exception — there's no plausible reading
+  // of (0,0) or an axis-zero point as a real location, so it's on by default.
   const [appliedChecks, setAppliedChecks] = useState<Record<QualityFlag, boolean>>({
     ZERO_COORDINATE: true,
-    EQUAL_COORDINATES: true,
-    GBIF_HEADQUARTERS: true,
-    DUPLICATE: true,
+    EQUAL_COORDINATES: false,
+    GBIF_HEADQUARTERS: false,
+    DUPLICATE: false,
+    NEAR_CAPITAL: false,
+    NEAR_CENTROID: false,
+    NEAR_INSTITUTION: false,
+    OCEAN: false,
+    URBAN_AREA: false,
+    ARTIFICIAL_HOTSPOT: false,
+    OUTSIDE_REPORTED_COUNTRY: false,
   });
-  const [colorByDate, setColorByDate] = useState(false);
+  const [colorByDate, setColorByDate] = useState(true);
   const [basemap, setBasemap] = useState<BasemapKey>("streets");
   const [showProtectedAreas, setShowProtectedAreas] = useState(false);
   const [splitView, setSplitView] = useState(false);
   const [splitDate, setSplitDate] = useState<string>(assessmentDate?.split("T")[0] || "");
   const [sharedViewState, setSharedViewState] = useState({ longitude: 0, latitude: 20, zoom: 1.5 });
   const mapRef = useRef<MapRef>(null);
-  const [sampleSize, setSampleSize] = useState(300);
-  const [yearRange, setYearRange] = useState<[number, number]>([0, 9999]);
+  // Initial fetch size — no longer user-adjustable; loading more of a specific
+  // basis-of-record category is handled by loadMoreForCategory below instead.
+  const sampleSize = 300;
 
   // Filters dropdown state
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -635,21 +372,9 @@ export default function OccurrenceMapRow({
   // Hovered iNat observation (for map highlight)
   const [hoveredObs, setHoveredObs] = useState<InatObservation | null>(null);
 
-  // Hovered year from histogram (for linked brushing)
-  const [hoveredYear, setHoveredYear] = useState<number | null>(null);
-
-  // Hovered observation type pill (for linked brushing)
-  const [hoveredType, setHoveredType] = useState<string | null>(null);
-
   // Hovered occurrence on map (for hover tooltip)
   const [hoveredFeature, setHoveredFeature] = useState<OccurrenceFeature | null>(null);
   const [hoveredPanel, setHoveredPanel] = useState<string | null>(null);
-
-  // Animation state: step through unique sorted dates
-  const [animatingDateIdx, setAnimatingDateIdx] = useState<number | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [playbackSpeed, setPlaybackSpeed] = useState(2);
-  const animationRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Touch-only device detection (no hover tooltips on touch-only devices)
   // Check for coarse pointer (phone/tablet) rather than maxTouchPoints which is true on Mac trackpads
@@ -689,17 +414,48 @@ export default function OccurrenceMapRow({
         setOccurrences(features);
         setTotalOccurrences(data.metadata?.total ?? null);
         setBbox(data.metadata?.bbox ?? null);
-        // Initialize year range from data
-        const years = features
-          .map((f: OccurrenceFeature) => f.properties.year)
-          .filter((y: number | null | undefined): y is number => y != null);
-        if (years.length > 0) {
-          setYearRange([Math.min(...years), Math.max(...years)]);
-        }
       })
       .catch(console.error)
       .finally(() => setLoadingOccurrences(false));
   }, [speciesKey, countryCode, sampleSize]);
+
+  // Basis-of-record category currently fetching more records, if any (drives the
+  // per-row "Load more" spinner/disabled state in the dropdown).
+  const [loadingMoreCategory, setLoadingMoreCategory] = useState<string | null>(null);
+
+  // Load another batch of just one basis-of-record category (e.g. "load 200 more
+  // Preserved specimen records"), independent of the overall sample-size selector —
+  // that reloads everything and is dominated by whichever category is most numerous.
+  // Offsets by how many of this category are already loaded, and de-dupes the merge
+  // by gbifID since the untargeted main fetch and this filtered one aren't guaranteed
+  // to line up by offset alone.
+  const loadMoreForCategory = useCallback((key: string) => {
+    const gbifBasis = GBIF_BASIS_OF_RECORD[key];
+    if (!gbifBasis) return;
+    setLoadingMoreCategory(key);
+    const alreadyLoaded = occurrences.filter((o) => classifyOccurrence(o) === key).length;
+    const params = new URLSearchParams({
+      speciesKey: speciesKey.toString(),
+      basisOfRecord: gbifBasis,
+      limit: BASIS_OF_RECORD_LOAD_MORE_BATCH.toString(),
+      offset: alreadyLoaded.toString(),
+    });
+    if (countryCode) {
+      params.set("country", countryCode);
+    }
+    fetch(`/api/occurrences?${params}`)
+      .then((res) => res.json())
+      .then((data) => {
+        const newFeatures: OccurrenceFeature[] = data.features || [];
+        setOccurrences((prev) => {
+          const seen = new Set(prev.map((o) => o.properties.gbifID));
+          const toAdd = newFeatures.filter((f) => !seen.has(f.properties.gbifID));
+          return [...prev, ...toAdd];
+        });
+      })
+      .catch(console.error)
+      .finally(() => setLoadingMoreCategory(null));
+  }, [occurrences, speciesKey, countryCode]);
 
   // Fetch breakdown data
   useEffect(() => {
@@ -756,18 +512,8 @@ export default function OccurrenceMapRow({
     fetchInatPhotos(0, pageSize);
   }, [pageSize, fetchInatPhotos]);
 
-  // Stop animation when user manually changes year range
-  const handleYearRangeChange = useCallback((range: [number, number]) => {
-    setYearRange(range);
-    if (isPlaying) {
-      setIsPlaying(false);
-      setAnimatingDateIdx(null);
-      if (animationRef.current) clearInterval(animationRef.current);
-    }
-  }, [isPlaying]);
-
-  // Multi-stage filtering pipeline (before animation)
-  const filteredBeforeAnimation = useMemo(() => {
+  // Multi-stage filtering pipeline
+  const filteredOccurrences = useMemo(() => {
     let result = occurrences;
     // 1. Basis of record checkboxes
     result = result.filter((o) => checkedTypes[classifyOccurrence(o) as keyof typeof checkedTypes]);
@@ -778,16 +524,10 @@ export default function OccurrenceMapRow({
         return u != null && u <= maxUncertainty;
       });
     }
-    // 3. Year range filter
-    result = result.filter((o) => {
-      const y = o.properties.year;
-      if (y == null) return true; // keep records without year data
-      return y >= yearRange[0] && y <= yearRange[1];
-    });
-    // 4. Coordinate-cleaning checks (zero/equal coords, GBIF HQ, duplicates)
+    // 3. Coordinate-cleaning checks (zero/equal coords, GBIF HQ, duplicates)
     result = result.filter((o) => !o.properties.qualityFlags?.some((f) => appliedChecks[f as QualityFlag]));
     return result;
-  }, [occurrences, checkedTypes, maxUncertainty, yearRange, appliedChecks]);
+  }, [occurrences, checkedTypes, maxUncertainty, appliedChecks]);
 
   // Per-check counts among the currently loaded occurrences (independent of whether
   // that check is applied), for the coordinate-cleaning dropdown
@@ -802,102 +542,45 @@ export default function OccurrenceMapRow({
     return counts;
   }, [occurrences]);
 
-  // Always list every check, even ones with zero flagged records in the current
-  // sample, so the available cleaning options are discoverable up front.
+  // For each check: of the loaded records it flags, how many would actually appear on
+  // the map if just this one check were switched off (i.e. they still pass every other
+  // active filter — basis of record, uncertainty, year range, and every other applied
+  // coordinate-cleaning check). Mirrors basisLoadedShownCounts's "shown of loaded"
+  // semantics so both dropdowns read the same way.
+  const flagShownCounts = useMemo(() => {
+    const counts: Partial<Record<QualityFlag, number>> = {};
+    for (const o of occurrences) {
+      if (!checkedTypes[classifyOccurrence(o) as keyof typeof checkedTypes]) continue;
+      if (maxUncertainty != null) {
+        const u = o.properties.coordinateUncertaintyInMeters;
+        if (u == null || u > maxUncertainty) continue;
+      }
+      const flags = o.properties.qualityFlags ?? [];
+      for (const f of flags) {
+        const key = f as QualityFlag;
+        const blockedByOtherCheck = flags.some((f2) => f2 !== key && appliedChecks[f2 as QualityFlag]);
+        if (!blockedByOtherCheck) counts[key] = (counts[key] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }, [occurrences, checkedTypes, maxUncertainty, appliedChecks]);
+
   const flagDefs = useMemo(
     () =>
       (Object.keys(QUALITY_FLAG_LABELS) as QualityFlag[]).map((key) => ({
         key,
         label: QUALITY_FLAG_LABELS[key],
         description: QUALITY_FLAG_DESCRIPTIONS[key],
+        source: QUALITY_FLAG_SOURCES[key],
         count: flagCounts[key] ?? 0,
+        shown: flagShownCounts[key] ?? 0,
       })),
-    [flagCounts]
+    [flagCounts, flagShownCounts]
   );
 
   const toggleCheck = (key: QualityFlag) => {
     setAppliedChecks((prev) => ({ ...prev, [key]: !prev[key] }));
   };
-
-  // Continuous date range for animation (every day from earliest to latest)
-  const animationDateRange = useMemo(() => {
-    let minDate: string | null = null;
-    let maxDate: string | null = null;
-    for (const o of filteredBeforeAnimation) {
-      const d = o.properties.eventDate ?? (o.properties.year != null ? `${o.properties.year}-01-01` : null);
-      if (d == null) continue;
-      if (minDate == null || d < minDate) minDate = d;
-      if (maxDate == null || d > maxDate) maxDate = d;
-    }
-    if (!minDate || !maxDate) return { start: null, totalDays: 0 };
-    const startMs = new Date(minDate).getTime();
-    const endMs = new Date(maxDate).getTime();
-    const totalDays = Math.floor((endMs - startMs) / 86400000) + 1;
-    return { start: startMs, totalDays };
-  }, [filteredBeforeAnimation]);
-
-  // Animation playback interval (date by date)
-  useEffect(() => {
-    if (!isPlaying) return;
-    if (animatingDateIdx == null) {
-      setAnimatingDateIdx(0); // eslint-disable-line react-hooks/set-state-in-effect -- init animation index
-    }
-    const totalDays = animationDateRange.totalDays;
-    // Base step: aim for ~20s animation at 1x, scale with speed
-    const baseStep = Math.max(1, Math.ceil(totalDays / (20 * 60)));
-    const step = baseStep * playbackSpeed;
-    animationRef.current = setInterval(() => {
-      setAnimatingDateIdx((prev) => {
-        const cur = prev ?? 0;
-        const next = cur + step;
-        if (next >= totalDays) {
-          setIsPlaying(false);
-          return totalDays - 1;
-        }
-        return next;
-      });
-    }, 16);
-    return () => {
-      if (animationRef.current) clearInterval(animationRef.current);
-    };
-  }, [isPlaying, playbackSpeed]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // The current animation date cutoff
-  const animatingDate = useMemo(() => {
-    if (animatingDateIdx == null || animationDateRange.start == null) return null;
-    const idx = Math.min(animatingDateIdx, animationDateRange.totalDays - 1);
-    const d = new Date(animationDateRange.start + idx * 86400000);
-    return d.toISOString().slice(0, 10);
-  }, [animatingDateIdx, animationDateRange]);
-
-  // Scrub animation to a year (from dragging the orange line)
-  const handleAnimationScrub = useCallback((year: number) => {
-    // Pause playback while scrubbing
-    if (isPlaying) {
-      if (animationRef.current) clearInterval(animationRef.current);
-      animationRef.current = null;
-      setIsPlaying(false);
-    }
-    // Convert year to a date index (Jan 1 of that year)
-    if (animationDateRange.start == null) return;
-    const targetMs = new Date(`${year}-01-01`).getTime();
-    const dayIdx = Math.max(0, Math.min(
-      Math.floor((targetMs - animationDateRange.start) / 86400000),
-      animationDateRange.totalDays - 1
-    ));
-    setAnimatingDateIdx(dayIdx);
-  }, [isPlaying, animationDateRange]);
-
-  // Apply animation filter
-  const filteredOccurrences = useMemo(() => {
-    if (animatingDate != null) {
-      return filteredBeforeAnimation.filter((o) => {
-        const d = o.properties.eventDate ?? (o.properties.year != null ? String(o.properties.year) : null);
-        return d != null && d <= animatingDate;
-      });
-    }
-    return filteredBeforeAnimation;
-  }, [filteredBeforeAnimation, animatingDate]);
 
   // Bounding box from filtered occurrences
   const filteredBbox = useMemo<[number, number, number, number] | null>(() => {
@@ -963,13 +646,12 @@ export default function OccurrenceMapRow({
     return { minDateNum: min, maxDateNum: max, minDateLabel: fmt(min), maxDateLabel: fmt(max) };
   }, [filteredOccurrences]);
 
-  // Filter definitions — GBIF basis of record terminology with iNat kept separate
+  // Filter definitions — plain GBIF basis-of-record terminology (iNaturalist is just
+  // part of "Human observation" here; it gets its own dedicated panel below anyway)
   const pillDefs = useMemo(() => {
     if (!breakdown) return [];
-    const humanOtherCount = Math.max(0, breakdown.humanObservation - breakdown.iNaturalist);
     return [
-      { key: "iNaturalist" as const, label: "iNaturalist (community science)", count: breakdown.iNaturalist },
-      { key: "humanOther" as const, label: "Human observation (e.g. eBird, field surveys)", count: humanOtherCount },
+      { key: "humanObservation" as const, label: "Human observation (e.g. iNaturalist, eBird)", count: breakdown.humanObservation },
       { key: "machineObservation" as const, label: "Machine observation (e.g. camera traps)", count: breakdown.machineObservation },
       { key: "observation" as const, label: "Observation", count: breakdown.observation },
       { key: "preservedSpecimen" as const, label: "Preserved specimen (e.g. herbaria, museums)", count: breakdown.preservedSpecimen },
@@ -980,6 +662,7 @@ export default function OccurrenceMapRow({
       { key: "occurrence" as const, label: "Occurrence", count: breakdown.occurrence },
     ];
   }, [breakdown]);
+
 
   const toggleType = (key: keyof typeof checkedTypes) => {
     setCheckedTypes((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -1000,32 +683,22 @@ export default function OccurrenceMapRow({
         const u = o.properties.coordinateUncertaintyInMeters;
         if (u == null || u > maxUncertainty) continue;
       }
-      const y = o.properties.year;
-      if (y != null && (y < yearRange[0] || y > yearRange[1])) continue;
       if (o.properties.qualityFlags?.some((f) => appliedChecks[f as QualityFlag])) continue;
       entry.shown++;
     }
     return counts;
-  }, [occurrences, maxUncertainty, yearRange, appliedChecks]);
+  }, [occurrences, maxUncertainty, appliedChecks]);
 
   // Build GeoJSON FeatureCollection with computed styling properties for the circle layer
   const buildStyledFeatureCollection = useCallback((
     panelOccurrences: OccurrenceFeature[],
   ): GeoJSON.FeatureCollection => {
     const features = panelOccurrences.map((feature) => {
-      const category = classifyOccurrence(feature);
-      const isTypeBrushed = hoveredType != null && category === hoveredType;
-      const isTypeDimmed = hoveredType != null && category !== hoveredType;
-      const isBrushed = (hoveredYear != null && feature.properties.year === hoveredYear) || isTypeBrushed;
-      const isDimmed = (hoveredYear != null && feature.properties.year !== hoveredYear) || isTypeDimmed;
       const isFeatureHovered = hoveredFeature?.properties.gbifID === feature.properties.gbifID;
 
       let strokeColor: string;
       let fillColor: string;
-      if (isBrushed) {
-        strokeColor = "#d97706";
-        fillColor = "#f59e0b";
-      } else if (colorByDate) {
+      if (colorByDate) {
         const dNum = dateToNumeric(feature.properties.eventDate, feature.properties.year);
         if (dNum != null) {
           const colors = dateToColor(dNum);
@@ -1042,9 +715,8 @@ export default function OccurrenceMapRow({
         fillColor = isNew ? "#4ade80" : "#9ca3af";
       }
 
-      const radius = isFeatureHovered ? 6 : (isBrushed ? 6 : (isDimmed ? 4 : 5));
-      const strokeWidth = isDimmed ? 1 : (isFeatureHovered || isBrushed ? 3 : 2);
-      const opacity = isDimmed ? 0.15 : 1;
+      const radius = isFeatureHovered ? 6 : 5;
+      const strokeWidth = isFeatureHovered ? 3 : 2;
 
       return {
         type: "Feature" as const,
@@ -1054,13 +726,13 @@ export default function OccurrenceMapRow({
           _strokeColor: strokeColor,
           _radius: radius,
           _strokeWidth: strokeWidth,
-          _opacity: opacity,
+          _opacity: 1,
         },
         geometry: feature.geometry,
       };
     });
     return { type: "FeatureCollection", features };
-  }, [hoveredType, hoveredYear, hoveredFeature, colorByDate, assessmentDate, assessmentYear]);
+  }, [hoveredFeature, colorByDate, assessmentDate, assessmentYear]);
 
   // FitBounds helper using map ref
   const fitMapToBbox = useCallback((bbox: [number, number, number, number]) => {
@@ -1093,7 +765,7 @@ export default function OccurrenceMapRow({
 
   // Fit bounds when bbox changes (may need to wait for map to be ready)
   useEffect(() => {
-    if (!filteredBbox || animatingDateIdx != null) return;
+    if (!filteredBbox) return;
     const key = filteredBbox.join(",");
     if (fittedBboxRef.current === key) return;
     if (fitMapToBbox(filteredBbox)) {
@@ -1103,7 +775,7 @@ export default function OccurrenceMapRow({
       // Map not ready yet — store as pending for onLoad
       pendingBboxRef.current = filteredBbox;
     }
-  }, [filteredBbox, animatingDateIdx, fitMapToBbox]);
+  }, [filteredBbox, fitMapToBbox]);
 
   // Called when the MapGL component finishes loading
   const handleMapLoad = useCallback(() => {
@@ -1149,6 +821,7 @@ export default function OccurrenceMapRow({
             year: props.year,
             month: props.month,
             institutionCode: props.institutionCode,
+            qualityFlags: typeof props.qualityFlags === "string" ? JSON.parse(props.qualityFlags) : props.qualityFlags,
           },
           geometry: { type: "Point", coordinates: coords },
         });
@@ -1318,7 +991,6 @@ export default function OccurrenceMapRow({
                     <div className="w-3 h-3 rounded-full" style={{ background: dateToColor(maxDateNum).fill, border: `2px solid ${dateToColor(maxDateNum).stroke}` }} />
                     <span>{maxDateLabel}</span>
                   </div>
-                  <span className="text-zinc-400">({panelOccurrences.length})</span>
                 </>
               ) : (
                 <>
@@ -1330,7 +1002,6 @@ export default function OccurrenceMapRow({
                     <div className="w-3 h-3 rounded-full bg-green-400 border-2 border-green-600" />
                     <span>After {assessmentDate?.split("T")[0] ?? assessmentYear}</span>
                   </div>
-                  <span className="text-zinc-400">({panelOccurrences.length})</span>
                 </>
               )}
               {/* Toggle color mode / split view (only when assessment year is available) */}
@@ -1349,9 +1020,6 @@ export default function OccurrenceMapRow({
                       onClick={() => {
                         if (!splitDate && assessmentDate) setSplitDate(assessmentDate.split("T")[0]);
                         setSplitView(true);
-                        setIsPlaying(false);
-                        setAnimatingDateIdx(null);
-                        if (animationRef.current) clearInterval(animationRef.current);
                       }}
                       className="px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-[10px] text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-1"
                     >
@@ -1364,13 +1032,6 @@ export default function OccurrenceMapRow({
                   )}
                 </>
               )}
-            </div>
-          )}
-          {/* Animating badge */}
-          {!splitView && animatingDate != null && (
-            <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[1000] bg-amber-500 text-white text-sm font-bold px-3 py-1 rounded-full shadow-md tabular-nums flex items-center gap-2">
-              <span>{animatingDate}</span>
-              <span className="text-xs font-normal text-amber-100">{panelOccurrences.length} / {filteredBeforeAnimation.length}</span>
             </div>
           )}
           {/* Label badge for split view */}
@@ -1425,40 +1086,20 @@ export default function OccurrenceMapRow({
     );
   };
 
-  const inatContributorsChart = useMemo(() => <InatContributorsChart speciesKey={speciesKey} />, [speciesKey]);
+  // Once every GBIF record for this species is loaded (no more to page in), the
+  // basis-of-record dropdown's "total" and "loaded" columns are always identical —
+  // collapse them into one column rather than showing the same number twice.
+  const isFullSample = totalOccurrences == null || totalOccurrences <= occurrences.length;
 
   return (
     <div className="bg-zinc-50 dark:bg-zinc-800/50">
       <div className="p-2">
         <div className="flex flex-col gap-2">
-          {/* Sample size summary — up top so it's clear how much of the true GBIF
-              total is actually loaded before you start filtering it */}
-          {!splitView && totalOccurrences != null && totalOccurrences > occurrences.length && (
-            <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-300">
-              <span>
-                Loaded <strong>{occurrences.length.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> total GBIF records.
-                {filteredOccurrences.length < occurrences.length && (
-                  <> Showing <strong>{filteredOccurrences.length.toLocaleString()}</strong> after filters.</>
-                )}
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span>Load more:</span>
-                <select
-                  value={sampleSize}
-                  onChange={(e) => setSampleSize(parseInt(e.target.value))}
-                  className="text-xs px-1.5 py-0.5 rounded border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-300"
-                >
-                  {SAMPLE_SIZE_OPTIONS.map((n) => (
-                    <option key={n} value={n}>{n.toLocaleString()}</option>
-                  ))}
-                </select>
-              </span>
-            </div>
-          )}
-          {/* ── Filter Bar ── */}
+          {/* Filter dropdowns + sample-size summary, merged into one row (summary on
+              the left) — sit above the map itself, not a separate header bar */}
           <div className="p-2 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700">
             <div className="flex flex-wrap items-center gap-2">
-              {/* Filter by basis of record — dropdown checklist */}
+              {/* Basis of Record — dropdown checklist */}
               <div className="relative" ref={filtersRef}>
                 <button
                   onClick={() => setFiltersOpen(!filtersOpen)}
@@ -1471,10 +1112,10 @@ export default function OccurrenceMapRow({
                   <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
                   </svg>
-                  Filter by basis of record
+                  Basis of Record
                   {!loadingBreakdown && (
                     <span className="text-[10px] text-zinc-400 tabular-nums">
-                      {pillDefs.filter(p => checkedTypes[p.key]).length}/{pillDefs.length}
+                      Selected {pillDefs.filter(p => checkedTypes[p.key]).length} of {pillDefs.length}
                     </span>
                   )}
                   <svg className={`w-3 h-3 text-zinc-400 transition-transform ${filtersOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -1482,17 +1123,46 @@ export default function OccurrenceMapRow({
                   </svg>
                 </button>
                 {filtersOpen && !loadingBreakdown && (
-                  <div className="absolute left-0 top-full mt-1 z-50 w-80 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
+                  <div className="absolute left-0 top-full mt-1 z-50 w-[36rem] bg-white/75 dark:bg-zinc-900/75 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
+                    <div className="flex items-center gap-2 px-3 pb-1 text-[10px] font-medium text-zinc-400 dark:text-zinc-500">
+                      <span className="flex-1 min-w-0 flex items-center gap-2">
+                        <button
+                          onClick={() => setCheckedTypes((prev) => {
+                            const next = { ...prev };
+                            for (const p of pillDefs) next[p.key] = true;
+                            return next;
+                          })}
+                          className="hover:text-zinc-600 dark:hover:text-zinc-300 hover:underline"
+                        >
+                          Select all
+                        </button>
+                        <span className="text-zinc-300 dark:text-zinc-600">·</span>
+                        <button
+                          onClick={() => setCheckedTypes((prev) => {
+                            const next = { ...prev };
+                            for (const p of pillDefs) next[p.key] = false;
+                            return next;
+                          })}
+                          className="hover:text-zinc-600 dark:hover:text-zinc-300 hover:underline"
+                        >
+                          Deselect all
+                        </button>
+                      </span>
+                      {!isFullSample && <span className="w-14 text-right shrink-0">Total</span>}
+                      <span className="w-16 text-right shrink-0">{isFullSample ? "Total" : "Loaded"}</span>
+                      <span className="w-12 text-right shrink-0">Cleaned</span>
+                    </div>
                     {pillDefs.map((pill) => {
                       const active = checkedTypes[pill.key];
-                      const loadedShown = basisLoadedShownCounts[pill.key];
+                      const loadedShown = basisLoadedShownCounts[pill.key] ?? { loaded: 0, shown: 0 };
+                      const canLoadMore = pill.count > loadedShown.loaded;
+                      const isLoadingMore = loadingMoreCategory === pill.key;
+                      const loadMoreCount = Math.min(BASIS_OF_RECORD_LOAD_MORE_BATCH, pill.count - loadedShown.loaded);
                       return (
+                        <div key={pill.key}>
                         <label
-                          key={pill.key}
                           className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
-                          onMouseEnter={() => setHoveredType(pill.key)}
-                          onMouseLeave={() => setHoveredType(null)}
-                          title={loadedShown ? `${loadedShown.shown.toLocaleString()} of ${loadedShown.loaded.toLocaleString()} loaded records in this category also pass your other active filters` : undefined}
+                          title={`${pill.count.toLocaleString()} total across all of GBIF. ${loadedShown.loaded.toLocaleString()} loaded in your current sample. ${loadedShown.shown.toLocaleString()} of those also pass your other active filters (cleaned).`}
                         >
                           <input
                             type="checkbox"
@@ -1500,129 +1170,64 @@ export default function OccurrenceMapRow({
                             onChange={() => toggleType(pill.key)}
                             className="w-3 h-3 rounded accent-emerald-500 shrink-0"
                           />
-                          <span className={active ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-400 dark:text-zinc-500"}>
+                          <span className={`flex-1 min-w-0 ${active ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-400 dark:text-zinc-500"}`}>
                             {pill.label}
                           </span>
-                          <span className="ml-auto flex flex-col items-end shrink-0 leading-tight">
-                            <span className={`tabular-nums ${active ? "text-emerald-500 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"}`}>
+                          {!isFullSample && (
+                            <span className="w-14 text-right tabular-nums shrink-0 text-zinc-400 dark:text-zinc-500">
                               {pill.count.toLocaleString()}
                             </span>
-                            {loadedShown && (
-                              <span className="text-[10px] tabular-nums text-zinc-400 dark:text-zinc-500">
-                                {loadedShown.shown.toLocaleString()} of {loadedShown.loaded.toLocaleString()} shown
-                              </span>
-                            )}
+                          )}
+                          <span className="w-16 text-right tabular-nums shrink-0 text-zinc-400 dark:text-zinc-500">
+                            {(isFullSample ? pill.count : loadedShown.loaded).toLocaleString()}
+                          </span>
+                          <span className={`w-12 text-right tabular-nums shrink-0 ${active ? "text-emerald-500 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"}`}>
+                            {loadedShown.shown.toLocaleString()}
                           </span>
                         </label>
+                        {canLoadMore && (
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              loadMoreForCategory(pill.key);
+                            }}
+                            disabled={loadingMoreCategory != null}
+                            className="block pl-8 pr-3 -mt-1 pb-1.5 text-[10px] text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          >
+                            {isLoadingMore ? "(loading…)" : `(load ${loadMoreCount.toLocaleString()} more)`}
+                          </button>
+                        )}
+                        </div>
                       );
                     })}
+                    {(() => {
+                      const totalCount = pillDefs.reduce((sum, p) => sum + p.count, 0);
+                      const totalLoaded = pillDefs.reduce((sum, p) => sum + (basisLoadedShownCounts[p.key]?.loaded ?? 0), 0);
+                      const totalShown = pillDefs.reduce((sum, p) => sum + (basisLoadedShownCounts[p.key]?.shown ?? 0), 0);
+                      return (
+                        <div className="flex items-center gap-2 px-3 py-1.5 mt-1 border-t border-zinc-100 dark:border-zinc-800 text-xs font-medium">
+                          <span className="w-3 shrink-0" />
+                          <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">Total</span>
+                          {!isFullSample && (
+                            <span className="w-14 text-right tabular-nums shrink-0 text-zinc-500 dark:text-zinc-400">
+                              {totalCount.toLocaleString()}
+                            </span>
+                          )}
+                          <span className="w-12 text-right tabular-nums shrink-0 text-zinc-500 dark:text-zinc-400">
+                            {(isFullSample ? totalCount : totalLoaded).toLocaleString()}
+                          </span>
+                          <span className="w-12 text-right tabular-nums shrink-0 text-emerald-600 dark:text-emerald-400">
+                            {totalShown.toLocaleString()}
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
-              {loadingBreakdown && (
-                <div className="flex items-center gap-2 text-zinc-400 text-xs">
-                  <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  Loading...
-                </div>
-              )}
-
               {/* Separator */}
               <div className="w-px h-5 bg-zinc-200 dark:bg-zinc-700 mx-0.5 hidden sm:block" />
-
-              {/* Year range trimmer */}
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 whitespace-nowrap">Obs. by year</span>
-                <span className="text-[11px] text-zinc-500 dark:text-zinc-400 tabular-nums whitespace-nowrap">
-                  {yearRange[0]}
-                </span>
-                <YearRangeTrimmer
-                  features={occurrences.filter((o) => {
-                    if (!checkedTypes[classifyOccurrence(o) as keyof typeof checkedTypes]) return false;
-                    if (maxUncertainty != null) {
-                      const u = o.properties.coordinateUncertaintyInMeters;
-                      if (u == null || u > maxUncertainty) return false;
-                    }
-                    if (o.properties.qualityFlags?.some((f) => appliedChecks[f as QualityFlag])) return false;
-                    return true;
-                  })}
-                  yearRange={yearRange}
-                  onRangeChange={handleYearRangeChange}
-                  assessmentYear={assessmentYear}
-                  hoveredYear={hoveredYear}
-                  onHoverYear={setHoveredYear}
-                  animatingYear={animatingDate != null
-                    ? parseInt(animatingDate.slice(0, 4)) || null
-                    : null}
-                  onAnimationScrub={handleAnimationScrub}
-                  className="w-32 sm:w-44 h-8"
-                />
-                <span className="text-[11px] text-zinc-500 dark:text-zinc-400 tabular-nums whitespace-nowrap">
-                  {yearRange[1]}
-                </span>
-                {/* Play/pause animation */}
-                <button
-                  onClick={() => {
-                    if (isPlaying) {
-                      if (animationRef.current) clearInterval(animationRef.current);
-                      animationRef.current = null;
-                      setIsPlaying(false);
-                    } else {
-                      // Reset to start if at the end
-                      if (animatingDateIdx != null && animatingDateIdx >= animationDateRange.totalDays - 1) {
-                        setAnimatingDateIdx(0);
-                      } else if (animatingDateIdx == null) {
-                        setAnimatingDateIdx(0);
-                      }
-                      setIsPlaying(true);
-                    }
-                  }}
-                  className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                  title={isPlaying ? "Pause" : "Play timeline"}
-                  disabled={animationDateRange.totalDays === 0}
-                >
-                  {isPlaying ? (
-                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
-                    </svg>
-                  ) : (
-                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M8 5v14l11-7z" />
-                    </svg>
-                  )}
-                </button>
-                {(isPlaying || animatingDateIdx != null) && (
-                  <>
-                    <button
-                      onClick={() => {
-                        if (animationRef.current) clearInterval(animationRef.current);
-                        animationRef.current = null;
-                        setIsPlaying(false);
-                        setAnimatingDateIdx(null);
-                      }}
-                      className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                      title="Stop animation"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                        <rect x="6" y="6" width="12" height="12" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={() => setPlaybackSpeed((s) => s === 1 ? 2 : s === 2 ? 3 : s === 3 ? 5 : 1)}
-                      className="px-1.5 py-0.5 rounded text-[10px] font-medium tabular-nums border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 dark:text-zinc-400 transition-colors"
-                      title="Playback speed"
-                    >
-                      {playbackSpeed}x
-                    </button>
-                  </>
-                )}
-              </div>
-
-              {/* Separator */}
-              <div className="w-px h-5 bg-zinc-200 dark:bg-zinc-700 mx-0.5 hidden sm:block" />
-
               {/* Coordinate cleaning — dropdown: max GPS uncertainty + one checkbox per check */}
               <div className="relative" ref={cleaningFilterRef}>
                 <button
@@ -1639,7 +1244,7 @@ export default function OccurrenceMapRow({
                   </svg>
                   Coordinate cleaning
                   <span className="text-[10px] text-zinc-400 tabular-nums">
-                    {flagDefs.filter((d) => appliedChecks[d.key]).length}/{flagDefs.length}
+                    Applied {flagDefs.filter((d) => appliedChecks[d.key]).length} of {flagDefs.length}
                     {maxUncertainty != null && ` · ≤ ${formatUncertainty(maxUncertainty)}`}
                   </span>
                   <svg className={`w-3 h-3 text-zinc-400 transition-transform ${cleaningFilterOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -1647,10 +1252,34 @@ export default function OccurrenceMapRow({
                   </svg>
                 </button>
                 {cleaningFilterOpen && (
-                  <div className="absolute left-0 top-full mt-1 z-50 w-80 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
+                  <div className="absolute left-0 top-full mt-1 z-50 w-80 bg-white/75 dark:bg-zinc-900/75 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
+                    <div className="flex items-center px-3 pb-1 text-[10px] font-medium text-zinc-400 dark:text-zinc-500">
+                      <button
+                        onClick={() => setAppliedChecks((prev) => {
+                          const next = { ...prev };
+                          for (const d of flagDefs) next[d.key] = true;
+                          return next;
+                        })}
+                        className="hover:text-zinc-600 dark:hover:text-zinc-300 hover:underline"
+                      >
+                        Select all
+                      </button>
+                      <span className="text-zinc-300 dark:text-zinc-600 mx-2">·</span>
+                      <button
+                        onClick={() => setAppliedChecks((prev) => {
+                          const next = { ...prev };
+                          for (const d of flagDefs) next[d.key] = false;
+                          return next;
+                        })}
+                        className="hover:text-zinc-600 dark:hover:text-zinc-300 hover:underline"
+                      >
+                        Deselect all
+                      </button>
+                    </div>
                     {flagDefs.map((def) => {
-                      const active = appliedChecks[def.key];
-                      const hasRecords = def.count > 0;
+                      const active = appliedChecks[def.key]; // checked = currently hides matching records
+                      const impact = flagShownCounts[def.key] ?? 0; // how many would flip visibility if toggled
+                      const hasImpact = impact > 0;
                       return (
                         <label
                           key={def.key}
@@ -1663,11 +1292,35 @@ export default function OccurrenceMapRow({
                             onChange={() => toggleCheck(def.key)}
                             className="w-3 h-3 rounded accent-emerald-500 shrink-0"
                           />
-                          <span className={active && hasRecords ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-400 dark:text-zinc-500"}>
+                          <span className={`flex-1 min-w-0 ${hasImpact ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-400 dark:text-zinc-500"}`}>
                             {def.label}
                           </span>
-                          <span className={`ml-auto tabular-nums shrink-0 ${active && hasRecords ? "text-emerald-500 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"}`}>
-                            {def.count.toLocaleString()}
+                          {def.source && (
+                            <a
+                              href={def.source.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={`Reference data source: ${def.source.label}`}
+                              onClick={(e) => {
+                                // Prevent the enclosing <label>'s native click-forwarding from
+                                // toggling the checkbox, without also losing the link's own
+                                // navigation (preventDefault suppresses both, so re-trigger it
+                                // manually).
+                                e.preventDefault();
+                                e.stopPropagation();
+                                window.open(def.source!.url, "_blank", "noopener,noreferrer");
+                              }}
+                              className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
+                            >
+                              <FaInfoCircle className="w-3 h-3" />
+                            </a>
+                          )}
+                          <span className={`ml-auto tabular-nums shrink-0 text-[11px] font-medium ${hasImpact ? "text-zinc-600 dark:text-zinc-300" : "text-zinc-300 dark:text-zinc-600"}`}>
+                            {!hasImpact
+                              ? "0 records"
+                              : active
+                                ? `${impact.toLocaleString()} record${impact === 1 ? "" : "s"} hidden`
+                                : `Hide ${impact.toLocaleString()} record${impact === 1 ? "" : "s"}`}
                           </span>
                         </label>
                       );
@@ -1734,26 +1387,40 @@ export default function OccurrenceMapRow({
                   </div>
                 )}
               </div>
-
+              {!splitView && totalOccurrences != null && (
+                <div className="ml-auto flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-300">
+                  <span>
+                    {isFullSample ? (
+                      <>All <strong>{totalOccurrences.toLocaleString()}</strong> GBIF records loaded.</>
+                    ) : (
+                      <>Loaded <strong>{occurrences.length.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> total GBIF records.</>
+                    )}
+                    {filteredOccurrences.length < occurrences.length && (
+                      <> Showing <strong>{filteredOccurrences.length.toLocaleString()}</strong> after filters.</>
+                    )}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
           {/* ── Left sidebar (iNat photos + contributors) + Map (right) ── */}
           <div className="flex flex-col sm:flex-row sm:items-stretch gap-2">
-            {/* Left column — iNat photos on top, contributors below (hidden if no iNat data) */}
+            {/* Left column — iNat photo gallery only (hidden if no iNat data); narrow
+                since it's just a 2-col thumbnail grid now, leaving more room for the map */}
             {(!breakdown || breakdown.iNaturalist > 0) && (
-            <div className="sm:w-1/3 shrink-0 flex flex-col gap-2">
+            <div className="sm:w-44 shrink-0 flex flex-col gap-2">
               {/* iNat photo grid — only shown when photos exist or loading */}
               {(inatPhotos.length > 0 || loadingInatPhotos) && (
                 <div className="flex flex-col bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden relative z-10">
                   {/* Header */}
                   <div className="px-2 py-1.5 text-xs sm:text-[10px] font-medium text-zinc-500 dark:text-zinc-400 text-center border-b border-zinc-100 dark:border-zinc-800">
-                    iNaturalist Photos {inatTotalCount > 0 && <span className="tabular-nums">— {inatTotalCount.toLocaleString()} observations</span>}
+                    iNaturalist Observations
                   </div>
                   {inatPhotos.length > 0 ? (
                     <>
-                      {/* Photos — 5-col grid */}
-                      <div className={`grid grid-cols-5 gap-1 p-1.5 ${loadingInatPhotos ? "opacity-50" : ""}`}>
+                      {/* Photos — 2-col x 5-row grid */}
+                      <div className={`grid grid-cols-2 gap-1 p-1.5 ${loadingInatPhotos ? "opacity-50" : ""}`}>
                         {inatPhotos.slice(0, pageSize).map((obs, idx) => (
                           <div key={`${inatPage}-${idx}`} className="aspect-square">
                             <InatPhotoWithPreview
@@ -1812,14 +1479,11 @@ export default function OccurrenceMapRow({
                   )}
                 </div>
               )}
-
-              {/* Observers / Identifiers chart (memoized to avoid rerender on hover state changes) */}
-              {inatContributorsChart}
             </div>
             )}
 
             {/* Map(s) — takes remaining width, stretches to match left column */}
-            <div className="flex-1 min-w-0 flex flex-col">
+            <div className="flex-1 min-w-0 flex flex-col gap-2">
               {splitView && splitDate ? (
                 <div className="flex flex-col gap-2">
                   {/* Split view control bar */}
