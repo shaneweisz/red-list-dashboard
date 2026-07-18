@@ -1468,114 +1468,9 @@ export default function OccurrenceMapRow({
     <div className="bg-zinc-50 dark:bg-zinc-800/50">
       <div className="p-2">
         <div className="flex flex-col gap-2">
-          {/* Sample size summary — up top so it's clear how much of the true GBIF
-              total is actually loaded before you start filtering it */}
-          {!splitView && totalOccurrences != null && totalOccurrences > occurrences.length && (
-            <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-300">
-              <span>
-                Loaded <strong>{occurrences.length.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> total GBIF records.
-                {filteredOccurrences.length < occurrences.length && (
-                  <> Showing <strong>{filteredOccurrences.length.toLocaleString()}</strong> after filters.</>
-                )}
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span>Load more:</span>
-                <select
-                  value={sampleSize}
-                  onChange={(e) => setSampleSize(parseInt(e.target.value))}
-                  className="text-xs px-1.5 py-0.5 rounded border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-300"
-                >
-                  {SAMPLE_SIZE_OPTIONS.map((n) => (
-                    <option key={n} value={n}>{n.toLocaleString()}</option>
-                  ))}
-                </select>
-              </span>
-            </div>
-          )}
           {/* ── Filter Bar ── */}
           <div className="p-2 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700">
             <div className="flex flex-wrap items-center gap-2">
-              {/* Basis of Record — dropdown checklist */}
-              <div className="relative" ref={filtersRef}>
-                <button
-                  onClick={() => setFiltersOpen(!filtersOpen)}
-                  className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border text-xs transition-colors ${
-                    filtersOpen
-                      ? "bg-zinc-100 dark:bg-zinc-800 border-zinc-400 dark:border-zinc-500"
-                      : "border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                  } text-zinc-700 dark:text-zinc-300`}
-                >
-                  <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                  </svg>
-                  Basis of Record
-                  {!loadingBreakdown && (
-                    <span className="text-[10px] text-zinc-400 tabular-nums">
-                      {pillDefs.filter(p => checkedTypes[p.key]).length}/{pillDefs.length}
-                    </span>
-                  )}
-                  <svg className={`w-3 h-3 text-zinc-400 transition-transform ${filtersOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                {filtersOpen && !loadingBreakdown && (
-                  <div className="absolute left-0 top-full mt-1 z-50 w-96 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
-                    <div className="flex items-center gap-2 px-3 pb-1 text-[10px] font-medium text-zinc-400 dark:text-zinc-500">
-                      <span className="flex-1 min-w-0" />
-                      {!isFullSample && <span className="w-14 text-right shrink-0">Total</span>}
-                      <span className="w-12 text-right shrink-0">{isFullSample ? "Total" : "Loaded"}</span>
-                      <span className="w-12 text-right shrink-0">Shown</span>
-                    </div>
-                    {pillDefs.map((pill) => {
-                      const active = checkedTypes[pill.key];
-                      const loadedShown = basisLoadedShownCounts[pill.key] ?? { loaded: 0, shown: 0 };
-                      return (
-                        <label
-                          key={pill.key}
-                          className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
-                          onMouseEnter={() => setHoveredType(pill.key)}
-                          onMouseLeave={() => setHoveredType(null)}
-                          title={`${pill.count.toLocaleString()} total across all of GBIF. ${loadedShown.loaded.toLocaleString()} loaded in your current sample. ${loadedShown.shown.toLocaleString()} of those also pass your other active filters, so would be shown.`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={active}
-                            onChange={() => toggleType(pill.key)}
-                            className="w-3 h-3 rounded accent-emerald-500 shrink-0"
-                          />
-                          <span className={`flex-1 min-w-0 truncate ${active ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-400 dark:text-zinc-500"}`}>
-                            {pill.label}
-                          </span>
-                          {!isFullSample && (
-                            <span className="w-14 text-right tabular-nums shrink-0 text-zinc-400 dark:text-zinc-500">
-                              {pill.count.toLocaleString()}
-                            </span>
-                          )}
-                          <span className="w-12 text-right tabular-nums shrink-0 text-zinc-400 dark:text-zinc-500">
-                            {(isFullSample ? pill.count : loadedShown.loaded).toLocaleString()}
-                          </span>
-                          <span className={`w-12 text-right tabular-nums shrink-0 ${active ? "text-emerald-500 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"}`}>
-                            {loadedShown.shown.toLocaleString()}
-                          </span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-              {loadingBreakdown && (
-                <div className="flex items-center gap-2 text-zinc-400 text-xs">
-                  <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  Loading...
-                </div>
-              )}
-
-              {/* Separator */}
-              <div className="w-px h-5 bg-zinc-200 dark:bg-zinc-700 mx-0.5 hidden sm:block" />
-
               {/* Coordinate cleaning — dropdown: max GPS uncertainty + one checkbox per check */}
               <div className="relative" ref={cleaningFilterRef}>
                 <button
@@ -1621,7 +1516,7 @@ export default function OccurrenceMapRow({
                             {def.label}
                           </span>
                           <span className={`ml-auto tabular-nums shrink-0 text-[11px] font-medium ${hasImpact ? "text-zinc-600 dark:text-zinc-300" : "text-zinc-300 dark:text-zinc-600"}`}>
-                            {active ? "Show" : "Hide"} {impact.toLocaleString()}
+                            {active ? `${impact.toLocaleString()} records hidden` : `Hide ${impact.toLocaleString()} records`}
                           </span>
                         </label>
                       );
@@ -1688,6 +1583,109 @@ export default function OccurrenceMapRow({
                   </div>
                 )}
               </div>
+
+              {/* Separator */}
+              <div className="w-px h-5 bg-zinc-200 dark:bg-zinc-700 mx-0.5 hidden sm:block" />
+
+              {/* Basis of Record — dropdown checklist */}
+              <div className="relative" ref={filtersRef}>
+                <button
+                  onClick={() => setFiltersOpen(!filtersOpen)}
+                  className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border text-xs transition-colors ${
+                    filtersOpen
+                      ? "bg-zinc-100 dark:bg-zinc-800 border-zinc-400 dark:border-zinc-500"
+                      : "border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                  } text-zinc-700 dark:text-zinc-300`}
+                >
+                  <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                  </svg>
+                  Basis of Record
+                  {!loadingBreakdown && (
+                    <span className="text-[10px] text-zinc-400 tabular-nums">
+                      {pillDefs.filter(p => checkedTypes[p.key]).length}/{pillDefs.length}
+                    </span>
+                  )}
+                  <svg className={`w-3 h-3 text-zinc-400 transition-transform ${filtersOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {filtersOpen && !loadingBreakdown && (
+                  <div className="absolute left-0 top-full mt-1 z-50 w-96 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
+                    <div className="flex items-center gap-2 px-3 pb-1 text-[10px] font-medium text-zinc-400 dark:text-zinc-500">
+                      <span className="flex-1 min-w-0" />
+                      {!isFullSample && <span className="w-14 text-right shrink-0">Total</span>}
+                      <span className="w-12 text-right shrink-0">{isFullSample ? "Total" : "Loaded"}</span>
+                      <span className="w-12 text-right shrink-0">Cleaned</span>
+                    </div>
+                    {pillDefs.map((pill) => {
+                      const active = checkedTypes[pill.key];
+                      const loadedShown = basisLoadedShownCounts[pill.key] ?? { loaded: 0, shown: 0 };
+                      return (
+                        <label
+                          key={pill.key}
+                          className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
+                          onMouseEnter={() => setHoveredType(pill.key)}
+                          onMouseLeave={() => setHoveredType(null)}
+                          title={`${pill.count.toLocaleString()} total across all of GBIF. ${loadedShown.loaded.toLocaleString()} loaded in your current sample. ${loadedShown.shown.toLocaleString()} of those also pass your other active filters (cleaned).`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={active}
+                            onChange={() => toggleType(pill.key)}
+                            className="w-3 h-3 rounded accent-emerald-500 shrink-0"
+                          />
+                          <span className={`flex-1 min-w-0 truncate ${active ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-400 dark:text-zinc-500"}`}>
+                            {pill.label}
+                          </span>
+                          {!isFullSample && (
+                            <span className="w-14 text-right tabular-nums shrink-0 text-zinc-400 dark:text-zinc-500">
+                              {pill.count.toLocaleString()}
+                            </span>
+                          )}
+                          <span className="w-12 text-right tabular-nums shrink-0 text-zinc-400 dark:text-zinc-500">
+                            {(isFullSample ? pill.count : loadedShown.loaded).toLocaleString()}
+                          </span>
+                          <span className={`w-12 text-right tabular-nums shrink-0 ${active ? "text-emerald-500 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"}`}>
+                            {loadedShown.shown.toLocaleString()}
+                          </span>
+                        </label>
+                      );
+                    })}
+                    {(() => {
+                      const totalCount = pillDefs.reduce((sum, p) => sum + p.count, 0);
+                      const totalLoaded = pillDefs.reduce((sum, p) => sum + (basisLoadedShownCounts[p.key]?.loaded ?? 0), 0);
+                      const totalShown = pillDefs.reduce((sum, p) => sum + (basisLoadedShownCounts[p.key]?.shown ?? 0), 0);
+                      return (
+                        <div className="flex items-center gap-2 px-3 py-1.5 mt-1 border-t border-zinc-100 dark:border-zinc-800 text-xs font-medium">
+                          <span className="w-3 shrink-0" />
+                          <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">Total</span>
+                          {!isFullSample && (
+                            <span className="w-14 text-right tabular-nums shrink-0 text-zinc-500 dark:text-zinc-400">
+                              {totalCount.toLocaleString()}
+                            </span>
+                          )}
+                          <span className="w-12 text-right tabular-nums shrink-0 text-zinc-500 dark:text-zinc-400">
+                            {(isFullSample ? totalCount : totalLoaded).toLocaleString()}
+                          </span>
+                          <span className="w-12 text-right tabular-nums shrink-0 text-emerald-600 dark:text-emerald-400">
+                            {totalShown.toLocaleString()}
+                          </span>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+              {loadingBreakdown && (
+                <div className="flex items-center gap-2 text-zinc-400 text-xs">
+                  <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Loading...
+                </div>
+              )}
 
               {/* Year range trimmer */}
               <div className="flex items-center gap-1.5">
@@ -1860,7 +1858,31 @@ export default function OccurrenceMapRow({
             )}
 
             {/* Map(s) — takes remaining width, stretches to match left column */}
-            <div className="flex-1 min-w-0 flex flex-col">
+            <div className="flex-1 min-w-0 flex flex-col gap-2">
+              {/* Sample size summary — right above the map so it's clear how much of the
+                  true GBIF total is actually loaded before you start filtering it */}
+              {!splitView && totalOccurrences != null && totalOccurrences > occurrences.length && (
+                <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-300">
+                  <span>
+                    Loaded <strong>{occurrences.length.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> total GBIF records.
+                    {filteredOccurrences.length < occurrences.length && (
+                      <> Showing <strong>{filteredOccurrences.length.toLocaleString()}</strong> after filters.</>
+                    )}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span>Load more:</span>
+                    <select
+                      value={sampleSize}
+                      onChange={(e) => setSampleSize(parseInt(e.target.value))}
+                      className="text-xs px-1.5 py-0.5 rounded border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-300"
+                    >
+                      {SAMPLE_SIZE_OPTIONS.map((n) => (
+                        <option key={n} value={n}>{n.toLocaleString()}</option>
+                      ))}
+                    </select>
+                  </span>
+                </div>
+              )}
               {splitView && splitDate ? (
                 <div className="flex flex-col gap-2">
                   {/* Split view control bar */}
