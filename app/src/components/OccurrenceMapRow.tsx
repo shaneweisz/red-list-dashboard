@@ -378,17 +378,11 @@ export default function OccurrenceMapRow({
   const [hoveredFeature, setHoveredFeature] = useState<OccurrenceFeature | null>(null);
   const [hoveredPanel, setHoveredPanel] = useState<string | null>(null);
 
-  // Animation state: step through unique sorted dates
-  const [animatingDateIdx, setAnimatingDateIdx] = useState<number | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [playbackSpeed, setPlaybackSpeed] = useState(2);
-  const animationRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
   // Touch-only device detection (no hover tooltips on touch-only devices)
   // Check for coarse pointer (phone/tablet) rather than maxTouchPoints which is true on Mac trackpads
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   useEffect(() => {
-    setIsTouchDevice(window.matchMedia("(pointer: coarse)").matches && !window.matchMedia("(pointer: fine)").matches);
+    setIsTouchDevice(window.matchMedia("(pointer: coarse)").matches && !window.matchMedia("(pointer: fine)").matches); // eslint-disable-line react-hooks/set-state-in-effect -- detect on mount
   }, []);
 
   // Lookup: gbifID → InatObservation (for showing photos in map popups)
@@ -407,7 +401,7 @@ export default function OccurrenceMapRow({
 
   // Fetch occurrences (re-fetches when sample size changes)
   useEffect(() => {
-    setLoadingOccurrences(true);
+    setLoadingOccurrences(true); // eslint-disable-line react-hooks/set-state-in-effect -- loading state for fetch
     const params = new URLSearchParams({
       speciesKey: speciesKey.toString(),
       limit: sampleSize.toString(),
@@ -467,7 +461,7 @@ export default function OccurrenceMapRow({
 
   // Fetch breakdown data
   useEffect(() => {
-    setLoadingBreakdown(true);
+    setLoadingBreakdown(true); // eslint-disable-line react-hooks/set-state-in-effect -- loading state for fetch
     const params = new URLSearchParams();
     if (countryCode) {
       params.set("country", countryCode);
@@ -516,12 +510,12 @@ export default function OccurrenceMapRow({
   // Re-fetch when screen size changes (page size changes)
   useEffect(() => {
     // Reset to page 0 and re-fetch with new page size
-    setInatPage(0);
+    setInatPage(0); // eslint-disable-line react-hooks/set-state-in-effect -- reset pagination on resize
     fetchInatPhotos(0, pageSize);
   }, [pageSize, fetchInatPhotos]);
 
-  // Multi-stage filtering pipeline (before animation)
-  const filteredBeforeAnimation = useMemo(() => {
+  // Multi-stage filtering pipeline
+  const filteredOccurrences = useMemo(() => {
     let result = occurrences;
     // 1. Basis of record checkboxes
     result = result.filter((o) => checkedTypes[classifyOccurrence(o) as keyof typeof checkedTypes]);
@@ -588,100 +582,6 @@ export default function OccurrenceMapRow({
   const toggleCheck = (key: QualityFlag) => {
     setAppliedChecks((prev) => ({ ...prev, [key]: !prev[key] }));
   };
-
-  // Continuous date range for animation (every day from earliest to latest)
-  const animationDateRange = useMemo(() => {
-    let minDate: string | null = null;
-    let maxDate: string | null = null;
-    for (const o of filteredBeforeAnimation) {
-      const d = o.properties.eventDate ?? (o.properties.year != null ? `${o.properties.year}-01-01` : null);
-      if (d == null) continue;
-      if (minDate == null || d < minDate) minDate = d;
-      if (maxDate == null || d > maxDate) maxDate = d;
-    }
-    if (!minDate || !maxDate) return { start: null, totalDays: 0 };
-    const startMs = new Date(minDate).getTime();
-    const endMs = new Date(maxDate).getTime();
-    const totalDays = Math.floor((endMs - startMs) / 86400000) + 1;
-    return { start: startMs, totalDays };
-  }, [filteredBeforeAnimation]);
-
-  // Animation playback interval (date by date)
-  useEffect(() => {
-    if (!isPlaying) return;
-    if (animatingDateIdx == null) {
-      setAnimatingDateIdx(0);
-    }
-    const totalDays = animationDateRange.totalDays;
-    // Base step: aim for ~20s animation at 1x, scale with speed
-    const baseStep = Math.max(1, Math.ceil(totalDays / (20 * 60)));
-    const step = baseStep * playbackSpeed;
-    animationRef.current = setInterval(() => {
-      setAnimatingDateIdx((prev) => {
-        const cur = prev ?? 0;
-        const next = cur + step;
-        if (next >= totalDays) {
-          setIsPlaying(false);
-          return totalDays - 1;
-        }
-        return next;
-      });
-    }, 16);
-    return () => {
-      if (animationRef.current) clearInterval(animationRef.current);
-    };
-  }, [isPlaying, playbackSpeed]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // The current animation date cutoff
-  const animatingDate = useMemo(() => {
-    if (animatingDateIdx == null || animationDateRange.start == null) return null;
-    const idx = Math.min(animatingDateIdx, animationDateRange.totalDays - 1);
-    const d = new Date(animationDateRange.start + idx * 86400000);
-    return d.toISOString().slice(0, 10);
-  }, [animatingDateIdx, animationDateRange]);
-
-  // Apply animation filter
-  const filteredOccurrences = useMemo(() => {
-    if (animatingDate != null) {
-      return filteredBeforeAnimation.filter((o) => {
-        const d = o.properties.eventDate ?? (o.properties.year != null ? String(o.properties.year) : null);
-        return d != null && d <= animatingDate;
-      });
-    }
-    return filteredBeforeAnimation;
-  }, [filteredBeforeAnimation, animatingDate]);
-
-  // Records hidden by the currently-hovered row's own filter, but which would be
-  // visible if just that filter were relaxed (i.e. they still pass every other
-  // active filter) — the same "impact" set the dropdown row's own count describes.
-  // Hovering a row should reveal these on the map even though they're otherwise
-  // hidden, so you can see what a checkbox is actually excluding.
-  const hoverRevealedOccurrences = useMemo(() => {
-    if (hoveredFlag == null && hoveredType == null) return [];
-    return occurrences.filter((o) => {
-      if (maxUncertainty != null) {
-        const u = o.properties.coordinateUncertaintyInMeters;
-        if (u == null || u > maxUncertainty) return false;
-      }
-      if (hoveredFlag != null) {
-        const flags = o.properties.qualityFlags ?? [];
-        if (!flags.includes(hoveredFlag)) return false;
-        if (!checkedTypes[classifyOccurrence(o) as keyof typeof checkedTypes]) return false;
-        return !flags.some((f) => f !== hoveredFlag && appliedChecks[f as QualityFlag]);
-      }
-      if (classifyOccurrence(o) !== hoveredType) return false;
-      return !o.properties.qualityFlags?.some((f) => appliedChecks[f as QualityFlag]);
-    });
-  }, [hoveredFlag, hoveredType, occurrences, checkedTypes, maxUncertainty, appliedChecks]);
-
-  // Occurrences actually passed to the map: the real filtered set, plus anything
-  // the current hover should reveal that isn't already in it.
-  const hoverAugmentedOccurrences = useMemo(() => {
-    if (hoverRevealedOccurrences.length === 0) return filteredOccurrences;
-    const seen = new Set(filteredOccurrences.map((o) => o.properties.gbifID));
-    const extra = hoverRevealedOccurrences.filter((o) => !seen.has(o.properties.gbifID));
-    return extra.length === 0 ? filteredOccurrences : [...filteredOccurrences, ...extra];
-  }, [filteredOccurrences, hoverRevealedOccurrences]);
 
   // Bounding box from filtered occurrences
   const filteredBbox = useMemo<[number, number, number, number] | null>(() => {
@@ -882,7 +782,7 @@ export default function OccurrenceMapRow({
 
   // Fit bounds when bbox changes (may need to wait for map to be ready)
   useEffect(() => {
-    if (!filteredBbox || animatingDateIdx != null) return;
+    if (!filteredBbox) return;
     const key = filteredBbox.join(",");
     if (fittedBboxRef.current === key) return;
     if (fitMapToBbox(filteredBbox)) {
@@ -892,7 +792,7 @@ export default function OccurrenceMapRow({
       // Map not ready yet — store as pending for onLoad
       pendingBboxRef.current = filteredBbox;
     }
-  }, [filteredBbox, animatingDateIdx, fitMapToBbox]);
+  }, [filteredBbox, fitMapToBbox]);
 
   // Called when the MapGL component finishes loading
   const handleMapLoad = useCallback(() => {
@@ -970,10 +870,6 @@ export default function OccurrenceMapRow({
     panelBbox: [number, number, number, number] | null,
     label: string | null,
     panelId: string = "main",
-    // Count shown in the legend/animating badges — separate from panelOccurrences
-    // since that can include hover-revealed records temporarily added just for
-    // rendering, which shouldn't make the displayed counts jump around.
-    displayCount: number = panelOccurrences.length,
   ) => {
     const styledGeoJson = buildStyledFeatureCollection(panelOccurrences);
 
@@ -1125,67 +1021,6 @@ export default function OccurrenceMapRow({
                   </div>
                 </>
               )}
-              {/* Play/pause animation (independent of assessment year) */}
-              {!label && (
-                <>
-                  <span className="text-zinc-300 dark:text-zinc-600">|</span>
-                  <button
-                    onClick={() => {
-                      if (isPlaying) {
-                        if (animationRef.current) clearInterval(animationRef.current);
-                        animationRef.current = null;
-                        setIsPlaying(false);
-                      } else {
-                        // Reset to start if at the end
-                        if (animatingDateIdx != null && animatingDateIdx >= animationDateRange.totalDays - 1) {
-                          setAnimatingDateIdx(0);
-                        } else if (animatingDateIdx == null) {
-                          setAnimatingDateIdx(0);
-                        }
-                        setIsPlaying(true);
-                      }
-                    }}
-                    className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                    title={isPlaying ? "Pause" : "Play timeline"}
-                    disabled={animationDateRange.totalDays === 0}
-                  >
-                    {isPlaying ? (
-                      <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
-                      </svg>
-                    ) : (
-                      <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M8 5v14l11-7z" />
-                      </svg>
-                    )}
-                  </button>
-                  {(isPlaying || animatingDateIdx != null) && (
-                    <>
-                      <button
-                        onClick={() => {
-                          if (animationRef.current) clearInterval(animationRef.current);
-                          animationRef.current = null;
-                          setIsPlaying(false);
-                          setAnimatingDateIdx(null);
-                        }}
-                        className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                        title="Stop animation"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                          <rect x="6" y="6" width="12" height="12" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => setPlaybackSpeed((s) => s === 1 ? 2 : s === 2 ? 3 : s === 3 ? 5 : 1)}
-                        className="px-1.5 py-0.5 rounded text-[10px] font-medium tabular-nums border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 dark:text-zinc-400 transition-colors"
-                        title="Playback speed"
-                      >
-                        {playbackSpeed}x
-                      </button>
-                    </>
-                  )}
-                </>
-              )}
               {/* Toggle color mode / split view (only when assessment year is available) */}
               {!label && assessmentYear && (
                 <>
@@ -1202,9 +1037,6 @@ export default function OccurrenceMapRow({
                       onClick={() => {
                         if (!splitDate && assessmentDate) setSplitDate(assessmentDate.split("T")[0]);
                         setSplitView(true);
-                        setIsPlaying(false);
-                        setAnimatingDateIdx(null);
-                        if (animationRef.current) clearInterval(animationRef.current);
                       }}
                       className="px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-[10px] text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-1"
                     >
@@ -1217,13 +1049,6 @@ export default function OccurrenceMapRow({
                   )}
                 </>
               )}
-            </div>
-          )}
-          {/* Animating badge */}
-          {!splitView && animatingDate != null && (
-            <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[1000] bg-amber-500 text-white text-sm font-bold px-3 py-1 rounded-full shadow-md tabular-nums flex items-center gap-2">
-              <span>{animatingDate}</span>
-              <span className="text-xs font-normal text-amber-100">{displayCount} / {filteredBeforeAnimation.length}</span>
             </div>
           )}
           {/* Label badge for split view */}
@@ -1318,7 +1143,7 @@ export default function OccurrenceMapRow({
                     <div className="flex items-center gap-2 px-3 pb-1 text-[10px] font-medium text-zinc-400 dark:text-zinc-500">
                       <span className="flex-1 min-w-0" />
                       {!isFullSample && <span className="w-14 text-right shrink-0">Total</span>}
-                      <span className="w-12 text-right shrink-0">{isFullSample ? "Total" : "Loaded"}</span>
+                      <span className="w-16 text-right shrink-0">{isFullSample ? "Total" : "Loaded"}</span>
                       <span className="w-12 text-right shrink-0">Cleaned</span>
                     </div>
                     {pillDefs.map((pill) => {
@@ -1326,50 +1151,59 @@ export default function OccurrenceMapRow({
                       const loadedShown = basisLoadedShownCounts[pill.key] ?? { loaded: 0, shown: 0 };
                       const canLoadMore = pill.count > loadedShown.loaded;
                       const isLoadingMore = loadingMoreCategory === pill.key;
+                      const loadMoreCount = Math.min(BASIS_OF_RECORD_LOAD_MORE_BATCH, pill.count - loadedShown.loaded);
                       return (
-                        <div key={pill.key}>
-                          <label
-                            className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
-                            onMouseEnter={loadedShown.shown > 0 ? () => setHoveredType(pill.key) : undefined}
-                            onMouseLeave={() => setHoveredType(null)}
-                            title={`${pill.count.toLocaleString()} total across all of GBIF. ${loadedShown.loaded.toLocaleString()} loaded in your current sample. ${loadedShown.shown.toLocaleString()} of those also pass your other active filters (cleaned).`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={active}
-                              onChange={() => toggleType(pill.key)}
-                              className="w-3 h-3 rounded accent-emerald-500 shrink-0"
-                            />
-                            <span className={`flex-1 min-w-0 truncate ${active ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-400 dark:text-zinc-500"}`}>
-                              {pill.label}
+                        <label
+                          key={pill.key}
+                          className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
+                          onMouseEnter={loadedShown.shown > 0 ? () => setHoveredType(pill.key) : undefined}
+                          onMouseLeave={() => setHoveredType(null)}
+                          title={`${pill.count.toLocaleString()} total across all of GBIF. ${loadedShown.loaded.toLocaleString()} loaded in your current sample. ${loadedShown.shown.toLocaleString()} of those also pass your other active filters (cleaned).`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={active}
+                            onChange={() => toggleType(pill.key)}
+                            className="w-3 h-3 rounded accent-emerald-500 shrink-0"
+                          />
+                          <span className={`flex-1 min-w-0 truncate ${active ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-400 dark:text-zinc-500"}`}>
+                            {pill.label}
+                          </span>
+                          {!isFullSample && (
+                            <span className="w-14 text-right tabular-nums shrink-0 text-zinc-400 dark:text-zinc-500">
+                              {pill.count.toLocaleString()}
                             </span>
-                            {!isFullSample && (
-                              <span className="w-14 text-right tabular-nums shrink-0 text-zinc-400 dark:text-zinc-500">
-                                {pill.count.toLocaleString()}
-                              </span>
-                            )}
-                            <span className="w-12 text-right tabular-nums shrink-0 text-zinc-400 dark:text-zinc-500">
-                              {(isFullSample ? pill.count : loadedShown.loaded).toLocaleString()}
-                            </span>
-                            <span className={`w-12 text-right tabular-nums shrink-0 ${active ? "text-emerald-500 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"}`}>
-                              {loadedShown.shown.toLocaleString()}
-                            </span>
-                          </label>
-                          {canLoadMore && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                loadMoreForCategory(pill.key);
-                              }}
-                              disabled={loadingMoreCategory != null}
-                              className="w-full text-left pl-8 pr-3 pb-1.5 -mt-0.5 text-[10px] text-blue-600 dark:text-blue-400 hover:underline disabled:no-underline disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              {isLoadingMore
-                                ? "Loading more…"
-                                : `Load ${Math.min(BASIS_OF_RECORD_LOAD_MORE_BATCH, pill.count - loadedShown.loaded).toLocaleString()} more`}
-                            </button>
                           )}
-                        </div>
+                          <span className="w-16 shrink-0 flex items-center justify-end gap-0.5 text-zinc-400 dark:text-zinc-500">
+                            <span className="tabular-nums">{(isFullSample ? pill.count : loadedShown.loaded).toLocaleString()}</span>
+                            {canLoadMore && (
+                              <button
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  loadMoreForCategory(pill.key);
+                                }}
+                                disabled={loadingMoreCategory != null}
+                                title={`Load ${loadMoreCount.toLocaleString()} more`}
+                                className="shrink-0 p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                              >
+                                {isLoadingMore ? (
+                                  <svg className="w-2.5 h-2.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                  </svg>
+                                ) : (
+                                  <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                                  </svg>
+                                )}
+                              </button>
+                            )}
+                          </span>
+                          <span className={`w-12 text-right tabular-nums shrink-0 ${active ? "text-emerald-500 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"}`}>
+                            {loadedShown.shown.toLocaleString()}
+                          </span>
+                        </label>
                       );
                     })}
                     {(() => {
@@ -1446,9 +1280,11 @@ export default function OccurrenceMapRow({
                             {def.label}
                           </span>
                           <span className={`ml-auto tabular-nums shrink-0 text-[11px] font-medium ${hasImpact ? "text-zinc-600 dark:text-zinc-300" : "text-zinc-300 dark:text-zinc-600"}`}>
-                            {active
-                              ? `${impact.toLocaleString()} record${impact === 1 ? "" : "s"} hidden`
-                              : `Hide ${impact.toLocaleString()} record${impact === 1 ? "" : "s"}`}
+                            {!hasImpact
+                              ? "0 records"
+                              : active
+                                ? `${impact.toLocaleString()} record${impact === 1 ? "" : "s"} hidden`
+                                : `Hide ${impact.toLocaleString()} record${impact === 1 ? "" : "s"}`}
                           </span>
                         </label>
                       );
@@ -1667,7 +1503,7 @@ export default function OccurrenceMapRow({
                   </div>
                 </div>
               ) : (
-                renderMapPanel(hoverAugmentedOccurrences, filteredBbox, null, "main", filteredOccurrences.length)
+                renderMapPanel(filteredOccurrences, filteredBbox, null)
               )}
             </div>
           </div>
