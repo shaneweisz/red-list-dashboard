@@ -1146,8 +1146,8 @@ export default function OccurrenceMapRow({
                       const isLoadingMore = loadingMoreCategory === pill.key;
                       const loadMoreCount = Math.min(BASIS_OF_RECORD_LOAD_MORE_BATCH, pill.count - loadedShown.loaded);
                       return (
+                        <div key={pill.key}>
                         <label
-                          key={pill.key}
                           className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
                           title={`${pill.count.toLocaleString()} total across all of GBIF. ${loadedShown.loaded.toLocaleString()} loaded in your current sample. ${loadedShown.shown.toLocaleString()} of those also pass your other active filters (cleaned).`}
                         >
@@ -1165,26 +1165,27 @@ export default function OccurrenceMapRow({
                               {pill.count.toLocaleString()}
                             </span>
                           )}
-                          <span className="shrink-0 text-right text-zinc-400 dark:text-zinc-500 whitespace-nowrap">
-                            <span className="w-16 inline-block tabular-nums">{(isFullSample ? pill.count : loadedShown.loaded).toLocaleString()}</span>
-                            {canLoadMore && (
-                              <button
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  loadMoreForCategory(pill.key);
-                                }}
-                                disabled={loadingMoreCategory != null}
-                                className="ml-1 text-[10px] hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                              >
-                                {isLoadingMore ? "(loading…)" : `(load ${loadMoreCount.toLocaleString()} more)`}
-                              </button>
-                            )}
+                          <span className="w-16 text-right tabular-nums shrink-0 text-zinc-400 dark:text-zinc-500">
+                            {(isFullSample ? pill.count : loadedShown.loaded).toLocaleString()}
                           </span>
                           <span className={`w-12 text-right tabular-nums shrink-0 ${active ? "text-emerald-500 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"}`}>
                             {loadedShown.shown.toLocaleString()}
                           </span>
                         </label>
+                        {canLoadMore && (
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              loadMoreForCategory(pill.key);
+                            }}
+                            disabled={loadingMoreCategory != null}
+                            className="block pl-8 pr-3 -mt-1 pb-1.5 text-[10px] text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          >
+                            {isLoadingMore ? "(loading…)" : `(load ${loadMoreCount.toLocaleString()} more)`}
+                          </button>
+                        )}
+                        </div>
                       );
                     })}
                     {(() => {
