@@ -26,16 +26,17 @@ type GbifRecord = {
 };
 
 /**
- * Fetch paginated records from GBIF up to the given limit.
+ * Fetch paginated records from GBIF up to the given limit, starting from startOffset.
  * Returns { results, totalCount }.
  */
 async function fetchPaginated(
   baseParams: URLSearchParams,
-  fetchLimit: number
+  fetchLimit: number,
+  startOffset = 0
 ): Promise<{ results: GbifRecord[]; totalCount: number }> {
   let results: GbifRecord[] = [];
   let totalCount = 0;
-  let offset = 0;
+  let offset = startOffset;
 
   while (results.length < fetchLimit) {
     const pageSize = Math.min(GBIF_PAGE_LIMIT, fetchLimit - results.length);
@@ -57,7 +58,7 @@ async function fetchPaginated(
     results = results.concat(data.results);
     offset += pageSize;
 
-    if (data.endOfRecords || results.length >= totalCount) {
+    if (data.endOfRecords || offset >= totalCount) {
       break;
     }
   }
@@ -71,6 +72,11 @@ export async function GET(request: NextRequest) {
   const country = searchParams.get("country");
   const limit = Math.min(parseInt(searchParams.get("limit") || "500"), 5000);
   const maxUncertainty = searchParams.get("maxUncertainty");
+  // Optional: fetch more records of just one basis-of-record category (e.g. "load
+  // more Preserved specimen records" from the Basis of Record dropdown), starting
+  // after the given offset within that category's own GBIF result set.
+  const basisOfRecord = searchParams.get("basisOfRecord");
+  const offset = Math.max(0, parseInt(searchParams.get("offset") || "0"));
 
   if (!speciesKey) {
     return NextResponse.json(
@@ -94,9 +100,13 @@ export async function GET(request: NextRequest) {
       baseParams.set("coordinateUncertaintyInMeters", `*,${maxUncertainty}`);
     }
 
+    if (basisOfRecord) {
+      baseParams.set("basisOfRecord", basisOfRecord);
+    }
+
     // GBIF default order: year descending, then month ascending within each year,
     // then by gbifID ascending. No custom sort is available via the API.
-    const { results: allResults, totalCount } = await fetchPaginated(baseParams, limit);
+    const { results: allResults, totalCount } = await fetchPaginated(baseParams, limit, offset);
 
     // Convert to GeoJSON
     const validResults = allResults.filter(

@@ -209,6 +209,23 @@ function classifyOccurrence(o: OccurrenceFeature): string {
   return "observation"; // fallback
 }
 
+// Inverse of classifyOccurrence — the GBIF basisOfRecord value to filter
+// /api/occurrences by when loading more of just this category.
+const GBIF_BASIS_OF_RECORD: Record<string, string> = {
+  humanObservation: "HUMAN_OBSERVATION",
+  machineObservation: "MACHINE_OBSERVATION",
+  observation: "OBSERVATION",
+  preservedSpecimen: "PRESERVED_SPECIMEN",
+  fossilSpecimen: "FOSSIL_SPECIMEN",
+  livingSpecimen: "LIVING_SPECIMEN",
+  materialSample: "MATERIAL_SAMPLE",
+  materialCitation: "MATERIAL_CITATION",
+  occurrence: "OCCURRENCE",
+};
+
+// How many additional records to fetch per "Load more" click on a Basis of Record row.
+const BASIS_OF_RECORD_LOAD_MORE_BATCH = 200;
+
 interface RecordTypeBreakdown {
   humanObservation: number;
   machineObservation: number;
@@ -405,6 +422,44 @@ export default function OccurrenceMapRow({
       .catch(console.error)
       .finally(() => setLoadingOccurrences(false));
   }, [speciesKey, countryCode, sampleSize]);
+
+  // Basis-of-record category currently fetching more records, if any (drives the
+  // per-row "Load more" spinner/disabled state in the dropdown).
+  const [loadingMoreCategory, setLoadingMoreCategory] = useState<string | null>(null);
+
+  // Load another batch of just one basis-of-record category (e.g. "load 200 more
+  // Preserved specimen records"), independent of the overall sample-size selector —
+  // that reloads everything and is dominated by whichever category is most numerous.
+  // Offsets by how many of this category are already loaded, and de-dupes the merge
+  // by gbifID since the untargeted main fetch and this filtered one aren't guaranteed
+  // to line up by offset alone.
+  const loadMoreForCategory = useCallback((key: string) => {
+    const gbifBasis = GBIF_BASIS_OF_RECORD[key];
+    if (!gbifBasis) return;
+    setLoadingMoreCategory(key);
+    const alreadyLoaded = occurrences.filter((o) => classifyOccurrence(o) === key).length;
+    const params = new URLSearchParams({
+      speciesKey: speciesKey.toString(),
+      basisOfRecord: gbifBasis,
+      limit: BASIS_OF_RECORD_LOAD_MORE_BATCH.toString(),
+      offset: alreadyLoaded.toString(),
+    });
+    if (countryCode) {
+      params.set("country", countryCode);
+    }
+    fetch(`/api/occurrences?${params}`)
+      .then((res) => res.json())
+      .then((data) => {
+        const newFeatures: OccurrenceFeature[] = data.features || [];
+        setOccurrences((prev) => {
+          const seen = new Set(prev.map((o) => o.properties.gbifID));
+          const toAdd = newFeatures.filter((f) => !seen.has(f.properties.gbifID));
+          return [...prev, ...toAdd];
+        });
+      })
+      .catch(console.error)
+      .finally(() => setLoadingMoreCategory(null));
+  }, [occurrences, speciesKey, countryCode]);
 
   // Fetch breakdown data
   useEffect(() => {
@@ -1223,35 +1278,52 @@ export default function OccurrenceMapRow({
                     {pillDefs.map((pill) => {
                       const active = checkedTypes[pill.key];
                       const loadedShown = basisLoadedShownCounts[pill.key] ?? { loaded: 0, shown: 0 };
+                      const canLoadMore = pill.count > loadedShown.loaded;
+                      const isLoadingMore = loadingMoreCategory === pill.key;
                       return (
-                        <label
-                          key={pill.key}
-                          className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
-                          onMouseEnter={() => setHoveredType(pill.key)}
-                          onMouseLeave={() => setHoveredType(null)}
-                          title={`${pill.count.toLocaleString()} total across all of GBIF. ${loadedShown.loaded.toLocaleString()} loaded in your current sample. ${loadedShown.shown.toLocaleString()} of those also pass your other active filters (cleaned).`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={active}
-                            onChange={() => toggleType(pill.key)}
-                            className="w-3 h-3 rounded accent-emerald-500 shrink-0"
-                          />
-                          <span className={`flex-1 min-w-0 truncate ${active ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-400 dark:text-zinc-500"}`}>
-                            {pill.label}
-                          </span>
-                          {!isFullSample && (
-                            <span className="w-14 text-right tabular-nums shrink-0 text-zinc-400 dark:text-zinc-500">
-                              {pill.count.toLocaleString()}
+                        <div key={pill.key}>
+                          <label
+                            className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
+                            onMouseEnter={() => setHoveredType(pill.key)}
+                            onMouseLeave={() => setHoveredType(null)}
+                            title={`${pill.count.toLocaleString()} total across all of GBIF. ${loadedShown.loaded.toLocaleString()} loaded in your current sample. ${loadedShown.shown.toLocaleString()} of those also pass your other active filters (cleaned).`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={active}
+                              onChange={() => toggleType(pill.key)}
+                              className="w-3 h-3 rounded accent-emerald-500 shrink-0"
+                            />
+                            <span className={`flex-1 min-w-0 truncate ${active ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-400 dark:text-zinc-500"}`}>
+                              {pill.label}
                             </span>
+                            {!isFullSample && (
+                              <span className="w-14 text-right tabular-nums shrink-0 text-zinc-400 dark:text-zinc-500">
+                                {pill.count.toLocaleString()}
+                              </span>
+                            )}
+                            <span className="w-12 text-right tabular-nums shrink-0 text-zinc-400 dark:text-zinc-500">
+                              {(isFullSample ? pill.count : loadedShown.loaded).toLocaleString()}
+                            </span>
+                            <span className={`w-12 text-right tabular-nums shrink-0 ${active ? "text-emerald-500 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"}`}>
+                              {loadedShown.shown.toLocaleString()}
+                            </span>
+                          </label>
+                          {canLoadMore && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                loadMoreForCategory(pill.key);
+                              }}
+                              disabled={loadingMoreCategory != null}
+                              className="w-full text-left pl-8 pr-3 pb-1.5 -mt-0.5 text-[10px] text-blue-600 dark:text-blue-400 hover:underline disabled:no-underline disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {isLoadingMore
+                                ? "Loading more…"
+                                : `Load ${Math.min(BASIS_OF_RECORD_LOAD_MORE_BATCH, pill.count - loadedShown.loaded).toLocaleString()} more`}
+                            </button>
                           )}
-                          <span className="w-12 text-right tabular-nums shrink-0 text-zinc-400 dark:text-zinc-500">
-                            {(isFullSample ? pill.count : loadedShown.loaded).toLocaleString()}
-                          </span>
-                          <span className={`w-12 text-right tabular-nums shrink-0 ${active ? "text-emerald-500 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"}`}>
-                            {loadedShown.shown.toLocaleString()}
-                          </span>
-                        </label>
+                        </div>
                       );
                     })}
                     {(() => {
