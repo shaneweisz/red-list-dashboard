@@ -1109,7 +1109,7 @@ export default function OccurrenceMapRow({
                   Basis of Record
                   {!loadingBreakdown && (
                     <span className="text-[10px] text-zinc-400 tabular-nums">
-                      {pillDefs.filter(p => checkedTypes[p.key]).length}/{pillDefs.length}
+                      Selected {pillDefs.filter(p => checkedTypes[p.key]).length} of {pillDefs.length}
                     </span>
                   )}
                   <svg className={`w-3 h-3 text-zinc-400 transition-transform ${filtersOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -1117,7 +1117,7 @@ export default function OccurrenceMapRow({
                   </svg>
                 </button>
                 {filtersOpen && !loadingBreakdown && (
-                  <div className="absolute left-0 top-full mt-1 z-50 w-96 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
+                  <div className="absolute left-0 top-full mt-1 z-50 w-[30rem] bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
                     <div className="flex items-center gap-2 px-3 pb-1 text-[10px] font-medium text-zinc-400 dark:text-zinc-500">
                       <button
                         onClick={() => {
@@ -1228,7 +1228,7 @@ export default function OccurrenceMapRow({
                   </svg>
                   Coordinate cleaning
                   <span className="text-[10px] text-zinc-400 tabular-nums">
-                    {flagDefs.filter((d) => appliedChecks[d.key]).length}/{flagDefs.length}
+                    Applied {flagDefs.filter((d) => appliedChecks[d.key]).length} of {flagDefs.length}
                     {maxUncertainty != null && ` · ≤ ${formatUncertainty(maxUncertainty)}`}
                   </span>
                   <svg className={`w-3 h-3 text-zinc-400 transition-transform ${cleaningFilterOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
