@@ -13,13 +13,16 @@ import {
   isNearCapital,
   isNearCentroid,
   isNearInstitution,
+  isInOcean,
+  isInUrbanArea,
   flagDuplicateCoordinates,
   getQualityFlags,
 } from "../coordinate-cleaning";
 
 // A point in the Southern Ocean, ~3,300-3,700km from the nearest capital, country
 // centroid, and biodiversity institution in the reference data (verified against the
-// real datasets) — a reliable "clean" fixture for all three phase-2 checks at once.
+// real datasets), also outside every land/urban-area polygon — a reliable "clean"
+// fixture for all five point-gazetteer/polygon checks at once.
 const FAR_FROM_EVERYTHING = { lon: -140, lat: -60 };
 
 describe("isZeroCoordinate", () => {
@@ -125,6 +128,38 @@ describe("isNearInstitution", () => {
   });
 });
 
+describe("isInOcean", () => {
+  it("flags a point in the middle of the Pacific", () => {
+    expect(isInOcean({ lon: -140, lat: 0 })).toBe(true);
+  });
+
+  it("clears a point on land, far from any coastline", () => {
+    expect(isInOcean({ lon: 15, lat: 23 })).toBe(false); // middle of the Sahara
+  });
+
+  it("clears a point far from every land polygon's own reference", () => {
+    expect(isInOcean(FAR_FROM_EVERYTHING)).toBe(true); // Southern Ocean
+  });
+});
+
+describe("isInUrbanArea", () => {
+  // Greater Tokyo — the single largest urban-area polygon in the reference data
+  // (verified against the real dataset), a reliable "definitely urban" fixture.
+  const inGreaterTokyo = { lon: 139.88725, lat: 36.1406 };
+
+  it("flags a point inside a real urban area", () => {
+    expect(isInUrbanArea(inGreaterTokyo)).toBe(true);
+  });
+
+  it("clears a point on land but outside any mapped urban area", () => {
+    expect(isInUrbanArea({ lon: -2.5, lat: 52 })).toBe(false); // rural England
+  });
+
+  it("clears a point in the ocean", () => {
+    expect(isInUrbanArea(FAR_FROM_EVERYTHING)).toBe(false);
+  });
+});
+
 describe("flagDuplicateCoordinates", () => {
   it("flags every repeat of a coordinate pair after the first", () => {
     const records = [
@@ -153,13 +188,15 @@ describe("getQualityFlags", () => {
     ];
     const flags = getQualityFlags(records);
     // (0,0) also happens to be ~7m from a real GRSciColl institution whose own
-    // coordinates are themselves defaulted to null island, and GBIF's Copenhagen HQ
-    // is genuinely ~1.4km from Denmark's real national capital point — both are
-    // honest overlaps in the live reference data, not bugs in this test.
-    expect(flags[0].sort()).toEqual(["EQUAL_COORDINATES", "NEAR_INSTITUTION", "ZERO_COORDINATE"].sort());
+    // coordinates are themselves defaulted to null island (and, being in the Gulf of
+    // Guinea, it's also in the ocean); GBIF's Copenhagen HQ is genuinely ~1.4km from
+    // Denmark's real national capital point; and London's capital point falls inside
+    // its own real urban-area polygon — all honest overlaps in the live reference
+    // data, not bugs in this test.
+    expect(flags[0].sort()).toEqual(["EQUAL_COORDINATES", "NEAR_INSTITUTION", "OCEAN", "ZERO_COORDINATE"].sort());
     expect(flags[1].sort()).toEqual(["GBIF_HEADQUARTERS", "NEAR_CAPITAL"].sort());
     expect(flags[2].sort()).toEqual(["DUPLICATE", "GBIF_HEADQUARTERS", "NEAR_CAPITAL"].sort());
     expect(flags[3]).toEqual([]);
-    expect(flags[4]).toEqual(["NEAR_CAPITAL"]);
+    expect(flags[4].sort()).toEqual(["NEAR_CAPITAL", "URBAN_AREA"].sort());
   });
 });

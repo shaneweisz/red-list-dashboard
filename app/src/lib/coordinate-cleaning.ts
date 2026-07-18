@@ -19,6 +19,9 @@
  *                                 confusing/inconsistent default relative to the rest of the
  *                                 package; using geodesic meters here for consistency with
  *                                 every other check in this file)
+ * - isInOcean         -> cc_sea  (point-in-polygon against Natural Earth land polygons; flagged
+ *                                 when the point falls outside every land polygon)
+ * - isInUrbanArea     -> cc_urb  (point-in-polygon against Natural Earth urban-area polygons)
  *
  * None of the checks below implement upstream's optional `verify` step (re-checking whether a
  * flagged point is the *only* record for that species nearby, which would unflag it) — matches
@@ -29,9 +32,13 @@
  * provenance.
  */
 
+import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
+
 import capitals from "./coordinate-cleaning-refdata/capitals.json";
 import centroids from "./coordinate-cleaning-refdata/centroids.json";
 import institutions from "./coordinate-cleaning-refdata/institutions.json";
+import landPolygons from "./coordinate-cleaning-refdata/land-polygons.json";
+import urbanAreas from "./coordinate-cleaning-refdata/urban-areas.json";
 
 const EARTH_RADIUS_METERS = 6371000;
 
@@ -44,7 +51,9 @@ export type QualityFlag =
   | "DUPLICATE"
   | "NEAR_CAPITAL"
   | "NEAR_CENTROID"
-  | "NEAR_INSTITUTION";
+  | "NEAR_INSTITUTION"
+  | "OCEAN"
+  | "URBAN_AREA";
 
 export interface CleanableCoordinate {
   lon: number;
@@ -62,6 +71,8 @@ export const QUALITY_FLAG_LABELS: Record<QualityFlag, string> = {
   NEAR_CAPITAL: "Near a country capital",
   NEAR_CENTROID: "Near a country centroid",
   NEAR_INSTITUTION: "Near a biodiversity institution",
+  OCEAN: "In the ocean",
+  URBAN_AREA: "Inside an urban area",
 };
 
 // One-sentence explanation of exactly what each check does and doesn't do —
@@ -81,6 +92,10 @@ export const QUALITY_FLAG_DESCRIPTIONS: Record<QualityFlag, string> = {
     "Within 1km of a country's geographic centroid — another common default, often from software that geocodes \"Country: X\" to the middle of the country when no precise locality was given.",
   NEAR_INSTITUTION:
     "Within 100m of a museum, herbarium, zoo, university, or similar biodiversity institution — often a captive/cultivated specimen or a record defaulted to the collecting institution's address rather than the true find location.",
+  OCEAN:
+    "Falls in the ocean, outside every Natural Earth land polygon — often a GPS sign error or a marine coordinate wrongly applied to a terrestrial species, though correct for genuinely marine/coastal species.",
+  URBAN_AREA:
+    "Falls within a Natural Earth-mapped urban area — often a specimen defaulted to a city/town address rather than the true find location, though correct for genuinely urban-adapted or captive species.",
 };
 
 function haversineMeters(a: CleanableCoordinate, b: CleanableCoordinate): number {
@@ -162,6 +177,63 @@ export function flagDuplicateCoordinates(records: readonly CleanableCoordinate[]
   });
 }
 
+interface RawPolygon {
+  type: "Polygon";
+  coordinates: number[][][];
+}
+
+interface IndexedPolygon {
+  polygon: RawPolygon;
+  bbox: [minLon: number, minLat: number, maxLon: number, maxLat: number];
+}
+
+function indexPolygons(polygons: readonly RawPolygon[]): IndexedPolygon[] {
+  return polygons.map((polygon) => {
+    let minLon = Infinity;
+    let minLat = Infinity;
+    let maxLon = -Infinity;
+    let maxLat = -Infinity;
+    for (const ring of polygon.coordinates) {
+      for (const [lon, lat] of ring) {
+        if (lon < minLon) minLon = lon;
+        if (lon > maxLon) maxLon = lon;
+        if (lat < minLat) minLat = lat;
+        if (lat > maxLat) maxLat = lat;
+      }
+    }
+    return { polygon, bbox: [minLon, minLat, maxLon, maxLat] };
+  });
+}
+
+// Precomputed once at module load — a cheap bounding-box pre-filter avoids running the exact
+// (and much more expensive) point-in-polygon test against every polygon on every record.
+const indexedLandPolygons = indexPolygons(landPolygons as RawPolygon[]);
+const indexedUrbanAreas = indexPolygons(urbanAreas as RawPolygon[]);
+
+function isInsideAny(coord: CleanableCoordinate, indexed: readonly IndexedPolygon[]): boolean {
+  for (const { polygon, bbox } of indexed) {
+    const [minLon, minLat, maxLon, maxLat] = bbox;
+    if (coord.lon < minLon || coord.lon > maxLon || coord.lat < minLat || coord.lat > maxLat) continue;
+    if (booleanPointInPolygon([coord.lon, coord.lat], polygon)) return true;
+  }
+  return false;
+}
+
+/**
+ * Port of cc_sea: flags points that fall outside every Natural Earth land polygon, i.e. in
+ * the ocean. Land polygons are 110m-scale (Natural Earth's coarsest), which is a deliberate
+ * trade-off for bundle size — fine for "clearly in the ocean" but won't catch a point that's
+ * technically on a small island or narrow coastal strip too fine for that resolution.
+ */
+export function isInOcean(coord: CleanableCoordinate): boolean {
+  return !isInsideAny(coord, indexedLandPolygons);
+}
+
+/** Port of cc_urb: flags points inside a Natural Earth 50m-scale urban-area polygon. */
+export function isInUrbanArea(coord: CleanableCoordinate): boolean {
+  return isInsideAny(coord, indexedUrbanAreas);
+}
+
 /**
  * Runs all checks over a single species' occurrence records and returns each record's
  * failed-check names, mirroring clean_coordinates()'s per-test flag columns. Callers
@@ -179,6 +251,8 @@ export function getQualityFlags<T extends CleanableCoordinate>(records: readonly
     if (isNearCapital(record)) flags.push("NEAR_CAPITAL");
     if (isNearCentroid(record)) flags.push("NEAR_CENTROID");
     if (isNearInstitution(record)) flags.push("NEAR_INSTITUTION");
+    if (isInOcean(record)) flags.push("OCEAN");
+    if (isInUrbanArea(record)) flags.push("URBAN_AREA");
     return flags;
   });
 }

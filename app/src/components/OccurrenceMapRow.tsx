@@ -583,6 +583,8 @@ export default function OccurrenceMapRow({
     NEAR_CAPITAL: true,
     NEAR_CENTROID: true,
     NEAR_INSTITUTION: true,
+    OCEAN: true,
+    URBAN_AREA: true,
   });
   const [colorByDate, setColorByDate] = useState(false);
   const [basemap, setBasemap] = useState<BasemapKey>("streets");
@@ -1152,6 +1154,7 @@ export default function OccurrenceMapRow({
             year: props.year,
             month: props.month,
             institutionCode: props.institutionCode,
+            qualityFlags: typeof props.qualityFlags === "string" ? JSON.parse(props.qualityFlags) : props.qualityFlags,
           },
           geometry: { type: "Point", coordinates: coords },
         });
