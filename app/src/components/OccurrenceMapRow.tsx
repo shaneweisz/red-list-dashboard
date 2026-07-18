@@ -369,6 +369,9 @@ export default function OccurrenceMapRow({
 
   // Hovered observation type pill (for linked brushing)
   const [hoveredType, setHoveredType] = useState<string | null>(null);
+  // Hovered coordinate-cleaning check (for linked brushing) — mutually exclusive
+  // with hoveredType, since only one dropdown row can be hovered at a time
+  const [hoveredFlag, setHoveredFlag] = useState<QualityFlag | null>(null);
 
   // Hovered occurrence on map (for hover tooltip)
   const [hoveredFeature, setHoveredFeature] = useState<OccurrenceFeature | null>(null);
@@ -760,9 +763,16 @@ export default function OccurrenceMapRow({
     panelOccurrences: OccurrenceFeature[],
   ): GeoJSON.FeatureCollection => {
     const features = panelOccurrences.map((feature) => {
-      const category = classifyOccurrence(feature);
-      const isBrushed = hoveredType != null && category === hoveredType;
-      const isDimmed = hoveredType != null && category !== hoveredType;
+      // Only one of hoveredType (Basis of Record row) / hoveredFlag (Coordinate
+      // cleaning row) is ever set at a time, since only one dropdown row can be
+      // hovered at once — whichever is set decides the match test below.
+      const matchesHovered = hoveredType != null
+        ? classifyOccurrence(feature) === hoveredType
+        : hoveredFlag != null
+          ? (feature.properties.qualityFlags?.includes(hoveredFlag) ?? false)
+          : null;
+      const isBrushed = matchesHovered === true;
+      const isDimmed = matchesHovered === false;
       const isFeatureHovered = hoveredFeature?.properties.gbifID === feature.properties.gbifID;
 
       let strokeColor: string;
@@ -787,8 +797,10 @@ export default function OccurrenceMapRow({
         fillColor = isNew ? "#4ade80" : "#9ca3af";
       }
 
-      const radius = isFeatureHovered ? 6 : (isBrushed ? 6 : (isDimmed ? 4 : 5));
-      const strokeWidth = isDimmed ? 1 : (isFeatureHovered || isBrushed ? 3 : 2);
+      // Dimmed markers are just muted via opacity — not also shrunk/thinned, which
+      // read as more distracting flicker than clarifying emphasis.
+      const radius = isFeatureHovered || isBrushed ? 6 : 5;
+      const strokeWidth = isFeatureHovered || isBrushed ? 3 : 2;
       const opacity = isDimmed ? 0.15 : 1;
 
       return {
@@ -805,7 +817,7 @@ export default function OccurrenceMapRow({
       };
     });
     return { type: "FeatureCollection", features };
-  }, [hoveredType, hoveredFeature, colorByDate, assessmentDate, assessmentYear]);
+  }, [hoveredType, hoveredFlag, hoveredFeature, colorByDate, assessmentDate, assessmentYear]);
 
   // FitBounds helper using map ref
   const fitMapToBbox = useCallback((bbox: [number, number, number, number]) => {
@@ -1395,6 +1407,8 @@ export default function OccurrenceMapRow({
                         <label
                           key={def.key}
                           className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
+                          onMouseEnter={() => setHoveredFlag(def.key)}
+                          onMouseLeave={() => setHoveredFlag(null)}
                           title={def.description}
                         >
                           <input
@@ -1513,7 +1527,7 @@ export default function OccurrenceMapRow({
                 <div className="flex flex-col bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden relative z-10">
                   {/* Header */}
                   <div className="px-2 py-1.5 text-xs sm:text-[10px] font-medium text-zinc-500 dark:text-zinc-400 text-center border-b border-zinc-100 dark:border-zinc-800">
-                    iNaturalist Photos {inatTotalCount > 0 && <span className="tabular-nums">— {inatTotalCount.toLocaleString()} observations</span>}
+                    iNaturalist Observations
                   </div>
                   {inatPhotos.length > 0 ? (
                     <>
