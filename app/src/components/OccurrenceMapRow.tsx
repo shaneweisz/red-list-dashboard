@@ -585,10 +585,6 @@ export default function OccurrenceMapRow({
     [flagCounts, flagShownCounts]
   );
 
-  // Only list checks that actually flag something in the loaded sample — an empty
-  // row can't be hovered to reveal anything on the map, so it's just clutter.
-  const visibleFlagDefs = useMemo(() => flagDefs.filter((d) => d.count > 0), [flagDefs]);
-
   const toggleCheck = (key: QualityFlag) => {
     setAppliedChecks((prev) => ({ ...prev, [key]: !prev[key] }));
   };
@@ -768,10 +764,6 @@ export default function OccurrenceMapRow({
     ];
   }, [breakdown]);
 
-  // Only list categories that actually have records in GBIF for this species —
-  // e.g. no point showing a "Fossil specimen" row (and it can't be meaningfully
-  // hovered either) for a species with none.
-  const visiblePillDefs = useMemo(() => pillDefs.filter((p) => p.count > 0), [pillDefs]);
 
   const toggleType = (key: keyof typeof checkedTypes) => {
     setCheckedTypes((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -1120,7 +1112,6 @@ export default function OccurrenceMapRow({
                     <div className="w-3 h-3 rounded-full" style={{ background: dateToColor(maxDateNum).fill, border: `2px solid ${dateToColor(maxDateNum).stroke}` }} />
                     <span>{maxDateLabel}</span>
                   </div>
-                  <span className="text-zinc-400">({displayCount})</span>
                 </>
               ) : (
                 <>
@@ -1132,38 +1123,6 @@ export default function OccurrenceMapRow({
                     <div className="w-3 h-3 rounded-full bg-green-400 border-2 border-green-600" />
                     <span>After {assessmentDate?.split("T")[0] ?? assessmentYear}</span>
                   </div>
-                  <span className="text-zinc-400">({displayCount})</span>
-                </>
-              )}
-              {/* Toggle color mode / split view (only when assessment year is available) */}
-              {!label && assessmentYear && (
-                <>
-                  <span className="text-zinc-300 dark:text-zinc-600">|</span>
-                  <button
-                    onClick={() => setColorByDate(!colorByDate)}
-                    className="px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-[10px] text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"
-                    title={colorByDate ? "Color by before/after assessment" : "Color by date"}
-                  >
-                    {colorByDate ? "Color by before/after assess. date" : "Color by date"}
-                  </button>
-                  {!splitView && (
-                    <button
-                      onClick={() => {
-                        if (!splitDate && assessmentDate) setSplitDate(assessmentDate.split("T")[0]);
-                        setSplitView(true);
-                        setIsPlaying(false);
-                        setAnimatingDateIdx(null);
-                        if (animationRef.current) clearInterval(animationRef.current);
-                      }}
-                      className="px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-[10px] text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-1"
-                    >
-                      <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                        <rect x="1" y="2" width="14" height="12" rx="1.5" />
-                        <line x1="8" y1="2" x2="8" y2="14" />
-                      </svg>
-                      Split view
-                    </button>
-                  )}
                 </>
               )}
               {/* Play/pause animation (independent of assessment year) */}
@@ -1224,6 +1183,37 @@ export default function OccurrenceMapRow({
                         {playbackSpeed}x
                       </button>
                     </>
+                  )}
+                </>
+              )}
+              {/* Toggle color mode / split view (only when assessment year is available) */}
+              {!label && assessmentYear && (
+                <>
+                  <span className="text-zinc-300 dark:text-zinc-600">|</span>
+                  <button
+                    onClick={() => setColorByDate(!colorByDate)}
+                    className="px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-[10px] text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"
+                    title={colorByDate ? "Color by before/after assessment" : "Color by date"}
+                  >
+                    {colorByDate ? "Color by before/after assess. date" : "Color by date"}
+                  </button>
+                  {!splitView && (
+                    <button
+                      onClick={() => {
+                        if (!splitDate && assessmentDate) setSplitDate(assessmentDate.split("T")[0]);
+                        setSplitView(true);
+                        setIsPlaying(false);
+                        setAnimatingDateIdx(null);
+                        if (animationRef.current) clearInterval(animationRef.current);
+                      }}
+                      className="px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-[10px] text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-1"
+                    >
+                      <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                        <rect x="1" y="2" width="14" height="12" rx="1.5" />
+                        <line x1="8" y1="2" x2="8" y2="14" />
+                      </svg>
+                      Split view
+                    </button>
                   )}
                 </>
               )}
@@ -1316,7 +1306,7 @@ export default function OccurrenceMapRow({
                   Basis of Record
                   {!loadingBreakdown && (
                     <span className="text-[10px] text-zinc-400 tabular-nums">
-                      {visiblePillDefs.filter(p => checkedTypes[p.key]).length}/{visiblePillDefs.length}
+                      {pillDefs.filter(p => checkedTypes[p.key]).length}/{pillDefs.length}
                     </span>
                   )}
                   <svg className={`w-3 h-3 text-zinc-400 transition-transform ${filtersOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -1331,7 +1321,7 @@ export default function OccurrenceMapRow({
                       <span className="w-12 text-right shrink-0">{isFullSample ? "Total" : "Loaded"}</span>
                       <span className="w-12 text-right shrink-0">Cleaned</span>
                     </div>
-                    {visiblePillDefs.map((pill) => {
+                    {pillDefs.map((pill) => {
                       const active = checkedTypes[pill.key];
                       const loadedShown = basisLoadedShownCounts[pill.key] ?? { loaded: 0, shown: 0 };
                       const canLoadMore = pill.count > loadedShown.loaded;
@@ -1383,9 +1373,9 @@ export default function OccurrenceMapRow({
                       );
                     })}
                     {(() => {
-                      const totalCount = visiblePillDefs.reduce((sum, p) => sum + p.count, 0);
-                      const totalLoaded = visiblePillDefs.reduce((sum, p) => sum + (basisLoadedShownCounts[p.key]?.loaded ?? 0), 0);
-                      const totalShown = visiblePillDefs.reduce((sum, p) => sum + (basisLoadedShownCounts[p.key]?.shown ?? 0), 0);
+                      const totalCount = pillDefs.reduce((sum, p) => sum + p.count, 0);
+                      const totalLoaded = pillDefs.reduce((sum, p) => sum + (basisLoadedShownCounts[p.key]?.loaded ?? 0), 0);
+                      const totalShown = pillDefs.reduce((sum, p) => sum + (basisLoadedShownCounts[p.key]?.shown ?? 0), 0);
                       return (
                         <div className="flex items-center gap-2 px-3 py-1.5 mt-1 border-t border-zinc-100 dark:border-zinc-800 text-xs font-medium">
                           <span className="w-3 shrink-0" />
@@ -1425,7 +1415,7 @@ export default function OccurrenceMapRow({
                   </svg>
                   Coordinate cleaning
                   <span className="text-[10px] text-zinc-400 tabular-nums">
-                    {visibleFlagDefs.filter((d) => appliedChecks[d.key]).length}/{visibleFlagDefs.length}
+                    {flagDefs.filter((d) => appliedChecks[d.key]).length}/{flagDefs.length}
                     {maxUncertainty != null && ` · ≤ ${formatUncertainty(maxUncertainty)}`}
                   </span>
                   <svg className={`w-3 h-3 text-zinc-400 transition-transform ${cleaningFilterOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -1434,7 +1424,7 @@ export default function OccurrenceMapRow({
                 </button>
                 {cleaningFilterOpen && (
                   <div className="absolute left-0 top-full mt-1 z-50 w-80 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
-                    {visibleFlagDefs.map((def) => {
+                    {flagDefs.map((def) => {
                       const active = appliedChecks[def.key]; // checked = currently hides matching records
                       const impact = flagShownCounts[def.key] ?? 0; // how many would flip visibility if toggled
                       const hasImpact = impact > 0;
@@ -1456,7 +1446,9 @@ export default function OccurrenceMapRow({
                             {def.label}
                           </span>
                           <span className={`ml-auto tabular-nums shrink-0 text-[11px] font-medium ${hasImpact ? "text-zinc-600 dark:text-zinc-300" : "text-zinc-300 dark:text-zinc-600"}`}>
-                            {active ? `${impact.toLocaleString()} records hidden` : `Hide ${impact.toLocaleString()} records`}
+                            {active
+                              ? `${impact.toLocaleString()} record${impact === 1 ? "" : "s"} hidden`
+                              : `Hide ${impact.toLocaleString()} record${impact === 1 ? "" : "s"}`}
                           </span>
                         </label>
                       );
