@@ -6,7 +6,8 @@ import type { MapRef, ViewStateChangeEvent, MapLayerMouseEvent } from "react-map
 import type maplibregl from "maplibre-gl";
 import { mapTaxonId } from "@/lib/data/taxonomy-constants";
 import { InatObservation, getThumbUrl, InatPhotoWithPreview } from "./InatPhotoCard";
-import { QualityFlag, QUALITY_FLAG_LABELS, QUALITY_FLAG_DESCRIPTIONS } from "@/lib/coordinate-cleaning";
+import { QualityFlag, QUALITY_FLAG_LABELS, QUALITY_FLAG_DESCRIPTIONS, QUALITY_FLAG_SOURCES } from "@/lib/coordinate-cleaning";
+import { FaInfoCircle } from "react-icons/fa";
 
 // Fixed page size for iNat photo grid (2 columns x 5 rows)
 const INAT_PAGE_SIZE = 10;
@@ -313,6 +314,7 @@ export default function OccurrenceMapRow({
     NEAR_INSTITUTION: false,
     OCEAN: false,
     URBAN_AREA: false,
+    ARTIFICIAL_HOTSPOT: false,
   });
   const [colorByDate, setColorByDate] = useState(true);
   const [basemap, setBasemap] = useState<BasemapKey>("streets");
@@ -568,6 +570,7 @@ export default function OccurrenceMapRow({
         key,
         label: QUALITY_FLAG_LABELS[key],
         description: QUALITY_FLAG_DESCRIPTIONS[key],
+        source: QUALITY_FLAG_SOURCES[key],
         count: flagCounts[key] ?? 0,
         shown: flagShownCounts[key] ?? 0,
       })),
@@ -1291,6 +1294,26 @@ export default function OccurrenceMapRow({
                           <span className={`flex-1 min-w-0 ${hasImpact ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-400 dark:text-zinc-500"}`}>
                             {def.label}
                           </span>
+                          {def.source && (
+                            <a
+                              href={def.source.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={`Reference data source: ${def.source.label}`}
+                              onClick={(e) => {
+                                // Prevent the enclosing <label>'s native click-forwarding from
+                                // toggling the checkbox, without also losing the link's own
+                                // navigation (preventDefault suppresses both, so re-trigger it
+                                // manually).
+                                e.preventDefault();
+                                e.stopPropagation();
+                                window.open(def.source!.url, "_blank", "noopener,noreferrer");
+                              }}
+                              className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
+                            >
+                              <FaInfoCircle className="w-3 h-3" />
+                            </a>
+                          )}
                           <span className={`ml-auto tabular-nums shrink-0 text-[11px] font-medium ${hasImpact ? "text-zinc-600 dark:text-zinc-300" : "text-zinc-300 dark:text-zinc-600"}`}>
                             {!hasImpact
                               ? "0 records"

@@ -15,14 +15,15 @@ import {
   isNearInstitution,
   isInOcean,
   isInUrbanArea,
+  isNearArtificialHotspot,
   flagDuplicateCoordinates,
   getQualityFlags,
 } from "../coordinate-cleaning";
 
 // A point in the Southern Ocean, ~3,300-3,700km from the nearest capital, country
-// centroid, and biodiversity institution in the reference data (verified against the
-// real datasets), also outside every land/urban-area polygon — a reliable "clean"
-// fixture for all five point-gazetteer/polygon checks at once.
+// centroid, biodiversity institution, and artificial hotspot in the reference data
+// (verified against the real datasets), also outside every land/urban-area polygon —
+// a reliable "clean" fixture for all six point-gazetteer/polygon checks at once.
 const FAR_FROM_EVERYTHING = { lon: -140, lat: -60 };
 
 describe("isZeroCoordinate", () => {
@@ -170,6 +171,25 @@ describe("isInUrbanArea", () => {
   });
 });
 
+describe("isNearArtificialHotspot", () => {
+  it("flags a point exactly at a known artificial hotspot", () => {
+    // A grid-centroid point from the AHOI dataset (birds), confirmed artificial
+    // (determination === "FALSE" in the source data — see coordinate-cleaning-refdata/README.md).
+    expect(isNearArtificialHotspot({ lat: 56.2, lon: 16.4 })).toBe(true);
+  });
+
+  it("flags within the default 10km buffer, clears within a tighter custom buffer", () => {
+    // ~1112m from the hotspot above — inside the 10km default, outside a 1000m custom buffer
+    const nearHotspot = { lat: 56.21, lon: 16.4 };
+    expect(isNearArtificialHotspot(nearHotspot)).toBe(true);
+    expect(isNearArtificialHotspot(nearHotspot, 1000)).toBe(false);
+  });
+
+  it("clears a point far from every artificial hotspot", () => {
+    expect(isNearArtificialHotspot(FAR_FROM_EVERYTHING)).toBe(false);
+  });
+});
+
 describe("flagDuplicateCoordinates", () => {
   it("flags every repeat of a coordinate pair after the first", () => {
     const records = [
@@ -199,13 +219,17 @@ describe("getQualityFlags", () => {
     const flags = getQualityFlags(records);
     // (0,0) also happens to be ~7m from a real GRSciColl institution whose own
     // coordinates are themselves defaulted to null island (and, being in the Gulf of
-    // Guinea, it's also in the ocean); GBIF's Copenhagen HQ is genuinely ~1.4km from
-    // Denmark's real national capital point, and its own (12.58, 55.67) coordinate —
-    // only 2 decimal places, ~1km precision — lands in Copenhagen's harbor rather than
-    // on the building itself, so it also reads as OCEAN even at 50m; and London's
-    // capital point falls inside its own real urban-area polygon — all honest overlaps
-    // in the live reference data, not bugs in this test.
-    expect(flags[0].sort()).toEqual(["EQUAL_COORDINATES", "NEAR_INSTITUTION", "OCEAN", "ZERO_COORDINATE"].sort());
+    // Guinea, it's also in the ocean), and is itself a confirmed entry in the AHOI
+    // dataset (a "geopolitical_centroid" — unsurprising, since null island is the
+    // canonical artificial coordinate default); GBIF's Copenhagen HQ is genuinely
+    // ~1.4km from Denmark's real national capital point, and its own (12.58, 55.67)
+    // coordinate — only 2 decimal places, ~1km precision — lands in Copenhagen's
+    // harbor rather than on the building itself, so it also reads as OCEAN even at
+    // 50m; and London's capital point falls inside its own real urban-area polygon —
+    // all honest overlaps in the live reference data, not bugs in this test.
+    expect(flags[0].sort()).toEqual(
+      ["EQUAL_COORDINATES", "NEAR_INSTITUTION", "OCEAN", "ZERO_COORDINATE", "ARTIFICIAL_HOTSPOT"].sort()
+    );
     expect(flags[1].sort()).toEqual(["GBIF_HEADQUARTERS", "NEAR_CAPITAL", "OCEAN"].sort());
     expect(flags[2].sort()).toEqual(["DUPLICATE", "GBIF_HEADQUARTERS", "NEAR_CAPITAL", "OCEAN"].sort());
     expect(flags[3]).toEqual([]);

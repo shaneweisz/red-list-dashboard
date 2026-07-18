@@ -4,14 +4,20 @@
  *
  * Institutions get added/moved in GRSciColl over time, so this is worth re-running
  * occasionally (not on every sync — it's not part of the taxonomic data pipeline).
- * Capitals/centroids (src/lib/coordinate-cleaning-refdata/{capitals,centroids}.json)
- * are sourced from Natural Earth and mledoze/countries instead, both essentially
- * static (country capitals/centroids don't move), so there's no fetch script for
- * those — they were extracted once by hand; re-derive the same way if ever needed:
+ * Capitals/centroids/land/urban-areas/aohi (src/lib/coordinate-cleaning-refdata/
+ * {capitals,centroids,land-polygons,urban-areas,aohi}.json) are sourced from Natural
+ * Earth, mledoze/countries, and a frozen Zenodo/Dryad deposit instead, all essentially
+ * static, so there's no fetch script for those — they were extracted once by hand;
+ * re-derive the same way if ever needed:
  *   - capitals.json: https://github.com/martynafford/natural-earth-geojson
  *     50m/cultural/ne_50m_populated_places.json, filtered to ADM0CAP === 1
  *   - centroids.json: https://github.com/mledoze/countries dist/countries.json,
  *     each country's `latlng` field
+ *   - land-polygons.json / urban-areas.json: same natural-earth-geojson mirror,
+ *     50m/physical/ne_50m_land.json and 50m/cultural/ne_50m_urban_areas.json
+ *   - aohi.json: https://zenodo.org/records/7268229 (CC0), the 4 taxon CSVs
+ *     (birds/insects/mammals/plants), kept only rows where determination === "FALSE"
+ *     (confirmed artificial, not a genuine site) — see coordinate-cleaning-refdata/README.md
  *
  * Usage:
  *   npx tsx scripts/fetch-coordinate-cleaning-refdata.ts

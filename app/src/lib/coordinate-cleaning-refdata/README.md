@@ -1,6 +1,6 @@
 # Coordinate-cleaning reference data
 
-Point gazetteers and polygon layers used by `../coordinate-cleaning.ts`'s `cc_cap`/`cc_cen`/`cc_inst`/`cc_sea`/`cc_urb` ports. Sourced independently of CoordinateCleaner's own bundled `countryref`/`institutions`/`landmass`/`urban_areas` R data objects (GPL-3) — see `docs/gbif-coordinate-cleaning-scoping.md` §4 for why.
+Point gazetteers and polygon layers used by `../coordinate-cleaning.ts`'s `cc_cap`/`cc_cen`/`cc_inst`/`cc_sea`/`cc_urb`/`cc_aohi` ports. Sourced independently of CoordinateCleaner's own bundled `countryref`/`institutions`/`landmass`/`urban_areas`/`aohi` R data objects (GPL-3) — see `docs/gbif-coordinate-cleaning-scoping.md` §4 for why.
 
 All of this data is imported only by `coordinate-cleaning.ts`, which is used both server-side (`/api/occurrences`) and by a couple of client components for just their label/description exports (`QUALITY_FLAG_LABELS`/`QUALITY_FLAG_DESCRIPTIONS`). Verified via a production build that the bundler tree-shakes the actual point/polygon data out of the client bundle — only the flag label strings ship to the browser.
 
@@ -27,3 +27,7 @@ Land/ocean mask. Extracted from Natural Earth's 1:50m land layer (public domain)
 ## `urban-areas.json` (2,143 polygons)
 
 Urban area footprints. Extracted from Natural Earth's 1:50m urban areas layer (public domain), via the martynafford mirror (`50m/cultural/ne_50m_urban_areas.json`), same stripping/rounding treatment (4 decimal places, ~11m precision; 1.97MB → 730KB). Extracted by hand once (2026-07); no refresh script, same rationale as land polygons.
+
+## `aohi.json` (231 points)
+
+Artificial Hotspot Occurrence Inventory (AHOI) — recurring coordinates independently confirmed by [Park et al. (2023)](https://onlinelibrary.wiley.com/doi/10.1111/jbi.14543) as artificial aggregation points (geopolitical/grid centroids and similar geo-referencing defaults), not genuine observation sites. Sourced from the authors' own [Dryad](https://datadryad.org/dataset/doi:10.5061/dryad.v41ns1s0p) / [Zenodo](https://zenodo.org/records/7268229) deposit (**CC0**, public domain) — independent of CoordinateCleaner's bundled `aohi` R data object (GPL-3), despite backing the same `cc_aohi` check. The deposit ships 4 CSVs (birds/insects/mammals/plants, Oct 2022 snapshot) with a `determination` column (`TRUE` = confirmed genuine site, `FALSE` = confirmed artificial); kept only the `FALSE` rows across all four taxa, matching upstream `cc_aohi`'s own default `taxa` argument (all four). Extracted by hand once (2026-07) — this is a frozen dataset snapshot (fixed DOI), not a live API, so no refresh script; re-derive by hand from the same Zenodo/Dryad deposit if a future AHOI version ships.

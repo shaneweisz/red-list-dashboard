@@ -22,6 +22,10 @@
  * - isInOcean         -> cc_sea  (point-in-polygon against Natural Earth land polygons; flagged
  *                                 when the point falls outside every land polygon)
  * - isInUrbanArea     -> cc_urb  (point-in-polygon against Natural Earth urban-area polygons)
+ * - isNearArtificialHotspot -> cc_aohi (buffer = 10000m geodesic, geod = TRUE, taxa = all four —
+ *                                 matches upstream's own defaults; see coordinate-cleaning-refdata/README.md
+ *                                 for why this one's reference data comes straight from the AHOI
+ *                                 authors' own CC0 deposit rather than CoordinateCleaner's bundled copy)
  *
  * None of the checks below implement upstream's optional `verify` step (re-checking whether a
  * flagged point is the *only* record for that species nearby, which would unflag it) — matches
@@ -39,6 +43,7 @@ import centroids from "./coordinate-cleaning-refdata/centroids.json";
 import institutions from "./coordinate-cleaning-refdata/institutions.json";
 import landPolygons from "./coordinate-cleaning-refdata/land-polygons.json";
 import urbanAreas from "./coordinate-cleaning-refdata/urban-areas.json";
+import artificialHotspots from "./coordinate-cleaning-refdata/aohi.json";
 
 const EARTH_RADIUS_METERS = 6371000;
 
@@ -53,7 +58,8 @@ export type QualityFlag =
   | "NEAR_CENTROID"
   | "NEAR_INSTITUTION"
   | "OCEAN"
-  | "URBAN_AREA";
+  | "URBAN_AREA"
+  | "ARTIFICIAL_HOTSPOT";
 
 export interface CleanableCoordinate {
   lon: number;
@@ -73,6 +79,7 @@ export const QUALITY_FLAG_LABELS: Record<QualityFlag, string> = {
   NEAR_INSTITUTION: "Near a biodiversity institution",
   OCEAN: "In the ocean",
   URBAN_AREA: "Inside an urban area",
+  ARTIFICIAL_HOTSPOT: "Known artificial coordinate hotspot",
 };
 
 // One-sentence explanation of exactly what each check does and doesn't do —
@@ -96,6 +103,39 @@ export const QUALITY_FLAG_DESCRIPTIONS: Record<QualityFlag, string> = {
     "Falls in the ocean, outside every Natural Earth land polygon — often a GPS sign error or a marine coordinate wrongly applied to a terrestrial species, though correct for genuinely marine/coastal species.",
   URBAN_AREA:
     "Falls within a Natural Earth-mapped urban area — often a specimen defaulted to a city/town address rather than the true find location, though correct for genuinely urban-adapted or captive species.",
+  ARTIFICIAL_HOTSPOT:
+    "Within 10km of a coordinate independently confirmed by Park et al. (2023) as an artificial aggregation point — grid/geopolitical centroids and similar recurring defaults that accumulated thousands of unrelated records, not real observation sites.",
+};
+
+// External source for each check's reference data — only present where the check actually
+// draws on an independently-sourced dataset (not for the four self-contained/algorithmic
+// checks: ZERO_COORDINATE, EQUAL_COORDINATES, GBIF_HEADQUARTERS, DUPLICATE). Shown as a
+// linked info icon next to the check in the coordinate-cleaning filter.
+export const QUALITY_FLAG_SOURCES: Partial<Record<QualityFlag, { label: string; url: string }>> = {
+  NEAR_CAPITAL: {
+    label: "Natural Earth 1:50m populated places",
+    url: "https://www.naturalearthdata.com/downloads/50m-cultural-vectors/50m-populated-places/",
+  },
+  NEAR_CENTROID: {
+    label: "mledoze/countries",
+    url: "https://github.com/mledoze/countries",
+  },
+  NEAR_INSTITUTION: {
+    label: "GBIF GRSciColl registry",
+    url: "https://www.gbif.org/grscicoll",
+  },
+  OCEAN: {
+    label: "Natural Earth 1:50m land",
+    url: "https://www.naturalearthdata.com/downloads/50m-physical-vectors/50m-land/",
+  },
+  URBAN_AREA: {
+    label: "Natural Earth 1:50m urban areas",
+    url: "https://www.naturalearthdata.com/downloads/50m-cultural-vectors/50m-urban-areas/",
+  },
+  ARTIFICIAL_HOTSPOT: {
+    label: "Park et al. (2023) AHOI dataset",
+    url: "https://zenodo.org/records/7268229",
+  },
 };
 
 function haversineMeters(a: CleanableCoordinate, b: CleanableCoordinate): number {
@@ -237,6 +277,18 @@ export function isInUrbanArea(coord: CleanableCoordinate): boolean {
 }
 
 /**
+ * Port of cc_aohi (geod=TRUE default, taxa=all four): flags points within `bufferMeters` of
+ * a coordinate in the Artificial Hotspot Occurrence Inventory (Park et al. 2023) — recurring
+ * coordinates independently confirmed (determination="FALSE" in the source dataset, i.e. NOT
+ * a genuine observation site) as geopolitical/grid centroids or similar geo-referencing
+ * defaults that accumulated large numbers of unrelated records across birds, insects,
+ * mammals, and plants.
+ */
+export function isNearArtificialHotspot(coord: CleanableCoordinate, bufferMeters = 10000): boolean {
+  return isNearAny(coord, artificialHotspots, bufferMeters);
+}
+
+/**
  * Runs all checks over a single species' occurrence records and returns each record's
  * failed-check names, mirroring clean_coordinates()'s per-test flag columns. Callers
  * should pass all records for one species (cc_dupl's duplicate key includes species,
@@ -255,6 +307,7 @@ export function getQualityFlags<T extends CleanableCoordinate>(records: readonly
     if (isNearInstitution(record)) flags.push("NEAR_INSTITUTION");
     if (isInOcean(record)) flags.push("OCEAN");
     if (isInUrbanArea(record)) flags.push("URBAN_AREA");
+    if (isNearArtificialHotspot(record)) flags.push("ARTIFICIAL_HOTSPOT");
     return flags;
   });
 }
