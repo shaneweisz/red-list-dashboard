@@ -1459,6 +1459,11 @@ export default function OccurrenceMapRow({
 
   const inatContributorsChart = useMemo(() => <InatContributorsChart speciesKey={speciesKey} />, [speciesKey]);
 
+  // Once every GBIF record for this species is loaded (no more to page in), the
+  // basis-of-record dropdown's "total" and "loaded" columns are always identical —
+  // collapse them into one column rather than showing the same number twice.
+  const isFullSample = totalOccurrences == null || totalOccurrences <= occurrences.length;
+
   return (
     <div className="bg-zinc-50 dark:bg-zinc-800/50">
       <div className="p-2">
@@ -1490,7 +1495,7 @@ export default function OccurrenceMapRow({
           {/* ── Filter Bar ── */}
           <div className="p-2 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700">
             <div className="flex flex-wrap items-center gap-2">
-              {/* Filter by basis of record — dropdown checklist */}
+              {/* Basis of Record — dropdown checklist */}
               <div className="relative" ref={filtersRef}>
                 <button
                   onClick={() => setFiltersOpen(!filtersOpen)}
@@ -1503,7 +1508,7 @@ export default function OccurrenceMapRow({
                   <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
                   </svg>
-                  Filter by basis of record
+                  Basis of Record
                   {!loadingBreakdown && (
                     <span className="text-[10px] text-zinc-400 tabular-nums">
                       {pillDefs.filter(p => checkedTypes[p.key]).length}/{pillDefs.length}
@@ -1514,20 +1519,23 @@ export default function OccurrenceMapRow({
                   </svg>
                 </button>
                 {filtersOpen && !loadingBreakdown && (
-                  <div className="absolute left-0 top-full mt-1 z-50 w-80 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
-                    <div className="px-3 pb-1.5 mb-1 border-b border-zinc-100 dark:border-zinc-800 text-[10px] text-zinc-400 dark:text-zinc-500">
-                      Bold: total across all of GBIF. Small: shown of your {occurrences.length.toLocaleString()} loaded records.
+                  <div className="absolute left-0 top-full mt-1 z-50 w-96 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
+                    <div className="flex items-center gap-2 px-3 pb-1 text-[10px] font-medium text-zinc-400 dark:text-zinc-500">
+                      <span className="flex-1 min-w-0" />
+                      {!isFullSample && <span className="w-14 text-right shrink-0">Total</span>}
+                      <span className="w-12 text-right shrink-0">{isFullSample ? "Total" : "Loaded"}</span>
+                      <span className="w-12 text-right shrink-0">Shown</span>
                     </div>
                     {pillDefs.map((pill) => {
                       const active = checkedTypes[pill.key];
-                      const loadedShown = basisLoadedShownCounts[pill.key];
+                      const loadedShown = basisLoadedShownCounts[pill.key] ?? { loaded: 0, shown: 0 };
                       return (
                         <label
                           key={pill.key}
                           className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
                           onMouseEnter={() => setHoveredType(pill.key)}
                           onMouseLeave={() => setHoveredType(null)}
-                          title={`${pill.count.toLocaleString()} total in GBIF.${loadedShown ? ` ${loadedShown.shown.toLocaleString()} of ${loadedShown.loaded.toLocaleString()} loaded records in this category also pass your other active filters.` : ""}`}
+                          title={`${pill.count.toLocaleString()} total across all of GBIF. ${loadedShown.loaded.toLocaleString()} loaded in your current sample. ${loadedShown.shown.toLocaleString()} of those also pass your other active filters, so would be shown.`}
                         >
                           <input
                             type="checkbox"
@@ -1535,18 +1543,19 @@ export default function OccurrenceMapRow({
                             onChange={() => toggleType(pill.key)}
                             className="w-3 h-3 rounded accent-emerald-500 shrink-0"
                           />
-                          <span className={active ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-400 dark:text-zinc-500"}>
+                          <span className={`flex-1 min-w-0 truncate ${active ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-400 dark:text-zinc-500"}`}>
                             {pill.label}
                           </span>
-                          <span className="ml-auto flex flex-col items-end shrink-0 leading-tight">
-                            <span className={`tabular-nums ${active ? "text-emerald-500 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"}`}>
+                          {!isFullSample && (
+                            <span className="w-14 text-right tabular-nums shrink-0 text-zinc-400 dark:text-zinc-500">
                               {pill.count.toLocaleString()}
                             </span>
-                            {loadedShown && (
-                              <span className="text-[10px] tabular-nums text-zinc-400 dark:text-zinc-500">
-                                {loadedShown.shown.toLocaleString()} of {loadedShown.loaded.toLocaleString()} shown
-                              </span>
-                            )}
+                          )}
+                          <span className="w-12 text-right tabular-nums shrink-0 text-zinc-400 dark:text-zinc-500">
+                            {(isFullSample ? pill.count : loadedShown.loaded).toLocaleString()}
+                          </span>
+                          <span className={`w-12 text-right tabular-nums shrink-0 ${active ? "text-emerald-500 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"}`}>
+                            {loadedShown.shown.toLocaleString()}
                           </span>
                         </label>
                       );
@@ -1566,6 +1575,119 @@ export default function OccurrenceMapRow({
 
               {/* Separator */}
               <div className="w-px h-5 bg-zinc-200 dark:bg-zinc-700 mx-0.5 hidden sm:block" />
+
+              {/* Coordinate cleaning — dropdown: max GPS uncertainty + one checkbox per check */}
+              <div className="relative" ref={cleaningFilterRef}>
+                <button
+                  onClick={() => setCleaningFilterOpen(!cleaningFilterOpen)}
+                  className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border text-xs transition-colors ${
+                    cleaningFilterOpen
+                      ? "bg-zinc-100 dark:bg-zinc-800 border-zinc-400 dark:border-zinc-500"
+                      : "border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                  } text-zinc-700 dark:text-zinc-300`}
+                  title="Filter by GPS uncertainty and hide records flagged by coordinate-cleaning checks (e.g. zero coordinates, GBIF headquarters, duplicates)"
+                >
+                  <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                  </svg>
+                  Coordinate cleaning
+                  <span className="text-[10px] text-zinc-400 tabular-nums">
+                    {flagDefs.filter((d) => appliedChecks[d.key]).length}/{flagDefs.length}
+                    {maxUncertainty != null && ` · ≤ ${formatUncertainty(maxUncertainty)}`}
+                  </span>
+                  <svg className={`w-3 h-3 text-zinc-400 transition-transform ${cleaningFilterOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {cleaningFilterOpen && (
+                  <div className="absolute left-0 top-full mt-1 z-50 w-80 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
+                    {flagDefs.map((def) => {
+                      const active = appliedChecks[def.key]; // checked = currently hides matching records
+                      const impact = flagShownCounts[def.key] ?? 0; // how many would flip visibility if toggled
+                      const hasImpact = impact > 0;
+                      return (
+                        <label
+                          key={def.key}
+                          className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
+                          title={def.description}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={active}
+                            onChange={() => toggleCheck(def.key)}
+                            className="w-3 h-3 rounded accent-emerald-500 shrink-0"
+                          />
+                          <span className={`flex-1 min-w-0 ${hasImpact ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-400 dark:text-zinc-500"}`}>
+                            {def.label}
+                          </span>
+                          <span className={`ml-auto tabular-nums shrink-0 text-[11px] font-medium ${hasImpact ? "text-zinc-600 dark:text-zinc-300" : "text-zinc-300 dark:text-zinc-600"}`}>
+                            {active ? "Show" : "Hide"} {impact.toLocaleString()}
+                          </span>
+                        </label>
+                      );
+                    })}
+                    <div className="my-1 border-t border-zinc-100 dark:border-zinc-800" />
+                    <div className="flex items-center gap-2 px-3 py-1.5 text-xs" title="Only show records with a GPS uncertainty at or below this radius">
+                      <span className="w-3 shrink-0" />
+                      <span className="text-zinc-700 dark:text-zinc-200">Max GPS uncertainty</span>
+                      {customUncertaintyMode ? (
+                        <span className="ml-auto flex items-center gap-1">
+                          <input
+                            type="number"
+                            min={0}
+                            step={1}
+                            autoFocus
+                            value={customUncertaintyInput}
+                            placeholder="meters"
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              setCustomUncertaintyInput(raw);
+                              const n = raw === "" ? null : Math.max(0, parseInt(raw));
+                              setMaxUncertainty(n != null && !Number.isNaN(n) ? n : null);
+                            }}
+                            className="w-16 text-xs px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
+                          />
+                          <span className="text-zinc-400">m</span>
+                          <button
+                            onClick={() => {
+                              setCustomUncertaintyMode(false);
+                              setCustomUncertaintyInput("");
+                              setMaxUncertainty(null);
+                            }}
+                            title="Back to preset options"
+                            className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                          >
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </span>
+                      ) : (
+                        <select
+                          value={maxUncertainty ?? ""}
+                          onChange={(e) => {
+                            if (e.target.value === "custom") {
+                              setCustomUncertaintyMode(true);
+                              setCustomUncertaintyInput("");
+                              setMaxUncertainty(null);
+                            } else {
+                              setMaxUncertainty(e.target.value ? parseInt(e.target.value) : null);
+                            }
+                          }}
+                          className="ml-auto text-xs px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
+                        >
+                          {UNCERTAINTY_OPTIONS.map((opt) => (
+                            <option key={opt.label} value={opt.value ?? ""}>
+                              {opt.label}
+                            </option>
+                          ))}
+                          <option value="custom">Custom…</option>
+                        </select>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* Year range trimmer */}
               <div className="flex items-center gap-1.5">
@@ -1654,132 +1776,6 @@ export default function OccurrenceMapRow({
                   </>
                 )}
               </div>
-
-              {/* Separator */}
-              <div className="w-px h-5 bg-zinc-200 dark:bg-zinc-700 mx-0.5 hidden sm:block" />
-
-              {/* Coordinate cleaning — dropdown: max GPS uncertainty + one checkbox per check */}
-              <div className="relative" ref={cleaningFilterRef}>
-                <button
-                  onClick={() => setCleaningFilterOpen(!cleaningFilterOpen)}
-                  className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border text-xs transition-colors ${
-                    cleaningFilterOpen
-                      ? "bg-zinc-100 dark:bg-zinc-800 border-zinc-400 dark:border-zinc-500"
-                      : "border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                  } text-zinc-700 dark:text-zinc-300`}
-                  title="Filter by GPS uncertainty and hide records flagged by coordinate-cleaning checks (e.g. zero coordinates, GBIF headquarters, duplicates)"
-                >
-                  <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                  </svg>
-                  Coordinate cleaning
-                  <span className="text-[10px] text-zinc-400 tabular-nums">
-                    {flagDefs.filter((d) => appliedChecks[d.key]).length}/{flagDefs.length}
-                    {maxUncertainty != null && ` · ≤ ${formatUncertainty(maxUncertainty)}`}
-                  </span>
-                  <svg className={`w-3 h-3 text-zinc-400 transition-transform ${cleaningFilterOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                {cleaningFilterOpen && (
-                  <div className="absolute left-0 top-full mt-1 z-50 w-80 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
-                    <div className="px-3 pb-1.5 mb-1 border-b border-zinc-100 dark:border-zinc-800 text-[10px] text-zinc-400 dark:text-zinc-500">
-                      Counts are among your {occurrences.length.toLocaleString()} loaded records. Small number: how many would still show if just this check were switched off.
-                    </div>
-                    {flagDefs.map((def) => {
-                      const active = appliedChecks[def.key];
-                      const hasRecords = def.count > 0;
-                      return (
-                        <label
-                          key={def.key}
-                          className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
-                          title={`${def.description} ${hasRecords ? `${def.shown.toLocaleString()} of ${def.count.toLocaleString()} flagged records would still show if this check were off.` : ""}`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={active}
-                            onChange={() => toggleCheck(def.key)}
-                            className="w-3 h-3 rounded accent-emerald-500 shrink-0"
-                          />
-                          <span className={active && hasRecords ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-400 dark:text-zinc-500"}>
-                            {def.label}
-                          </span>
-                          <span className="ml-auto flex flex-col items-end shrink-0 leading-tight">
-                            <span className={`tabular-nums ${active && hasRecords ? "text-emerald-500 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"}`}>
-                              {def.count.toLocaleString()}
-                            </span>
-                            {hasRecords && (
-                              <span className="text-[10px] tabular-nums text-zinc-400 dark:text-zinc-500">
-                                {def.shown.toLocaleString()} of {def.count.toLocaleString()} shown
-                              </span>
-                            )}
-                          </span>
-                        </label>
-                      );
-                    })}
-                    <div className="my-1 border-t border-zinc-100 dark:border-zinc-800" />
-                    <div className="flex items-center gap-2 px-3 py-1.5 text-xs" title="Only show records with a GPS uncertainty at or below this radius">
-                      <span className="w-3 shrink-0" />
-                      <span className="text-zinc-700 dark:text-zinc-200">Max GPS uncertainty</span>
-                      {customUncertaintyMode ? (
-                        <span className="ml-auto flex items-center gap-1">
-                          <input
-                            type="number"
-                            min={0}
-                            step={1}
-                            autoFocus
-                            value={customUncertaintyInput}
-                            placeholder="meters"
-                            onChange={(e) => {
-                              const raw = e.target.value;
-                              setCustomUncertaintyInput(raw);
-                              const n = raw === "" ? null : Math.max(0, parseInt(raw));
-                              setMaxUncertainty(n != null && !Number.isNaN(n) ? n : null);
-                            }}
-                            className="w-16 text-xs px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
-                          />
-                          <span className="text-zinc-400">m</span>
-                          <button
-                            onClick={() => {
-                              setCustomUncertaintyMode(false);
-                              setCustomUncertaintyInput("");
-                              setMaxUncertainty(null);
-                            }}
-                            title="Back to preset options"
-                            className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-                          >
-                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                          </button>
-                        </span>
-                      ) : (
-                        <select
-                          value={maxUncertainty ?? ""}
-                          onChange={(e) => {
-                            if (e.target.value === "custom") {
-                              setCustomUncertaintyMode(true);
-                              setCustomUncertaintyInput("");
-                              setMaxUncertainty(null);
-                            } else {
-                              setMaxUncertainty(e.target.value ? parseInt(e.target.value) : null);
-                            }
-                          }}
-                          className="ml-auto text-xs px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
-                        >
-                          {UNCERTAINTY_OPTIONS.map((opt) => (
-                            <option key={opt.label} value={opt.value ?? ""}>
-                              {opt.label}
-                            </option>
-                          ))}
-                          <option value="custom">Custom…</option>
-                        </select>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
             </div>
           </div>
 
