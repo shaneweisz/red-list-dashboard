@@ -252,10 +252,12 @@ interface OccurrenceMapRowProps {
    * preserved specimens ON for plants & fungi, where herbarium/fungarium
    * records are a core data source. */
   taxonGroup?: string;
+  /** This species' scientific name — used to look up its POWO/WCVP native range. */
+  scientificName?: string;
   /** This species' native-range countries (ISO 3166-1 alpha-2), per its IUCN Red
    * List assessment's locations (already filtered to origin="Native" upstream in
-   * scripts/fetch-redlist-species.ts) — drives the "Native range only" filter. */
-  nativeCountries?: string[];
+   * scripts/fetch-redlist-species.ts) — the "Red List" native-range source. */
+  nativeCountriesRedList?: string[];
   /** Called once the occurrence data has loaded and there are no records to show,
    * letting the parent fall back to another tab (e.g. Catalogue of Life). */
   onEmpty?: () => void;
@@ -282,6 +284,14 @@ export function isPlantTaxonGroup(taxonGroup: string | undefined): boolean {
 }
 
 /**
+ * Vascular plants only — the taxonomic scope WCVP/POWO actually covers (not
+ * mosses, algae, or fungi), used to gate the "POWO" native-range source fetch.
+ */
+export function isVascularPlantTaxonGroup(taxonGroup: string | undefined): boolean {
+  return taxonGroup === "flowering_plants" || taxonGroup === "gymnosperms" || taxonGroup === "ferns_and_allies";
+}
+
+/**
  * True if this occurrence's reported country falls outside the species' native
  * range (its IUCN Red List assessment's country list, already Native-only).
  * Records with no reported country, or species with no native-range data at
@@ -304,7 +314,8 @@ export default function OccurrenceMapRow({
   assessmentYear,
   assessmentDate,
   taxonGroup,
-  nativeCountries,
+  scientificName,
+  nativeCountriesRedList,
   onEmpty,
 }: OccurrenceMapRowProps) {
   const [occurrences, setOccurrences] = useState<OccurrenceFeature[]>([]);
@@ -351,10 +362,19 @@ export default function OccurrenceMapRow({
     OUTSIDE_REPORTED_COUNTRY: false,
   });
   // Native range only — hide occurrences reported in a country outside this
-  // species' native range (per its Red List assessment). Defaults on for plants
-  // (issue #82), where cultivated/naturalized botanical-garden specimens are a
-  // common false signal; off by default for other taxa.
+  // species' native range. Defaults on for plants (issue #82), where cultivated/
+  // naturalized botanical-garden specimens are a common false signal; off by
+  // default for other taxa.
   const [nativeRangeOnly, setNativeRangeOnly] = useState(isPlantTaxonGroup(taxonGroup));
+  // Which native-range source backs the filter above. Defaults to the Red List
+  // assessment (available for every taxon, already shipped pre-#380-follow-up);
+  // "wcvp" (POWO) is only offered as an alternative when this species has a WCVP
+  // match, since the two sources can genuinely disagree on native range (e.g.
+  // Acorus calamus: WCVP treats it as native only to Kazakhstan, everywhere else
+  // — including the Red List assessment's own 26-country list — as introduced).
+  const [nativeRangeSource, setNativeRangeSource] = useState<"redlist" | "wcvp">("redlist");
+  const [nativeCountriesWcvp, setNativeCountriesWcvp] = useState<string[] | null>(null);
+  const [loadingWcvpRange, setLoadingWcvpRange] = useState(false);
   const [colorByDate, setColorByDate] = useState(true);
   const [basemap, setBasemap] = useState<BasemapKey>("streets");
   const [showProtectedAreas, setShowProtectedAreas] = useState(false);
@@ -512,6 +532,21 @@ export default function OccurrenceMapRow({
       .finally(() => setLoadingBreakdown(false));
   }, [speciesKey, countryCode]);
 
+  // Fetch this species' POWO/WCVP native range (only meaningful for vascular
+  // plants — WCVP doesn't cover mosses/algae/fungi/animals).
+  useEffect(() => {
+    if (!isVascularPlantTaxonGroup(taxonGroup) || !scientificName) {
+      setNativeCountriesWcvp(null);
+      return;
+    }
+    setLoadingWcvpRange(true); // eslint-disable-line react-hooks/set-state-in-effect -- loading state for fetch
+    fetch(`/api/wcvp-native-range?name=${encodeURIComponent(scientificName)}`)
+      .then((res) => res.json())
+      .then((data) => setNativeCountriesWcvp(data.countries ?? null))
+      .catch(console.error)
+      .finally(() => setLoadingWcvpRange(false));
+  }, [taxonGroup, scientificName]);
+
   // Once occurrences have loaded, tell the parent if GBIF (which includes iNat
   // records) returned nothing — so an unevaluated species with no occurrence data
   // can fall back to another tab (e.g. Catalogue of Life).
@@ -550,6 +585,12 @@ export default function OccurrenceMapRow({
     fetchInatPhotos(0, pageSize);
   }, [pageSize, fetchInatPhotos]);
 
+  // Which native-country list actually backs the filter right now, per the
+  // selected source. Only "wcvp" when this species has a real WCVP match —
+  // there's nothing to fall back to silently, since the source picker itself
+  // (below) is only ever shown once nativeCountriesWcvp is known to be non-empty.
+  const effectiveNativeCountries = nativeRangeSource === "wcvp" ? (nativeCountriesWcvp ?? undefined) : nativeCountriesRedList;
+
   // Multi-stage filtering pipeline
   const filteredOccurrences = useMemo(() => {
     let result = occurrences;
@@ -566,16 +607,16 @@ export default function OccurrenceMapRow({
     result = result.filter((o) => !o.properties.qualityFlags?.some((f) => appliedChecks[f as QualityFlag]));
     // 4. Native range only — hide occurrences reported outside this species' native countries
     if (nativeRangeOnly) {
-      result = result.filter((o) => !isOutsideNativeRange(o.properties.countryCode, nativeCountries));
+      result = result.filter((o) => !isOutsideNativeRange(o.properties.countryCode, effectiveNativeCountries));
     }
     return result;
-  }, [occurrences, checkedTypes, maxUncertainty, appliedChecks, nativeRangeOnly, nativeCountries]);
+  }, [occurrences, checkedTypes, maxUncertainty, appliedChecks, nativeRangeOnly, effectiveNativeCountries]);
 
   // Of the loaded occurrences that pass every other active filter, how many are
   // outside the species' native range — i.e. how many the "Native range only"
   // checkbox would additionally hide if switched on right now.
   const nativeRangeHiddenCount = useMemo(() => {
-    if (!nativeCountries || nativeCountries.length === 0) return 0;
+    if (!effectiveNativeCountries || effectiveNativeCountries.length === 0) return 0;
     let count = 0;
     for (const o of occurrences) {
       if (!checkedTypes[classifyOccurrence(o) as keyof typeof checkedTypes]) continue;
@@ -584,10 +625,10 @@ export default function OccurrenceMapRow({
         if (u == null || u > maxUncertainty) continue;
       }
       if (o.properties.qualityFlags?.some((f) => appliedChecks[f as QualityFlag])) continue;
-      if (isOutsideNativeRange(o.properties.countryCode, nativeCountries)) count++;
+      if (isOutsideNativeRange(o.properties.countryCode, effectiveNativeCountries)) count++;
     }
     return count;
-  }, [occurrences, checkedTypes, maxUncertainty, appliedChecks, nativeCountries]);
+  }, [occurrences, checkedTypes, maxUncertainty, appliedChecks, effectiveNativeCountries]);
 
   // Per-check counts among the currently loaded occurrences (independent of whether
   // that check is applied), for the coordinate-cleaning dropdown
@@ -1032,7 +1073,7 @@ export default function OccurrenceMapRow({
                     imageUrl={hInat?.imageUrl ?? null}
                     observer={hInat?.observer ?? null}
                     qualityFlags={hoveredFeature.properties.qualityFlags}
-                    outsideNativeRange={isOutsideNativeRange(hoveredFeature.properties.countryCode, nativeCountries)}
+                    outsideNativeRange={isOutsideNativeRange(hoveredFeature.properties.countryCode, effectiveNativeCountries)}
                     country={hoveredFeature.properties.country}
                   />
                 );
@@ -1451,9 +1492,10 @@ export default function OccurrenceMapRow({
                   </div>
                 )}
               </div>
-              {/* Native range only — single checkbox toggle, only shown when this
-                  species has native-range data to filter by */}
-              {nativeCountries && nativeCountries.length > 0 && (
+              {/* Native range only — checkbox toggle + source picker, only shown
+                  when at least one native-range source has data for this species */}
+              {((nativeCountriesRedList && nativeCountriesRedList.length > 0) ||
+                (nativeCountriesWcvp && nativeCountriesWcvp.length > 0)) && (
                 <>
                   <div className="w-px h-5 bg-zinc-200 dark:bg-zinc-700 mx-0.5 hidden sm:block" />
                   <label
@@ -1462,7 +1504,11 @@ export default function OccurrenceMapRow({
                         ? "bg-zinc-100 dark:bg-zinc-800 border-zinc-400 dark:border-zinc-500"
                         : "border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-800"
                     } text-zinc-700 dark:text-zinc-300`}
-                    title="Hide occurrences reported in a country outside this species' native range, per its IUCN Red List assessment (e.g. cultivated botanical-garden specimens). Records with no reported country can't be checked."
+                    title={
+                      nativeRangeSource === "wcvp"
+                        ? "Hide occurrences reported in a country outside this species' native range, per Kew's World Checklist of Vascular Plants / Plants of the World Online (POWO). Records with no reported country can't be checked."
+                        : "Hide occurrences reported in a country outside this species' native range, per its IUCN Red List assessment (e.g. cultivated botanical-garden specimens). Records with no reported country can't be checked."
+                    }
                   >
                     <input
                       type="checkbox"
@@ -1479,6 +1525,39 @@ export default function OccurrenceMapRow({
                       </span>
                     )}
                   </label>
+                  {/* Source picker — only when BOTH sources have real data for this
+                      species, since they can genuinely disagree (issue #82 follow-up:
+                      "we need the powo one for plants too and user can choose") */}
+                  {nativeCountriesRedList && nativeCountriesRedList.length > 0 &&
+                   nativeCountriesWcvp && nativeCountriesWcvp.length > 0 && (
+                    <div className="flex items-center rounded border border-zinc-300 dark:border-zinc-600 overflow-hidden text-[10px]">
+                      <button
+                        onClick={() => setNativeRangeSource("redlist")}
+                        title="Native range per the IUCN Red List assessment's locations"
+                        className={`px-1.5 py-1 transition-colors ${
+                          nativeRangeSource === "redlist"
+                            ? "bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 font-medium"
+                            : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                        }`}
+                      >
+                        IUCN
+                      </button>
+                      <button
+                        onClick={() => setNativeRangeSource("wcvp")}
+                        title="Native range per Kew's World Checklist of Vascular Plants (POWO)"
+                        className={`px-1.5 py-1 transition-colors border-l border-zinc-300 dark:border-zinc-600 ${
+                          nativeRangeSource === "wcvp"
+                            ? "bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 font-medium"
+                            : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                        }`}
+                      >
+                        POWO
+                      </button>
+                    </div>
+                  )}
+                  {loadingWcvpRange && isVascularPlantTaxonGroup(taxonGroup) && (
+                    <span className="text-[10px] text-zinc-400">Checking POWO…</span>
+                  )}
                 </>
               )}
               {!splitView && totalOccurrences != null && (
