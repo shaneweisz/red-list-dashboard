@@ -4,6 +4,8 @@ All notable changes to the IUCN Red List Assessments Dashboard.
 
 ## [Unreleased]
 
+- Added a "Native range only" toggle to the GBIF occurrence map, defaulted on for plants — hides occurrences reported outside a species' native countries (per its Red List assessment), catching cultivated/naturalized botanical-garden specimens
+
 ## [v2.16.0] — 2026-06-30 – 2026-07-07 — Shared Filters, Attribution & Taxon Browsing
 
 - Added a shared filter registry so the dashboard URL, MCP tools, and /browse stay in sync

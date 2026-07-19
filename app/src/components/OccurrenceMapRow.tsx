@@ -47,6 +47,8 @@ interface OccurrenceFeature {
     gbifID: number;
     species: string;
     eventDate?: string;
+    country?: string;
+    countryCode?: string;
     basisOfRecord?: string;
     datasetKey?: string;
     datasetName?: string;
@@ -250,6 +252,10 @@ interface OccurrenceMapRowProps {
    * preserved specimens ON for plants & fungi, where herbarium/fungarium
    * records are a core data source. */
   taxonGroup?: string;
+  /** This species' native-range countries (ISO 3166-1 alpha-2), per its IUCN Red
+   * List assessment's locations (already filtered to origin="Native" upstream in
+   * scripts/fetch-redlist-species.ts) — drives the "Native range only" filter. */
+  nativeCountries?: string[];
   /** Called once the occurrence data has loaded and there are no records to show,
    * letting the parent fall back to another tab (e.g. Catalogue of Life). */
   onEmpty?: () => void;
@@ -265,6 +271,32 @@ export function isPlantOrFungiTaxonGroup(taxonGroup: string | undefined): boolea
   return kingdom === "plantae" || kingdom === "fungi";
 }
 
+/**
+ * Plants only (not fungi) — the narrower taxonomic scope issue #82 asked to
+ * default the "Native range only" filter on for, since cultivated/naturalized
+ * botanical-garden specimens are the specific problem it's meant to catch.
+ */
+export function isPlantTaxonGroup(taxonGroup: string | undefined): boolean {
+  if (!taxonGroup) return false;
+  return mapTaxonId(taxonGroup) === "plantae";
+}
+
+/**
+ * True if this occurrence's reported country falls outside the species' native
+ * range (its IUCN Red List assessment's country list, already Native-only).
+ * Records with no reported country, or species with no native-range data at
+ * all, can't be checked and are never flagged — same "nothing to contradict"
+ * logic as isOutsideReportedCountry in coordinate-cleaning.ts.
+ */
+export function isOutsideNativeRange(
+  countryCode: string | null | undefined,
+  nativeCountries: readonly string[] | undefined,
+): boolean {
+  if (!countryCode || !nativeCountries || nativeCountries.length === 0) return false;
+  const upper = countryCode.toUpperCase();
+  return !nativeCountries.some((c) => c.toUpperCase() === upper);
+}
+
 export default function OccurrenceMapRow({
   speciesKey,
   countryCode,
@@ -272,6 +304,7 @@ export default function OccurrenceMapRow({
   assessmentYear,
   assessmentDate,
   taxonGroup,
+  nativeCountries,
   onEmpty,
 }: OccurrenceMapRowProps) {
   const [occurrences, setOccurrences] = useState<OccurrenceFeature[]>([]);
@@ -317,6 +350,11 @@ export default function OccurrenceMapRow({
     ARTIFICIAL_HOTSPOT: false,
     OUTSIDE_REPORTED_COUNTRY: false,
   });
+  // Native range only — hide occurrences reported in a country outside this
+  // species' native range (per its Red List assessment). Defaults on for plants
+  // (issue #82), where cultivated/naturalized botanical-garden specimens are a
+  // common false signal; off by default for other taxa.
+  const [nativeRangeOnly, setNativeRangeOnly] = useState(isPlantTaxonGroup(taxonGroup));
   const [colorByDate, setColorByDate] = useState(true);
   const [basemap, setBasemap] = useState<BasemapKey>("streets");
   const [showProtectedAreas, setShowProtectedAreas] = useState(false);
@@ -526,8 +564,30 @@ export default function OccurrenceMapRow({
     }
     // 3. Coordinate-cleaning checks (zero/equal coords, GBIF HQ, duplicates)
     result = result.filter((o) => !o.properties.qualityFlags?.some((f) => appliedChecks[f as QualityFlag]));
+    // 4. Native range only — hide occurrences reported outside this species' native countries
+    if (nativeRangeOnly) {
+      result = result.filter((o) => !isOutsideNativeRange(o.properties.countryCode, nativeCountries));
+    }
     return result;
-  }, [occurrences, checkedTypes, maxUncertainty, appliedChecks]);
+  }, [occurrences, checkedTypes, maxUncertainty, appliedChecks, nativeRangeOnly, nativeCountries]);
+
+  // Of the loaded occurrences that pass every other active filter, how many are
+  // outside the species' native range — i.e. how many the "Native range only"
+  // checkbox would additionally hide if switched on right now.
+  const nativeRangeHiddenCount = useMemo(() => {
+    if (!nativeCountries || nativeCountries.length === 0) return 0;
+    let count = 0;
+    for (const o of occurrences) {
+      if (!checkedTypes[classifyOccurrence(o) as keyof typeof checkedTypes]) continue;
+      if (maxUncertainty != null) {
+        const u = o.properties.coordinateUncertaintyInMeters;
+        if (u == null || u > maxUncertainty) continue;
+      }
+      if (o.properties.qualityFlags?.some((f) => appliedChecks[f as QualityFlag])) continue;
+      if (isOutsideNativeRange(o.properties.countryCode, nativeCountries)) count++;
+    }
+    return count;
+  }, [occurrences, checkedTypes, maxUncertainty, appliedChecks, nativeCountries]);
 
   // Per-check counts among the currently loaded occurrences (independent of whether
   // that check is applied), for the coordinate-cleaning dropdown
@@ -813,6 +873,8 @@ export default function OccurrenceMapRow({
             gbifID: props.gbifID,
             species: props.species,
             eventDate: props.eventDate,
+            country: props.country,
+            countryCode: props.countryCode,
             basisOfRecord: props.basisOfRecord,
             datasetKey: props.datasetKey,
             datasetName: props.datasetName,
@@ -970,6 +1032,8 @@ export default function OccurrenceMapRow({
                     imageUrl={hInat?.imageUrl ?? null}
                     observer={hInat?.observer ?? null}
                     qualityFlags={hoveredFeature.properties.qualityFlags}
+                    outsideNativeRange={isOutsideNativeRange(hoveredFeature.properties.countryCode, nativeCountries)}
+                    country={hoveredFeature.properties.country}
                   />
                 );
               })()}
@@ -1387,6 +1451,36 @@ export default function OccurrenceMapRow({
                   </div>
                 )}
               </div>
+              {/* Native range only — single checkbox toggle, only shown when this
+                  species has native-range data to filter by */}
+              {nativeCountries && nativeCountries.length > 0 && (
+                <>
+                  <div className="w-px h-5 bg-zinc-200 dark:bg-zinc-700 mx-0.5 hidden sm:block" />
+                  <label
+                    className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border text-xs cursor-pointer transition-colors ${
+                      nativeRangeOnly
+                        ? "bg-zinc-100 dark:bg-zinc-800 border-zinc-400 dark:border-zinc-500"
+                        : "border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                    } text-zinc-700 dark:text-zinc-300`}
+                    title="Hide occurrences reported in a country outside this species' native range, per its IUCN Red List assessment (e.g. cultivated botanical-garden specimens). Records with no reported country can't be checked."
+                  >
+                    <input
+                      type="checkbox"
+                      checked={nativeRangeOnly}
+                      onChange={() => setNativeRangeOnly((v) => !v)}
+                      className="w-3 h-3 rounded accent-emerald-500 shrink-0"
+                    />
+                    Native range only
+                    {nativeRangeHiddenCount > 0 && (
+                      <span className="text-[10px] text-zinc-400 tabular-nums">
+                        {nativeRangeOnly
+                          ? `${nativeRangeHiddenCount.toLocaleString()} hidden`
+                          : `Hide ${nativeRangeHiddenCount.toLocaleString()}`}
+                      </span>
+                    )}
+                  </label>
+                </>
+              )}
               {!splitView && totalOccurrences != null && (
                 <div className="ml-auto flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-300">
                   <span>
