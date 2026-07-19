@@ -22,10 +22,10 @@ import type { TaxonomyNode } from "../src/config/taxonomy-tree";
 import type { NodeSummary } from "../src/lib/data/species-store";
 import {
   COL_SPECIES_NAME_OVERRIDES,
-  COL_EXCLUDE_ALL_NODES,
   COL_DOMESTIC_EXCLUDE_NAMES,
 } from "../src/config/col-described-overrides";
 import { isOutdated } from "../src/lib/outdated";
+import { filterToSql, sqlStrList, type NodeFilter } from "../src/lib/taxonomy-sql";
 
 // CoL species kept out of the universe (like the domesticated-GBIF exclusion). Homo sapiens
 // — IUCN omits humans from its Red List export. Keep in sync with species-duckdb.ts.
@@ -122,78 +122,8 @@ async function colCountsByGroup(): Promise<Map<string, { col_described: number; 
   return out;
 }
 
-type NodeFilter = TaxonomyNode["filter"];
-
-// The display tree classifies fishes by the traditional GBIF/IUCN classes, but CoL XR
-// uses finer classes — so a node filtering on `actinopterygii` matches zero CoL rows
-// (which are `teleostei`, `holostei`, …). Expand those display classes to the CoL
-// classes they contain so the four fish sub-groups count correctly. Identity for any
-// class name that already exists in CoL (orders are unaffected).
-const COL_CLASS_ALIASES: Record<string, string[]> = {
-  actinopterygii: ["teleostei", "chondrostei", "cladistii", "holostei"],
-  sarcopterygii: ["dipneusti", "coelacanthi"],
-  chondrichthyes: ["elasmobranchii", "holocephali"],
-};
-function expandClasses(names: string[]): string[] {
-  return names.flatMap((n) => COL_CLASS_ALIASES[n.toLowerCase()] ?? [n]);
-}
-
-function sqlStrList(vals: string[]): string {
-  return vals.map((v) => `'${v.toLowerCase().replace(/'/g, "''")}'`).join(", ");
-}
-
-// See config/col-described-overrides.ts for what these are and why — shared with the
-// frontend so the "# Described Species" tooltip explains the same overrides applied
-// here, instead of the two silently drifting apart.
-
-// Translate a taxonomy node filter into a SQL predicate over species/, mirroring
-// matchesFilter() exactly — including its `?? ""` null handling (so a null order_name
-// behaves like an empty string, not SQL NULL, which would otherwise drop such rows from
-// both an include and its complementary exclude). Children partition a group by
-// class/order, which is exclusive in the CoL universe — so no claim-tracking needed.
-// nodeId (optional) triggers the species-name overrides above when computing a node's
-// own CoL described/not-evaluated counts — irrelevant for the real IUCN-assessed-species
-// matching this same function mirrors, which doesn't go through this code path.
-function filterToSql(filter: NodeFilter, nodeId?: string): string {
-  const sciName = "coalesce(lower(scientific_name), '')";
-  if (nodeId && COL_SPECIES_NAME_OVERRIDES[nodeId]) {
-    return `taxon_group IN (${sqlStrList(filter.csvGroups)}) AND ${sciName} IN (${sqlStrList(COL_SPECIES_NAME_OVERRIDES[nodeId])})`;
-  }
-  const cls = "coalesce(lower(class_name), '')";
-  const ord = "coalesce(lower(order_name), '')";
-  const fam = "coalesce(lower(family), '')";
-  const genus = "coalesce(lower(split_part(scientific_name, ' ', 1)), '')";
-  const conds: string[] = [`taxon_group IN (${sqlStrList(filter.csvGroups)})`];
-  if (filter.classNames?.length) conds.push(`${cls} IN (${sqlStrList(expandClasses(filter.classNames))})`);
-  if (filter.excludeClasses?.length) conds.push(`${cls} NOT IN (${sqlStrList(expandClasses(filter.excludeClasses))})`);
-  if (filter.orderNames?.length) {
-    const l = sqlStrList(filter.orderNames);
-    conds.push(`(${ord} IN (${l}) OR (${ord} = '' AND ${cls} IN (${l})))`);
-  }
-  if (filter.excludeOrders?.length) {
-    const l = sqlStrList(filter.excludeOrders);
-    conds.push(`NOT (${ord} IN (${l}) OR (${ord} = '' AND ${cls} IN (${l})))`);
-  }
-  if (filter.families?.length) conds.push(`${fam} IN (${sqlStrList(filter.families)})`);
-  if (filter.excludeFamilies?.length) conds.push(`${fam} NOT IN (${sqlStrList(filter.excludeFamilies)})`);
-  if (filter.genera?.length) conds.push(`${genus} IN (${sqlStrList(filter.genera)})`);
-  if (filter.excludeGenera?.length) conds.push(`${genus} NOT IN (${sqlStrList(filter.excludeGenera)})`);
-  if (filter.speciesNames?.length) conds.push(`${sciName} IN (${sqlStrList(filter.speciesNames)})`);
-  if (filter.excludeSpeciesNames?.length) conds.push(`${sciName} NOT IN (${sqlStrList(filter.excludeSpeciesNames)})`);
-  // Domestic forms + species reassigned to another node's CoL override (see above) —
-  // excluded from every node's CoL count so they don't inflate one group's "described"
-  // total or get double-counted between two groups.
-  conds.push(`${sciName} NOT IN (${sqlStrList(COL_EXCLUDE_ALL_NODES)})`);
-  const normalClause = conds.join(" AND ");
-  // extraSpeciesNames: mirrors matchesFilter's OR escape hatch (taxonomy-utils.ts) —
-  // species included regardless of the class/order/family/genus rule above. Still
-  // scoped to this node's csvGroups and the CoL-only exclusions.
-  if (filter.extraSpeciesNames?.length) {
-    const extraClause = `taxon_group IN (${sqlStrList(filter.csvGroups)}) AND ${sciName} IN (${sqlStrList(filter.extraSpeciesNames)}) AND ${sciName} NOT IN (${sqlStrList(COL_EXCLUDE_ALL_NODES)})`;
-    return `((${normalClause}) OR (${extraClause}))`;
-  }
-  return normalClause;
-}
+// filterToSql/sqlStrList now live in src/lib/taxonomy-sql.ts (imported above) — shared
+// with the live per-country query path (src/lib/data/country-taxa-summary-duckdb.ts).
 
 type PrimaryDim = { field: keyof NodeFilter; rank: string; names: string[] };
 
@@ -555,6 +485,14 @@ async function attachColCounts(summaries: Record<string, NodeSummary[]>): Promis
 export async function run(): Promise<void> {
   const summaries: TaxonSummaryRow[] = [];
 
+  // Per-country totals across ALL species (unfiltered by taxon) — feeds the
+  // country-view landing page's world map. Deliberately a single precomputed
+  // aggregate, not one file per country: unlike the per-taxon node summaries
+  // below (which must compose with an arbitrary taxon/subgroup selection, hence
+  // live DuckDB queries — see country-taxa-summary-duckdb.ts), the landing map
+  // is always "all species" scope, so this never needs to vary per request.
+  const countryStats = new Map<string, { total_assessed: number; outdated: number }>();
+
   // Load mapping to determine which GBIF species are linked to redlist entries
   const mapping = readMappingCsv();
   const linkedGbifKeys = new Set<number>();
@@ -580,14 +518,24 @@ export async function run(): Promise<void> {
     const byCategory: Record<string, number> = {};
 
     for (const s of redlistSpecies) {
+      const speciesOutdated = isOutdated(s.assessment_date);
+
       // Count outdated
-      if (isOutdated(s.assessment_date)) {
+      if (speciesOutdated) {
         outdated++;
       }
 
       // Count by category
       const cat = s.category || "DD";
       byCategory[cat] = (byCategory[cat] || 0) + 1;
+
+      // Per-country tally (see countryStats declaration above)
+      for (const cc of s.countries) {
+        const entry = countryStats.get(cc) ?? { total_assessed: 0, outdated: 0 };
+        entry.total_assessed++;
+        if (speciesOutdated) entry.outdated++;
+        countryStats.set(cc, entry);
+      }
     }
 
     // GBIF stats
@@ -640,6 +588,14 @@ export async function run(): Promise<void> {
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
   fs.writeFileSync(outputPath, JSON.stringify(summaries, null, 2) + "\n");
   console.log(`\nWrote ${summaries.length} taxa → ${outputPath}`);
+
+  const countryStatsObj: Record<string, { species: number; outdated: number }> = {};
+  for (const [cc, stats] of countryStats) {
+    countryStatsObj[cc] = { species: stats.total_assessed, outdated: stats.outdated };
+  }
+  const countryStatsOutputPath = path.join(DATA_DIR, "country-stats.json");
+  fs.writeFileSync(countryStatsOutputPath, JSON.stringify(countryStatsObj, null, 2) + "\n");
+  console.log(`Wrote ${countryStats.size} countries → ${countryStatsOutputPath}`);
 
   // ─── Second pass: precompute node children summaries ──────────────
   console.log("\nComputing node children summaries...");

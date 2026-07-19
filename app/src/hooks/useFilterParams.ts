@@ -9,10 +9,17 @@ import { expandTaxaToken, collapseTaxaToTokens, getViewRootForNode, type FilterR
 
 export type ViewMode = "reassessments" | "new-assessments";
 
-// Flat-table layout ("Table 1a mode" / "SSC groups mode") — URL-synced so it
-// survives reload/share and so the browser back button can return to it after
-// drilling into a group (see navigateToTaxonSubgroup below).
-export type LayoutMode = "table1a" | "ssc" | null;
+// Flat-table layout ("Table 1a mode" / "SSC groups mode") plus the country-view
+// landing page ("country") — URL-synced so it survives reload/share and so the
+// browser back button can return to it after drilling into a group (see
+// navigateToTaxonSubgroup below) or a country (see enterCountryDrilldown).
+export type LayoutMode = "table1a" | "ssc" | "country" | null;
+
+// WorldMap's own Map/List toggle and the list view's column sort — URL-synced
+// (distinct from sortField/sortDirection above, which sort the species table)
+// so a list-view sort like "most outdated plants" is a shareable link.
+export type MapViewMode = "map" | "list";
+export type MapSortKey = "name" | "species" | "outdated" | "percentOutdated";
 
 // Exact, URL-only base filters (no on-screen control — the charts use coarse
 // buckets). They let an agent/MCP dashboard link reproduce the exact /browse
@@ -105,7 +112,7 @@ export function parseParams(search: string) {
   }
   return {
     viewMode: (viewParam === "new-assessments" ? "new-assessments" : "reassessments") as ViewMode,
-    layoutMode: (layoutParam === "table1a" || layoutParam === "ssc" ? layoutParam : null) as LayoutMode,
+    layoutMode: (layoutParam === "table1a" || layoutParam === "ssc" || layoutParam === "country" ? layoutParam : null) as LayoutMode,
     // Expanded from the flat `taxa` token list (+ legacy `subgroups=`) above.
     taxa: taxaSet,
     subgroups: subgroupSet,
@@ -169,6 +176,14 @@ export function parseParams(search: string) {
       null
     ) as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear" | null,
     sortDirection: (p.get("dir") === "asc" ? "asc" : "desc") as "asc" | "desc",
+    mapViewMode: (p.get("mapview") === "list" ? "list" : "map") as MapViewMode,
+    mapSortKey: (
+      p.get("mapsort") === "name" ? "name" :
+      p.get("mapsort") === "outdated" ? "outdated" :
+      p.get("mapsort") === "percentOutdated" ? "percentOutdated" :
+      "species"
+    ) as MapSortKey,
+    mapSortDirection: (p.get("mapdir") === "asc" ? "asc" : "desc") as "asc" | "desc",
     species: p.get("species") ? Number(p.get("species")) : null,
     tab: (p.get("tab") || null) as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol" | null,
   };
@@ -204,6 +219,9 @@ export function buildQs(state: {
   maxDescribedYear?: number | null;
   sortField: "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear" | null;
   sortDirection: "asc" | "desc";
+  mapViewMode?: MapViewMode;
+  mapSortKey?: MapSortKey;
+  mapSortDirection?: "asc" | "desc";
   species: number | null;
   tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol" | null;
 }): string {
@@ -252,6 +270,9 @@ export function buildQs(state: {
   } else if (state.sortDirection !== "desc") {
     p.set("dir", state.sortDirection);
   }
+  if (state.mapViewMode === "list") p.set("mapview", "list");
+  if (state.mapSortKey && state.mapSortKey !== "species") p.set("mapsort", state.mapSortKey);
+  if (state.mapSortDirection === "asc") p.set("mapdir", "asc");
   const qs = p.toString();
   return qs ? `?${qs}` : "";
 }
@@ -446,6 +467,52 @@ export function useFilterParams() {
     [syncUrl]
   );
 
+  // Select country/countries from the Country view landing page — a single
+  // setState + history push (see navigateToTaxonSubgroup above for why atomic
+  // matters here too). Accepts either a plain Set (replace) or an updater
+  // function (toggle-in-place), the same shape setSelectedCountries takes, so
+  // RedListView's click handler can implement the normal plain-click-replaces/
+  // ctrl-click-toggles gesture for a single country, a whole region, or an
+  // arbitrary multi-select — this just guarantees the country change stays
+  // atomic with clearing taxa/subgroups, whichever shape the update takes.
+  // Deliberately leaves layoutMode untouched (stays "country"): the promoted
+  // map and the bare taxa summary table (All Species, Mammals, ..., Fungi)
+  // show together, scoped to however many countries are now selected, until
+  // the user clicks an actual taxon row (handleToggleTaxon, in RedListView) —
+  // that's what exits to the full charts+species-table view, still scoped the
+  // same way.
+  //
+  // Sets fromPopstateRef true first: RedListView's own "reset all other filters
+  // when taxa selection changes" effect (it watches selectedTaxa transitioning
+  // non-empty→non-empty/empty to drop stale category/year/etc. filters from
+  // whatever was previously browsed) would otherwise fire right after this
+  // non-empty→empty taxa change and immediately clear the `countries` this very
+  // call just set — the ref is the same "this is one atomic, fully-specified
+  // state transition, don't run the generic per-field reset side effect"
+  // escape hatch real popstate restores already rely on.
+  const enterCountryDrilldown = useCallback(
+    (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+      fromPopstateRef.current = true;
+      setState(prev => {
+        const nextCountries = typeof updater === "function" ? updater(prev.countries) : updater;
+        const next = { ...prev, countries: nextCountries, taxa: new Set<string>(), subgroups: new Set<string>(), breakdown: null };
+        queueMicrotask(() => syncUrl(next, true));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
+  // Reverse of enterCountryDrilldown — clears the country scope and re-enters
+  // the Country view landing page.
+  const returnToCountryList = useCallback(() => {
+    setState(prev => {
+      const next = { ...prev, countries: new Set<string>(), layoutMode: "country" as LayoutMode, breakdown: null };
+      queueMicrotask(() => syncUrl(next, true));
+      return next;
+    });
+  }, [syncUrl]);
+
   const setSelectedSystems = useCallback(
     (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
       setState(prev => {
@@ -609,6 +676,28 @@ export function useFilterParams() {
     [syncUrl]
   );
 
+  const setMapViewMode = useCallback(
+    (mode: MapViewMode) => {
+      setState(prev => {
+        const next = { ...prev, mapViewMode: mode };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
+  const setMapSort = useCallback(
+    (key: MapSortKey, direction: "asc" | "desc") => {
+      setState(prev => {
+        const next = { ...prev, mapSortKey: key, mapSortDirection: direction };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
   const setSpeciesParam = useCallback(
     (species: number | null, tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol" = "gbif") => {
       setState(prev => {
@@ -722,11 +811,16 @@ export function useFilterParams() {
     setExactFilters,
     sortField: state.sortField,
     sortDirection: state.sortDirection,
+    mapViewMode: state.mapViewMode,
+    mapSortKey: state.mapSortKey,
+    mapSortDirection: state.mapSortDirection,
 
     setViewMode,
     setLayoutMode,
     navigateToTaxonSubgroup,
     returnToLayoutMode,
+    enterCountryDrilldown,
+    returnToCountryList,
     setSelectedTaxa,
     setSelectedSubgroups,
     setSelectedCategories,
@@ -746,6 +840,8 @@ export function useFilterParams() {
     setSelectedReviewers,
     setSearchFilter,
     setSort,
+    setMapViewMode,
+    setMapSort,
     fromPopstateRef,
     clearAllFilters,
     clearAllFiltersAndTaxa,

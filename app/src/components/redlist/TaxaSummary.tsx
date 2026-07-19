@@ -16,6 +16,8 @@ import {
 import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
 import type { RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import { outdatedCutoffDate } from "@/lib/outdated";
+import { ALPHA2_TO_NAME } from "@/lib/countries";
+import { matchingRegion } from "@/lib/regions";
 
 // See scripts/build-taxa-summary.ts's classifyNoMatch for what each reason means.
 // Modular/additive on top of colBreakdown[].noMatchIds — safe to drop independently
@@ -137,10 +139,29 @@ interface Props {
   onNavigateToSubgroup?: (taxonId: string, subgroupId: string) => void;
   disableAllSpecies?: boolean;
   viewMode?: "reassessments" | "new-assessments";
-  /** Table 1a mode / SSC groups mode — URL-synced (see useFilterParams) so it
-   * survives reload/share and the browser back button can return to it. */
-  layoutMode: "table1a" | "ssc" | null;
-  onLayoutModeChange: (mode: "table1a" | "ssc" | null) => void;
+  /** Table 1a mode / SSC groups mode / country-view landing page — URL-synced
+   * (see useFilterParams) so it survives reload/share and the browser back
+   * button can return to it. */
+  layoutMode: "table1a" | "ssc" | "country" | null;
+  onLayoutModeChange: (mode: "table1a" | "ssc" | "country" | null) => void;
+  /** Rendered in place of the taxa table when layoutMode === "country" — a
+   * promoted WorldMap/CountryStatsList panel built by RedListView (which already
+   * owns the country-stats data and click-through wiring), kept out of this
+   * component so it doesn't need its own dynamic WorldMap import. */
+  countryModeContent?: React.ReactNode;
+  /** Set whenever at least one country is selected — independent of layoutMode,
+   * so selecting countries anywhere (not just via the Country view landing page)
+   * scopes this table's own fetches too. One country, a whole region, or an
+   * arbitrary multi-select are all just "the current set of codes" here. */
+  countryScope?: string[] | null;
+  /** Clears the country selection and re-enters the Country view landing page —
+   * used for the clear button atop the table while layoutMode is "country". */
+  onExitCountryScope?: () => void;
+  /** Clears the country selection without changing layoutMode — used for the
+   * same clear button atop the table once a taxon's been clicked and this has
+   * exited to the full view (returning to the Country view landing page from
+   * there would be a surprising jump). */
+  onClearCountryScope?: () => void;
 }
 
 // Dynamic: any tree node with children is expandable
@@ -164,7 +185,7 @@ const getAssessedBarColor = (percent: number) =>
   percent >= 50 ? "#22c55e" : percent >= 20 ? "#eab308" : "#ef4444";
 
 const getOutdatedBarColor = (percent: number) =>
-  percent < 10 ? "#22c55e" : percent < 50 ? "#eab308" : "#ef4444";
+  percent < 20 ? "#22c55e" : percent <= 50 ? "#f97316" : "#ef4444";
 
 // Info icon for the "# Outdated" header: states the exact rolling cutoff date
 // (today minus 10 years) so the ">10 yrs old" threshold isn't just an abstract rule.
@@ -222,6 +243,17 @@ const numericThWrapClasses = `${cellPad} text-right text-sm font-bold text-zinc-
 
 // Toggleable column IDs (Taxon is always visible)
 type ColumnId = "described" | "colDescribed" | "assessed" | "outdated" | "breakdown" | "gbifUnassessed" | "colNe" | "totalGbifObs" | "meanGbifObs" | "medianGbifObs" | "gbifDistribution";
+
+// Columns with no valid per-country value — neither GBIF nor Catalogue of Life
+// data has a country dimension, and estimatedDescribed/percentAssessed ("described"
+// column) is a global figure (see country-taxa-summary-duckdb.ts's doc comment).
+// Force-hidden whenever countryStyleColumns is set (a country is scoped, or
+// we're in Country View at all — see its definition below), on top of whatever
+// hiddenColumns already has — total_assessed/outdated/by_category ("assessed"/
+// "outdated"/"breakdown") ARE real per-country numbers and stay visible.
+const COUNTRY_SCOPED_HIDDEN_COLUMNS: ColumnId[] = [
+  "described", "colDescribed", "colNe", "gbifUnassessed", "totalGbifObs", "meanGbifObs", "medianGbifObs", "gbifDistribution",
+];
 
 const COLUMN_LABELS: Record<ColumnId, string> = {
   described: "# Described Species",
@@ -1017,7 +1049,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
   );
 }
 
-export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", layoutMode, onLayoutModeChange }: Props) {
+export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", layoutMode, onLayoutModeChange, countryModeContent, countryScope, onExitCountryScope, onClearCountryScope }: Props) {
   const isNewAssessments = viewMode === "new-assessments";
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1052,7 +1084,38 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
 
-  const isVisible = (col: ColumnId) => !hiddenColumns.has(col);
+  const countryScoped = !!countryScope?.length;
+  // Stable, order-independent key for the current country selection — used in
+  // place of the countryScope array itself in effect dependency arrays and
+  // fetch query strings. countryScope is a fresh array every render (built via
+  // `[...selectedCountries]` in RedListView), so depending on the array
+  // reference directly would refetch on every unrelated parent re-render, not
+  // just when the actual selection changes; sorting also means toggling two
+  // countries on in either order produces the same key (and cache-friendly
+  // URL), not one per click order.
+  const countryKey = countryScoped ? [...countryScope!].sort().join(",") : "";
+  // Display name for the atop-table label: the one country's name, the whole
+  // region's name if the selection exactly matches one (e.g. picked via the
+  // region dropdown, or by happening to cmd-click every one of its countries),
+  // or the countries' own names (comma-separated, alphabetical) for an
+  // arbitrary multi-select that doesn't line up with any single region.
+  const countryScopeLabel = !countryScoped ? "" :
+    countryScope!.length === 1 ? (ALPHA2_TO_NAME[countryScope![0]] ?? countryScope![0]) :
+    matchingRegion(countryScope!) ?? countryScope!
+      .map((c) => ALPHA2_TO_NAME[c] ?? c)
+      .sort()
+      .join(", ");
+  // Country View always uses the plain 3-column style (even before a country is
+  // picked, showing global data) since Described/GBIF/CoL columns have no country
+  // dimension there either — see the `country-scoped` design note near countryMode.
+  const countryStyleColumns = layoutMode === "country" || countryScoped;
+  // Tighter, non-responsive padding for the sticky Taxonomic Group column in
+  // Country View — cellPad's px-4 growth at the md breakpoint is more than the
+  // taxon name + icon need just to avoid wrapping, and that column is the
+  // biggest lever for giving the Outdated/% Outdated bars more room in the
+  // narrower 3/5-width table.
+  const taxonCellPad = countryStyleColumns ? "px-2 py-2 md:py-2.5" : cellPad;
+  const isVisible = (col: ColumnId) => !hiddenColumns.has(col) && !(countryStyleColumns && COUNTRY_SCOPED_HIDDEN_COLUMNS.includes(col));
   const toggleColumn = (col: ColumnId) => {
     setHiddenColumns((prev) => {
       const next = new Set(prev);
@@ -1067,7 +1130,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     setHiddenColumns(new Set(FOCUS_HIDDEN[mode]));
   };
 
-  const visibleColCount = 1 + (Object.keys(COLUMN_LABELS) as ColumnId[]).filter(isVisible).length;
+  const visibleColCount = 1 + (Object.keys(COLUMN_LABELS) as ColumnId[]).filter(isVisible).length + (countryStyleColumns ? 1 : 0);
 
   // Close column menu on outside click
   useEffect(() => {
@@ -1131,7 +1194,8 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     if (!subgroupDataRef.current[taxonId] && !loadingSubgroupsRef.current.has(taxonId)) {
       setLoadingSubgroups((prev) => new Set(prev).add(taxonId));
       try {
-        const res = await fetch(`/api/redlist/taxa-subgroups?nodeId=${taxonId}`);
+        const countryQs = countryKey ? `&country=${encodeURIComponent(countryKey)}` : "";
+        const res = await fetch(`/api/redlist/taxa-subgroups?nodeId=${taxonId}${countryQs}`);
         if (res.ok) {
           const data = await res.json();
           setSubgroupData((prev) => ({ ...prev, [taxonId]: data.subgroups }));
@@ -1144,7 +1208,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         });
       }
     }
-  }, []);
+  }, [countryKey]);
 
   // Table 1a mode / SSC groups mode — derived from the URL-synced layoutMode
   // prop (see useFilterParams) rather than local state, so a page load or
@@ -1152,6 +1216,32 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   // automatically. table1aData/sscData stay local — just a fetch-once cache.
   const table1aMode = layoutMode === "table1a";
   const sscMode = layoutMode === "ssc";
+  const countryMode = layoutMode === "country";
+
+  // Single 4-way view selector — replaces the old Table 1a/SSC Groups button pair
+  // (+ their "Exit ... View" states). "Country view" needs real per-country
+  // location data, which Not Evaluated species don't have (no assessment means no
+  // assessment_locations row), so it's disabled under New Assessments.
+  const layoutModeSelect = (
+    <span className="inline-flex items-center gap-1.5">
+      <span className="text-xs text-zinc-400 dark:text-zinc-500">View:</span>
+      <select
+        value={layoutMode ?? "taxonomic"}
+        onChange={(e) => {
+          const v = e.target.value;
+          onLayoutModeChange(v === "taxonomic" ? null : (v as "table1a" | "ssc" | "country"));
+        }}
+        className="text-xs bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+      >
+        <option value="taxonomic">Standard view</option>
+        <option value="table1a">Table 1a view</option>
+        <option value="ssc">SSC group view</option>
+        <option value="country" disabled={isNewAssessments} title={isNewAssessments ? "Not available for New Assessments — Not Evaluated species have no location data" : undefined}>
+          Country view
+        </option>
+      </select>
+    </span>
+  );
   const [table1aData, setTable1aData] = useState<Table1aSectionData[] | null>(null);
   const [table1aLoading, setTable1aLoading] = useState(false);
 
@@ -1207,7 +1297,8 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     for (const taxonId of expandableTaxaIds) {
       if (!subgroupDataRef.current[taxonId] && !loadingSubgroupsRef.current.has(taxonId)) {
         setLoadingSubgroups((prev) => new Set(prev).add(taxonId));
-        fetch(`/api/redlist/taxa-subgroups?nodeId=${taxonId}`)
+        const countryQs = countryKey ? `&country=${encodeURIComponent(countryKey)}` : "";
+        fetch(`/api/redlist/taxa-subgroups?nodeId=${taxonId}${countryQs}`)
           .then(res => res.ok ? res.json() : null)
           .then(data => {
             if (data) setSubgroupData((prev) => ({ ...prev, [taxonId]: data.subgroups }));
@@ -1221,7 +1312,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           });
       }
     }
-  }, [perTaxa]);
+  }, [perTaxa, countryKey]);
 
   const collapseAll = useCallback(() => {
     setExpandedTaxa(new Set());
@@ -1237,11 +1328,12 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     if (!table1aMode || table1aData || table1aFetchStartedRef.current) return;
     table1aFetchStartedRef.current = true;
     setTable1aLoading(true);
-    fetch("/api/redlist/taxa-summary?table1a=true")
+    const countryQs = countryKey ? `&country=${encodeURIComponent(countryKey)}` : "";
+    fetch(`/api/redlist/taxa-summary?table1a=true${countryQs}`)
       .then(res => res.ok ? res.json() : null)
       .then(data => { if (data) setTable1aData(data.sections); })
       .finally(() => setTable1aLoading(false));
-  }, [table1aMode, table1aData]);
+  }, [table1aMode, table1aData, countryKey]);
 
   // SSC groups mode — same flat-table layout as Table 1a mode, sourced from
   // the precomputed SSC wrapper nodes' children instead of the top-level
@@ -1267,9 +1359,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     if (!sscMode || sscData || sscFetchStartedRef.current) return;
     sscFetchStartedRef.current = true;
     setSscLoading(true);
+    const countryQs = countryKey ? `&country=${encodeURIComponent(countryKey)}` : "";
     Promise.all(
       SSC_SECTIONS.map((section) =>
-        fetch(`/api/redlist/taxa-subgroups?nodeId=${section.nodeId}`)
+        fetch(`/api/redlist/taxa-subgroups?nodeId=${section.nodeId}${countryQs}`)
           .then(res => (res.ok ? res.json() : null))
           .then((data): Table1aSectionData | null => {
             if (!data) return null;
@@ -1302,12 +1395,27 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     )
       .then((sections) => setSscData(sections.filter((s): s is Table1aSectionData => s != null)))
       .finally(() => setSscLoading(false));
-  }, [sscMode, sscData]);
+  }, [sscMode, sscData, countryKey]);
 
   // Shared flat-table data source for whichever mode (Table 1a / SSC groups) is active
   const flatMode = table1aMode || sscMode;
   const flatData = table1aMode ? table1aData : sscData;
   const flatLoading = table1aMode ? table1aLoading : sscLoading;
+
+  // table1aData/sscData/subgroupData are fetch-once caches keyed only by mode/nodeId,
+  // not by country — without this, switching countries while table1a/ssc data (or an
+  // expanded node's subgroups) is already cached would keep showing the stale,
+  // un-scoped numbers instead of re-fetching for the new country.
+  const prevCountryKeyRef = useRef(countryKey);
+  useEffect(() => {
+    if (prevCountryKeyRef.current === countryKey) return;
+    prevCountryKeyRef.current = countryKey;
+    setTable1aData(null);
+    table1aFetchStartedRef.current = false;
+    setSscData(null);
+    sscFetchStartedRef.current = false;
+    setSubgroupData({});
+  }, [countryKey]);
 
   const allExpanded = useMemo(() => perTaxa.filter(t => isExpandable(t.id)).every(t => expandedTaxa.has(t.id)), [perTaxa, expandedTaxa]);
 
@@ -1344,8 +1452,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
 
   useEffect(() => {
     async function fetchTaxa() {
+      setLoading(true);
       try {
-        const res = await fetch("/api/redlist/taxa-summary");
+        const countryQs = countryKey ? `?country=${encodeURIComponent(countryKey)}` : "";
+        const res = await fetch(`/api/redlist/taxa-summary${countryQs}`);
         if (!res.ok) throw new Error("Failed to load taxa");
         const data = await res.json();
         setTaxa(data.taxa);
@@ -1356,9 +1466,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       }
     }
     fetchTaxa();
-  }, []);
+  }, [countryKey]);
 
-  if (loading) {
+  // Only the very first load (no data yet) shows the full-table skeleton below —
+  // a country-switch refetch (countryScope changing with taxa already populated)
+  // keeps rendering the existing table with its stale data, plus a small corner
+  // spinner (see the scrollRef wrapper below), so the map/table/toolbar don't
+  // blank out and reappear on every country click.
+  if (loading && taxa.length === 0) {
     // Skeleton rows matching actual table structure
     const skeletonRows = Array.from({ length: 9 }, (_, i) => (
       <tr key={i} className={i === 0 ? "bg-zinc-50/80 dark:bg-zinc-800/60" : ""}>
@@ -1394,6 +1509,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               <div className="flex-1 min-w-[40px] h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
               <div className="h-3 w-[44px] sm:w-[52px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
             </div>
+          </td>
+        )}
+        {countryStyleColumns && (
+          <td className={numericTdNoDividerClasses}>
+            <div className="h-4 w-12 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
           </td>
         )}
         {isVisible("gbifUnassessed") && (
@@ -1463,15 +1583,24 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         <table className="w-full">
           <thead>
             <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
-              <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} text-center text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap w-0`}>Taxonomic Group</th>
+              <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${taxonCellPad} text-center text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap w-0`}>Taxonomic Group</th>
               {isVisible("described") && <th className={numericThNoDividerClasses}># Described Species</th>}
               {isVisible("colDescribed") && <th className={numericThClasses}># Described Species (CoL)</th>}
-              {isVisible("assessed") && <th className={centeredThClasses}># Red List Assessed</th>}
-              {isVisible("outdated") && (
-                <th className={centeredThClasses}>
-                  <span className="inline-flex items-center gap-1"># Outdated (&gt;10 yrs old) <OutdatedInfoIcon /></span>
+              {isVisible("assessed") && (
+                <th className={countryStyleColumns ? `${centeredThClasses} whitespace-nowrap min-w-[80px]` : centeredThClasses}>
+                  {countryStyleColumns ? "# Assessed" : "# Red List Assessed"}
                 </th>
               )}
+              {isVisible("outdated") && (
+                <th className={countryStyleColumns ? numericThNoDividerClasses : centeredThClasses}>
+                  {countryStyleColumns ? (
+                    "# Outdated"
+                  ) : (
+                    <span className="inline-flex items-center gap-1"># Outdated (&gt;10 yrs old) <OutdatedInfoIcon /></span>
+                  )}
+                </th>
+              )}
+              {countryStyleColumns && <th className={numericThNoDividerClasses}>% Outdated</th>}
               {isVisible("gbifUnassessed") && <th className={centeredThClasses}># Unassessed, 1+ GBIF Obs</th>}
               {isVisible("colNe") && <th className={centeredThClasses}># Not Evaluated</th>}
               {isVisible("totalGbifObs") && <th className={numericThClasses}>Total Obs</th>}
@@ -1524,6 +1653,28 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
 
 
   // Column order: Taxon (sticky) | # Described | Assessed | Outdated | Category Breakdown
+
+  // Compact colored bar for Country View's % Outdated column — separate from
+  // # Outdated's own plain-count column (reverted back to two columns per
+  // feedback, now that the 2/5-map-3/5-table split leaves more room). Widened
+  // (w-10 -> w-20) now that taxonCellPad reclaims space from the Taxonomic
+  // Group column specifically to make room for this.
+  const renderCompactPercentBar = (percent: number) => {
+    const clampedPercent = Math.min(100, Math.max(0, percent));
+    return (
+      <div className="flex items-center justify-end gap-1.5">
+        <div className="w-20 h-2 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden flex-shrink-0">
+          <div
+            className="h-full rounded-full"
+            style={{ width: `${clampedPercent}%`, backgroundColor: getOutdatedBarColor(percent) }}
+          />
+        </div>
+        <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums w-12 text-right flex-shrink-0">
+          {percent.toFixed(1)}%
+        </span>
+      </div>
+    );
+  };
 
   // Render a percentage bar (optionally with a count label above)
   const renderBar = (percent: number, barColor: string, isAll: boolean, count?: number, fontWeight?: string) => {
@@ -1724,7 +1875,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         }}
         className={`transition-colors ${rowBg} ${hoverClass}`}
       >
-        <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 ${stickyBg}`}>
+        <td className={`${stickyClasses} ${taxonCellPad} whitespace-nowrap w-0 ${stickyBg}`}>
           <div className="flex items-center gap-2">
             {expandToggle(false, false)}
             <TaxaIcon taxonId={id} size={22} className="flex-shrink-0" style={{ color }} />
@@ -1741,18 +1892,34 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         )}
         {colDescribedCell(gbifObs?.colDescribed)}
         {isVisible("assessed") && (
-          <td className={flexTdClasses}>
-            {available ? (
-              renderBar(percentAssessed, getAssessedBarColor(percentAssessed), isAllRow, assessed)
-            ) : (
+          <td className={countryStyleColumns ? numericTdNoDividerClasses : flexTdClasses}>
+            {!available ? (
               <span className="text-sm md:text-base text-zinc-400">—</span>
+            ) : countryStyleColumns ? (
+              // % assessed (vs. the *global* described-species estimate) has no
+              // per-country meaning — see COUNTRY_SCOPED_HIDDEN_COLUMNS's doc
+              // comment — so this is a plain count, not renderBar's bar+percent.
+              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">{assessed.toLocaleString()}</span>
+            ) : (
+              renderBar(percentAssessed, getAssessedBarColor(percentAssessed), isAllRow, assessed)
             )}
           </td>
         )}
         {isVisible("outdated") && (
-          <td className={flexTdClasses}>
-            {available ? (
+          <td className={countryStyleColumns ? numericTdNoDividerClasses : flexTdClasses}>
+            {!available ? (
+              <span className="text-sm md:text-base text-zinc-400">—</span>
+            ) : countryStyleColumns ? (
+              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">{outdated.toLocaleString()}</span>
+            ) : (
               renderBar(percentOutdated, getOutdatedBarColor(percentOutdated), isAllRow, outdated)
+            )}
+          </td>
+        )}
+        {countryStyleColumns && (
+          <td className={numericTdNoDividerClasses}>
+            {available ? (
+              renderCompactPercentBar(percentOutdated)
             ) : (
               <span className="text-sm md:text-base text-zinc-400">—</span>
             )}
@@ -1821,7 +1988,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           onToggleSubgroup(sg.id);
         }}
       >
-        <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 bg-white dark:bg-zinc-900`}>
+        <td className={`${stickyClasses} ${taxonCellPad} whitespace-nowrap w-0 bg-white dark:bg-zinc-900`}>
           <div className="flex items-center gap-2" style={{ paddingLeft: `${depth * 12}px` }}>
             <TaxaIcon taxonId={sg.id} size={isViewRoot ? 18 : 16} className="flex-shrink-0" style={{ color }} />
             <span className="text-sm text-zinc-700 dark:text-zinc-300">{sg.name}</span>
@@ -1892,7 +2059,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           }
         }}
       >
-        <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 bg-zinc-100 dark:bg-zinc-800`}>
+        <td className={`${stickyClasses} ${taxonCellPad} whitespace-nowrap w-0 bg-zinc-100 dark:bg-zinc-800`}>
           <div className="flex items-center gap-2">
             {expandToggle(isExpandable(sg.id), expandedTaxa.has(sg.id))}
             <TaxaIcon taxonId={sg.id} size={18} className="flex-shrink-0" style={{ color: taxon.color }} />
@@ -1980,7 +2147,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             }
           }}
         >
-          <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 ${isSgSelected ? "bg-violet-50 dark:bg-violet-900/20" : "bg-white dark:bg-zinc-900"}`}>
+          <td className={`${stickyClasses} ${taxonCellPad} whitespace-nowrap w-0 ${isSgSelected ? "bg-violet-50 dark:bg-violet-900/20" : "bg-white dark:bg-zinc-900"}`}>
             <div className="flex items-center gap-2" style={{ paddingLeft: `${(depth - 1) * 12}px` }}>
               {expandToggle(sgHasChildren, isSgExpanded)}
               <TaxaIcon taxonId={sg.id} size={depth === 1 ? 16 : 14} className="flex-shrink-0" style={{ color: parentColor, opacity: isSgSelected ? 1 : 0.6 }} />
@@ -2003,15 +2170,32 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           )}
           {colDescribedCell(sg.colDescribed)}
           {isVisible("assessed") && (
-            <td className={flexTdClasses}>
-              {renderBar(sgPctAssessed, getAssessedBarColor(sgPctAssessed), false, sg.totalAssessed)}
+            <td className={countryStyleColumns ? numericTdNoDividerClasses : flexTdClasses}>
+              {countryStyleColumns ? (
+                <span className="text-sm text-zinc-600 dark:text-zinc-400 tabular-nums">{sg.totalAssessed.toLocaleString()}</span>
+              ) : (
+                renderBar(sgPctAssessed, getAssessedBarColor(sgPctAssessed), false, sg.totalAssessed)
+              )}
             </td>
           )}
           {isVisible("outdated") && (
-            <td className={flexTdClasses}>
-              {sg.totalAssessed > 0
-                ? renderBar(sgPctOutdated, getOutdatedBarColor(sgPctOutdated), false, sg.outdated)
-                : <span className="text-sm text-zinc-400">—</span>}
+            <td className={countryStyleColumns ? numericTdNoDividerClasses : flexTdClasses}>
+              {sg.totalAssessed === 0 ? (
+                <span className="text-sm text-zinc-400">—</span>
+              ) : countryStyleColumns ? (
+                <span className="text-sm text-zinc-600 dark:text-zinc-400 tabular-nums">{sg.outdated.toLocaleString()}</span>
+              ) : (
+                renderBar(sgPctOutdated, getOutdatedBarColor(sgPctOutdated), false, sg.outdated)
+              )}
+            </td>
+          )}
+          {countryStyleColumns && (
+            <td className={numericTdNoDividerClasses}>
+              {sg.totalAssessed > 0 ? (
+                renderCompactPercentBar(sgPctOutdated)
+              ) : (
+                <span className="text-sm text-zinc-400">—</span>
+              )}
             </td>
           )}
           {isVisible("gbifUnassessed") && (
@@ -2077,7 +2261,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             }
           }}
         >
-          <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 ${isSelected ? "bg-zinc-100 dark:bg-zinc-800" : "bg-white dark:bg-zinc-900"}`}>
+          <td className={`${stickyClasses} ${taxonCellPad} whitespace-nowrap w-0 ${isSelected ? "bg-zinc-100 dark:bg-zinc-800" : "bg-white dark:bg-zinc-900"}`}>
             <div className="flex items-center gap-2">
               {/* Only show the expand chevron once the taxon is selected — on the landing
                   page a click selects (doesn't expand yet), so a chevron there misleads. */}
@@ -2101,17 +2285,34 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           )}
           {colDescribedCell(taxon.available ? taxon.colDescribed : undefined)}
           {isVisible("assessed") && (
-            <td className={flexTdClasses}>
-              {taxon.available
-                ? renderBar(taxon.percentAssessed, getAssessedBarColor(taxon.percentAssessed), false, taxon.totalAssessed)
-                : <span className="text-sm text-zinc-400">—</span>}
+            <td className={countryStyleColumns ? numericTdNoDividerClasses : flexTdClasses}>
+              {!taxon.available ? (
+                <span className="text-sm text-zinc-400">—</span>
+              ) : countryStyleColumns ? (
+                <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">{taxon.totalAssessed.toLocaleString()}</span>
+              ) : (
+                renderBar(taxon.percentAssessed, getAssessedBarColor(taxon.percentAssessed), false, taxon.totalAssessed)
+              )}
             </td>
           )}
           {isVisible("outdated") && (
-            <td className={flexTdClasses}>
-              {taxon.available
-                ? renderBar(taxon.percentOutdated, getOutdatedBarColor(taxon.percentOutdated), false, taxon.outdated)
-                : <span className="text-sm text-zinc-400">—</span>}
+            <td className={countryStyleColumns ? numericTdNoDividerClasses : flexTdClasses}>
+              {!taxon.available ? (
+                <span className="text-sm text-zinc-400">—</span>
+              ) : countryStyleColumns ? (
+                <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">{taxon.outdated.toLocaleString()}</span>
+              ) : (
+                renderBar(taxon.percentOutdated, getOutdatedBarColor(taxon.percentOutdated), false, taxon.outdated)
+              )}
+            </td>
+          )}
+          {countryStyleColumns && (
+            <td className={numericTdNoDividerClasses}>
+              {taxon.available ? (
+                renderCompactPercentBar(taxon.percentOutdated)
+              ) : (
+                <span className="text-sm text-zinc-400">—</span>
+              )}
             </td>
           )}
           {isVisible("gbifUnassessed") && (
@@ -2169,24 +2370,28 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   const renderHead = () => (
     <thead>
       <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
-        <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} ${flatMode ? "text-left" : "text-center"} text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap w-0 ${flatMode ? "max-w-[160px] sm:max-w-[240px] lg:max-w-[300px]" : ""}`}>
+        <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${taxonCellPad} ${flatMode ? "text-left" : "text-center"} text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap w-0 ${flatMode ? "max-w-[160px] sm:max-w-[240px] lg:max-w-[300px]" : ""}`}>
           <div className={`flex items-center gap-1.5 ${flatMode ? "justify-start" : "justify-center"}`}>
             Taxonomic Group
-            <button
-              ref={menuButtonRef}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (!showColumnMenu && menuButtonRef.current) {
-                  const rect = menuButtonRef.current.getBoundingClientRect();
-                  setMenuPos({ top: rect.bottom + 4, left: rect.left });
-                }
-                setShowColumnMenu((v) => !v);
-              }}
-              className="p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-              title="Toggle columns"
-            >
-              <HiOutlineAdjustmentsHorizontal size={14} />
-            </button>
+            {/* Country View always shows the same fixed 3 columns — nothing to
+                toggle, so the columns menu button doesn't apply there. */}
+            {!countryMode && (
+              <button
+                ref={menuButtonRef}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!showColumnMenu && menuButtonRef.current) {
+                    const rect = menuButtonRef.current.getBoundingClientRect();
+                    setMenuPos({ top: rect.bottom + 4, left: rect.left });
+                  }
+                  setShowColumnMenu((v) => !v);
+                }}
+                className="p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                title="Toggle columns"
+              >
+                <HiOutlineAdjustmentsHorizontal size={14} />
+              </button>
+            )}
           </div>
         </th>
         {isVisible("described") && (
@@ -2216,12 +2421,25 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           <th className={numericThClasses}># Described Species (CoL)</th>
         )}
         {isVisible("assessed") && (
-          <th className={centeredThClasses}># Red List Assessed</th>
+          <th className={countryStyleColumns ? `${centeredThClasses} whitespace-nowrap min-w-[80px]` : centeredThClasses}>
+            {countryStyleColumns ? "# Assessed" : "# Red List Assessed"}
+          </th>
         )}
         {isVisible("outdated") && (
-          <th className={centeredThClasses}>
-            <span className="inline-flex items-center gap-1"># Outdated (&gt;10 yrs old) <OutdatedInfoIcon /></span>
+          <th className={countryStyleColumns ? numericThNoDividerClasses : centeredThClasses}>
+            {/* Country View's half-width column has no room for the full
+                "(>10 yrs old)" qualifier + info icon on one non-wrapping line
+                (inline-flex forces it to stay unwrapped) — shortened here,
+                same info still available via the plain-mode header. */}
+            {countryStyleColumns ? (
+              "# Outdated"
+            ) : (
+              <span className="inline-flex items-center gap-1"># Outdated (&gt;10 yrs old) <OutdatedInfoIcon /></span>
+            )}
           </th>
+        )}
+        {countryStyleColumns && (
+          <th className={numericThNoDividerClasses}>% Outdated</th>
         )}
         {isVisible("gbifUnassessed") && (
           <th className={centeredThClasses}># Unassessed, 1+ GBIF Obs</th>
@@ -2263,7 +2481,15 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
 
   return (
     <>
-    {showColumnMenu && createPortal(
+    {/* Country view: map and taxa table render side by side (see the grid
+        wrapper below) rather than the map replacing the whole component —
+        clicking a country narrows the map/table together; only clicking a
+        taxon row (handleToggleTaxon, in RedListView) exits layoutMode to
+        reveal the full charts view. The view-mode select itself stays in the
+        landing-only toolbar below (selectedTaxa is empty throughout country
+        browsing, same as it is on the plain landing page), not duplicated
+        here. */}
+    {!countryMode && showColumnMenu && createPortal(
       <div
         ref={menuRef}
         className="fixed bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg z-[9999] py-1 min-w-[180px]"
@@ -2307,9 +2533,58 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       </div>,
       document.body
     )}
-    <div ref={scrollRef} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto">
-      <table className="w-full">
-        {renderHead()}
+    {/* Country view: map on the left third, taxa table on the right two-thirds.
+        The table always uses the plain 3-column style in this mode
+        (countryStyleColumns, derived from layoutMode — see its definition
+        above), whether or not a country is picked yet. The selected country's
+        identity shows atop the table itself (below) in both this landing mode
+        and, once a taxon's clicked, the full view too. Uses `contents` to
+        no-op this grouping entirely outside country mode, rather than
+        branching (and duplicating) the huge table JSX below per mode. */}
+    <div className={countryMode ? "grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4" : "contents"}>
+      {/* No extra wrapper here — WorldMap already renders its own card (bg/border/
+          padding); wrapping it again doubled up the box and, since neither div had
+          an explicit height, left the map's own h-full with nothing to fill,
+          which is why it didn't match the table's height. Grid's default
+          align-items: stretch now makes both columns match the taller one — no
+          artificial min-height on the map side, so the row settles at the
+          table's own natural content height instead of leaving dead space
+          below the last row. 1/3 map, 2/3 table (col-span-1/col-span-2). */}
+      {countryMode && <div className="lg:col-span-1">{countryModeContent}</div>}
+      <div className={countryMode ? "min-w-0 flex flex-col h-full lg:col-span-2" : "contents"}>
+        {/* Country name atop the table — shown whenever a country is scoped,
+            in both Country View's landing layout and the full (post-taxon-click)
+            view. The clear button behaves differently per context: in Country
+            View it returns to the country list (onExitCountryScope); in the
+            full view it just drops the country filter and stays put
+            (onClearCountryScope) — same as the "France ×" chip elsewhere. */}
+        {countryScoped && (
+          <div className="flex items-center gap-1.5 mb-1.5 min-w-0 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+            <span className="truncate" title={countryScopeLabel}>{countryScopeLabel}</span>
+            {(countryMode ? onExitCountryScope : onClearCountryScope) && (
+              <button
+                onClick={countryMode ? onExitCountryScope : onClearCountryScope}
+                className="text-sm font-normal text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors shrink-0"
+                title="Clear selected country"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        )}
+        <div ref={scrollRef} className={`relative bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto ${countryMode ? "flex-1" : ""}`}>
+          {/* Country-switch refetch indicator — see the loading-gate comment
+              above renderRow's skeleton branch for why this doesn't blank the table. */}
+          {loading && taxa.length > 0 && (
+            <div className="absolute top-2 right-2 z-20">
+              <svg className="animate-spin h-4 w-4 text-zinc-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+            </div>
+          )}
+          <table className="w-full">
+            {renderHead()}
         <tbody>
           {flatMode ? (
             /* Table 1a / SSC groups view: sections with headers, individual rows, subtotals */
@@ -2365,7 +2640,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                       {/* Section header — shows the section's subtotals directly, so they're
                           visible without scrolling past every row to reach the bottom. */}
                       <tr className="bg-zinc-100 dark:bg-zinc-800/80 border-b border-zinc-200 dark:border-zinc-700">
-                        <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 bg-zinc-100 dark:bg-zinc-800/80`}>
+                        <td className={`${stickyClasses} ${taxonCellPad} whitespace-nowrap w-0 bg-zinc-100 dark:bg-zinc-800/80`}>
                           <span className="text-xs font-bold text-zinc-600 dark:text-zinc-300 uppercase tracking-wider">
                             {section.title}
                           </span>
@@ -2469,7 +2744,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                             }
                           }}
                         >
-                          <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 max-w-[160px] sm:max-w-[240px] lg:max-w-[300px] bg-white dark:bg-zinc-900`}>
+                          <td className={`${stickyClasses} ${taxonCellPad} whitespace-nowrap w-0 max-w-[160px] sm:max-w-[240px] lg:max-w-[300px] bg-white dark:bg-zinc-900`}>
                             <span className="flex items-center gap-1.5 pl-4 min-w-0">
                               <span className="text-sm md:text-base text-zinc-900 dark:text-zinc-100 truncate" title={row.name}>
                                 {row.name}
@@ -2728,14 +3003,22 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           )}
         </tbody>
       </table>
+        </div>
+      </div>
     </div>
     {/* Subtle controls: usage hint + # Described toggle + expand/table controls,
-        all landing-only — hidden once a taxon is selected. */}
-    {!loading && perTaxa.length > 0 && selectedTaxa.size === 0 && (
+        all landing-only — hidden once a taxon is selected. Gated on perTaxa.length
+        alone (not also !loading) — perTaxa already implies data is present, and
+        also gating on loading made this row flicker away and back on every
+        country switch (loading briefly flips true again for the background
+        refetch even though perTaxa/taxa still hold the previous country's data). */}
+    {perTaxa.length > 0 && selectedTaxa.size === 0 && (
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 mt-1.5">
-        {/* Usage hint — desktop only; the toggles below matter more on mobile than this prose */}
+        {/* Usage hint — desktop only; the toggles below matter more on mobile than this prose.
+            Country View has no multi-select (a country click always narrows to that one
+            country — see handleCountryDrilldown), so the normal hint doesn't apply there. */}
         <span className="hidden sm:inline pl-3 md:pl-4 text-xs text-zinc-400 dark:text-zinc-500">
-          Click to filter, Cmd/Ctrl+click to multi-select.
+          {countryMode ? "Click a country to view its data." : "Click to filter, Cmd/Ctrl+click to multi-select."}
         </span>
         <div className="flex flex-wrap items-center gap-3 pl-3 sm:pl-0">
           {/* IUCN ↔ CoL source toggle: flips the described count + recomputes % Assessed */}
@@ -2758,21 +3041,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             </span>
           </span>
           <span className="text-zinc-300 dark:text-zinc-700">|</span>
-          {table1aMode ? (
-            <button
-              onClick={() => onLayoutModeChange(null)}
-              className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-            >
-              Exit Table 1a View
-            </button>
-          ) : sscMode ? (
-            <button
-              onClick={() => onLayoutModeChange(null)}
-              className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-            >
-              Exit SSC Groups View
-            </button>
-          ) : (
+          {/* Expand/Collapse all doesn't apply to Country View — its subgroup tree
+              stays collapsed by default there regardless (fewer controls, per its
+              single-country-focus design). */}
+          {!flatMode && !countryMode && (
             <>
               <button
                 onClick={allExpanded ? collapseAll : expandAll}
@@ -2782,52 +3054,24 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                 {allExpanded ? "Collapse all" : "Expand all"}
               </button>
               <span className="text-zinc-300 dark:text-zinc-700">|</span>
-              <span className="inline-flex items-center gap-1">
-                <button
-                  onClick={() => onLayoutModeChange("table1a")}
-                  className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                >
-                  Table 1a View
-                </button>
-                <span className="relative group/t1a">
-                  <a
-                    href={IUCN_SOURCE_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <FaInfoCircle size={10} />
-                  </a>
-                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover/t1a:opacity-100 group-hover/t1a:visible z-50 shadow-lg pointer-events-none">
-                    View IUCN Red List Table 1a (PDF)
-                  </span>
-                </span>
-              </span>
-              <span className="text-zinc-300 dark:text-zinc-700">|</span>
-              <span className="inline-flex items-center gap-1">
-                <button
-                  onClick={() => onLayoutModeChange("ssc")}
-                  className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                >
-                  SSC Groups View
-                </button>
-                <span className="relative group/ssc">
-                  <a
-                    href="https://iucn.org/our-union/commissions/group/1445"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <FaInfoCircle size={10} />
-                  </a>
-                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover/ssc:opacity-100 group-hover/ssc:visible z-50 shadow-lg pointer-events-none">
-                    View IUCN SSC Specialist Groups (mammals, reptiles, fishes, invertebrates, plants & fungi)
-                  </span>
-                </span>
-              </span>
             </>
+          )}
+          {layoutModeSelect}
+          {(table1aMode || sscMode) && (
+            <span className="relative group/lm">
+              <a
+                href={table1aMode ? IUCN_SOURCE_URL : "https://iucn.org/our-union/commissions/group/1445"}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <FaInfoCircle size={10} />
+              </a>
+              <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover/lm:opacity-100 group-hover/lm:visible z-50 shadow-lg pointer-events-none">
+                {table1aMode ? "View IUCN Red List Table 1a (PDF)" : "View IUCN SSC Specialist Groups (mammals, reptiles, fishes, invertebrates, plants & fungi)"}
+              </span>
+            </span>
           )}
         </div>
       </div>
