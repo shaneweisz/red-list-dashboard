@@ -15,6 +15,12 @@ export type ViewMode = "reassessments" | "new-assessments";
 // navigateToTaxonSubgroup below) or a country (see enterCountryDrilldown).
 export type LayoutMode = "table1a" | "ssc" | "country" | null;
 
+// WorldMap's own Map/List toggle and the list view's column sort — URL-synced
+// (distinct from sortField/sortDirection above, which sort the species table)
+// so a list-view sort like "most outdated plants" is a shareable link.
+export type MapViewMode = "map" | "list";
+export type MapSortKey = "name" | "species" | "outdated" | "percentOutdated";
+
 // Exact, URL-only base filters (no on-screen control — the charts use coarse
 // buckets). They let an agent/MCP dashboard link reproduce the exact /browse
 // query; each feeds the same predicate the dashboard already runs.
@@ -170,6 +176,14 @@ export function parseParams(search: string) {
       null
     ) as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear" | null,
     sortDirection: (p.get("dir") === "asc" ? "asc" : "desc") as "asc" | "desc",
+    mapViewMode: (p.get("mapview") === "list" ? "list" : "map") as MapViewMode,
+    mapSortKey: (
+      p.get("mapsort") === "name" ? "name" :
+      p.get("mapsort") === "outdated" ? "outdated" :
+      p.get("mapsort") === "percentOutdated" ? "percentOutdated" :
+      "species"
+    ) as MapSortKey,
+    mapSortDirection: (p.get("mapdir") === "asc" ? "asc" : "desc") as "asc" | "desc",
     species: p.get("species") ? Number(p.get("species")) : null,
     tab: (p.get("tab") || null) as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol" | null,
   };
@@ -205,6 +219,9 @@ export function buildQs(state: {
   maxDescribedYear?: number | null;
   sortField: "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear" | null;
   sortDirection: "asc" | "desc";
+  mapViewMode?: MapViewMode;
+  mapSortKey?: MapSortKey;
+  mapSortDirection?: "asc" | "desc";
   species: number | null;
   tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol" | null;
 }): string {
@@ -253,6 +270,9 @@ export function buildQs(state: {
   } else if (state.sortDirection !== "desc") {
     p.set("dir", state.sortDirection);
   }
+  if (state.mapViewMode === "list") p.set("mapview", "list");
+  if (state.mapSortKey && state.mapSortKey !== "species") p.set("mapsort", state.mapSortKey);
+  if (state.mapSortDirection === "asc") p.set("mapdir", "asc");
   const qs = p.toString();
   return qs ? `?${qs}` : "";
 }
@@ -648,6 +668,28 @@ export function useFilterParams() {
     [syncUrl]
   );
 
+  const setMapViewMode = useCallback(
+    (mode: MapViewMode) => {
+      setState(prev => {
+        const next = { ...prev, mapViewMode: mode };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
+  const setMapSort = useCallback(
+    (key: MapSortKey, direction: "asc" | "desc") => {
+      setState(prev => {
+        const next = { ...prev, mapSortKey: key, mapSortDirection: direction };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
   const setSpeciesParam = useCallback(
     (species: number | null, tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol" = "gbif") => {
       setState(prev => {
@@ -761,6 +803,9 @@ export function useFilterParams() {
     setExactFilters,
     sortField: state.sortField,
     sortDirection: state.sortDirection,
+    mapViewMode: state.mapViewMode,
+    mapSortKey: state.mapSortKey,
+    mapSortDirection: state.mapSortDirection,
 
     setViewMode,
     setLayoutMode,
@@ -787,6 +832,8 @@ export function useFilterParams() {
     setSelectedReviewers,
     setSearchFilter,
     setSort,
+    setMapViewMode,
+    setMapSort,
     fromPopstateRef,
     clearAllFilters,
     clearAllFiltersAndTaxa,

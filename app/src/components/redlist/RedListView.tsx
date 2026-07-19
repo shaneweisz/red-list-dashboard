@@ -360,6 +360,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     searchFilter, setSearchFilter,
     exactFilters, setExactFilters,
     sortField, sortDirection, setSort,
+    mapViewMode, mapSortKey, mapSortDirection, setMapViewMode, setMapSort,
     clearAllFilters,
     setViewMode: setUrlViewMode,
     species: urlSpecies, tab: urlTab,
@@ -2260,17 +2261,20 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // is already excluded too: handleCountryDrilldown always treats a click as a
   // single-country pick, ignoring ctrl/cmd (see its own comment).
   const countryModeContent = (
-    <div style={{ height: 600 }}>
-      <WorldMap
-        selectedCountries={selectedCountries}
-        onCountrySelect={handleCountryDrilldown}
-        precomputedStats={countryLandingStats ?? {}}
-        selectedTaxa={selectedTaxa}
-        speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
-        showOutdatedMode={!isNewAssessments}
-        showGbifToggle={false}
-      />
-    </div>
+    <WorldMap
+      selectedCountries={selectedCountries}
+      onCountrySelect={handleCountryDrilldown}
+      precomputedStats={countryLandingStats ?? {}}
+      selectedTaxa={selectedTaxa}
+      speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
+      showOutdatedMode={!isNewAssessments}
+      showGbifToggle={false}
+      mapViewMode={mapViewMode}
+      onMapViewModeChange={setMapViewMode}
+      mapSortKey={mapSortKey}
+      mapSortDirection={mapSortDirection}
+      onMapSortChange={setMapSort}
+    />
   );
 
   return (
@@ -2685,6 +2689,11 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   endemicsOnly={endemicsOnly}
                   onEndemicsToggle={() => setEndemicsOnly(!endemicsOnly)}
                   showGbifToggle={showGbifToggle}
+                  mapViewMode={mapViewMode}
+                  onMapViewModeChange={setMapViewMode}
+                  mapSortKey={mapSortKey}
+                  mapSortDirection={mapSortDirection}
+                  onMapSortChange={setMapSort}
                 />
               )}
             </div>

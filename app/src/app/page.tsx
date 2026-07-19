@@ -51,12 +51,32 @@ export default function RedListPage() {
             search bar share the same flush-left edge as the table below. */}
         <div className="mb-[0.9rem] md:mb-[1.35rem]">
           <div className="min-w-0 grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center gap-x-3 gap-y-1.5 sm:gap-y-3 [grid-template-areas:'title'_'subtitle'_'controls'_'search'] sm:[grid-template-areas:'title_controls'_'subtitle_search']">
-            <div className="[grid-area:title] flex items-center gap-2 min-w-0">
+            <button
+              type="button"
+              onClick={() => {
+                // "Go home": drop every filter/selection, but keep the layout
+                // (Standard/Table 1a/SSC/Country) and view (Reassessments/New
+                // Assessments) choices — same fields clearAllFiltersAndTaxa
+                // preserves, replicated here via raw URL params since this
+                // click lives outside RedListView's useFilterParams instance.
+                const params = new URLSearchParams(window.location.search);
+                const kept = new URLSearchParams();
+                const layout = params.get("layout");
+                const view = params.get("view");
+                if (layout) kept.set("layout", layout);
+                if (view) kept.set("view", view);
+                const qs = kept.toString();
+                window.history.pushState(null, "", qs ? `/?${qs}` : "/");
+                window.dispatchEvent(new PopStateEvent("popstate"));
+              }}
+              className="[grid-area:title] flex items-center gap-2 min-w-0 text-left cursor-pointer hover:opacity-80 transition-opacity"
+              title="Back to home"
+            >
               {brand.showGlobe && (
                 <FaGlobeAmericas className="shrink-0 text-2xl sm:text-3xl md:text-[2rem] text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
               )}
               <h1 className="text-2xl sm:text-3xl md:text-[2rem] font-bold text-zinc-900 dark:text-zinc-100 truncate">{brand.title}</h1>
-            </div>
+            </button>
             {brand.subtitle && (
               <p className="[grid-area:subtitle] text-[15px] md:text-[1.375rem] text-zinc-500 dark:text-zinc-400">{brand.subtitle}</p>
             )}

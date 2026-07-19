@@ -1200,7 +1200,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         }}
         className="text-xs bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
       >
-        <option value="taxonomic">Taxonomic view</option>
+        <option value="taxonomic">Standard view</option>
         <option value="table1a">Table 1a view</option>
         <option value="ssc">SSC group view</option>
         <option value="country" disabled={isNewAssessments} title={isNewAssessments ? "Not available for New Assessments — Not Evaluated species have no location data" : undefined}>
@@ -1435,7 +1435,12 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     fetchTaxa();
   }, [countryScope]);
 
-  if (loading) {
+  // Only the very first load (no data yet) shows the full-table skeleton below —
+  // a country-switch refetch (countryScope changing with taxa already populated)
+  // keeps rendering the existing table with its stale data, plus a small corner
+  // spinner (see the scrollRef wrapper below), so the map/table/toolbar don't
+  // blank out and reappear on every country click.
+  if (loading && taxa.length === 0) {
     // Skeleton rows matching actual table structure
     const skeletonRows = Array.from({ length: 9 }, (_, i) => (
       <tr key={i} className={i === 0 ? "bg-zinc-50/80 dark:bg-zinc-800/60" : ""}>
@@ -1471,6 +1476,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               <div className="flex-1 min-w-[40px] h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
               <div className="h-3 w-[44px] sm:w-[52px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
             </div>
+          </td>
+        )}
+        {countryStyleColumns && (
+          <td className={numericTdNoDividerClasses}>
+            <div className="h-4 w-12 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
           </td>
         )}
         {isVisible("gbifUnassessed") && (
@@ -1545,10 +1555,15 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               {isVisible("colDescribed") && <th className={numericThClasses}># Described Species (CoL)</th>}
               {isVisible("assessed") && <th className={centeredThClasses}># Red List Assessed</th>}
               {isVisible("outdated") && (
-                <th className={centeredThClasses}>
-                  <span className="inline-flex items-center gap-1"># Outdated (&gt;10 yrs old) <OutdatedInfoIcon /></span>
+                <th className={countryStyleColumns ? numericThNoDividerClasses : centeredThClasses}>
+                  {countryStyleColumns ? (
+                    "# Outdated"
+                  ) : (
+                    <span className="inline-flex items-center gap-1"># Outdated (&gt;10 yrs old) <OutdatedInfoIcon /></span>
+                  )}
                 </th>
               )}
+              {countryStyleColumns && <th className={numericThNoDividerClasses}>% Outdated</th>}
               {isVisible("gbifUnassessed") && <th className={centeredThClasses}># Unassessed, 1+ GBIF Obs</th>}
               {isVisible("colNe") && <th className={centeredThClasses}># Not Evaluated</th>}
               {isVisible("totalGbifObs") && <th className={numericThClasses}>Total Obs</th>}
@@ -2348,8 +2363,16 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           <th className={centeredThClasses}># Red List Assessed</th>
         )}
         {isVisible("outdated") && (
-          <th className={centeredThClasses}>
-            <span className="inline-flex items-center gap-1"># Outdated (&gt;10 yrs old) <OutdatedInfoIcon /></span>
+          <th className={countryStyleColumns ? numericThNoDividerClasses : centeredThClasses}>
+            {/* Country View's half-width column has no room for the full
+                "(>10 yrs old)" qualifier + info icon on one non-wrapping line
+                (inline-flex forces it to stay unwrapped) — shortened here,
+                same info still available via the plain-mode header. */}
+            {countryStyleColumns ? (
+              "# Outdated"
+            ) : (
+              <span className="inline-flex items-center gap-1"># Outdated (&gt;10 yrs old) <OutdatedInfoIcon /></span>
+            )}
           </th>
         )}
         {countryStyleColumns && (
@@ -2454,13 +2477,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         appears once one actually is (countryScoped). Uses `contents` to no-op
         this grouping entirely outside country mode, rather than branching
         (and duplicating) the huge table JSX below per mode. */}
-    <div className={countryMode ? "grid grid-cols-1 lg:grid-cols-2 gap-4 items-start mb-4" : "contents"}>
-      {countryMode && (
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
-          {countryModeContent}
-        </div>
-      )}
-      <div className={countryMode ? "min-w-0" : "contents"}>
+    <div className={countryMode ? "grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4" : "contents"}>
+      {/* No extra wrapper here — WorldMap already renders its own card (bg/border/
+          padding); wrapping it again doubled up the box and, since neither div had
+          an explicit height, left the map's own h-full with nothing to fill,
+          which is why it didn't match the table's height. Grid's default
+          align-items: stretch now makes both columns match the taller one. */}
+      {countryMode && <div className="min-h-[500px]">{countryModeContent}</div>}
+      <div className={countryMode ? "min-w-0 flex flex-col h-full" : "contents"}>
         {countryScoped && (
           <div className="flex items-center gap-1.5 mb-1.5 pl-3 sm:pl-0">
             <span className="text-xs text-zinc-500 dark:text-zinc-400">
@@ -2477,7 +2501,17 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             )}
           </div>
         )}
-        <div ref={scrollRef} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto">
+        <div ref={scrollRef} className={`relative bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto ${countryMode ? "flex-1" : ""}`}>
+          {/* Country-switch refetch indicator — see the loading-gate comment
+              above renderRow's skeleton branch for why this doesn't blank the table. */}
+          {loading && taxa.length > 0 && (
+            <div className="absolute top-2 right-2 z-20">
+              <svg className="animate-spin h-4 w-4 text-zinc-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+            </div>
+          )}
           <table className="w-full">
             {renderHead()}
         <tbody>
