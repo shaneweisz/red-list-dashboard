@@ -153,8 +153,13 @@ interface Props {
    * via the Country view landing page) scopes this table's own fetches too. */
   countryScope?: string | null;
   /** Clears the country selection and re-enters the Country view landing page —
-   * shown next to the country name atop the table whenever countryScope is set. */
+   * used for the clear button atop the table while layoutMode is "country". */
   onExitCountryScope?: () => void;
+  /** Clears the country selection without changing layoutMode — used for the
+   * same clear button atop the table once a taxon's been clicked and this has
+   * exited to the full view (returning to the Country view landing page from
+   * there would be a surprising jump). */
+  onClearCountryScope?: () => void;
 }
 
 // Dynamic: any tree node with children is expandable
@@ -1042,7 +1047,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
   );
 }
 
-export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", layoutMode, onLayoutModeChange, countryModeContent, countryScope, onExitCountryScope }: Props) {
+export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", layoutMode, onLayoutModeChange, countryModeContent, countryScope, onExitCountryScope, onClearCountryScope }: Props) {
   const isNewAssessments = viewMode === "new-assessments";
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1082,14 +1087,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   // picked, showing global data) since Described/GBIF/CoL columns have no country
   // dimension there either — see the `country-scoped` design note near countryMode.
   const countryStyleColumns = layoutMode === "country" || countryScoped;
-  // Appended to every row's own name (e.g. "Mammals (Brazil)") whenever a country
-  // is scoped outside the Country View landing page — where the map itself
-  // already shows the selected country instead (see WorldMap's
-  // selectedCountryLabel) — so the country identity doesn't need its own
-  // separate "Showing data for X" banner in either place.
-  const countryRowSuffix = layoutMode !== "country" && countryScoped
-    ? ` (${ALPHA2_TO_NAME[countryScope!] ?? countryScope})`
-    : "";
   // Tighter, non-responsive padding for the sticky Taxonomic Group column in
   // Country View — cellPad's px-4 growth at the md breakpoint is more than the
   // taxon name + icon need just to avoid wrapping, and that column is the
@@ -1860,7 +1857,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           <div className="flex items-center gap-2">
             {expandToggle(false, false)}
             <TaxaIcon taxonId={id} size={22} className="flex-shrink-0" style={{ color }} />
-            <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{name}{countryRowSuffix}</span>
+            <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{name}</span>
             {allDisabled && <DisabledAllTooltip />}
           </div>
         </td>
@@ -2044,7 +2041,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           <div className="flex items-center gap-2">
             {expandToggle(isExpandable(sg.id), expandedTaxa.has(sg.id))}
             <TaxaIcon taxonId={sg.id} size={18} className="flex-shrink-0" style={{ color: taxon.color }} />
-            <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{sg.name}{countryRowSuffix}</span>
+            <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{sg.name}</span>
           </div>
         </td>
         {isVisible("described") && (
@@ -2248,7 +2245,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                   page a click selects (doesn't expand yet), so a chevron there misleads. */}
               {expandToggle(hasSubgroups && isSelected, isExpanded)}
               <TaxaIcon taxonId={taxon.id} size={22} className="flex-shrink-0" style={{ color: taxon.color }} />
-              <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{taxon.name}{countryRowSuffix}</span>
+              <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{taxon.name}</span>
               {isLoadingSubs && (
                 <svg className="animate-spin h-3 w-3 text-zinc-400" viewBox="0 0 24 24" fill="none">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -2514,35 +2511,37 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       </div>,
       document.body
     )}
-    {/* Country view: map on the left half, taxa table on the right half. The
-        table always uses the plain 3-column style in this mode (countryStyleColumns,
-        derived from layoutMode — see its definition above), whether or not a
-        country is picked yet. The selected country's identity shows atop the
-        table itself (below) while in this landing mode; once a taxon is
-        clicked and this exits to the full view, each row's own name gets a
-        "(Country)" suffix instead (see countryRowSuffix above). Uses `contents`
-        to no-op this grouping entirely outside country mode, rather than
+    {/* Country view: map on the left third, taxa table on the right two-thirds.
+        The table always uses the plain 3-column style in this mode
+        (countryStyleColumns, derived from layoutMode — see its definition
+        above), whether or not a country is picked yet. The selected country's
+        identity shows atop the table itself (below) in both this landing mode
+        and, once a taxon's clicked, the full view too. Uses `contents` to
+        no-op this grouping entirely outside country mode, rather than
         branching (and duplicating) the huge table JSX below per mode. */}
-    <div className={countryMode ? "grid grid-cols-1 lg:grid-cols-5 gap-4 mb-4" : "contents"}>
+    <div className={countryMode ? "grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4" : "contents"}>
       {/* No extra wrapper here — WorldMap already renders its own card (bg/border/
           padding); wrapping it again doubled up the box and, since neither div had
           an explicit height, left the map's own h-full with nothing to fill,
           which is why it didn't match the table's height. Grid's default
-          align-items: stretch now makes both columns match the taller one.
-          2/5 map, 3/5 table (col-span-2/col-span-3 of the 5-col grid). */}
-      {countryMode && <div className="min-h-[500px] lg:col-span-2">{countryModeContent}</div>}
-      <div className={countryMode ? "min-w-0 flex flex-col h-full lg:col-span-3" : "contents"}>
-        {/* Country name atop the table, only in Country View's side-by-side
-            layout — the full (non-country-mode) view already identifies the
-            country via each row's own "(Country)" suffix plus the removable
-            "France ×" chip in the main filter-chips row, so this isn't
-            duplicated there. */}
-        {countryMode && countryScoped && (
+          align-items: stretch now makes both columns match the taller one — no
+          artificial min-height on the map side, so the row settles at the
+          table's own natural content height instead of leaving dead space
+          below the last row. 1/3 map, 2/3 table (col-span-1/col-span-2). */}
+      {countryMode && <div className="lg:col-span-1">{countryModeContent}</div>}
+      <div className={countryMode ? "min-w-0 flex flex-col h-full lg:col-span-2" : "contents"}>
+        {/* Country name atop the table — shown whenever a country is scoped,
+            in both Country View's landing layout and the full (post-taxon-click)
+            view. The clear button behaves differently per context: in Country
+            View it returns to the country list (onExitCountryScope); in the
+            full view it just drops the country filter and stays put
+            (onClearCountryScope) — same as the "France ×" chip elsewhere. */}
+        {countryScoped && (
           <div className="flex items-center gap-1.5 mb-1.5 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
             {ALPHA2_TO_NAME[countryScope!] ?? countryScope}
-            {onExitCountryScope && (
+            {(countryMode ? onExitCountryScope : onClearCountryScope) && (
               <button
-                onClick={onExitCountryScope}
+                onClick={countryMode ? onExitCountryScope : onClearCountryScope}
                 className="text-sm font-normal text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
                 title="Clear selected country"
               >
