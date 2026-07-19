@@ -1102,7 +1102,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     setHiddenColumns(new Set(FOCUS_HIDDEN[mode]));
   };
 
-  const visibleColCount = 1 + (Object.keys(COLUMN_LABELS) as ColumnId[]).filter(isVisible).length;
+  const visibleColCount = 1 + (Object.keys(COLUMN_LABELS) as ColumnId[]).filter(isVisible).length + (countryStyleColumns ? 1 : 0);
 
   // Close column menu on outside click
   useEffect(() => {
@@ -1483,6 +1483,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             </div>
           </td>
         )}
+        {countryStyleColumns && (
+          <td className={numericTdNoDividerClasses}>
+            <div className="h-4 w-12 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
+          </td>
+        )}
         {isVisible("gbifUnassessed") && (
           <td className={flexTdClasses}>
             <div className="flex items-center gap-1.5 sm:gap-3 min-w-[150px] sm:min-w-[230px] md:min-w-[250px]">
@@ -1561,12 +1566,13 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               {isVisible("outdated") && (
                 <th className={countryStyleColumns ? numericThNoDividerClasses : centeredThClasses}>
                   {countryStyleColumns ? (
-                    "Outdated"
+                    "# Outdated"
                   ) : (
                     <span className="inline-flex items-center gap-1"># Outdated (&gt;10 yrs old) <OutdatedInfoIcon /></span>
                   )}
                 </th>
               )}
+              {countryStyleColumns && <th className={numericThNoDividerClasses}>% Outdated</th>}
               {isVisible("gbifUnassessed") && <th className={centeredThClasses}># Unassessed, 1+ GBIF Obs</th>}
               {isVisible("colNe") && <th className={centeredThClasses}># Not Evaluated</th>}
               {isVisible("totalGbifObs") && <th className={numericThClasses}>Total Obs</th>}
@@ -1620,18 +1626,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
 
   // Column order: Taxon (sticky) | # Described | Assessed | Outdated | Category Breakdown
 
-  // Country View's single, merged "Outdated" column (count + colored bar + percent)
-  // — a narrower version of renderBar below (which is too wide for the half-width
-  // layout), but wide enough to read clearly now that # Outdated/% Outdated share
-  // one column instead of two.
-  const renderCountryOutdatedCell = (count: number, percent: number) => {
+  // Compact colored bar for Country View's % Outdated column — separate from
+  // # Outdated's own plain-count column (reverted back to two columns per
+  // feedback, now that the 2/5-map-3/5-table split leaves more room).
+  const renderCompactPercentBar = (percent: number) => {
     const clampedPercent = Math.min(100, Math.max(0, percent));
     return (
       <div className="flex items-center justify-end gap-1.5">
-        <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums w-10 text-right flex-shrink-0">
-          {count.toLocaleString()}
-        </span>
-        <div className="w-14 h-2 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden flex-shrink-0">
+        <div className="w-10 h-2 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden flex-shrink-0">
           <div
             className="h-full rounded-full"
             style={{ width: `${clampedPercent}%`, backgroundColor: getOutdatedBarColor(percent) }}
@@ -1878,9 +1880,18 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             {!available ? (
               <span className="text-sm md:text-base text-zinc-400">—</span>
             ) : countryStyleColumns ? (
-              renderCountryOutdatedCell(outdated, percentOutdated)
+              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">{outdated.toLocaleString()}</span>
             ) : (
               renderBar(percentOutdated, getOutdatedBarColor(percentOutdated), isAllRow, outdated)
+            )}
+          </td>
+        )}
+        {countryStyleColumns && (
+          <td className={numericTdNoDividerClasses}>
+            {available ? (
+              renderCompactPercentBar(percentOutdated)
+            ) : (
+              <span className="text-sm md:text-base text-zinc-400">—</span>
             )}
           </td>
         )}
@@ -2142,9 +2153,18 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               {sg.totalAssessed === 0 ? (
                 <span className="text-sm text-zinc-400">—</span>
               ) : countryStyleColumns ? (
-                renderCountryOutdatedCell(sg.outdated, sgPctOutdated)
+                <span className="text-sm text-zinc-600 dark:text-zinc-400 tabular-nums">{sg.outdated.toLocaleString()}</span>
               ) : (
                 renderBar(sgPctOutdated, getOutdatedBarColor(sgPctOutdated), false, sg.outdated)
+              )}
+            </td>
+          )}
+          {countryStyleColumns && (
+            <td className={numericTdNoDividerClasses}>
+              {sg.totalAssessed > 0 ? (
+                renderCompactPercentBar(sgPctOutdated)
+              ) : (
+                <span className="text-sm text-zinc-400">—</span>
               )}
             </td>
           )}
@@ -2250,9 +2270,18 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               {!taxon.available ? (
                 <span className="text-sm text-zinc-400">—</span>
               ) : countryStyleColumns ? (
-                renderCountryOutdatedCell(taxon.outdated, taxon.percentOutdated)
+                <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">{taxon.outdated.toLocaleString()}</span>
               ) : (
                 renderBar(taxon.percentOutdated, getOutdatedBarColor(taxon.percentOutdated), false, taxon.outdated)
+              )}
+            </td>
+          )}
+          {countryStyleColumns && (
+            <td className={numericTdNoDividerClasses}>
+              {taxon.available ? (
+                renderCompactPercentBar(taxon.percentOutdated)
+              ) : (
+                <span className="text-sm text-zinc-400">—</span>
               )}
             </td>
           )}
@@ -2371,16 +2400,16 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             {/* Country View's half-width column has no room for the full
                 "(>10 yrs old)" qualifier + info icon on one non-wrapping line
                 (inline-flex forces it to stay unwrapped) — shortened here,
-                same info still available via the plain-mode header. # Outdated
-                and % Outdated share this one header (and cell — see
-                renderCountryOutdatedCell) rather than each having their own
-                column, so the combined bar has more room to be legible. */}
+                same info still available via the plain-mode header. */}
             {countryStyleColumns ? (
-              "Outdated"
+              "# Outdated"
             ) : (
               <span className="inline-flex items-center gap-1"># Outdated (&gt;10 yrs old) <OutdatedInfoIcon /></span>
             )}
           </th>
+        )}
+        {countryStyleColumns && (
+          <th className={numericThNoDividerClasses}>% Outdated</th>
         )}
         {isVisible("gbifUnassessed") && (
           <th className={centeredThClasses}># Unassessed, 1+ GBIF Obs</th>
@@ -2484,14 +2513,15 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         neither needs a separate "Showing data for X" banner here. Uses `contents`
         to no-op this grouping entirely outside country mode, rather than
         branching (and duplicating) the huge table JSX below per mode. */}
-    <div className={countryMode ? "grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4" : "contents"}>
+    <div className={countryMode ? "grid grid-cols-1 lg:grid-cols-5 gap-4 mb-4" : "contents"}>
       {/* No extra wrapper here — WorldMap already renders its own card (bg/border/
           padding); wrapping it again doubled up the box and, since neither div had
           an explicit height, left the map's own h-full with nothing to fill,
           which is why it didn't match the table's height. Grid's default
-          align-items: stretch now makes both columns match the taller one. */}
-      {countryMode && <div className="min-h-[500px]">{countryModeContent}</div>}
-      <div className={countryMode ? "min-w-0 flex flex-col h-full" : "contents"}>
+          align-items: stretch now makes both columns match the taller one.
+          2/5 map, 3/5 table (col-span-2/col-span-3 of the 5-col grid). */}
+      {countryMode && <div className="min-h-[500px] lg:col-span-2">{countryModeContent}</div>}
+      <div className={countryMode ? "min-w-0 flex flex-col h-full lg:col-span-3" : "contents"}>
         {/* Intentionally no country-name banner/chip here anymore — see the
             comment above this whole grid wrapper for where that identity is
             now shown instead (map label in landing mode, per-row suffix once

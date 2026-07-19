@@ -599,16 +599,16 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
         </div>
       </div>
 
-      {/* Selected country, centered below the filter row and above the map/list —
+      {/* Selected country, left-aligned below the filter row and above the map/list —
           replaces what used to be a "Showing data for X" banner elsewhere on the
           page (see RedListView.tsx's countryModeContent doc comment). */}
       {selectedCountryLabel && (
-        <div className="flex items-center justify-center gap-1.5 mb-1.5 text-sm font-medium text-zinc-900 dark:text-zinc-100">
+        <div className="flex items-center gap-1.5 mb-1.5 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
           {selectedCountryLabel}
           {onClearSelectedCountry && (
             <button
               onClick={onClearSelectedCountry}
-              className="text-xs font-normal text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+              className="text-sm font-normal text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
               title="Clear selected country"
             >
               ✕

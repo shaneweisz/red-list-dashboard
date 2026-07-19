@@ -13,37 +13,34 @@ export type Brand = {
   showGlobe?: boolean;
 };
 
-// "Red List Dashboard" is the default brand shown on every host.
+// "Dash for Life" is the default brand shown on every host.
 const DEFAULT_BRAND: Brand = {
-  title: "Red List Dashboard",
+  title: "Dash for Life",
   subtitle: "A Dashboard for Conservation of Threatened Species",
-  description: "A dashboard for biodiversity data about life on Earth",
-  showGlobe: true,
-};
-
-// The "Dash of Life" rebrand — not the default for now, kept defined (not
-// mapped to any hostname below) in case it's revisited later.
-const DASH_OF_LIFE_BRAND: Brand = {
-  title: "Dash of Life",
-  subtitle: "A Dashboard for Conservation of Threatened Species",
-  tabTitle: "Dash of Life",
+  tabTitle: "Dash for Life",
   description: "A dashboard for biodiversity data about life on Earth",
   assessedTabLabel: "Red List Assessed",
   unassessedTabLabel: "Unassessed",
   showGlobe: true,
 };
 
-// The "Dash for Life" brand, identical to the Dash of Life rebrand save for its title.
-const DASH_FOR_LIFE_BRAND: Brand = {
-  ...DASH_OF_LIFE_BRAND,
-  title: "Dash for Life",
-  tabTitle: "Dash for Life",
+// Earlier brand variants — not the default for now, kept defined and exported
+// (not mapped to any hostname below) in case they're revisited later.
+export const RED_LIST_BRAND: Brand = {
+  title: "Red List Dashboard",
+  subtitle: "A Dashboard for Conservation of Threatened Species",
+  description: "A dashboard for biodiversity data about life on Earth",
+  showGlobe: true,
+};
+
+export const DASH_OF_LIFE_BRAND: Brand = {
+  ...DEFAULT_BRAND,
+  title: "Dash of Life",
+  tabTitle: "Dash of Life",
 };
 
 // Per-hostname overrides. Keys are bare hostnames (no port, no "www.").
-const BRANDS: Record<string, Brand> = {
-  "dashforlife.org": DASH_FOR_LIFE_BRAND,
-};
+const BRANDS: Record<string, Brand> = {};
 
 /** Resolve the brand for an incoming request's `Host` header. */
 export function brandForHost(host: string | null | undefined): Brand {
