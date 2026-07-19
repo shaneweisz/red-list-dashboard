@@ -2,12 +2,6 @@
 
 These apply to anyone (or any agent) opening a PR against redlist-dashboard, not just a specific assistant's preferences.
 
-## Ship multi-phase features as one PR
-
-When a feature naturally breaks into sequential phases (e.g. data pipeline → UI component → integration → wiring), open **one PR** and land each phase as its own commit, verifying it (typecheck/lint/tests + a real browser check for anything UI-facing — see below) before starting the next. Don't split phases into separate PRs.
-
-Only open a genuinely separate PR when a piece of follow-up work carries real, separate regression risk against already-working code — that's a scope decision (does this touch a different, currently-stable code path?), not a phasing-cadence one.
-
 ## Keep the PR description current
 
 Treat the PR body as a living summary, not a one-time snapshot. Every time a commit changes what the PR does, what it fixes, or what's been verified, update the body's Summary/Test-plan sections to match (`gh pr edit --body ...`) — don't just leave the original description stale with fixes trailing below in comments. A reviewer should be able to read the PR body alone and get the current, complete picture.
