@@ -2533,7 +2533,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       </div>,
       document.body
     )}
-    {/* Country view: map on the left third, taxa table on the right two-thirds.
+    {/* Country view: taxa table on the left half, map on the right half.
         The table always uses the plain 3-column style in this mode
         (countryStyleColumns, derived from layoutMode — see its definition
         above), whether or not a country is picked yet. The selected country's
@@ -2541,7 +2541,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         and, once a taxon's clicked, the full view too. Uses `contents` to
         no-op this grouping entirely outside country mode, rather than
         branching (and duplicating) the huge table JSX below per mode. */}
-    <div className={countryMode ? "grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4" : "contents"}>
+    <div className={countryMode ? "grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4" : "contents"}>
       {/* No extra wrapper here — WorldMap already renders its own card (bg/border/
           padding); wrapping it again doubled up the box and, since neither div had
           an explicit height, left the map's own h-full with nothing to fill,
@@ -2549,9 +2549,12 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           align-items: stretch now makes both columns match the taller one — no
           artificial min-height on the map side, so the row settles at the
           table's own natural content height instead of leaving dead space
-          below the last row. 1/3 map, 2/3 table (col-span-1/col-span-2). */}
-      {countryMode && <div className="lg:col-span-1">{countryModeContent}</div>}
-      <div className={countryMode ? "min-w-0 flex flex-col h-full lg:col-span-2" : "contents"}>
+          below the last row. Even 1/2-1/2 split (col-span-1 each); the table's
+          own scrollRef box below is zoomed down to compensate for the narrower
+          column (was 2/3 width, now 1/2 — zoom-[.75] keeps everything, fonts
+          included, at the same proportions just smaller, rather than letting
+          columns get cramped or triggering horizontal scroll). */}
+      <div className={countryMode ? "min-w-0 flex flex-col h-full" : "contents"}>
         {/* Country name atop the table — shown whenever a country is scoped,
             in both Country View's landing layout and the full (post-taxon-click)
             view. The clear button behaves differently per context: in Country
@@ -2572,7 +2575,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             )}
           </div>
         )}
-        <div ref={scrollRef} className={`relative bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto ${countryMode ? "flex-1" : ""}`}>
+        <div ref={scrollRef} className={`relative bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto ${countryMode ? "flex-1 [zoom:.75]" : ""}`}>
           {/* Country-switch refetch indicator — see the loading-gate comment
               above renderRow's skeleton branch for why this doesn't blank the table. */}
           {loading && taxa.length > 0 && (
@@ -3005,6 +3008,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       </table>
         </div>
       </div>
+      {countryMode && <div>{countryModeContent}</div>}
     </div>
     {/* Subtle controls: usage hint + # Described toggle + expand/table controls,
         all landing-only — hidden once a taxon is selected. Gated on perTaxa.length
@@ -3018,7 +3022,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             Country View has no multi-select (a country click always narrows to that one
             country — see handleCountryDrilldown), so the normal hint doesn't apply there. */}
         <span className="hidden sm:inline pl-3 md:pl-4 text-xs text-zinc-400 dark:text-zinc-500">
-          {countryMode ? "Click a country to view its data." : "Click to filter, Cmd/Ctrl+click to multi-select."}
+          {countryMode ? "Hover a country to view its data." : "Click to filter, Cmd/Ctrl+click to multi-select."}
         </span>
         <div className="flex flex-wrap items-center gap-3 pl-3 sm:pl-0">
           {/* IUCN ↔ CoL source toggle: flips the described count + recomputes % Assessed */}

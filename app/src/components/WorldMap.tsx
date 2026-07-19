@@ -245,6 +245,13 @@ interface WorldMapProps {
   mapSortKey?: MapSortKey;
   mapSortDirection?: "asc" | "desc";
   onMapSortChange?: (key: MapSortKey, direction: "asc" | "desc") => void;
+  // When true, hovering a country also drives onCountrySelect (in addition to
+  // the tooltip), so e.g. the country-view landing page's table updates as
+  // you scan the map rather than requiring a click. Default false — the
+  // other WorldMap usages (Charts row 2's country filter, the CITES map)
+  // still expect click-to-select, since hover already drives their tooltip
+  // and select-on-hover there would fight with normal mouse movement.
+  selectOnHover?: boolean;
 }
 
 const DEFAULT_CENTER: [number, number] = [10, 10];
@@ -252,7 +259,7 @@ const DEFAULT_ZOOM = 1.0;
 const MIN_ZOOM = 1.0;
 const MAX_ZOOM = 8.0;
 
-function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, precomputedStatsTotal, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, endemicsOnly = false, onEndemicsToggle, footer, showGbifToggle = true, showOutdatedMode = true, mapViewMode, onMapViewModeChange, mapSortKey, mapSortDirection, onMapSortChange }: WorldMapProps) {
+function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, precomputedStatsTotal, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, endemicsOnly = false, onEndemicsToggle, footer, showGbifToggle = true, showOutdatedMode = true, mapViewMode, onMapViewModeChange, mapSortKey, mapSortDirection, onMapSortChange, selectOnHover = false }: WorldMapProps) {
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoveredCountryCode, setHoveredCountryCode] = useState<string | null>(null);
   const [speciesStats, setSpeciesStats] = useState<CountryStats>(precomputedStats || {});
@@ -708,9 +715,12 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
                     <Geography
                       key={geo.rsmKey}
                       geography={geo}
-                      onMouseEnter={() => {
+                      onMouseEnter={(event) => {
                         setHoveredCountry(countryName);
                         setHoveredCountryCode(alpha2);
+                        if (selectOnHover && alpha2) {
+                          onCountrySelect(alpha2, countryName, event);
+                        }
                       }}
                       onMouseLeave={() => {
                         setHoveredCountry(null);

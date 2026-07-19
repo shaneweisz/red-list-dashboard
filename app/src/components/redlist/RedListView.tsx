@@ -2222,10 +2222,12 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // special-case region vs. multi-select here.
   const countryScope = selectedCountries.size > 0 ? [...selectedCountries] : null;
 
-  // Country view's own map/list click — same plain-click-replaces/ctrl-click-
-  // toggles gesture as handleCountrySelect (the normal browsing view's country
-  // filter), just routed through enterCountryDrilldown so the country change
-  // stays atomic with clearing taxa/subgroups (see its own comment).
+  // Country view's own map/list select — fires on hover, not just click (see
+  // WorldMap's selectOnHover), so the table updates as you scan the map. Same
+  // plain-select-replaces/ctrl-click-toggles gesture as handleCountrySelect
+  // (the normal browsing view's country filter), just routed through
+  // enterCountryDrilldown so the country change stays atomic with clearing
+  // taxa/subgroups (see its own comment).
   const handleCountryDrilldown = useCallback(
     (code: string, _name: string, event: React.MouseEvent) => {
       const isMultiSelect = event.metaKey || event.ctrlKey;
@@ -2280,6 +2282,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     <WorldMap
       selectedCountries={selectedCountries}
       onCountrySelect={handleCountryDrilldown}
+      selectOnHover
       precomputedStats={countryLandingStats ?? {}}
       selectedTaxa={selectedTaxa}
       speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
