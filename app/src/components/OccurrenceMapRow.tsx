@@ -1139,6 +1139,37 @@ export default function OccurrenceMapRow({
               {label}
             </div>
           )}
+          {/* Native-range source switch — floating on the map (like Protected areas
+              below) rather than buried in the Coordinate cleaning dropdown, so it's
+              visible/switchable at a glance. Only shown when both sources have real
+              data for this species, since only then is there a real choice to make. */}
+          {!loadingOccurrences && mounted && hasBothNativeRangeSources && (
+            <div className={`absolute left-2 z-[1000] ${label ? "top-10" : "top-2"} flex items-center gap-1 bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 p-1`}>
+              <span className="text-[10px] text-zinc-400 dark:text-zinc-500 pl-1 pr-0.5">Native range:</span>
+              <button
+                onClick={() => setNativeRangeSource("wcvp")}
+                title="Native range per Kew's World Checklist of Vascular Plants (POWO)"
+                className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                  nativeRangeSource === "wcvp"
+                    ? "bg-emerald-600 text-white"
+                    : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                }`}
+              >
+                POWO
+              </button>
+              <button
+                onClick={() => setNativeRangeSource("redlist")}
+                title="Native range per the IUCN Red List assessment's locations"
+                className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                  nativeRangeSource === "redlist"
+                    ? "bg-emerald-600 text-white"
+                    : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                }`}
+              >
+                IUCN
+              </button>
+            </div>
+          )}
           {/* Protected areas (WDPA) overlay toggle */}
           {!loadingOccurrences && mounted && (
             <div className="absolute top-2 right-2 z-[1000]">
@@ -1222,7 +1253,7 @@ export default function OccurrenceMapRow({
                   </svg>
                 </button>
                 {filtersOpen && !loadingBreakdown && (
-                  <div className="absolute left-0 top-full mt-1 z-50 w-[25rem] bg-white/60 dark:bg-zinc-900/60 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
+                  <div className="absolute left-0 top-full mt-1 z-50 w-[25rem] bg-white/40 dark:bg-zinc-900/40 backdrop-blur-sm rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
                     <div className="flex items-center gap-2 px-3 pb-1 text-[10px] font-medium text-zinc-400 dark:text-zinc-500">
                       <span className="w-40 shrink-0 flex items-center gap-2">
                         <button
