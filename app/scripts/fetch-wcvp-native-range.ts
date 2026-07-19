@@ -38,6 +38,13 @@
  * absent from WCVP) simply gets no POWO option — the UI falls back to the Red
  * List source where available.
  *
+ * Output is a Parquet file (not JSON) queried directly by DuckDB in
+ * /api/wcvp-native-range at request time — a plain JSON import would force
+ * parsing the entire ~49MB file into a JS object on every cold start just to
+ * answer a single-name lookup (measured ~3s, and that parse blocks Node's
+ * single-threaded event loop for its whole duration). Parquet lets DuckDB read
+ * only the rows it needs.
+ *
  * Usage (re-run occasionally; WCVP ships periodic updates):
  *   npx tsx scripts/fetch-wcvp-native-range.ts [path-to-already-downloaded-wcvp.zip]
  */
@@ -51,7 +58,7 @@ const WCVP_ZIP_URL = "https://sftp.kew.org/pub/data-repositories/WCVP/wcvp.zip";
 const TDWG_LEVEL3_URL =
   "https://raw.githubusercontent.com/tdwg/wgsrpd/master/109-488-1-ED/2nd%20Edition/tblLevel3.txt";
 const OUT_DIR = path.join(__dirname, "..", "src", "lib", "native-range-refdata");
-const OUT_PATH = path.join(OUT_DIR, "wcvp-native-countries.json");
+const OUT_PATH = path.join(OUT_DIR, "wcvp-native-countries.parquet");
 const WORK_DIR = path.join(__dirname, "..", ".wcvp-tmp");
 
 // Patches for TDWG WGSRPD level-3 codes with no ISO code in the official Ed.2
@@ -78,6 +85,10 @@ function download(url: string, destPath: string) {
   execSync(`curl -sL --max-time 300 -o "${destPath}" "${url}"`, { stdio: "inherit" });
 }
 
+function sqlString(s: string): string {
+  return `'${s.replace(/'/g, "''")}'`;
+}
+
 async function main() {
   fs.mkdirSync(WORK_DIR, { recursive: true });
   fs.mkdirSync(OUT_DIR, { recursive: true });
@@ -99,18 +110,18 @@ async function main() {
 
   // tblLevel3.txt is Latin-1 encoded (breaks on diacritics like "Føroyar" if read as UTF-8)
   const level3Raw = fs.readFileSync(level3Path).toString("latin1");
-  const level3ToIso = new Map<string, string[]>();
+  // (l3code, iso) pairs — one-to-many for composite codes split by WGSRPD_OVERRIDES.
+  const crosswalkRows: [string, string][] = [];
   for (const line of level3Raw.split(/\r?\n/).slice(1)) {
     if (!line.trim()) continue;
     const [l3code, , , isoCode] = line.split("*");
     if (!l3code) continue;
-    if (WGSRPD_OVERRIDES[l3code]) {
-      level3ToIso.set(l3code, WGSRPD_OVERRIDES[l3code]);
-    } else if (isoCode?.trim()) {
-      level3ToIso.set(l3code, [isoCode.trim().toUpperCase()]);
-    }
+    const isoCodes = WGSRPD_OVERRIDES[l3code] ?? (isoCode?.trim() ? [isoCode.trim().toUpperCase()] : null);
+    if (!isoCodes) continue;
+    for (const iso of isoCodes) crosswalkRows.push([l3code, iso]);
   }
-  console.log(`TDWG level-3 crosswalk: ${level3ToIso.size}/369 codes resolved to a country`);
+  const distinctL3 = new Set(crosswalkRows.map((r) => r[0]));
+  console.log(`TDWG level-3 crosswalk: ${distinctL3.size}/369 codes resolved to a country`);
 
   const namesPath = path.join(WORK_DIR, "wcvp_names.csv");
   const distPath = path.join(WORK_DIR, "wcvp_distribution.csv");
@@ -118,46 +129,40 @@ async function main() {
   const instance = await DuckDBInstance.create(":memory:");
   const conn = await instance.connect();
 
-  console.log("Reading native distribution rows...");
-  const distResult = await conn.runAndReadAll(`
-    SELECT plant_name_id, area_code_l3
-    FROM read_csv('${distPath}', delim=chr(124), header=true, quote='')
-    WHERE introduced = 0 AND extinct = 0 AND (location_doubtful = 0 OR location_doubtful IS NULL)
-  `);
-  const distRows = distResult.getRowObjects() as unknown as { plant_name_id: bigint; area_code_l3: string }[];
-  console.log(`${distRows.length} native distribution rows total`);
+  await conn.run(`CREATE TABLE crosswalk (l3code VARCHAR, iso VARCHAR)`);
+  const values = crosswalkRows.map(([l3, iso]) => `(${sqlString(l3)}, ${sqlString(iso)})`).join(",");
+  await conn.run(`INSERT INTO crosswalk VALUES ${values}`);
 
-  // Accepted-taxon id -> native ISO countries (distribution rows are keyed by the
-  // accepted taxon's own plant_name_id; synonyms don't get their own rows).
-  const idToCountries = new Map<bigint, Set<string>>();
-  for (const { plant_name_id, area_code_l3 } of distRows) {
-    const isoCodes = level3ToIso.get(area_code_l3);
-    if (!isoCodes) continue;
-    let set = idToCountries.get(plant_name_id);
-    if (!set) { set = new Set(); idToCountries.set(plant_name_id, set); }
-    for (const iso of isoCodes) set.add(iso);
-  }
+  console.log("Computing native countries per accepted taxon...");
+  await conn.run(`
+    CREATE TABLE id_countries AS
+    SELECT d.plant_name_id, list_sort(list(DISTINCT x.iso)) AS countries
+    FROM read_csv(${sqlString(distPath)}, delim=chr(124), header=true, quote='') d
+    JOIN crosswalk x ON x.l3code = d.area_code_l3
+    WHERE d.introduced = 0 AND d.extinct = 0 AND (d.location_doubtful = 0 OR d.location_doubtful IS NULL)
+    GROUP BY d.plant_name_id
+  `);
 
   // Every species-rank name in the full checklist (Accepted or Synonym), resolved
   // to its accepted taxon's id — covers current names AND older/synonym names a
-  // Red List assessment (assessed or NE) might still use.
-  console.log("Reading full WCVP species-rank name list...");
-  const namesResult = await conn.runAndReadAll(`
-    SELECT taxon_name, COALESCE(accepted_plant_name_id, plant_name_id) AS resolved_id
-    FROM read_csv('${namesPath}', delim=chr(124), header=true, quote='')
-    WHERE taxon_name IS NOT NULL AND taxon_rank = 'Species'
+  // Red List assessment (assessed or NE) might still use. Streamed straight to
+  // Parquet rather than materialized in JS (see file header for why).
+  console.log("Matching full WCVP species-rank name list and writing Parquet...");
+  await conn.run(`
+    COPY (
+      SELECT n.taxon_name AS name, ic.countries
+      FROM (
+        SELECT taxon_name, COALESCE(accepted_plant_name_id, plant_name_id) AS resolved_id
+        FROM read_csv(${sqlString(namesPath)}, delim=chr(124), header=true, quote='')
+        WHERE taxon_name IS NOT NULL AND taxon_rank = 'Species'
+      ) n
+      JOIN id_countries ic ON ic.plant_name_id = n.resolved_id
+    ) TO ${sqlString(OUT_PATH)} (FORMAT PARQUET)
   `);
-  const nameRows = namesResult.getRowObjects() as unknown as { taxon_name: string; resolved_id: bigint }[];
-  console.log(`${nameRows.length} species-rank names in the full checklist`);
 
-  const out: Record<string, string[]> = {};
-  for (const { taxon_name, resolved_id } of nameRows) {
-    const countries = idToCountries.get(resolved_id);
-    if (!countries || countries.size === 0) continue;
-    out[taxon_name] = Array.from(countries).sort();
-  }
-  fs.writeFileSync(OUT_PATH, JSON.stringify(out));
-  console.log(`Wrote ${Object.keys(out).length} names to ${OUT_PATH}`);
+  const countResult = await conn.runAndReadAll(`SELECT count(*) c FROM read_parquet(${sqlString(OUT_PATH)})`);
+  const count = Number(countResult.getRowObjects()[0].c);
+  console.log(`Wrote ${count} names to ${OUT_PATH}`);
 
   fs.rmSync(WORK_DIR, { recursive: true, force: true });
 }

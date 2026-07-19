@@ -1253,7 +1253,7 @@ export default function OccurrenceMapRow({
                   </svg>
                 </button>
                 {filtersOpen && !loadingBreakdown && (
-                  <div className="absolute left-0 top-full mt-1 z-50 w-[25rem] bg-white/40 dark:bg-zinc-900/40 backdrop-blur-sm rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
+                  <div className="absolute left-0 top-full mt-1 z-50 w-[25rem] bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
                     <div className="flex items-center gap-2 px-3 pb-1 text-[10px] font-medium text-zinc-400 dark:text-zinc-500">
                       <span className="w-40 shrink-0 flex items-center gap-2">
                         <button
