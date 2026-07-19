@@ -736,20 +736,6 @@ export default function OccurrenceMapRow({
     setAppliedChecks((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  // Bounding box from filtered occurrences
-  const filteredBbox = useMemo<[number, number, number, number] | null>(() => {
-    if (filteredOccurrences.length === 0) return bbox; // fall back to API bbox
-    let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
-    for (const f of filteredOccurrences) {
-      const [lon, lat] = f.geometry.coordinates;
-      if (lon < minLon) minLon = lon;
-      if (lon > maxLon) maxLon = lon;
-      if (lat < minLat) minLat = lat;
-      if (lat > maxLat) maxLat = lat;
-    }
-    return [minLon, minLat, maxLon, maxLat];
-  }, [filteredOccurrences, bbox]);
-
   // Date range for the split view slider
   const { sliderMinDate, sliderMaxDate } = useMemo(() => {
     const dates = filteredOccurrences
@@ -912,25 +898,30 @@ export default function OccurrenceMapRow({
     if (prevSplitViewRef.current !== splitView) {
       prevSplitViewRef.current = splitView;
       fittedBboxRef.current = null;
-      if (filteredBbox) {
-        pendingBboxRef.current = filteredBbox;
+      if (bbox) {
+        pendingBboxRef.current = bbox;
       }
     }
-  }, [splitView, filteredBbox]);
+  }, [splitView, bbox]);
 
-  // Fit bounds when bbox changes (may need to wait for map to be ready)
+  // Fit bounds when the (unfiltered) bbox changes (may need to wait for map to
+  // be ready) — deliberately keyed on `bbox` (the server-computed extent of
+  // every loaded record), not a filtered subset: re-fitting to whatever's left
+  // after toggling a filter checkbox felt jarring, since the view would jump
+  // every time. The map now only re-fits on genuinely new data (a new species,
+  // or loading a larger sample), not on filter changes.
   useEffect(() => {
-    if (!filteredBbox) return;
-    const key = filteredBbox.join(",");
+    if (!bbox) return;
+    const key = bbox.join(",");
     if (fittedBboxRef.current === key) return;
-    if (fitMapToBbox(filteredBbox)) {
+    if (fitMapToBbox(bbox)) {
       fittedBboxRef.current = key;
       pendingBboxRef.current = null;
     } else {
       // Map not ready yet — store as pending for onLoad
-      pendingBboxRef.current = filteredBbox;
+      pendingBboxRef.current = bbox;
     }
-  }, [filteredBbox, fitMapToBbox]);
+  }, [bbox, fitMapToBbox]);
 
   // Called when the MapGL component finishes loading
   const handleMapLoad = useCallback(() => {
@@ -1233,9 +1224,13 @@ export default function OccurrenceMapRow({
               ))}
             </div>
           )}
-          {/* Loaded X of Y GBIF records — floating badge, single view only */}
+          {/* Loaded X of Y GBIF records — floating badge, single view only.
+              Solid background (not translucent) in both themes: it sits over
+              arbitrary map tiles, not a plain page background, so a tinted/
+              translucent fill (as used elsewhere in the toolbar) reads with
+              poor contrast in dark mode against light-colored tiles. */}
           {!splitView && !loadingOccurrences && totalOccurrences != null && (
-            <div className="absolute top-2 right-2 z-[1000] max-w-[85%] px-2 py-1 rounded-lg shadow-md bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-[11px] text-emerald-700 dark:text-emerald-300">
+            <div className="absolute top-2 right-2 z-[1000] max-w-[85%] px-2 py-1 rounded-lg shadow-md bg-emerald-50 dark:bg-emerald-900 border border-emerald-200 dark:border-emerald-700 text-[11px] text-emerald-700 dark:text-emerald-300">
               {isFullSample ? (
                 <>All <strong>{totalOccurrences.toLocaleString()}</strong> GBIF records loaded.</>
               ) : (
@@ -1417,7 +1412,7 @@ export default function OccurrenceMapRow({
                   </svg>
                 </button>
                 {cleaningFilterOpen && (
-                  <div className="absolute left-0 top-full mt-1 z-50 w-80 bg-white/75 dark:bg-zinc-900/75 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
+                  <div className="absolute left-0 top-full mt-1 z-50 w-80 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
                     <div className="flex items-center px-3 pb-1 text-[10px] font-medium text-zinc-400 dark:text-zinc-500">
                       <button
                         onClick={() => {
@@ -1666,6 +1661,23 @@ export default function OccurrenceMapRow({
                         className="w-3 h-3 rounded accent-emerald-500 shrink-0"
                       />
                       <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">Protected areas</span>
+                      <a
+                        href="https://www.protectedplanet.net"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="World Database on Protected Areas (WDPA), via Protected Planet — UNEP-WCMC & IUCN"
+                        onClick={(e) => {
+                          // Same pattern as the other info-icon links in this
+                          // component: prevent the enclosing <label>'s native
+                          // click-forwarding from toggling the checkbox.
+                          e.preventDefault();
+                          e.stopPropagation();
+                          window.open("https://www.protectedplanet.net", "_blank", "noopener,noreferrer");
+                        }}
+                        className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
+                      >
+                        <FaInfoCircle className="w-3 h-3" />
+                      </a>
                     </label>
                     <label
                       className={`flex items-center gap-2 px-3 py-1.5 text-xs ${
@@ -1850,12 +1862,12 @@ export default function OccurrenceMapRow({
                     </button>
                   </div>
                   <div className="flex flex-col sm:flex-row gap-2">
-                    {renderMapPanel(preAssessmentOccs, filteredBbox, `Before ${splitDate} (${preAssessmentOccs.length})`, "before")}
-                    {renderMapPanel(postAssessmentOccs, filteredBbox, `After ${splitDate} (${postAssessmentOccs.length})`, "after")}
+                    {renderMapPanel(preAssessmentOccs, bbox, `Before ${splitDate} (${preAssessmentOccs.length})`, "before")}
+                    {renderMapPanel(postAssessmentOccs, bbox, `After ${splitDate} (${postAssessmentOccs.length})`, "after")}
                   </div>
                 </div>
               ) : (
-                renderMapPanel(filteredOccurrences, filteredBbox, null)
+                renderMapPanel(filteredOccurrences, bbox, null)
               )}
             </div>
           </div>
