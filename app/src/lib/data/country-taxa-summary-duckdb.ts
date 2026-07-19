@@ -25,15 +25,17 @@ import { outdatedCutoffDate } from "@/lib/outdated";
 import type { TaxonomyNode } from "@/config/taxonomy-tree";
 
 // list_contains needs an exact-case match; countries are stored upper-case 2-letter
-// codes (same convention as the countries= URL filter elsewhere in the app).
-function countryWhere(cc: string): string {
+// codes (same convention as the countries= URL filter elsewhere in the app). Exported
+// for unit tests (the DuckDB query itself is verified manually against live data —
+// see the country-taxa-summary-duckdb.test.ts file comment).
+export function countryWhere(cc: string): string {
   return `list_contains(string_split(coalesce(countries, ''), ';'), '${cc.toUpperCase().replace(/'/g, "''")}')`;
 }
 
 // DATE, not TIMESTAMP — isOutdated() compares full elapsed time, but assessment_date
 // only ever carries day precision, so truncating the cutoff to a date is equivalent
 // and avoids a timezone-sensitive TIMESTAMP comparison.
-function outdatedSql(cutoffIso: string): string {
+export function outdatedSql(cutoffIso: string): string {
   return `(assessment_date IS NULL OR CAST(assessment_date AS DATE) <= CAST('${cutoffIso}' AS DATE))`;
 }
 
@@ -89,8 +91,8 @@ export async function getCountryTaxaSummary(cc: string): Promise<TaxaSummaryRow[
 // matching rows away from a catch-all sibling (excludeClasses-bearing child) — see
 // computeChildrenSummaries' claim-tracking in build-taxa-summary.ts, which this
 // mirrors. families/genera/speciesNames-scoped siblings are deliberately NOT
-// claim-eligible (matching that function exactly).
-function claimEligibleSiblingsSql(children: TaxonomyNode[], excludeIdx: number): string | null {
+// claim-eligible (matching that function exactly). Exported for unit tests.
+export function claimEligibleSiblingsSql(children: TaxonomyNode[], excludeIdx: number): string | null {
   const clauses = children
     .filter((c, i) => i !== excludeIdx && (c.filter.classNames?.length || c.filter.orderNames?.length))
     .map((c) => filterToSql(c.filter));
