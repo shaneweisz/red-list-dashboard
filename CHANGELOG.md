@@ -4,8 +4,8 @@ All notable changes to the IUCN Red List Assessments Dashboard.
 
 ## [Unreleased]
 
-- Added a "Native range only" check to the GBIF occurrence map's Coordinate cleaning dropdown — hides occurrences reported outside a species' native countries, catching cultivated/naturalized botanical-garden specimens. Two selectable sources (POWO/WCVP default, or the Red List assessment's own locations), which can genuinely disagree on native range; POWO now covers the full WCVP checklist (~941k names, current and synonym), not just already-assessed species
-- Tightened the Basis of Record dropdown's layout (narrower, less opaque) and made its counts, and Coordinate cleaning's, cross-filter consistently with the new native-range check
+- Added a "Native range only" check to the GBIF occurrence map's Coordinate cleaning dropdown — hides occurrences reported outside a species' native countries, catching cultivated/naturalized botanical-garden specimens. Two selectable sources (POWO/WCVP default, or the Red List assessment's own locations), switchable both from the dropdown and a floating map control (like the Protected areas toggle); which can genuinely disagree on native range. POWO now covers the full WCVP checklist (~941k names, current and synonym), not just already-assessed species
+- Tightened the Basis of Record dropdown's layout (narrower, translucent with a blur) and made its counts, and Coordinate cleaning's, cross-filter consistently with the new native-range check
 
 ## [v2.16.0] — 2026-06-30 – 2026-07-07 — Shared Filters, Attribution & Taxon Browsing
 
