@@ -3751,6 +3751,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                 assessmentYear={assessmentYear}
                                 assessmentDate={s.assessment_date}
                                 taxonGroup={s.taxon_group}
+                                scientificName={s.scientific_name}
+                                nativeCountriesRedList={s.countries}
                                 onEmpty={s.category === "NE" ? handleOccurrenceEmpty : undefined}
                               />
                             </div>
