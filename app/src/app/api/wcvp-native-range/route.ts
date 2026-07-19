@@ -8,10 +8,10 @@ import wcvpNativeCountries from "@/lib/native-range-refdata/wcvp-native-countrie
  * OccurrenceMapRow.tsx (issue #82), alongside the Red List assessment-based one
  * already carried on every species as `s.countries`.
  *
- * A dedicated lazy route (not a field on /api/redlist/species) so this ~3MB
- * lookup table only ever loads server-side, for the one species whose GBIF tab
- * is actually open — not bundled into the already-large species-list payload for
- * all ~78k plant species, most of which never get their GBIF tab opened.
+ * A dedicated lazy route (not a field on /api/redlist/species) so this ~49MB
+ * full-checklist lookup table only ever loads server-side, for the one species
+ * whose GBIF tab is actually open — not bundled into the already-large
+ * species-list payload, and never shipped to the browser at all.
  */
 export async function GET(request: NextRequest) {
   const name = request.nextUrl.searchParams.get("name");

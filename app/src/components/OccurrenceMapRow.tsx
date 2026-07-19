@@ -274,16 +274,6 @@ export function isPlantOrFungiTaxonGroup(taxonGroup: string | undefined): boolea
 }
 
 /**
- * Plants only (not fungi) — the narrower taxonomic scope issue #82 asked to
- * default the "Native range only" filter on for, since cultivated/naturalized
- * botanical-garden specimens are the specific problem it's meant to catch.
- */
-export function isPlantTaxonGroup(taxonGroup: string | undefined): boolean {
-  if (!taxonGroup) return false;
-  return mapTaxonId(taxonGroup) === "plantae";
-}
-
-/**
  * Vascular plants only — the taxonomic scope WCVP/POWO actually covers (not
  * mosses, algae, or fungi), used to gate the "POWO" native-range source fetch.
  */
@@ -362,17 +352,17 @@ export default function OccurrenceMapRow({
     OUTSIDE_REPORTED_COUNTRY: false,
   });
   // Native range only — hide occurrences reported in a country outside this
-  // species' native range. Defaults on for plants (issue #82), where cultivated/
-  // naturalized botanical-garden specimens are a common false signal; off by
-  // default for other taxa.
-  const [nativeRangeOnly, setNativeRangeOnly] = useState(isPlantTaxonGroup(taxonGroup));
-  // Which native-range source backs the filter above. Defaults to the Red List
-  // assessment (available for every taxon, already shipped pre-#380-follow-up);
-  // "wcvp" (POWO) is only offered as an alternative when this species has a WCVP
-  // match, since the two sources can genuinely disagree on native range (e.g.
-  // Acorus calamus: WCVP treats it as native only to Kazakhstan, everywhere else
-  // — including the Red List assessment's own 26-country list — as introduced).
-  const [nativeRangeSource, setNativeRangeSource] = useState<"redlist" | "wcvp">("redlist");
+  // species' native range. Off by default (folded into the Coordinate cleaning
+  // dropdown below as an opt-in check, same as every other check there).
+  const [nativeRangeOnly, setNativeRangeOnly] = useState(false);
+  // Which native-range source backs the filter above. Defaults to "wcvp" (POWO)
+  // — the source issue #82 originally asked for by name — falling back to the
+  // Red List assessment's own locations when this species has no WCVP match.
+  // The two sources can genuinely disagree (e.g. Acorus calamus: WCVP treats it
+  // as native only to Kazakhstan, everywhere else — including the Red List
+  // assessment's own 26-country list — as introduced), which is why both are
+  // offered rather than picking one as canonical.
+  const [nativeRangeSource, setNativeRangeSource] = useState<"redlist" | "wcvp">("wcvp");
   const [nativeCountriesWcvp, setNativeCountriesWcvp] = useState<string[] | null>(null);
   const [loadingWcvpRange, setLoadingWcvpRange] = useState(false);
   const [colorByDate, setColorByDate] = useState(true);
@@ -590,6 +580,8 @@ export default function OccurrenceMapRow({
   // there's nothing to fall back to silently, since the source picker itself
   // (below) is only ever shown once nativeCountriesWcvp is known to be non-empty.
   const effectiveNativeCountries = nativeRangeSource === "wcvp" ? (nativeCountriesWcvp ?? undefined) : nativeCountriesRedList;
+  const hasNativeRangeData = (nativeCountriesRedList?.length ?? 0) > 0 || (nativeCountriesWcvp?.length ?? 0) > 0;
+  const hasBothNativeRangeSources = (nativeCountriesRedList?.length ?? 0) > 0 && (nativeCountriesWcvp?.length ?? 0) > 0;
 
   // Multi-stage filtering pipeline
   const filteredOccurrences = useMemo(() => {
@@ -645,9 +637,9 @@ export default function OccurrenceMapRow({
 
   // For each check: of the loaded records it flags, how many would actually appear on
   // the map if just this one check were switched off (i.e. they still pass every other
-  // active filter — basis of record, uncertainty, year range, and every other applied
-  // coordinate-cleaning check). Mirrors basisLoadedShownCounts's "shown of loaded"
-  // semantics so both dropdowns read the same way.
+  // active filter — basis of record, uncertainty, year range, native range, and every
+  // other applied coordinate-cleaning check). Mirrors basisLoadedShownCounts's "shown
+  // of loaded" semantics so both dropdowns read the same way.
   const flagShownCounts = useMemo(() => {
     const counts: Partial<Record<QualityFlag, number>> = {};
     for (const o of occurrences) {
@@ -656,6 +648,7 @@ export default function OccurrenceMapRow({
         const u = o.properties.coordinateUncertaintyInMeters;
         if (u == null || u > maxUncertainty) continue;
       }
+      if (nativeRangeOnly && isOutsideNativeRange(o.properties.countryCode, effectiveNativeCountries)) continue;
       const flags = o.properties.qualityFlags ?? [];
       for (const f of flags) {
         const key = f as QualityFlag;
@@ -664,7 +657,7 @@ export default function OccurrenceMapRow({
       }
     }
     return counts;
-  }, [occurrences, checkedTypes, maxUncertainty, appliedChecks]);
+  }, [occurrences, checkedTypes, maxUncertainty, appliedChecks, nativeRangeOnly, effectiveNativeCountries]);
 
   const flagDefs = useMemo(
     () =>
@@ -771,9 +764,9 @@ export default function OccurrenceMapRow({
 
   // Per-category counts among the currently loaded occurrences: how many are in this
   // basis-of-record category at all ("loaded"), and of those, how many also survive
-  // every other active filter — uncertainty, year range, coordinate cleaning — but not
-  // the basis-of-record checkboxes themselves ("shown"). Distinct from pillDefs' counts,
-  // which are true GBIF-wide totals from a separate server aggregation.
+  // every other active filter — uncertainty, year range, coordinate cleaning, native
+  // range — but not the basis-of-record checkboxes themselves ("shown"). Distinct from
+  // pillDefs' counts, which are true GBIF-wide totals from a separate server aggregation.
   const basisLoadedShownCounts = useMemo(() => {
     const counts: Record<string, { loaded: number; shown: number }> = {};
     for (const o of occurrences) {
@@ -785,10 +778,11 @@ export default function OccurrenceMapRow({
         if (u == null || u > maxUncertainty) continue;
       }
       if (o.properties.qualityFlags?.some((f) => appliedChecks[f as QualityFlag])) continue;
+      if (nativeRangeOnly && isOutsideNativeRange(o.properties.countryCode, effectiveNativeCountries)) continue;
       entry.shown++;
     }
     return counts;
-  }, [occurrences, maxUncertainty, appliedChecks]);
+  }, [occurrences, maxUncertainty, appliedChecks, nativeRangeOnly, effectiveNativeCountries]);
 
   // Build GeoJSON FeatureCollection with computed styling properties for the circle layer
   const buildStyledFeatureCollection = useCallback((
@@ -1228,9 +1222,9 @@ export default function OccurrenceMapRow({
                   </svg>
                 </button>
                 {filtersOpen && !loadingBreakdown && (
-                  <div className="absolute left-0 top-full mt-1 z-50 w-[36rem] bg-white/75 dark:bg-zinc-900/75 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
+                  <div className="absolute left-0 top-full mt-1 z-50 w-[25rem] bg-white/60 dark:bg-zinc-900/60 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
                     <div className="flex items-center gap-2 px-3 pb-1 text-[10px] font-medium text-zinc-400 dark:text-zinc-500">
-                      <span className="flex-1 min-w-0 flex items-center gap-2">
+                      <span className="w-40 shrink-0 flex items-center gap-2">
                         <button
                           onClick={() => setCheckedTypes((prev) => {
                             const next = { ...prev };
@@ -1275,7 +1269,7 @@ export default function OccurrenceMapRow({
                             onChange={() => toggleType(pill.key)}
                             className="w-3 h-3 rounded accent-emerald-500 shrink-0"
                           />
-                          <span className={`flex-1 min-w-0 ${active ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-400 dark:text-zinc-500"}`}>
+                          <span className={`w-40 shrink-0 ${active ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-400 dark:text-zinc-500"}`}>
                             {pill.label}
                           </span>
                           {!isFullSample && (
@@ -1313,7 +1307,7 @@ export default function OccurrenceMapRow({
                       return (
                         <div className="flex items-center gap-2 px-3 py-1.5 mt-1 border-t border-zinc-100 dark:border-zinc-800 text-xs font-medium">
                           <span className="w-3 shrink-0" />
-                          <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">Total</span>
+                          <span className="w-40 shrink-0 text-zinc-700 dark:text-zinc-200">Total</span>
                           {!isFullSample && (
                             <span className="w-14 text-right tabular-nums shrink-0 text-zinc-500 dark:text-zinc-400">
                               {totalCount.toLocaleString()}
@@ -1349,7 +1343,7 @@ export default function OccurrenceMapRow({
                   </svg>
                   Coordinate cleaning
                   <span className="text-[10px] text-zinc-400 tabular-nums">
-                    Applied {flagDefs.filter((d) => appliedChecks[d.key]).length} of {flagDefs.length}
+                    Applied {flagDefs.filter((d) => appliedChecks[d.key]).length + (hasNativeRangeData && nativeRangeOnly ? 1 : 0)} of {flagDefs.length + (hasNativeRangeData ? 1 : 0)}
                     {maxUncertainty != null && ` · ≤ ${formatUncertainty(maxUncertainty)}`}
                   </span>
                   <svg className={`w-3 h-3 text-zinc-400 transition-transform ${cleaningFilterOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -1360,22 +1354,28 @@ export default function OccurrenceMapRow({
                   <div className="absolute left-0 top-full mt-1 z-50 w-80 bg-white/75 dark:bg-zinc-900/75 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
                     <div className="flex items-center px-3 pb-1 text-[10px] font-medium text-zinc-400 dark:text-zinc-500">
                       <button
-                        onClick={() => setAppliedChecks((prev) => {
-                          const next = { ...prev };
-                          for (const d of flagDefs) next[d.key] = true;
-                          return next;
-                        })}
+                        onClick={() => {
+                          setAppliedChecks((prev) => {
+                            const next = { ...prev };
+                            for (const d of flagDefs) next[d.key] = true;
+                            return next;
+                          });
+                          if (hasNativeRangeData) setNativeRangeOnly(true);
+                        }}
                         className="hover:text-zinc-600 dark:hover:text-zinc-300 hover:underline"
                       >
                         Select all
                       </button>
                       <span className="text-zinc-300 dark:text-zinc-600 mx-2">·</span>
                       <button
-                        onClick={() => setAppliedChecks((prev) => {
-                          const next = { ...prev };
-                          for (const d of flagDefs) next[d.key] = false;
-                          return next;
-                        })}
+                        onClick={() => {
+                          setAppliedChecks((prev) => {
+                            const next = { ...prev };
+                            for (const d of flagDefs) next[d.key] = false;
+                            return next;
+                          });
+                          if (hasNativeRangeData) setNativeRangeOnly(false);
+                        }}
                         className="hover:text-zinc-600 dark:hover:text-zinc-300 hover:underline"
                       >
                         Deselect all
@@ -1430,6 +1430,76 @@ export default function OccurrenceMapRow({
                         </label>
                       );
                     })}
+                    {hasNativeRangeData && (
+                      <>
+                        <div className="my-1 border-t border-zinc-100 dark:border-zinc-800" />
+                        <label
+                          className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
+                          title={
+                            nativeRangeSource === "wcvp"
+                              ? "Hide occurrences reported in a country outside this species' native range, per Kew's World Checklist of Vascular Plants / Plants of the World Online (POWO). Records with no reported country can't be checked."
+                              : "Hide occurrences reported in a country outside this species' native range, per its IUCN Red List assessment (e.g. cultivated botanical-garden specimens). Records with no reported country can't be checked."
+                          }
+                        >
+                          <input
+                            type="checkbox"
+                            checked={nativeRangeOnly}
+                            onChange={() => setNativeRangeOnly((v) => !v)}
+                            className="w-3 h-3 rounded accent-emerald-500 shrink-0"
+                          />
+                          <span className={`flex-1 min-w-0 ${nativeRangeOnly ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-400 dark:text-zinc-500"}`}>
+                            Native range only
+                          </span>
+                          {/* Source picker — only when BOTH sources have real data for this
+                              species, since they can genuinely disagree (issue #82 follow-up:
+                              "we need the powo one for plants too and user can choose") */}
+                          {hasBothNativeRangeSources && (
+                            <div className="flex items-center rounded border border-zinc-300 dark:border-zinc-600 overflow-hidden text-[10px] shrink-0">
+                              <button
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setNativeRangeSource("wcvp");
+                                }}
+                                title="Native range per Kew's World Checklist of Vascular Plants (POWO)"
+                                className={`px-1.5 py-0.5 transition-colors ${
+                                  nativeRangeSource === "wcvp"
+                                    ? "bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 font-medium"
+                                    : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                                }`}
+                              >
+                                POWO
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setNativeRangeSource("redlist");
+                                }}
+                                title="Native range per the IUCN Red List assessment's locations"
+                                className={`px-1.5 py-0.5 transition-colors border-l border-zinc-300 dark:border-zinc-600 ${
+                                  nativeRangeSource === "redlist"
+                                    ? "bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 font-medium"
+                                    : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                                }`}
+                              >
+                                IUCN
+                              </button>
+                            </div>
+                          )}
+                          <span className={`ml-auto tabular-nums shrink-0 text-[11px] font-medium ${nativeRangeHiddenCount > 0 ? "text-zinc-600 dark:text-zinc-300" : "text-zinc-300 dark:text-zinc-600"}`}>
+                            {nativeRangeHiddenCount === 0
+                              ? "0 records"
+                              : nativeRangeOnly
+                                ? `${nativeRangeHiddenCount.toLocaleString()} record${nativeRangeHiddenCount === 1 ? "" : "s"} hidden`
+                                : `Hide ${nativeRangeHiddenCount.toLocaleString()} record${nativeRangeHiddenCount === 1 ? "" : "s"}`}
+                          </span>
+                        </label>
+                        {loadingWcvpRange && isVascularPlantTaxonGroup(taxonGroup) && (
+                          <div className="px-3 pb-1 text-[10px] text-zinc-400">Checking POWO…</div>
+                        )}
+                      </>
+                    )}
                     <div className="my-1 border-t border-zinc-100 dark:border-zinc-800" />
                     <div className="flex items-center gap-2 px-3 py-1.5 text-xs" title="Only show records with a GPS uncertainty at or below this radius">
                       <span className="w-3 shrink-0" />
@@ -1492,74 +1562,6 @@ export default function OccurrenceMapRow({
                   </div>
                 )}
               </div>
-              {/* Native range only — checkbox toggle + source picker, only shown
-                  when at least one native-range source has data for this species */}
-              {((nativeCountriesRedList && nativeCountriesRedList.length > 0) ||
-                (nativeCountriesWcvp && nativeCountriesWcvp.length > 0)) && (
-                <>
-                  <div className="w-px h-5 bg-zinc-200 dark:bg-zinc-700 mx-0.5 hidden sm:block" />
-                  <label
-                    className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border text-xs cursor-pointer transition-colors ${
-                      nativeRangeOnly
-                        ? "bg-zinc-100 dark:bg-zinc-800 border-zinc-400 dark:border-zinc-500"
-                        : "border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                    } text-zinc-700 dark:text-zinc-300`}
-                    title={
-                      nativeRangeSource === "wcvp"
-                        ? "Hide occurrences reported in a country outside this species' native range, per Kew's World Checklist of Vascular Plants / Plants of the World Online (POWO). Records with no reported country can't be checked."
-                        : "Hide occurrences reported in a country outside this species' native range, per its IUCN Red List assessment (e.g. cultivated botanical-garden specimens). Records with no reported country can't be checked."
-                    }
-                  >
-                    <input
-                      type="checkbox"
-                      checked={nativeRangeOnly}
-                      onChange={() => setNativeRangeOnly((v) => !v)}
-                      className="w-3 h-3 rounded accent-emerald-500 shrink-0"
-                    />
-                    Native range only
-                    {nativeRangeHiddenCount > 0 && (
-                      <span className="text-[10px] text-zinc-400 tabular-nums">
-                        {nativeRangeOnly
-                          ? `${nativeRangeHiddenCount.toLocaleString()} hidden`
-                          : `Hide ${nativeRangeHiddenCount.toLocaleString()}`}
-                      </span>
-                    )}
-                  </label>
-                  {/* Source picker — only when BOTH sources have real data for this
-                      species, since they can genuinely disagree (issue #82 follow-up:
-                      "we need the powo one for plants too and user can choose") */}
-                  {nativeCountriesRedList && nativeCountriesRedList.length > 0 &&
-                   nativeCountriesWcvp && nativeCountriesWcvp.length > 0 && (
-                    <div className="flex items-center rounded border border-zinc-300 dark:border-zinc-600 overflow-hidden text-[10px]">
-                      <button
-                        onClick={() => setNativeRangeSource("redlist")}
-                        title="Native range per the IUCN Red List assessment's locations"
-                        className={`px-1.5 py-1 transition-colors ${
-                          nativeRangeSource === "redlist"
-                            ? "bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 font-medium"
-                            : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                        }`}
-                      >
-                        IUCN
-                      </button>
-                      <button
-                        onClick={() => setNativeRangeSource("wcvp")}
-                        title="Native range per Kew's World Checklist of Vascular Plants (POWO)"
-                        className={`px-1.5 py-1 transition-colors border-l border-zinc-300 dark:border-zinc-600 ${
-                          nativeRangeSource === "wcvp"
-                            ? "bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 font-medium"
-                            : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                        }`}
-                      >
-                        POWO
-                      </button>
-                    </div>
-                  )}
-                  {loadingWcvpRange && isVascularPlantTaxonGroup(taxonGroup) && (
-                    <span className="text-[10px] text-zinc-400">Checking POWO…</span>
-                  )}
-                </>
-              )}
               {!splitView && totalOccurrences != null && (
                 <div className="ml-auto flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-300">
                   <span>

@@ -26,12 +26,17 @@
  * and leaves the rest unmapped — matching this codebase's existing "don't flag what
  * we can't determine" convention (see isOutsideReportedCountry/isOutsideNativeRange).
  *
- * Matching our Red List species to WCVP: exact case-insensitive match of
- * scientific_name against wcvp_names.taxon_name (covering both Accepted and
- * Synonym rows, resolved to accepted_plant_name_id) — no fuzzy/synonym-network
- * matching beyond what WCVP's own accepted_plant_name_id column gives us. Species
- * with no match (different spelling, taxonomic disagreement, or genuinely absent
- * from WCVP) simply get no POWO option — the UI falls back to the Red List source.
+ * Covers the FULL WCVP checklist, not just species already in our own Red List
+ * database — every species-rank name (Accepted or Synonym; ~1.05M rows) gets an
+ * entry keyed by that exact name string, resolved to its accepted taxon's native
+ * range via accepted_plant_name_id. Deliberately NOT scoped to our own assessed
+ * species: this dashboard also shows a GBIF occurrence map for Not-Evaluated (NE)
+ * species browsed from the Catalogue-of-Life-backed universe, which aren't in
+ * assessed.parquet at all — scoping to our own species list would silently give
+ * those zero POWO coverage even though WCVP has the data. A species (assessed or
+ * NE) with no match (different spelling, taxonomic disagreement, or genuinely
+ * absent from WCVP) simply gets no POWO option — the UI falls back to the Red
+ * List source where available.
  *
  * Usage (re-run occasionally; WCVP ships periodic updates):
  *   npx tsx scripts/fetch-wcvp-native-range.ts [path-to-already-downloaded-wcvp.zip]
@@ -41,7 +46,6 @@ import * as fs from "fs";
 import * as path from "path";
 import { execSync } from "child_process";
 import { DuckDBInstance } from "@duckdb/node-api";
-import { DATA_DIR } from "./utils";
 
 const WCVP_ZIP_URL = "https://sftp.kew.org/pub/data-repositories/WCVP/wcvp.zip";
 const TDWG_LEVEL3_URL =
@@ -110,36 +114,9 @@ async function main() {
 
   const namesPath = path.join(WORK_DIR, "wcvp_names.csv");
   const distPath = path.join(WORK_DIR, "wcvp_distribution.csv");
-  const assessedPath = path.join(DATA_DIR, "assessed.parquet");
 
   const instance = await DuckDBInstance.create(":memory:");
   const conn = await instance.connect();
-
-  console.log("Matching Red List vascular-plant species against WCVP names...");
-  const matchResult = await conn.runAndReadAll(`
-    WITH our_species AS (
-      SELECT DISTINCT scientific_name, lower(scientific_name) AS name_lower
-      FROM read_parquet('${assessedPath}')
-      WHERE taxon_group IN ('flowering_plants', 'gymnosperms', 'ferns_and_allies')
-    ),
-    names AS (
-      SELECT lower(taxon_name) AS name_lower,
-             COALESCE(accepted_plant_name_id, plant_name_id) AS resolved_id
-      FROM read_csv('${namesPath}', delim=chr(124), header=true, quote='')
-      WHERE taxon_name IS NOT NULL
-    )
-    SELECT o.scientific_name, n.resolved_id
-    FROM our_species o JOIN names n ON o.name_lower = n.name_lower
-  `);
-  const matches = matchResult.getRowObjects() as unknown as { scientific_name: string; resolved_id: bigint }[];
-  console.log(`Matched ${matches.length} species to a WCVP name`);
-
-  const idToNames = new Map<bigint, string[]>();
-  for (const { scientific_name, resolved_id } of matches) {
-    const arr = idToNames.get(resolved_id);
-    if (arr) arr.push(scientific_name);
-    else idToNames.set(resolved_id, [scientific_name]);
-  }
 
   console.log("Reading native distribution rows...");
   const distResult = await conn.runAndReadAll(`
@@ -150,25 +127,37 @@ async function main() {
   const distRows = distResult.getRowObjects() as unknown as { plant_name_id: bigint; area_code_l3: string }[];
   console.log(`${distRows.length} native distribution rows total`);
 
-  const speciesCountries = new Map<string, Set<string>>();
+  // Accepted-taxon id -> native ISO countries (distribution rows are keyed by the
+  // accepted taxon's own plant_name_id; synonyms don't get their own rows).
+  const idToCountries = new Map<bigint, Set<string>>();
   for (const { plant_name_id, area_code_l3 } of distRows) {
-    const names = idToNames.get(plant_name_id);
-    if (!names) continue;
     const isoCodes = level3ToIso.get(area_code_l3);
     if (!isoCodes) continue;
-    for (const name of names) {
-      let set = speciesCountries.get(name);
-      if (!set) { set = new Set(); speciesCountries.set(name, set); }
-      for (const iso of isoCodes) set.add(iso);
-    }
+    let set = idToCountries.get(plant_name_id);
+    if (!set) { set = new Set(); idToCountries.set(plant_name_id, set); }
+    for (const iso of isoCodes) set.add(iso);
   }
 
+  // Every species-rank name in the full checklist (Accepted or Synonym), resolved
+  // to its accepted taxon's id — covers current names AND older/synonym names a
+  // Red List assessment (assessed or NE) might still use.
+  console.log("Reading full WCVP species-rank name list...");
+  const namesResult = await conn.runAndReadAll(`
+    SELECT taxon_name, COALESCE(accepted_plant_name_id, plant_name_id) AS resolved_id
+    FROM read_csv('${namesPath}', delim=chr(124), header=true, quote='')
+    WHERE taxon_name IS NOT NULL AND taxon_rank = 'Species'
+  `);
+  const nameRows = namesResult.getRowObjects() as unknown as { taxon_name: string; resolved_id: bigint }[];
+  console.log(`${nameRows.length} species-rank names in the full checklist`);
+
   const out: Record<string, string[]> = {};
-  for (const [name, countries] of speciesCountries) {
-    out[name] = Array.from(countries).sort();
+  for (const { taxon_name, resolved_id } of nameRows) {
+    const countries = idToCountries.get(resolved_id);
+    if (!countries || countries.size === 0) continue;
+    out[taxon_name] = Array.from(countries).sort();
   }
   fs.writeFileSync(OUT_PATH, JSON.stringify(out));
-  console.log(`Wrote ${Object.keys(out).length} species to ${OUT_PATH}`);
+  console.log(`Wrote ${Object.keys(out).length} names to ${OUT_PATH}`);
 
   fs.rmSync(WORK_DIR, { recursive: true, force: true });
 }
