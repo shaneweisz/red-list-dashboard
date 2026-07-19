@@ -4,7 +4,7 @@ All notable changes to the IUCN Red List Assessments Dashboard.
 
 ## [Unreleased]
 
-- Added a "Native range only" toggle to the GBIF occurrence map, defaulted on for plants — hides occurrences reported outside a species' native countries (per its Red List assessment), catching cultivated/naturalized botanical-garden specimens
+- Added a "Native range only" toggle to the GBIF occurrence map, defaulted on for plants — hides occurrences reported outside a species' native countries, catching cultivated/naturalized botanical-garden specimens. Two selectable sources: the Red List assessment's own locations, or (for vascular plants) Kew's POWO/World Checklist of Vascular Plants, which can genuinely disagree on native range
 
 ## [v2.16.0] — 2026-06-30 – 2026-07-07 — Shared Filters, Attribution & Taxon Browsing
 
