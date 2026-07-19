@@ -2333,20 +2333,22 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     </thead>
   );
 
-  // Country view: an entirely different UI (map/list, not a taxonomy table), so
-  // it bypasses the shared <table>/column-menu/focus-mode machinery below rather
-  // than trying to squeeze into the flatMode ternary that table1a/ssc share.
-  if (countryMode) {
-    return (
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
-        <div className="flex items-center justify-end mb-2">{layoutModeSelect}</div>
-        {countryModeContent}
-      </div>
-    );
-  }
-
   return (
     <>
+    {/* Country view: map stays visible above the ordinary taxa table (which is
+        already generically country-scoped via countryScope/countryScoped — see
+        the fetches above and the exit chip below) rather than replacing the
+        whole component — clicking a country narrows the map/table together;
+        only clicking a taxon row (handleToggleTaxon, in RedListView) exits
+        layoutMode to reveal the full charts view. The view-mode select itself
+        stays in the landing-only toolbar below (selectedTaxa is empty
+        throughout country browsing, same as it is on the plain landing page),
+        not duplicated here. */}
+    {countryMode && (
+      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 mb-4">
+        {countryModeContent}
+      </div>
+    )}
     {showColumnMenu && createPortal(
       <div
         ref={menuRef}

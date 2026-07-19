@@ -426,9 +426,15 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
     0
   );
 
+  // A single selected country reads as "you are here" — every other country's
+  // own heatmap value is a distraction from that focus, not useful context, so
+  // they go neutral instead of staying colored by their own (unrelated) stats.
+  const singleCountryFocused = selectedCountries.size === 1;
+
   const getCountryColor = (alpha2: string | undefined, isSelected: boolean): string => {
     if (isSelected) return "#3b82f6"; // blue-500 for selected
     if (!alpha2) return "#f4f4f5";
+    if (singleCountryFocused) return "#f4f4f5";
 
     const stats = activeStats[alpha2];
     if (!stats) return "#f4f4f5";

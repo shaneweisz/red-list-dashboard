@@ -452,6 +452,17 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const handleToggleTaxon = useCallback((taxonId: string, event: React.MouseEvent) => {
     const isMulti = event.metaKey || event.ctrlKey;
 
+    // Clicking any taxon row while browsing a country-scoped bare summary
+    // table (Country view, one country selected, no taxon picked yet — see
+    // TaxaSummary's countryMode rendering) exits to the full charts+species-
+    // table view, still scoped to that country (selectedCountries untouched).
+    // Safe to fire alongside the setSelectedTaxa call below without the
+    // fromPopstateRef trick enterCountryDrilldown needs: this is always an
+    // empty->non-empty taxa transition, which RedListView's own "reset filters
+    // on taxa change" effect already no-ops on (see its `prev.size === 0`
+    // guard), so selectedCountries survives untouched either way.
+    if (layoutMode === "country") setLayoutMode(null);
+
     // "all" row behavior:
     // - If anything is selected (nested view), return to landing page
     // - Only select "all" when clicking from the landing page itself (nothing selected)
@@ -497,7 +508,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       setSelectedSubgroups(new Set());
       return new Set([taxonId]);
     });
-  }, [setSelectedTaxa, setSelectedSubgroups, selectedTaxa, selectedSubgroups, isNewAssessments, searchFilter, urlSpecies, clearAllFilters]);
+  }, [setSelectedTaxa, setSelectedSubgroups, selectedTaxa, selectedSubgroups, isNewAssessments, searchFilter, urlSpecies, clearAllFilters, layoutMode, setLayoutMode]);
 
   // Reset all other filters when taxa selection changes
   const prevTaxaRef = useRef(selectedTaxa);
@@ -2241,6 +2252,13 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // Country view landing page content — a promoted WorldMap (its own Map/List
   // toggle applies here too), passed into TaxaSummary rather than duplicating a
   // second dynamic-import + prop-wiring of WorldMap there.
+  // Region-select and endemics are omitted here (unlike the normal "Charts row
+  // 2" map below): this view's whole design assumes exactly one selected
+  // country — the bare summary table only renders scoped data for
+  // countryScope (selectedCountries.size === 1) — and a region selects many
+  // countries at once, leaving nothing for that table to show. Multi-select
+  // is already excluded too: handleCountryDrilldown always treats a click as a
+  // single-country pick, ignoring ctrl/cmd (see its own comment).
   const countryModeContent = (
     <div style={{ height: 600 }}>
       <WorldMap
@@ -2250,9 +2268,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         selectedTaxa={selectedTaxa}
         speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
         showOutdatedMode={!isNewAssessments}
-        onRegionFilter={handleRegionFilter}
-        endemicsOnly={endemicsOnly}
-        onEndemicsToggle={() => setEndemicsOnly(!endemicsOnly)}
         showGbifToggle={false}
       />
     </div>

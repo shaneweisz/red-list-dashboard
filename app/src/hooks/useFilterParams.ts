@@ -447,18 +447,13 @@ export function useFilterParams() {
     [syncUrl]
   );
 
-  // Drill from the Country view landing page into the normal taxonomic view,
-  // scoped to one country — a single setState + history push (see
-  // navigateToTaxonSubgroup above for why atomic matters here too). Clears
-  // taxa/subgroups back to empty so the landing lands on just the bare taxa
-  // summary table (All Species, Mammals, ..., Fungi — the same shape as the
-  // un-scoped landing page), not straight into the full charts+species-table
-  // view — matching how the plain landing page already behaves, rather than
-  // introducing a new pattern. countryScope (selectedCountries.size === 1)
-  // applies regardless of taxa/layoutMode, so the summary table's own numbers
-  // are already country-scoped even with no taxon picked yet; clicking a row
-  // (the ordinary handleToggleTaxon flow) reveals the full drilled-in view,
-  // now scoped to both that taxon and this country.
+  // Select one country from the Country view landing page — a single setState
+  // + history push (see navigateToTaxonSubgroup above for why atomic matters
+  // here too). Deliberately leaves layoutMode untouched (stays "country"): the
+  // promoted map and the bare taxa summary table (All Species, Mammals, ...,
+  // Fungi) show together, scoped to this one country, until the user clicks an
+  // actual taxon row (handleToggleTaxon, in RedListView) — that's what exits to
+  // the full charts+species-table view, still scoped to this same country.
   //
   // Sets fromPopstateRef true first: RedListView's own "reset all other filters
   // when taxa selection changes" effect (it watches selectedTaxa transitioning
@@ -472,7 +467,7 @@ export function useFilterParams() {
     (countryCode: string) => {
       fromPopstateRef.current = true;
       setState(prev => {
-        const next = { ...prev, countries: new Set([countryCode]), taxa: new Set<string>(), subgroups: new Set<string>(), layoutMode: null as LayoutMode, breakdown: null };
+        const next = { ...prev, countries: new Set([countryCode]), taxa: new Set<string>(), subgroups: new Set<string>(), breakdown: null };
         queueMicrotask(() => syncUrl(next, true));
         return next;
       });
