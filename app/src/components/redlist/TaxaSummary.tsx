@@ -1092,7 +1092,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     setHiddenColumns(new Set(FOCUS_HIDDEN[mode]));
   };
 
-  const visibleColCount = 1 + (Object.keys(COLUMN_LABELS) as ColumnId[]).filter(isVisible).length;
+  const visibleColCount = 1 + (Object.keys(COLUMN_LABELS) as ColumnId[]).filter(isVisible).length + (countryScoped ? 1 : 0);
 
   // Close column menu on outside click
   useEffect(() => {
@@ -1813,18 +1813,36 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         )}
         {colDescribedCell(gbifObs?.colDescribed)}
         {isVisible("assessed") && (
-          <td className={flexTdClasses}>
-            {available ? (
-              renderBar(percentAssessed, getAssessedBarColor(percentAssessed), isAllRow, assessed)
-            ) : (
+          <td className={countryScoped ? numericTdNoDividerClasses : flexTdClasses}>
+            {!available ? (
               <span className="text-sm md:text-base text-zinc-400">—</span>
+            ) : countryScoped ? (
+              // % assessed (vs. the *global* described-species estimate) has no
+              // per-country meaning — see COUNTRY_SCOPED_HIDDEN_COLUMNS's doc
+              // comment — so this is a plain count, not renderBar's bar+percent.
+              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">{assessed.toLocaleString()}</span>
+            ) : (
+              renderBar(percentAssessed, getAssessedBarColor(percentAssessed), isAllRow, assessed)
             )}
           </td>
         )}
         {isVisible("outdated") && (
-          <td className={flexTdClasses}>
-            {available ? (
+          <td className={countryScoped ? numericTdNoDividerClasses : flexTdClasses}>
+            {!available ? (
+              <span className="text-sm md:text-base text-zinc-400">—</span>
+            ) : countryScoped ? (
+              // Plain count, no severity-color bar — see the country-scoped
+              // "3 columns, no colors" comment on percentOutdatedCell below.
+              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">{outdated.toLocaleString()}</span>
+            ) : (
               renderBar(percentOutdated, getOutdatedBarColor(percentOutdated), isAllRow, outdated)
+            )}
+          </td>
+        )}
+        {countryScoped && (
+          <td className={numericTdNoDividerClasses}>
+            {available ? (
+              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">{percentOutdated.toFixed(1)}%</span>
             ) : (
               <span className="text-sm md:text-base text-zinc-400">—</span>
             )}
@@ -2075,15 +2093,32 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           )}
           {colDescribedCell(sg.colDescribed)}
           {isVisible("assessed") && (
-            <td className={flexTdClasses}>
-              {renderBar(sgPctAssessed, getAssessedBarColor(sgPctAssessed), false, sg.totalAssessed)}
+            <td className={countryScoped ? numericTdNoDividerClasses : flexTdClasses}>
+              {countryScoped ? (
+                <span className="text-sm text-zinc-600 dark:text-zinc-400 tabular-nums">{sg.totalAssessed.toLocaleString()}</span>
+              ) : (
+                renderBar(sgPctAssessed, getAssessedBarColor(sgPctAssessed), false, sg.totalAssessed)
+              )}
             </td>
           )}
           {isVisible("outdated") && (
-            <td className={flexTdClasses}>
-              {sg.totalAssessed > 0
-                ? renderBar(sgPctOutdated, getOutdatedBarColor(sgPctOutdated), false, sg.outdated)
-                : <span className="text-sm text-zinc-400">—</span>}
+            <td className={countryScoped ? numericTdNoDividerClasses : flexTdClasses}>
+              {sg.totalAssessed === 0 ? (
+                <span className="text-sm text-zinc-400">—</span>
+              ) : countryScoped ? (
+                <span className="text-sm text-zinc-600 dark:text-zinc-400 tabular-nums">{sg.outdated.toLocaleString()}</span>
+              ) : (
+                renderBar(sgPctOutdated, getOutdatedBarColor(sgPctOutdated), false, sg.outdated)
+              )}
+            </td>
+          )}
+          {countryScoped && (
+            <td className={numericTdNoDividerClasses}>
+              {sg.totalAssessed > 0 ? (
+                <span className="text-sm text-zinc-600 dark:text-zinc-400 tabular-nums">{sgPctOutdated.toFixed(1)}%</span>
+              ) : (
+                <span className="text-sm text-zinc-400">—</span>
+              )}
             </td>
           )}
           {isVisible("gbifUnassessed") && (
@@ -2173,17 +2208,34 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           )}
           {colDescribedCell(taxon.available ? taxon.colDescribed : undefined)}
           {isVisible("assessed") && (
-            <td className={flexTdClasses}>
-              {taxon.available
-                ? renderBar(taxon.percentAssessed, getAssessedBarColor(taxon.percentAssessed), false, taxon.totalAssessed)
-                : <span className="text-sm text-zinc-400">—</span>}
+            <td className={countryScoped ? numericTdNoDividerClasses : flexTdClasses}>
+              {!taxon.available ? (
+                <span className="text-sm text-zinc-400">—</span>
+              ) : countryScoped ? (
+                <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">{taxon.totalAssessed.toLocaleString()}</span>
+              ) : (
+                renderBar(taxon.percentAssessed, getAssessedBarColor(taxon.percentAssessed), false, taxon.totalAssessed)
+              )}
             </td>
           )}
           {isVisible("outdated") && (
-            <td className={flexTdClasses}>
-              {taxon.available
-                ? renderBar(taxon.percentOutdated, getOutdatedBarColor(taxon.percentOutdated), false, taxon.outdated)
-                : <span className="text-sm text-zinc-400">—</span>}
+            <td className={countryScoped ? numericTdNoDividerClasses : flexTdClasses}>
+              {!taxon.available ? (
+                <span className="text-sm text-zinc-400">—</span>
+              ) : countryScoped ? (
+                <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">{taxon.outdated.toLocaleString()}</span>
+              ) : (
+                renderBar(taxon.percentOutdated, getOutdatedBarColor(taxon.percentOutdated), false, taxon.outdated)
+              )}
+            </td>
+          )}
+          {countryScoped && (
+            <td className={numericTdNoDividerClasses}>
+              {taxon.available ? (
+                <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">{taxon.percentOutdated.toFixed(1)}%</span>
+              ) : (
+                <span className="text-sm text-zinc-400">—</span>
+              )}
             </td>
           )}
           {isVisible("gbifUnassessed") && (
@@ -2294,6 +2346,9 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           <th className={centeredThClasses}>
             <span className="inline-flex items-center gap-1"># Outdated (&gt;10 yrs old) <OutdatedInfoIcon /></span>
           </th>
+        )}
+        {countryScoped && (
+          <th className={numericThNoDividerClasses}>% Outdated</th>
         )}
         {isVisible("gbifUnassessed") && (
           <th className={centeredThClasses}># Unassessed, 1+ GBIF Obs</th>
