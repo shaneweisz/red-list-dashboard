@@ -41,6 +41,14 @@ const MapOccurrenceTooltip = dynamic(
   () => import("./MapOccurrenceTooltip"),
   { ssr: false }
 );
+// Shape of coordinate-cleaning-refdata/countries.json (Natural Earth admin-0
+// country polygons, keyed by ISO 3166-1 alpha-2), dynamically imported for the
+// POWO/IUCN native-range overlays.
+interface CountryPolygon {
+  iso_a2: string;
+  polygon: GeoJSON.Polygon;
+}
+
 interface OccurrenceFeature {
   type: "Feature";
   properties: {
@@ -364,10 +372,18 @@ export default function OccurrenceMapRow({
   // offered rather than picking one as canonical.
   const [nativeRangeSource, setNativeRangeSource] = useState<"redlist" | "wcvp">("wcvp");
   const [nativeCountriesWcvp, setNativeCountriesWcvp] = useState<string[] | null>(null);
+  // This species' accepted-taxon POWO/IPNI id (from the WCVP fetch), for linking
+  // out to its real POWO page — see the "POWO native range" overlay's info icon.
+  const [wcvpPowoId, setWcvpPowoId] = useState<string | null>(null);
   const [loadingWcvpRange, setLoadingWcvpRange] = useState(false);
   const [colorByDate, setColorByDate] = useState(true);
   const [basemap, setBasemap] = useState<BasemapKey>("streets");
+  // Overlays — informational map layers, independent of the "Native range only"
+  // occurrence filter above: shading which countries a source considers native,
+  // regardless of whether occurrences are being filtered by it.
   const [showProtectedAreas, setShowProtectedAreas] = useState(false);
+  const [showPowoRangeOverlay, setShowPowoRangeOverlay] = useState(false);
+  const [showIucnRangeOverlay, setShowIucnRangeOverlay] = useState(false);
   const [splitView, setSplitView] = useState(false);
   const [splitDate, setSplitDate] = useState<string>(assessmentDate?.split("T")[0] || "");
   const [sharedViewState, setSharedViewState] = useState({ longitude: 0, latitude: 20, zoom: 1.5 });
@@ -383,6 +399,10 @@ export default function OccurrenceMapRow({
   // Coordinate-cleaning checks dropdown state
   const [cleaningFilterOpen, setCleaningFilterOpen] = useState(false);
   const cleaningFilterRef = useRef<HTMLDivElement>(null);
+
+  // Overlays dropdown state (Protected areas / POWO native range / IUCN native range)
+  const [overlaysOpen, setOverlaysOpen] = useState(false);
+  const overlaysRef = useRef<HTMLDivElement>(null);
 
   // Fixed page size for filmstrip
   const pageSize = INAT_PAGE_SIZE;
@@ -417,6 +437,18 @@ export default function OccurrenceMapRow({
     return () => document.removeEventListener("mousedown", handler);
   }, [cleaningFilterOpen]);
 
+  // Close overlays popover on outside click
+  useEffect(() => {
+    if (!overlaysOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (overlaysRef.current && !overlaysRef.current.contains(e.target as Node)) {
+        setOverlaysOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [overlaysOpen]);
+
   // Hovered iNat observation (for map highlight)
   const [hoveredObs, setHoveredObs] = useState<InatObservation | null>(null);
 
@@ -428,7 +460,7 @@ export default function OccurrenceMapRow({
   // Check for coarse pointer (phone/tablet) rather than maxTouchPoints which is true on Mac trackpads
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   useEffect(() => {
-    setIsTouchDevice(window.matchMedia("(pointer: coarse)").matches && !window.matchMedia("(pointer: fine)").matches); // eslint-disable-line react-hooks/set-state-in-effect -- detect on mount
+    setIsTouchDevice(window.matchMedia("(pointer: coarse)").matches && !window.matchMedia("(pointer: fine)").matches);
   }, []);
 
   // Lookup: gbifID → InatObservation (for showing photos in map popups)
@@ -447,7 +479,7 @@ export default function OccurrenceMapRow({
 
   // Fetch occurrences (re-fetches when sample size changes)
   useEffect(() => {
-    setLoadingOccurrences(true); // eslint-disable-line react-hooks/set-state-in-effect -- loading state for fetch
+    setLoadingOccurrences(true);
     const params = new URLSearchParams({
       speciesKey: speciesKey.toString(),
       limit: sampleSize.toString(),
@@ -507,7 +539,7 @@ export default function OccurrenceMapRow({
 
   // Fetch breakdown data
   useEffect(() => {
-    setLoadingBreakdown(true); // eslint-disable-line react-hooks/set-state-in-effect -- loading state for fetch
+    setLoadingBreakdown(true);
     const params = new URLSearchParams();
     if (countryCode) {
       params.set("country", countryCode);
@@ -526,13 +558,17 @@ export default function OccurrenceMapRow({
   // plants — WCVP doesn't cover mosses/algae/fungi/animals).
   useEffect(() => {
     if (!isVascularPlantTaxonGroup(taxonGroup) || !scientificName) {
-      setNativeCountriesWcvp(null); // eslint-disable-line react-hooks/set-state-in-effect -- reset when leaving vascular-plant scope
+      setNativeCountriesWcvp(null);
+      setWcvpPowoId(null);
       return;
     }
     setLoadingWcvpRange(true);
     fetch(`/api/wcvp-native-range?name=${encodeURIComponent(scientificName)}`)
       .then((res) => res.json())
-      .then((data) => setNativeCountriesWcvp(data.countries ?? null))
+      .then((data) => {
+        setNativeCountriesWcvp(data.countries ?? null);
+        setWcvpPowoId(data.powoId ?? null);
+      })
       .catch(console.error)
       .finally(() => setLoadingWcvpRange(false));
   }, [taxonGroup, scientificName]);
@@ -571,7 +607,7 @@ export default function OccurrenceMapRow({
   // Re-fetch when screen size changes (page size changes)
   useEffect(() => {
     // Reset to page 0 and re-fetch with new page size
-    setInatPage(0); // eslint-disable-line react-hooks/set-state-in-effect -- reset pagination on resize
+    setInatPage(0);
     fetchInatPhotos(0, pageSize);
   }, [pageSize, fetchInatPhotos]);
 
@@ -582,6 +618,30 @@ export default function OccurrenceMapRow({
   const effectiveNativeCountries = nativeRangeSource === "wcvp" ? (nativeCountriesWcvp ?? undefined) : nativeCountriesRedList;
   const hasNativeRangeData = (nativeCountriesRedList?.length ?? 0) > 0 || (nativeCountriesWcvp?.length ?? 0) > 0;
   const hasBothNativeRangeSources = (nativeCountriesRedList?.length ?? 0) > 0 && (nativeCountriesWcvp?.length ?? 0) > 0;
+
+  // Country border polygons for the POWO/IUCN native-range overlays — loaded
+  // lazily (dynamic import) only once one of those overlays is actually turned
+  // on, so the ~1.7MB Natural Earth dataset never weighs down the initial
+  // bundle for the (majority of) sessions that never open this dropdown.
+  const [countryPolygons, setCountryPolygons] = useState<CountryPolygon[] | null>(null);
+  useEffect(() => {
+    if (!(showPowoRangeOverlay || showIucnRangeOverlay) || countryPolygons) return;
+    import("@/lib/coordinate-cleaning-refdata/countries.json").then((mod) => {
+      setCountryPolygons(mod.default as unknown as CountryPolygon[]);
+    });
+  }, [showPowoRangeOverlay, showIucnRangeOverlay, countryPolygons]);
+
+  const buildRangeGeoJson = useCallback((countries: string[] | null | undefined): GeoJSON.FeatureCollection | null => {
+    if (!countryPolygons || !countries || countries.length === 0) return null;
+    const codes = new Set(countries.map((c) => c.toUpperCase()));
+    const features = countryPolygons
+      .filter((p) => codes.has(p.iso_a2))
+      .map((p) => ({ type: "Feature" as const, properties: {}, geometry: p.polygon }));
+    return { type: "FeatureCollection", features };
+  }, [countryPolygons]);
+
+  const powoRangeGeoJson = useMemo(() => buildRangeGeoJson(nativeCountriesWcvp), [buildRangeGeoJson, nativeCountriesWcvp]);
+  const iucnRangeGeoJson = useMemo(() => buildRangeGeoJson(nativeCountriesRedList), [buildRangeGeoJson, nativeCountriesRedList]);
 
   // Multi-stage filtering pipeline
   const filteredOccurrences = useMemo(() => {
@@ -1018,6 +1078,22 @@ export default function OccurrenceMapRow({
                   <Layer id={`wdpa-layer-${panelId}`} type="raster" paint={{ "raster-opacity": 0.5 }} />
                 </Source>
               )}
+              {/* POWO / IUCN native-range overlays — shade the countries each
+                  source considers native, purely informational (independent of
+                  the "Native range only" occurrence filter). Distinct colors
+                  since both can be shown at once to compare them directly. */}
+              {showPowoRangeOverlay && powoRangeGeoJson && (
+                <Source id={`powo-range-${panelId}`} type="geojson" data={powoRangeGeoJson}>
+                  <Layer id={`powo-range-fill-${panelId}`} type="fill" paint={{ "fill-color": "#3b82f6", "fill-opacity": 0.25 }} />
+                  <Layer id={`powo-range-line-${panelId}`} type="line" paint={{ "line-color": "#2563eb", "line-width": 1 }} />
+                </Source>
+              )}
+              {showIucnRangeOverlay && iucnRangeGeoJson && (
+                <Source id={`iucn-range-${panelId}`} type="geojson" data={iucnRangeGeoJson}>
+                  <Layer id={`iucn-range-fill-${panelId}`} type="fill" paint={{ "fill-color": "#f59e0b", "fill-opacity": 0.25 }} />
+                  <Layer id={`iucn-range-line-${panelId}`} type="line" paint={{ "line-color": "#d97706", "line-width": 1 }} />
+                </Source>
+              )}
               {/* Occurrence circles (GeoJSON source + circle layer) */}
               <Source id={`occurrences-${panelId}`} type="geojson" data={styledGeoJson}>
                 <Layer {...circleLayerStyle} />
@@ -1167,29 +1243,6 @@ export default function OccurrenceMapRow({
                 }`}
               >
                 IUCN
-              </button>
-            </div>
-          )}
-          {/* Protected areas (WDPA) overlay toggle */}
-          {!loadingOccurrences && mounted && (
-            <div className="absolute top-2 right-2 z-[1000]">
-              <button
-                onClick={() => setShowProtectedAreas((v) => !v)}
-                className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg shadow-md border text-[11px] font-medium transition-colors ${
-                  showProtectedAreas
-                    ? "bg-emerald-600 border-emerald-600 text-white"
-                    : "bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700"
-                }`}
-                title="Overlay World Database on Protected Areas (WDPA) — UNEP-WCMC & IUCN"
-              >
-                <span
-                  className={`w-3 h-3 rounded-sm border ${
-                    showProtectedAreas
-                      ? "bg-white/30 border-white/70"
-                      : "bg-emerald-500/40 border-emerald-600"
-                  }`}
-                />
-                Protected areas
               </button>
             </div>
           )}
@@ -1590,6 +1643,106 @@ export default function OccurrenceMapRow({
                         </select>
                       )}
                     </div>
+                  </div>
+                )}
+              </div>
+              {/* Overlays — informational map layers (Protected areas / POWO
+                  native range / IUCN native range), independent of the
+                  "Native range only" occurrence filter above: these just shade
+                  which countries a source considers native, for context. */}
+              <div className="relative" ref={overlaysRef}>
+                <button
+                  onClick={() => setOverlaysOpen(!overlaysOpen)}
+                  className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border text-xs transition-colors ${
+                    overlaysOpen
+                      ? "bg-zinc-100 dark:bg-zinc-800 border-zinc-400 dark:border-zinc-500"
+                      : "border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                  } text-zinc-700 dark:text-zinc-300`}
+                  title="Map overlays: protected areas, POWO/IUCN native range"
+                >
+                  <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                  </svg>
+                  Overlays
+                  <span className="text-[10px] text-zinc-400 tabular-nums">
+                    {[showProtectedAreas, showPowoRangeOverlay, showIucnRangeOverlay].filter(Boolean).length} of 3
+                  </span>
+                  <svg className={`w-3 h-3 text-zinc-400 transition-transform ${overlaysOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {overlaysOpen && (
+                  <div className="absolute left-0 top-full mt-1 z-50 w-64 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
+                    <label
+                      className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
+                      title="Overlay the World Database on Protected Areas (WDPA) — UNEP-WCMC & IUCN"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={showProtectedAreas}
+                        onChange={() => setShowProtectedAreas((v) => !v)}
+                        className="w-3 h-3 rounded accent-emerald-500 shrink-0"
+                      />
+                      <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">Protected areas</span>
+                    </label>
+                    <label
+                      className={`flex items-center gap-2 px-3 py-1.5 text-xs ${
+                        nativeCountriesWcvp && nativeCountriesWcvp.length > 0
+                          ? "hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
+                          : "opacity-50 cursor-not-allowed"
+                      }`}
+                      title="Shade the countries Kew's POWO/World Checklist of Vascular Plants considers this species native to"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={showPowoRangeOverlay}
+                        disabled={!(nativeCountriesWcvp && nativeCountriesWcvp.length > 0)}
+                        onChange={() => setShowPowoRangeOverlay((v) => !v)}
+                        className="w-3 h-3 rounded accent-blue-500 shrink-0"
+                      />
+                      <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">POWO native range</span>
+                      {wcvpPowoId && (
+                        <a
+                          href={`https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:${wcvpPowoId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="View this species on Plants of the World Online (POWO)"
+                          onClick={(e) => {
+                            // See the identical pattern on Coordinate cleaning's
+                            // source links: prevent the enclosing <label>'s native
+                            // click-forwarding from toggling the checkbox, without
+                            // losing the link's own navigation.
+                            e.preventDefault();
+                            e.stopPropagation();
+                            window.open(
+                              `https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:${wcvpPowoId}`,
+                              "_blank",
+                              "noopener,noreferrer"
+                            );
+                          }}
+                          className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
+                        >
+                          <FaInfoCircle className="w-3 h-3" />
+                        </a>
+                      )}
+                    </label>
+                    <label
+                      className={`flex items-center gap-2 px-3 py-1.5 text-xs ${
+                        nativeCountriesRedList && nativeCountriesRedList.length > 0
+                          ? "hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
+                          : "opacity-50 cursor-not-allowed"
+                      }`}
+                      title="Shade the countries this species' IUCN Red List assessment lists as native range"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={showIucnRangeOverlay}
+                        disabled={!(nativeCountriesRedList && nativeCountriesRedList.length > 0)}
+                        onChange={() => setShowIucnRangeOverlay((v) => !v)}
+                        className="w-3 h-3 rounded accent-amber-500 shrink-0"
+                      />
+                      <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">IUCN native range</span>
+                    </label>
                   </div>
                 )}
               </div>

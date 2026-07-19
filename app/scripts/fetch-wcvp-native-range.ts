@@ -45,6 +45,11 @@
  * single-threaded event loop for its whole duration). Parquet lets DuckDB read
  * only the rows it needs.
  *
+ * Also carries `powo_id` — the matched name's ACCEPTED taxon's own id (not the
+ * matched name's own, which may be a synonym with a different id) — used to
+ * link out to the taxon's real POWO page for reference/verification:
+ * https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:{powo_id}
+ *
  * Usage (re-run occasionally; WCVP ships periodic updates):
  *   npx tsx scripts/fetch-wcvp-native-range.ts [path-to-already-downloaded-wcvp.zip]
  */
@@ -143,20 +148,32 @@ async function main() {
     GROUP BY d.plant_name_id
   `);
 
+  console.log("Resolving each accepted taxon's own POWO id (for the info-link)...");
+  await conn.run(`
+    CREATE TABLE accepted_powo_id AS
+    SELECT plant_name_id, powo_id
+    FROM read_csv(${sqlString(namesPath)}, delim=chr(124), header=true, quote='')
+    WHERE taxon_status = 'Accepted' AND powo_id IS NOT NULL
+  `);
+
   // Every species-rank name in the full checklist (Accepted or Synonym), resolved
   // to its accepted taxon's id — covers current names AND older/synonym names a
   // Red List assessment (assessed or NE) might still use. Streamed straight to
-  // Parquet rather than materialized in JS (see file header for why).
+  // Parquet rather than materialized in JS (see file header for why). powo_id is
+  // the ACCEPTED taxon's own id (not the matched name's, which may be a synonym
+  // with a different id) — it's what the countries themselves describe, and what
+  // the info-link should point to (https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:{powo_id}).
   console.log("Matching full WCVP species-rank name list and writing Parquet...");
   await conn.run(`
     COPY (
-      SELECT n.taxon_name AS name, ic.countries
+      SELECT n.taxon_name AS name, ic.countries, p.powo_id
       FROM (
         SELECT taxon_name, COALESCE(accepted_plant_name_id, plant_name_id) AS resolved_id
         FROM read_csv(${sqlString(namesPath)}, delim=chr(124), header=true, quote='')
         WHERE taxon_name IS NOT NULL AND taxon_rank = 'Species'
       ) n
       JOIN id_countries ic ON ic.plant_name_id = n.resolved_id
+      LEFT JOIN accepted_powo_id p ON p.plant_name_id = n.resolved_id
     ) TO ${sqlString(OUT_PATH)} (FORMAT PARQUET)
   `);
 
