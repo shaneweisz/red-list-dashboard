@@ -458,6 +458,42 @@ export function useFilterParams() {
     [syncUrl]
   );
 
+  // Drill from the Country view landing page into the normal taxonomic view,
+  // scoped to one country — a single setState + history push (see
+  // navigateToTaxonSubgroup above for why atomic matters here too). Doesn't
+  // touch taxa/subgroups: countryScope (selectedCountries.size === 1) applies
+  // regardless of layoutMode, so whatever taxa selection is already active
+  // (typically {"all"}, auto-selected on entering country view — see
+  // setLayoutMode) carries over unchanged.
+  const enterCountryDrilldown = useCallback(
+    (countryCode: string) => {
+      setState(prev => {
+        const next = { ...prev, countries: new Set([countryCode]), layoutMode: null as LayoutMode, breakdown: null };
+        queueMicrotask(() => syncUrl(next, true));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
+  // Reverse of enterCountryDrilldown — clears the country scope and re-enters
+  // the Country view landing page. Re-applies setLayoutMode's own "auto-select
+  // All Species if taxa is empty" fallback (duplicated rather than calling
+  // setLayoutMode, which would be a second setState + a second history push).
+  const returnToCountryList = useCallback(() => {
+    setState(prev => {
+      const next = {
+        ...prev,
+        countries: new Set<string>(),
+        layoutMode: "country" as LayoutMode,
+        breakdown: null,
+        ...(prev.taxa.size === 0 ? { taxa: new Set(["all"]), subgroups: new Set<string>() } : {}),
+      };
+      queueMicrotask(() => syncUrl(next, true));
+      return next;
+    });
+  }, [syncUrl]);
+
   const setSelectedSystems = useCallback(
     (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
       setState(prev => {
@@ -739,6 +775,8 @@ export function useFilterParams() {
     setLayoutMode,
     navigateToTaxonSubgroup,
     returnToLayoutMode,
+    enterCountryDrilldown,
+    returnToCountryList,
     setSelectedTaxa,
     setSelectedSubgroups,
     setSelectedCategories,

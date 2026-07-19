@@ -16,6 +16,7 @@ import {
 import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
 import type { RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import { outdatedCutoffDate } from "@/lib/outdated";
+import { ALPHA2_TO_NAME } from "@/lib/countries";
 
 // See scripts/build-taxa-summary.ts's classifyNoMatch for what each reason means.
 // Modular/additive on top of colBreakdown[].noMatchIds — safe to drop independently
@@ -147,6 +148,13 @@ interface Props {
    * owns the country-stats data and click-through wiring), kept out of this
    * component so it doesn't need its own dynamic WorldMap import. */
   countryModeContent?: React.ReactNode;
+  /** Set whenever exactly one country is selected (selectedCountries.size === 1)
+   * — independent of layoutMode, so clicking a single country anywhere (not just
+   * via the Country view landing page) scopes this table's own fetches too. */
+  countryScope?: string | null;
+  /** Clears the country selection and re-enters the Country view landing page —
+   * shown as a small "Exit" chip whenever countryScope is set. */
+  onExitCountryScope?: () => void;
 }
 
 // Dynamic: any tree node with children is expandable
@@ -228,6 +236,16 @@ const numericThWrapClasses = `${cellPad} text-right text-sm font-bold text-zinc-
 
 // Toggleable column IDs (Taxon is always visible)
 type ColumnId = "described" | "colDescribed" | "assessed" | "outdated" | "breakdown" | "gbifUnassessed" | "colNe" | "totalGbifObs" | "meanGbifObs" | "medianGbifObs" | "gbifDistribution";
+
+// Columns with no valid per-country value — neither GBIF nor Catalogue of Life
+// data has a country dimension, and estimatedDescribed/percentAssessed ("described"
+// column) is a global figure (see country-taxa-summary-duckdb.ts's doc comment).
+// Force-hidden whenever countryScope is set, on top of whatever hiddenColumns
+// already has — total_assessed/outdated/by_category ("assessed"/"outdated"/
+// "breakdown") ARE real per-country numbers and stay visible.
+const COUNTRY_SCOPED_HIDDEN_COLUMNS: ColumnId[] = [
+  "described", "colDescribed", "colNe", "gbifUnassessed", "totalGbifObs", "meanGbifObs", "medianGbifObs", "gbifDistribution",
+];
 
 const COLUMN_LABELS: Record<ColumnId, string> = {
   described: "# Described Species",
@@ -1023,7 +1041,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
   );
 }
 
-export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", layoutMode, onLayoutModeChange, countryModeContent }: Props) {
+export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", layoutMode, onLayoutModeChange, countryModeContent, countryScope, onExitCountryScope }: Props) {
   const isNewAssessments = viewMode === "new-assessments";
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1058,7 +1076,8 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
 
-  const isVisible = (col: ColumnId) => !hiddenColumns.has(col);
+  const countryScoped = !!countryScope;
+  const isVisible = (col: ColumnId) => !hiddenColumns.has(col) && !(countryScoped && COUNTRY_SCOPED_HIDDEN_COLUMNS.includes(col));
   const toggleColumn = (col: ColumnId) => {
     setHiddenColumns((prev) => {
       const next = new Set(prev);
@@ -1137,7 +1156,8 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     if (!subgroupDataRef.current[taxonId] && !loadingSubgroupsRef.current.has(taxonId)) {
       setLoadingSubgroups((prev) => new Set(prev).add(taxonId));
       try {
-        const res = await fetch(`/api/redlist/taxa-subgroups?nodeId=${taxonId}`);
+        const countryQs = countryScope ? `&country=${encodeURIComponent(countryScope)}` : "";
+        const res = await fetch(`/api/redlist/taxa-subgroups?nodeId=${taxonId}${countryQs}`);
         if (res.ok) {
           const data = await res.json();
           setSubgroupData((prev) => ({ ...prev, [taxonId]: data.subgroups }));
@@ -1150,7 +1170,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         });
       }
     }
-  }, []);
+  }, [countryScope]);
 
   // Table 1a mode / SSC groups mode — derived from the URL-synced layoutMode
   // prop (see useFilterParams) rather than local state, so a page load or
@@ -1239,7 +1259,8 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     for (const taxonId of expandableTaxaIds) {
       if (!subgroupDataRef.current[taxonId] && !loadingSubgroupsRef.current.has(taxonId)) {
         setLoadingSubgroups((prev) => new Set(prev).add(taxonId));
-        fetch(`/api/redlist/taxa-subgroups?nodeId=${taxonId}`)
+        const countryQs = countryScope ? `&country=${encodeURIComponent(countryScope)}` : "";
+        fetch(`/api/redlist/taxa-subgroups?nodeId=${taxonId}${countryQs}`)
           .then(res => res.ok ? res.json() : null)
           .then(data => {
             if (data) setSubgroupData((prev) => ({ ...prev, [taxonId]: data.subgroups }));
@@ -1253,7 +1274,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           });
       }
     }
-  }, [perTaxa]);
+  }, [perTaxa, countryScope]);
 
   const collapseAll = useCallback(() => {
     setExpandedTaxa(new Set());
@@ -1269,11 +1290,12 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     if (!table1aMode || table1aData || table1aFetchStartedRef.current) return;
     table1aFetchStartedRef.current = true;
     setTable1aLoading(true);
-    fetch("/api/redlist/taxa-summary?table1a=true")
+    const countryQs = countryScope ? `&country=${encodeURIComponent(countryScope)}` : "";
+    fetch(`/api/redlist/taxa-summary?table1a=true${countryQs}`)
       .then(res => res.ok ? res.json() : null)
       .then(data => { if (data) setTable1aData(data.sections); })
       .finally(() => setTable1aLoading(false));
-  }, [table1aMode, table1aData]);
+  }, [table1aMode, table1aData, countryScope]);
 
   // SSC groups mode — same flat-table layout as Table 1a mode, sourced from
   // the precomputed SSC wrapper nodes' children instead of the top-level
@@ -1299,9 +1321,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     if (!sscMode || sscData || sscFetchStartedRef.current) return;
     sscFetchStartedRef.current = true;
     setSscLoading(true);
+    const countryQs = countryScope ? `&country=${encodeURIComponent(countryScope)}` : "";
     Promise.all(
       SSC_SECTIONS.map((section) =>
-        fetch(`/api/redlist/taxa-subgroups?nodeId=${section.nodeId}`)
+        fetch(`/api/redlist/taxa-subgroups?nodeId=${section.nodeId}${countryQs}`)
           .then(res => (res.ok ? res.json() : null))
           .then((data): Table1aSectionData | null => {
             if (!data) return null;
@@ -1334,12 +1357,27 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     )
       .then((sections) => setSscData(sections.filter((s): s is Table1aSectionData => s != null)))
       .finally(() => setSscLoading(false));
-  }, [sscMode, sscData]);
+  }, [sscMode, sscData, countryScope]);
 
   // Shared flat-table data source for whichever mode (Table 1a / SSC groups) is active
   const flatMode = table1aMode || sscMode;
   const flatData = table1aMode ? table1aData : sscData;
   const flatLoading = table1aMode ? table1aLoading : sscLoading;
+
+  // table1aData/sscData/subgroupData are fetch-once caches keyed only by mode/nodeId,
+  // not by country — without this, switching countries while table1a/ssc data (or an
+  // expanded node's subgroups) is already cached would keep showing the stale,
+  // un-scoped numbers instead of re-fetching for the new country.
+  const prevCountryScopeRef = useRef(countryScope);
+  useEffect(() => {
+    if (prevCountryScopeRef.current === countryScope) return;
+    prevCountryScopeRef.current = countryScope;
+    setTable1aData(null);
+    table1aFetchStartedRef.current = false;
+    setSscData(null);
+    sscFetchStartedRef.current = false;
+    setSubgroupData({});
+  }, [countryScope]);
 
   const allExpanded = useMemo(() => perTaxa.filter(t => isExpandable(t.id)).every(t => expandedTaxa.has(t.id)), [perTaxa, expandedTaxa]);
 
@@ -1376,8 +1414,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
 
   useEffect(() => {
     async function fetchTaxa() {
+      setLoading(true);
       try {
-        const res = await fetch("/api/redlist/taxa-summary");
+        const countryQs = countryScope ? `?country=${encodeURIComponent(countryScope)}` : "";
+        const res = await fetch(`/api/redlist/taxa-summary${countryQs}`);
         if (!res.ok) throw new Error("Failed to load taxa");
         const data = await res.json();
         setTaxa(data.taxa);
@@ -1388,7 +1428,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       }
     }
     fetchTaxa();
-  }, []);
+  }, [countryScope]);
 
   if (loading) {
     // Skeleton rows matching actual table structure
@@ -2350,6 +2390,22 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         ))}
       </div>,
       document.body
+    )}
+    {countryScoped && (
+      <div className="flex items-center gap-1.5 mb-1.5 pl-3 sm:pl-0">
+        <span className="text-xs text-zinc-500 dark:text-zinc-400">
+          Showing data for <span className="font-medium text-zinc-700 dark:text-zinc-200">{ALPHA2_TO_NAME[countryScope!] ?? countryScope}</span>
+        </span>
+        {onExitCountryScope && (
+          <button
+            onClick={onExitCountryScope}
+            className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+            title="Back to Country view"
+          >
+            ✕
+          </button>
+        )}
+      </div>
     )}
     <div ref={scrollRef} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto">
       <table className="w-full">

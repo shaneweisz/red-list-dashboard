@@ -338,6 +338,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     layoutMode, setLayoutMode,
     navigateToTaxonSubgroup,
     returnToLayoutMode,
+    enterCountryDrilldown,
+    returnToCountryList,
     selectedTaxa, setSelectedTaxa,
     selectedSubgroups, setSelectedSubgroups,
     selectedCategories, setSelectedCategories,
@@ -2197,6 +2199,21 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     && !searchFilter
     && !showOnlyStarred;
 
+  // A single country selected anywhere (not just via the Country view landing
+  // page) scopes TaxaSummary's own fetches too — clicking one country on the
+  // normal "Charts row 2" map already narrowed every other chart/table; this
+  // closes the one remaining inconsistency (the taxa tree staying global).
+  const countryScope = selectedCountries.size === 1 ? [...selectedCountries][0] : null;
+
+  // Country view's own map/list click is always a single-country drill-down
+  // (never the ctrl/cmd multi-select gesture handleCountrySelect supports for
+  // the normal browsing view's country filter) — it exits the landing page
+  // into the taxonomic view scoped to that one country.
+  const handleCountryDrilldown = useCallback(
+    (code: string) => enterCountryDrilldown(code),
+    [enterCountryDrilldown]
+  );
+
   // Country view landing page content — a promoted WorldMap (its own Map/List
   // toggle applies here too), passed into TaxaSummary rather than duplicating a
   // second dynamic-import + prop-wiring of WorldMap there.
@@ -2204,7 +2221,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     <div style={{ height: 600 }}>
       <WorldMap
         selectedCountries={selectedCountries}
-        onCountrySelect={handleCountrySelect}
+        onCountrySelect={handleCountryDrilldown}
         precomputedStats={countryStatsForMap}
         precomputedStatsTotal={countryStatsForMapTotal}
         selectedTaxa={selectedTaxa}
@@ -2230,6 +2247,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         layoutMode={layoutMode}
         onLayoutModeChange={setLayoutMode}
         countryModeContent={countryModeContent}
+        countryScope={countryScope}
+        onExitCountryScope={returnToCountryList}
         onToggleSubgroup={(sgId) => {
           // Clicking a view root ancestor → clear subgroups to show its children.
           // If the currently-selected subgroup is an SSC group, we got here by
