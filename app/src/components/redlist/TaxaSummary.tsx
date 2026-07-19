@@ -1102,7 +1102,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     setHiddenColumns(new Set(FOCUS_HIDDEN[mode]));
   };
 
-  const visibleColCount = 1 + (Object.keys(COLUMN_LABELS) as ColumnId[]).filter(isVisible).length + (countryStyleColumns ? 1 : 0);
+  const visibleColCount = 1 + (Object.keys(COLUMN_LABELS) as ColumnId[]).filter(isVisible).length;
 
   // Close column menu on outside click
   useEffect(() => {
@@ -1483,11 +1483,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             </div>
           </td>
         )}
-        {countryStyleColumns && (
-          <td className={numericTdNoDividerClasses}>
-            <div className="h-4 w-12 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
-          </td>
-        )}
         {isVisible("gbifUnassessed") && (
           <td className={flexTdClasses}>
             <div className="flex items-center gap-1.5 sm:gap-3 min-w-[150px] sm:min-w-[230px] md:min-w-[250px]">
@@ -1558,17 +1553,20 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} text-center text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap w-0`}>Taxonomic Group</th>
               {isVisible("described") && <th className={numericThNoDividerClasses}># Described Species</th>}
               {isVisible("colDescribed") && <th className={numericThClasses}># Described Species (CoL)</th>}
-              {isVisible("assessed") && <th className={centeredThClasses}>{countryStyleColumns ? "# Assessed" : "# Red List Assessed"}</th>}
+              {isVisible("assessed") && (
+                <th className={countryStyleColumns ? `${centeredThClasses} whitespace-nowrap min-w-[80px]` : centeredThClasses}>
+                  {countryStyleColumns ? "# Assessed" : "# Red List Assessed"}
+                </th>
+              )}
               {isVisible("outdated") && (
                 <th className={countryStyleColumns ? numericThNoDividerClasses : centeredThClasses}>
                   {countryStyleColumns ? (
-                    "# Outdated"
+                    "Outdated"
                   ) : (
                     <span className="inline-flex items-center gap-1"># Outdated (&gt;10 yrs old) <OutdatedInfoIcon /></span>
                   )}
                 </th>
               )}
-              {countryStyleColumns && <th className={numericThNoDividerClasses}>% Outdated</th>}
               {isVisible("gbifUnassessed") && <th className={centeredThClasses}># Unassessed, 1+ GBIF Obs</th>}
               {isVisible("colNe") && <th className={centeredThClasses}># Not Evaluated</th>}
               {isVisible("totalGbifObs") && <th className={numericThClasses}>Total Obs</th>}
@@ -1622,21 +1620,24 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
 
   // Column order: Taxon (sticky) | # Described | Assessed | Outdated | Category Breakdown
 
-  // Compact colored bar for the % Outdated column in Country View's plain 3-column
-  // style — a short fixed-width version of renderBar below (which is too wide for
-  // that half-width layout): no count label, no wide min-width, just a small bar
-  // sized to fit next to the plain # Assessed/# Outdated numbers.
-  const renderCompactPercentBar = (percent: number) => {
+  // Country View's single, merged "Outdated" column (count + colored bar + percent)
+  // — a narrower version of renderBar below (which is too wide for the half-width
+  // layout), but wide enough to read clearly now that # Outdated/% Outdated share
+  // one column instead of two.
+  const renderCountryOutdatedCell = (count: number, percent: number) => {
     const clampedPercent = Math.min(100, Math.max(0, percent));
     return (
-      <div className="flex items-center justify-end gap-1">
-        <div className="w-6 h-2 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden flex-shrink-0">
+      <div className="flex items-center justify-end gap-1.5">
+        <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums w-10 text-right flex-shrink-0">
+          {count.toLocaleString()}
+        </span>
+        <div className="w-14 h-2 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden flex-shrink-0">
           <div
             className="h-full rounded-full"
             style={{ width: `${clampedPercent}%`, backgroundColor: getOutdatedBarColor(percent) }}
           />
         </div>
-        <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums w-10 text-right">
+        <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums w-12 text-right flex-shrink-0">
           {percent.toFixed(1)}%
         </span>
       </div>
@@ -1877,20 +1878,9 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             {!available ? (
               <span className="text-sm md:text-base text-zinc-400">—</span>
             ) : countryStyleColumns ? (
-              // Plain count, no severity-color bar — see the country-scoped
-              // "3 columns, no colors" comment on percentOutdatedCell below.
-              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">{outdated.toLocaleString()}</span>
+              renderCountryOutdatedCell(outdated, percentOutdated)
             ) : (
               renderBar(percentOutdated, getOutdatedBarColor(percentOutdated), isAllRow, outdated)
-            )}
-          </td>
-        )}
-        {countryStyleColumns && (
-          <td className={numericTdNoDividerClasses}>
-            {available ? (
-              renderCompactPercentBar(percentOutdated)
-            ) : (
-              <span className="text-sm md:text-base text-zinc-400">—</span>
             )}
           </td>
         )}
@@ -2152,18 +2142,9 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               {sg.totalAssessed === 0 ? (
                 <span className="text-sm text-zinc-400">—</span>
               ) : countryStyleColumns ? (
-                <span className="text-sm text-zinc-600 dark:text-zinc-400 tabular-nums">{sg.outdated.toLocaleString()}</span>
+                renderCountryOutdatedCell(sg.outdated, sgPctOutdated)
               ) : (
                 renderBar(sgPctOutdated, getOutdatedBarColor(sgPctOutdated), false, sg.outdated)
-              )}
-            </td>
-          )}
-          {countryStyleColumns && (
-            <td className={numericTdNoDividerClasses}>
-              {sg.totalAssessed > 0 ? (
-                renderCompactPercentBar(sgPctOutdated)
-              ) : (
-                <span className="text-sm text-zinc-400">—</span>
               )}
             </td>
           )}
@@ -2269,18 +2250,9 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               {!taxon.available ? (
                 <span className="text-sm text-zinc-400">—</span>
               ) : countryStyleColumns ? (
-                <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">{taxon.outdated.toLocaleString()}</span>
+                renderCountryOutdatedCell(taxon.outdated, taxon.percentOutdated)
               ) : (
                 renderBar(taxon.percentOutdated, getOutdatedBarColor(taxon.percentOutdated), false, taxon.outdated)
-              )}
-            </td>
-          )}
-          {countryStyleColumns && (
-            <td className={numericTdNoDividerClasses}>
-              {taxon.available ? (
-                renderCompactPercentBar(taxon.percentOutdated)
-              ) : (
-                <span className="text-sm text-zinc-400">—</span>
               )}
             </td>
           )}
@@ -2390,23 +2362,25 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           <th className={numericThClasses}># Described Species (CoL)</th>
         )}
         {isVisible("assessed") && (
-          <th className={centeredThClasses}>{countryStyleColumns ? "# Assessed" : "# Red List Assessed"}</th>
+          <th className={countryStyleColumns ? `${centeredThClasses} whitespace-nowrap min-w-[80px]` : centeredThClasses}>
+            {countryStyleColumns ? "# Assessed" : "# Red List Assessed"}
+          </th>
         )}
         {isVisible("outdated") && (
           <th className={countryStyleColumns ? numericThNoDividerClasses : centeredThClasses}>
             {/* Country View's half-width column has no room for the full
                 "(>10 yrs old)" qualifier + info icon on one non-wrapping line
                 (inline-flex forces it to stay unwrapped) — shortened here,
-                same info still available via the plain-mode header. */}
+                same info still available via the plain-mode header. # Outdated
+                and % Outdated share this one header (and cell — see
+                renderCountryOutdatedCell) rather than each having their own
+                column, so the combined bar has more room to be legible. */}
             {countryStyleColumns ? (
-              "# Outdated"
+              "Outdated"
             ) : (
               <span className="inline-flex items-center gap-1"># Outdated (&gt;10 yrs old) <OutdatedInfoIcon /></span>
             )}
           </th>
-        )}
-        {countryStyleColumns && (
-          <th className={numericThNoDividerClasses}>% Outdated</th>
         )}
         {isVisible("gbifUnassessed") && (
           <th className={centeredThClasses}># Unassessed, 1+ GBIF Obs</th>

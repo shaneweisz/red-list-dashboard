@@ -319,7 +319,10 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
       // Zoom level depends on country size - small countries zoom more
       const smallCountries = new Set(["Singapore", "Luxembourg", "Cyprus", "Jamaica", "Trinidad and Tobago", "Brunei", "Qatar", "Kuwait", "Lebanon", "Djibouti", "eSwatini", "Lesotho", "Gambia", "Guinea-Bissau", "Slovenia", "Montenegro", "Kosovo", "Macedonia", "Andorra", "Antigua and Barb.", "Bahrain", "Barbados", "Belize", "Cabo Verde", "Comoros", "Dominica", "Grenada", "Kiribati", "Liechtenstein", "Maldives", "Malta", "Marshall Is.", "Mauritius", "Micronesia", "Monaco", "Nauru", "Palau", "Samoa", "San Marino", "São Tomé and Principe", "Seychelles", "St. Kitts and Nevis", "Saint Lucia", "St. Vin. and Gren.", "Tonga", "Tuvalu", "Vatican", "American Samoa", "Anguilla", "Aruba", "Bermuda", "British Virgin Is.", "Cayman Is.", "Curaçao", "Faeroe Is.", "Guernsey", "Hong Kong", "Isle of Man", "Jersey", "Macao", "Montserrat", "N. Mariana Is.", "Niue", "Norfolk Island", "Pitcairn Is.", "Saint Helena", "Sint Maarten", "St-Barthélemy", "St-Martin", "St. Pierre and Miquelon", "Turks and Caicos Is.", "U.S. Virgin Is.", "Wallis and Futuna Is.", "Åland", "N. Cyprus"]);
       const largeCountries = new Set(["Russia", "Canada", "United States of America", "China", "Brazil", "Australia", "India", "Argentina"]);
-      const zoomLevel = smallCountries.has(countryName) ? 6 : largeCountries.has(countryName) ? 2.5 : 4;
+      // Small-country zoom capped lower than it used to be (was 6) — at 6 a
+      // small island could fill the whole visible frame, right where the
+      // bottom-left Map/List toggle and bottom-right zoom controls overlay it.
+      const zoomLevel = smallCountries.has(countryName) ? 4.5 : largeCountries.has(countryName) ? 2.5 : 4;
       setZoom(zoomLevel);
     }
     setSearchQuery("");
@@ -500,24 +503,8 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
     <div className="relative bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 p-3 h-full flex flex-col">
       {/* Header with controls */}
       <div className="flex items-center justify-between mb-1 gap-2">
-        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 flex items-center gap-1.5">
-          {selectedCountryLabel ? (
-            <>
-              <span className="font-normal text-zinc-400 dark:text-zinc-500">Country:</span>
-              {selectedCountryLabel}
-              {onClearSelectedCountry && (
-                <button
-                  onClick={onClearSelectedCountry}
-                  className="font-normal text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                  title="Clear selected country"
-                >
-                  ✕
-                </button>
-              )}
-            </>
-          ) : (
-            "Country"
-          )}
+        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0">
+          Country
         </h2>
         <div className="flex items-center gap-2 flex-wrap min-w-0">
           {/* Country search */}
@@ -609,27 +596,26 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
               ))}
             </select>
           )}
-          {/* Map/List toggle — a sortable table alternative to the choropleth for
-              users who'd rather scan/sort a list than read a map. Kept last so it
-              reads as "switch the whole view", after the filters that narrow it. */}
-          <div className="flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md p-0.5 text-[10px]">
-            {(["map", "list"] as const).map((mode) => (
-              <button
-                key={mode}
-                onClick={() => setViewMode(mode)}
-                aria-pressed={viewMode === mode}
-                className={`px-1.5 py-0.5 rounded capitalize transition-colors ${
-                  viewMode === mode
-                    ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
-                    : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
-                }`}
-              >
-                {mode}
-              </button>
-            ))}
-          </div>
         </div>
       </div>
+
+      {/* Selected country, centered below the filter row and above the map/list —
+          replaces what used to be a "Showing data for X" banner elsewhere on the
+          page (see RedListView.tsx's countryModeContent doc comment). */}
+      {selectedCountryLabel && (
+        <div className="flex items-center justify-center gap-1.5 mb-1.5 text-sm font-medium text-zinc-900 dark:text-zinc-100">
+          {selectedCountryLabel}
+          {onClearSelectedCountry && (
+            <button
+              onClick={onClearSelectedCountry}
+              className="text-xs font-normal text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+              title="Clear selected country"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Hover tooltip (map view only) */}
       {viewMode === "map" && hoveredCountry && (
@@ -687,7 +673,11 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
 
       {/* List view: sortable table alternative, same stats/selection/click-through.
           Narrowed to activeRegion's countries when a whole region is selected —
-          same scope the map already implies via its blue region highlight. */}
+          same scope the map already implies via its blue region highlight.
+          Shares this relative wrapper with the map below (rather than each
+          having its own) so the Map/List toggle can overlay bottom-left of
+          whichever one is actually showing. */}
+      <div className="relative flex-1 min-h-0 flex flex-col">
       {viewMode === "list" && (
         <CountryStatsList
           stats={activeStats}
@@ -828,6 +818,27 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
             &minus;
           </button>
         </div>
+      </div>
+      {/* Map/List toggle — a sortable table alternative to the choropleth for
+          users who'd rather scan/sort a list than read a map. Bottom-left,
+          overlaying whichever of the two is currently showing (see the shared
+          relative wrapper above), mirroring the zoom controls' bottom-right spot. */}
+      <div className="absolute bottom-2 left-2 z-10 flex items-center bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md p-0.5 text-[10px] shadow-sm">
+        {(["map", "list"] as const).map((mode) => (
+          <button
+            key={mode}
+            onClick={() => setViewMode(mode)}
+            aria-pressed={viewMode === mode}
+            className={`px-1.5 py-0.5 rounded capitalize transition-colors ${
+              viewMode === mode
+                ? "bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900"
+                : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+            }`}
+          >
+            {mode}
+          </button>
+        ))}
+      </div>
       </div>
       {footer}
     </div>
