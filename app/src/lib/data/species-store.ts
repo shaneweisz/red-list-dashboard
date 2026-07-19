@@ -18,6 +18,7 @@ const DATA_DIR = path.join(process.cwd(), "data");
 const REDLIST_DIR = path.join(DATA_DIR, "redlist");
 const TAXA_SUMMARY_PATH = path.join(DATA_DIR, "taxa-summary.json");
 const NODE_CHILDREN_SUMMARIES_PATH = path.join(DATA_DIR, "node-children-summaries.json");
+const COUNTRY_STATS_PATH = path.join(DATA_DIR, "country-stats.json");
 
 // =============================================================================
 // TYPES
@@ -108,6 +109,7 @@ const redlistCache = new Map<string, RedlistRow[]>();
 const historyCache = new Map<string, HistoryMap>();
 let taxaSummaryCache: TaxaSummaryRow[] | null = null;
 let nodeChildrenSummariesCache: Record<string, NodeSummary[]> | null = null;
+let countryStatsCache: Record<string, { species: number; outdated: number }> | null = null;
 
 /** @internal Reset all module-level caches (for tests only). */
 export function _resetCaches(): void {
@@ -115,6 +117,7 @@ export function _resetCaches(): void {
   historyCache.clear();
   taxaSummaryCache = null;
   nodeChildrenSummariesCache = null;
+  countryStatsCache = null;
 }
 
 function loadRedlistForGroup(group: string): RedlistRow[] {
@@ -165,6 +168,22 @@ export function getPrecomputedChildrenSummaries(parentNodeId: string): NodeSumma
     nodeChildrenSummariesCache = JSON.parse(content) as Record<string, NodeSummary[]>;
   }
   return nodeChildrenSummariesCache[parentNodeId] ?? [];
+}
+
+/**
+ * Get per-country totals across ALL species (unfiltered by taxon) — feeds the
+ * country-view landing page's world map. A single precomputed aggregate
+ * (~200 countries, one static file), not a live query: this data never varies
+ * by taxon/subgroup selection, unlike the per-country taxa-summary/node-summary
+ * endpoints (see country-taxa-summary-duckdb.ts), so there's nothing for a
+ * live query to compose with here.
+ */
+export function getCountryStats(): Record<string, { species: number; outdated: number }> {
+  if (!countryStatsCache) {
+    const content = fs.readFileSync(COUNTRY_STATS_PATH, "utf-8");
+    countryStatsCache = JSON.parse(content) as Record<string, { species: number; outdated: number }>;
+  }
+  return countryStatsCache;
 }
 
 // =============================================================================

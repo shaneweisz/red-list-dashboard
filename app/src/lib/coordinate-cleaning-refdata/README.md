@@ -1,6 +1,6 @@
 # Coordinate-cleaning reference data
 
-Point gazetteers and polygon layers used by `../coordinate-cleaning.ts`'s `cc_cap`/`cc_cen`/`cc_inst`/`cc_sea`/`cc_urb`/`cc_aohi`/`cc_coun` ports. Sourced independently of CoordinateCleaner's own bundled `countryref`/`institutions`/`landmass`/`urban_areas`/`aohi` R data objects (GPL-3) — see `docs/gbif-coordinate-cleaning-scoping.md` §4 for why.
+Point gazetteers and polygon layers used by `../coordinate-cleaning.ts`'s `cc_cap`/`cc_cen`/`cc_inst`/`cc_sea`/`cc_urb`/`cc_aohi`/`cc_coun` ports. Sourced independently of CoordinateCleaner's own bundled `countryref`/`institutions`/`landmass`/`urban_areas`/`aohi` R data objects rather than extracting and redistributing those GPL-3 R data objects verbatim — each section below documents its own independent source.
 
 All of this data is imported only by `coordinate-cleaning.ts`, which is used both server-side (`/api/occurrences`) and by a couple of client components for just their label/description exports (`QUALITY_FLAG_LABELS`/`QUALITY_FLAG_DESCRIPTIONS`). Verified via a production build that the bundler tree-shakes the actual point/polygon data out of the client bundle — only the flag label strings ship to the browser.
 

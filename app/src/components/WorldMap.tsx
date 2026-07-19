@@ -8,7 +8,9 @@ import {
   ZoomableGroup,
 } from "react-simple-maps";
 import { geoCentroid } from "d3-geo";
-import { IUCN_REGION_ORDER, countryToIucnRegion, iucnRegionCountries } from "@/lib/regions";
+import { IUCN_REGION_ORDER, matchingRegion } from "@/lib/regions";
+import CountryStatsList from "./CountryStatsList";
+import type { MapViewMode, MapSortKey } from "@/hooks/useFilterParams";
 
 // Using the recommended TopoJSON from react-simple-maps
 const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json";
@@ -140,7 +142,7 @@ export const ALPHA2_TO_NAME: Record<string, string> = {
 // Sorted list of country names for search
 const COUNTRY_NAMES_SORTED = Object.keys(NAME_TO_ALPHA2).sort();
 
-interface CountryStats {
+export interface CountryStats {
   [countryCode: string]: {
     occurrences: number;
     species: number;
@@ -235,6 +237,14 @@ interface WorldMapProps {
   // Whether the "% Outdated" color mode is meaningful (false for unassessed/NE species views,
   // where every species has no assessment date rather than an outdated one)
   showOutdatedMode?: boolean;
+  // Map/List toggle + list-view sort, URL-synced (see useFilterParams.ts's
+  // mapViewMode/mapSortKey/mapSortDirection) so a sorted list view is a
+  // shareable link. Falls back to local state when omitted (e.g. tests).
+  mapViewMode?: MapViewMode;
+  onMapViewModeChange?: (mode: MapViewMode) => void;
+  mapSortKey?: MapSortKey;
+  mapSortDirection?: "asc" | "desc";
+  onMapSortChange?: (key: MapSortKey, direction: "asc" | "desc") => void;
 }
 
 const DEFAULT_CENTER: [number, number] = [10, 10];
@@ -242,7 +252,7 @@ const DEFAULT_ZOOM = 1.0;
 const MIN_ZOOM = 1.0;
 const MAX_ZOOM = 8.0;
 
-function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, precomputedStatsTotal, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, endemicsOnly = false, onEndemicsToggle, footer, showGbifToggle = true, showOutdatedMode = true }: WorldMapProps) {
+function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, precomputedStatsTotal, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, endemicsOnly = false, onEndemicsToggle, footer, showGbifToggle = true, showOutdatedMode = true, mapViewMode, onMapViewModeChange, mapSortKey, mapSortDirection, onMapSortChange }: WorldMapProps) {
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoveredCountryCode, setHoveredCountryCode] = useState<string | null>(null);
   const [speciesStats, setSpeciesStats] = useState<CountryStats>(precomputedStats || {});
@@ -250,6 +260,22 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
   const [loading, setLoading] = useState(!precomputedStats);
   const [occurrenceLoading, setOccurrenceLoading] = useState(false);
   const [colorMode, setColorMode] = useState<ColorMode>("species");
+  // Falls back to local state when uncontrolled (mapViewMode/onMapViewModeChange
+  // omitted) — see the same pattern for sort just below.
+  const [localViewMode, setLocalViewMode] = useState<MapViewMode>("map");
+  const viewMode = mapViewMode ?? localViewMode;
+  const setViewMode = onMapViewModeChange ?? setLocalViewMode;
+  const [localSortKey, setLocalSortKey] = useState<MapSortKey>("species");
+  const [localSortDir, setLocalSortDir] = useState<"asc" | "desc">("desc");
+  const sortKey = mapSortKey ?? localSortKey;
+  const sortDir = mapSortDirection ?? localSortDir;
+  const setSort = useCallback(
+    (key: MapSortKey, dir: "asc" | "desc") => {
+      if (onMapSortChange) onMapSortChange(key, dir);
+      else { setLocalSortKey(key); setLocalSortDir(dir); }
+    },
+    [onMapSortChange]
+  );
 
   // Reset to species mode if GBIF is hidden while it's the active mode
   // (Species and % Outdated stay available regardless of showGbifToggle,
@@ -287,7 +313,10 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
       // Zoom level depends on country size - small countries zoom more
       const smallCountries = new Set(["Singapore", "Luxembourg", "Cyprus", "Jamaica", "Trinidad and Tobago", "Brunei", "Qatar", "Kuwait", "Lebanon", "Djibouti", "eSwatini", "Lesotho", "Gambia", "Guinea-Bissau", "Slovenia", "Montenegro", "Kosovo", "Macedonia", "Andorra", "Antigua and Barb.", "Bahrain", "Barbados", "Belize", "Cabo Verde", "Comoros", "Dominica", "Grenada", "Kiribati", "Liechtenstein", "Maldives", "Malta", "Marshall Is.", "Mauritius", "Micronesia", "Monaco", "Nauru", "Palau", "Samoa", "San Marino", "São Tomé and Principe", "Seychelles", "St. Kitts and Nevis", "Saint Lucia", "St. Vin. and Gren.", "Tonga", "Tuvalu", "Vatican", "American Samoa", "Anguilla", "Aruba", "Bermuda", "British Virgin Is.", "Cayman Is.", "Curaçao", "Faeroe Is.", "Guernsey", "Hong Kong", "Isle of Man", "Jersey", "Macao", "Montserrat", "N. Mariana Is.", "Niue", "Norfolk Island", "Pitcairn Is.", "Saint Helena", "Sint Maarten", "St-Barthélemy", "St-Martin", "St. Pierre and Miquelon", "Turks and Caicos Is.", "U.S. Virgin Is.", "Wallis and Futuna Is.", "Åland", "N. Cyprus"]);
       const largeCountries = new Set(["Russia", "Canada", "United States of America", "China", "Brazil", "Australia", "India", "Argentina"]);
-      const zoomLevel = smallCountries.has(countryName) ? 6 : largeCountries.has(countryName) ? 2.5 : 4;
+      // Small-country zoom capped lower than it used to be (was 6) — at 6 a
+      // small island could fill the whole visible frame, right where the
+      // bottom-left Map/List toggle and bottom-right zoom controls overlay it.
+      const zoomLevel = smallCountries.has(countryName) ? 4.5 : largeCountries.has(countryName) ? 2.5 : 4;
       setZoom(zoomLevel);
     }
     setSearchQuery("");
@@ -418,6 +447,13 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
   // since outdated counts are computed alongside species counts, not fetched separately)
   const activeStats = colorMode === "occurrences" ? (occurrenceStats || {}) : speciesStats;
 
+  // Which region (if any) is currently selected as a whole — shared by the
+  // region <select>'s own value (below) and the list view (which narrows its
+  // rows to this region, same as the map already implicitly does via the blue
+  // highlight over the whole region's shapes). See matchingRegion's own doc
+  // comment for exactly what "as a whole" means.
+  const activeRegion = useMemo(() => matchingRegion(selectedCountries) ?? "", [selectedCountries]);
+
   // Calculate max value for heatmap scaling (unused in "outdated" mode, which uses a fixed 0-100% gradient)
   const maxValue = Object.values(activeStats).reduce(
     (max, stat) => Math.max(max, colorMode === "species" ? stat.species : stat.occurrences),
@@ -530,22 +566,7 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
           )}
           {onRegionFilter && (
             <select
-              value={(() => {
-                if (selectedCountries.size === 0) return "";
-                const regions = new Set<string>();
-                selectedCountries.forEach(c => regions.add(countryToIucnRegion(c)));
-                if (regions.size === 1) {
-                  const region = [...regions][0];
-                  if (region !== "Other") {
-                    // Only show region if ALL countries in that region are selected
-                    const regionCodes = iucnRegionCountries(region);
-                    if (regionCodes.length === selectedCountries.size && regionCodes.every(c => selectedCountries.has(c))) {
-                      return region;
-                    }
-                  }
-                }
-                return "";
-              })()}
+              value={activeRegion}
               onChange={(e) => onRegionFilter(e.target.value)}
               className="text-[10px] bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500 max-w-[96px] truncate"
             >
@@ -558,8 +579,8 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
         </div>
       </div>
 
-      {/* Hover tooltip */}
-      {hoveredCountry && (
+      {/* Hover tooltip (map view only) */}
+      {viewMode === "map" && hoveredCountry && (
         <div className="absolute top-12 left-1/2 -translate-x-1/2 z-10 bg-white dark:bg-zinc-800 px-3 py-2 rounded-lg shadow-lg text-sm text-zinc-700 dark:text-zinc-300 pointer-events-none border border-zinc-200 dark:border-zinc-700 min-w-[140px]">
           <div className="font-medium text-zinc-900 dark:text-zinc-100">{hoveredCountry}</div>
           {hoveredSpeciesStats || hoveredOccurrenceStats ? (
@@ -578,12 +599,20 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
                 </div>
               )}
               {showOutdatedMode && hoveredSpeciesStats && hoveredSpeciesStats.species > 0 && (
-                <div className="flex justify-between gap-4 text-xs">
-                  <span className="text-zinc-500"># Outdated</span>
-                  <span className="font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">
-                    {formatNumber(hoveredSpeciesStats.outdated || 0)} ({(((hoveredSpeciesStats.outdated || 0) / hoveredSpeciesStats.species) * 100).toFixed(1)}%)
-                  </span>
-                </div>
+                <>
+                  <div className="flex justify-between gap-4 text-xs">
+                    <span className="text-zinc-500"># Outdated</span>
+                    <span className="font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">
+                      {formatNumber(hoveredSpeciesStats.outdated || 0)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-4 text-xs">
+                    <span className="text-zinc-500">% Outdated</span>
+                    <span className="font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">
+                      {(((hoveredSpeciesStats.outdated || 0) / hoveredSpeciesStats.species) * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                </>
               )}
               {showGbifToggle && (
               <div className="flex justify-between gap-4 text-xs">
@@ -604,8 +633,29 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
         </div>
       )}
 
+      {/* List view: sortable table alternative, same stats/selection/click-through.
+          Narrowed to activeRegion's countries when a whole region is selected —
+          same scope the map already implies via its blue region highlight.
+          Shares this relative wrapper with the map below (rather than each
+          having its own) so the Map/List toggle can overlay bottom-left of
+          whichever one is actually showing. */}
+      <div className="relative flex-1 min-h-0 flex flex-col">
+      {viewMode === "list" && (
+        <CountryStatsList
+          stats={activeStats}
+          selectedCountries={selectedCountries}
+          onCountrySelect={onCountrySelect}
+          speciesLabel={speciesLabel}
+          showOutdatedMode={showOutdatedMode}
+          regionFilter={activeRegion || null}
+          sortKey={sortKey}
+          sortDir={sortDir}
+          onSortChange={setSort}
+        />
+      )}
+
       {/* Map */}
-      <div ref={mapContainerRef} className="flex-1 rounded-lg overflow-hidden relative" style={{ minHeight: "200px", touchAction: "none" }}>
+      <div className={viewMode === "list" ? "hidden" : "flex-1 rounded-lg overflow-hidden relative"} ref={mapContainerRef} style={{ minHeight: "200px", touchAction: "none" }}>
         {(loading || (colorMode === "occurrences" && !occurrenceStats)) && (
           <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-zinc-900/50 z-10">
             <svg className="animate-spin h-5 w-5 text-zinc-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -617,7 +667,7 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
         <ComposableMap
           projection="geoNaturalEarth1"
           projectionConfig={{
-            scale: 210,
+            scale: 140,
             center: [0, 0],
           }}
           style={{ width: "100%", height: "100%", position: "absolute", top: 0, left: 0 }}
@@ -730,6 +780,27 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
             &minus;
           </button>
         </div>
+      </div>
+      {/* Map/List toggle — a sortable table alternative to the choropleth for
+          users who'd rather scan/sort a list than read a map. Bottom-left,
+          overlaying whichever of the two is currently showing (see the shared
+          relative wrapper above), mirroring the zoom controls' bottom-right spot. */}
+      <div className="absolute bottom-2 left-2 z-10 flex items-center bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md p-0.5 text-[10px] shadow-sm">
+        {(["map", "list"] as const).map((mode) => (
+          <button
+            key={mode}
+            onClick={() => setViewMode(mode)}
+            aria-pressed={viewMode === mode}
+            className={`px-1.5 py-0.5 rounded capitalize transition-colors ${
+              viewMode === mode
+                ? "bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900"
+                : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+            }`}
+          >
+            {mode}
+          </button>
+        ))}
+      </div>
       </div>
       {footer}
     </div>

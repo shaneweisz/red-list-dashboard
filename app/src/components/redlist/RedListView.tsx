@@ -10,7 +10,7 @@ import CitesSummary from "../CitesSummary";
 import WikipediaSummary from "../WikipediaSummary";
 import EolSummary from "../EolSummary";
 import TaxaIcon from "../TaxaIcon";
-import { ALPHA2_TO_NAME } from "../WorldMap";
+import { ALPHA2_TO_NAME, type CountryStats } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID, THREATENED_CATEGORIES } from "@/config/taxa";
 import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode, matchesBreakdownName, breakdownDisplayName } from "@/lib/taxonomy-utils";
 import ReviewerChart from "./ReviewerChart";
@@ -338,6 +338,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     layoutMode, setLayoutMode,
     navigateToTaxonSubgroup,
     returnToLayoutMode,
+    enterCountryDrilldown,
+    returnToCountryList,
     selectedTaxa, setSelectedTaxa,
     selectedSubgroups, setSelectedSubgroups,
     selectedCategories, setSelectedCategories,
@@ -358,12 +360,23 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     searchFilter, setSearchFilter,
     exactFilters, setExactFilters,
     sortField, sortDirection, setSort,
+    mapViewMode, mapSortKey, mapSortDirection, setMapViewMode, setMapSort,
     clearAllFilters,
     setViewMode: setUrlViewMode,
     species: urlSpecies, tab: urlTab,
     setSpeciesParam, setTabParam,
     fromPopstateRef,
   } = useFilterParams();
+
+  // Country view needs real per-country location data, which Not Evaluated
+  // species don't have (no assessment means no assessment_locations row) — see
+  // the matching disabled-option guard in TaxaSummary's layoutModeSelect. Exit
+  // back to the taxonomic default if New Assessments is switched on while
+  // already in country view, rather than leaving an unreachable-but-still-active
+  // mode selected.
+  useEffect(() => {
+    if (isNewAssessments && layoutMode === "country") setLayoutMode(null);
+  }, [isNewAssessments, layoutMode, setLayoutMode]);
 
   // Initialize from shared state on mount (when switching from another view)
   const initializedRef = useRef(false);
@@ -440,6 +453,17 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const handleToggleTaxon = useCallback((taxonId: string, event: React.MouseEvent) => {
     const isMulti = event.metaKey || event.ctrlKey;
 
+    // Clicking any taxon row while browsing a country-scoped bare summary
+    // table (Country view, one country selected, no taxon picked yet — see
+    // TaxaSummary's countryMode rendering) exits to the full charts+species-
+    // table view, still scoped to that country (selectedCountries untouched).
+    // Safe to fire alongside the setSelectedTaxa call below without the
+    // fromPopstateRef trick enterCountryDrilldown needs: this is always an
+    // empty->non-empty taxa transition, which RedListView's own "reset filters
+    // on taxa change" effect already no-ops on (see its `prev.size === 0`
+    // guard), so selectedCountries survives untouched either way.
+    if (layoutMode === "country") setLayoutMode(null);
+
     // "all" row behavior:
     // - If anything is selected (nested view), return to landing page
     // - Only select "all" when clicking from the landing page itself (nothing selected)
@@ -485,7 +509,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       setSelectedSubgroups(new Set());
       return new Set([taxonId]);
     });
-  }, [setSelectedTaxa, setSelectedSubgroups, selectedTaxa, selectedSubgroups, isNewAssessments, searchFilter, urlSpecies, clearAllFilters]);
+  }, [setSelectedTaxa, setSelectedSubgroups, selectedTaxa, selectedSubgroups, isNewAssessments, searchFilter, urlSpecies, clearAllFilters, layoutMode, setLayoutMode]);
 
   // Reset all other filters when taxa selection changes
   const prevTaxaRef = useRef(selectedTaxa);
@@ -2164,6 +2188,112 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     return { name: id.charAt(0).toUpperCase() + id.slice(1), rank };
   }, [selectedTaxa, species]);
 
+  // GBIF occurrence counts aren't filterable per-country/category/etc. — only show
+  // that color/list column when no filter narrower than "a whole top-level taxon"
+  // is active. Shared by both WorldMap instances (the always-visible Country chart
+  // and the promoted country-view landing page) so they never disagree.
+  const showGbifToggle =
+    selectedSubgroups.size === 0
+    && [...selectedTaxa].every(id => id in TAXA_BY_ID)
+    && selectedCategories.size === 0
+    && selectedYearRanges.size === 0
+    && selectedAssessmentYears.size === 0
+    && selectedObsRanges.size === 0
+    && selectedCountries.size === 0
+    && selectedSystems.size === 0
+    && selectedPopulationTrends.size === 0
+    && selectedMovementPatterns.size === 0
+    && selectedThreats.size === 0
+    && selectedGrowthForms.size === 0
+    && selectedAssessors.size === 0
+    && selectedReviewers.size === 0
+    && !endemicsOnly
+    && !searchFilter
+    && !showOnlyStarred;
+
+  // Any countries selected anywhere (not just via the Country view landing
+  // page) scope TaxaSummary's own fetches too — clicking a country on the
+  // normal "Charts row 2" map already narrowed every other chart/table; this
+  // closes the one remaining inconsistency (the taxa tree staying global). One
+  // country, a whole region, or an arbitrary multi-select are all just "the
+  // set of currently selected countries" — the live per-country query counts
+  // each species once regardless of how many of these codes it matches (see
+  // country-taxa-summary-duckdb.ts's countriesWhere), so there's no reason to
+  // special-case region vs. multi-select here.
+  const countryScope = selectedCountries.size > 0 ? [...selectedCountries] : null;
+
+  // Country view's own map/list click — same plain-click-replaces/ctrl-click-
+  // toggles gesture as handleCountrySelect (the normal browsing view's country
+  // filter), just routed through enterCountryDrilldown so the country change
+  // stays atomic with clearing taxa/subgroups (see its own comment).
+  const handleCountryDrilldown = useCallback(
+    (code: string, _name: string, event: React.MouseEvent) => {
+      const isMultiSelect = event.metaKey || event.ctrlKey;
+      enterCountryDrilldown(prev => {
+        if (isMultiSelect) {
+          const next = new Set(prev);
+          if (next.has(code)) next.delete(code);
+          else next.add(code);
+          return next;
+        } else {
+          if (prev.size === 1 && prev.has(code)) return new Set();
+          return new Set([code]);
+        }
+      });
+    },
+    [enterCountryDrilldown]
+  );
+
+  // Country view's own per-country stats — a small precomputed, all-species
+  // aggregate (see data/country-stats.json), fetched once and cached for the
+  // session, NOT the client-side countryStatsForMap used elsewhere (that one
+  // requires the currently-browsed taxon's full species array to already be
+  // loaded, which is fine when you're already browsing e.g. Mammals for other
+  // reasons, but would mean downloading the entire "All Species" dataset just
+  // to show the landing map — multi-second blank-map delay for no reason,
+  // since this data never varies by taxon selection on the landing page).
+  const [countryLandingStats, setCountryLandingStats] = useState<CountryStats | null>(null);
+  useEffect(() => {
+    if (layoutMode !== "country" || countryLandingStats) return;
+    fetch("/api/redlist/country-stats")
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (!data?.stats) return;
+        const shaped: CountryStats = {};
+        for (const [code, s] of Object.entries(data.stats as Record<string, { species: number; outdated: number }>)) {
+          shaped[code] = { occurrences: 0, species: s.species, outdated: s.outdated };
+        }
+        setCountryLandingStats(shaped);
+      })
+      .catch(() => {});
+  }, [layoutMode, countryLandingStats]);
+
+  // Country view landing page content — a promoted WorldMap (its own Map/List
+  // toggle applies here too), passed into TaxaSummary rather than duplicating a
+  // second dynamic-import + prop-wiring of WorldMap there. Region-select
+  // behaves the same as the normal "Charts row 2" map below: a region just
+  // selects all its countries at once (handleRegionFilter), same as any other
+  // multi-country selection. No endemics toggle here — the country-scoped
+  // taxa summary is a live per-country DuckDB query that doesn't take an
+  // endemics parameter, so the button would have nothing to actually filter.
+  const countryModeContent = (
+    <WorldMap
+      selectedCountries={selectedCountries}
+      onCountrySelect={handleCountryDrilldown}
+      precomputedStats={countryLandingStats ?? {}}
+      selectedTaxa={selectedTaxa}
+      speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
+      showOutdatedMode={!isNewAssessments}
+      showGbifToggle={false}
+      onRegionFilter={handleRegionFilter}
+      mapViewMode={mapViewMode}
+      onMapViewModeChange={setMapViewMode}
+      mapSortKey={mapSortKey}
+      mapSortDirection={mapSortDirection}
+      onMapSortChange={setMapSort}
+    />
+  );
+
   return (
     <div className="space-y-4 min-w-0">
       {/* Always show Taxa Summary table */}
@@ -2175,6 +2305,10 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         viewMode={viewMode}
         layoutMode={layoutMode}
         onLayoutModeChange={setLayoutMode}
+        countryModeContent={countryModeContent}
+        countryScope={countryScope}
+        onExitCountryScope={returnToCountryList}
+        onClearCountryScope={() => setSelectedCountries(new Set())}
         onToggleSubgroup={(sgId) => {
           // Clicking a view root ancestor → clear subgroups to show its children.
           // If the currently-selected subgroup is an SSC group, we got here by
@@ -2221,8 +2355,12 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         </div>
       )}
 
-      {/* Charts, search, and species table - only visible after a taxon is selected */}
-      {selectedTaxa.size > 0 && (
+      {/* Charts, search, and species table - only visible after a taxon is selected.
+          Hidden in country mode too: TaxaSummary's own countryModeContent (the
+          promoted WorldMap) is the entire page there, and selectedTaxa is only
+          "all" in that mode as a side effect of loading species for the map's own
+          stats (see setLayoutMode), not a real drill-down into All Species. */}
+      {selectedTaxa.size > 0 && layoutMode !== "country" && (
       neTooLarge ? (
         <div className="bg-white dark:bg-zinc-900 rounded-xl border border-amber-200 dark:border-amber-900/40 px-6 py-10 text-center">
           <p className="text-base font-medium text-zinc-700 dark:text-zinc-200">
@@ -2568,25 +2706,12 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   onRegionFilter={handleRegionFilter}
                   endemicsOnly={endemicsOnly}
                   onEndemicsToggle={() => setEndemicsOnly(!endemicsOnly)}
-                  showGbifToggle={
-                    selectedSubgroups.size === 0
-                    && [...selectedTaxa].every(id => id in TAXA_BY_ID)
-                    && selectedCategories.size === 0
-                    && selectedYearRanges.size === 0
-                    && selectedAssessmentYears.size === 0
-                    && selectedObsRanges.size === 0
-                    && selectedCountries.size === 0
-                    && selectedSystems.size === 0
-                    && selectedPopulationTrends.size === 0
-                    && selectedMovementPatterns.size === 0
-                    && selectedThreats.size === 0
-                    && selectedGrowthForms.size === 0
-                    && selectedAssessors.size === 0
-                    && selectedReviewers.size === 0
-                    && !endemicsOnly
-                    && !searchFilter
-                    && !showOnlyStarred
-                  }
+                  showGbifToggle={showGbifToggle}
+                  mapViewMode={mapViewMode}
+                  onMapViewModeChange={setMapViewMode}
+                  mapSortKey={mapSortKey}
+                  mapSortDirection={mapSortDirection}
+                  onMapSortChange={setMapSort}
                 />
               )}
             </div>
@@ -3751,6 +3876,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                 assessmentYear={assessmentYear}
                                 assessmentDate={s.assessment_date}
                                 taxonGroup={s.taxon_group}
+                                scientificName={s.scientific_name}
+                                nativeCountriesRedList={s.countries}
                                 onEmpty={s.category === "NE" ? handleOccurrenceEmpty : undefined}
                               />
                             </div>
