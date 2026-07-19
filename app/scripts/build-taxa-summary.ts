@@ -485,6 +485,14 @@ async function attachColCounts(summaries: Record<string, NodeSummary[]>): Promis
 export async function run(): Promise<void> {
   const summaries: TaxonSummaryRow[] = [];
 
+  // Per-country totals across ALL species (unfiltered by taxon) — feeds the
+  // country-view landing page's world map. Deliberately a single precomputed
+  // aggregate, not one file per country: unlike the per-taxon node summaries
+  // below (which must compose with an arbitrary taxon/subgroup selection, hence
+  // live DuckDB queries — see country-taxa-summary-duckdb.ts), the landing map
+  // is always "all species" scope, so this never needs to vary per request.
+  const countryStats = new Map<string, { total_assessed: number; outdated: number }>();
+
   // Load mapping to determine which GBIF species are linked to redlist entries
   const mapping = readMappingCsv();
   const linkedGbifKeys = new Set<number>();
@@ -510,14 +518,24 @@ export async function run(): Promise<void> {
     const byCategory: Record<string, number> = {};
 
     for (const s of redlistSpecies) {
+      const speciesOutdated = isOutdated(s.assessment_date);
+
       // Count outdated
-      if (isOutdated(s.assessment_date)) {
+      if (speciesOutdated) {
         outdated++;
       }
 
       // Count by category
       const cat = s.category || "DD";
       byCategory[cat] = (byCategory[cat] || 0) + 1;
+
+      // Per-country tally (see countryStats declaration above)
+      for (const cc of s.countries) {
+        const entry = countryStats.get(cc) ?? { total_assessed: 0, outdated: 0 };
+        entry.total_assessed++;
+        if (speciesOutdated) entry.outdated++;
+        countryStats.set(cc, entry);
+      }
     }
 
     // GBIF stats
@@ -570,6 +588,14 @@ export async function run(): Promise<void> {
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
   fs.writeFileSync(outputPath, JSON.stringify(summaries, null, 2) + "\n");
   console.log(`\nWrote ${summaries.length} taxa → ${outputPath}`);
+
+  const countryStatsObj: Record<string, { species: number; outdated: number }> = {};
+  for (const [cc, stats] of countryStats) {
+    countryStatsObj[cc] = { species: stats.total_assessed, outdated: stats.outdated };
+  }
+  const countryStatsOutputPath = path.join(DATA_DIR, "country-stats.json");
+  fs.writeFileSync(countryStatsOutputPath, JSON.stringify(countryStatsObj, null, 2) + "\n");
+  console.log(`Wrote ${countryStats.size} countries → ${countryStatsOutputPath}`);
 
   // ─── Second pass: precompute node children summaries ──────────────
   console.log("\nComputing node children summaries...");

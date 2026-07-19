@@ -110,6 +110,9 @@ const nextConfig: NextConfig = {
     // gated on assessed.parquet NOT existing locally.
     "/api/redlist/taxa-summary": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", "**/data/*.parquet", ...COL_ARTIFACTS],
     "/api/redlist/taxa-subgroups": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", "**/data/*.parquet", ...COL_ARTIFACTS],
+    // Reads only the small precomputed country-stats.json (no DuckDB — this is
+    // a static aggregate, not a live query, see species-store.ts's getCountryStats).
+    "/api/redlist/country-stats": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", "**/data/node-children-summaries.json", "**/data/*.parquet", ...COL_ARTIFACTS],
     // Backbone tree navigation queries backbone.parquet in R2 (httpfs) — no local data.
     "/api/taxa/species": ["**/data/**"],
     // /browse mirrors /api/redlist/species (same querySpecies): keep taxa-summary.json
