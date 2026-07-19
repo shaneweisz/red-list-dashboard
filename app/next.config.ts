@@ -74,6 +74,13 @@ const nextConfig: NextConfig = {
     // ?country=, since the throw happens before GET() ever runs).
     "/api/redlist/taxa-summary": DUCKDB_TRACE,
     "/api/redlist/taxa-subgroups": DUCKDB_TRACE,
+    // Queries the committed (not R2) wcvp-native-countries.parquet directly via
+    // DuckDB read_parquet() — a raw file path, not a JS import, so Next's tracer
+    // needs telling explicitly (same class of miss as the dlopen'd libduckdb.so).
+    "/api/wcvp-native-range": [
+      "./node_modules/@duckdb/node-bindings-linux-x64/**",
+      "./src/lib/native-range-refdata/wcvp-native-countries.parquet",
+    ],
   },
 
   // The API routes import a shared species-store module that references every

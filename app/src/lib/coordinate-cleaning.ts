@@ -3,7 +3,7 @@
  * (Zizka et al. 2019, https://github.com/ropensci/CoordinateCleaner), reimplemented
  * from the published algorithms and roxygen examples rather than transcribed from the
  * GPL-3 source. Flags GBIF geo-referencing artifacts that GBIF's own `issues` array
- * doesn't catch (see docs/gbif-coordinate-cleaning-scoping.md).
+ * doesn't catch.
  *
  * Each function mirrors one upstream `cc_*` test at its documented default threshold:
  * - isZeroCoordinate  -> cc_zero  (buffer = 0.5 decimal degrees)
@@ -12,8 +12,9 @@
  * - flagDuplicateCoordinates -> cc_dupl (species + lon/lat key, no extra columns)
  * - isNearCapital     -> cc_cap  (buffer = 10000m geodesic, geod = TRUE)
  * - isNearCentroid    -> cc_cen  (buffer = 1000m geodesic, geod = TRUE, test = "country" only —
- *                                 upstream default also tests province centroids, skipped here,
- *                                 see docs/gbif-coordinate-cleaning-scoping.md phase 2 scoping)
+ *                                 upstream default also tests province centroids, skipped here;
+ *                                 no independently-sourced province-centroid dataset was worth
+ *                                 the added complexity)
  * - isNearInstitution -> cc_inst (buffer = 100m geodesic — upstream's own standalone default is
  *                                 geod=FALSE with the buffer in decimal degrees, which is a
  *                                 confusing/inconsistent default relative to the rest of the

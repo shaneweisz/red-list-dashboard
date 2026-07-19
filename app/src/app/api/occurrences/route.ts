@@ -114,7 +114,8 @@ export async function GET(request: NextRequest) {
       (r) => r.decimalLatitude != null && r.decimalLongitude != null
     );
     // Computed over this request's result set (a single species, per cc_dupl's species
-    // key), not the species' full GBIF record — see docs/gbif-coordinate-cleaning-scoping.md
+    // key), not the species' full GBIF record — this route is paginated per-request and
+    // never sees a species' complete point set.
     const qualityFlags = getQualityFlags(
       validResults.map((r) => ({ lon: r.decimalLongitude, lat: r.decimalLatitude, countryCode: r.countryCode }))
     );
