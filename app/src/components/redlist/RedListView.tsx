@@ -10,7 +10,7 @@ import CitesSummary from "../CitesSummary";
 import WikipediaSummary from "../WikipediaSummary";
 import EolSummary from "../EolSummary";
 import TaxaIcon from "../TaxaIcon";
-import { ALPHA2_TO_NAME } from "../WorldMap";
+import { ALPHA2_TO_NAME, type CountryStats } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID, THREATENED_CATEGORIES } from "@/config/taxa";
 import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode, matchesBreakdownName, breakdownDisplayName } from "@/lib/taxonomy-utils";
 import ReviewerChart from "./ReviewerChart";
@@ -2214,6 +2214,30 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     [enterCountryDrilldown]
   );
 
+  // Country view's own per-country stats — a small precomputed, all-species
+  // aggregate (see data/country-stats.json), fetched once and cached for the
+  // session, NOT the client-side countryStatsForMap used elsewhere (that one
+  // requires the currently-browsed taxon's full species array to already be
+  // loaded, which is fine when you're already browsing e.g. Mammals for other
+  // reasons, but would mean downloading the entire "All Species" dataset just
+  // to show the landing map — multi-second blank-map delay for no reason,
+  // since this data never varies by taxon selection on the landing page).
+  const [countryLandingStats, setCountryLandingStats] = useState<CountryStats | null>(null);
+  useEffect(() => {
+    if (layoutMode !== "country" || countryLandingStats) return;
+    fetch("/api/redlist/country-stats")
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (!data?.stats) return;
+        const shaped: CountryStats = {};
+        for (const [code, s] of Object.entries(data.stats as Record<string, { species: number; outdated: number }>)) {
+          shaped[code] = { occurrences: 0, species: s.species, outdated: s.outdated };
+        }
+        setCountryLandingStats(shaped);
+      })
+      .catch(() => {});
+  }, [layoutMode, countryLandingStats]);
+
   // Country view landing page content — a promoted WorldMap (its own Map/List
   // toggle applies here too), passed into TaxaSummary rather than duplicating a
   // second dynamic-import + prop-wiring of WorldMap there.
@@ -2222,15 +2246,14 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       <WorldMap
         selectedCountries={selectedCountries}
         onCountrySelect={handleCountryDrilldown}
-        precomputedStats={countryStatsForMap}
-        precomputedStatsTotal={countryStatsForMapTotal}
+        precomputedStats={countryLandingStats ?? {}}
         selectedTaxa={selectedTaxa}
         speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
         showOutdatedMode={!isNewAssessments}
         onRegionFilter={handleRegionFilter}
         endemicsOnly={endemicsOnly}
         onEndemicsToggle={() => setEndemicsOnly(!endemicsOnly)}
-        showGbifToggle={showGbifToggle}
+        showGbifToggle={false}
       />
     </div>
   );

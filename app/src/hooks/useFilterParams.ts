@@ -407,18 +407,7 @@ export function useFilterParams() {
   const setLayoutMode = useCallback(
     (mode: LayoutMode) => {
       setState(prev => {
-        // Country view needs real per-species data loaded to compute its
-        // per-country stats client-side (unlike table1a/ssc, which read their
-        // own precomputed endpoint regardless of taxa selection) — auto-select
-        // "All Species" when entering from the empty landing page (the only
-        // place layoutMode is ever set from), and undo that auto-select (not a
-        // real user pick) when leaving back to another mode.
-        let next = { ...prev, layoutMode: mode };
-        if (mode === "country" && prev.layoutMode !== "country" && prev.taxa.size === 0) {
-          next = { ...next, taxa: new Set(["all"]), subgroups: new Set(), breakdown: null };
-        } else if (prev.layoutMode === "country" && mode !== "country" && prev.taxa.size === 1 && prev.taxa.has("all")) {
-          next = { ...next, taxa: new Set(), subgroups: new Set(), breakdown: null };
-        }
+        const next = { ...prev, layoutMode: mode };
         queueMicrotask(() => syncUrl(next, true)); // push so back button exits the mode
         return next;
       });
@@ -492,18 +481,10 @@ export function useFilterParams() {
   );
 
   // Reverse of enterCountryDrilldown — clears the country scope and re-enters
-  // the Country view landing page. Re-applies setLayoutMode's own "auto-select
-  // All Species if taxa is empty" fallback (duplicated rather than calling
-  // setLayoutMode, which would be a second setState + a second history push).
+  // the Country view landing page.
   const returnToCountryList = useCallback(() => {
     setState(prev => {
-      const next = {
-        ...prev,
-        countries: new Set<string>(),
-        layoutMode: "country" as LayoutMode,
-        breakdown: null,
-        ...(prev.taxa.size === 0 ? { taxa: new Set(["all"]), subgroups: new Set<string>() } : {}),
-      };
+      const next = { ...prev, countries: new Set<string>(), layoutMode: "country" as LayoutMode, breakdown: null };
       queueMicrotask(() => syncUrl(next, true));
       return next;
     });
