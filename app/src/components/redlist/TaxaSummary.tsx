@@ -137,10 +137,16 @@ interface Props {
   onNavigateToSubgroup?: (taxonId: string, subgroupId: string) => void;
   disableAllSpecies?: boolean;
   viewMode?: "reassessments" | "new-assessments";
-  /** Table 1a mode / SSC groups mode — URL-synced (see useFilterParams) so it
-   * survives reload/share and the browser back button can return to it. */
-  layoutMode: "table1a" | "ssc" | null;
-  onLayoutModeChange: (mode: "table1a" | "ssc" | null) => void;
+  /** Table 1a mode / SSC groups mode / country-view landing page — URL-synced
+   * (see useFilterParams) so it survives reload/share and the browser back
+   * button can return to it. */
+  layoutMode: "table1a" | "ssc" | "country" | null;
+  onLayoutModeChange: (mode: "table1a" | "ssc" | "country" | null) => void;
+  /** Rendered in place of the taxa table when layoutMode === "country" — a
+   * promoted WorldMap/CountryStatsList panel built by RedListView (which already
+   * owns the country-stats data and click-through wiring), kept out of this
+   * component so it doesn't need its own dynamic WorldMap import. */
+  countryModeContent?: React.ReactNode;
 }
 
 // Dynamic: any tree node with children is expandable
@@ -1017,7 +1023,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
   );
 }
 
-export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", layoutMode, onLayoutModeChange }: Props) {
+export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", layoutMode, onLayoutModeChange, countryModeContent }: Props) {
   const isNewAssessments = viewMode === "new-assessments";
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1152,6 +1158,32 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   // automatically. table1aData/sscData stay local — just a fetch-once cache.
   const table1aMode = layoutMode === "table1a";
   const sscMode = layoutMode === "ssc";
+  const countryMode = layoutMode === "country";
+
+  // Single 4-way view selector — replaces the old Table 1a/SSC Groups button pair
+  // (+ their "Exit ... View" states). "Country view" needs real per-country
+  // location data, which Not Evaluated species don't have (no assessment means no
+  // assessment_locations row), so it's disabled under New Assessments.
+  const layoutModeSelect = (
+    <span className="inline-flex items-center gap-1.5">
+      <span className="text-xs text-zinc-400 dark:text-zinc-500">View:</span>
+      <select
+        value={layoutMode ?? "taxonomic"}
+        onChange={(e) => {
+          const v = e.target.value;
+          onLayoutModeChange(v === "taxonomic" ? null : (v as "table1a" | "ssc" | "country"));
+        }}
+        className="text-xs bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+      >
+        <option value="taxonomic">Taxonomic view</option>
+        <option value="table1a">Table 1a view</option>
+        <option value="ssc">SSC group view</option>
+        <option value="country" disabled={isNewAssessments} title={isNewAssessments ? "Not available for New Assessments — Not Evaluated species have no location data" : undefined}>
+          Country view
+        </option>
+      </select>
+    </span>
+  );
   const [table1aData, setTable1aData] = useState<Table1aSectionData[] | null>(null);
   const [table1aLoading, setTable1aLoading] = useState(false);
 
@@ -2261,6 +2293,18 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     </thead>
   );
 
+  // Country view: an entirely different UI (map/list, not a taxonomy table), so
+  // it bypasses the shared <table>/column-menu/focus-mode machinery below rather
+  // than trying to squeeze into the flatMode ternary that table1a/ssc share.
+  if (countryMode) {
+    return (
+      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
+        <div className="flex items-center justify-end mb-2">{layoutModeSelect}</div>
+        {countryModeContent}
+      </div>
+    );
+  }
+
   return (
     <>
     {showColumnMenu && createPortal(
@@ -2758,21 +2802,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             </span>
           </span>
           <span className="text-zinc-300 dark:text-zinc-700">|</span>
-          {table1aMode ? (
-            <button
-              onClick={() => onLayoutModeChange(null)}
-              className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-            >
-              Exit Table 1a View
-            </button>
-          ) : sscMode ? (
-            <button
-              onClick={() => onLayoutModeChange(null)}
-              className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-            >
-              Exit SSC Groups View
-            </button>
-          ) : (
+          {!flatMode && (
             <>
               <button
                 onClick={allExpanded ? collapseAll : expandAll}
@@ -2782,52 +2812,24 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                 {allExpanded ? "Collapse all" : "Expand all"}
               </button>
               <span className="text-zinc-300 dark:text-zinc-700">|</span>
-              <span className="inline-flex items-center gap-1">
-                <button
-                  onClick={() => onLayoutModeChange("table1a")}
-                  className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                >
-                  Table 1a View
-                </button>
-                <span className="relative group/t1a">
-                  <a
-                    href={IUCN_SOURCE_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <FaInfoCircle size={10} />
-                  </a>
-                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover/t1a:opacity-100 group-hover/t1a:visible z-50 shadow-lg pointer-events-none">
-                    View IUCN Red List Table 1a (PDF)
-                  </span>
-                </span>
-              </span>
-              <span className="text-zinc-300 dark:text-zinc-700">|</span>
-              <span className="inline-flex items-center gap-1">
-                <button
-                  onClick={() => onLayoutModeChange("ssc")}
-                  className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                >
-                  SSC Groups View
-                </button>
-                <span className="relative group/ssc">
-                  <a
-                    href="https://iucn.org/our-union/commissions/group/1445"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <FaInfoCircle size={10} />
-                  </a>
-                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover/ssc:opacity-100 group-hover/ssc:visible z-50 shadow-lg pointer-events-none">
-                    View IUCN SSC Specialist Groups (mammals, reptiles, fishes, invertebrates, plants & fungi)
-                  </span>
-                </span>
-              </span>
             </>
+          )}
+          {layoutModeSelect}
+          {(table1aMode || sscMode) && (
+            <span className="relative group/lm">
+              <a
+                href={table1aMode ? IUCN_SOURCE_URL : "https://iucn.org/our-union/commissions/group/1445"}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <FaInfoCircle size={10} />
+              </a>
+              <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover/lm:opacity-100 group-hover/lm:visible z-50 shadow-lg pointer-events-none">
+                {table1aMode ? "View IUCN Red List Table 1a (PDF)" : "View IUCN SSC Specialist Groups (mammals, reptiles, fishes, invertebrates, plants & fungi)"}
+              </span>
+            </span>
           )}
         </div>
       </div>

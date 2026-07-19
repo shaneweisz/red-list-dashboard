@@ -9,10 +9,11 @@ import { expandTaxaToken, collapseTaxaToTokens, getViewRootForNode, type FilterR
 
 export type ViewMode = "reassessments" | "new-assessments";
 
-// Flat-table layout ("Table 1a mode" / "SSC groups mode") — URL-synced so it
-// survives reload/share and so the browser back button can return to it after
-// drilling into a group (see navigateToTaxonSubgroup below).
-export type LayoutMode = "table1a" | "ssc" | null;
+// Flat-table layout ("Table 1a mode" / "SSC groups mode") plus the country-view
+// landing page ("country") — URL-synced so it survives reload/share and so the
+// browser back button can return to it after drilling into a group (see
+// navigateToTaxonSubgroup below) or a country (see enterCountryDrilldown).
+export type LayoutMode = "table1a" | "ssc" | "country" | null;
 
 // Exact, URL-only base filters (no on-screen control — the charts use coarse
 // buckets). They let an agent/MCP dashboard link reproduce the exact /browse
@@ -105,7 +106,7 @@ export function parseParams(search: string) {
   }
   return {
     viewMode: (viewParam === "new-assessments" ? "new-assessments" : "reassessments") as ViewMode,
-    layoutMode: (layoutParam === "table1a" || layoutParam === "ssc" ? layoutParam : null) as LayoutMode,
+    layoutMode: (layoutParam === "table1a" || layoutParam === "ssc" || layoutParam === "country" ? layoutParam : null) as LayoutMode,
     // Expanded from the flat `taxa` token list (+ legacy `subgroups=`) above.
     taxa: taxaSet,
     subgroups: subgroupSet,
@@ -406,7 +407,18 @@ export function useFilterParams() {
   const setLayoutMode = useCallback(
     (mode: LayoutMode) => {
       setState(prev => {
-        const next = { ...prev, layoutMode: mode };
+        // Country view needs real per-species data loaded to compute its
+        // per-country stats client-side (unlike table1a/ssc, which read their
+        // own precomputed endpoint regardless of taxa selection) — auto-select
+        // "All Species" when entering from the empty landing page (the only
+        // place layoutMode is ever set from), and undo that auto-select (not a
+        // real user pick) when leaving back to another mode.
+        let next = { ...prev, layoutMode: mode };
+        if (mode === "country" && prev.layoutMode !== "country" && prev.taxa.size === 0) {
+          next = { ...next, taxa: new Set(["all"]), subgroups: new Set(), breakdown: null };
+        } else if (prev.layoutMode === "country" && mode !== "country" && prev.taxa.size === 1 && prev.taxa.has("all")) {
+          next = { ...next, taxa: new Set(), subgroups: new Set(), breakdown: null };
+        }
         queueMicrotask(() => syncUrl(next, true)); // push so back button exits the mode
         return next;
       });
