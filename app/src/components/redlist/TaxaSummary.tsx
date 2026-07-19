@@ -152,6 +152,9 @@ interface Props {
    * — independent of layoutMode, so clicking a single country anywhere (not just
    * via the Country view landing page) scopes this table's own fetches too. */
   countryScope?: string | null;
+  /** Clears the country selection and re-enters the Country view landing page —
+   * shown next to the country name atop the table whenever countryScope is set. */
+  onExitCountryScope?: () => void;
 }
 
 // Dynamic: any tree node with children is expandable
@@ -1039,7 +1042,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
   );
 }
 
-export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", layoutMode, onLayoutModeChange, countryModeContent, countryScope }: Props) {
+export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", layoutMode, onLayoutModeChange, countryModeContent, countryScope, onExitCountryScope }: Props) {
   const isNewAssessments = viewMode === "new-assessments";
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1087,6 +1090,12 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   const countryRowSuffix = layoutMode !== "country" && countryScoped
     ? ` (${ALPHA2_TO_NAME[countryScope!] ?? countryScope})`
     : "";
+  // Tighter, non-responsive padding for the sticky Taxonomic Group column in
+  // Country View — cellPad's px-4 growth at the md breakpoint is more than the
+  // taxon name + icon need just to avoid wrapping, and that column is the
+  // biggest lever for giving the Outdated/% Outdated bars more room in the
+  // narrower 3/5-width table.
+  const taxonCellPad = countryStyleColumns ? "px-2 py-2 md:py-2.5" : cellPad;
   const isVisible = (col: ColumnId) => !hiddenColumns.has(col) && !(countryStyleColumns && COUNTRY_SCOPED_HIDDEN_COLUMNS.includes(col));
   const toggleColumn = (col: ColumnId) => {
     setHiddenColumns((prev) => {
@@ -1555,7 +1564,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         <table className="w-full">
           <thead>
             <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
-              <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} text-center text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap w-0`}>Taxonomic Group</th>
+              <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${taxonCellPad} text-center text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap w-0`}>Taxonomic Group</th>
               {isVisible("described") && <th className={numericThNoDividerClasses}># Described Species</th>}
               {isVisible("colDescribed") && <th className={numericThClasses}># Described Species (CoL)</th>}
               {isVisible("assessed") && (
@@ -1628,12 +1637,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
 
   // Compact colored bar for Country View's % Outdated column — separate from
   // # Outdated's own plain-count column (reverted back to two columns per
-  // feedback, now that the 2/5-map-3/5-table split leaves more room).
+  // feedback, now that the 2/5-map-3/5-table split leaves more room). Widened
+  // (w-10 -> w-20) now that taxonCellPad reclaims space from the Taxonomic
+  // Group column specifically to make room for this.
   const renderCompactPercentBar = (percent: number) => {
     const clampedPercent = Math.min(100, Math.max(0, percent));
     return (
       <div className="flex items-center justify-end gap-1.5">
-        <div className="w-10 h-2 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden flex-shrink-0">
+        <div className="w-20 h-2 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden flex-shrink-0">
           <div
             className="h-full rounded-full"
             style={{ width: `${clampedPercent}%`, backgroundColor: getOutdatedBarColor(percent) }}
@@ -1845,7 +1856,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         }}
         className={`transition-colors ${rowBg} ${hoverClass}`}
       >
-        <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 ${stickyBg}`}>
+        <td className={`${stickyClasses} ${taxonCellPad} whitespace-nowrap w-0 ${stickyBg}`}>
           <div className="flex items-center gap-2">
             {expandToggle(false, false)}
             <TaxaIcon taxonId={id} size={22} className="flex-shrink-0" style={{ color }} />
@@ -1958,7 +1969,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           onToggleSubgroup(sg.id);
         }}
       >
-        <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 bg-white dark:bg-zinc-900`}>
+        <td className={`${stickyClasses} ${taxonCellPad} whitespace-nowrap w-0 bg-white dark:bg-zinc-900`}>
           <div className="flex items-center gap-2" style={{ paddingLeft: `${depth * 12}px` }}>
             <TaxaIcon taxonId={sg.id} size={isViewRoot ? 18 : 16} className="flex-shrink-0" style={{ color }} />
             <span className="text-sm text-zinc-700 dark:text-zinc-300">{sg.name}</span>
@@ -2029,7 +2040,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           }
         }}
       >
-        <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 bg-zinc-100 dark:bg-zinc-800`}>
+        <td className={`${stickyClasses} ${taxonCellPad} whitespace-nowrap w-0 bg-zinc-100 dark:bg-zinc-800`}>
           <div className="flex items-center gap-2">
             {expandToggle(isExpandable(sg.id), expandedTaxa.has(sg.id))}
             <TaxaIcon taxonId={sg.id} size={18} className="flex-shrink-0" style={{ color: taxon.color }} />
@@ -2117,7 +2128,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             }
           }}
         >
-          <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 ${isSgSelected ? "bg-violet-50 dark:bg-violet-900/20" : "bg-white dark:bg-zinc-900"}`}>
+          <td className={`${stickyClasses} ${taxonCellPad} whitespace-nowrap w-0 ${isSgSelected ? "bg-violet-50 dark:bg-violet-900/20" : "bg-white dark:bg-zinc-900"}`}>
             <div className="flex items-center gap-2" style={{ paddingLeft: `${(depth - 1) * 12}px` }}>
               {expandToggle(sgHasChildren, isSgExpanded)}
               <TaxaIcon taxonId={sg.id} size={depth === 1 ? 16 : 14} className="flex-shrink-0" style={{ color: parentColor, opacity: isSgSelected ? 1 : 0.6 }} />
@@ -2231,7 +2242,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             }
           }}
         >
-          <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 ${isSelected ? "bg-zinc-100 dark:bg-zinc-800" : "bg-white dark:bg-zinc-900"}`}>
+          <td className={`${stickyClasses} ${taxonCellPad} whitespace-nowrap w-0 ${isSelected ? "bg-zinc-100 dark:bg-zinc-800" : "bg-white dark:bg-zinc-900"}`}>
             <div className="flex items-center gap-2">
               {/* Only show the expand chevron once the taxon is selected — on the landing
                   page a click selects (doesn't expand yet), so a chevron there misleads. */}
@@ -2340,7 +2351,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   const renderHead = () => (
     <thead>
       <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
-        <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} ${flatMode ? "text-left" : "text-center"} text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap w-0 ${flatMode ? "max-w-[160px] sm:max-w-[240px] lg:max-w-[300px]" : ""}`}>
+        <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${taxonCellPad} ${flatMode ? "text-left" : "text-center"} text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap w-0 ${flatMode ? "max-w-[160px] sm:max-w-[240px] lg:max-w-[300px]" : ""}`}>
           <div className={`flex items-center gap-1.5 ${flatMode ? "justify-start" : "justify-center"}`}>
             Taxonomic Group
             {/* Country View always shows the same fixed 3 columns — nothing to
@@ -2506,11 +2517,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     {/* Country view: map on the left half, taxa table on the right half. The
         table always uses the plain 3-column style in this mode (countryStyleColumns,
         derived from layoutMode — see its definition above), whether or not a
-        country is picked yet. The selected country's identity shows on the map
-        itself (see WorldMap's selectedCountryLabel) while in this landing mode;
-        once a taxon is clicked and this exits to the full view, each row's own
-        name gets a "(Country)" suffix instead (see COUNTRY_ROW_SUFFIX below) —
-        neither needs a separate "Showing data for X" banner here. Uses `contents`
+        country is picked yet. The selected country's identity shows atop the
+        table itself (below) while in this landing mode; once a taxon is
+        clicked and this exits to the full view, each row's own name gets a
+        "(Country)" suffix instead (see countryRowSuffix above). Uses `contents`
         to no-op this grouping entirely outside country mode, rather than
         branching (and duplicating) the huge table JSX below per mode. */}
     <div className={countryMode ? "grid grid-cols-1 lg:grid-cols-5 gap-4 mb-4" : "contents"}>
@@ -2522,12 +2532,25 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           2/5 map, 3/5 table (col-span-2/col-span-3 of the 5-col grid). */}
       {countryMode && <div className="min-h-[500px] lg:col-span-2">{countryModeContent}</div>}
       <div className={countryMode ? "min-w-0 flex flex-col h-full lg:col-span-3" : "contents"}>
-        {/* Intentionally no country-name banner/chip here anymore — see the
-            comment above this whole grid wrapper for where that identity is
-            now shown instead (map label in landing mode, per-row suffix once
-            a taxon's selected — countryScope also already has its own
-            removable "France ×" chip in the main filter-chips row below the
-            charts once in the full non-country-mode view). */}
+        {/* Country name atop the table, only in Country View's side-by-side
+            layout — the full (non-country-mode) view already identifies the
+            country via each row's own "(Country)" suffix plus the removable
+            "France ×" chip in the main filter-chips row, so this isn't
+            duplicated there. */}
+        {countryMode && countryScoped && (
+          <div className="flex items-center gap-1.5 mb-1.5 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+            {ALPHA2_TO_NAME[countryScope!] ?? countryScope}
+            {onExitCountryScope && (
+              <button
+                onClick={onExitCountryScope}
+                className="text-sm font-normal text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                title="Clear selected country"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        )}
         <div ref={scrollRef} className={`relative bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto ${countryMode ? "flex-1" : ""}`}>
           {/* Country-switch refetch indicator — see the loading-gate comment
               above renderRow's skeleton branch for why this doesn't blank the table. */}
@@ -2596,7 +2619,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                       {/* Section header — shows the section's subtotals directly, so they're
                           visible without scrolling past every row to reach the bottom. */}
                       <tr className="bg-zinc-100 dark:bg-zinc-800/80 border-b border-zinc-200 dark:border-zinc-700">
-                        <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 bg-zinc-100 dark:bg-zinc-800/80`}>
+                        <td className={`${stickyClasses} ${taxonCellPad} whitespace-nowrap w-0 bg-zinc-100 dark:bg-zinc-800/80`}>
                           <span className="text-xs font-bold text-zinc-600 dark:text-zinc-300 uppercase tracking-wider">
                             {section.title}
                           </span>
@@ -2700,7 +2723,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                             }
                           }}
                         >
-                          <td className={`${stickyClasses} ${cellPad} whitespace-nowrap w-0 max-w-[160px] sm:max-w-[240px] lg:max-w-[300px] bg-white dark:bg-zinc-900`}>
+                          <td className={`${stickyClasses} ${taxonCellPad} whitespace-nowrap w-0 max-w-[160px] sm:max-w-[240px] lg:max-w-[300px] bg-white dark:bg-zinc-900`}>
                             <span className="flex items-center gap-1.5 pl-4 min-w-0">
                               <span className="text-sm md:text-base text-zinc-900 dark:text-zinc-100 truncate" title={row.name}>
                                 {row.name}

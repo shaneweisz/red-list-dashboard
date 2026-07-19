@@ -245,12 +245,6 @@ interface WorldMapProps {
   mapSortKey?: MapSortKey;
   mapSortDirection?: "asc" | "desc";
   onMapSortChange?: (key: MapSortKey, direction: "asc" | "desc") => void;
-  // Shows this country's name in the header with a clear ("✕") affordance,
-  // instead of the plain "Country" title — used by the Country View landing
-  // page in place of a separate "Showing data for X" banner elsewhere on the
-  // page (see RedListView.tsx's countryModeContent).
-  selectedCountryLabel?: string;
-  onClearSelectedCountry?: () => void;
 }
 
 const DEFAULT_CENTER: [number, number] = [10, 10];
@@ -258,7 +252,7 @@ const DEFAULT_ZOOM = 1.0;
 const MIN_ZOOM = 1.0;
 const MAX_ZOOM = 8.0;
 
-function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, precomputedStatsTotal, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, endemicsOnly = false, onEndemicsToggle, footer, showGbifToggle = true, showOutdatedMode = true, mapViewMode, onMapViewModeChange, mapSortKey, mapSortDirection, onMapSortChange, selectedCountryLabel, onClearSelectedCountry }: WorldMapProps) {
+function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, precomputedStatsTotal, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, endemicsOnly = false, onEndemicsToggle, footer, showGbifToggle = true, showOutdatedMode = true, mapViewMode, onMapViewModeChange, mapSortKey, mapSortDirection, onMapSortChange }: WorldMapProps) {
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoveredCountryCode, setHoveredCountryCode] = useState<string | null>(null);
   const [speciesStats, setSpeciesStats] = useState<CountryStats>(precomputedStats || {});
@@ -598,24 +592,6 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
           )}
         </div>
       </div>
-
-      {/* Selected country, left-aligned below the filter row and above the map/list —
-          replaces what used to be a "Showing data for X" banner elsewhere on the
-          page (see RedListView.tsx's countryModeContent doc comment). */}
-      {selectedCountryLabel && (
-        <div className="flex items-center gap-1.5 mb-1.5 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-          {selectedCountryLabel}
-          {onClearSelectedCountry && (
-            <button
-              onClick={onClearSelectedCountry}
-              className="text-sm font-normal text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-              title="Clear selected country"
-            >
-              ✕
-            </button>
-          )}
-        </div>
-      )}
 
       {/* Hover tooltip (map view only) */}
       {viewMode === "map" && hoveredCountry && (
