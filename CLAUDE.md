@@ -6,8 +6,6 @@ These apply to anyone (or any agent) opening a PR against redlist-dashboard, not
 
 Treat the PR body as a living summary, not a one-time snapshot. Every time a commit changes what the PR does, what it fixes, or what's been verified, update the body's Summary/Test-plan sections to match (`gh pr edit --body ...`) — don't just leave the original description stale with fixes trailing below in comments. A reviewer should be able to read the PR body alone and get the current, complete picture.
 
-**"Update the description" means reconcile the whole thing against current HEAD, not append the latest change on top.** A long-running PR's body accumulates phases/sections over time; each update pass should also revisit what's already there — text describing behavior that's since changed, and especially screenshots (see below) that no longer match current behavior — not just add a new section for the newest commit and leave the rest as a historical record. If a screenshot needs retaking, retake it as the *last* step before considering the work done, not mid-session — a commit landing after you took it invalidates it just as much as one from three days ago.
-
 ## Always verify UI changes in a real browser
 
 For any UI-facing change, complete an actual browser drive-through (navigate, interact, screenshot) before calling it done — don't downgrade to "typecheck/lint/tests pass, API returns the right data, that's probably enough" as a way to route around flaky tooling. If the verification tooling itself is broken, fix the tooling (see `.claude/skills/verify-ui/` for the current Node/Playwright workaround) rather than substituting a weaker check. Only skip with explicit sign-off, and say plainly that it wasn't verified visually — don't imply it was.
