@@ -245,6 +245,12 @@ interface WorldMapProps {
   mapSortKey?: MapSortKey;
   mapSortDirection?: "asc" | "desc";
   onMapSortChange?: (key: MapSortKey, direction: "asc" | "desc") => void;
+  // Shows this country's name in the header with a clear ("✕") affordance,
+  // instead of the plain "Country" title — used by the Country View landing
+  // page in place of a separate "Showing data for X" banner elsewhere on the
+  // page (see RedListView.tsx's countryModeContent).
+  selectedCountryLabel?: string;
+  onClearSelectedCountry?: () => void;
 }
 
 const DEFAULT_CENTER: [number, number] = [10, 10];
@@ -252,7 +258,7 @@ const DEFAULT_ZOOM = 1.0;
 const MIN_ZOOM = 1.0;
 const MAX_ZOOM = 8.0;
 
-function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, precomputedStatsTotal, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, endemicsOnly = false, onEndemicsToggle, footer, showGbifToggle = true, showOutdatedMode = true, mapViewMode, onMapViewModeChange, mapSortKey, mapSortDirection, onMapSortChange }: WorldMapProps) {
+function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, precomputedStatsTotal, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, endemicsOnly = false, onEndemicsToggle, footer, showGbifToggle = true, showOutdatedMode = true, mapViewMode, onMapViewModeChange, mapSortKey, mapSortDirection, onMapSortChange, selectedCountryLabel, onClearSelectedCountry }: WorldMapProps) {
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoveredCountryCode, setHoveredCountryCode] = useState<string | null>(null);
   const [speciesStats, setSpeciesStats] = useState<CountryStats>(precomputedStats || {});
@@ -494,8 +500,24 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
     <div className="relative bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 p-3 h-full flex flex-col">
       {/* Header with controls */}
       <div className="flex items-center justify-between mb-1 gap-2">
-        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0">
-          Country
+        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 flex items-center gap-1.5">
+          {selectedCountryLabel ? (
+            <>
+              <span className="font-normal text-zinc-400 dark:text-zinc-500">Country:</span>
+              {selectedCountryLabel}
+              {onClearSelectedCountry && (
+                <button
+                  onClick={onClearSelectedCountry}
+                  className="font-normal text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                  title="Clear selected country"
+                >
+                  ✕
+                </button>
+              )}
+            </>
+          ) : (
+            "Country"
+          )}
         </h2>
         <div className="flex items-center gap-2 flex-wrap min-w-0">
           {/* Country search */}

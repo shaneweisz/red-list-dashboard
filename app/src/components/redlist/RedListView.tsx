@@ -2274,6 +2274,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       mapSortKey={mapSortKey}
       mapSortDirection={mapSortDirection}
       onMapSortChange={setMapSort}
+      selectedCountryLabel={countryScope ? (ALPHA2_TO_NAME[countryScope] ?? countryScope) : undefined}
+      onClearSelectedCountry={returnToCountryList}
     />
   );
 
@@ -2290,7 +2292,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         onLayoutModeChange={setLayoutMode}
         countryModeContent={countryModeContent}
         countryScope={countryScope}
-        onExitCountryScope={returnToCountryList}
         onToggleSubgroup={(sgId) => {
           // Clicking a view root ancestor → clear subgroups to show its children.
           // If the currently-selected subgroup is an SSC group, we got here by
