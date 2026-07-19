@@ -1,5 +1,5 @@
 ---
-name: run
+name: verify-ui
 description: Launch and drive the redlist-dashboard Next.js app for manual/agent verification, including the Node 22 workaround needed for Playwright browser checks on this machine.
 ---
 
