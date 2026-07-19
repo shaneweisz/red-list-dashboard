@@ -1097,11 +1097,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   // Display name for the atop-table label: the one country's name, the whole
   // region's name if the selection exactly matches one (e.g. picked via the
   // region dropdown, or by happening to cmd-click every one of its countries),
-  // or a plain count for an arbitrary multi-select that doesn't line up with
-  // any single region.
+  // or the countries' own names (comma-separated, alphabetical) for an
+  // arbitrary multi-select that doesn't line up with any single region.
   const countryScopeLabel = !countryScoped ? "" :
     countryScope!.length === 1 ? (ALPHA2_TO_NAME[countryScope![0]] ?? countryScope![0]) :
-    matchingRegion(countryScope!) ?? `${countryScope!.length} countries`;
+    matchingRegion(countryScope!) ?? countryScope!
+      .map((c) => ALPHA2_TO_NAME[c] ?? c)
+      .sort()
+      .join(", ");
   // Country View always uses the plain 3-column style (even before a country is
   // picked, showing global data) since Described/GBIF/CoL columns have no country
   // dimension there either — see the `country-scoped` design note near countryMode.
@@ -2556,12 +2559,12 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             full view it just drops the country filter and stays put
             (onClearCountryScope) — same as the "France ×" chip elsewhere. */}
         {countryScoped && (
-          <div className="flex items-center gap-1.5 mb-1.5 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-            {countryScopeLabel}
+          <div className="flex items-center gap-1.5 mb-1.5 min-w-0 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+            <span className="truncate" title={countryScopeLabel}>{countryScopeLabel}</span>
             {(countryMode ? onExitCountryScope : onClearCountryScope) && (
               <button
                 onClick={countryMode ? onExitCountryScope : onClearCountryScope}
-                className="text-sm font-normal text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                className="text-sm font-normal text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors shrink-0"
                 title="Clear selected country"
               >
                 ✕

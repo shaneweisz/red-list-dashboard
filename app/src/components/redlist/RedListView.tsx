@@ -2270,10 +2270,12 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
 
   // Country view landing page content — a promoted WorldMap (its own Map/List
   // toggle applies here too), passed into TaxaSummary rather than duplicating a
-  // second dynamic-import + prop-wiring of WorldMap there. Region-select and
-  // endemics now behave the same as the normal "Charts row 2" map below: a
-  // region just selects all its countries at once (handleRegionFilter), same
-  // as any other multi-country selection.
+  // second dynamic-import + prop-wiring of WorldMap there. Region-select
+  // behaves the same as the normal "Charts row 2" map below: a region just
+  // selects all its countries at once (handleRegionFilter), same as any other
+  // multi-country selection. No endemics toggle here — the country-scoped
+  // taxa summary is a live per-country DuckDB query that doesn't take an
+  // endemics parameter, so the button would have nothing to actually filter.
   const countryModeContent = (
     <WorldMap
       selectedCountries={selectedCountries}
@@ -2284,8 +2286,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       showOutdatedMode={!isNewAssessments}
       showGbifToggle={false}
       onRegionFilter={handleRegionFilter}
-      endemicsOnly={endemicsOnly}
-      onEndemicsToggle={() => setEndemicsOnly(!endemicsOnly)}
       mapViewMode={mapViewMode}
       onMapViewModeChange={setMapViewMode}
       mapSortKey={mapSortKey}
