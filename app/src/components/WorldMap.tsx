@@ -629,12 +629,20 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
                 </div>
               )}
               {showOutdatedMode && hoveredSpeciesStats && hoveredSpeciesStats.species > 0 && (
-                <div className="flex justify-between gap-4 text-xs">
-                  <span className="text-zinc-500"># Outdated</span>
-                  <span className="font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">
-                    {formatNumber(hoveredSpeciesStats.outdated || 0)} ({(((hoveredSpeciesStats.outdated || 0) / hoveredSpeciesStats.species) * 100).toFixed(1)}%)
-                  </span>
-                </div>
+                <>
+                  <div className="flex justify-between gap-4 text-xs">
+                    <span className="text-zinc-500"># Outdated</span>
+                    <span className="font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">
+                      {formatNumber(hoveredSpeciesStats.outdated || 0)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-4 text-xs">
+                    <span className="text-zinc-500">% Outdated</span>
+                    <span className="font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">
+                      {(((hoveredSpeciesStats.outdated || 0) / hoveredSpeciesStats.species) * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                </>
               )}
               {showGbifToggle && (
               <div className="flex justify-between gap-4 text-xs">
@@ -685,7 +693,7 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
         <ComposableMap
           projection="geoNaturalEarth1"
           projectionConfig={{
-            scale: 210,
+            scale: 140,
             center: [0, 0],
           }}
           style={{ width: "100%", height: "100%", position: "absolute", top: 0, left: 0 }}

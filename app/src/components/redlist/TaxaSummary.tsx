@@ -1553,7 +1553,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} text-center text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap w-0`}>Taxonomic Group</th>
               {isVisible("described") && <th className={numericThNoDividerClasses}># Described Species</th>}
               {isVisible("colDescribed") && <th className={numericThClasses}># Described Species (CoL)</th>}
-              {isVisible("assessed") && <th className={centeredThClasses}># Red List Assessed</th>}
+              {isVisible("assessed") && <th className={centeredThClasses}>{countryStyleColumns ? "# Assessed" : "# Red List Assessed"}</th>}
               {isVisible("outdated") && (
                 <th className={countryStyleColumns ? numericThNoDividerClasses : centeredThClasses}>
                   {countryStyleColumns ? (
@@ -1862,7 +1862,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         {countryStyleColumns && (
           <td className={numericTdNoDividerClasses}>
             {available ? (
-              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">{percentOutdated.toFixed(1)}%</span>
+              <span className="text-sm md:text-base font-medium tabular-nums" style={{ color: getOutdatedBarColor(percentOutdated) }}>{percentOutdated.toFixed(1)}%</span>
             ) : (
               <span className="text-sm md:text-base text-zinc-400">—</span>
             )}
@@ -2135,7 +2135,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           {countryStyleColumns && (
             <td className={numericTdNoDividerClasses}>
               {sg.totalAssessed > 0 ? (
-                <span className="text-sm text-zinc-600 dark:text-zinc-400 tabular-nums">{sgPctOutdated.toFixed(1)}%</span>
+                <span className="text-sm font-medium tabular-nums" style={{ color: getOutdatedBarColor(sgPctOutdated) }}>{sgPctOutdated.toFixed(1)}%</span>
               ) : (
                 <span className="text-sm text-zinc-400">—</span>
               )}
@@ -2252,7 +2252,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           {countryStyleColumns && (
             <td className={numericTdNoDividerClasses}>
               {taxon.available ? (
-                <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">{taxon.percentOutdated.toFixed(1)}%</span>
+                <span className="text-sm md:text-base font-medium tabular-nums" style={{ color: getOutdatedBarColor(taxon.percentOutdated) }}>{taxon.percentOutdated.toFixed(1)}%</span>
               ) : (
                 <span className="text-sm text-zinc-400">—</span>
               )}
@@ -2316,21 +2316,25 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${cellPad} ${flatMode ? "text-left" : "text-center"} text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap w-0 ${flatMode ? "max-w-[160px] sm:max-w-[240px] lg:max-w-[300px]" : ""}`}>
           <div className={`flex items-center gap-1.5 ${flatMode ? "justify-start" : "justify-center"}`}>
             Taxonomic Group
-            <button
-              ref={menuButtonRef}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (!showColumnMenu && menuButtonRef.current) {
-                  const rect = menuButtonRef.current.getBoundingClientRect();
-                  setMenuPos({ top: rect.bottom + 4, left: rect.left });
-                }
-                setShowColumnMenu((v) => !v);
-              }}
-              className="p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-              title="Toggle columns"
-            >
-              <HiOutlineAdjustmentsHorizontal size={14} />
-            </button>
+            {/* Country View always shows the same fixed 3 columns — nothing to
+                toggle, so the columns menu button doesn't apply there. */}
+            {!countryMode && (
+              <button
+                ref={menuButtonRef}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!showColumnMenu && menuButtonRef.current) {
+                    const rect = menuButtonRef.current.getBoundingClientRect();
+                    setMenuPos({ top: rect.bottom + 4, left: rect.left });
+                  }
+                  setShowColumnMenu((v) => !v);
+                }}
+                className="p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                title="Toggle columns"
+              >
+                <HiOutlineAdjustmentsHorizontal size={14} />
+              </button>
+            )}
           </div>
         </th>
         {isVisible("described") && (
@@ -2360,7 +2364,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           <th className={numericThClasses}># Described Species (CoL)</th>
         )}
         {isVisible("assessed") && (
-          <th className={centeredThClasses}># Red List Assessed</th>
+          <th className={centeredThClasses}>{countryStyleColumns ? "# Assessed" : "# Red List Assessed"}</th>
         )}
         {isVisible("outdated") && (
           <th className={countryStyleColumns ? numericThNoDividerClasses : centeredThClasses}>
@@ -2426,7 +2430,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         landing-only toolbar below (selectedTaxa is empty throughout country
         browsing, same as it is on the plain landing page), not duplicated
         here. */}
-    {showColumnMenu && createPortal(
+    {!countryMode && showColumnMenu && createPortal(
       <div
         ref={menuRef}
         className="fixed bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg z-[9999] py-1 min-w-[180px]"
@@ -2936,12 +2940,18 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       </div>
     </div>
     {/* Subtle controls: usage hint + # Described toggle + expand/table controls,
-        all landing-only — hidden once a taxon is selected. */}
-    {!loading && perTaxa.length > 0 && selectedTaxa.size === 0 && (
+        all landing-only — hidden once a taxon is selected. Gated on perTaxa.length
+        alone (not also !loading) — perTaxa already implies data is present, and
+        also gating on loading made this row flicker away and back on every
+        country switch (loading briefly flips true again for the background
+        refetch even though perTaxa/taxa still hold the previous country's data). */}
+    {perTaxa.length > 0 && selectedTaxa.size === 0 && (
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 mt-1.5">
-        {/* Usage hint — desktop only; the toggles below matter more on mobile than this prose */}
+        {/* Usage hint — desktop only; the toggles below matter more on mobile than this prose.
+            Country View has no multi-select (a country click always narrows to that one
+            country — see handleCountryDrilldown), so the normal hint doesn't apply there. */}
         <span className="hidden sm:inline pl-3 md:pl-4 text-xs text-zinc-400 dark:text-zinc-500">
-          Click to filter, Cmd/Ctrl+click to multi-select.
+          {countryMode ? "Click a country to view its data." : "Click to filter, Cmd/Ctrl+click to multi-select."}
         </span>
         <div className="flex flex-wrap items-center gap-3 pl-3 sm:pl-0">
           {/* IUCN ↔ CoL source toggle: flips the described count + recomputes % Assessed */}
@@ -2964,7 +2974,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             </span>
           </span>
           <span className="text-zinc-300 dark:text-zinc-700">|</span>
-          {!flatMode && (
+          {/* Expand/Collapse all doesn't apply to Country View — its subgroup tree
+              stays collapsed by default there regardless (fewer controls, per its
+              single-country-focus design). */}
+          {!flatMode && !countryMode && (
             <>
               <button
                 onClick={allExpanded ? collapseAll : expandAll}
