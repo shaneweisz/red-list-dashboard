@@ -1215,37 +1215,6 @@ export default function OccurrenceMapRow({
               {label}
             </div>
           )}
-          {/* Native-range source switch — floating on the map (like Protected areas
-              below) rather than buried in the Coordinate cleaning dropdown, so it's
-              visible/switchable at a glance. Only shown when both sources have real
-              data for this species, since only then is there a real choice to make. */}
-          {!loadingOccurrences && mounted && hasBothNativeRangeSources && (
-            <div className={`absolute left-2 z-[1000] ${label ? "top-10" : "top-2"} flex items-center gap-1 bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 p-1`}>
-              <span className="text-[10px] text-zinc-400 dark:text-zinc-500 pl-1 pr-0.5">Native range:</span>
-              <button
-                onClick={() => setNativeRangeSource("wcvp")}
-                title="Native range per Kew's World Checklist of Vascular Plants (POWO)"
-                className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
-                  nativeRangeSource === "wcvp"
-                    ? "bg-emerald-600 text-white"
-                    : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
-                }`}
-              >
-                POWO
-              </button>
-              <button
-                onClick={() => setNativeRangeSource("redlist")}
-                title="Native range per the IUCN Red List assessment's locations"
-                className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
-                  nativeRangeSource === "redlist"
-                    ? "bg-emerald-600 text-white"
-                    : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
-                }`}
-              >
-                IUCN
-              </button>
-            </div>
-          )}
           {/* Basemap toggle */}
           {!loadingOccurrences && mounted && (
             <div className="absolute top-12 right-2 z-[1000] flex flex-col gap-0.5 bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 p-1">
@@ -1262,6 +1231,19 @@ export default function OccurrenceMapRow({
                   {opt.label}
                 </button>
               ))}
+            </div>
+          )}
+          {/* Loaded X of Y GBIF records — floating badge, single view only */}
+          {!splitView && !loadingOccurrences && totalOccurrences != null && (
+            <div className="absolute top-2 right-2 z-[1000] max-w-[85%] px-2 py-1 rounded-lg shadow-md bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-[11px] text-emerald-700 dark:text-emerald-300">
+              {isFullSample ? (
+                <>All <strong>{totalOccurrences.toLocaleString()}</strong> GBIF records loaded.</>
+              ) : (
+                <>Loaded <strong>{occurrences.length.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> total GBIF records.</>
+              )}
+              {filteredOccurrences.length < occurrences.length && (
+                <> Showing <strong>{filteredOccurrences.length.toLocaleString()}</strong> after filters.</>
+              )}
             </div>
           )}
         </div>
@@ -1746,20 +1728,6 @@ export default function OccurrenceMapRow({
                   </div>
                 )}
               </div>
-              {!splitView && totalOccurrences != null && (
-                <div className="ml-auto flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-300">
-                  <span>
-                    {isFullSample ? (
-                      <>All <strong>{totalOccurrences.toLocaleString()}</strong> GBIF records loaded.</>
-                    ) : (
-                      <>Loaded <strong>{occurrences.length.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> total GBIF records.</>
-                    )}
-                    {filteredOccurrences.length < occurrences.length && (
-                      <> Showing <strong>{filteredOccurrences.length.toLocaleString()}</strong> after filters.</>
-                    )}
-                  </span>
-                </div>
-              )}
             </div>
           </div>
 
