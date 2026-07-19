@@ -536,10 +536,10 @@ export default function OccurrenceMapRow({
   // plants — WCVP doesn't cover mosses/algae/fungi/animals).
   useEffect(() => {
     if (!isVascularPlantTaxonGroup(taxonGroup) || !scientificName) {
-      setNativeCountriesWcvp(null);
+      setNativeCountriesWcvp(null); // eslint-disable-line react-hooks/set-state-in-effect -- reset when leaving vascular-plant scope
       return;
     }
-    setLoadingWcvpRange(true); // eslint-disable-line react-hooks/set-state-in-effect -- loading state for fetch
+    setLoadingWcvpRange(true);
     fetch(`/api/wcvp-native-range?name=${encodeURIComponent(scientificName)}`)
       .then((res) => res.json())
       .then((data) => setNativeCountriesWcvp(data.countries ?? null))
