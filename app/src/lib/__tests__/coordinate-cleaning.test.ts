@@ -1,9 +1,8 @@
 /**
  * Cases below marked "upstream example" are transcribed from CoordinateCleaner's own
- * roxygen @examples blocks (R/cc_zero.R, R/cc_gbif.R — see
- * docs/gbif-coordinate-cleaning-scoping.md), so results here should match calling the
- * real R functions with `value = "flagged"` (inverted, since R's convention is
- * TRUE = passed/clean, not TRUE = flagged).
+ * roxygen @examples blocks (R/cc_zero.R, R/cc_gbif.R), so results here should match
+ * calling the real R functions with `value = "flagged"` (inverted, since R's
+ * convention is TRUE = passed/clean, not TRUE = flagged).
  */
 import { describe, it, expect } from "vitest";
 import {
