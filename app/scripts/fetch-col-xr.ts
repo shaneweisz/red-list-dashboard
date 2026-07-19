@@ -1,5 +1,5 @@
 /**
- * fetch-coldp (#271, Phase 3): download the Catalogue of Life eXtended Release (XR)
+ * fetch-col-xr (#271, Phase 3): download the Catalogue of Life eXtended Release (XR)
  * ColDP archive and extract NameUsage.tsv + Reference.tsv — the inputs to build-backbone.
  *
  * Downloads to a TEMP dir (outside data/) so the ~2.8GB TSVs are never swept into the
@@ -21,7 +21,7 @@
  *
  * Returns the paths to the extracted TSVs (and their shared temp dir).
  *
- *   npx tsx scripts/fetch-coldp.ts        # downloads + prints the TSV paths
+ *   npx tsx scripts/fetch-col-xr.ts        # downloads + prints the TSV paths
  */
 import * as fs from "fs";
 import * as os from "os";
@@ -29,7 +29,7 @@ import * as path from "path";
 import { execFileSync } from "child_process";
 import { loadEnvFiles } from "./utils";
 
-export interface ColdpPaths {
+export interface ColXrPaths {
   dir: string;
   nameUsage: string;
   reference: string;
@@ -65,10 +65,10 @@ export async function resolveXrDataset(): Promise<XrDatasetInfo> {
 export function writeReleaseMetadata(xr: XrDatasetInfo): void {
   const outPath = path.join(__dirname, "../src/config/col-release.json");
   fs.writeFileSync(outPath, JSON.stringify(xr, null, 2) + "\n");
-  console.log(`fetch-coldp: wrote ${outPath} (${xr.alias}, ${xr.key})`);
+  console.log(`fetch-col-xr: wrote ${outPath} (${xr.alias}, ${xr.key})`);
 }
 
-export async function run(opts: { destDir?: string } = {}): Promise<ColdpPaths> {
+export async function run(opts: { destDir?: string } = {}): Promise<ColXrPaths> {
   const xr = await resolveXrDataset();
   const XR_DATASET = xr.key;
   writeReleaseMetadata(xr);
@@ -77,22 +77,22 @@ export async function run(opts: { destDir?: string } = {}): Promise<ColdpPaths> 
   const zip = path.join(destDir, "coldp_xr.zip");
   const url = `https://api.checklistbank.org/dataset/${XR_DATASET}/export.zip?format=ColDP&extended=true`;
 
-  console.log(`fetch-coldp: downloading XR (${XR_DATASET}) ColDP export…`);
+  console.log(`fetch-col-xr: downloading XR (${XR_DATASET}) ColDP export…`);
   execFileSync("curl", ["-fsSL", url, "-o", zip], { stdio: ["ignore", "inherit", "inherit"] });
-  console.log("fetch-coldp: extracting NameUsage.tsv + Reference.tsv…");
+  console.log("fetch-col-xr: extracting NameUsage.tsv + Reference.tsv…");
   execFileSync("unzip", ["-o", zip, "NameUsage.tsv", "Reference.tsv", "-d", destDir], { stdio: ["ignore", "inherit", "inherit"] });
   fs.rmSync(zip, { force: true });
 
   const nameUsage = path.join(destDir, "NameUsage.tsv");
   const reference = path.join(destDir, "Reference.tsv");
-  if (!fs.existsSync(nameUsage)) throw new Error("fetch-coldp: NameUsage.tsv missing after extraction");
-  if (!fs.existsSync(reference)) throw new Error("fetch-coldp: Reference.tsv missing after extraction");
-  console.log(`fetch-coldp: wrote ${nameUsage} (${(fs.statSync(nameUsage).size / 1024 / 1024).toFixed(0)} MB)`);
-  console.log(`fetch-coldp: wrote ${reference} (${(fs.statSync(reference).size / 1024 / 1024).toFixed(0)} MB)`);
+  if (!fs.existsSync(nameUsage)) throw new Error("fetch-col-xr: NameUsage.tsv missing after extraction");
+  if (!fs.existsSync(reference)) throw new Error("fetch-col-xr: Reference.tsv missing after extraction");
+  console.log(`fetch-col-xr: wrote ${nameUsage} (${(fs.statSync(nameUsage).size / 1024 / 1024).toFixed(0)} MB)`);
+  console.log(`fetch-col-xr: wrote ${reference} (${(fs.statSync(reference).size / 1024 / 1024).toFixed(0)} MB)`);
   return { dir: destDir, nameUsage, reference, xrDataset: xr };
 }
 
-const isDirectRun = process.argv[1]?.endsWith("fetch-coldp.ts") || process.argv[1]?.endsWith("fetch-coldp.js");
+const isDirectRun = process.argv[1]?.endsWith("fetch-col-xr.ts") || process.argv[1]?.endsWith("fetch-col-xr.js");
 if (isDirectRun) {
   loadEnvFiles();
   run().then((p) => console.log(`${p.nameUsage}\n${p.reference}`)).catch((err) => { console.error("Fatal error:", err); process.exit(1); });

@@ -81,7 +81,7 @@ jobs:
         run: npm run fetch-data-from-r2
         working-directory: app
 
-      - name: Run sync (phases 2-10 — GBIF, CoL backbone, matching, taxa-summary)
+      - name: Run sync (phases 2-13 — GBIF, CoL backbone, matching, taxa-summary)
         run: npx tsx scripts/sync.ts --skip-redlist
         working-directory: app
 
@@ -129,6 +129,6 @@ jobs:
           git push origin "$BRANCH"
           gh pr create \
             --title "Bump data sync to $TS" \
-            --body "Automated weekly sync (phases 2-10: GBIF occurrence counts, CoL backbone, matching, taxa-summary). The Red List DB fetch (phase 1) is skipped and stays on its own manual ~6-month cadence. Review the diff before merging — merging is what flips production to this sync." \
+            --body "Automated weekly sync (phases 2-13: GBIF occurrence counts, CoL backbone, matching, taxa-summary). The Red List DB fetch (phase 1) is skipped and stays on its own manual ~6-month cadence. Review the diff before merging — merging is what flips production to this sync." \
             --base main \
             --head "$BRANCH"
