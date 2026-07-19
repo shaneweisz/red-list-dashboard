@@ -66,6 +66,14 @@ const nextConfig: NextConfig = {
     "/browse": DUCKDB_TRACE,
     // /api/mcp runs the same query layer for the MCP tools.
     "/api/mcp": DUCKDB_TRACE,
+    // ?country= on these two routes queries assessed.parquet live via DuckDB
+    // (country-taxa-summary-duckdb.ts) — same native addon as every route above,
+    // so it needs the same trace. Without this the addon's dlopen'd libduckdb.so
+    // is missing on Vercel and importing the module throws at load time, failing
+    // EVERY request to the route (even a plain landing-page load with no
+    // ?country=, since the throw happens before GET() ever runs).
+    "/api/redlist/taxa-summary": DUCKDB_TRACE,
+    "/api/redlist/taxa-subgroups": DUCKDB_TRACE,
   },
 
   // The API routes import a shared species-store module that references every
@@ -96,9 +104,12 @@ const nextConfig: NextConfig = {
     // the R2-only CoL artifacts.
     "/api/redlist/assessor-candidates-by-country": ["**/data/search-index.json", ...COL_ARTIFACTS],
     "/api/redlist/reviewer-candidates-by-country": ["**/data/search-index.json", ...COL_ARTIFACTS],
-    // These read only the small precomputed summary JSONs.
-    "/api/redlist/taxa-summary": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", ...COL_ARTIFACTS],
-    "/api/redlist/taxa-subgroups": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", ...COL_ARTIFACTS],
+    // Read the small precomputed summary JSONs by default, or query
+    // assessed.parquet in R2 (httpfs) when ?country= is set — same CRITICAL
+    // note as /api/redlist/species: keep ALL parquets out, since USE_R2 is
+    // gated on assessed.parquet NOT existing locally.
+    "/api/redlist/taxa-summary": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", "**/data/*.parquet", ...COL_ARTIFACTS],
+    "/api/redlist/taxa-subgroups": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", "**/data/*.parquet", ...COL_ARTIFACTS],
     // Backbone tree navigation queries backbone.parquet in R2 (httpfs) — no local data.
     "/api/taxa/species": ["**/data/**"],
     // /browse mirrors /api/redlist/species (same querySpecies): keep taxa-summary.json
