@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { countryWhere, outdatedSql, claimEligibleSiblingsSql } from "@/lib/data/country-taxa-summary-duckdb";
+import { countryWhere, countriesWhere, outdatedSql, claimEligibleSiblingsSql } from "@/lib/data/country-taxa-summary-duckdb";
 import type { TaxonomyNode } from "@/config/taxonomy-tree";
 
 // Unit tests for the pure SQL-fragment builders in country-taxa-summary-duckdb.ts.
@@ -22,6 +22,21 @@ describe("countryWhere", () => {
   it("checks exact list membership, not substring match", () => {
     const sql = countryWhere("FR");
     expect(sql).toContain("list_contains(string_split(coalesce(countries, ''), ';'), 'FR')");
+  });
+});
+
+describe("countriesWhere", () => {
+  it("matches countryWhere exactly for a single code", () => {
+    expect(countriesWhere(["FR"])).toBe(countryWhere("FR"));
+  });
+
+  it("ORs multiple codes together — a species matching any one of them counts once, not per-code", () => {
+    const sql = countriesWhere(["FR", "DE", "IT"]);
+    expect(sql).toBe(`${countryWhere("FR")} OR ${countryWhere("DE")} OR ${countryWhere("IT")}`);
+  });
+
+  it("returns a predicate that matches nothing for an empty list", () => {
+    expect(countriesWhere([])).toBe("FALSE");
   });
 });
 

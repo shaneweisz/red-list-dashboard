@@ -467,13 +467,20 @@ export function useFilterParams() {
     [syncUrl]
   );
 
-  // Select one country from the Country view landing page — a single setState
-  // + history push (see navigateToTaxonSubgroup above for why atomic matters
-  // here too). Deliberately leaves layoutMode untouched (stays "country"): the
-  // promoted map and the bare taxa summary table (All Species, Mammals, ...,
-  // Fungi) show together, scoped to this one country, until the user clicks an
-  // actual taxon row (handleToggleTaxon, in RedListView) — that's what exits to
-  // the full charts+species-table view, still scoped to this same country.
+  // Select country/countries from the Country view landing page — a single
+  // setState + history push (see navigateToTaxonSubgroup above for why atomic
+  // matters here too). Accepts either a plain Set (replace) or an updater
+  // function (toggle-in-place), the same shape setSelectedCountries takes, so
+  // RedListView's click handler can implement the normal plain-click-replaces/
+  // ctrl-click-toggles gesture for a single country, a whole region, or an
+  // arbitrary multi-select — this just guarantees the country change stays
+  // atomic with clearing taxa/subgroups, whichever shape the update takes.
+  // Deliberately leaves layoutMode untouched (stays "country"): the promoted
+  // map and the bare taxa summary table (All Species, Mammals, ..., Fungi)
+  // show together, scoped to however many countries are now selected, until
+  // the user clicks an actual taxon row (handleToggleTaxon, in RedListView) —
+  // that's what exits to the full charts+species-table view, still scoped the
+  // same way.
   //
   // Sets fromPopstateRef true first: RedListView's own "reset all other filters
   // when taxa selection changes" effect (it watches selectedTaxa transitioning
@@ -484,10 +491,11 @@ export function useFilterParams() {
   // state transition, don't run the generic per-field reset side effect"
   // escape hatch real popstate restores already rely on.
   const enterCountryDrilldown = useCallback(
-    (countryCode: string) => {
+    (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
       fromPopstateRef.current = true;
       setState(prev => {
-        const next = { ...prev, countries: new Set([countryCode]), taxa: new Set<string>(), subgroups: new Set<string>(), breakdown: null };
+        const nextCountries = typeof updater === "function" ? updater(prev.countries) : updater;
+        const next = { ...prev, countries: nextCountries, taxa: new Set<string>(), subgroups: new Set<string>(), breakdown: null };
         queueMicrotask(() => syncUrl(next, true));
         return next;
       });

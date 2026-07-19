@@ -32,6 +32,18 @@ export function countryWhere(cc: string): string {
   return `list_contains(string_split(coalesce(countries, ''), ';'), '${cc.toUpperCase().replace(/'/g, "''")}')`;
 }
 
+// One or more country codes — a single country, a whole IUCN region, or an
+// arbitrary multi-select, all handled identically here: OR'd list_contains
+// checks, not a sum of separately-computed per-country totals. This is why
+// there's no double-counting risk generalizing from one country to many — each
+// species is exactly one row in the underlying table, so count(*)/GROUP BY
+// below still counts it once even if it matches several of these codes at
+// once (e.g. occurs in both France and Germany within a "Europe" selection).
+export function countriesWhere(codes: string[]): string {
+  if (codes.length === 0) return "FALSE"; // no countries selected — matches nothing
+  return codes.map(countryWhere).join(" OR ");
+}
+
 // DATE, not TIMESTAMP — isOutdated() compares full elapsed time, but assessment_date
 // only ever carries day precision, so truncating the cutoff to a date is equivalent
 // and avoids a timezone-sensitive TIMESTAMP comparison.
@@ -46,8 +58,12 @@ export function outdatedSql(cutoffIso: string): string {
  * all-zero one) so the country route's per-node "available" check doesn't wrongly
  * mark a taxon unavailable just because zero of its species occur in this country —
  * unlike the global case, "0 species here" is a real, valid country-scoped answer.
+ *
+ * `countries` is one or more codes — a single country, a whole region, or an
+ * arbitrary multi-select (see countriesWhere's doc comment for why this is safe
+ * from double-counting regardless of how many codes are passed).
  */
-export async function getCountryTaxaSummary(cc: string): Promise<TaxaSummaryRow[]> {
+export async function getCountryTaxaSummary(countries: string[]): Promise<TaxaSummaryRow[]> {
   const conn = await getConn();
   const cutoff = outdatedCutoffDate().toISOString().slice(0, 10);
   const assessedUri = parquetUri("assessed.parquet");
@@ -55,7 +71,7 @@ export async function getCountryTaxaSummary(cc: string): Promise<TaxaSummaryRow[
     `SELECT taxon_group, iucn_category AS category, count(*) AS n,
             sum(CASE WHEN ${outdatedSql(cutoff)} THEN 1 ELSE 0 END) AS n_outdated
      FROM '${assessedUri}'
-     WHERE ${countryWhere(cc)}
+     WHERE ${countriesWhere(countries)}
      GROUP BY taxon_group, iucn_category`
   )).getRowObjects();
 
@@ -104,8 +120,10 @@ export function claimEligibleSiblingsSql(children: TaxonomyNode[], excludeIdx: n
  * NodeSummary per child of the given parent, mirroring build-taxa-summary.ts's pass
  * 2 (computeChildrenSummaries), including its catch-all claim-tracking, but computed
  * on demand for just this one parent instead of the whole tree.
+ *
+ * `countries` is one or more codes — see getCountryTaxaSummary's doc comment.
  */
-export async function getCountryChildrenSummaries(cc: string, parentNodeId: string): Promise<NodeSummary[]> {
+export async function getCountryChildrenSummaries(countries: string[], parentNodeId: string): Promise<NodeSummary[]> {
   const parent = NODE_INDEX.get(parentNodeId);
   if (!parent?.children?.length) return [];
   const conn = await getConn();
@@ -125,7 +143,7 @@ export async function getCountryChildrenSummaries(cc: string, parentNodeId: stri
       `SELECT iucn_category AS category, count(*) AS n,
               sum(CASE WHEN ${outdatedSql(cutoff)} THEN 1 ELSE 0 END) AS n_outdated
        FROM '${assessedUri}'
-       WHERE (${where}) AND ${countryWhere(cc)}
+       WHERE (${where}) AND (${countriesWhere(countries)})
        GROUP BY iucn_category`
     )).getRowObjects();
 

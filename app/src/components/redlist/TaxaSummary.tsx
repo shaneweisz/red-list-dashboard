@@ -17,6 +17,7 @@ import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
 import type { RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import { outdatedCutoffDate } from "@/lib/outdated";
 import { ALPHA2_TO_NAME } from "@/lib/countries";
+import { matchingRegion } from "@/lib/regions";
 
 // See scripts/build-taxa-summary.ts's classifyNoMatch for what each reason means.
 // Modular/additive on top of colBreakdown[].noMatchIds — safe to drop independently
@@ -148,10 +149,11 @@ interface Props {
    * owns the country-stats data and click-through wiring), kept out of this
    * component so it doesn't need its own dynamic WorldMap import. */
   countryModeContent?: React.ReactNode;
-  /** Set whenever exactly one country is selected (selectedCountries.size === 1)
-   * — independent of layoutMode, so clicking a single country anywhere (not just
-   * via the Country view landing page) scopes this table's own fetches too. */
-  countryScope?: string | null;
+  /** Set whenever at least one country is selected — independent of layoutMode,
+   * so selecting countries anywhere (not just via the Country view landing page)
+   * scopes this table's own fetches too. One country, a whole region, or an
+   * arbitrary multi-select are all just "the current set of codes" here. */
+  countryScope?: string[] | null;
   /** Clears the country selection and re-enters the Country view landing page —
    * used for the clear button atop the table while layoutMode is "country". */
   onExitCountryScope?: () => void;
@@ -1082,7 +1084,24 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
 
-  const countryScoped = !!countryScope;
+  const countryScoped = !!countryScope?.length;
+  // Stable, order-independent key for the current country selection — used in
+  // place of the countryScope array itself in effect dependency arrays and
+  // fetch query strings. countryScope is a fresh array every render (built via
+  // `[...selectedCountries]` in RedListView), so depending on the array
+  // reference directly would refetch on every unrelated parent re-render, not
+  // just when the actual selection changes; sorting also means toggling two
+  // countries on in either order produces the same key (and cache-friendly
+  // URL), not one per click order.
+  const countryKey = countryScoped ? [...countryScope!].sort().join(",") : "";
+  // Display name for the atop-table label: the one country's name, the whole
+  // region's name if the selection exactly matches one (e.g. picked via the
+  // region dropdown, or by happening to cmd-click every one of its countries),
+  // or a plain count for an arbitrary multi-select that doesn't line up with
+  // any single region.
+  const countryScopeLabel = !countryScoped ? "" :
+    countryScope!.length === 1 ? (ALPHA2_TO_NAME[countryScope![0]] ?? countryScope![0]) :
+    matchingRegion(countryScope!) ?? `${countryScope!.length} countries`;
   // Country View always uses the plain 3-column style (even before a country is
   // picked, showing global data) since Described/GBIF/CoL columns have no country
   // dimension there either — see the `country-scoped` design note near countryMode.
@@ -1172,7 +1191,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     if (!subgroupDataRef.current[taxonId] && !loadingSubgroupsRef.current.has(taxonId)) {
       setLoadingSubgroups((prev) => new Set(prev).add(taxonId));
       try {
-        const countryQs = countryScope ? `&country=${encodeURIComponent(countryScope)}` : "";
+        const countryQs = countryKey ? `&country=${encodeURIComponent(countryKey)}` : "";
         const res = await fetch(`/api/redlist/taxa-subgroups?nodeId=${taxonId}${countryQs}`);
         if (res.ok) {
           const data = await res.json();
@@ -1186,7 +1205,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         });
       }
     }
-  }, [countryScope]);
+  }, [countryKey]);
 
   // Table 1a mode / SSC groups mode — derived from the URL-synced layoutMode
   // prop (see useFilterParams) rather than local state, so a page load or
@@ -1275,7 +1294,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     for (const taxonId of expandableTaxaIds) {
       if (!subgroupDataRef.current[taxonId] && !loadingSubgroupsRef.current.has(taxonId)) {
         setLoadingSubgroups((prev) => new Set(prev).add(taxonId));
-        const countryQs = countryScope ? `&country=${encodeURIComponent(countryScope)}` : "";
+        const countryQs = countryKey ? `&country=${encodeURIComponent(countryKey)}` : "";
         fetch(`/api/redlist/taxa-subgroups?nodeId=${taxonId}${countryQs}`)
           .then(res => res.ok ? res.json() : null)
           .then(data => {
@@ -1290,7 +1309,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           });
       }
     }
-  }, [perTaxa, countryScope]);
+  }, [perTaxa, countryKey]);
 
   const collapseAll = useCallback(() => {
     setExpandedTaxa(new Set());
@@ -1306,12 +1325,12 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     if (!table1aMode || table1aData || table1aFetchStartedRef.current) return;
     table1aFetchStartedRef.current = true;
     setTable1aLoading(true);
-    const countryQs = countryScope ? `&country=${encodeURIComponent(countryScope)}` : "";
+    const countryQs = countryKey ? `&country=${encodeURIComponent(countryKey)}` : "";
     fetch(`/api/redlist/taxa-summary?table1a=true${countryQs}`)
       .then(res => res.ok ? res.json() : null)
       .then(data => { if (data) setTable1aData(data.sections); })
       .finally(() => setTable1aLoading(false));
-  }, [table1aMode, table1aData, countryScope]);
+  }, [table1aMode, table1aData, countryKey]);
 
   // SSC groups mode — same flat-table layout as Table 1a mode, sourced from
   // the precomputed SSC wrapper nodes' children instead of the top-level
@@ -1337,7 +1356,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     if (!sscMode || sscData || sscFetchStartedRef.current) return;
     sscFetchStartedRef.current = true;
     setSscLoading(true);
-    const countryQs = countryScope ? `&country=${encodeURIComponent(countryScope)}` : "";
+    const countryQs = countryKey ? `&country=${encodeURIComponent(countryKey)}` : "";
     Promise.all(
       SSC_SECTIONS.map((section) =>
         fetch(`/api/redlist/taxa-subgroups?nodeId=${section.nodeId}${countryQs}`)
@@ -1373,7 +1392,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     )
       .then((sections) => setSscData(sections.filter((s): s is Table1aSectionData => s != null)))
       .finally(() => setSscLoading(false));
-  }, [sscMode, sscData, countryScope]);
+  }, [sscMode, sscData, countryKey]);
 
   // Shared flat-table data source for whichever mode (Table 1a / SSC groups) is active
   const flatMode = table1aMode || sscMode;
@@ -1384,16 +1403,16 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   // not by country — without this, switching countries while table1a/ssc data (or an
   // expanded node's subgroups) is already cached would keep showing the stale,
   // un-scoped numbers instead of re-fetching for the new country.
-  const prevCountryScopeRef = useRef(countryScope);
+  const prevCountryKeyRef = useRef(countryKey);
   useEffect(() => {
-    if (prevCountryScopeRef.current === countryScope) return;
-    prevCountryScopeRef.current = countryScope;
+    if (prevCountryKeyRef.current === countryKey) return;
+    prevCountryKeyRef.current = countryKey;
     setTable1aData(null);
     table1aFetchStartedRef.current = false;
     setSscData(null);
     sscFetchStartedRef.current = false;
     setSubgroupData({});
-  }, [countryScope]);
+  }, [countryKey]);
 
   const allExpanded = useMemo(() => perTaxa.filter(t => isExpandable(t.id)).every(t => expandedTaxa.has(t.id)), [perTaxa, expandedTaxa]);
 
@@ -1432,7 +1451,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     async function fetchTaxa() {
       setLoading(true);
       try {
-        const countryQs = countryScope ? `?country=${encodeURIComponent(countryScope)}` : "";
+        const countryQs = countryKey ? `?country=${encodeURIComponent(countryKey)}` : "";
         const res = await fetch(`/api/redlist/taxa-summary${countryQs}`);
         if (!res.ok) throw new Error("Failed to load taxa");
         const data = await res.json();
@@ -1444,7 +1463,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       }
     }
     fetchTaxa();
-  }, [countryScope]);
+  }, [countryKey]);
 
   // Only the very first load (no data yet) shows the full-table skeleton below —
   // a country-switch refetch (countryScope changing with taxa already populated)
@@ -2538,7 +2557,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             (onClearCountryScope) — same as the "France ×" chip elsewhere. */}
         {countryScoped && (
           <div className="flex items-center gap-1.5 mb-1.5 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-            {ALPHA2_TO_NAME[countryScope!] ?? countryScope}
+            {countryScopeLabel}
             {(countryMode ? onExitCountryScope : onClearCountryScope) && (
               <button
                 onClick={countryMode ? onExitCountryScope : onClearCountryScope}

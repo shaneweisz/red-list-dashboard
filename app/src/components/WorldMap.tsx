@@ -8,7 +8,7 @@ import {
   ZoomableGroup,
 } from "react-simple-maps";
 import { geoCentroid } from "d3-geo";
-import { IUCN_REGION_ORDER, countryToIucnRegion, iucnRegionCountries } from "@/lib/regions";
+import { IUCN_REGION_ORDER, matchingRegion } from "@/lib/regions";
 import CountryStatsList from "./CountryStatsList";
 import type { MapViewMode, MapSortKey } from "@/hooks/useFilterParams";
 
@@ -447,26 +447,12 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
   // since outdated counts are computed alongside species counts, not fetched separately)
   const activeStats = colorMode === "occurrences" ? (occurrenceStats || {}) : speciesStats;
 
-  // Which region (if any) is currently selected as a whole — i.e. selectedCountries
-  // exactly matches one IUCN region's country set, not just some/one country within
-  // it. Shared by the region <select>'s own value (below) and the list view (which
-  // narrows its rows to this region, same as the map already implicitly does via
-  // the blue highlight over the whole region's shapes).
-  const activeRegion = useMemo(() => {
-    if (selectedCountries.size === 0) return "";
-    const regions = new Set<string>();
-    selectedCountries.forEach(c => regions.add(countryToIucnRegion(c)));
-    if (regions.size === 1) {
-      const region = [...regions][0];
-      if (region !== "Other") {
-        const regionCodes = iucnRegionCountries(region);
-        if (regionCodes.length === selectedCountries.size && regionCodes.every(c => selectedCountries.has(c))) {
-          return region;
-        }
-      }
-    }
-    return "";
-  }, [selectedCountries]);
+  // Which region (if any) is currently selected as a whole — shared by the
+  // region <select>'s own value (below) and the list view (which narrows its
+  // rows to this region, same as the map already implicitly does via the blue
+  // highlight over the whole region's shapes). See matchingRegion's own doc
+  // comment for exactly what "as a whole" means.
+  const activeRegion = useMemo(() => matchingRegion(selectedCountries) ?? "", [selectedCountries]);
 
   // Calculate max value for heatmap scaling (unused in "outdated" mode, which uses a fixed 0-100% gradient)
   const maxValue = Object.values(activeStats).reduce(

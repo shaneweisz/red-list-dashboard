@@ -48,9 +48,11 @@ export async function GET(request: NextRequest) {
     // doc comment). `countryScoped` tells the client to hide those columns outright
     // rather than render a misleading 0 — TaxaSummary.tsx must gate on this flag,
     // not on a field being present/absent, since every field is still populated.
-    const country = request.nextUrl.searchParams.get("country");
-    const data = country ? await getCountryTaxaSummary(country) : getTaxaSummary();
-    const countryScoped = !!country;
+    // One or more comma-separated codes — a single country, a whole region's
+    // worth, or an arbitrary multi-select all arrive the same way here.
+    const countries = request.nextUrl.searchParams.get("country")?.split(",").map((c) => c.trim()).filter(Boolean) ?? [];
+    const data = countries.length > 0 ? await getCountryTaxaSummary(countries) : getTaxaSummary();
+    const countryScoped = countries.length > 0;
     const rowsByGroup = new Map(
       data.map((row) => [row.table1a_taxon_group, row])
     );

@@ -2211,18 +2211,36 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     && !searchFilter
     && !showOnlyStarred;
 
-  // A single country selected anywhere (not just via the Country view landing
-  // page) scopes TaxaSummary's own fetches too — clicking one country on the
+  // Any countries selected anywhere (not just via the Country view landing
+  // page) scope TaxaSummary's own fetches too — clicking a country on the
   // normal "Charts row 2" map already narrowed every other chart/table; this
-  // closes the one remaining inconsistency (the taxa tree staying global).
-  const countryScope = selectedCountries.size === 1 ? [...selectedCountries][0] : null;
+  // closes the one remaining inconsistency (the taxa tree staying global). One
+  // country, a whole region, or an arbitrary multi-select are all just "the
+  // set of currently selected countries" — the live per-country query counts
+  // each species once regardless of how many of these codes it matches (see
+  // country-taxa-summary-duckdb.ts's countriesWhere), so there's no reason to
+  // special-case region vs. multi-select here.
+  const countryScope = selectedCountries.size > 0 ? [...selectedCountries] : null;
 
-  // Country view's own map/list click is always a single-country drill-down
-  // (never the ctrl/cmd multi-select gesture handleCountrySelect supports for
-  // the normal browsing view's country filter) — it exits the landing page
-  // into the taxonomic view scoped to that one country.
+  // Country view's own map/list click — same plain-click-replaces/ctrl-click-
+  // toggles gesture as handleCountrySelect (the normal browsing view's country
+  // filter), just routed through enterCountryDrilldown so the country change
+  // stays atomic with clearing taxa/subgroups (see its own comment).
   const handleCountryDrilldown = useCallback(
-    (code: string) => enterCountryDrilldown(code),
+    (code: string, _name: string, event: React.MouseEvent) => {
+      const isMultiSelect = event.metaKey || event.ctrlKey;
+      enterCountryDrilldown(prev => {
+        if (isMultiSelect) {
+          const next = new Set(prev);
+          if (next.has(code)) next.delete(code);
+          else next.add(code);
+          return next;
+        } else {
+          if (prev.size === 1 && prev.has(code)) return new Set();
+          return new Set([code]);
+        }
+      });
+    },
     [enterCountryDrilldown]
   );
 
@@ -2252,14 +2270,10 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
 
   // Country view landing page content — a promoted WorldMap (its own Map/List
   // toggle applies here too), passed into TaxaSummary rather than duplicating a
-  // second dynamic-import + prop-wiring of WorldMap there.
-  // Region-select and endemics are omitted here (unlike the normal "Charts row
-  // 2" map below): this view's whole design assumes exactly one selected
-  // country — the bare summary table only renders scoped data for
-  // countryScope (selectedCountries.size === 1) — and a region selects many
-  // countries at once, leaving nothing for that table to show. Multi-select
-  // is already excluded too: handleCountryDrilldown always treats a click as a
-  // single-country pick, ignoring ctrl/cmd (see its own comment).
+  // second dynamic-import + prop-wiring of WorldMap there. Region-select and
+  // endemics now behave the same as the normal "Charts row 2" map below: a
+  // region just selects all its countries at once (handleRegionFilter), same
+  // as any other multi-country selection.
   const countryModeContent = (
     <WorldMap
       selectedCountries={selectedCountries}
@@ -2269,6 +2283,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
       showOutdatedMode={!isNewAssessments}
       showGbifToggle={false}
+      onRegionFilter={handleRegionFilter}
+      endemicsOnly={endemicsOnly}
+      onEndemicsToggle={() => setEndemicsOnly(!endemicsOnly)}
       mapViewMode={mapViewMode}
       onMapViewModeChange={setMapViewMode}
       mapSortKey={mapSortKey}
