@@ -9,6 +9,7 @@ import {
 } from "react-simple-maps";
 import { geoCentroid } from "d3-geo";
 import { IUCN_REGION_ORDER, countryToIucnRegion, iucnRegionCountries } from "@/lib/regions";
+import CountryStatsList from "./CountryStatsList";
 
 // Using the recommended TopoJSON from react-simple-maps
 const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json";
@@ -140,7 +141,7 @@ export const ALPHA2_TO_NAME: Record<string, string> = {
 // Sorted list of country names for search
 const COUNTRY_NAMES_SORTED = Object.keys(NAME_TO_ALPHA2).sort();
 
-interface CountryStats {
+export interface CountryStats {
   [countryCode: string]: {
     occurrences: number;
     species: number;
@@ -250,6 +251,7 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
   const [loading, setLoading] = useState(!precomputedStats);
   const [occurrenceLoading, setOccurrenceLoading] = useState(false);
   const [colorMode, setColorMode] = useState<ColorMode>("species");
+  const [viewMode, setViewMode] = useState<"map" | "list">("map");
 
   // Reset to species mode if GBIF is hidden while it's the active mode
   // (Species and % Outdated stay available regardless of showGbifToggle,
@@ -514,6 +516,24 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
             {showOutdatedMode && <option value="outdated">% Outdated</option>}
             {showGbifToggle && <option value="occurrences"># GBIF Obs</option>}
           </select>
+          {/* Map/List toggle — a sortable table alternative to the choropleth for
+              users who'd rather scan/sort a list than read a map. */}
+          <div className="flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md p-0.5 text-[10px]">
+            {(["map", "list"] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setViewMode(mode)}
+                aria-pressed={viewMode === mode}
+                className={`px-1.5 py-0.5 rounded capitalize transition-colors ${
+                  viewMode === mode
+                    ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
+                    : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                }`}
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
           {onEndemicsToggle && (
             <button
               onClick={onEndemicsToggle}
@@ -558,8 +578,8 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
         </div>
       </div>
 
-      {/* Hover tooltip */}
-      {hoveredCountry && (
+      {/* Hover tooltip (map view only) */}
+      {viewMode === "map" && hoveredCountry && (
         <div className="absolute top-12 left-1/2 -translate-x-1/2 z-10 bg-white dark:bg-zinc-800 px-3 py-2 rounded-lg shadow-lg text-sm text-zinc-700 dark:text-zinc-300 pointer-events-none border border-zinc-200 dark:border-zinc-700 min-w-[140px]">
           <div className="font-medium text-zinc-900 dark:text-zinc-100">{hoveredCountry}</div>
           {hoveredSpeciesStats || hoveredOccurrenceStats ? (
@@ -604,8 +624,19 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
         </div>
       )}
 
+      {/* List view: sortable table alternative, same stats/selection/click-through */}
+      {viewMode === "list" && (
+        <CountryStatsList
+          stats={activeStats}
+          selectedCountries={selectedCountries}
+          onCountrySelect={onCountrySelect}
+          speciesLabel={speciesLabel}
+          showOutdatedMode={showOutdatedMode}
+        />
+      )}
+
       {/* Map */}
-      <div ref={mapContainerRef} className="flex-1 rounded-lg overflow-hidden relative" style={{ minHeight: "200px", touchAction: "none" }}>
+      <div className={viewMode === "list" ? "hidden" : "flex-1 rounded-lg overflow-hidden relative"} ref={mapContainerRef} style={{ minHeight: "200px", touchAction: "none" }}>
         {(loading || (colorMode === "occurrences" && !occurrenceStats)) && (
           <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-zinc-900/50 z-10">
             <svg className="animate-spin h-5 w-5 text-zinc-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
