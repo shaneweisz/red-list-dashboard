@@ -23,14 +23,17 @@ const USE_R2 = !fs.existsSync(path.join(DATA_DIR, "assessed.parquet"));
 // v2 function (next.config). LOAD by path avoids the cold-start network INSTALL.
 const HTTPFS_EXT = path.join(process.cwd(), "duckdb-ext", "httpfs.duckdb_extension");
 
-function parquetUri(name: string): string {
+// Exported for src/lib/data/country-taxa-summary-duckdb.ts, which queries the same
+// assessed.parquet over the same cached connection — a second independent connection
+// would double the httpfs/R2 setup cost per cold start.
+export function parquetUri(name: string): string {
   if (!USE_R2) return path.join(DATA_DIR, name);
   const ts = fs.readFileSync(path.join(process.cwd(), "latest-sync.txt"), "utf-8").trim();
   return `s3://${process.env.R2_DATA_BUCKET_NAME}/syncs/${ts}/${name}`;
 }
 
 let connPromise: Promise<DuckDBConnection> | null = null;
-async function getConn(): Promise<DuckDBConnection> {
+export async function getConn(): Promise<DuckDBConnection> {
   if (!connPromise) {
     connPromise = (async () => {
       const inst = await DuckDBInstance.create(":memory:");

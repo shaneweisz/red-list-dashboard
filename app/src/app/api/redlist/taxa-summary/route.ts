@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTaxaSummary } from "@/lib/data/species-store";
+import { getCountryTaxaSummary } from "@/lib/data/country-taxa-summary-duckdb";
 import { findNode, getCsvGroupsForNode } from "@/lib/taxonomy-utils";
 import { getView } from "@/config/taxonomy-views";
 import { CACHE_1H } from "@/lib/cache-headers";
@@ -42,7 +43,14 @@ function mergeByCategory(
 
 export async function GET(request: NextRequest) {
   try {
-    const data = getTaxaSummary();
+    // Country-scoped rows carry zeroed estimatedDescribed/gbif*/col* fields (no
+    // country dimension exists in that data — see country-taxa-summary-duckdb.ts's
+    // doc comment). `countryScoped` tells the client to hide those columns outright
+    // rather than render a misleading 0 — TaxaSummary.tsx must gate on this flag,
+    // not on a field being present/absent, since every field is still populated.
+    const country = request.nextUrl.searchParams.get("country");
+    const data = country ? await getCountryTaxaSummary(country) : getTaxaSummary();
+    const countryScoped = !!country;
     const rowsByGroup = new Map(
       data.map((row) => [row.table1a_taxon_group, row])
     );
@@ -100,7 +108,7 @@ export async function GET(request: NextRequest) {
           };
         }),
       }));
-      return NextResponse.json({ sections }, { headers: CACHE_1H });
+      return NextResponse.json({ sections, countryScoped }, { headers: CACHE_1H });
     }
 
     // Default view: use the 8-taxa view from taxonomy tree
@@ -231,7 +239,7 @@ export async function GET(request: NextRequest) {
       allEntry.colNe = perTaxonRows.reduce((s, t) => s + (t.colNe ?? 0), 0);
     }
 
-    return NextResponse.json({ taxa }, { headers: CACHE_1H });
+    return NextResponse.json({ taxa, countryScoped }, { headers: CACHE_1H });
   } catch (error) {
     console.error("Taxa summary error:", error);
     const message = error instanceof Error ? error.message : "Unknown error";
