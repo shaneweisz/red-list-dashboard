@@ -451,6 +451,26 @@ export function useFilterParams() {
     [syncUrl]
   );
 
+  // Exits Country View to the full charts+species-table view when a taxon's
+  // clicked from the country-scoped landing/list (see RedListView's
+  // handleToggleTaxon) — atomic (one setState + one history push), same
+  // reasoning as navigateToTaxonSubgroup above: without this, layoutMode and
+  // taxa/subgroups would each get their own history entry, so a single
+  // "back" press would land on some half-updated intermediate (e.g.
+  // layoutMode cleared but taxa not yet set) instead of cleanly restoring
+  // the Country View landing page. countries is deliberately left untouched
+  // — the taxon drill-down stays scoped to whatever was selected.
+  const exitCountryModeForTaxon = useCallback(
+    (taxonId: string) => {
+      setState(prev => {
+        const next = { ...prev, taxa: new Set([taxonId]), subgroups: new Set<string>(), layoutMode: null, breakdown: null };
+        queueMicrotask(() => syncUrl(next, true));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
   // Reverse of navigateToTaxonSubgroup — clears taxa/subgroups back to the
   // landing page and re-enters a flat-table layout mode, atomically (one
   // history push). Used when clicking the "Mammals" ancestor row after
@@ -818,6 +838,7 @@ export function useFilterParams() {
     setViewMode,
     setLayoutMode,
     navigateToTaxonSubgroup,
+    exitCountryModeForTaxon,
     returnToLayoutMode,
     enterCountryDrilldown,
     returnToCountryList,

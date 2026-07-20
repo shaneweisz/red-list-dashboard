@@ -337,6 +337,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const {
     layoutMode, setLayoutMode,
     navigateToTaxonSubgroup,
+    exitCountryModeForTaxon,
     returnToLayoutMode,
     enterCountryDrilldown,
     returnToCountryList,
@@ -453,15 +454,20 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const handleToggleTaxon = useCallback((taxonId: string, event: React.MouseEvent) => {
     const isMulti = event.metaKey || event.ctrlKey;
 
-    // Clicking any taxon row while browsing a country-scoped bare summary
-    // table (Country view, one country selected, no taxon picked yet — see
-    // TaxaSummary's countryMode rendering) exits to the full charts+species-
-    // table view, still scoped to that country (selectedCountries untouched).
-    // Safe to fire alongside the setSelectedTaxa call below without the
-    // fromPopstateRef trick enterCountryDrilldown needs: this is always an
-    // empty->non-empty taxa transition, which RedListView's own "reset filters
-    // on taxa change" effect already no-ops on (see its `prev.size === 0`
-    // guard), so selectedCountries survives untouched either way.
+    // Clicking a specific taxon row while browsing a country-scoped bare
+    // summary table (Country view, one country selected, no taxon picked yet
+    // — see TaxaSummary's countryMode rendering) exits to the full charts+
+    // species-table view, still scoped to that country (selectedCountries
+    // untouched). Atomic (one history push) via exitCountryModeForTaxon, so
+    // a single "back" press cleanly restores the Country View landing page
+    // instead of layoutMode and taxa unwinding as separate history entries.
+    // The "all" row and multi-select (ctrl/cmd-click) cases fall through to
+    // the general path below instead — rarer, and "all" isn't a real taxon
+    // drill-down (see its own branch just below).
+    if (layoutMode === "country" && taxonId !== "all" && !isMulti) {
+      exitCountryModeForTaxon(taxonId);
+      return;
+    }
     if (layoutMode === "country") setLayoutMode(null);
 
     // "all" row behavior:
@@ -509,7 +515,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       setSelectedSubgroups(new Set());
       return new Set([taxonId]);
     });
-  }, [setSelectedTaxa, setSelectedSubgroups, selectedTaxa, selectedSubgroups, isNewAssessments, searchFilter, urlSpecies, clearAllFilters, layoutMode, setLayoutMode]);
+  }, [setSelectedTaxa, setSelectedSubgroups, selectedTaxa, selectedSubgroups, isNewAssessments, searchFilter, urlSpecies, clearAllFilters, layoutMode, setLayoutMode, exitCountryModeForTaxon]);
 
   // Reset all other filters when taxa selection changes
   const prevTaxaRef = useRef(selectedTaxa);
@@ -2246,6 +2252,12 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const handleCountryDrilldown = useCallback(
     (code: string, _name: string, event: React.MouseEvent) => {
       const isMultiSelect = event.metaKey || event.ctrlKey;
+      // A real click always supersedes any leftover hover preview — without
+      // this, clearing a locked selection back to empty (self-toggle-off)
+      // would leave the table reading a stale hoverPreviewCountry from
+      // before the lock, since countryScope falls back to it whenever
+      // selectedCountries is empty (see its definition above).
+      setHoverPreviewCountry(null);
       enterCountryDrilldown(prev => {
         if (prev.size === 0 && !isMultiSelect) {
           return new Set([code]);
@@ -2297,7 +2309,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       onCountrySelect={handleCountryDrilldown}
       selectOnHover={selectedCountries.size === 0}
       onCountryHover={setHoverPreviewCountry}
-      onClearSelection={returnToCountryList}
       precomputedStats={countryLandingStats ?? {}}
       selectedTaxa={selectedTaxa}
       speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
@@ -2325,7 +2336,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         onLayoutModeChange={setLayoutMode}
         countryModeContent={countryModeContent}
         countryScope={countryScope}
-        onClearCountryScope={() => setSelectedCountries(new Set())}
+        onExitCountryScope={() => { returnToCountryList(); setHoverPreviewCountry(null); }}
+        onClearCountryScope={() => { setSelectedCountries(new Set()); setHoverPreviewCountry(null); }}
         onToggleSubgroup={(sgId) => {
           // Clicking a view root ancestor → clear subgroups to show its children.
           // If the currently-selected subgroup is an SSC group, we got here by

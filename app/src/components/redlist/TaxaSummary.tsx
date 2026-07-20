@@ -78,9 +78,6 @@ const IUCN_SOURCE_URL = "https://nc.iucnredlist.org/redlist/content/attachment_f
 // SSC groups mode — one section per taxon that has an SSC pilot built out.
 // Add an entry here (nodeId, parentTaxon, title, catch-all id) when a new
 // taxon's SSC groups are added.
-// Named groups shown per section before collapsing behind "Show all" — the
-// catch-all row is never counted against this and always stays visible.
-const SSC_SECTION_COLLAPSE_SIZE = 5;
 const SSC_SECTIONS: { nodeId: string; parentTaxon: string; title: string; catchAllId: string }[] = [
   { nodeId: "ssc-groups", parentTaxon: "mammals", title: "MAMMAL SPECIALIST GROUPS", catchAllId: "ssc-other-mammals" },
   { nodeId: "ssc-reptile-groups", parentTaxon: "reptiles", title: "REPTILE SPECIALIST GROUPS", catchAllId: "ssc-snake-lizard-rla" },
@@ -154,10 +151,13 @@ interface Props {
    * scopes this table's own fetches too. One country, a whole region, or an
    * arbitrary multi-select are all just "the current set of codes" here. */
   countryScope?: string[] | null;
+  /** Clears the country selection and re-enters the Country view landing page —
+   * used for the clear button atop the table while layoutMode is "country". */
+  onExitCountryScope?: () => void;
   /** Clears the country selection without changing layoutMode — used for the
-   * "France ×" chip atop the table when a country's scoped outside Country
-   * View. Country View's own equivalent clear button lives on the map now
-   * (WorldMap's onClearSelection), not routed through here. */
+   * same clear button atop the table once a taxon's been clicked and this has
+   * exited to the full view (returning to the Country view landing page from
+   * there would be a surprising jump). */
   onClearCountryScope?: () => void;
 }
 
@@ -1046,7 +1046,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
   );
 }
 
-export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", layoutMode, onLayoutModeChange, countryModeContent, countryScope, onClearCountryScope }: Props) {
+export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", layoutMode, onLayoutModeChange, countryModeContent, countryScope, onExitCountryScope, onClearCountryScope }: Props) {
   const isNewAssessments = viewMode === "new-assessments";
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1336,19 +1336,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   // the precomputed SSC wrapper nodes' children instead of the top-level
   // Table 1a CSV groups (see SSC_SECTIONS above).
   const [sscData, setSscData] = useState<Table1aSectionData[] | null>(null);
-  // Which SSC sections (keyed by title) are expanded past the first
-  // SSC_SECTION_COLLAPSE_SIZE rows — collapsed by default so a taxon with 36
-  // groups (mammals) doesn't dwarf the page; the catch-all row always shows
-  // regardless of this state (see the render loop below).
-  const [expandedSscSections, setExpandedSscSections] = useState<Set<string>>(new Set());
-  const toggleSscSection = useCallback((title: string) => {
-    setExpandedSscSections((prev) => {
-      const next = new Set(prev);
-      if (next.has(title)) next.delete(title);
-      else next.add(title);
-      return next;
-    });
-  }, []);
   const [sscLoading, setSscLoading] = useState(false);
   const sscFetchStartedRef = useRef(false);
 
@@ -2554,18 +2541,18 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           columns get cramped or triggering horizontal scroll). */}
       {countryMode && <div>{countryModeContent}</div>}
       <div className={countryMode ? "min-w-0 flex flex-col h-full" : "contents"}>
-        {/* Country name atop the table — shown whenever a country is scoped
-            OUTSIDE Country View (the normal browsing view's "France ×" chip,
-            via onClearCountryScope). Country View's own version of this label
-            now lives on the map instead (see WorldMap's onClearSelection/
-            scopeLabel) — it drives the same table from the other side of the
-            grid, so showing it twice was redundant. */}
-        {countryScoped && !countryMode && (
+        {/* Country name atop the table — shown whenever a country is scoped,
+            in both Country View's landing layout and the full (post-taxon-click)
+            view. The clear button behaves differently per context: in Country
+            View it returns to the country list (onExitCountryScope); in the
+            full view it just drops the country filter and stays put
+            (onClearCountryScope) — same as the "France ×" chip elsewhere. */}
+        {countryScoped && (
           <div className="flex items-center gap-1.5 mb-1.5 min-w-0 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
             <span className="truncate" title={countryScopeLabel}>{countryScopeLabel}</span>
-            {onClearCountryScope && (
+            {(countryMode ? onExitCountryScope : onClearCountryScope) && (
               <button
-                onClick={onClearCountryScope}
+                onClick={countryMode ? onExitCountryScope : onClearCountryScope}
                 className="text-sm font-normal text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors shrink-0"
                 title="Clear selected country"
               >
@@ -2687,20 +2674,15 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                           <td className={flexTdClasses}>{renderBreakdownBar(subByCategory)}</td>
                         )}
                       </tr>
-                      {/* Section rows — collapsed to SSC_SECTION_COLLAPSE_SIZE named
-                          groups by default in SSC mode (a 36-row mammal section would
-                          otherwise dwarf every other taxon); the catch-all row is
-                          pulled out of the collapse/expand entirely and always shown,
-                          since it's usually the largest, most load-bearing row. Table
-                          1a mode has no catch-all concept (section.catchAllId is
-                          undefined there), so it always renders every row. */}
+                      {/* Section rows — all named groups always shown; the catch-all
+                          row is pulled out and rendered last, since it's usually the
+                          largest, most load-bearing row. Table 1a mode has no
+                          catch-all concept (section.catchAllId is undefined there),
+                          so it always renders every row too. */}
                       {(() => {
                         const isSscSection = sscMode && section.catchAllId != null;
                         const catchAllRow = isSscSection ? rows.find(r => r.group === section.catchAllId) : undefined;
                         const namedRows = catchAllRow ? rows.filter(r => r.group !== section.catchAllId) : rows;
-                        const isExpanded = expandedSscSections.has(section.title);
-                        const visibleNamedRows = isSscSection && !isExpanded ? namedRows.slice(0, SSC_SECTION_COLLAPSE_SIZE) : namedRows;
-                        const hiddenCount = namedRows.length - visibleNamedRows.length;
                         const renderGroupRow = (row: (typeof rows)[number]) => (
                         <tr
                           key={row.group}
@@ -2835,29 +2817,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                         );
                         return (
                           <>
-                            {visibleNamedRows.map(renderGroupRow)}
-                            {isSscSection && hiddenCount > 0 && (
-                              <tr
-                                className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer"
-                                onClick={() => toggleSscSection(section.title)}
-                              >
-                                <td colSpan={visibleColCount} className={`${cellPad} text-center`}>
-                                  <span className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors">
-                                    Show all {namedRows.length} groups ({hiddenCount} more)
-                                  </span>
-                                </td>
-                              </tr>
-                            )}
-                            {isSscSection && isExpanded && namedRows.length > SSC_SECTION_COLLAPSE_SIZE && (
-                              <tr
-                                className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer"
-                                onClick={() => toggleSscSection(section.title)}
-                              >
-                                <td colSpan={visibleColCount} className={`${cellPad} text-center`}>
-                                  <span className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors">Show less</span>
-                                </td>
-                              </tr>
-                            )}
+                            {namedRows.map(renderGroupRow)}
                             {catchAllRow && renderGroupRow(catchAllRow)}
                           </>
                         );

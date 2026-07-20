@@ -257,13 +257,6 @@ interface WorldMapProps {
   // Called with the hovered country's code on mouseenter, and null on
   // mouseleave, only while selectOnHover is true.
   onCountryHover?: (countryCode: string | null) => void;
-  // When provided, shows the current selection (one country's name, a
-  // matching region's name, or a comma-joined list) top-left below the
-  // toolbar row, with a ✕ that calls this to clear it — the country-view
-  // landing page's own "which country am I looking at" label, now living on
-  // the map instead of atop the table it drives. Omitted (and thus hidden)
-  // for the other WorldMap usages, which have no such label.
-  onClearSelection?: () => void;
 }
 
 const DEFAULT_CENTER: [number, number] = [10, 10];
@@ -271,7 +264,7 @@ const DEFAULT_ZOOM = 1.0;
 const MIN_ZOOM = 1.0;
 const MAX_ZOOM = 8.0;
 
-function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, precomputedStatsTotal, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, endemicsOnly = false, onEndemicsToggle, footer, showGbifToggle = true, showOutdatedMode = true, mapViewMode, onMapViewModeChange, mapSortKey, mapSortDirection, onMapSortChange, selectOnHover = false, onCountryHover, onClearSelection }: WorldMapProps) {
+function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, precomputedStatsTotal, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, endemicsOnly = false, onEndemicsToggle, footer, showGbifToggle = true, showOutdatedMode = true, mapViewMode, onMapViewModeChange, mapSortKey, mapSortDirection, onMapSortChange, selectOnHover = false, onCountryHover }: WorldMapProps) {
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoveredCountryCode, setHoveredCountryCode] = useState<string | null>(null);
   const [speciesStats, setSpeciesStats] = useState<CountryStats>(precomputedStats || {});
@@ -499,19 +492,6 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
   const hoveredTotalStats = hoveredCountryCode ? precomputedStatsTotal?.[hoveredCountryCode] : null;
   const hoveredOccurrenceStats = hoveredCountryCode && occurrenceStats ? occurrenceStats[hoveredCountryCode] : null;
 
-  // Selection label — one country's name, a matching region's name, or a
-  // comma-joined list for an arbitrary multi-select. Same logic as
-  // TaxaSummary's own countryScopeLabel (the "France ×" chip it still shows
-  // for the non-map-paired country filter elsewhere), just computed here too
-  // now that Country View's version of this label lives on the map itself.
-  const scopeCodes = [...selectedCountries];
-  const scopeLabel = scopeCodes.length === 0 ? "" :
-    scopeCodes.length === 1 ? (ALPHA2_TO_NAME[scopeCodes[0]] ?? scopeCodes[0]) :
-    matchingRegion(selectedCountries) ?? scopeCodes
-      .map((c) => ALPHA2_TO_NAME[c] ?? c)
-      .sort()
-      .join(", ");
-
   return (
     <div className="relative bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 p-3 h-full flex flex-col">
       {/* Header with controls */}
@@ -611,23 +591,6 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
           )}
         </div>
       </div>
-
-      {/* Selection label — top-left, just below the toolbar row. Only when a
-          clear handler's given (Country View's own map instance) and a
-          selection is actually locked in (see selectOnHover/onCountrySelect
-          in RedListView — a plain hover-preview doesn't reach here). */}
-      {onClearSelection && scopeLabel && (
-        <div className="flex items-center gap-1.5 mb-1.5 min-w-0 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-          <span className="truncate" title={scopeLabel}>{scopeLabel}</span>
-          <button
-            onClick={onClearSelection}
-            className="text-sm font-normal text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors shrink-0"
-            title="Clear selected country"
-          >
-            ✕
-          </button>
-        </div>
-      )}
 
       {/* Hover tooltip (map view only) */}
       {viewMode === "map" && hoveredCountry && (
@@ -768,9 +731,11 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
                       onMouseLeave={() => {
                         setHoveredCountry(null);
                         setHoveredCountryCode(null);
-                        if (selectOnHover) {
-                          onCountryHover?.(null);
-                        }
+                        // Unconditional (not gated on selectOnHover, unlike
+                        // onMouseEnter above) — self-heals a stale preview
+                        // left over from before a country got locked in, so
+                        // it can't resurface later if the lock is cleared.
+                        onCountryHover?.(null);
                       }}
                       onClick={(event) => {
                         if (alpha2) {
