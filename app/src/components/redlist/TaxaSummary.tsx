@@ -2529,10 +2529,15 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         either column specifically so chips changing (locking/clearing/
         hovering, which varies their count and text width) never resizes the
         map or shifts the (zoomed) table's position; both used to happen
-        when the chips lived inside one column or the other. Uses `contents`
-        to no-op this grouping entirely outside country mode, rather than
-        branching (and duplicating) the huge table JSX below per mode. */}
-    {countryMode && <div className="mb-1.5">{countryPillsContent}</div>}
+        when the chips lived inside one column or the other. min-h-[26px]
+        (one pill row's height) reserves that space unconditionally, even
+        with zero chips, so the table/map below don't themselves shift down
+        the moment a hover starts previewing a country — that shift was its
+        own kind of jarring, just one level up from the two this replaced.
+        Uses `contents` to no-op this grouping entirely outside country
+        mode, rather than branching (and duplicating) the huge table JSX
+        below per mode. */}
+    {countryMode && <div className="min-h-[26px] mb-1.5">{countryPillsContent}</div>}
     <div className={countryMode ? "grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4" : "contents"}>
       {/* No extra wrapper here — WorldMap already renders its own card (bg/border/
           padding); wrapping it again doubled up the box and, since neither div had
