@@ -257,6 +257,14 @@ interface WorldMapProps {
   // Called with the hovered country's code on mouseenter, and null on
   // mouseleave, only while selectOnHover is true.
   onCountryHover?: (countryCode: string | null) => void;
+  // When true, renders the current selection as individually-removable name
+  // chips top-left below the toolbar row (each ✕ toggles just that one
+  // country off via onCountrySelect) — Country View's own "which countries
+  // am I looking at" display, living on the map instead of atop the table it
+  // drives (a label atop the table there made the zoomed table jump position
+  // every time a country got locked/cleared). Default false — the other
+  // WorldMap usages keep their existing atop-table chip instead.
+  showSelectionChips?: boolean;
 }
 
 const DEFAULT_CENTER: [number, number] = [10, 10];
@@ -264,7 +272,7 @@ const DEFAULT_ZOOM = 1.0;
 const MIN_ZOOM = 1.0;
 const MAX_ZOOM = 8.0;
 
-function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, precomputedStatsTotal, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, endemicsOnly = false, onEndemicsToggle, footer, showGbifToggle = true, showOutdatedMode = true, mapViewMode, onMapViewModeChange, mapSortKey, mapSortDirection, onMapSortChange, selectOnHover = false, onCountryHover }: WorldMapProps) {
+function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, precomputedStatsTotal, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, endemicsOnly = false, onEndemicsToggle, footer, showGbifToggle = true, showOutdatedMode = true, mapViewMode, onMapViewModeChange, mapSortKey, mapSortDirection, onMapSortChange, selectOnHover = false, onCountryHover, showSelectionChips = false }: WorldMapProps) {
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoveredCountryCode, setHoveredCountryCode] = useState<string | null>(null);
   const [speciesStats, setSpeciesStats] = useState<CountryStats>(precomputedStats || {});
@@ -591,6 +599,33 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
           )}
         </div>
       </div>
+
+      {/* Selection chips — top-left, just below the toolbar row. One per
+          selected country (not collapsed into a region name, unlike the
+          atop-table "France ×" chip elsewhere) so each can be removed
+          individually without clearing the whole selection. */}
+      {showSelectionChips && selectedCountries.size > 0 && (
+        <div className="flex flex-wrap items-center gap-1 mb-1.5">
+          {[...selectedCountries]
+            .map(code => ({ code, name: ALPHA2_TO_NAME[code] ?? code }))
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map(({ code, name }) => (
+              <span
+                key={code}
+                className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-xs text-zinc-700 dark:text-zinc-300 max-w-full"
+              >
+                <span className="truncate">{name}</span>
+                <button
+                  onClick={(e) => onCountrySelect(code, name, e)}
+                  className="shrink-0 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                  title={`Remove ${name}`}
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+        </div>
+      )}
 
       {/* Hover tooltip (map view only) */}
       {viewMode === "map" && hoveredCountry && (

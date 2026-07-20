@@ -151,13 +151,10 @@ interface Props {
    * scopes this table's own fetches too. One country, a whole region, or an
    * arbitrary multi-select are all just "the current set of codes" here. */
   countryScope?: string[] | null;
-  /** Clears the country selection and re-enters the Country view landing page —
-   * used for the clear button atop the table while layoutMode is "country". */
-  onExitCountryScope?: () => void;
   /** Clears the country selection without changing layoutMode — used for the
-   * same clear button atop the table once a taxon's been clicked and this has
-   * exited to the full view (returning to the Country view landing page from
-   * there would be a surprising jump). */
+   * "France ×" chip atop the table when a country's scoped outside Country
+   * View. Country View's own equivalent lives on the map now (see WorldMap's
+   * country chips), not routed through here. */
   onClearCountryScope?: () => void;
 }
 
@@ -1046,7 +1043,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
   );
 }
 
-export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", layoutMode, onLayoutModeChange, countryModeContent, countryScope, onExitCountryScope, onClearCountryScope }: Props) {
+export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", layoutMode, onLayoutModeChange, countryModeContent, countryScope, onClearCountryScope }: Props) {
   const isNewAssessments = viewMode === "new-assessments";
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2541,18 +2538,19 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           columns get cramped or triggering horizontal scroll). */}
       {countryMode && <div>{countryModeContent}</div>}
       <div className={countryMode ? "min-w-0 flex flex-col h-full" : "contents"}>
-        {/* Country name atop the table — shown whenever a country is scoped,
-            in both Country View's landing layout and the full (post-taxon-click)
-            view. The clear button behaves differently per context: in Country
-            View it returns to the country list (onExitCountryScope); in the
-            full view it just drops the country filter and stays put
-            (onClearCountryScope) — same as the "France ×" chip elsewhere. */}
-        {countryScoped && (
+        {/* Country name atop the table — shown whenever a country is scoped
+            OUTSIDE Country View (the normal browsing view's "France ×" chip,
+            via onClearCountryScope). Country View's own version lives on the
+            map itself instead (see WorldMap's country chips) — moving it
+            atop the table there made the zoomed table jump position every
+            time a country got locked/cleared, which read as jarring since
+            the map's own layout doesn't shift the same way. */}
+        {countryScoped && !countryMode && (
           <div className="flex items-center gap-1.5 mb-1.5 min-w-0 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
             <span className="truncate" title={countryScopeLabel}>{countryScopeLabel}</span>
-            {(countryMode ? onExitCountryScope : onClearCountryScope) && (
+            {onClearCountryScope && (
               <button
-                onClick={countryMode ? onExitCountryScope : onClearCountryScope}
+                onClick={onClearCountryScope}
                 className="text-sm font-normal text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors shrink-0"
                 title="Clear selected country"
               >
@@ -2983,26 +2981,33 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           {countryMode ? "Hover a country, or click to lock it and multi-select." : "Click to filter, Cmd/Ctrl+click to multi-select."}
         </span>
         <div className="flex flex-wrap items-center gap-3 pl-3 sm:pl-0">
-          {/* IUCN ↔ CoL source toggle: flips the described count + recomputes % Assessed */}
-          <span className="inline-flex items-center gap-1.5">
-            <span className="text-xs text-zinc-400 dark:text-zinc-500">Source for # Described:</span>
-            <span className="inline-flex rounded-md overflow-hidden border border-zinc-300 dark:border-zinc-600 text-[10px] font-semibold" title="Switch # Described Species between IUCN Table 1a estimates and the Catalogue of Life backbone, for the rows with an official IUCN figure — every other row (sub-groups, SSC groups) always shows the CoL-derived count">
-              {(["iucn", "col"] as const).map((src) => (
-                <button
-                  key={src}
-                  onClick={(e) => { e.stopPropagation(); setDescribedSource(src); }}
-                  className={`px-1.5 py-0.5 transition-colors ${
-                    describedSource === src
-                      ? "bg-zinc-700 text-white dark:bg-zinc-200 dark:text-zinc-900"
-                      : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700"
-                  }`}
-                >
-                  {src === "iucn" ? "IUCN" : "CoL"}
-                </button>
-              ))}
-            </span>
-          </span>
-          <span className="text-zinc-300 dark:text-zinc-700">|</span>
+          {/* IUCN ↔ CoL source toggle: flips the described count + recomputes % Assessed.
+              Hidden in Country View — its plain 3-column table doesn't show a
+              # Described column at all (see COUNTRY_SCOPED_HIDDEN_COLUMNS), so the
+              toggle would have nothing to actually affect there. */}
+          {!countryMode && (
+            <>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="text-xs text-zinc-400 dark:text-zinc-500">Source for # Described:</span>
+                <span className="inline-flex rounded-md overflow-hidden border border-zinc-300 dark:border-zinc-600 text-[10px] font-semibold" title="Switch # Described Species between IUCN Table 1a estimates and the Catalogue of Life backbone, for the rows with an official IUCN figure — every other row (sub-groups, SSC groups) always shows the CoL-derived count">
+                  {(["iucn", "col"] as const).map((src) => (
+                    <button
+                      key={src}
+                      onClick={(e) => { e.stopPropagation(); setDescribedSource(src); }}
+                      className={`px-1.5 py-0.5 transition-colors ${
+                        describedSource === src
+                          ? "bg-zinc-700 text-white dark:bg-zinc-200 dark:text-zinc-900"
+                          : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                      }`}
+                    >
+                      {src === "iucn" ? "IUCN" : "CoL"}
+                    </button>
+                  ))}
+                </span>
+              </span>
+              <span className="text-zinc-300 dark:text-zinc-700">|</span>
+            </>
+          )}
           {/* Expand/Collapse all doesn't apply to Country View — its subgroup tree
               stays collapsed by default there regardless (fewer controls, per its
               single-country-focus design). */}

@@ -523,16 +523,6 @@ export function useFilterParams() {
     [syncUrl]
   );
 
-  // Reverse of enterCountryDrilldown — clears the country scope and re-enters
-  // the Country view landing page.
-  const returnToCountryList = useCallback(() => {
-    setState(prev => {
-      const next = { ...prev, countries: new Set<string>(), layoutMode: "country" as LayoutMode, breakdown: null };
-      queueMicrotask(() => syncUrl(next, true));
-      return next;
-    });
-  }, [syncUrl]);
-
   const setSelectedSystems = useCallback(
     (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
       setState(prev => {
@@ -841,7 +831,6 @@ export function useFilterParams() {
     exitCountryModeForTaxon,
     returnToLayoutMode,
     enterCountryDrilldown,
-    returnToCountryList,
     setSelectedTaxa,
     setSelectedSubgroups,
     setSelectedCategories,

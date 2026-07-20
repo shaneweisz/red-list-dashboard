@@ -340,7 +340,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     exitCountryModeForTaxon,
     returnToLayoutMode,
     enterCountryDrilldown,
-    returnToCountryList,
     selectedTaxa, setSelectedTaxa,
     selectedSubgroups, setSelectedSubgroups,
     selectedCategories, setSelectedCategories,
@@ -2309,6 +2308,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       onCountrySelect={handleCountryDrilldown}
       selectOnHover={selectedCountries.size === 0}
       onCountryHover={setHoverPreviewCountry}
+      showSelectionChips
       precomputedStats={countryLandingStats ?? {}}
       selectedTaxa={selectedTaxa}
       speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
@@ -2336,7 +2336,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         onLayoutModeChange={setLayoutMode}
         countryModeContent={countryModeContent}
         countryScope={countryScope}
-        onExitCountryScope={() => { returnToCountryList(); setHoverPreviewCountry(null); }}
         onClearCountryScope={() => { setSelectedCountries(new Set()); setHoverPreviewCountry(null); }}
         onToggleSubgroup={(sgId) => {
           // Clicking a view root ancestor → clear subgroups to show its children.
