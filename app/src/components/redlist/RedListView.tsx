@@ -2323,6 +2323,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       onCountrySelect={handleCountryDrilldown}
       selectOnHover={selectedCountries.size === 0}
       onCountryHover={setHoverPreviewCountry}
+      showTopSpacer
       precomputedStats={countryLandingStats ?? {}}
       selectedTaxa={selectedTaxa}
       speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
@@ -2337,15 +2338,13 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     />
   );
 
-  // Selection chips floated over the top-left of the table's own column
-  // (see countryPillsContent's own doc in TaxaSummary.tsx) — the wrapper
-  // there is pointer-events-none (floating shouldn't block clicks on the
-  // table underneath), so every actual chip/button here needs its own
-  // pointer-events-auto to stay clickable, plus a shadow so it reads as
-  // sitting on top of real table rows now rather than blank map space. One
-  // chip per selected country (not collapsed into a region name, unlike
-  // the atop-table "France ×" chip elsewhere), each individually
-  // removable, plus "Clear all" once there's more than one.
+  // Selection chips shown in normal flow above the table (see
+  // countryPillsContent's own doc in TaxaSummary.tsx — WorldMap reserves
+  // matching blank space via showTopSpacer so the map's card doesn't need
+  // to stretch past its own natural height to match). One chip per
+  // selected country (not collapsed into a region name, unlike the
+  // atop-table "France ×" chip elsewhere), each individually removable,
+  // plus "Clear all" once there's more than one.
   // Before anything's locked, hovering shows its own preview chip (dashed,
   // non-removable — there's nothing to remove yet, moving the mouse away
   // already clears it) so the table's live hover-preview has a visual
@@ -2353,7 +2352,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // for a country that's already selected always toggles it off, whichever
   // branch handleCountryDrilldown takes.
   const countryPillsContent = (selectedCountries.size > 0 || hoverPreviewCountry) && (
-    <div className="flex flex-wrap items-center gap-1.5 max-w-full">
+    <div className="flex flex-wrap items-center gap-1.5">
       {selectedCountries.size > 0 ? (
         <>
           {[...selectedCountries]
@@ -2362,7 +2361,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
             .map(({ code, name }) => (
               <span
                 key={code}
-                className="pointer-events-auto inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 shadow-sm text-sm text-zinc-700 dark:text-zinc-300 max-w-full"
+                className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-sm text-zinc-700 dark:text-zinc-300 max-w-full"
               >
                 <span className="truncate">{name}</span>
                 <button
@@ -2377,14 +2376,14 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
           {selectedCountries.size > 1 && (
             <button
               onClick={() => { enterCountryDrilldown(new Set()); setHoverPreviewCountry(null); }}
-              className="pointer-events-auto text-sm text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 underline transition-colors bg-white/80 dark:bg-zinc-900/80 rounded px-1"
+              className="text-sm text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 underline transition-colors"
             >
               Clear all
             </button>
           )}
         </>
       ) : (
-        <span className="pointer-events-none inline-flex items-center pl-3 pr-3 py-1 rounded-full bg-white dark:bg-zinc-800 border border-dashed border-zinc-300 dark:border-zinc-600 shadow-sm text-sm text-zinc-500 dark:text-zinc-400 max-w-full">
+        <span className="inline-flex items-center pl-3 pr-3 py-1 rounded-full bg-white dark:bg-zinc-800 border border-dashed border-zinc-300 dark:border-zinc-600 text-sm text-zinc-500 dark:text-zinc-400 max-w-full">
           <span className="truncate">{ALPHA2_TO_NAME[hoverPreviewCountry!] ?? hoverPreviewCountry}</span>
         </span>
       )}

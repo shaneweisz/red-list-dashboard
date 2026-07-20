@@ -2494,20 +2494,22 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         The table always uses the plain 3-column style in this mode
         (countryStyleColumns, derived from layoutMode — see its definition
         above), whether or not a country is picked yet. The selected
-        country's identity shows as removable chips floated (absolute) over
-        the top-left of the table's own column (countryPillsContent, built
-        by RedListView) — not in normal flow. A normal-flow reservation
-        there was tried first, but WorldMap's choropleth renders at a fixed
-        projection scale (doesn't grow taller to fill its container), so
-        growing the table's column by a pill row's worth of height stretched
-        the map's card to match (via align-items: stretch below) without the
-        map's own content growing to fill it — a visible gap under the map
-        that wasn't there before. Floating the pills instead keeps the
-        table's column at its original natural height, so the grid row (and
-        the map along with it) doesn't grow in the first place. Uses
-        `contents` to no-op this grouping entirely outside country mode,
-        rather than branching (and duplicating) the huge table JSX below per
-        mode. */}
+        country's identity shows as removable chips in normal flow above
+        the table (countryPillsContent, built by RedListView), reserved via
+        min-h-[34px] so the space is there even with zero chips (nothing to
+        preview/lock yet) — otherwise the table would itself jump down the
+        moment a hover starts previewing a country. WorldMap gets a
+        showTopSpacer prop that reserves the exact same height at the top
+        of the map's own card (blank — the map has nothing to put there),
+        so both columns' natural heights include the same "extra" amount
+        and grid's align-items: stretch below doesn't need to inflate
+        either one to match the other. Without that matching spacer, only
+        growing the table's column stretched the map's card via align-
+        items: stretch, but WorldMap's choropleth renders at a fixed
+        projection scale — its content didn't grow to fill the extra
+        height, leaving a visible gap under the map. Uses `contents` to
+        no-op this grouping entirely outside country mode, rather than
+        branching (and duplicating) the huge table JSX below per mode. */}
     <div className={countryMode ? "grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4" : "contents"}>
       {/* No extra wrapper here — WorldMap already renders its own card (bg/border/
           padding); wrapping it again doubled up the box and, since neither div had
@@ -2522,14 +2524,12 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           included, at the same proportions just smaller, rather than letting
           columns get cramped or triggering horizontal scroll). */}
       {countryMode && <div>{countryModeContent}</div>}
-      <div className={countryMode ? "relative min-w-0 flex flex-col h-full" : "contents"}>
-        {countryMode && (
-          <div className="absolute top-2 left-2 z-20 pointer-events-none">{countryPillsContent}</div>
-        )}
+      <div className={countryMode ? "min-w-0 flex flex-col h-full" : "contents"}>
+        {countryMode && <div className="min-h-[34px] mb-1.5">{countryPillsContent}</div>}
         {/* Country name atop the table — shown whenever a country is scoped
             OUTSIDE Country View (the normal browsing view's "France ×" chip,
             via onClearCountryScope). Country View's own version is the
-            floating countryPillsContent block just above instead. */}
+            countryPillsContent block just above instead. */}
         {countryScoped && !countryMode && (
           <div className="flex items-center gap-1.5 mb-1.5 min-w-0 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
             <span className="truncate" title={countryScopeLabel}>{countryScopeLabel}</span>
