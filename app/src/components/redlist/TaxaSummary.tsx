@@ -1264,8 +1264,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       // more honest signal than silently reverting to a static, never-re-verified
       // citation — it means this specific CoL release is missing species IUCN's own
       // assessors already recognize (e.g. the pygmy hippo, or a handful of recent
-      // Artiodactyla splits), and that's worth surfacing, not hiding.
-      if (useCol && colDescribed != null) return { value: colDescribed, source: "col" };
+      // Artiodactyla splits), and that's worth surfacing, not hiding. For the same
+      // reason, non-official nodes have no estimatedDescribed fallback at all (the
+      // field no longer exists on them, see taxonomy-tree.ts) — colDescribed ?? 0 is
+      // the only number they ever show.
+      if (useCol) return { value: colDescribed ?? 0, source: "col" };
       return { value: estimatedDescribed, source: "iucn" };
     },
     [describedSource]
