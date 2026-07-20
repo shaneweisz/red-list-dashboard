@@ -336,6 +336,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // Filters synced with URL search params for shareable links
   const {
     layoutMode, setLayoutMode,
+    originLayout,
     navigateToTaxonSubgroup,
     exitCountryModeForTaxon,
     returnToLayoutMode,
@@ -475,6 +476,20 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     // Disabled in new-assessments mode (NE dataset too large for "all")
     if (taxonId === "all") {
       if (selectedTaxa.size > 0 || selectedSubgroups.size > 0) {
+        if (originLayout === "country") {
+          // Came from Country View's landing page via a taxon drill-down
+          // (exitCountryModeForTaxon) — return there instead of the generic
+          // default view. See originLayout's own doc in useFilterParams.ts.
+          // fromPopstateRef first: this taxa non-empty→empty transition is
+          // part of one atomic, fully-specified navigation (countries stays
+          // as-is), not a generic "taxon deselected" — without the ref, the
+          // "reset filters on taxa change" effect below would immediately
+          // clear the very countries this navigation means to keep (see its
+          // own comment on enterCountryDrilldown for the same escape hatch).
+          fromPopstateRef.current = true;
+          returnToLayoutMode("country");
+          return;
+        }
         // Return to landing page
         setSelectedSubgroups(new Set());
         setSelectedTaxa(new Set());
@@ -514,7 +529,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       setSelectedSubgroups(new Set());
       return new Set([taxonId]);
     });
-  }, [setSelectedTaxa, setSelectedSubgroups, selectedTaxa, selectedSubgroups, isNewAssessments, searchFilter, urlSpecies, clearAllFilters, layoutMode, setLayoutMode, exitCountryModeForTaxon]);
+  }, [setSelectedTaxa, setSelectedSubgroups, selectedTaxa, selectedSubgroups, isNewAssessments, searchFilter, urlSpecies, clearAllFilters, layoutMode, setLayoutMode, exitCountryModeForTaxon, originLayout, returnToLayoutMode, fromPopstateRef]);
 
   // Reset all other filters when taxa selection changes
   const prevTaxaRef = useRef(selectedTaxa);
@@ -2309,6 +2324,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       selectOnHover={selectedCountries.size === 0}
       onCountryHover={setHoverPreviewCountry}
       showSelectionChips
+      onClearAllCountries={() => { enterCountryDrilldown(new Set()); setHoverPreviewCountry(null); }}
       precomputedStats={countryLandingStats ?? {}}
       selectedTaxa={selectedTaxa}
       speciesLabel={isNewAssessments ? "# Unassessed" : undefined}

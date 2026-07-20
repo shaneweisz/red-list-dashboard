@@ -113,6 +113,16 @@ export function parseParams(search: string) {
   return {
     viewMode: (viewParam === "new-assessments" ? "new-assessments" : "reassessments") as ViewMode,
     layoutMode: (layoutParam === "table1a" || layoutParam === "ssc" || layoutParam === "country" ? layoutParam : null) as LayoutMode,
+    // Remembers the layout mode a taxon drill-down exited FROM (see
+    // exitCountryModeForTaxon) — survives even while layoutMode itself is
+    // null/something-else, so "All Species" and the site logo's Home button
+    // can jump back to Country View's landing page rather than the generic
+    // default, and so that memory itself survives a reload/shared link
+    // (page.tsx's Home handler reads this directly off the URL, outside this
+    // hook entirely). Cleared wherever a new layoutMode is deliberately set
+    // (setLayoutMode/navigateToTaxonSubgroup/returnToLayoutMode) — a fresh,
+    // explicit mode choice overrides whatever "return to X" memory it held.
+    originLayout: (p.get("origin") === "table1a" || p.get("origin") === "ssc" || p.get("origin") === "country" ? p.get("origin") : null) as LayoutMode,
     // Expanded from the flat `taxa` token list (+ legacy `subgroups=`) above.
     taxa: taxaSet,
     subgroups: subgroupSet,
@@ -192,6 +202,7 @@ export function parseParams(search: string) {
 export function buildQs(state: {
   viewMode: ViewMode;
   layoutMode?: LayoutMode;
+  originLayout?: LayoutMode;
   taxa: Set<string>;
   subgroups: Set<string>;
   categories: Set<string>;
@@ -228,6 +239,7 @@ export function buildQs(state: {
   const p = new URLSearchParams();
   if (state.viewMode === "new-assessments") p.set("view", "new-assessments");
   if (state.layoutMode) p.set("layout", state.layoutMode);
+  if (state.originLayout) p.set("origin", state.originLayout);
   // taxa + subgroups collapse to a single flat `taxa` token list (e.g.
   // invertebrates + inv-corals → taxa=corals); no separate subgroups param.
   const taxaTokens = collapseTaxaToTokens(state.taxa, state.subgroups);
@@ -427,7 +439,9 @@ export function useFilterParams() {
   const setLayoutMode = useCallback(
     (mode: LayoutMode) => {
       setState(prev => {
-        const next = { ...prev, layoutMode: mode };
+        // A deliberate, explicit mode choice overrides any "return to X"
+        // memory exitCountryModeForTaxon left behind — see originLayout's doc.
+        const next = { ...prev, layoutMode: mode, originLayout: null as LayoutMode };
         queueMicrotask(() => syncUrl(next, true)); // push so back button exits the mode
         return next;
       });
@@ -443,7 +457,7 @@ export function useFilterParams() {
   const navigateToTaxonSubgroup = useCallback(
     (taxonId: string, subgroupId: string) => {
       setState(prev => {
-        const next = { ...prev, taxa: new Set([taxonId]), subgroups: new Set([subgroupId]), layoutMode: null, breakdown: null };
+        const next = { ...prev, taxa: new Set([taxonId]), subgroups: new Set([subgroupId]), layoutMode: null, originLayout: null as LayoutMode, breakdown: null };
         queueMicrotask(() => syncUrl(next, true));
         return next;
       });
@@ -459,11 +473,16 @@ export function useFilterParams() {
   // "back" press would land on some half-updated intermediate (e.g.
   // layoutMode cleared but taxa not yet set) instead of cleanly restoring
   // the Country View landing page. countries is deliberately left untouched
-  // — the taxon drill-down stays scoped to whatever was selected.
+  // — the taxon drill-down stays scoped to whatever was selected. Also
+  // records originLayout: "country" — layoutMode itself is about to go
+  // null, so without this nothing durable remembers we came from Country
+  // View. RedListView's "All Species" row (and the site logo's Home button,
+  // reading straight off the URL) use this to jump back to that landing
+  // page instead of the generic default view.
   const exitCountryModeForTaxon = useCallback(
     (taxonId: string) => {
       setState(prev => {
-        const next = { ...prev, taxa: new Set([taxonId]), subgroups: new Set<string>(), layoutMode: null, breakdown: null };
+        const next = { ...prev, taxa: new Set([taxonId]), subgroups: new Set<string>(), layoutMode: null as LayoutMode, originLayout: "country" as LayoutMode, breakdown: null };
         queueMicrotask(() => syncUrl(next, true));
         return next;
       });
@@ -475,11 +494,13 @@ export function useFilterParams() {
   // landing page and re-enters a flat-table layout mode, atomically (one
   // history push). Used when clicking the "Mammals" ancestor row after
   // drilling out of SSC groups mode should return to that table instead of
-  // falling through to the plain taxon tree view.
+  // falling through to the plain taxon tree view, and (passing "country")
+  // by RedListView's "All Species" row to consume an originLayout memory
+  // left by exitCountryModeForTaxon and land back on Country View properly.
   const returnToLayoutMode = useCallback(
     (mode: LayoutMode) => {
       setState(prev => {
-        const next = { ...prev, taxa: new Set<string>(), subgroups: new Set<string>(), layoutMode: mode, breakdown: null };
+        const next = { ...prev, taxa: new Set<string>(), subgroups: new Set<string>(), layoutMode: mode, originLayout: null as LayoutMode, breakdown: null };
         queueMicrotask(() => syncUrl(next, true));
         return next;
       });
@@ -799,6 +820,7 @@ export function useFilterParams() {
   return {
     viewMode: state.viewMode,
     layoutMode: state.layoutMode,
+    originLayout: state.originLayout,
     selectedTaxa: state.taxa,
     selectedSubgroups: state.subgroups,
     selectedCategories: state.categories,

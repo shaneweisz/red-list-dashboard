@@ -59,9 +59,14 @@ export default function RedListPage() {
                 // Assessments) choices — same fields clearAllFiltersAndTaxa
                 // preserves, replicated here via raw URL params since this
                 // click lives outside RedListView's useFilterParams instance.
+                // Falls back to `origin` when `layout` itself is absent — a
+                // taxon drill-down out of Country View clears `layout` but
+                // leaves `origin=country` behind (see useFilterParams.ts's
+                // originLayout), so Home still lands back on that view
+                // instead of the generic default.
                 const params = new URLSearchParams(window.location.search);
                 const kept = new URLSearchParams();
-                const layout = params.get("layout");
+                const layout = params.get("layout") || params.get("origin");
                 const view = params.get("view");
                 if (layout) kept.set("layout", layout);
                 if (view) kept.set("view", view);
