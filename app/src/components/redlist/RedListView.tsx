@@ -3878,7 +3878,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                 assessmentId={s.assessment_id}
                                 sisTaxonId={s.sis_taxon_id}
                                 taxonGroup={s.taxon_group}
-                                hasMap={s.has_map}
                                 scientificName={s.scientific_name}
                                 nativeCountriesRedList={s.countries}
                                 onEmpty={s.category === "NE" ? handleOccurrenceEmpty : undefined}

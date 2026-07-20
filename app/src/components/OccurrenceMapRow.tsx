@@ -49,12 +49,6 @@ const AohMapLayer = dynamic(
   () => import("./AohMapLayer"),
   { ssr: false }
 );
-const InatContributorsChart = dynamic(
-  () => import("./InatContributorsChart"),
-  { ssr: false }
-);
-
-const INAT_DATASET_KEY = "50c9509d-22c7-4a22-a47d-8c48425ef4a7";
 
 // Shape of coordinate-cleaning-refdata/countries.json (Natural Earth admin-0
 // country polygons, keyed by ISO 3166-1 alpha-2), dynamically imported for the
@@ -277,7 +271,6 @@ interface OccurrenceMapRowProps {
    * preserved specimens ON for plants & fungi, where herbarium/fungarium
    * records are a core data source. */
   taxonGroup?: string;
-  hasMap?: boolean | null;
   /** This species' scientific name — used to look up its POWO/WCVP native range. */
   scientificName?: string;
   /** This species' native-range countries (ISO 3166-1 alpha-2), per its IUCN Red
@@ -332,7 +325,6 @@ export default function OccurrenceMapRow({
   assessmentId,
   sisTaxonId,
   taxonGroup,
-  hasMap,
   scientificName,
   nativeCountriesRedList,
   onEmpty,
@@ -1308,7 +1300,7 @@ export default function OccurrenceMapRow({
               >
                 GBIF Points
               </button>
-              {hasMap && assessmentId && (
+              {assessmentId && (
                 <div className="flex flex-col">
                   <button
                     onClick={() => setShowRange(!showRange)}
