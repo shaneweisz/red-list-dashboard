@@ -257,19 +257,6 @@ interface WorldMapProps {
   // Called with the hovered country's code on mouseenter, and null on
   // mouseleave, only while selectOnHover is true.
   onCountryHover?: (countryCode: string | null) => void;
-  // When set, reserves a blank strip of exactly this many px right below
-  // the toolbar row — matching (via the caller's own ResizeObserver
-  // measurement, not a fixed guess) the real height of the selection-chip
-  // row Country View's paired table reserves above itself, so both sides
-  // of that grid always have the same "extra" natural height and neither
-  // needs align-items: stretch to inflate it to match the other — a fixed
-  // guess only covers the common 1-line-of-chips case; once chips wrap to
-  // a second line the table's column grows past it, and since the
-  // choropleth renders at a fixed projection scale (its content doesn't
-  // grow to fill extra height), stretching the map's card to match left a
-  // visible gap under the map. Omitted for the other WorldMap usages,
-  // which have no paired chip row.
-  topSpacerHeight?: number;
 }
 
 const DEFAULT_CENTER: [number, number] = [10, 10];
@@ -277,7 +264,7 @@ const DEFAULT_ZOOM = 1.0;
 const MIN_ZOOM = 1.0;
 const MAX_ZOOM = 8.0;
 
-function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, precomputedStatsTotal, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, endemicsOnly = false, onEndemicsToggle, footer, showGbifToggle = true, showOutdatedMode = true, mapViewMode, onMapViewModeChange, mapSortKey, mapSortDirection, onMapSortChange, selectOnHover = false, onCountryHover, topSpacerHeight }: WorldMapProps) {
+function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, precomputedStatsTotal, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, endemicsOnly = false, onEndemicsToggle, footer, showGbifToggle = true, showOutdatedMode = true, mapViewMode, onMapViewModeChange, mapSortKey, mapSortDirection, onMapSortChange, selectOnHover = false, onCountryHover }: WorldMapProps) {
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoveredCountryCode, setHoveredCountryCode] = useState<string | null>(null);
   const [speciesStats, setSpeciesStats] = useState<CountryStats>(precomputedStats || {});
@@ -608,8 +595,6 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
           )}
         </div>
       </div>
-
-      {topSpacerHeight != null && <div className="mb-1.5" style={{ height: topSpacerHeight }} />}
 
       {/* Hover tooltip (map view only) */}
       {viewMode === "map" && hoveredCountry && (

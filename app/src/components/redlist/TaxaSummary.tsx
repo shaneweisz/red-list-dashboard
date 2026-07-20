@@ -2525,23 +2525,28 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         The table always uses the plain 3-column style in this mode
         (countryStyleColumns, derived from layoutMode — see its definition
         above), whether or not a country is picked yet. The selected
-        country's identity shows as removable chips in normal flow above
-        the table — countryPillsContent (built by RedListView) already
-        includes its own min-h-[34px] reserving wrapper (with a ref
-        RedListView measures via ResizeObserver), so it's rendered directly
-        here with no extra wrapper of our own. That measured height feeds
-        WorldMap's topSpacerHeight, which reserves the exact same blank
-        height at the top of the map's own card, so both columns' natural
-        heights always include the same "extra" amount and grid's align-
-        items: stretch below doesn't need to inflate either one to match
-        the other. Without a matching (and correctly *measured*, not
-        guessed) spacer, only growing the table's column stretched the
-        map's card via align-items: stretch, but WorldMap's choropleth
-        renders at a fixed projection scale — its content didn't grow to
-        fill the extra height, leaving a visible gap under the map. Uses
-        `contents` to no-op this grouping entirely outside country mode,
-        rather than branching (and duplicating) the huge table JSX below
-        per mode. */}
+        country's identity shows as removable chips in a row of its own
+        ABOVE this whole grid — same grid-cols template so its columns line
+        up with the map/table below, but with the left (map) cell left
+        empty and the chips confined to the right (table) cell. min-h-
+        [34px] on that cell reserves the space unconditionally (a blank gap
+        before anything's hovered/selected), so it never grows *this* grid
+        below it into needing align-items: stretch to force the map's card
+        to match a taller table. Chips living inside either component
+        (tried both: atop just the table, floated over the map, enclosed in
+        the table's own card) always ended up needing some mechanism to
+        keep the map's card the same height as the table's — a separate row
+        above both sidesteps the problem entirely, since neither column's
+        own natural height is ever affected by how many chips are showing.
+        Uses `contents` to no-op this grouping entirely outside country
+        mode, rather than branching (and duplicating) the huge table JSX
+        below per mode. */}
+    {countryMode && (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-1.5">
+        <div aria-hidden="true" />
+        <div className="min-h-[34px]">{countryPillsContent}</div>
+      </div>
+    )}
     <div className={countryMode ? "grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4" : "contents"}>
       {/* No extra wrapper here — WorldMap already renders its own card (bg/border/
           padding); wrapping it again doubled up the box and, since neither div had
@@ -2556,21 +2561,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           included, at the same proportions just smaller, rather than letting
           columns get cramped or triggering horizontal scroll). */}
       {countryMode && <div>{countryModeContent}</div>}
-      <div className={countryMode ? "min-w-0 flex flex-col h-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-sm p-3" : "contents"}>
-        {/* The pills + table both live inside this same bordered/padded card
-            now — matching WorldMap's own card (border/rounded-xl/p-3
-            wrapping its "Country" heading+toolbar, then its content) so both
-            components' outer boxes start flush at the top of the grid row.
-            Previously only the scrollRef box below had this border/padding,
-            with the (unboxed) pills sitting above it — the map's card
-            started at the row's top edge while the table's bordered box
-            started lower, below that gap, even though their total heights
-            already matched via topSpacerHeight. */}
-        {countryMode && countryPillsContent}
+      <div className={countryMode ? "min-w-0 flex flex-col h-full" : "contents"}>
         {/* Country name atop the table — shown whenever a country is scoped
             OUTSIDE Country View (the normal browsing view's "France ×" chip,
             via onClearCountryScope). Country View's own version is the
-            countryPillsContent block just above instead. */}
+            chips row above the grid instead. */}
         {countryScoped && !countryMode && (
           <div className="flex items-center gap-1.5 mb-1.5 min-w-0 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
             <span className="truncate" title={countryScopeLabel}>{countryScopeLabel}</span>
@@ -2585,7 +2580,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             )}
           </div>
         )}
-        <div ref={scrollRef} className={countryMode ? "relative overflow-x-auto flex-1 [zoom:.75]" : "relative bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto"}>
+        <div ref={scrollRef} className={`relative bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto ${countryMode ? "flex-1 [zoom:.75]" : ""}`}>
           {/* Country-switch refetch indicator — see the loading-gate comment
               above renderRow's skeleton branch for why this doesn't blank the table. */}
           {loading && taxa.length > 0 && (
