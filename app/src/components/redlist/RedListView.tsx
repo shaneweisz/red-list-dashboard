@@ -2323,8 +2323,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       onCountrySelect={handleCountryDrilldown}
       selectOnHover={selectedCountries.size === 0}
       onCountryHover={setHoverPreviewCountry}
-      showSelectionChips
-      onClearAllCountries={() => { enterCountryDrilldown(new Set()); setHoverPreviewCountry(null); }}
       precomputedStats={countryLandingStats ?? {}}
       selectedTaxa={selectedTaxa}
       speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
@@ -2339,6 +2337,57 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     />
   );
 
+  // Selection chips shown above BOTH the map and the table (see
+  // countryPillsContent's own doc in TaxaSummary.tsx) — living outside
+  // either column means neither one resizes as chips are added/removed/
+  // hovered. One chip per selected country (not collapsed into a region
+  // name, unlike the atop-table "France ×" chip elsewhere), each
+  // individually removable, plus "Clear all" once there's more than one.
+  // Before anything's locked, hovering shows its own preview chip (dashed,
+  // non-removable — there's nothing to remove yet, moving the mouse away
+  // already clears it) so the table's live hover-preview has a visual
+  // anchor. Reuses handleCountryDrilldown for removal — clicking a chip's ✕
+  // for a country that's already selected always toggles it off, whichever
+  // branch handleCountryDrilldown takes.
+  const countryPillsContent = (selectedCountries.size > 0 || hoverPreviewCountry) && (
+    <div className="flex flex-wrap items-center gap-1">
+      {selectedCountries.size > 0 ? (
+        <>
+          {[...selectedCountries]
+            .map(code => ({ code, name: ALPHA2_TO_NAME[code] ?? code }))
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map(({ code, name }) => (
+              <span
+                key={code}
+                className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-xs text-zinc-700 dark:text-zinc-300 max-w-full"
+              >
+                <span className="truncate">{name}</span>
+                <button
+                  onClick={(e) => handleCountryDrilldown(code, name, e)}
+                  className="shrink-0 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                  title={`Remove ${name}`}
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+          {selectedCountries.size > 1 && (
+            <button
+              onClick={() => { enterCountryDrilldown(new Set()); setHoverPreviewCountry(null); }}
+              className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 underline transition-colors"
+            >
+              Clear all
+            </button>
+          )}
+        </>
+      ) : (
+        <span className="inline-flex items-center pl-2 pr-2 py-0.5 rounded-full bg-white dark:bg-zinc-800 border border-dashed border-zinc-300 dark:border-zinc-600 text-xs text-zinc-500 dark:text-zinc-400 max-w-full">
+          <span className="truncate">{ALPHA2_TO_NAME[hoverPreviewCountry!] ?? hoverPreviewCountry}</span>
+        </span>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-4 min-w-0">
       {/* Always show Taxa Summary table */}
@@ -2351,6 +2400,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         layoutMode={layoutMode}
         onLayoutModeChange={setLayoutMode}
         countryModeContent={countryModeContent}
+        countryPillsContent={countryPillsContent}
         countryScope={countryScope}
         onClearCountryScope={() => { setSelectedCountries(new Set()); setHoverPreviewCountry(null); }}
         onToggleSubgroup={(sgId) => {

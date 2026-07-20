@@ -146,6 +146,12 @@ interface Props {
    * owns the country-stats data and click-through wiring), kept out of this
    * component so it doesn't need its own dynamic WorldMap import. */
   countryModeContent?: React.ReactNode;
+  /** Rendered above BOTH the map and the table in Country View — the current
+   * selection as removable name chips (built by RedListView, which owns the
+   * selection/hover state). Living above the whole grid rather than inside
+   * either column means neither the map nor the (zoomed) table ever resizes
+   * as chips are added/removed while hovering/locking/clearing countries. */
+  countryPillsContent?: React.ReactNode;
   /** Set whenever at least one country is selected — independent of layoutMode,
    * so selecting countries anywhere (not just via the Country view landing page)
    * scopes this table's own fetches too. One country, a whole region, or an
@@ -1043,7 +1049,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
   );
 }
 
-export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", layoutMode, onLayoutModeChange, countryModeContent, countryScope, onClearCountryScope }: Props) {
+export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", layoutMode, onLayoutModeChange, countryModeContent, countryPillsContent, countryScope, onClearCountryScope }: Props) {
   const isNewAssessments = viewMode === "new-assessments";
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2514,15 +2520,19 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       </div>,
       document.body
     )}
-    {/* Country view: map on the left half, taxa table on the right half.
+    {/* Country view: taxa table on the left half, map on the right half.
         The table always uses the plain 3-column style in this mode
         (countryStyleColumns, derived from layoutMode — see its definition
-        above), whether or not a country is picked yet. The selected country's
-        identity shows atop the map itself now (WorldMap's onClearSelection/
-        scopeLabel), not atop the table — see the comment on the other, non-
-        country-mode instance of that label below. Uses `contents` to no-op
-        this grouping entirely outside country mode, rather than branching
-        (and duplicating) the huge table JSX below per mode. */}
+        above), whether or not a country is picked yet. The selected
+        country's identity shows as removable chips above BOTH the table and
+        the map (countryPillsContent, built by RedListView) — living outside
+        either column specifically so chips changing (locking/clearing/
+        hovering, which varies their count and text width) never resizes the
+        map or shifts the (zoomed) table's position; both used to happen
+        when the chips lived inside one column or the other. Uses `contents`
+        to no-op this grouping entirely outside country mode, rather than
+        branching (and duplicating) the huge table JSX below per mode. */}
+    {countryMode && <div className="mb-1.5">{countryPillsContent}</div>}
     <div className={countryMode ? "grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4" : "contents"}>
       {/* No extra wrapper here — WorldMap already renders its own card (bg/border/
           padding); wrapping it again doubled up the box and, since neither div had
@@ -2536,15 +2546,16 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           column (was 2/3 width, now 1/2 — zoom-[.75] keeps everything, fonts
           included, at the same proportions just smaller, rather than letting
           columns get cramped or triggering horizontal scroll). */}
-      {countryMode && <div>{countryModeContent}</div>}
       <div className={countryMode ? "min-w-0 flex flex-col h-full" : "contents"}>
         {/* Country name atop the table — shown whenever a country is scoped
             OUTSIDE Country View (the normal browsing view's "France ×" chip,
-            via onClearCountryScope). Country View's own version lives on the
-            map itself instead (see WorldMap's country chips) — moving it
-            atop the table there made the zoomed table jump position every
-            time a country got locked/cleared, which read as jarring since
-            the map's own layout doesn't shift the same way. */}
+            via onClearCountryScope). Country View's own version lives above
+            both the table and the map instead (see countryPillsContent) —
+            moving it strictly atop the table made the zoomed table jump
+            position every time a country got locked/cleared; moving it onto
+            the map instead made the map itself flicker/resize as chips
+            changed size while hovering. Living above both avoids resizing
+            either one. */}
         {countryScoped && !countryMode && (
           <div className="flex items-center gap-1.5 mb-1.5 min-w-0 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
             <span className="truncate" title={countryScopeLabel}>{countryScopeLabel}</span>
@@ -2965,6 +2976,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       </table>
         </div>
       </div>
+      {countryMode && <div>{countryModeContent}</div>}
     </div>
     {/* Subtle controls: usage hint + # Described toggle + expand/table controls,
         all landing-only — hidden once a taxon is selected. Gated on perTaxa.length

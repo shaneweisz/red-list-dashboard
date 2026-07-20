@@ -257,18 +257,6 @@ interface WorldMapProps {
   // Called with the hovered country's code on mouseenter, and null on
   // mouseleave, only while selectOnHover is true.
   onCountryHover?: (countryCode: string | null) => void;
-  // When true, renders the current selection as individually-removable name
-  // chips floated over the top-left of the map (each ✕ toggles just that one
-  // country off via onCountrySelect) — Country View's own "which countries
-  // am I looking at" display, living on the map instead of atop the table it
-  // drives (a label atop the table there made the zoomed table jump position
-  // every time a country got locked/cleared). Default false — the other
-  // WorldMap usages keep their existing atop-table chip instead.
-  showSelectionChips?: boolean;
-  // Clears every selected country at once — the "Clear all" shown alongside
-  // the chips once there's more than one. Only rendered/called when both
-  // this and showSelectionChips are set.
-  onClearAllCountries?: () => void;
 }
 
 const DEFAULT_CENTER: [number, number] = [10, 10];
@@ -276,7 +264,7 @@ const DEFAULT_ZOOM = 1.0;
 const MIN_ZOOM = 1.0;
 const MAX_ZOOM = 8.0;
 
-function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, precomputedStatsTotal, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, endemicsOnly = false, onEndemicsToggle, footer, showGbifToggle = true, showOutdatedMode = true, mapViewMode, onMapViewModeChange, mapSortKey, mapSortDirection, onMapSortChange, selectOnHover = false, onCountryHover, showSelectionChips = false, onClearAllCountries }: WorldMapProps) {
+function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, precomputedStatsTotal, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, endemicsOnly = false, onEndemicsToggle, footer, showGbifToggle = true, showOutdatedMode = true, mapViewMode, onMapViewModeChange, mapSortKey, mapSortDirection, onMapSortChange, selectOnHover = false, onCountryHover }: WorldMapProps) {
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoveredCountryCode, setHoveredCountryCode] = useState<string | null>(null);
   const [speciesStats, setSpeciesStats] = useState<CountryStats>(precomputedStats || {});
@@ -603,58 +591,6 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
           )}
         </div>
       </div>
-
-      {/* Selection chips — floated (absolute) over the top-left of the map
-          area rather than sitting in normal flow, so adding/removing a
-          country never changes the map's own rendered size (it used to push
-          the choropleth down/shrink it every time the selection changed).
-          One chip per selected country (not collapsed into a region name,
-          unlike the atop-table "France ×" chip elsewhere), each individually
-          removable, plus a "Clear all" for dropping the whole selection at
-          once — pointer-events-none on the wrapper so empty space between
-          chips doesn't block map clicks, re-enabled per chip/button. Before
-          anything's locked, hovering shows its own preview chip (dashed,
-          non-removable — there's nothing to remove yet, moving the mouse
-          away already clears it) so the table's live hover-preview has the
-          same visual anchor a locked selection does. */}
-      {showSelectionChips && (selectedCountries.size > 0 || (selectOnHover && hoveredCountryCode)) && (
-        <div className="absolute top-11 left-3 right-3 z-20 flex flex-wrap items-center gap-1 pointer-events-none">
-          {selectedCountries.size > 0 ? (
-            <>
-              {[...selectedCountries]
-                .map(code => ({ code, name: ALPHA2_TO_NAME[code] ?? code }))
-                .sort((a, b) => a.name.localeCompare(b.name))
-                .map(({ code, name }) => (
-                  <span
-                    key={code}
-                    className="pointer-events-auto inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-sm text-xs text-zinc-700 dark:text-zinc-300 max-w-full"
-                  >
-                    <span className="truncate">{name}</span>
-                    <button
-                      onClick={(e) => onCountrySelect(code, name, e)}
-                      className="shrink-0 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                      title={`Remove ${name}`}
-                    >
-                      ✕
-                    </button>
-                  </span>
-                ))}
-              {selectedCountries.size > 1 && onClearAllCountries && (
-                <button
-                  onClick={onClearAllCountries}
-                  className="pointer-events-auto text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 underline transition-colors"
-                >
-                  Clear all
-                </button>
-              )}
-            </>
-          ) : (
-            <span className="pointer-events-none inline-flex items-center pl-2 pr-2 py-0.5 rounded-full bg-white/90 dark:bg-zinc-800/90 border border-dashed border-zinc-300 dark:border-zinc-600 text-xs text-zinc-500 dark:text-zinc-400 max-w-full">
-              <span className="truncate">{hoveredCountry}</span>
-            </span>
-          )}
-        </div>
-      )}
 
       {/* Hover tooltip (map view only) */}
       {viewMode === "map" && hoveredCountry && (
