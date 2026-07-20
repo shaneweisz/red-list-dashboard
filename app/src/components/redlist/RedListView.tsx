@@ -2350,7 +2350,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // for a country that's already selected always toggles it off, whichever
   // branch handleCountryDrilldown takes.
   const countryPillsContent = (selectedCountries.size > 0 || hoverPreviewCountry) && (
-    <div className="flex flex-wrap items-center gap-1">
+    <div className="flex flex-wrap items-center gap-1.5">
       {selectedCountries.size > 0 ? (
         <>
           {[...selectedCountries]
@@ -2359,7 +2359,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
             .map(({ code, name }) => (
               <span
                 key={code}
-                className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-xs text-zinc-700 dark:text-zinc-300 max-w-full"
+                className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-sm text-zinc-700 dark:text-zinc-300 max-w-full"
               >
                 <span className="truncate">{name}</span>
                 <button
@@ -2374,14 +2374,14 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
           {selectedCountries.size > 1 && (
             <button
               onClick={() => { enterCountryDrilldown(new Set()); setHoverPreviewCountry(null); }}
-              className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 underline transition-colors"
+              className="text-sm text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 underline transition-colors"
             >
               Clear all
             </button>
           )}
         </>
       ) : (
-        <span className="inline-flex items-center pl-2 pr-2 py-0.5 rounded-full bg-white dark:bg-zinc-800 border border-dashed border-zinc-300 dark:border-zinc-600 text-xs text-zinc-500 dark:text-zinc-400 max-w-full">
+        <span className="inline-flex items-center pl-3 pr-3 py-1 rounded-full bg-white dark:bg-zinc-800 border border-dashed border-zinc-300 dark:border-zinc-600 text-sm text-zinc-500 dark:text-zinc-400 max-w-full">
           <span className="truncate">{ALPHA2_TO_NAME[hoverPreviewCountry!] ?? hoverPreviewCountry}</span>
         </span>
       )}

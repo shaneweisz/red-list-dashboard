@@ -1234,11 +1234,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         className="text-xs bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
       >
         <option value="taxonomic">By Taxon</option>
-        <option value="table1a">Table 1a</option>
-        <option value="ssc">By SSC Specialist Group</option>
         <option value="country" disabled={isNewAssessments} title={isNewAssessments ? "Not available for New Assessments — Not Evaluated species have no location data" : undefined}>
           By Country
         </option>
+        <option value="ssc">By SSC Specialist Group</option>
+        <option value="table1a">Table 1a</option>
       </select>
     </span>
   );
@@ -2520,7 +2520,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       </div>,
       document.body
     )}
-    {/* Country view: taxa table on the left half, map on the right half.
+    {/* Country view: map on the left half, taxa table on the right half.
         The table always uses the plain 3-column style in this mode
         (countryStyleColumns, derived from layoutMode — see its definition
         above), whether or not a country is picked yet. The selected
@@ -2529,7 +2529,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         either column specifically so chips changing (locking/clearing/
         hovering, which varies their count and text width) never resizes the
         map or shifts the (zoomed) table's position; both used to happen
-        when the chips lived inside one column or the other. min-h-[26px]
+        when the chips lived inside one column or the other. min-h-[34px]
         (one pill row's height) reserves that space unconditionally, even
         with zero chips, so the table/map below don't themselves shift down
         the moment a hover starts previewing a country — that shift was its
@@ -2537,7 +2537,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         Uses `contents` to no-op this grouping entirely outside country
         mode, rather than branching (and duplicating) the huge table JSX
         below per mode. */}
-    {countryMode && <div className="min-h-[26px] mb-1.5">{countryPillsContent}</div>}
+    {countryMode && <div className="min-h-[34px] mb-1.5">{countryPillsContent}</div>}
     <div className={countryMode ? "grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4" : "contents"}>
       {/* No extra wrapper here — WorldMap already renders its own card (bg/border/
           padding); wrapping it again doubled up the box and, since neither div had
@@ -2551,6 +2551,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           column (was 2/3 width, now 1/2 — zoom-[.75] keeps everything, fonts
           included, at the same proportions just smaller, rather than letting
           columns get cramped or triggering horizontal scroll). */}
+      {countryMode && <div>{countryModeContent}</div>}
       <div className={countryMode ? "min-w-0 flex flex-col h-full" : "contents"}>
         {/* Country name atop the table — shown whenever a country is scoped
             OUTSIDE Country View (the normal browsing view's "France ×" chip,
@@ -2981,7 +2982,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       </table>
         </div>
       </div>
-      {countryMode && <div>{countryModeContent}</div>}
     </div>
     {/* Subtle controls: usage hint + # Described toggle + expand/table controls,
         all landing-only — hidden once a taxon is selected. Gated on perTaxa.length
