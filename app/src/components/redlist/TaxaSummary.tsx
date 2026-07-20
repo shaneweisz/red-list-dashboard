@@ -1233,11 +1233,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         }}
         className="text-xs bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
       >
-        <option value="taxonomic">Standard view</option>
-        <option value="table1a">Table 1a view</option>
-        <option value="ssc">SSC group view</option>
+        <option value="taxonomic">By Taxon</option>
+        <option value="table1a">Table 1a</option>
+        <option value="ssc">By SSC Specialist Group</option>
         <option value="country" disabled={isNewAssessments} title={isNewAssessments ? "Not available for New Assessments — Not Evaluated species have no location data" : undefined}>
-          Country view
+          By Country
         </option>
       </select>
     </span>
