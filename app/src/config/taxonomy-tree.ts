@@ -346,13 +346,11 @@ const MUSHROOMS_NODE: TaxonomyNode = {
       id: "ascomycota",
       name: "Ascomycota",
       filter: { csvGroups: ["mushrooms"], orderNames: ASCOMYCOTA_ORDERS },
-
     },
     {
       id: "other-fungi",
       name: "Other Fungi",
       filter: { csvGroups: ["mushrooms"], excludeOrders: ASCOMYCOTA_ORDERS },
-
     },
   ],
 };
@@ -391,25 +389,21 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           id: "rodents",
           name: "Rodents",
           filter: { csvGroups: ["mammals"], orderNames: ["rodentia"] },
-
         },
         {
           id: "bats",
           name: "Bats",
           filter: { csvGroups: ["mammals"], orderNames: ["chiroptera"] },
-
         },
         {
           id: "eulipotyphla",
           name: "Eulipotyphla",
           filter: { csvGroups: ["mammals"], orderNames: ["eulipotyphla"] },
-
         },
         {
           id: "primates",
           name: "Primates",
           filter: { csvGroups: ["mammals"], orderNames: ["primates"] },
-
         },
         {
           id: "marsupials",
@@ -421,43 +415,36 @@ export const TAXONOMY_TREE: TaxonomyNode = {
               "peramelemorphia", "paucituberculata", "notoryctemorphia", "microbiotheria",
             ],
           },
-
         },
         {
           id: "carnivores",
           name: "Carnivores",
           filter: { csvGroups: ["mammals"], orderNames: ["carnivora"] },
-
         },
         {
           id: "artiodactyls",
           name: "Artiodactyls",
           filter: { csvGroups: ["mammals"], orderNames: ["artiodactyla"] },
-
         },
         {
           id: "rabbits-hares",
           name: "Rabbits & Hares",
           filter: { csvGroups: ["mammals"], orderNames: ["lagomorpha"] },
-
         },
         {
           id: "sirenians",
           name: "Sirenians",
           filter: { csvGroups: ["mammals"], orderNames: ["sirenia"] },
-
         },
         {
           id: "odd-toed-ungulates",
           name: "Odd-toed Ungulates",
           filter: { csvGroups: ["mammals"], orderNames: ["perissodactyla"] },
-
         },
         {
           id: "pangolins",
           name: "Pangolins",
           filter: { csvGroups: ["mammals"], orderNames: ["pholidota"] },
-
         },
         {
           id: "other-mammals",
@@ -466,7 +453,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
             csvGroups: ["mammals"],
             excludeOrders: MAMMAL_NAMED_ORDERS,
           },
-
         },
       ],
     },
@@ -498,28 +484,24 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           id: "ssc-african-elephant",
           name: "African Elephant Specialist Group",
           filter: { csvGroups: ["mammals"], genera: ["loxodonta"] },
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-african-elephant-specialist-group",
         },
         {
           id: "ssc-asian-elephant",
           name: "Asian Elephant Specialist Group",
           filter: { csvGroups: ["mammals"], genera: ["elephas"] },
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-asian-elephant-specialist-group",
         },
         {
           id: "ssc-african-rhino",
           name: "African Rhino Specialist Group",
           filter: { csvGroups: ["mammals"], genera: ["diceros", "ceratotherium"] },
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-african-rhino-specialist-group",
         },
         {
           id: "ssc-asian-rhino",
           name: "Asian Rhino Specialist Group",
           filter: { csvGroups: ["mammals"], genera: ["rhinoceros", "dicerorhinus"] },
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-asian-rhino-specialist-group",
         },
         {
@@ -542,7 +524,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
             // group names. Excluded to avoid a genus-match false positive.
             excludeSpeciesNames: ["bos primigenius"],
           },
-
           sourceUrl: "https://www.asianwildcattle.org/",
         },
         {
@@ -553,7 +534,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // golden moles, 34 tenrecs" = 81 (golden moles + tenrecs are both
           // subsumed under order Afrosoricida in our data, not separate
           // "groups" as the group's own site describes them informally).
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-afrotheria-specialist-group",
         },
         {
@@ -563,7 +543,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Own site (xenarthrans.org): "seven sloth species, ten anteater
           // species, and 25 armadillo species" = 42; stale MDD-derived figure
           // (31) reflected pre-2025 traditional Xenarthra taxonomy.
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-anteater-sloth-and-armadillo-specialist-group",
         },
         {
@@ -604,7 +583,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
             //    the species into both (this tree assumes one node per species).
             extraSpeciesNames: ["antilocapra americana", "hyemoschus aquaticus", "camelus ferus"],
           },
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-antelope-specialist-group",
         },
         {
@@ -618,42 +596,36 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // monotreme species and approximately 265 marsupial species of
           // Australia, New Guinea, Indonesia and the Solomon Islands" = ~270;
           // stale MDD-derived figure (250) undercounted.
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-australasian-marsupial-and-monotreme-specialist-group",
         },
         {
           id: "ssc-bat",
           name: "Bat Specialist Group",
           filter: { csvGroups: ["mammals"], orderNames: ["chiroptera"] },
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-bat-specialist-group",
         },
         {
           id: "ssc-bear",
           name: "Bear Specialist Group",
           filter: { csvGroups: ["mammals"], families: ["ursidae"], excludeSpeciesNames: ["ursus maritimus"] },
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-bear-specialist-group",
         },
         {
           id: "ssc-polar-bear",
           name: "Polar Bear Specialist Group",
           filter: { csvGroups: ["mammals"], speciesNames: ["ursus maritimus"] },
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-polar-bear-specialist-group",
         },
         {
           id: "ssc-bison",
           name: "Bison Specialist Group",
           filter: { csvGroups: ["mammals"], genera: ["bison"] },
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-bison-specialist-group",
         },
         {
           id: "ssc-canid",
           name: "Canid Specialist Group",
           filter: { csvGroups: ["mammals"], families: ["canidae"] },
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-canid-specialist-group",
         },
         {
@@ -667,14 +639,12 @@ export const TAXONOMY_TREE: TaxonomyNode = {
               "ammotragus", "hemitragus", "nilgiritragus", "arabitragus", "pseudois",
             ],
           },
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-caprinae-specialist-group",
         },
         {
           id: "ssc-cat",
           name: "Cat Specialist Group",
           filter: { csvGroups: ["mammals"], families: ["felidae"] },
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-cat-specialist-group",
         },
         {
@@ -688,7 +658,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
               "phocoenidae", "iniidae", "lipotidae", "platanistidae", "pontoporiidae",
             ],
           },
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-cetacean-specialist-group",
         },
         {
@@ -704,42 +673,36 @@ export const TAXONOMY_TREE: TaxonomyNode = {
             // so it stays there via extraSpeciesNames rather than double-counting.
             excludeSpeciesNames: ["hyemoschus aquaticus"],
           },
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-deer-specialist-group",
         },
         {
           id: "ssc-equid",
           name: "Equid Specialist Group",
           filter: { csvGroups: ["mammals"], families: ["equidae"] },
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-equid-specialist-group",
         },
         {
           id: "ssc-giraffe-okapi",
           name: "Giraffe and Okapi Specialist Group",
           filter: { csvGroups: ["mammals"], families: ["giraffidae"] },
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-giraffe-and-okapi-specialist-group",
         },
         {
           id: "ssc-hippo",
           name: "Hippo Specialist Group",
           filter: { csvGroups: ["mammals"], families: ["hippopotamidae"] },
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-hippo-specialist-group",
         },
         {
           id: "ssc-hyaena",
           name: "Hyaena Specialist Group",
           filter: { csvGroups: ["mammals"], families: ["hyaenidae"] },
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-hyaena-specialist-group",
         },
         {
           id: "ssc-lagomorph",
           name: "Lagomorph Specialist Group",
           filter: { csvGroups: ["mammals"], orderNames: ["lagomorpha"] },
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-lagomorph-specialist-group",
         },
         {
@@ -753,7 +716,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Marsupials (NWMs) comprise over 135 species... classified within
           // the orders Didelphimorphia, Microbiotheria and Paucituberculata"
           // — Didelphimorphia 127 + Microbiotheria 1 + Paucituberculata 7 = 135.
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-new-world-marsupial-specialist-group",
         },
         {
@@ -763,28 +725,24 @@ export const TAXONOMY_TREE: TaxonomyNode = {
             csvGroups: ["mammals"],
             genera: ["lutra", "pteronura", "aonyx", "lutrogale", "enhydra", "hydrictis", "lontra"],
           },
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-otter-specialist-group",
         },
         {
           id: "ssc-pangolin",
           name: "Pangolin Specialist Group",
           filter: { csvGroups: ["mammals"], orderNames: ["pholidota"] },
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-pangolin-specialist-group",
         },
         {
           id: "ssc-peccary",
           name: "Peccary Specialist Group",
           filter: { csvGroups: ["mammals"], families: ["tayassuidae"] },
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-peccary-specialist-group",
         },
         {
           id: "ssc-pinniped",
           name: "Pinniped Specialist Group",
           filter: { csvGroups: ["mammals"], families: ["otariidae", "phocidae", "odobenidae"] },
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-pinniped-specialist-group",
         },
         {
@@ -795,14 +753,12 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // data's 527 assessed Primates rows (assessed can't exceed
           // described). Corrected to the Primate SG's own self-reported
           // count.
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-primate-specialist-group",
         },
         {
           id: "ssc-sirenia",
           name: "Sirenia Specialist Group",
           filter: { csvGroups: ["mammals"], orderNames: ["sirenia"] },
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-sirenia-specialist-group",
         },
         {
@@ -819,21 +775,18 @@ export const TAXONOMY_TREE: TaxonomyNode = {
             families: ["mustelidae", "viverridae", "herpestidae", "eupleridae", "procyonidae", "mephitidae", "nandiniidae", "prionodontidae", "ailuridae"],
             excludeGenera: ["lutra", "pteronura", "aonyx", "lutrogale", "enhydra", "hydrictis", "lontra"],
           },
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-small-carnivore-specialist-group",
         },
         {
           id: "ssc-small-mammal",
           name: "Small Mammal Specialist Group",
           filter: { csvGroups: ["mammals"], orderNames: ["rodentia", "eulipotyphla", "scandentia"] },
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-small-mammal-specialist-group",
         },
         {
           id: "ssc-tapir",
           name: "Tapir Specialist Group",
           filter: { csvGroups: ["mammals"], families: ["tapiridae"] },
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-tapir-specialist-group",
         },
         {
@@ -845,14 +798,12 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Wild Cattle SG above.
           name: "South American Camelid Specialist Group",
           filter: { csvGroups: ["mammals"], genera: ["lama", "vicugna"] },
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-wild-camelid-specialist-group-0",
         },
         {
           id: "ssc-wild-pig",
           name: "Wild Pig Specialist Group",
           filter: { csvGroups: ["mammals"], families: ["suidae"] },
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-wild-pig-specialist-group",
         },
         // Catch-all: mammal orders/families/genera not claimed by any of the 35
@@ -909,7 +860,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // (e.g. Primate SG 522→527, Anteater/Sloth/Armadillo SG 31→42,
           // Australasian Marsupial SG 250→270). Recomputed as the actual sum
           // of all 35 sibling nodes' current estimatedDescribed values.
-
         },
       ],
     },
@@ -937,7 +887,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Own site (iucncsg.org): "There are 26 recognised species of extant
           // crocodilians... divided into three Families - Alligatoridae...
           // Crocodylidae... and Gavialidae" — all of order Crocodylia, no exceptions.
-
           sourceUrl: "http://www.iucncsg.org/",
         },
         {
@@ -957,7 +906,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // the separate Marine Turtle SG below. No source states the marine
           // exclusion in so many words; it's implied by "freshwater and
           // terrestrial" plus the existence of a dedicated Marine Turtle SG.
-
           sourceUrl: "https://iucn-tftsg.org/",
         },
         {
@@ -967,7 +915,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Own site (iucn-mtsg.org): "responsible for providing information on
           // the seven species of sea turtles" — Cheloniidae (6) + Dermochelyidae
           // (1, leatherback), all 7 recognized species, no exceptions.
-
           sourceUrl: "https://www.iucn-mtsg.org/",
         },
         {
@@ -979,7 +926,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // recognised by the SSG" — whole family Scincidae, no exceptions
           // found. Dibamidae (legless "skink-like" lizards) is a separate
           // family, not mentioned by the group either way — left out of scope.
-
           sourceUrl: "https://www.skinks.org/",
         },
         {
@@ -989,7 +935,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Own site (iucnchameleons.org): "there are currently 228 species of
           // chameleon recognized by the Chameleon Specialist Group" — whole
           // family Chamaeleonidae, no carve-outs.
-
           sourceUrl: "http://iucnchameleons.org/",
         },
         {
@@ -1006,7 +951,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // bypassed) — users clicking through may see a browser security
           // warning; this is a hosting issue on the group's end, not a data
           // problem here.
-
           sourceUrl: "https://iucn-mlsg.org/",
         },
         {
@@ -1019,7 +963,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Cyclura, Dipsosaurus, Iguana, Sauromalus). Confirmed against our
           // data: every species under the "iguanidae" family label is one of
           // these 9 genera (no stray genus), so a plain family filter is exact.
-
           sourceUrl: "http://www.iucn-isg.org/",
         },
         {
@@ -1041,7 +984,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // reflects Reptile Database's larger global described-species count
           // vs. this file's assessed/candidate subset, not an in-file
           // family-label split.
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-anoline-lizard-specialist-group",
         },
         {
@@ -1057,7 +999,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Specialist Groups, respectively" — i.e. Viperidae in full, no
           // subfamily carve-out (covers Viperinae, Crotalinae, and Azemiopinae
           // alike).
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-viper-specialist-group",
         },
         {
@@ -1099,7 +1040,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // 3 families (a genus-level subset of Elapidae + all of Homalopsidae
           // + all of Acrochordidae), confirmed by the neighboring Snake
           // Specialist Group's own exclusion statement (see Viper SG above).
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-sea-snake-specialist-group",
         },
         {
@@ -1116,7 +1056,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // distributed across seven families" — the 7 standard,
           // universally-recognized Gekkota families (all geckos), all
           // present in our data.
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-gekkota-lizard-specialist-group",
         },
         {
@@ -1157,7 +1096,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // December 2020 — an organizational change not otherwise
           // documented here, though the group appears to still be active per
           // SSC quadrennium reporting.
-
           sourceUrl: "https://iucn.org/content/kering-and-iucn-boa-python-specialist-group-announce-first-report-captive-breeding",
         },
         // Catch-all: NOT a "no group" placeholder like ssc-other-mammals — this
@@ -1204,7 +1142,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // account for other sibling groups' own estimates changing since.
           // Recomputed as the actual sum of all 12 sibling nodes' current
           // estimatedDescribed values.
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-snake-and-lizard-red-list-authority",
         },
       ],
@@ -1235,25 +1172,28 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           id: "squamates",
           name: "Squamates",
           filter: { csvGroups: ["reptiles"], orderNames: ["squamata"] },
-
         },
         {
           id: "turtles-tortoises",
           name: "Turtles & Tortoises",
           filter: { csvGroups: ["reptiles"], orderNames: ["testudines"] },
-
         },
         {
           id: "crocodilians",
           name: "Crocodilians",
           filter: { csvGroups: ["reptiles"], orderNames: ["crocodylia"] },
-
         },
         {
           id: "tuataras",
           name: "Tuataras",
-          filter: { csvGroups: ["reptiles"], orderNames: ["rhynchocephalia"] },
-
+          // orderNames alone matches zero live CoL species: the CoL backbone's own
+          // record for Sphenodon punctatus has a NULL order_name (IUCN's
+          // assessed.parquet correctly has "rhynchocephalia" — this is a CoL-side
+          // data gap, not an assessment issue). extraSpeciesNames names the species
+          // directly as an OR escape hatch (bypasses orderNames entirely, same
+          // mechanism used elsewhere for out-of-family exceptions), so colDescribed
+          // isn't stuck at 0 for this monotypic order.
+          filter: { csvGroups: ["reptiles"], orderNames: ["rhynchocephalia"], extraSpeciesNames: ["sphenodon punctatus"] },
         },
       ],
     },
@@ -1272,19 +1212,16 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           id: "frogs-toads",
           name: "Frogs & Toads",
           filter: { csvGroups: ["amphibians"], orderNames: ["anura"] },
-
         },
         {
           id: "salamanders-newts",
           name: "Salamanders & Newts",
           filter: { csvGroups: ["amphibians"], orderNames: ["caudata"] },
-
         },
         {
           id: "caecilians",
           name: "Caecilians",
           filter: { csvGroups: ["amphibians"], orderNames: ["gymnophiona"] },
-
         },
       ],
     },
@@ -1303,13 +1240,11 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           id: "ray-finned-fishes",
           name: "Ray-finned Fishes",
           filter: { csvGroups: ["fishes"], classNames: ["actinopterygii"] },
-
         },
         {
           id: "lobe-finned-fishes",
           name: "Lobe-finned Fishes",
           filter: { csvGroups: ["fishes"], classNames: ["sarcopterygii"] },
-
         },
         {
           id: "sharks-rays",
@@ -1324,13 +1259,11 @@ export const TAXONOMY_TREE: TaxonomyNode = {
             classNames: ["chondrichthyes", "elasmobranchii", "holocephali"],
             excludeSpeciesNames: ["isurus desori", "oxyrhina hastalis", "carcharhinus spec"],
           },
-
         },
         {
           id: "jawless-fish",
           name: "Jawless Fish",
           filter: { csvGroups: ["fishes"], classNames: ["myxini", "petromyzonti"] },
-
         },
       ],
     },
@@ -1387,7 +1320,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Own site (iucnssg.org): "leading authority on the status of sharks,
           // rays, and chimaeras" — the entire class Chondrichthyes, repeatedly
           // and explicitly including chimaeras (not just elasmobranchs).
-
           sourceUrl: "https://www.iucnssg.org",
         },
         {
@@ -1399,7 +1331,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Scaridae)" — explicit, both grouper family labels (Epinephelidae
           // was split out of Serranidae, and our data still carries both) plus
           // wrasses and parrotfishes.
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-groupers-and-wrasses-specialist-group",
         },
         {
@@ -1412,7 +1343,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Lethrinidae, Caesionidae. Gerreidae (mojarras) is NOT named
           // anywhere in the group's own materials despite being a similar
           // reef-fish family — deliberately left out, falls to the catch-all.
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-snapper-seabream-and-grunt-specialist-group",
         },
         {
@@ -1429,7 +1359,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // core family) plus Solenostomidae (ghost pipefish), Aulostomidae
           // (trumpetfish), Fistulariidae (cornetfish), and Centriscidae
           // (shrimpfish) — all explicitly named, not just the core family.
-
           sourceUrl: "https://iucn-seahorse.org/",
         },
         {
@@ -1441,7 +1370,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // include revising and submitting assessments of all 300 species of
           // Croaker and Drum Fishes" — the whole family Sciaenidae, no
           // exceptions found.
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-croaker-and-drum-fishes-red-list-authority",
         },
         {
@@ -1454,7 +1382,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // family Salmonidae)... throughout their native range," naming
           // genera across all 3 subfamilies (Salmoninae, Coregoninae,
           // Thymallinae) — the whole family, no carve-outs found.
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-salmonid-specialist-group",
         },
         {
@@ -1470,7 +1397,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // (not just the tuna genera — includes mackerels/bonitos too), and
           // 10 = Istiophoridae (9 species) + monotypic Xiphiidae (swordfish).
           // 51 + 10 = 61, confirming full-family scope for all 3 families.
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-tuna-and-billfish-specialist-group",
         },
         {
@@ -1483,7 +1409,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // = sturgeons; Polyodontidae = paddlefish, only 2 species exist:
           // American paddlefish + the now-extinct Chinese paddlefish), not
           // sturgeons alone.
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-sturgeon-specialist-group",
         },
         {
@@ -1496,7 +1421,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // species. Its own site (a page of iucnffsg.org) was found compromised
           // with injected gambling/casino content during review, so sourceUrl
           // points to the iucn.org directory listing instead.
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-anguillid-eel-specialist-group",
         },
         // Catch-all: NOT a claim on behalf of Freshwater Fish SG (see the
@@ -1519,7 +1443,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
               "anguillidae",
             ],
           },
-
         },
       ],
     },
@@ -1607,7 +1530,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // homepage reports 145,412 accepted names, and this app's own
           // COL_2025 data for taxon_group=molluscs totals ~89,648 rows,
           // matching independent literature (~90,000 valid Recent species).
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-mollusc-specialist-group",
         },
         {
@@ -1627,7 +1549,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // reports ~53,000-53,700 described spider species alone, plus
           // ~2,600-2,900 scorpions, matching this app's own COL_2025 data
           // (~54,938 Araneae + 2,955 Scorpiones).
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-spider-and-scorpion-specialist-group",
         },
         {
@@ -1666,7 +1587,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // estimatedDescribed corrected — the prior figure (14,269)
           // undercounted by ~1.5x against this app's own COL_2025 data for
           // the exact 8-family filter (~21,600-23,000 rows).
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-butterfly-and-moth-specialist-group",
         },
         {
@@ -1689,7 +1609,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // undercounted by ~3x; Orthoptera Species File alone lists
           // ~28,000-29,500 valid species, matching this app's own COL_2025
           // data (~28,701 Orthoptera + 3,439 Phasmida + 2,522 Mantodea).
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-grasshopper-specialist-group",
         },
         {
@@ -1712,7 +1631,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // estimatedDescribed corrected to match the group's own "more than
           // 20,000" figure quoted directly above — the prior value (7,411)
           // directly contradicted it.
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-wild-bee-specialist-group",
         },
         {
@@ -1725,7 +1643,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // estimatedDescribed corrected — the COL_2025-derived figure
           // (6,390) badly undercounted real diversity, especially Trichoptera
           // (~16,000 species alone per the Trichoptera World Checklist).
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-mayfly-stonefly-and-caddisfly-specialist-group",
         },
         {
@@ -1737,7 +1654,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // dragonflies)" — the entire order, both suborders (Anisoptera +
           // Zygoptera), which is exactly this whole Table 1a CSV group (no
           // other order appears in our "dragonflies_and_damselflies" data).
-
           sourceUrl: "https://worlddragonfly.org/",
         },
         {
@@ -1750,7 +1666,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Formicidae — so there's no competing claim to check against).
           // estimatedDescribed corrected — the COL_2025-derived figure
           // (5,976) undercounted real global ant diversity by ~2.7x.
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-ant-specialist-group",
         },
         {
@@ -1881,7 +1796,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // be identified directly and named individually via
           // extraSpeciesNames instead (see below), the same OR escape hatch
           // already used for Antelope SG's out-of-family exceptions.
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-freshwater-crustacean-specialist-group",
         },
         {
@@ -1904,7 +1818,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // revisit if per-species range data ever becomes reliable enough to
           // narrow this correctly. estimatedDescribed corrected — the prior
           // figure (2,330) undercounted real global Syrphidae by ~2.8x.
-
           sourceUrl: "https://iucn-hsg.pmf.uns.ac.rs/",
         },
         {
@@ -1920,7 +1833,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // the standard technical term for "reef-building corals." No
           // source confirms or denies broader Anthozoa inclusion, so the
           // rest is left to the catch-all rather than guessed either way.
-
           sourceUrl: "https://iucncoralsg.org/",
         },
         {
@@ -1930,7 +1842,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Own site (fireflyersinternational.net/iucn): "Fireflies
           // (Coleoptera: Lampyridae)" — the whole family, no narrower
           // carve-out found.
-
           sourceUrl: "https://fireflyersinternational.net/iucn",
         },
         {
@@ -2019,7 +1930,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Scarabaeinae is real but incomplete relative to true global
           // diversity (Wikipedia: "The Scarabaeinae alone comprises more
           // than 5,000 species").
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-dung-beetle-specialist-group",
         },
         {
@@ -2030,7 +1940,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // whole-class mapping, same pattern as Mollusc SG. Class
           // Holothuroidea (sea cucumbers) within the "other_invertebrates"
           // Table 1a CSV group.
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-sea-cucumber-specialist-group",
         },
         {
@@ -2043,7 +1952,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // CSV group (horseshoe crabs are chelicerates, not true
           // crustaceans, despite the common name — already modeled
           // separately in this tree).
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-horseshoe-crab-specialist-group",
         },
         {
@@ -2060,7 +1968,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Acanthobdellida, Branchiobdellida) and aquatic
           // oligochaetes/potworms (Tubificida, Lumbriculida, Enchytraeida,
           // Haplotaxida, etc.) are not earthworms.
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-earthworm-specialist-group",
         },
         {
@@ -2076,7 +1983,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Homoscleromorpha, doesn't appear as a distinct label here — its
           // species are filed under Demospongiae, the older classification
           // still used by this dataset).
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-sponge-specialist-group-2021-2025",
         },
         // Catch-all: a plain "No SSC Group" remainder (NOT a claim on behalf
@@ -2242,7 +2148,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
               "troglomexicanus huastecae", "troglomexicanus perezfarfanteae", "troglomexicanus tamaulipasensis",
             ],
           },
-
         },
       ],
     },
@@ -2345,7 +2250,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // estimatedDescribed corrected — the prior figure (12,767)
           // undercounted by ~2.5x against both literature (Christenhusz &
           // Byng 2016 cite >28,000) and this app's own COL_2025 data.
-
           sourceUrl: "https://www.orchidspecialistgroup.com/about",
         },
         {
@@ -2361,7 +2265,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
                     // estimatedDescribed reconciled with MOSSES_NODE above — both use
           // the identical csvGroups:["mosses"] filter and should never have
           // diverged.
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-bryophyte-specialist-group",
         },
         {
@@ -2385,7 +2288,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Agave, Pachypodium, Hoodia, Dudleya, Fouquieria, ...) that no
           // source could verify with confidence, so they're deliberately
           // left to the catch-all rather than guessed.
-
           sourceUrl: "https://iucn-cssg.org/en/cacti_and_succulents/",
         },
         {
@@ -2401,7 +2303,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // undercounted by ~30-35% against both literature (Dransfield et
           // al., Genera Palmarum, ~2,600 species) and this app's own
           // COL_2025 data.
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-palm-specialist-group",
         },
         {
@@ -2421,7 +2322,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // named in an unverifiable cached source — excluded here pending a
           // first-party confirmation, consistent with treating the
           // well-evidenced core as the safe default.
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-carnivorous-plant-specialist-group",
         },
         {
@@ -2438,7 +2338,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // other group in our list claims them either — a genuine, open
           // gap (3-4 species total) rather than an oversight; they fall to
           // the catch-all.
-
           sourceUrl: "https://threatenedconifers.rbge.org.uk/",
         },
         {
@@ -2449,7 +2348,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // accepted genera" across exactly the 2 families of order
           // Cycadales (Cycadaceae, Zamiaceae) — matches our data exactly, no
           // exceptions found.
-
           sourceUrl: "http://www.cycadgroup.org/",
         },
         {
@@ -2487,7 +2385,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // species," produced by the ~70-member group) and its ongoing 2025
           // regional Red List reassessments, which consistently work from
           // exactly this genus list.
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-seagrass-species-specialist-group",
         },
         // Catch-all: a plain "No SSC Group" remainder (NOT a claim on behalf
@@ -2520,7 +2417,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // CSV-group totals (flowering_plants + gymnosperms +
           // ferns_and_allies + green_algae + red_algae = 404,464) imply once
           // the 8 named sibling groups' current estimates are subtracted.
-
         },
       ],
     },
@@ -2557,7 +2453,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // the entire "mushrooms" CSV group under one group's banner —
           // exactly the kind of overclaim this pilot has consistently
           // avoided elsewhere.
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-cup-fungi-truffles-and-allies-specialist-group",
         },
         {
@@ -2598,7 +2493,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // oomycete, and myxomycete classes) — UNVERIFIED against real data
           // since none currently exists to check against; revisit naming if
           // this ever needs to match a real assessed species.
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-chytrid-zygomycete-downy-mildew-and-myxomycete-specialist",
         },
         {
@@ -2623,7 +2517,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Lichinomycetes, Coniocybomycetes, Candelariomycetes) but weren't
           // confirmed as explicitly in-scope by the group's own materials, so
           // they're left to the catch-all rather than assumed.
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-lichen-specialist-group",
         },
         {
@@ -2640,7 +2533,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Agaricomycetes with no narrower restriction implied. Standard
           // mycological usage: mushrooms/brackets/puffballs collectively
           // describe class Agaricomycetes.
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-mushroom-bracket-and-puffball-specialist-group",
         },
         {
@@ -2691,7 +2583,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // filter happens to match in our own dataset, not a real-world
           // described-species estimate — same category error as Dung Beetle
           // SG's first-pass estimate).
-
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-rusts-and-smuts-specialist-group",
         },
         // Catch-all: a plain "No SSC Group" remainder. Kept in sync
@@ -2716,14 +2607,12 @@ export const TAXONOMY_TREE: TaxonomyNode = {
             ],
             excludeClasses: ["chytridiomycetes", "mucoromycetes", "zoopagomycetes", "oomycetes", "myxomycetes", "lecanoromycetes", "agaricomycetes"],
           },
-
         },
       ],
     },
 
     // ─── VIRTUAL GROUPING NODES ────────────────────────────────────────
     // These aggregate Table 1a groups for the default view
-
     {
       id: "invertebrates",
       name: "Invertebrates",
@@ -2743,7 +2632,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         prefixTree(OTHER_INVERTEBRATES_NODE, "inv-"),
       ],
     },
-
     {
       id: "plantae",
       name: "Plants",
@@ -2761,7 +2649,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         prefixTree(RED_ALGAE_NODE, "pl-"),
       ],
     },
-
     {
       id: "fungi",
       name: "Fungi & Protists",

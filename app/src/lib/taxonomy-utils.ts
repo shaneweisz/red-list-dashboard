@@ -339,7 +339,10 @@ const capitalize = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1)
 // Binomial convention: capitalize the genus, leave the species epithet lowercase.
 const capitalizeSpeciesName = (s: string): string => s.split(" ").map((w, i) => (i === 0 ? capitalize(w) : w)).join(" ");
 
-export type FilterRank = "class" | "order" | "family" | "genus" | "species";
+// "remainder": a catch-all/remainder node (e.g. "Other Mammals", any "No/Other SSC
+// Group") whose filter has no positive dimension to enumerate, only exclude*
+// clauses — see primaryFilterRank below.
+export type FilterRank = "class" | "order" | "family" | "genus" | "species" | "remainder";
 
 // name → CoL taxon id, built by scripts/build-col-taxon-ids.ts from the taxonomy tree
 // + backbone.parquet. Only covers names actually referenced by a SpeciesFilter
@@ -378,6 +381,19 @@ export function primaryFilterRank(filter: SpeciesFilter): { rank: FilterRank; la
   if (filter.families?.length) return { rank: "family", label: "Family" };
   if (filter.genera?.length) return { rank: "genus", label: "Genus" };
   if (filter.speciesNames?.length) return { rank: "species", label: "Species" };
+  // Catch-all/remainder node (excludeOrders/excludeClasses/excludeFamilies/
+  // excludeGenera/excludeSpeciesNames only, no positive dimension) — mirrors
+  // isExcludeOnlyCatchAll in scripts/build-taxa-summary.ts, which computes exactly
+  // one colBreakdown bucket (keyed by the node's own name) for these nodes.
+  if (
+    filter.excludeOrders?.length ||
+    filter.excludeClasses?.length ||
+    filter.excludeFamilies?.length ||
+    filter.excludeGenera?.length ||
+    filter.excludeSpeciesNames?.length
+  ) {
+    return { rank: "remainder", label: "Group" };
+  }
   return null;
 }
 
@@ -433,6 +449,12 @@ export function matchesBreakdownName(
       return ((row.scientific_name ?? "").trim().split(/\s+/)[0] ?? "").toLowerCase() === n;
     case "species":
       return (row.scientific_name ?? "").trim().toLowerCase() === n;
+    case "remainder":
+      // A remainder bucket represents the WHOLE node's filter, not one narrower
+      // name within it — speciesMatchesNode (checked alongside this, see
+      // SpeciesListPanel) already fully qualifies membership, so no further
+      // narrowing is meaningful here.
+      return true;
   }
 }
 

@@ -343,14 +343,35 @@ async function attachColCounts(summaries: Record<string, NodeSummary[]>): Promis
       n++;
 
       const dim = COL_SPECIES_NAME_OVERRIDES[node.id] ? null : primaryDimension(node.filter);
-      if (dim) {
+      // A catch-all/remainder node (e.g. "Other Mammals", any "No/Other SSC Group")
+      // has no positive dimension to enumerate — its filter is defined entirely by
+      // excludeOrders/excludeClasses/excludeGenera/excludeFamilies/excludeSpeciesNames
+      // instead. Without a fallback, primaryDimension returns null and the whole
+      // per-name breakdown block below is skipped, leaving these nodes with no
+      // colBreakdown at all — the frontend then has no click-through species list or
+      // "No 1:1 CoL Match" bucket for them, unlike every named node (bug report,
+      // 2026-07-20: "Other Mammals" — a real one-species remainder like Perissodactyla
+      // gets a bucket, this doesn't). Fixed by computing exactly one bucket for the
+      // node's own full (unnarrowed) filter, labeled with its own name, whenever
+      // there's no positive dimension but at least one exclude* clause is present.
+      const isExcludeOnlyCatchAll =
+        !dim &&
+        Boolean(
+          node.filter.excludeOrders?.length ||
+            node.filter.excludeClasses?.length ||
+            node.filter.excludeFamilies?.length ||
+            node.filter.excludeGenera?.length ||
+            node.filter.excludeSpeciesNames?.length,
+        );
+      if (dim || isExcludeOnlyCatchAll) {
         const breakdown: {
           name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[];
           noMatchDetails?: NoMatchDetail[];
           splitDetails?: SplitDetail[];
         }[] = [];
-        for (const name of dim.names) {
-          const narrowed: NodeFilter = { ...node.filter, [dim.field]: [name] };
+        const bucketNames = dim ? dim.names : [node.name];
+        for (const name of bucketNames) {
+          const narrowed: NodeFilter = dim ? { ...node.filter, [dim.field]: [name] } : node.filter;
           const bRows = await (await conn.run(`
             SELECT count(*) FILTER (in_base AND ${universe} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL}) AS n,
                    count(*) FILTER (in_base AND ${universe} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL} AND col_id NOT IN (SELECT col_id FROM assessed_cids)) AS ne
