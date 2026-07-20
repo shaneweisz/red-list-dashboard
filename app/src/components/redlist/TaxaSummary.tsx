@@ -1094,6 +1094,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   // countries on in either order produces the same key (and cache-friendly
   // URL), not one per click order.
   const countryKey = countryScoped ? [...countryScope!].sort().join(",") : "";
+  // Kept in sync every render (plain assignment, not an effect — refs don't
+  // need one) so the promise-chained fetches below (toggleExpand, Table 1a,
+  // SSC groups — unlike the main fetchTaxa effect above, these aren't
+  // effect-cleanup-cancellable) can tell, once their response finally
+  // resolves, whether countryKey has already moved on to a different
+  // country and skip applying a now-stale result.
+  const countryKeyRef = useRef(countryKey);
+  countryKeyRef.current = countryKey;
   // Display name for the atop-table label: the one country's name, the whole
   // region's name if the selection exactly matches one (e.g. picked via the
   // region dropdown, or by happening to cmd-click every one of its countries),
@@ -1193,10 +1201,15 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     // Fetch subgroup data if not already loaded (read from refs to avoid stale closures)
     if (!subgroupDataRef.current[taxonId] && !loadingSubgroupsRef.current.has(taxonId)) {
       setLoadingSubgroups((prev) => new Set(prev).add(taxonId));
+      const requestCountryKey = countryKey;
       try {
         const countryQs = countryKey ? `&country=${encodeURIComponent(countryKey)}` : "";
         const res = await fetch(`/api/redlist/taxa-subgroups?nodeId=${taxonId}${countryQs}`);
-        if (res.ok) {
+        // Bail if the country changed while this was in flight — countryKey
+        // changing already clears subgroupData wholesale (see the effect
+        // above), and applying this now-stale response would silently
+        // re-add wrongly-scoped numbers for taxonId right after that clear.
+        if (res.ok && countryKeyRef.current === requestCountryKey) {
           const data = await res.json();
           setSubgroupData((prev) => ({ ...prev, [taxonId]: data.subgroups }));
         }
@@ -1300,10 +1313,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     if (!table1aMode || table1aData || table1aFetchStartedRef.current) return;
     table1aFetchStartedRef.current = true;
     setTable1aLoading(true);
+    const requestCountryKey = countryKey;
     const countryQs = countryKey ? `&country=${encodeURIComponent(countryKey)}` : "";
     fetch(`/api/redlist/taxa-summary?table1a=true${countryQs}`)
       .then(res => res.ok ? res.json() : null)
-      .then(data => { if (data) setTable1aData(data.sections); })
+      // countryKey changing already resets table1aData/table1aFetchStartedRef
+      // (see the effect above) so a fresh fetch can start — but doesn't cancel
+      // THIS one, so skip applying it if it resolves after that happened.
+      .then(data => { if (data && countryKeyRef.current === requestCountryKey) setTable1aData(data.sections); })
       .finally(() => setTable1aLoading(false));
   }, [table1aMode, table1aData, countryKey]);
 
@@ -1318,6 +1335,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     if (!sscMode || sscData || sscFetchStartedRef.current) return;
     sscFetchStartedRef.current = true;
     setSscLoading(true);
+    const requestCountryKey = countryKey;
     const countryQs = countryKey ? `&country=${encodeURIComponent(countryKey)}` : "";
     Promise.all(
       SSC_SECTIONS.map((section) =>
@@ -1352,7 +1370,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           })
       )
     )
-      .then((sections) => setSscData(sections.filter((s): s is Table1aSectionData => s != null)))
+      // Same staleness guard as the Table 1a fetch above — countryKey
+      // changing already reset sscData/sscFetchStartedRef, but didn't cancel
+      // this in-flight request.
+      .then((sections) => { if (countryKeyRef.current === requestCountryKey) setSscData(sections.filter((s): s is Table1aSectionData => s != null)); })
       .finally(() => setSscLoading(false));
   }, [sscMode, sscData, countryKey]);
 
@@ -1407,22 +1428,32 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     //   expands taxa (mutates expandedTaxa), which would re-trigger the effect
   }, [selectedSubgroups]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Aborts the in-flight request whenever countryKey changes again before it
+  // resolves — without this, rapid country hovering could fire many quick
+  // requests whose responses race each other, and whichever happened to
+  // resolve LAST (not necessarily the one for the currently-hovered/
+  // selected country) would win and overwrite `taxa` with stale, wrongly-
+  // scoped numbers — visibly "stuck" even after the hover preview and its
+  // pill had already cleared back to no selection.
   useEffect(() => {
+    const controller = new AbortController();
     async function fetchTaxa() {
       setLoading(true);
       try {
         const countryQs = countryKey ? `?country=${encodeURIComponent(countryKey)}` : "";
-        const res = await fetch(`/api/redlist/taxa-summary${countryQs}`);
+        const res = await fetch(`/api/redlist/taxa-summary${countryQs}`, { signal: controller.signal });
         if (!res.ok) throw new Error("Failed to load taxa");
         const data = await res.json();
         setTaxa(data.taxa);
       } catch (err) {
+        if (controller.signal.aborted) return;
         setError(err instanceof Error ? err.message : "Failed to load taxa");
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     }
     fetchTaxa();
+    return () => controller.abort();
   }, [countryKey]);
 
   // Only the very first load (no data yet) shows the full-table skeleton below —
@@ -2525,7 +2556,16 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           included, at the same proportions just smaller, rather than letting
           columns get cramped or triggering horizontal scroll). */}
       {countryMode && <div>{countryModeContent}</div>}
-      <div className={countryMode ? "min-w-0 flex flex-col h-full" : "contents"}>
+      <div className={countryMode ? "min-w-0 flex flex-col h-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-sm p-3" : "contents"}>
+        {/* The pills + table both live inside this same bordered/padded card
+            now — matching WorldMap's own card (border/rounded-xl/p-3
+            wrapping its "Country" heading+toolbar, then its content) so both
+            components' outer boxes start flush at the top of the grid row.
+            Previously only the scrollRef box below had this border/padding,
+            with the (unboxed) pills sitting above it — the map's card
+            started at the row's top edge while the table's bordered box
+            started lower, below that gap, even though their total heights
+            already matched via topSpacerHeight. */}
         {countryMode && countryPillsContent}
         {/* Country name atop the table — shown whenever a country is scoped
             OUTSIDE Country View (the normal browsing view's "France ×" chip,
@@ -2545,7 +2585,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             )}
           </div>
         )}
-        <div ref={scrollRef} className={`relative bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto ${countryMode ? "flex-1 [zoom:.75]" : ""}`}>
+        <div ref={scrollRef} className={countryMode ? "relative overflow-x-auto flex-1 [zoom:.75]" : "relative bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto"}>
           {/* Country-switch refetch indicator — see the loading-gate comment
               above renderRow's skeleton branch for why this doesn't blank the table. */}
           {loading && taxa.length > 0 && (
@@ -2558,7 +2598,15 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           )}
           <table className="w-full">
             {renderHead()}
-        <tbody>
+        {/* Dims every row's numbers (not just a corner spinner) while a
+            country-switch refetch is in flight — the row-level content below
+            deliberately keeps showing the previous country's numbers during
+            that refetch (see the skeleton-gate comment above) rather than
+            blanking to a skeleton, so without this there's no visual cue
+            that any given number might already be stale. Scoped to
+            !flatMode: Table 1a/SSC's own refetch (flatLoading) already
+            blanks to a loading row instead of leaving stale content up. */}
+        <tbody className={!flatMode && loading && taxa.length > 0 ? "opacity-50 transition-opacity duration-200" : "transition-opacity duration-200"}>
           {flatMode ? (
             /* Table 1a / SSC groups view: sections with headers, individual rows, subtotals */
             flatLoading ? (
