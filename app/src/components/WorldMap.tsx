@@ -245,6 +245,31 @@ interface WorldMapProps {
   mapSortKey?: MapSortKey;
   mapSortDirection?: "asc" | "desc";
   onMapSortChange?: (key: MapSortKey, direction: "asc" | "desc") => void;
+  // When true, hovering a country calls onCountryHover (in addition to the
+  // tooltip), so e.g. the country-view landing page's table can preview a
+  // country as you scan the map rather than requiring a click. Deliberately
+  // separate from onCountrySelect/onClick — hover previews, it doesn't
+  // select, so the caller can keep its real (locked-in) selection state
+  // untouched by mouse movement. Default false — the other WorldMap usages
+  // (Charts row 2's country filter, the CITES map) still expect click-to-
+  // select only.
+  selectOnHover?: boolean;
+  // Called with the hovered country's code on mouseenter, and null on
+  // mouseleave, only while selectOnHover is true.
+  onCountryHover?: (countryCode: string | null) => void;
+  // When set, reserves a blank strip of exactly this many px right below
+  // the toolbar row — matching (via the caller's own ResizeObserver
+  // measurement, not a fixed guess) the real height of the selection-chip
+  // row Country View's paired table reserves above itself, so both sides
+  // of that grid always have the same "extra" natural height and neither
+  // needs align-items: stretch to inflate it to match the other — a fixed
+  // guess only covers the common 1-line-of-chips case; once chips wrap to
+  // a second line the table's column grows past it, and since the
+  // choropleth renders at a fixed projection scale (its content doesn't
+  // grow to fill extra height), stretching the map's card to match left a
+  // visible gap under the map. Omitted for the other WorldMap usages,
+  // which have no paired chip row.
+  topSpacerHeight?: number;
 }
 
 const DEFAULT_CENTER: [number, number] = [10, 10];
@@ -252,7 +277,7 @@ const DEFAULT_ZOOM = 1.0;
 const MIN_ZOOM = 1.0;
 const MAX_ZOOM = 8.0;
 
-function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, precomputedStatsTotal, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, endemicsOnly = false, onEndemicsToggle, footer, showGbifToggle = true, showOutdatedMode = true, mapViewMode, onMapViewModeChange, mapSortKey, mapSortDirection, onMapSortChange }: WorldMapProps) {
+function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, precomputedStatsTotal, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, endemicsOnly = false, onEndemicsToggle, footer, showGbifToggle = true, showOutdatedMode = true, mapViewMode, onMapViewModeChange, mapSortKey, mapSortDirection, onMapSortChange, selectOnHover = false, onCountryHover, topSpacerHeight }: WorldMapProps) {
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoveredCountryCode, setHoveredCountryCode] = useState<string | null>(null);
   const [speciesStats, setSpeciesStats] = useState<CountryStats>(precomputedStats || {});
@@ -479,6 +504,7 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
   const hoveredSpeciesStats = hoveredCountryCode ? speciesStats[hoveredCountryCode] : null;
   const hoveredTotalStats = hoveredCountryCode ? precomputedStatsTotal?.[hoveredCountryCode] : null;
   const hoveredOccurrenceStats = hoveredCountryCode && occurrenceStats ? occurrenceStats[hoveredCountryCode] : null;
+
   return (
     <div className="relative bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 p-3 h-full flex flex-col">
       {/* Header with controls */}
@@ -540,16 +566,20 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
             )}
           </div>
           {/* Color mode: Species and % Outdated are always accurate; GBIF only when
-              no extra filters are active (its counts aren't filterable per-country) */}
-          <select
-            value={colorMode}
-            onChange={(e) => setColorMode(e.target.value as ColorMode)}
-            className="text-[10px] bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          >
-            <option value="species">{speciesLabel}</option>
-            {showOutdatedMode && <option value="outdated">% Outdated</option>}
-            {showGbifToggle && <option value="occurrences"># GBIF Obs</option>}
-          </select>
+              no extra filters are active (its counts aren't filterable per-country).
+              Only meaningful for the choropleth itself — hidden in List view, which
+              shows every column directly rather than color-coding by just one. */}
+          {viewMode === "map" && (
+            <select
+              value={colorMode}
+              onChange={(e) => setColorMode(e.target.value as ColorMode)}
+              className="text-[10px] bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="species">{speciesLabel}</option>
+              {showOutdatedMode && <option value="outdated">% Outdated</option>}
+              {showGbifToggle && <option value="occurrences"># GBIF Obs</option>}
+            </select>
+          )}
           {onEndemicsToggle && (
             <button
               onClick={onEndemicsToggle}
@@ -578,6 +608,8 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
           )}
         </div>
       </div>
+
+      {topSpacerHeight != null && <div className="mb-1.5" style={{ height: topSpacerHeight }} />}
 
       {/* Hover tooltip (map view only) */}
       {viewMode === "map" && hoveredCountry && (
@@ -711,10 +743,18 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
                       onMouseEnter={() => {
                         setHoveredCountry(countryName);
                         setHoveredCountryCode(alpha2);
+                        if (selectOnHover && alpha2) {
+                          onCountryHover?.(alpha2);
+                        }
                       }}
                       onMouseLeave={() => {
                         setHoveredCountry(null);
                         setHoveredCountryCode(null);
+                        // Unconditional (not gated on selectOnHover, unlike
+                        // onMouseEnter above) — self-heals a stale preview
+                        // left over from before a country got locked in, so
+                        // it can't resurface later if the lock is cleared.
+                        onCountryHover?.(null);
                       }}
                       onClick={(event) => {
                         if (alpha2) {

@@ -336,10 +336,11 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // Filters synced with URL search params for shareable links
   const {
     layoutMode, setLayoutMode,
+    originLayout,
     navigateToTaxonSubgroup,
+    exitCountryModeForTaxon,
     returnToLayoutMode,
     enterCountryDrilldown,
-    returnToCountryList,
     selectedTaxa, setSelectedTaxa,
     selectedSubgroups, setSelectedSubgroups,
     selectedCategories, setSelectedCategories,
@@ -453,15 +454,20 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const handleToggleTaxon = useCallback((taxonId: string, event: React.MouseEvent) => {
     const isMulti = event.metaKey || event.ctrlKey;
 
-    // Clicking any taxon row while browsing a country-scoped bare summary
-    // table (Country view, one country selected, no taxon picked yet — see
-    // TaxaSummary's countryMode rendering) exits to the full charts+species-
-    // table view, still scoped to that country (selectedCountries untouched).
-    // Safe to fire alongside the setSelectedTaxa call below without the
-    // fromPopstateRef trick enterCountryDrilldown needs: this is always an
-    // empty->non-empty taxa transition, which RedListView's own "reset filters
-    // on taxa change" effect already no-ops on (see its `prev.size === 0`
-    // guard), so selectedCountries survives untouched either way.
+    // Clicking a specific taxon row while browsing a country-scoped bare
+    // summary table (Country view, one country selected, no taxon picked yet
+    // — see TaxaSummary's countryMode rendering) exits to the full charts+
+    // species-table view, still scoped to that country (selectedCountries
+    // untouched). Atomic (one history push) via exitCountryModeForTaxon, so
+    // a single "back" press cleanly restores the Country View landing page
+    // instead of layoutMode and taxa unwinding as separate history entries.
+    // The "all" row and multi-select (ctrl/cmd-click) cases fall through to
+    // the general path below instead — rarer, and "all" isn't a real taxon
+    // drill-down (see its own branch just below).
+    if (layoutMode === "country" && taxonId !== "all" && !isMulti) {
+      exitCountryModeForTaxon(taxonId);
+      return;
+    }
     if (layoutMode === "country") setLayoutMode(null);
 
     // "all" row behavior:
@@ -470,6 +476,20 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     // Disabled in new-assessments mode (NE dataset too large for "all")
     if (taxonId === "all") {
       if (selectedTaxa.size > 0 || selectedSubgroups.size > 0) {
+        if (originLayout === "country") {
+          // Came from Country View's landing page via a taxon drill-down
+          // (exitCountryModeForTaxon) — return there instead of the generic
+          // default view. See originLayout's own doc in useFilterParams.ts.
+          // fromPopstateRef first: this taxa non-empty→empty transition is
+          // part of one atomic, fully-specified navigation (countries stays
+          // as-is), not a generic "taxon deselected" — without the ref, the
+          // "reset filters on taxa change" effect below would immediately
+          // clear the very countries this navigation means to keep (see its
+          // own comment on enterCountryDrilldown for the same escape hatch).
+          fromPopstateRef.current = true;
+          returnToLayoutMode("country");
+          return;
+        }
         // Return to landing page
         setSelectedSubgroups(new Set());
         setSelectedTaxa(new Set());
@@ -509,7 +529,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       setSelectedSubgroups(new Set());
       return new Set([taxonId]);
     });
-  }, [setSelectedTaxa, setSelectedSubgroups, selectedTaxa, selectedSubgroups, isNewAssessments, searchFilter, urlSpecies, clearAllFilters, layoutMode, setLayoutMode]);
+  }, [setSelectedTaxa, setSelectedSubgroups, selectedTaxa, selectedSubgroups, isNewAssessments, searchFilter, urlSpecies, clearAllFilters, layoutMode, setLayoutMode, exitCountryModeForTaxon, originLayout, returnToLayoutMode, fromPopstateRef]);
 
   // Reset all other filters when taxa selection changes
   const prevTaxaRef = useRef(selectedTaxa);
@@ -2220,25 +2240,72 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // each species once regardless of how many of these codes it matches (see
   // country-taxa-summary-duckdb.ts's countriesWhere), so there's no reason to
   // special-case region vs. multi-select here.
-  const countryScope = selectedCountries.size > 0 ? [...selectedCountries] : null;
+  // Hover preview — separate from selectedCountries (the real, locked
+  // selection) so scanning the map with the mouse never itself writes to
+  // URL-synced state. Only consulted as a countryScope fallback below when
+  // nothing's actually locked yet; once selectedCountries is non-empty this
+  // is ignored entirely, matching "hover only works if no country is
+  // selected" (see handleCountryDrilldown/selectOnHover).
+  const [hoverPreviewCountry, setHoverPreviewCountry] = useState<string | null>(null);
 
-  // Country view's own map/list click — same plain-click-replaces/ctrl-click-
-  // toggles gesture as handleCountrySelect (the normal browsing view's country
-  // filter), just routed through enterCountryDrilldown so the country change
-  // stays atomic with clearing taxa/subgroups (see its own comment).
+  // Measures the actual rendered height of the pills row below (it wraps to
+  // multiple lines once enough countries are selected, or long names push
+  // it past one line) so WorldMap's matching top spacer — see
+  // countryModeContent's topSpacerHeight — can reserve exactly that much,
+  // not a fixed guess. A fixed guess only matched the common 1-pill case;
+  // once pills wrapped to two lines, the table's column grew past what the
+  // map's spacer accounted for, and the paired grid's align-items: stretch
+  // inflated the map's card to match without its (fixed-projection-scale)
+  // content growing to fill it — the same gap-under-the-map problem this
+  // whole spacer exists to avoid, just reappearing at the wrap threshold.
+  // ResizeObserver (not just a selection-keyed effect) so a pure window-
+  // resize reflow — more/fewer pills fitting per line at the same
+  // selection — is caught too.
+  const pillsRef = useRef<HTMLDivElement>(null);
+  const [pillsHeight, setPillsHeight] = useState(34);
+  useEffect(() => {
+    const el = pillsRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      const height = entries[0]?.contentRect.height;
+      if (height != null) setPillsHeight(Math.max(34, Math.ceil(height)));
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const countryScope = selectedCountries.size > 0 ? [...selectedCountries]
+    : hoverPreviewCountry ? [hoverPreviewCountry]
+    : null;
+
+  // Country view's own map/list select. Before anything's picked, hovering
+  // previews the table (see WorldMap's selectOnHover, gated below on
+  // selectedCountries.size === 0 so it stops once a country's locked in).
+  // The first click locks in a single country and switches off hover; every
+  // click after that toggles a country in/out of the selection, so you can
+  // build up a multi-select by clicking (no ctrl/cmd needed) — clicking the
+  // already-sole-selected country again clears back to the empty/hover state.
+  // ctrl/cmd-click still toggles directly even before anything's locked, for
+  // building a multi-select from scratch without an initial single pick.
+  // Routed through enterCountryDrilldown so the country change stays atomic
+  // with clearing taxa/subgroups (see its own comment).
   const handleCountryDrilldown = useCallback(
     (code: string, _name: string, event: React.MouseEvent) => {
       const isMultiSelect = event.metaKey || event.ctrlKey;
+      // A real click always supersedes any leftover hover preview — without
+      // this, clearing a locked selection back to empty (self-toggle-off)
+      // would leave the table reading a stale hoverPreviewCountry from
+      // before the lock, since countryScope falls back to it whenever
+      // selectedCountries is empty (see its definition above).
+      setHoverPreviewCountry(null);
       enterCountryDrilldown(prev => {
-        if (isMultiSelect) {
-          const next = new Set(prev);
-          if (next.has(code)) next.delete(code);
-          else next.add(code);
-          return next;
-        } else {
-          if (prev.size === 1 && prev.has(code)) return new Set();
+        if (prev.size === 0 && !isMultiSelect) {
           return new Set([code]);
         }
+        const next = new Set(prev);
+        if (next.has(code)) next.delete(code);
+        else next.add(code);
+        return next;
       });
     },
     [enterCountryDrilldown]
@@ -2280,6 +2347,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     <WorldMap
       selectedCountries={selectedCountries}
       onCountrySelect={handleCountryDrilldown}
+      selectOnHover={selectedCountries.size === 0}
+      onCountryHover={setHoverPreviewCountry}
+      topSpacerHeight={pillsHeight}
       precomputedStats={countryLandingStats ?? {}}
       selectedTaxa={selectedTaxa}
       speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
@@ -2294,6 +2364,66 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     />
   );
 
+  // Selection chips shown in normal flow above the table. Wrapped in its
+  // own min-h-[34px] div with pillsRef attached — that's the box
+  // ResizeObserver measures above to drive WorldMap's topSpacerHeight, so
+  // the map's matching blank spacer always reserves exactly this box's
+  // real height (min 34px, taller once chips wrap to a second line) rather
+  // than a fixed guess that only held for the common 1-pill case. The
+  // wrapper renders unconditionally (even with nothing to show) so the
+  // measurement is always live; only the actual chip row inside is
+  // conditional. One chip per selected country (not collapsed into a
+  // region name, unlike the atop-table "France ×" chip elsewhere), each
+  // individually removable, plus "Clear all" once there's more than one.
+  // Before anything's locked, hovering shows its own preview chip (dashed,
+  // non-removable — there's nothing to remove yet, moving the mouse away
+  // already clears it) so the table's live hover-preview has a visual
+  // anchor. Reuses handleCountryDrilldown for removal — clicking a chip's ✕
+  // for a country that's already selected always toggles it off, whichever
+  // branch handleCountryDrilldown takes.
+  const countryPillsContent = (
+    <div ref={pillsRef} className="min-h-[34px] mb-1.5">
+      {(selectedCountries.size > 0 || hoverPreviewCountry) && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {selectedCountries.size > 0 ? (
+            <>
+              {[...selectedCountries]
+                .map(code => ({ code, name: ALPHA2_TO_NAME[code] ?? code }))
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map(({ code, name }) => (
+                  <span
+                    key={code}
+                    className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-sm text-zinc-700 dark:text-zinc-300 max-w-full"
+                  >
+                    <span className="truncate">{name}</span>
+                    <button
+                      onClick={(e) => handleCountryDrilldown(code, name, e)}
+                      className="shrink-0 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                      title={`Remove ${name}`}
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ))}
+              {selectedCountries.size > 1 && (
+                <button
+                  onClick={() => { enterCountryDrilldown(new Set()); setHoverPreviewCountry(null); }}
+                  className="text-sm text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 underline transition-colors"
+                >
+                  Clear all
+                </button>
+              )}
+            </>
+          ) : (
+            <span className="inline-flex items-center pl-3 pr-3 py-1 rounded-full bg-white dark:bg-zinc-800 border border-dashed border-zinc-300 dark:border-zinc-600 text-sm text-zinc-500 dark:text-zinc-400 max-w-full">
+              <span className="truncate">{ALPHA2_TO_NAME[hoverPreviewCountry!] ?? hoverPreviewCountry}</span>
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-4 min-w-0">
       {/* Always show Taxa Summary table */}
@@ -2306,9 +2436,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         layoutMode={layoutMode}
         onLayoutModeChange={setLayoutMode}
         countryModeContent={countryModeContent}
+        countryPillsContent={countryPillsContent}
         countryScope={countryScope}
-        onExitCountryScope={returnToCountryList}
-        onClearCountryScope={() => setSelectedCountries(new Set())}
+        onClearCountryScope={() => { setSelectedCountries(new Set()); setHoverPreviewCountry(null); }}
         onToggleSubgroup={(sgId) => {
           // Clicking a view root ancestor → clear subgroups to show its children.
           // If the currently-selected subgroup is an SSC group, we got here by

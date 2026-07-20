@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { FaInfoCircle, FaExpandAlt, FaCompressAlt, FaChevronRight } from "react-icons/fa";
+import { FaInfoCircle, FaChevronRight } from "react-icons/fa";
 
 import { HiOutlineAdjustmentsHorizontal } from "react-icons/hi2";
 import TaxaIcon from "@/components/TaxaIcon";
@@ -78,9 +78,6 @@ const IUCN_SOURCE_URL = "https://nc.iucnredlist.org/redlist/content/attachment_f
 // SSC groups mode — one section per taxon that has an SSC pilot built out.
 // Add an entry here (nodeId, parentTaxon, title, catch-all id) when a new
 // taxon's SSC groups are added.
-// Named groups shown per section before collapsing behind "Show all" — the
-// catch-all row is never counted against this and always stays visible.
-const SSC_SECTION_COLLAPSE_SIZE = 5;
 const SSC_SECTIONS: { nodeId: string; parentTaxon: string; title: string; catchAllId: string }[] = [
   { nodeId: "ssc-groups", parentTaxon: "mammals", title: "MAMMAL SPECIALIST GROUPS", catchAllId: "ssc-other-mammals" },
   { nodeId: "ssc-reptile-groups", parentTaxon: "reptiles", title: "REPTILE SPECIALIST GROUPS", catchAllId: "ssc-snake-lizard-rla" },
@@ -149,18 +146,21 @@ interface Props {
    * owns the country-stats data and click-through wiring), kept out of this
    * component so it doesn't need its own dynamic WorldMap import. */
   countryModeContent?: React.ReactNode;
+  /** Rendered above BOTH the map and the table in Country View — the current
+   * selection as removable name chips (built by RedListView, which owns the
+   * selection/hover state). Living above the whole grid rather than inside
+   * either column means neither the map nor the (zoomed) table ever resizes
+   * as chips are added/removed while hovering/locking/clearing countries. */
+  countryPillsContent?: React.ReactNode;
   /** Set whenever at least one country is selected — independent of layoutMode,
    * so selecting countries anywhere (not just via the Country view landing page)
    * scopes this table's own fetches too. One country, a whole region, or an
    * arbitrary multi-select are all just "the current set of codes" here. */
   countryScope?: string[] | null;
-  /** Clears the country selection and re-enters the Country view landing page —
-   * used for the clear button atop the table while layoutMode is "country". */
-  onExitCountryScope?: () => void;
   /** Clears the country selection without changing layoutMode — used for the
-   * same clear button atop the table once a taxon's been clicked and this has
-   * exited to the full view (returning to the Country view landing page from
-   * there would be a surprising jump). */
+   * "France ×" chip atop the table when a country's scoped outside Country
+   * View. Country View's own equivalent lives on the map now (see WorldMap's
+   * country chips), not routed through here. */
   onClearCountryScope?: () => void;
 }
 
@@ -1049,7 +1049,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
   );
 }
 
-export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", layoutMode, onLayoutModeChange, countryModeContent, countryScope, onExitCountryScope, onClearCountryScope }: Props) {
+export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", layoutMode, onLayoutModeChange, countryModeContent, countryPillsContent, countryScope, onClearCountryScope }: Props) {
   const isNewAssessments = viewMode === "new-assessments";
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1233,12 +1233,12 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         }}
         className="text-xs bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
       >
-        <option value="taxonomic">Standard view</option>
-        <option value="table1a">Table 1a view</option>
-        <option value="ssc">SSC group view</option>
+        <option value="taxonomic">By Taxon</option>
         <option value="country" disabled={isNewAssessments} title={isNewAssessments ? "Not available for New Assessments — Not Evaluated species have no location data" : undefined}>
-          Country view
+          By Country
         </option>
+        <option value="ssc">By SSC Specialist Group (WIP)</option>
+        <option value="table1a">Table 1a</option>
       </select>
     </span>
   );
@@ -1290,34 +1290,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   }, [taxa, applySource]);
   const perTaxa = useMemo(() => taxa.filter((t) => t.id !== "all").map(t => applySource(t, t.id)), [taxa, applySource]);
 
-  // Expand all expandable taxa
-  const expandAll = useCallback(async () => {
-    const expandableTaxaIds = perTaxa.filter(t => isExpandable(t.id)).map(t => t.id);
-    setExpandedTaxa(new Set(expandableTaxaIds));
-    for (const taxonId of expandableTaxaIds) {
-      if (!subgroupDataRef.current[taxonId] && !loadingSubgroupsRef.current.has(taxonId)) {
-        setLoadingSubgroups((prev) => new Set(prev).add(taxonId));
-        const countryQs = countryKey ? `&country=${encodeURIComponent(countryKey)}` : "";
-        fetch(`/api/redlist/taxa-subgroups?nodeId=${taxonId}${countryQs}`)
-          .then(res => res.ok ? res.json() : null)
-          .then(data => {
-            if (data) setSubgroupData((prev) => ({ ...prev, [taxonId]: data.subgroups }));
-          })
-          .finally(() => {
-            setLoadingSubgroups((prev) => {
-              const next = new Set(prev);
-              next.delete(taxonId);
-              return next;
-            });
-          });
-      }
-    }
-  }, [perTaxa, countryKey]);
-
-  const collapseAll = useCallback(() => {
-    setExpandedTaxa(new Set());
-  }, []);
-
   // Fetch-if-needed, driven by table1aMode rather than a click handler, so it
   // also runs when the mode is entered via URL load or browser back/forward.
   // Uses a ref (not the loading state) to gate the fetch — including the
@@ -1339,19 +1311,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   // the precomputed SSC wrapper nodes' children instead of the top-level
   // Table 1a CSV groups (see SSC_SECTIONS above).
   const [sscData, setSscData] = useState<Table1aSectionData[] | null>(null);
-  // Which SSC sections (keyed by title) are expanded past the first
-  // SSC_SECTION_COLLAPSE_SIZE rows — collapsed by default so a taxon with 36
-  // groups (mammals) doesn't dwarf the page; the catch-all row always shows
-  // regardless of this state (see the render loop below).
-  const [expandedSscSections, setExpandedSscSections] = useState<Set<string>>(new Set());
-  const toggleSscSection = useCallback((title: string) => {
-    setExpandedSscSections((prev) => {
-      const next = new Set(prev);
-      if (next.has(title)) next.delete(title);
-      else next.add(title);
-      return next;
-    });
-  }, []);
   const [sscLoading, setSscLoading] = useState(false);
   const sscFetchStartedRef = useRef(false);
 
@@ -1416,8 +1375,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     sscFetchStartedRef.current = false;
     setSubgroupData({});
   }, [countryKey]);
-
-  const allExpanded = useMemo(() => perTaxa.filter(t => isExpandable(t.id)).every(t => expandedTaxa.has(t.id)), [perTaxa, expandedTaxa]);
 
   // Collapse all when returning to landing page (no taxa selected)
   useEffect(() => {
@@ -2533,15 +2490,28 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       </div>,
       document.body
     )}
-    {/* Country view: map on the left third, taxa table on the right two-thirds.
+    {/* Country view: map on the left half, taxa table on the right half.
         The table always uses the plain 3-column style in this mode
         (countryStyleColumns, derived from layoutMode — see its definition
-        above), whether or not a country is picked yet. The selected country's
-        identity shows atop the table itself (below) in both this landing mode
-        and, once a taxon's clicked, the full view too. Uses `contents` to
-        no-op this grouping entirely outside country mode, rather than
-        branching (and duplicating) the huge table JSX below per mode. */}
-    <div className={countryMode ? "grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4" : "contents"}>
+        above), whether or not a country is picked yet. The selected
+        country's identity shows as removable chips in normal flow above
+        the table — countryPillsContent (built by RedListView) already
+        includes its own min-h-[34px] reserving wrapper (with a ref
+        RedListView measures via ResizeObserver), so it's rendered directly
+        here with no extra wrapper of our own. That measured height feeds
+        WorldMap's topSpacerHeight, which reserves the exact same blank
+        height at the top of the map's own card, so both columns' natural
+        heights always include the same "extra" amount and grid's align-
+        items: stretch below doesn't need to inflate either one to match
+        the other. Without a matching (and correctly *measured*, not
+        guessed) spacer, only growing the table's column stretched the
+        map's card via align-items: stretch, but WorldMap's choropleth
+        renders at a fixed projection scale — its content didn't grow to
+        fill the extra height, leaving a visible gap under the map. Uses
+        `contents` to no-op this grouping entirely outside country mode,
+        rather than branching (and duplicating) the huge table JSX below
+        per mode. */}
+    <div className={countryMode ? "grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4" : "contents"}>
       {/* No extra wrapper here — WorldMap already renders its own card (bg/border/
           padding); wrapping it again doubled up the box and, since neither div had
           an explicit height, left the map's own h-full with nothing to fill,
@@ -2549,21 +2519,24 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           align-items: stretch now makes both columns match the taller one — no
           artificial min-height on the map side, so the row settles at the
           table's own natural content height instead of leaving dead space
-          below the last row. 1/3 map, 2/3 table (col-span-1/col-span-2). */}
-      {countryMode && <div className="lg:col-span-1">{countryModeContent}</div>}
-      <div className={countryMode ? "min-w-0 flex flex-col h-full lg:col-span-2" : "contents"}>
-        {/* Country name atop the table — shown whenever a country is scoped,
-            in both Country View's landing layout and the full (post-taxon-click)
-            view. The clear button behaves differently per context: in Country
-            View it returns to the country list (onExitCountryScope); in the
-            full view it just drops the country filter and stays put
-            (onClearCountryScope) — same as the "France ×" chip elsewhere. */}
-        {countryScoped && (
+          below the last row. Even 1/2-1/2 split (col-span-1 each); the table's
+          own scrollRef box below is zoomed down to compensate for the narrower
+          column (was 2/3 width, now 1/2 — zoom-[.75] keeps everything, fonts
+          included, at the same proportions just smaller, rather than letting
+          columns get cramped or triggering horizontal scroll). */}
+      {countryMode && <div>{countryModeContent}</div>}
+      <div className={countryMode ? "min-w-0 flex flex-col h-full" : "contents"}>
+        {countryMode && countryPillsContent}
+        {/* Country name atop the table — shown whenever a country is scoped
+            OUTSIDE Country View (the normal browsing view's "France ×" chip,
+            via onClearCountryScope). Country View's own version is the
+            countryPillsContent block just above instead. */}
+        {countryScoped && !countryMode && (
           <div className="flex items-center gap-1.5 mb-1.5 min-w-0 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
             <span className="truncate" title={countryScopeLabel}>{countryScopeLabel}</span>
-            {(countryMode ? onExitCountryScope : onClearCountryScope) && (
+            {onClearCountryScope && (
               <button
-                onClick={countryMode ? onExitCountryScope : onClearCountryScope}
+                onClick={onClearCountryScope}
                 className="text-sm font-normal text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors shrink-0"
                 title="Clear selected country"
               >
@@ -2572,7 +2545,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             )}
           </div>
         )}
-        <div ref={scrollRef} className={`relative bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto ${countryMode ? "flex-1" : ""}`}>
+        <div ref={scrollRef} className={`relative bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto ${countryMode ? "flex-1 [zoom:.75]" : ""}`}>
           {/* Country-switch refetch indicator — see the loading-gate comment
               above renderRow's skeleton branch for why this doesn't blank the table. */}
           {loading && taxa.length > 0 && (
@@ -2685,20 +2658,15 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                           <td className={flexTdClasses}>{renderBreakdownBar(subByCategory)}</td>
                         )}
                       </tr>
-                      {/* Section rows — collapsed to SSC_SECTION_COLLAPSE_SIZE named
-                          groups by default in SSC mode (a 36-row mammal section would
-                          otherwise dwarf every other taxon); the catch-all row is
-                          pulled out of the collapse/expand entirely and always shown,
-                          since it's usually the largest, most load-bearing row. Table
-                          1a mode has no catch-all concept (section.catchAllId is
-                          undefined there), so it always renders every row. */}
+                      {/* Section rows — all named groups always shown; the catch-all
+                          row is pulled out and rendered last, since it's usually the
+                          largest, most load-bearing row. Table 1a mode has no
+                          catch-all concept (section.catchAllId is undefined there),
+                          so it always renders every row too. */}
                       {(() => {
                         const isSscSection = sscMode && section.catchAllId != null;
                         const catchAllRow = isSscSection ? rows.find(r => r.group === section.catchAllId) : undefined;
                         const namedRows = catchAllRow ? rows.filter(r => r.group !== section.catchAllId) : rows;
-                        const isExpanded = expandedSscSections.has(section.title);
-                        const visibleNamedRows = isSscSection && !isExpanded ? namedRows.slice(0, SSC_SECTION_COLLAPSE_SIZE) : namedRows;
-                        const hiddenCount = namedRows.length - visibleNamedRows.length;
                         const renderGroupRow = (row: (typeof rows)[number]) => (
                         <tr
                           key={row.group}
@@ -2833,29 +2801,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                         );
                         return (
                           <>
-                            {visibleNamedRows.map(renderGroupRow)}
-                            {isSscSection && hiddenCount > 0 && (
-                              <tr
-                                className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer"
-                                onClick={() => toggleSscSection(section.title)}
-                              >
-                                <td colSpan={visibleColCount} className={`${cellPad} text-center`}>
-                                  <span className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors">
-                                    Show all {namedRows.length} groups ({hiddenCount} more)
-                                  </span>
-                                </td>
-                              </tr>
-                            )}
-                            {isSscSection && isExpanded && namedRows.length > SSC_SECTION_COLLAPSE_SIZE && (
-                              <tr
-                                className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer"
-                                onClick={() => toggleSscSection(section.title)}
-                              >
-                                <td colSpan={visibleColCount} className={`${cellPad} text-center`}>
-                                  <span className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors">Show less</span>
-                                </td>
-                              </tr>
-                            )}
+                            {namedRows.map(renderGroupRow)}
                             {catchAllRow && renderGroupRow(catchAllRow)}
                           </>
                         );
@@ -3015,44 +2961,36 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     {perTaxa.length > 0 && selectedTaxa.size === 0 && (
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 mt-1.5">
         {/* Usage hint — desktop only; the toggles below matter more on mobile than this prose.
-            Country View has no multi-select (a country click always narrows to that one
-            country — see handleCountryDrilldown), so the normal hint doesn't apply there. */}
+            Country View starts hover-driven, then locks to click+multi-select once a
+            country's picked (see handleCountryDrilldown), so it gets its own wording. */}
         <span className="hidden sm:inline pl-3 md:pl-4 text-xs text-zinc-400 dark:text-zinc-500">
-          {countryMode ? "Click a country to view its data." : "Click to filter, Cmd/Ctrl+click to multi-select."}
+          {countryMode ? "Hover over a country, or click to lock it and multi-select." : "Click to filter, Cmd/Ctrl+click to multi-select."}
         </span>
         <div className="flex flex-wrap items-center gap-3 pl-3 sm:pl-0">
-          {/* IUCN ↔ CoL source toggle: flips the described count + recomputes % Assessed */}
-          <span className="inline-flex items-center gap-1.5">
-            <span className="text-xs text-zinc-400 dark:text-zinc-500">Source for # Described:</span>
-            <span className="inline-flex rounded-md overflow-hidden border border-zinc-300 dark:border-zinc-600 text-[10px] font-semibold" title="Switch # Described Species between IUCN Table 1a estimates and the Catalogue of Life backbone, for the rows with an official IUCN figure — every other row (sub-groups, SSC groups) always shows the CoL-derived count">
-              {(["iucn", "col"] as const).map((src) => (
-                <button
-                  key={src}
-                  onClick={(e) => { e.stopPropagation(); setDescribedSource(src); }}
-                  className={`px-1.5 py-0.5 transition-colors ${
-                    describedSource === src
-                      ? "bg-zinc-700 text-white dark:bg-zinc-200 dark:text-zinc-900"
-                      : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700"
-                  }`}
-                >
-                  {src === "iucn" ? "IUCN" : "CoL"}
-                </button>
-              ))}
-            </span>
-          </span>
-          <span className="text-zinc-300 dark:text-zinc-700">|</span>
-          {/* Expand/Collapse all doesn't apply to Country View — its subgroup tree
-              stays collapsed by default there regardless (fewer controls, per its
-              single-country-focus design). */}
-          {!flatMode && !countryMode && (
+          {/* IUCN ↔ CoL source toggle: flips the described count + recomputes % Assessed.
+              Hidden in Country View — its plain 3-column table doesn't show a
+              # Described column at all (see COUNTRY_SCOPED_HIDDEN_COLUMNS), so the
+              toggle would have nothing to actually affect there. */}
+          {!countryMode && (
             <>
-              <button
-                onClick={allExpanded ? collapseAll : expandAll}
-                className="inline-flex items-center gap-1 text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-              >
-                {allExpanded ? <FaCompressAlt size={9} /> : <FaExpandAlt size={9} />}
-                {allExpanded ? "Collapse all" : "Expand all"}
-              </button>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="text-xs text-zinc-400 dark:text-zinc-500">Source for # Described:</span>
+                <span className="inline-flex rounded-md overflow-hidden border border-zinc-300 dark:border-zinc-600 text-[10px] font-semibold" title="Switch # Described Species between IUCN Table 1a estimates and the Catalogue of Life backbone, for the rows with an official IUCN figure — every other row (sub-groups, SSC groups) always shows the CoL-derived count">
+                  {(["iucn", "col"] as const).map((src) => (
+                    <button
+                      key={src}
+                      onClick={(e) => { e.stopPropagation(); setDescribedSource(src); }}
+                      className={`px-1.5 py-0.5 transition-colors ${
+                        describedSource === src
+                          ? "bg-zinc-700 text-white dark:bg-zinc-200 dark:text-zinc-900"
+                          : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                      }`}
+                    >
+                      {src === "iucn" ? "IUCN" : "CoL"}
+                    </button>
+                  ))}
+                </span>
+              </span>
               <span className="text-zinc-300 dark:text-zinc-700">|</span>
             </>
           )}
