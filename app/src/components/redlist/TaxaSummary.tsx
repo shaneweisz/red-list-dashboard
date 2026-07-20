@@ -2957,7 +2957,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             Country View starts hover-driven, then locks to click+multi-select once a
             country's picked (see handleCountryDrilldown), so it gets its own wording. */}
         <span className="hidden sm:inline pl-3 md:pl-4 text-xs text-zinc-400 dark:text-zinc-500">
-          {countryMode ? "Hover a country, or click to lock it and multi-select." : "Click to filter, Cmd/Ctrl+click to multi-select."}
+          {countryMode ? "Hover over a country, or click to lock it and multi-select." : "Click to filter, Cmd/Ctrl+click to multi-select."}
         </span>
         <div className="flex flex-wrap items-center gap-3 pl-3 sm:pl-0">
           {/* IUCN ↔ CoL source toggle: flips the described count + recomputes % Assessed.
