@@ -33,8 +33,8 @@ name: Weekly data sync
 #     API key or token).
 #   - The PR step stages an explicit file allowlist, never `git add -A`/`.`,
 #     so the ~400MB of raw per-species data (gitignored, private-R2-only)
-#     can never accidentally end up in a commit — only the two small
-#     aggregate JSON files (already committed today) plus col-taxon-ids.json.
+#     can never accidentally end up in a commit — only the small, already-
+#     committed aggregate/config files staged explicitly below.
 #   - Every script in this pipeline only logs aggregate counts/durations,
 #     never per-species rows, so the (publicly-visible) Action logs are safe.
 
@@ -118,7 +118,7 @@ jobs:
           # -A`/`.` here: data/ holds ~400MB of raw per-species data that must
           # never touch git, only these small, already-committed aggregate files.
           git add latest-sync.txt data/taxa-summary.json data/node-children-summaries.json data/country-stats.json
-          git add src/config/col-taxon-ids.json
+          git add src/config/col-taxon-ids.json src/config/col-release.json
 
           if git diff --cached --quiet; then
             echo "Nothing to commit — skipping PR."
