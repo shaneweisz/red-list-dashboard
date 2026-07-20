@@ -2494,16 +2494,20 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         The table always uses the plain 3-column style in this mode
         (countryStyleColumns, derived from layoutMode — see its definition
         above), whether or not a country is picked yet. The selected
-        country's identity shows as removable chips at the top-left of the
-        table's own column (countryPillsContent, built by RedListView), not
-        spanning the map too. min-h-[34px] (one pill row's height) reserves
-        that space in the table's column unconditionally, even with zero
-        chips, so the table's own total height stays constant as chips are
-        added/removed/hovered — which in turn keeps the map from resizing
-        too, since grid's align-items: stretch matches both columns to
-        whichever's taller. Uses `contents` to no-op this grouping entirely
-        outside country mode, rather than branching (and duplicating) the
-        huge table JSX below per mode. */}
+        country's identity shows as removable chips floated (absolute) over
+        the top-left of the table's own column (countryPillsContent, built
+        by RedListView) — not in normal flow. A normal-flow reservation
+        there was tried first, but WorldMap's choropleth renders at a fixed
+        projection scale (doesn't grow taller to fill its container), so
+        growing the table's column by a pill row's worth of height stretched
+        the map's card to match (via align-items: stretch below) without the
+        map's own content growing to fill it — a visible gap under the map
+        that wasn't there before. Floating the pills instead keeps the
+        table's column at its original natural height, so the grid row (and
+        the map along with it) doesn't grow in the first place. Uses
+        `contents` to no-op this grouping entirely outside country mode,
+        rather than branching (and duplicating) the huge table JSX below per
+        mode. */}
     <div className={countryMode ? "grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4" : "contents"}>
       {/* No extra wrapper here — WorldMap already renders its own card (bg/border/
           padding); wrapping it again doubled up the box and, since neither div had
@@ -2518,12 +2522,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           included, at the same proportions just smaller, rather than letting
           columns get cramped or triggering horizontal scroll). */}
       {countryMode && <div>{countryModeContent}</div>}
-      <div className={countryMode ? "min-w-0 flex flex-col h-full" : "contents"}>
-        {countryMode && <div className="min-h-[34px] mb-1.5">{countryPillsContent}</div>}
+      <div className={countryMode ? "relative min-w-0 flex flex-col h-full" : "contents"}>
+        {countryMode && (
+          <div className="absolute top-2 left-2 z-20 pointer-events-none">{countryPillsContent}</div>
+        )}
         {/* Country name atop the table — shown whenever a country is scoped
             OUTSIDE Country View (the normal browsing view's "France ×" chip,
             via onClearCountryScope). Country View's own version is the
-            countryPillsContent block just above instead. */}
+            floating countryPillsContent block just above instead. */}
         {countryScoped && !countryMode && (
           <div className="flex items-center gap-1.5 mb-1.5 min-w-0 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
             <span className="truncate" title={countryScopeLabel}>{countryScopeLabel}</span>
