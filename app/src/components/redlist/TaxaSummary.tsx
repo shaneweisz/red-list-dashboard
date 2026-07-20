@@ -1237,7 +1237,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         <option value="country" disabled={isNewAssessments} title={isNewAssessments ? "Not available for New Assessments — Not Evaluated species have no location data" : undefined}>
           By Country
         </option>
-        <option value="ssc">By SSC Specialist Group</option>
+        <option value="ssc">By SSC Specialist Group (WIP)</option>
         <option value="table1a">Table 1a</option>
       </select>
     </span>
@@ -2520,7 +2520,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       </div>,
       document.body
     )}
-    {/* Country view: map on the left half, taxa table on the right half.
+    {/* Country view: taxa table on the left half, map on the right half.
         The table always uses the plain 3-column style in this mode
         (countryStyleColumns, derived from layoutMode — see its definition
         above), whether or not a country is picked yet. The selected
@@ -2551,7 +2551,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           column (was 2/3 width, now 1/2 — zoom-[.75] keeps everything, fonts
           included, at the same proportions just smaller, rather than letting
           columns get cramped or triggering horizontal scroll). */}
-      {countryMode && <div>{countryModeContent}</div>}
       <div className={countryMode ? "min-w-0 flex flex-col h-full" : "contents"}>
         {/* Country name atop the table — shown whenever a country is scoped
             OUTSIDE Country View (the normal browsing view's "France ×" chip,
@@ -2982,6 +2981,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       </table>
         </div>
       </div>
+      {countryMode && <div>{countryModeContent}</div>}
     </div>
     {/* Subtle controls: usage hint + # Described toggle + expand/table controls,
         all landing-only — hidden once a taxon is selected. Gated on perTaxa.length
