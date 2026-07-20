@@ -2490,24 +2490,20 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       </div>,
       document.body
     )}
-    {/* Country view: taxa table on the left half, map on the right half.
+    {/* Country view: map on the left half, taxa table on the right half.
         The table always uses the plain 3-column style in this mode
         (countryStyleColumns, derived from layoutMode — see its definition
         above), whether or not a country is picked yet. The selected
-        country's identity shows as removable chips above BOTH the table and
-        the map (countryPillsContent, built by RedListView) — living outside
-        either column specifically so chips changing (locking/clearing/
-        hovering, which varies their count and text width) never resizes the
-        map or shifts the (zoomed) table's position; both used to happen
-        when the chips lived inside one column or the other. min-h-[34px]
-        (one pill row's height) reserves that space unconditionally, even
-        with zero chips, so the table/map below don't themselves shift down
-        the moment a hover starts previewing a country — that shift was its
-        own kind of jarring, just one level up from the two this replaced.
-        Uses `contents` to no-op this grouping entirely outside country
-        mode, rather than branching (and duplicating) the huge table JSX
-        below per mode. */}
-    {countryMode && <div className="min-h-[34px] mb-1.5">{countryPillsContent}</div>}
+        country's identity shows as removable chips at the top-left of the
+        table's own column (countryPillsContent, built by RedListView), not
+        spanning the map too. min-h-[34px] (one pill row's height) reserves
+        that space in the table's column unconditionally, even with zero
+        chips, so the table's own total height stays constant as chips are
+        added/removed/hovered — which in turn keeps the map from resizing
+        too, since grid's align-items: stretch matches both columns to
+        whichever's taller. Uses `contents` to no-op this grouping entirely
+        outside country mode, rather than branching (and duplicating) the
+        huge table JSX below per mode. */}
     <div className={countryMode ? "grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4" : "contents"}>
       {/* No extra wrapper here — WorldMap already renders its own card (bg/border/
           padding); wrapping it again doubled up the box and, since neither div had
@@ -2521,16 +2517,13 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           column (was 2/3 width, now 1/2 — zoom-[.75] keeps everything, fonts
           included, at the same proportions just smaller, rather than letting
           columns get cramped or triggering horizontal scroll). */}
+      {countryMode && <div>{countryModeContent}</div>}
       <div className={countryMode ? "min-w-0 flex flex-col h-full" : "contents"}>
+        {countryMode && <div className="min-h-[34px] mb-1.5">{countryPillsContent}</div>}
         {/* Country name atop the table — shown whenever a country is scoped
             OUTSIDE Country View (the normal browsing view's "France ×" chip,
-            via onClearCountryScope). Country View's own version lives above
-            both the table and the map instead (see countryPillsContent) —
-            moving it strictly atop the table made the zoomed table jump
-            position every time a country got locked/cleared; moving it onto
-            the map instead made the map itself flicker/resize as chips
-            changed size while hovering. Living above both avoids resizing
-            either one. */}
+            via onClearCountryScope). Country View's own version is the
+            countryPillsContent block just above instead. */}
         {countryScoped && !countryMode && (
           <div className="flex items-center gap-1.5 mb-1.5 min-w-0 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
             <span className="truncate" title={countryScopeLabel}>{countryScopeLabel}</span>
@@ -2951,7 +2944,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       </table>
         </div>
       </div>
-      {countryMode && <div>{countryModeContent}</div>}
     </div>
     {/* Subtle controls: usage hint + # Described toggle + expand/table controls,
         all landing-only — hidden once a taxon is selected. Gated on perTaxa.length

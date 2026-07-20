@@ -2337,12 +2337,11 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     />
   );
 
-  // Selection chips shown above BOTH the map and the table (see
-  // countryPillsContent's own doc in TaxaSummary.tsx) — living outside
-  // either column means neither one resizes as chips are added/removed/
-  // hovered. One chip per selected country (not collapsed into a region
-  // name, unlike the atop-table "France ×" chip elsewhere), each
-  // individually removable, plus "Clear all" once there's more than one.
+  // Selection chips shown at the top-left of the table's own column (see
+  // countryPillsContent's own doc in TaxaSummary.tsx). One chip per
+  // selected country (not collapsed into a region name, unlike the
+  // atop-table "France ×" chip elsewhere), each individually removable,
+  // plus "Clear all" once there's more than one.
   // Before anything's locked, hovering shows its own preview chip (dashed,
   // non-removable — there's nothing to remove yet, moving the mouse away
   // already clears it) so the table's live hover-preview has a visual
