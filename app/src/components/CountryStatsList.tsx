@@ -46,7 +46,7 @@ function SortHeader({
 }) {
   return (
     <th
-      className={`text-xs font-medium text-zinc-500 dark:text-zinc-400 px-1.5 py-1.5 cursor-pointer select-none hover:text-zinc-700 dark:hover:text-zinc-200 whitespace-nowrap overflow-hidden text-ellipsis ${align === "left" ? "text-left" : "text-right"} ${widthClass ?? ""}`}
+      className={`text-xs font-medium text-zinc-500 dark:text-zinc-400 px-1.5 py-0.5 cursor-pointer select-none hover:text-zinc-700 dark:hover:text-zinc-200 whitespace-nowrap overflow-hidden text-ellipsis ${align === "left" ? "text-left" : "text-right"} ${widthClass ?? ""}`}
       onClick={onClick}
       aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : undefined}
     >
@@ -137,8 +137,13 @@ export default function CountryStatsList({
         {/* table-fixed + explicit column-width shares (rather than auto/content-based
             sizing) so the Country column truncates instead of wrapping long names
             ("United States of America") across multiple lines — needed now that
-            this list has to fit the map's narrower 1/3-width column. */}
-        <table className="w-full table-fixed text-sm border-collapse">
+            this list has to fit the map's narrower 1/3-width column. Rows use
+            text-xs + py-0.5 (down from text-sm/py-1) so PAGE_SIZE rows + header +
+            footer land close to the Map view's own natural height — with align-
+            items: stretch on the paired grid, taller List content used to drag
+            the whole row (map card AND table) up to match, which meant just
+            toggling Map/List visibly resized the page. */}
+        <table className="w-full table-fixed text-xs border-collapse">
           <thead className="sticky top-0 bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 z-10">
             <tr>
               <SortHeader label="Country" active={sortKey === "name"} dir={sortDir} align="left" widthClass={showOutdatedMode ? "w-[34%]" : "w-2/3"} onClick={() => toggleSort("name")} />
@@ -162,15 +167,15 @@ export default function CountryStatsList({
                     isSelected ? "bg-blue-50 dark:bg-blue-900/30" : "hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
                   }`}
                 >
-                  <td className="px-1.5 py-1 text-zinc-700 dark:text-zinc-300 max-w-0">
+                  <td className="px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 max-w-0">
                     <span className="block truncate" title={row.name}>{row.name}</span>
                   </td>
-                  <td className="px-1.5 py-1 text-right tabular-nums text-zinc-700 dark:text-zinc-300 whitespace-nowrap">{row.species.toLocaleString()}</td>
+                  <td className="px-1.5 py-0.5 text-right tabular-nums text-zinc-700 dark:text-zinc-300 whitespace-nowrap">{row.species.toLocaleString()}</td>
                   {showOutdatedMode && (
-                    <td className="px-1.5 py-1 text-right tabular-nums text-zinc-700 dark:text-zinc-300 whitespace-nowrap">{row.outdated.toLocaleString()}</td>
+                    <td className="px-1.5 py-0.5 text-right tabular-nums text-zinc-700 dark:text-zinc-300 whitespace-nowrap">{row.outdated.toLocaleString()}</td>
                   )}
                   {showOutdatedMode && (
-                    <td className="px-1.5 py-1 text-right tabular-nums text-zinc-700 dark:text-zinc-300 whitespace-nowrap">{row.percentOutdated.toFixed(1)}%</td>
+                    <td className="px-1.5 py-0.5 text-right tabular-nums text-zinc-700 dark:text-zinc-300 whitespace-nowrap">{row.percentOutdated.toFixed(1)}%</td>
                   )}
                 </tr>
               );
@@ -186,7 +191,7 @@ export default function CountryStatsList({
         </table>
       </div>
       {sorted.length > 0 && (
-        <div className="flex items-center justify-between px-2 py-1 border-t border-zinc-200 dark:border-zinc-800 text-xs text-zinc-500 dark:text-zinc-400 shrink-0">
+        <div className="flex items-center justify-between px-2 py-0.5 border-t border-zinc-200 dark:border-zinc-800 text-xs text-zinc-500 dark:text-zinc-400 shrink-0">
           <span>
             {clampedPage * PAGE_SIZE + 1}–{Math.min((clampedPage + 1) * PAGE_SIZE, sorted.length)} of {sorted.length}
           </span>

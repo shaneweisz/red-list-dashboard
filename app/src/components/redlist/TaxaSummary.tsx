@@ -154,13 +154,10 @@ interface Props {
    * scopes this table's own fetches too. One country, a whole region, or an
    * arbitrary multi-select are all just "the current set of codes" here. */
   countryScope?: string[] | null;
-  /** Clears the country selection and re-enters the Country view landing page —
-   * used for the clear button atop the table while layoutMode is "country". */
-  onExitCountryScope?: () => void;
   /** Clears the country selection without changing layoutMode — used for the
-   * same clear button atop the table once a taxon's been clicked and this has
-   * exited to the full view (returning to the Country view landing page from
-   * there would be a surprising jump). */
+   * "France ×" chip atop the table when a country's scoped outside Country
+   * View. Country View's own equivalent clear button lives on the map now
+   * (WorldMap's onClearSelection), not routed through here. */
   onClearCountryScope?: () => void;
 }
 
@@ -1049,7 +1046,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
   );
 }
 
-export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", layoutMode, onLayoutModeChange, countryModeContent, countryScope, onExitCountryScope, onClearCountryScope }: Props) {
+export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", layoutMode, onLayoutModeChange, countryModeContent, countryScope, onClearCountryScope }: Props) {
   const isNewAssessments = viewMode === "new-assessments";
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2533,14 +2530,15 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       </div>,
       document.body
     )}
-    {/* Country view: taxa table on the left half, map on the right half.
+    {/* Country view: map on the left half, taxa table on the right half.
         The table always uses the plain 3-column style in this mode
         (countryStyleColumns, derived from layoutMode — see its definition
         above), whether or not a country is picked yet. The selected country's
-        identity shows atop the table itself (below) in both this landing mode
-        and, once a taxon's clicked, the full view too. Uses `contents` to
-        no-op this grouping entirely outside country mode, rather than
-        branching (and duplicating) the huge table JSX below per mode. */}
+        identity shows atop the map itself now (WorldMap's onClearSelection/
+        scopeLabel), not atop the table — see the comment on the other, non-
+        country-mode instance of that label below. Uses `contents` to no-op
+        this grouping entirely outside country mode, rather than branching
+        (and duplicating) the huge table JSX below per mode. */}
     <div className={countryMode ? "grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4" : "contents"}>
       {/* No extra wrapper here — WorldMap already renders its own card (bg/border/
           padding); wrapping it again doubled up the box and, since neither div had
@@ -2554,19 +2552,20 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           column (was 2/3 width, now 1/2 — zoom-[.75] keeps everything, fonts
           included, at the same proportions just smaller, rather than letting
           columns get cramped or triggering horizontal scroll). */}
+      {countryMode && <div>{countryModeContent}</div>}
       <div className={countryMode ? "min-w-0 flex flex-col h-full" : "contents"}>
-        {/* Country name atop the table — shown whenever a country is scoped,
-            in both Country View's landing layout and the full (post-taxon-click)
-            view. The clear button behaves differently per context: in Country
-            View it returns to the country list (onExitCountryScope); in the
-            full view it just drops the country filter and stays put
-            (onClearCountryScope) — same as the "France ×" chip elsewhere. */}
-        {countryScoped && (
+        {/* Country name atop the table — shown whenever a country is scoped
+            OUTSIDE Country View (the normal browsing view's "France ×" chip,
+            via onClearCountryScope). Country View's own version of this label
+            now lives on the map instead (see WorldMap's onClearSelection/
+            scopeLabel) — it drives the same table from the other side of the
+            grid, so showing it twice was redundant. */}
+        {countryScoped && !countryMode && (
           <div className="flex items-center gap-1.5 mb-1.5 min-w-0 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
             <span className="truncate" title={countryScopeLabel}>{countryScopeLabel}</span>
-            {(countryMode ? onExitCountryScope : onClearCountryScope) && (
+            {onClearCountryScope && (
               <button
-                onClick={countryMode ? onExitCountryScope : onClearCountryScope}
+                onClick={onClearCountryScope}
                 className="text-sm font-normal text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors shrink-0"
                 title="Clear selected country"
               >
@@ -3008,7 +3007,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       </table>
         </div>
       </div>
-      {countryMode && <div>{countryModeContent}</div>}
     </div>
     {/* Subtle controls: usage hint + # Described toggle + expand/table controls,
         all landing-only — hidden once a taxon is selected. Gated on perTaxa.length
@@ -3019,10 +3017,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     {perTaxa.length > 0 && selectedTaxa.size === 0 && (
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 mt-1.5">
         {/* Usage hint — desktop only; the toggles below matter more on mobile than this prose.
-            Country View has no multi-select (a country click always narrows to that one
-            country — see handleCountryDrilldown), so the normal hint doesn't apply there. */}
+            Country View starts hover-driven, then locks to click+multi-select once a
+            country's picked (see handleCountryDrilldown), so it gets its own wording. */}
         <span className="hidden sm:inline pl-3 md:pl-4 text-xs text-zinc-400 dark:text-zinc-500">
-          {countryMode ? "Hover a country to view its data." : "Click to filter, Cmd/Ctrl+click to multi-select."}
+          {countryMode ? "Hover a country, or click to lock it and multi-select." : "Click to filter, Cmd/Ctrl+click to multi-select."}
         </span>
         <div className="flex flex-wrap items-center gap-3 pl-3 sm:pl-0">
           {/* IUCN ↔ CoL source toggle: flips the described count + recomputes % Assessed */}

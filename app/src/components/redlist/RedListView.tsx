@@ -2220,27 +2220,40 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // each species once regardless of how many of these codes it matches (see
   // country-taxa-summary-duckdb.ts's countriesWhere), so there's no reason to
   // special-case region vs. multi-select here.
-  const countryScope = selectedCountries.size > 0 ? [...selectedCountries] : null;
+  // Hover preview — separate from selectedCountries (the real, locked
+  // selection) so scanning the map with the mouse never itself writes to
+  // URL-synced state. Only consulted as a countryScope fallback below when
+  // nothing's actually locked yet; once selectedCountries is non-empty this
+  // is ignored entirely, matching "hover only works if no country is
+  // selected" (see handleCountryDrilldown/selectOnHover).
+  const [hoverPreviewCountry, setHoverPreviewCountry] = useState<string | null>(null);
 
-  // Country view's own map/list select — fires on hover, not just click (see
-  // WorldMap's selectOnHover), so the table updates as you scan the map. Same
-  // plain-select-replaces/ctrl-click-toggles gesture as handleCountrySelect
-  // (the normal browsing view's country filter), just routed through
-  // enterCountryDrilldown so the country change stays atomic with clearing
-  // taxa/subgroups (see its own comment).
+  const countryScope = selectedCountries.size > 0 ? [...selectedCountries]
+    : hoverPreviewCountry ? [hoverPreviewCountry]
+    : null;
+
+  // Country view's own map/list select. Before anything's picked, hovering
+  // previews the table (see WorldMap's selectOnHover, gated below on
+  // selectedCountries.size === 0 so it stops once a country's locked in).
+  // The first click locks in a single country and switches off hover; every
+  // click after that toggles a country in/out of the selection, so you can
+  // build up a multi-select by clicking (no ctrl/cmd needed) — clicking the
+  // already-sole-selected country again clears back to the empty/hover state.
+  // ctrl/cmd-click still toggles directly even before anything's locked, for
+  // building a multi-select from scratch without an initial single pick.
+  // Routed through enterCountryDrilldown so the country change stays atomic
+  // with clearing taxa/subgroups (see its own comment).
   const handleCountryDrilldown = useCallback(
     (code: string, _name: string, event: React.MouseEvent) => {
       const isMultiSelect = event.metaKey || event.ctrlKey;
       enterCountryDrilldown(prev => {
-        if (isMultiSelect) {
-          const next = new Set(prev);
-          if (next.has(code)) next.delete(code);
-          else next.add(code);
-          return next;
-        } else {
-          if (prev.size === 1 && prev.has(code)) return new Set();
+        if (prev.size === 0 && !isMultiSelect) {
           return new Set([code]);
         }
+        const next = new Set(prev);
+        if (next.has(code)) next.delete(code);
+        else next.add(code);
+        return next;
       });
     },
     [enterCountryDrilldown]
@@ -2282,7 +2295,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     <WorldMap
       selectedCountries={selectedCountries}
       onCountrySelect={handleCountryDrilldown}
-      selectOnHover
+      selectOnHover={selectedCountries.size === 0}
+      onCountryHover={setHoverPreviewCountry}
+      onClearSelection={returnToCountryList}
       precomputedStats={countryLandingStats ?? {}}
       selectedTaxa={selectedTaxa}
       speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
@@ -2310,7 +2325,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         onLayoutModeChange={setLayoutMode}
         countryModeContent={countryModeContent}
         countryScope={countryScope}
-        onExitCountryScope={returnToCountryList}
         onClearCountryScope={() => setSelectedCountries(new Set())}
         onToggleSubgroup={(sgId) => {
           // Clicking a view root ancestor → clear subgroups to show its children.
