@@ -612,34 +612,46 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
           unlike the atop-table "France ×" chip elsewhere), each individually
           removable, plus a "Clear all" for dropping the whole selection at
           once — pointer-events-none on the wrapper so empty space between
-          chips doesn't block map clicks, re-enabled per chip/button. */}
-      {showSelectionChips && selectedCountries.size > 0 && (
+          chips doesn't block map clicks, re-enabled per chip/button. Before
+          anything's locked, hovering shows its own preview chip (dashed,
+          non-removable — there's nothing to remove yet, moving the mouse
+          away already clears it) so the table's live hover-preview has the
+          same visual anchor a locked selection does. */}
+      {showSelectionChips && (selectedCountries.size > 0 || (selectOnHover && hoveredCountryCode)) && (
         <div className="absolute top-11 left-3 right-3 z-20 flex flex-wrap items-center gap-1 pointer-events-none">
-          {[...selectedCountries]
-            .map(code => ({ code, name: ALPHA2_TO_NAME[code] ?? code }))
-            .sort((a, b) => a.name.localeCompare(b.name))
-            .map(({ code, name }) => (
-              <span
-                key={code}
-                className="pointer-events-auto inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-sm text-xs text-zinc-700 dark:text-zinc-300 max-w-full"
-              >
-                <span className="truncate">{name}</span>
+          {selectedCountries.size > 0 ? (
+            <>
+              {[...selectedCountries]
+                .map(code => ({ code, name: ALPHA2_TO_NAME[code] ?? code }))
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map(({ code, name }) => (
+                  <span
+                    key={code}
+                    className="pointer-events-auto inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-sm text-xs text-zinc-700 dark:text-zinc-300 max-w-full"
+                  >
+                    <span className="truncate">{name}</span>
+                    <button
+                      onClick={(e) => onCountrySelect(code, name, e)}
+                      className="shrink-0 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                      title={`Remove ${name}`}
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ))}
+              {selectedCountries.size > 1 && onClearAllCountries && (
                 <button
-                  onClick={(e) => onCountrySelect(code, name, e)}
-                  className="shrink-0 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                  title={`Remove ${name}`}
+                  onClick={onClearAllCountries}
+                  className="pointer-events-auto text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 underline transition-colors"
                 >
-                  ✕
+                  Clear all
                 </button>
-              </span>
-            ))}
-          {selectedCountries.size > 1 && onClearAllCountries && (
-            <button
-              onClick={onClearAllCountries}
-              className="pointer-events-auto text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 underline transition-colors"
-            >
-              Clear all
-            </button>
+              )}
+            </>
+          ) : (
+            <span className="pointer-events-none inline-flex items-center pl-2 pr-2 py-0.5 rounded-full bg-white/90 dark:bg-zinc-800/90 border border-dashed border-zinc-300 dark:border-zinc-600 text-xs text-zinc-500 dark:text-zinc-400 max-w-full">
+              <span className="truncate">{hoveredCountry}</span>
+            </span>
           )}
         </div>
       )}
