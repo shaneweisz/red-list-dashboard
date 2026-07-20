@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { FaInfoCircle, FaExpandAlt, FaCompressAlt, FaChevronRight } from "react-icons/fa";
+import { FaInfoCircle, FaChevronRight } from "react-icons/fa";
 
 import { HiOutlineAdjustmentsHorizontal } from "react-icons/hi2";
 import TaxaIcon from "@/components/TaxaIcon";
@@ -1290,34 +1290,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   }, [taxa, applySource]);
   const perTaxa = useMemo(() => taxa.filter((t) => t.id !== "all").map(t => applySource(t, t.id)), [taxa, applySource]);
 
-  // Expand all expandable taxa
-  const expandAll = useCallback(async () => {
-    const expandableTaxaIds = perTaxa.filter(t => isExpandable(t.id)).map(t => t.id);
-    setExpandedTaxa(new Set(expandableTaxaIds));
-    for (const taxonId of expandableTaxaIds) {
-      if (!subgroupDataRef.current[taxonId] && !loadingSubgroupsRef.current.has(taxonId)) {
-        setLoadingSubgroups((prev) => new Set(prev).add(taxonId));
-        const countryQs = countryKey ? `&country=${encodeURIComponent(countryKey)}` : "";
-        fetch(`/api/redlist/taxa-subgroups?nodeId=${taxonId}${countryQs}`)
-          .then(res => res.ok ? res.json() : null)
-          .then(data => {
-            if (data) setSubgroupData((prev) => ({ ...prev, [taxonId]: data.subgroups }));
-          })
-          .finally(() => {
-            setLoadingSubgroups((prev) => {
-              const next = new Set(prev);
-              next.delete(taxonId);
-              return next;
-            });
-          });
-      }
-    }
-  }, [perTaxa, countryKey]);
-
-  const collapseAll = useCallback(() => {
-    setExpandedTaxa(new Set());
-  }, []);
-
   // Fetch-if-needed, driven by table1aMode rather than a click handler, so it
   // also runs when the mode is entered via URL load or browser back/forward.
   // Uses a ref (not the loading state) to gate the fetch — including the
@@ -1403,8 +1375,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     sscFetchStartedRef.current = false;
     setSubgroupData({});
   }, [countryKey]);
-
-  const allExpanded = useMemo(() => perTaxa.filter(t => isExpandable(t.id)).every(t => expandedTaxa.has(t.id)), [perTaxa, expandedTaxa]);
 
   // Collapse all when returning to landing page (no taxa selected)
   useEffect(() => {
@@ -3022,21 +2992,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                   ))}
                 </span>
               </span>
-              <span className="text-zinc-300 dark:text-zinc-700">|</span>
-            </>
-          )}
-          {/* Expand/Collapse all doesn't apply to Country View — its subgroup tree
-              stays collapsed by default there regardless (fewer controls, per its
-              single-country-focus design). */}
-          {!flatMode && !countryMode && (
-            <>
-              <button
-                onClick={allExpanded ? collapseAll : expandAll}
-                className="inline-flex items-center gap-1 text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-              >
-                {allExpanded ? <FaCompressAlt size={9} /> : <FaExpandAlt size={9} />}
-                {allExpanded ? "Collapse all" : "Expand all"}
-              </button>
               <span className="text-zinc-300 dark:text-zinc-700">|</span>
             </>
           )}
