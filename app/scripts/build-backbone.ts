@@ -60,7 +60,7 @@ const SPECIES_STATUS = "('accepted')";
 // extant universe filters to in_base, dropping that unflagged-fossil tail. Source
 // keys are global + version-stable, so a current Base release is a valid allowlist.
 // "3LR" is ChecklistBank's rolling alias for the current release (unlike XR, which
-// gets a new numeric key every cycle with no rolling alias — see fetch-coldp.ts) —
+// gets a new numeric key every cycle with no rolling alias — see fetch-col-xr.ts) —
 // use it rather than a numeric key, which would freeze to that one release forever.
 const COL_BASE_DATASET = process.env.COL_BASE_DATASET || "3LR";
 

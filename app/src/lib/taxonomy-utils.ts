@@ -326,7 +326,7 @@ export function getNodeDef(nodeId: string): { node: TaxonomyNode; parentId: stri
 
 export const COL_SOURCE_URL = "https://www.catalogueoflife.org/";
 
-// The exact CoL XR release colDescribed is built from (scripts/fetch-coldp.ts writes
+// The exact CoL XR release colDescribed is built from (scripts/fetch-col-xr.ts writes
 // this alongside every sync) — cited by alias (e.g. "COL26.6 XR") and linked via its
 // DOI, so "Source" points at the specific dataset version actually used instead of a
 // generic, dateless homepage link that says nothing about which release produced the
