@@ -50,3 +50,45 @@ th.sticky {
   background: none !important;
   border: none !important;
 }
+
+/* Extra-small range slider (used for the trade-flow-count control): a thin
+   track with a tiny thumb, so it reads as an unobtrusive inline control. */
+input[type="range"].slider-xs {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 8px;
+  background: transparent;
+}
+input[type="range"].slider-xs::-webkit-slider-runnable-track {
+  height: 2px;
+  border-radius: 9999px;
+  background: #d4d4d8;
+}
+.dark input[type="range"].slider-xs::-webkit-slider-runnable-track {
+  background: #52525b;
+}
+input[type="range"].slider-xs::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 7px;
+  height: 7px;
+  margin-top: -2.5px;
+  border: none;
+  border-radius: 9999px;
+  background: #ef4444;
+}
+input[type="range"].slider-xs::-moz-range-track {
+  height: 2px;
+  border-radius: 9999px;
+  background: #d4d4d8;
+}
+.dark input[type="range"].slider-xs::-moz-range-track {
+  background: #52525b;
+}
+input[type="range"].slider-xs::-moz-range-thumb {
+  width: 7px;
+  height: 7px;
+  border: none;
+  border-radius: 9999px;
+  background: #ef4444;
+}

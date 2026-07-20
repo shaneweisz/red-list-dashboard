@@ -59,7 +59,10 @@ const SPECIES_STATUS = "('accepted')";
 // We tag each species with in_base = (its sourceID is a Base GSD); the read layer's
 // extant universe filters to in_base, dropping that unflagged-fossil tail. Source
 // keys are global + version-stable, so a current Base release is a valid allowlist.
-const COL_BASE_DATASET = process.env.COL_BASE_DATASET || "315149";
+// "3LR" is ChecklistBank's rolling alias for the current release (unlike XR, which
+// gets a new numeric key every cycle with no rolling alias — see fetch-col-xr.ts) —
+// use it rather than a numeric key, which would freeze to that one release forever.
+const COL_BASE_DATASET = process.env.COL_BASE_DATASET || "3LR";
 
 // A curated-checklist usage "demotes" an XR-accepted species when the checklist does
 // NOT recognize that col_id as an accepted species — i.e. it's a synonym (incl.
@@ -208,9 +211,14 @@ export async function run(
     TO '${backboneOut}' (FORMAT PARQUET, COMPRESSION ZSTD);
   `);
 
-  // Upper bound for a plausible publication year (next calendar year, to tolerate
-  // early-release dates). Also excludes 4-digit plate/figure numbers that exceed it.
+  // Plausible-publication-year window. Upper bound: next calendar year (tolerates
+  // early-release dates; also drops 4-digit plate/figure numbers above it). Lower bound:
+  // 1753 — Linnaeus's Species Plantarum, the start of valid botanical nomenclature (zoology
+  // dates from 1758, but 1753 is the safe universal floor: it excludes no validly-published
+  // name). Any earlier year is necessarily a mis-parse (a volume/DOI/figure number that
+  // slipped through), so we null it rather than surface a pre-Linnaean "described year".
   const maxYear = new Date().getUTCFullYear() + 1;
+  const minYear = 1753;
 
   // ref — reference_id → publication year. Preferred from the structured col:issued
   // (a CSL date: bare year, "1875-03", "[1875]", or a range — take the first 4-digit
@@ -219,9 +227,11 @@ export async function run(
   // CRITICAL: take the LAST in-range 4-digit token, not the first. The publication
   // year always trails the volume/page/PLATE numbers in a citation, and those can be
   // 4 digits too ("Icon. Pl. 21: t. 2038a (1890)" → must yield 1890, not the plate
-  // 2038). So we collect every 4-digit run, keep the ones in [1500, maxYear] (drops
-  // plate numbers like 2038), and take the last — the trailing year.
-  // Empty table when Reference.tsv is absent so the join below is a harmless no-op.
+  // 2038). So we collect every 4-digit run, keep the ones in [minYear, maxYear] (drops
+  // plate numbers like 2038), and take the last — the trailing year. But first strip any
+  // DOI/URL: those usually trail the real year and carry in-range 4-digit runs (#295:
+  // Calandrinia villaroelii's "…/phytotaxa.1543…" → was picked as 1543), so they'd win
+  // "take the last". Empty table when Reference.tsv is absent (join below is a no-op).
   await conn.run(`
     CREATE TEMP TABLE ref AS
       SELECT rid, ryr FROM (
@@ -230,13 +240,17 @@ export async function run(
                coalesce(
                  TRY_CAST(regexp_extract("col:issued", '(\\d{4})', 1) AS INTEGER),
                  list_last(list_filter(
-                   list_transform(regexp_extract_all("col:citation", '\\d{4}'), x -> TRY_CAST(x AS INTEGER)),
-                   y -> y >= 1500 AND y <= ${maxYear}
+                   list_transform(
+                     regexp_extract_all(
+                       regexp_replace("col:citation", 'https?://\\S+|10\\.\\d{4,9}/\\S+', ' ', 'g'),
+                       '\\d{4}'),
+                     x -> TRY_CAST(x AS INTEGER)),
+                   y -> y >= ${minYear} AND y <= ${maxYear}
                  ))
                ) AS ryr
         FROM read_csv('${referenceTsv}', delim='\t', header=true, quote='', ignore_errors=true, all_varchar=true)
         ` : `SELECT NULL::VARCHAR AS rid, NULL::INTEGER AS ryr`}
-      ) WHERE rid IS NOT NULL AND ryr BETWEEN 1500 AND ${maxYear};
+      ) WHERE rid IS NOT NULL AND ryr BETWEEN ${minYear} AND ${maxYear};
   `);
 
   // species/ — accepted species only, lineage from XR's denormalized columns,
@@ -259,7 +273,7 @@ export async function run(
              extinct, in_base, ${TAXON_GROUP_CASE} AS taxon_group
       FROM (
         SELECT n.col_id, n.scientific_name, n.authorship,
-               CASE WHEN coalesce(n.combination_year, n.basionym_year, r.ryr) BETWEEN 1500 AND ${maxYear}
+               CASE WHEN coalesce(n.combination_year, n.basionym_year, r.ryr) BETWEEN ${minYear} AND ${maxYear}
                     THEN coalesce(n.combination_year, n.basionym_year, r.ryr) END AS described_year,
                lower(n.kingdom) AS kingdom, lower(n.phylum) AS phylum, lower(n.class_name) AS class_name,
                lower(n.order_name) AS order_name, lower(n.family) AS family, lower(n.genus) AS genus,

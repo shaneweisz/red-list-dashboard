@@ -18,6 +18,7 @@ const DATA_DIR = path.join(process.cwd(), "data");
 const REDLIST_DIR = path.join(DATA_DIR, "redlist");
 const TAXA_SUMMARY_PATH = path.join(DATA_DIR, "taxa-summary.json");
 const NODE_CHILDREN_SUMMARIES_PATH = path.join(DATA_DIR, "node-children-summaries.json");
+const COUNTRY_STATS_PATH = path.join(DATA_DIR, "country-stats.json");
 
 // =============================================================================
 // TYPES
@@ -44,7 +45,6 @@ interface RedlistRow {
   possibly_extinct_in_the_wild: boolean;
   criteria: string | null;
   threat_codes: string[];
-  has_map: boolean;
 }
 
 export interface PreviousAssessment {
@@ -96,7 +96,6 @@ function parseRedlistRow(r: Record<string, string>): RedlistRow {
     possibly_extinct_in_the_wild: r.possibly_extinct_in_the_wild === "true",
     criteria: r.criteria || null,
     threat_codes: r.threat_codes ? r.threat_codes.split(";").filter(Boolean) : [],
-    has_map: r.has_map === "true",
   };
 }
 
@@ -110,6 +109,7 @@ const redlistCache = new Map<string, RedlistRow[]>();
 const historyCache = new Map<string, HistoryMap>();
 let taxaSummaryCache: TaxaSummaryRow[] | null = null;
 let nodeChildrenSummariesCache: Record<string, NodeSummary[]> | null = null;
+let countryStatsCache: Record<string, { species: number; outdated: number }> | null = null;
 
 /** @internal Reset all module-level caches (for tests only). */
 export function _resetCaches(): void {
@@ -117,6 +117,7 @@ export function _resetCaches(): void {
   historyCache.clear();
   taxaSummaryCache = null;
   nodeChildrenSummariesCache = null;
+  countryStatsCache = null;
 }
 
 function loadRedlistForGroup(group: string): RedlistRow[] {
@@ -167,6 +168,22 @@ export function getPrecomputedChildrenSummaries(parentNodeId: string): NodeSumma
     nodeChildrenSummariesCache = JSON.parse(content) as Record<string, NodeSummary[]>;
   }
   return nodeChildrenSummariesCache[parentNodeId] ?? [];
+}
+
+/**
+ * Get per-country totals across ALL species (unfiltered by taxon) — feeds the
+ * country-view landing page's world map. A single precomputed aggregate
+ * (~200 countries, one static file), not a live query: this data never varies
+ * by taxon/subgroup selection, unlike the per-country taxa-summary/node-summary
+ * endpoints (see country-taxa-summary-duckdb.ts), so there's nothing for a
+ * live query to compose with here.
+ */
+export function getCountryStats(): Record<string, { species: number; outdated: number }> {
+  if (!countryStatsCache) {
+    const content = fs.readFileSync(COUNTRY_STATS_PATH, "utf-8");
+    countryStatsCache = JSON.parse(content) as Record<string, { species: number; outdated: number }>;
+  }
+  return countryStatsCache;
 }
 
 // =============================================================================
@@ -299,13 +316,24 @@ interface TaxonomyFilter {
   excludeClasses?: string[];
   excludeOrders?: string[];
   excludeFamilies?: string[];
+  genera?: string[];
+  excludeGenera?: string[];
+  speciesNames?: string[];
+  excludeSpeciesNames?: string[];
+  extraSpeciesNames?: string[];
 }
 
 /** Check if a redlist row passes the taxonomy filter */
 function matchesTaxonomyFilter(
-  row: { class_name: string | null; order_name: string | null; family: string | null },
+  row: { class_name: string | null; order_name: string | null; family: string | null; scientific_name?: string | null },
   filter: TaxonomyFilter,
 ): boolean {
+  // extraSpeciesNames: mirrors matchesFilter's OR escape hatch (taxonomy-utils.ts) —
+  // species included regardless of every other clause below.
+  if (filter.extraSpeciesNames?.length) {
+    const name = (row.scientific_name ?? "").trim().toLowerCase();
+    if (filter.extraSpeciesNames.includes(name)) return true;
+  }
   if (filter.classNames && filter.classNames.length > 0) {
     const cls = (row.class_name ?? "").toLowerCase();
     if (!filter.classNames.includes(cls)) return false;
@@ -332,7 +360,30 @@ function matchesTaxonomyFilter(
     const fam = (row.family ?? "").toLowerCase();
     if (fam && filter.excludeFamilies.includes(fam)) return false;
   }
+  if (filter.genera?.length || filter.excludeGenera?.length) {
+    const genus = (row.scientific_name ?? "").trim().split(/\s+/)[0]?.toLowerCase() ?? "";
+    if (filter.genera && filter.genera.length > 0 && !filter.genera.includes(genus)) return false;
+    if (filter.excludeGenera && filter.excludeGenera.length > 0 && genus && filter.excludeGenera.includes(genus)) return false;
+  }
+  if (filter.speciesNames?.length || filter.excludeSpeciesNames?.length) {
+    const name = (row.scientific_name ?? "").trim().toLowerCase();
+    if (filter.speciesNames && filter.speciesNames.length > 0 && !filter.speciesNames.includes(name)) return false;
+    if (filter.excludeSpeciesNames && filter.excludeSpeciesNames.length > 0 && name && filter.excludeSpeciesNames.includes(name)) return false;
+  }
   return true;
+}
+
+/**
+ * Strip trailing parenthetical affiliations from an assessor/reviewer name.
+ * The same person appears with a "(... Red List Authority)" / "(... Assessment
+ * Team)" role label in some assessments but not others, so we drop it to (a)
+ * aggregate that person's species under one candidate and (b) keep the name a
+ * stable identity that round-trips with the assessors/reviewers dashboard filter
+ * (which matches against the latest assessment, where the label is often absent).
+ * e.g. "Amori, G. (Small Nonvolant Mammal Red List Authority)" -> "Amori, G."
+ */
+function stripAffiliation(name: string): string {
+  return name.replace(/\s*\([^)]*\)/g, "").trim();
 }
 
 /**
@@ -388,7 +439,7 @@ export function getAssessorCandidatesByCountry(
         const date = assessment.date ?? "";
         if (date > latestDate) latestDate = date;
         for (const name of parseAssessorNames(assessment.assessors)) {
-          const normalizedName = name.trim();
+          const normalizedName = stripAffiliation(name);
           if (normalizedName && normalizedName.length >= 3) {
             speciesAssessors.add(normalizedName);
           }
@@ -427,6 +478,126 @@ export function getAssessorCandidatesByCountry(
   }
 
   return [...assessorMap.entries()]
+    .filter(([, stats]) => stats.totalInRegion > 0)
+    .map(([name, stats]) => ({
+      name,
+      regionCounts: stats.regionCounts,
+      countryCounts: stats.countryCounts,
+      totalInRegion: stats.totalInRegion,
+      totalAll: stats.totalAll,
+      latestDate: stats.latestDate,
+    }))
+    .sort((a, b) => {
+      if (a.totalInRegion !== b.totalInRegion) return b.totalInRegion - a.totalInRegion;
+      return b.latestDate.localeCompare(a.latestDate);
+    });
+}
+
+export interface ReviewerCountryCandidate {
+  name: string;
+  /** Per-region species counts (aggregated from the target species' countries) */
+  regionCounts: Record<string, number>;
+  /** Per-country species counts (country codes from the target species) */
+  countryCounts: Record<string, number>;
+  /** Species reviewed in this taxonomy scope with country overlap */
+  totalInRegion: number;
+  /** Total species reviewed in this taxonomy scope (regardless of country) */
+  totalAll: number;
+  latestDate: string;
+}
+
+/**
+ * Find reviewer candidates for an NE species by looking at assessed species
+ * in the given taxon groups that share at least one country with the target species.
+ * Accepts multiple groups so a taxa like "plantae" can search across all plant groups.
+ * Applies an optional taxonomy filter (e.g. orderNames for beetles) to narrow scope.
+ * Aggregates counts by UN M49 sub-region for cleaner visualisation.
+ */
+export function getReviewerCandidatesByCountry(
+  taxonGroups: string[],
+  countries: string[],
+  taxonomyFilter?: TaxonomyFilter,
+): ReviewerCountryCandidate[] {
+  if (countries.length === 0 || taxonGroups.length === 0) return [];
+
+  const countrySet = new Set(countries.map((c) => c.toUpperCase()));
+
+  const reviewerMap = new Map<string, { regionCounts: Record<string, number>; countryCounts: Record<string, number>; totalInRegion: number; totalAll: number; latestDate: string; seenSpeciesRegion: Set<number>; seenSpeciesAll: Set<number> }>();
+
+  for (const taxonGroup of taxonGroups) {
+    const redlistRows = loadRedlistForGroup(taxonGroup);
+    const historyMap = loadHistoryForGroup(taxonGroup);
+
+    for (const row of redlistRows) {
+      // Apply taxonomy filter (e.g. only coleoptera for beetles)
+      if (taxonomyFilter && !matchesTaxonomyFilter(row, taxonomyFilter)) continue;
+
+      // Find which of the target countries this species occurs in
+      const overlapping = row.countries.filter((c) => countrySet.has(c.toUpperCase()));
+      const hasCountryOverlap = overlapping.length > 0;
+
+      // Map overlapping countries to their regions (deduplicate per-species)
+      const regions = hasCountryOverlap
+        ? new Set(overlapping.map((c) => countryToRegion(c)))
+        : new Set<string>();
+
+      const assessments = historyMap[String(row.sis_taxon_id)] ?? [];
+      const allAssessments = assessments.length > 0 ? assessments : [{
+        id: row.assessment_id,
+        year: row.year_published,
+        category: row.category,
+        date: row.assessment_date,
+        assessors: null as string | null,
+        reviewers: null as string | null,
+      }];
+
+      // Collect unique reviewer names across all assessments for this species
+      const speciesReviewers = new Set<string>();
+      let latestDate = "";
+      for (const assessment of allAssessments) {
+        if (!assessment.reviewers) continue;
+        const date = assessment.date ?? "";
+        if (date > latestDate) latestDate = date;
+        for (const name of parseAssessorNames(assessment.reviewers)) {
+          const normalizedName = stripAffiliation(name);
+          if (normalizedName && normalizedName.length >= 3) {
+            speciesReviewers.add(normalizedName);
+          }
+        }
+      }
+
+      // Credit each reviewer once per species
+      for (const normalizedName of speciesReviewers) {
+        let stats = reviewerMap.get(normalizedName);
+        if (!stats) {
+          stats = { regionCounts: {}, countryCounts: {}, totalInRegion: 0, totalAll: 0, latestDate: "", seenSpeciesRegion: new Set(), seenSpeciesAll: new Set() };
+          reviewerMap.set(normalizedName, stats);
+        }
+
+        // Always count for totalAll
+        if (!stats.seenSpeciesAll.has(row.sis_taxon_id)) {
+          stats.seenSpeciesAll.add(row.sis_taxon_id);
+          stats.totalAll++;
+        }
+
+        // Count for region overlap
+        if (hasCountryOverlap && !stats.seenSpeciesRegion.has(row.sis_taxon_id)) {
+          stats.seenSpeciesRegion.add(row.sis_taxon_id);
+          stats.totalInRegion++;
+          for (const region of regions) {
+            stats.regionCounts[region] = (stats.regionCounts[region] ?? 0) + 1;
+          }
+          for (const c of overlapping) {
+            const code = c.toUpperCase();
+            stats.countryCounts[code] = (stats.countryCounts[code] ?? 0) + 1;
+          }
+        }
+        if (latestDate > stats.latestDate) stats.latestDate = latestDate;
+      }
+    }
+  }
+
+  return [...reviewerMap.entries()]
     .filter(([, stats]) => stats.totalInRegion > 0)
     .map(([name, stats]) => ({
       name,
@@ -495,18 +666,39 @@ export interface NodeSummary {
   // artifacts weren't present at build time.
   colDescribed?: number;
   colNe?: number;
+  // Per-name breakdown of colDescribed/colNe, for every name in the node's primary
+  // include dimension (e.g. Pinniped SG's families [otariidae, phocidae, odobenidae],
+  // or a single-name dimension like Primate SG's [primates]) — each entry's count/
+  // neCount use the same filter (including excludes) narrowed to that one name, so
+  // they sum to colDescribed/colNe exactly. trueAssessed is IUCN's own assessed count
+  // for that one name (matched via assessed.parquet's own class/order/family fields,
+  // not CoL's) — comparing it to count-neCount surfaces likely splits/lumps/coverage
+  // gaps a CoL-only view would hide (see BreakdownList in TaxaSummary.tsx). Undefined
+  // when the CoL artifacts weren't present at build time.
+  colBreakdown?: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[]; splitDetails?: SplitDetail[] }[];
 }
 
-const CURRENT_YEAR = new Date().getFullYear();
-const OUTDATED_THRESHOLD_YEARS = 10;
-
-/**
- * Is an assessment outdated? Uses the same logic as build-taxa-summary.ts:
- * outdated if assessment_date is >10 years ago, or if assessment_date is missing.
- */
-export function isOutdated(assessmentDate: string | null, currentYear = CURRENT_YEAR): boolean {
-  if (!assessmentDate) return true; // No date → treat as outdated
-  const year = parseInt(assessmentDate.slice(0, 4), 10);
-  if (isNaN(year)) return true;
-  return currentYear - year > OUTDATED_THRESHOLD_YEARS;
+// See scripts/build-taxa-summary.ts's classifyNoMatch for what each reason means and
+// how it's derived. Modular/additive on top of noMatchIds — safe to ignore or drop
+// without touching the count-only CoL Match / No CoL Match mechanism.
+export type NoMatchReason = "no_link" | "missing_from_backbone" | "infraspecific" | "provisional" | "lumped" | "not_in_base" | "extinct_unconfirmed" | "classified_elsewhere";
+export interface NoMatchDetail {
+  id: number;
+  name: string;
+  reason: NoMatchReason;
+  detail?: string;
+  detailId?: number;
 }
+
+// Heuristic "split from" flag for Not Evaluated species — see
+// scripts/build-taxa-summary.ts's SPLIT_CANDIDATES_SQL for the mechanism and its
+// caveats. Keyed by col_id (NE species have no sis_taxon_id), additive on top of
+// colBreakdown, and independently droppable.
+export interface SplitDetail {
+  colId: string;
+  parentId: number;
+  parentName: string;
+  parentCategory: string;
+}
+
+export { isOutdated, outdatedCutoffDate } from "@/lib/outdated";

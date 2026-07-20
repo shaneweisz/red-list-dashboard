@@ -23,6 +23,30 @@ const COL_ARTIFACTS = [
 ];
 
 const nextConfig: NextConfig = {
+  // Proxy PostHog through our own origin so ad/tracking blockers (which match the
+  // posthog.com domain directly) can't drop analytics for the academic audience.
+  // /static + /array hit the asset host (it keeps cache-control headers the main
+  // API strips); the catch-all must come last. EU cloud destinations.
+  async rewrites() {
+    return [
+      {
+        source: "/ingest/static/:path*",
+        destination: "https://eu-assets.i.posthog.com/static/:path*",
+      },
+      {
+        source: "/ingest/array/:path*",
+        destination: "https://eu-assets.i.posthog.com/array/:path*",
+      },
+      {
+        source: "/ingest/:path*",
+        destination: "https://eu.i.posthog.com/:path*",
+      },
+    ];
+  },
+  // PostHog's API relies on trailing slashes; without this Next.js redirects them
+  // and breaks event capture through the proxy.
+  skipTrailingSlashRedirect: true,
+
   // #261: DuckDB-backed read routes query Parquet in R2. Keep the native addon
   // out of the bundler, and force-include the 68MB libduckdb.so it dlopens at
   // runtime (file-tracing misses dlopen deps). Scoped to the v2 routes so the
@@ -38,6 +62,25 @@ const nextConfig: NextConfig = {
     "/api/search/warm": DUCKDB_TRACE,
     "/api/taxa/species": DUCKDB_TRACE,
     "/api/redlist/synonyms": DUCKDB_TRACE,
+    // /browse runs querySpecies/searchSpecies (DuckDB over R2) at request time.
+    "/browse": DUCKDB_TRACE,
+    // /api/mcp runs the same query layer for the MCP tools.
+    "/api/mcp": DUCKDB_TRACE,
+    // ?country= on these two routes queries assessed.parquet live via DuckDB
+    // (country-taxa-summary-duckdb.ts) — same native addon as every route above,
+    // so it needs the same trace. Without this the addon's dlopen'd libduckdb.so
+    // is missing on Vercel and importing the module throws at load time, failing
+    // EVERY request to the route (even a plain landing-page load with no
+    // ?country=, since the throw happens before GET() ever runs).
+    "/api/redlist/taxa-summary": DUCKDB_TRACE,
+    "/api/redlist/taxa-subgroups": DUCKDB_TRACE,
+    // Queries the committed (not R2) wcvp-native-countries.parquet directly via
+    // DuckDB read_parquet() — a raw file path, not a JS import, so Next's tracer
+    // needs telling explicitly (same class of miss as the dlopen'd libduckdb.so).
+    "/api/wcvp-native-range": [
+      "./node_modules/@duckdb/node-bindings-linux-x64/**",
+      "./src/lib/native-range-refdata/wcvp-native-countries.parquet",
+    ],
   },
 
   // The API routes import a shared species-store module that references every
@@ -46,6 +89,11 @@ const nextConfig: NextConfig = {
   // over Vercel's 250MB uncompressed limit. Prune per route to what each
   // actually reads at runtime. Globs use **/ so they match whether the tracing
   // root is app/ (local) or the repo root (Vercel, where paths are app/data/…).
+  // NOTE: search-index.json is now legacy (no code reads it; live search queries
+  // Parquet over R2) and is excluded from new syncs (upload-data-to-r2.ts). The
+  // search-index.json entries below are retained only because the active sync still
+  // ships the file into data/ at build time; drop them once a sync without it reaches
+  // production.
   outputFileTracingExcludes: {
     // Search now queries the parquets in R2 (httpfs) — no local data bundled.
     "/api/search": ["**/data/**"],
@@ -62,11 +110,24 @@ const nextConfig: NextConfig = {
     // Reads the Red List / GBIF CSVs (+ mapping) but never the search index or
     // the R2-only CoL artifacts.
     "/api/redlist/assessor-candidates-by-country": ["**/data/search-index.json", ...COL_ARTIFACTS],
-    // These read only the small precomputed summary JSONs.
-    "/api/redlist/taxa-summary": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", ...COL_ARTIFACTS],
-    "/api/redlist/taxa-subgroups": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", ...COL_ARTIFACTS],
+    "/api/redlist/reviewer-candidates-by-country": ["**/data/search-index.json", ...COL_ARTIFACTS],
+    // Read the small precomputed summary JSONs by default, or query
+    // assessed.parquet in R2 (httpfs) when ?country= is set — same CRITICAL
+    // note as /api/redlist/species: keep ALL parquets out, since USE_R2 is
+    // gated on assessed.parquet NOT existing locally.
+    "/api/redlist/taxa-summary": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", "**/data/*.parquet", ...COL_ARTIFACTS],
+    "/api/redlist/taxa-subgroups": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", "**/data/*.parquet", ...COL_ARTIFACTS],
+    // Reads only the small precomputed country-stats.json (no DuckDB — this is
+    // a static aggregate, not a live query, see species-store.ts's getCountryStats).
+    "/api/redlist/country-stats": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", "**/data/node-children-summaries.json", "**/data/*.parquet", ...COL_ARTIFACTS],
     // Backbone tree navigation queries backbone.parquet in R2 (httpfs) — no local data.
     "/api/taxa/species": ["**/data/**"],
+    // /browse mirrors /api/redlist/species (same querySpecies): keep taxa-summary.json
+    // for the instant NE tooLarge check, drop the heavy data + ALL parquets (the USE_R2
+    // gate keys on assessed.parquet being absent locally). /llms.txt reads no data.
+    "/browse": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", "**/data/node-children-summaries.json", "**/data/*.parquet", ...COL_ARTIFACTS],
+    "/api/mcp": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", "**/data/node-children-summaries.json", "**/data/*.parquet", ...COL_ARTIFACTS],
+    "/llms.txt": ["**/data/**"],
   },
 };
 

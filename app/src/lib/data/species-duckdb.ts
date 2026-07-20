@@ -23,14 +23,17 @@ const USE_R2 = !fs.existsSync(path.join(DATA_DIR, "assessed.parquet"));
 // v2 function (next.config). LOAD by path avoids the cold-start network INSTALL.
 const HTTPFS_EXT = path.join(process.cwd(), "duckdb-ext", "httpfs.duckdb_extension");
 
-function parquetUri(name: string): string {
+// Exported for src/lib/data/country-taxa-summary-duckdb.ts, which queries the same
+// assessed.parquet over the same cached connection — a second independent connection
+// would double the httpfs/R2 setup cost per cold start.
+export function parquetUri(name: string): string {
   if (!USE_R2) return path.join(DATA_DIR, name);
   const ts = fs.readFileSync(path.join(process.cwd(), "latest-sync.txt"), "utf-8").trim();
   return `s3://${process.env.R2_DATA_BUCKET_NAME}/syncs/${ts}/${name}`;
 }
 
 let connPromise: Promise<DuckDBConnection> | null = null;
-async function getConn(): Promise<DuckDBConnection> {
+export async function getConn(): Promise<DuckDBConnection> {
   if (!connPromise) {
     connPromise = (async () => {
       const inst = await DuckDBInstance.create(":memory:");
@@ -62,8 +65,19 @@ function ensureNeHelpers(conn: DuckDBConnection): Promise<void> {
     neHelpersPromise = (async () => {
       const linkUri = parquetUri("species_link.parquet");
       const unassessedUri = parquetUri("unassessed.parquet");
+      const assessedUri = parquetUri("assessed.parquet");
       await conn.run(`CREATE TEMP TABLE ne_assessed_col_ids AS
         SELECT DISTINCT col_id FROM read_parquet('${linkUri}') WHERE src = 'redlist' AND col_id IS NOT NULL`);
+      // A species CoL flags extinct still belongs to the "described" universe if
+      // IUCN's own linked assessment agrees (EX/EW) — see the matching comment +
+      // rationale next to createExEwAssessedTable in scripts/build-taxa-summary.ts.
+      // Mirrored here so this runtime species list and the build-time colDescribed/
+      // colNe summary numbers never disagree with each other.
+      await conn.run(`CREATE TEMP TABLE ne_ex_ew_col_ids AS
+        SELECT DISTINCT l.col_id
+        FROM read_parquet('${linkUri}') l
+        JOIN read_parquet('${assessedUri}') a ON a.id = l.id
+        WHERE l.src = 'redlist' AND l.col_id IS NOT NULL AND a.iucn_category IN ('EX', 'EW')`);
       await conn.run(`CREATE TEMP TABLE ne_gbif_by_col AS
         SELECT sl.col_id AS col_id, any_value(un.gbif_species_key) AS gbif_species_key, max(un.gbif_occurrence_count) AS gbif_occurrence_count, any_value(un.countries) AS countries, any_value(un.common_name) AS common_name
         FROM read_parquet('${linkUri}') sl JOIN read_parquet('${unassessedUri}') un ON un.id = sl.id
@@ -115,7 +129,7 @@ const ASSESSED_SELECT = `
   assessment_date, year_published, population_trend, countries, class_name, order_name,
   taxon_group, gbif_species_key, gbif_occurrence_count, gbif_observations_after_assessment_year,
   systems, growth_forms, movement_pattern, possibly_extinct, possibly_extinct_in_the_wild,
-  criteria, threat_codes, has_map, latest_assessors, latest_reviewers`;
+  criteria, threat_codes, latest_assessors, latest_reviewers`;
 
 const splitList = (s: unknown): string[] => (typeof s === "string" && s ? s.split(";").filter(Boolean) : []);
 const num = (v: unknown): number | null => (v == null ? null : Number(v));
@@ -161,7 +175,6 @@ export function toSpeciesRow(r: Record<string, unknown>) {
     possibly_extinct_in_the_wild: Boolean(r.possibly_extinct_in_the_wild),
     criteria: r.criteria ?? null,
     threat_codes: splitList(r.threat_codes),
-    has_map: Boolean(r.has_map),
   };
 }
 
@@ -249,7 +262,7 @@ export async function querySpecies(opts: {
     // The NE list IS the CoL extant universe under the taxon, not already assessed
     // (minus the small EXCLUDED_COL_IDS denylist). species/ is partitioned by taxon_group,
     // so the SAME `whereSql` used for the assessed parquet filters + prunes it.
-    const univFilter = `${whereSql} AND in_base AND extinct IS NOT TRUE AND col_id NOT IN ${assessedColIds} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL}`;
+    const univFilter = `${whereSql} AND in_base AND (extinct IS NOT TRUE OR col_id IN (SELECT col_id FROM ne_ex_ew_col_ids)) AND col_id NOT IN ${assessedColIds} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL}`;
 
     // Count first (cheap). A giant aggregate (insects ~935k, invertebrates ~1.3M) exceeds
     // the cap — serializing it is a 250MB+ payload the browser can't load. Flag `tooLarge`
@@ -398,14 +411,20 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
       countries: splitList(r.countries),
     };
   });
-  if (fast.length >= lim) return fast;
+  // Return as soon as the direct search (assessed ∪ unassessed, ~16MB) finds anything.
+  // The CoL-only and synonym tiers below each full-scan a large parquet over R2 (species/
+  // ~36MB, synonym-index ~77MB) with no pruning — ~10s on a cold function. They exist to
+  // *answer* queries the direct search can't (an old/synonym name, or a CoL-only species),
+  // not to pad results, so only run them when the direct search came up empty. A precise
+  // hit like "Panthera leo" returns here after one cheap scan instead of falling through
+  // both heavy tiers.
+  if (fast.length > 0) return fast;
 
   // CoL-only fallback: universe species (species/) that are neither IUCN-assessed nor
-  // GBIF-observed, to fill the remaining slots. species/ has no common name and can't
-  // partition-prune on name, so this full-scans the name column — only run it when the
-  // fast path returned fewer than `limit` hits (it then holds ALL assessed+GBIF matches,
-  // so any species/ match not already listed is genuinely CoL-only — name-dedup suffices,
-  // no species_link anti-join needed). These render as NE and navigate to their leaf taxon.
+  // GBIF-observed. species/ has no common name and can't partition-prune on name, so this
+  // full-scans the name column — gated above on the direct search returning nothing, so it
+  // holds ALL assessed+GBIF matches (none), and any species/ match is genuinely CoL-only
+  // (name-dedup suffices, no species_link anti-join needed). Render as NE → leaf taxon.
   const seen = new Set(fast.map((r) => r.scientific_name.toLowerCase()));
   const colSql = `
     SELECT col_id, scientific_name, taxon_group
@@ -437,10 +456,10 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
   if (fast.length >= lim) return fast;
 
   // Synonym tier: resolve an old/synonym name to its accepted species via synonym-index.parquet
-  // (name-sorted → prefix-range prunes to ~1 row group; substring backstop when sparse). Runs
-  // only when the accepted-name search above is still short. The accepted species routes like a
-  // direct hit — assessed → reassessments (sis id), NE → new-assessments/leaf node — and carries
-  // the matched synonym for the UI. Graceful no-op if the index isn't in this sync prefix.
+  // (name-sorted → prefix-range prunes to ~1 row group). Reached only when the direct search
+  // found nothing (gated above). The accepted species routes like a direct hit — assessed →
+  // reassessments (sis id), NE → new-assessments/leaf node — and carries the matched synonym
+  // for the UI. Graceful no-op if the index isn't in this sync prefix.
   const synUri = parquetUri("synonym-index.parquet");
   const synLo = `'${query.toLowerCase().replace(/'/g, "''")}'`;
   const need = lim - fast.length;
@@ -450,11 +469,14 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
       `SELECT ${synCols} FROM read_parquet('${synUri}')
        WHERE synonym_name_lower >= ${synLo} AND synonym_name_lower < ${synLo} || chr(1114111)
        ORDER BY synonym_name_lower LIMIT ${need * 3 + 5}`, {})).getRowObjects();
-    if (synRows.length < need) {
-      synRows = synRows.concat((await conn.runAndReadAll(
+    // Substring backstop (the query appears mid-name, not as a prefix) full-scans the whole
+    // 77MB index over R2 with no pruning, so only fall back to it when the prefix-range found
+    // nothing at all — not merely when it returned fewer than `need`.
+    if (synRows.length === 0) {
+      synRows = (await conn.runAndReadAll(
         `SELECT ${synCols} FROM read_parquet('${synUri}')
          WHERE synonym_name_lower LIKE '%' || ${synLo} || '%' AND synonym_name_lower NOT LIKE ${synLo} || '%'
-         ORDER BY synonym_name_lower LIMIT ${need * 3 + 5}`, {})).getRowObjects());
+         ORDER BY synonym_name_lower LIMIT ${need * 3 + 5}`, {})).getRowObjects();
     }
     for (const r of synRows) {
       const accName = String(r.accepted_name ?? "");
@@ -591,4 +613,57 @@ export async function getSpeciesUnder(taxon: string, limit = 50): Promise<{
     taxon, matched_rank: (head[0].matched_rank as string) ?? null, total,
     sample: rows.map((r) => ({ col_id: String(r.col_id), scientific_name: String(r.scientific_name) })),
   };
+}
+
+// ─── Higher-rank taxon suggestions (search-bar autocomplete) ─────────────────
+
+export interface TaxonSuggestion {
+  /** Prettified display name, e.g. "Felidae". */
+  name: string;
+  /** Rank the query matched at. */
+  rank: "class" | "order" | "family";
+  /** Lowercased token to pass as ?taxa= (what resolveWhere/querySpecies match on). */
+  taxon: string;
+}
+
+// Recognize a higher-rank taxon (class / order / family) the user is typing, so the
+// search bar can offer "Browse Felidae → " above the species hits. Restricted to the
+// three ranks resolveWhere()'s arbitrary-rank branch matches on — genus is excluded
+// because the dashboard query (querySpecies) can't filter by it, so a genus pick would
+// land on an empty view. Prefix-matches the DISTINCT rank names in the assessed ∪
+// unassessed parquets (already warm in the search hot path, name columns pre-lowercased
+// at build time), so it never full-scans species/. A rank with zero assessed and zero
+// GBIF-observed species won't surface — acceptable: those are exactly the taxa a user
+// wouldn't browse to, and the direct species/synonym search still answers by name.
+export async function suggestTaxa(query: string, limit = 3): Promise<TaxonSuggestion[]> {
+  if (query.length < 2) return [];
+  const conn = await getConn();
+  const q = query.toLowerCase();
+  const RANKS: { col: string; rank: TaxonSuggestion["rank"] }[] = [
+    { col: "family", rank: "family" },
+    { col: "order_name", rank: "order" },
+    { col: "class_name", rank: "class" },
+  ];
+  const part = (src: string, col: string, rank: string) =>
+    `SELECT DISTINCT ${col} AS name, '${rank}' AS rank FROM '${parquetUri(src)}'
+     WHERE ${col} IS NOT NULL AND ${col} LIKE $q || '%'`;
+  const parts = RANKS.flatMap(({ col, rank }) =>
+    [part("assessed.parquet", col, rank), part("unassessed.parquet", col, rank)]);
+  const lim = Math.min(Math.max(limit, 1), 10);
+  // Exact match first, then shortest (closest) name, then alphabetical. DISTINCT in the
+  // sub-selects collapses per-file dupes; the outer query dedupes across ranks by name.
+  const sql = `
+    SELECT name, any_value(rank) AS rank FROM (${parts.join(" UNION ALL ")})
+    GROUP BY name
+    ORDER BY (name = $q) DESC, length(name), name
+    LIMIT ${lim}`;
+  const rows = (await conn.runAndReadAll(sql, { q })).getRowObjects();
+  return rows.map((r) => {
+    const name = String(r.name);
+    return {
+      name: name.charAt(0).toUpperCase() + name.slice(1),
+      rank: String(r.rank) as TaxonSuggestion["rank"],
+      taxon: name,
+    };
+  });
 }

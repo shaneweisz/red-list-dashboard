@@ -2,8 +2,11 @@
 
 import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
-import { ThemeToggle } from "../components/ThemeToggle";
+import Link from "next/link";
+import { FaGlobeAmericas } from "react-icons/fa";
 import { SpeciesSearchBar } from "../components/SpeciesSearchBar";
+import { ThemeToggle } from "../components/ThemeToggle";
+import { useBrand } from "../components/BrandProvider";
 import { parseParams, type ViewMode } from "../hooks/useFilterParams";
 
 // Dynamically import view component
@@ -22,6 +25,7 @@ const RedListView = dynamic(
 );
 
 export default function RedListPage() {
+  const brand = useBrand();
   const [viewMode, setViewMode] = useState<ViewMode>("reassessments");
 
   // Hydrate viewMode from URL on mount + sync on popstate (back/forward)
@@ -42,59 +46,89 @@ export default function RedListPage() {
   return (
     <div className="min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950 px-4 sm:px-6 py-4 md:px-16 md:py-8">
       <main className="max-w-5xl w-full min-w-0 mx-auto flex-1">
-        {/* Header row: title + view mode toggle */}
-        <div className="mb-3 md:mb-4 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-zinc-900 dark:text-zinc-100">
-            IUCN Red List Assessments Dashboard
-          </h1>
-          <div className="flex items-center gap-2 shrink-0">
-            {/* View mode toggle */}
-            <div className="flex rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden text-sm">
-              <button
-                onClick={() => {
-                  if (viewMode === "reassessments") return;
-                  setViewMode("reassessments");
-                  setSharedTaxa(new Set());
-                  setSharedSubgroups(new Set());
-                  window.history.pushState(null, "", "/");
-                  window.dispatchEvent(new PopStateEvent("popstate"));
-                }}
-                className={`px-3 py-2 sm:py-1.5 font-medium transition-colors ${
-                  viewMode === "reassessments"
-                    ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
-                    : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
-                }`}
-              >
-                Reassessments
-              </button>
-              <button
-                onClick={() => {
-                  if (viewMode === "new-assessments") return;
-                  setViewMode("new-assessments");
-                  setSharedTaxa(new Set());
-                  setSharedSubgroups(new Set());
-                  window.history.pushState(null, "", "/?view=new-assessments");
-                  window.dispatchEvent(new PopStateEvent("popstate"));
-                }}
-                className={`px-3 py-2 sm:py-1.5 font-medium transition-colors ${
-                  viewMode === "new-assessments"
-                    ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
-                    : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
-                }`}
-              >
-                New Assessments
-              </button>
+        {/* Header: two aligned rows (title | view-toggle, subtitle | search).
+            Globe sits inline with the title so the subtitle, controls and
+            search bar share the same flush-left edge as the table below. */}
+        <div className="mb-[0.9rem] md:mb-[1.35rem]">
+          <div className="min-w-0 grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center gap-x-3 gap-y-1.5 sm:gap-y-3 [grid-template-areas:'title'_'subtitle'_'controls'_'search'] sm:[grid-template-areas:'title_controls'_'subtitle_search']">
+            <button
+              type="button"
+              onClick={() => {
+                // "Go home": drop every filter/selection, but keep the layout
+                // (Standard/Table 1a/SSC/Country) and view (Reassessments/New
+                // Assessments) choices — same fields clearAllFiltersAndTaxa
+                // preserves, replicated here via raw URL params since this
+                // click lives outside RedListView's useFilterParams instance.
+                const params = new URLSearchParams(window.location.search);
+                const kept = new URLSearchParams();
+                const layout = params.get("layout");
+                const view = params.get("view");
+                if (layout) kept.set("layout", layout);
+                if (view) kept.set("view", view);
+                const qs = kept.toString();
+                window.history.pushState(null, "", qs ? `/?${qs}` : "/");
+                window.dispatchEvent(new PopStateEvent("popstate"));
+              }}
+              className="[grid-area:title] flex items-center gap-2 min-w-0 text-left cursor-pointer hover:opacity-80 transition-opacity"
+              title="Back to home"
+            >
+              {brand.showGlobe && (
+                <FaGlobeAmericas className="shrink-0 text-2xl sm:text-3xl md:text-[2rem] text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+              )}
+              <h1 className="text-2xl sm:text-3xl md:text-[2rem] font-bold text-zinc-900 dark:text-zinc-100 truncate">{brand.title}</h1>
+            </button>
+            {brand.subtitle && (
+              <p className="[grid-area:subtitle] text-[15px] md:text-[1.375rem] text-zinc-500 dark:text-zinc-400">{brand.subtitle}</p>
+            )}
+            <div className="[grid-area:controls] flex items-center gap-2 sm:justify-self-end">
+              {/* View mode toggle */}
+              <div className="flex rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden text-sm">
+                <button
+                  onClick={() => {
+                    if (viewMode === "reassessments") return;
+                    setViewMode("reassessments");
+                    // Preserve the current taxa/subgroup/layout selection (and any other
+                    // URL-only filters) across the switch — only the `view` param changes.
+                    const params = new URLSearchParams(window.location.search);
+                    params.delete("view");
+                    const qs = params.toString();
+                    window.history.pushState(null, "", qs ? `/?${qs}` : "/");
+                    window.dispatchEvent(new PopStateEvent("popstate"));
+                  }}
+                  className={`px-3 py-2 sm:py-1.5 font-medium transition-colors ${
+                    viewMode === "reassessments"
+                      ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                      : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+                  }`}
+                >
+                  {brand.assessedTabLabel ?? "Reassessments"}
+                </button>
+                <button
+                  onClick={() => {
+                    if (viewMode === "new-assessments") return;
+                    setViewMode("new-assessments");
+                    // Preserve the current taxa/subgroup/layout selection (and any other
+                    // URL-only filters) across the switch — only the `view` param changes.
+                    const params = new URLSearchParams(window.location.search);
+                    params.set("view", "new-assessments");
+                    window.history.pushState(null, "", `/?${params.toString()}`);
+                    window.dispatchEvent(new PopStateEvent("popstate"));
+                  }}
+                  className={`px-3 py-2 sm:py-1.5 font-medium transition-colors ${
+                    viewMode === "new-assessments"
+                      ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                      : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+                  }`}
+                >
+                  {brand.unassessedTabLabel ?? "New Assessments"}
+                </button>
+              </div>
+              <ThemeToggle />
             </div>
-            <ThemeToggle />
+            <div className="[grid-area:search] sm:justify-self-end">
+              <SpeciesSearchBar />
+            </div>
           </div>
-        </div>
-
-        {/* Search bar + subtitle */}
-        <div className="mb-4 md:mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <p className="text-sm md:text-base text-zinc-600 dark:text-zinc-400">
-            Click taxa rows to filter, use charts and search to explore species.<span className="hidden sm:inline"> Cmd/Ctrl+click to multiselect.</span>
-          </p>
-          <SpeciesSearchBar />
         </div>
 
         {/* Content — single component instance stays mounted on viewMode switch */}
@@ -137,7 +171,7 @@ export default function RedListPage() {
           >
             PhD research project
           </a>
-          {" "}at the University of Cambridge. The data is sourced from publicly available{" "}
+          {" "}at the University of Cambridge. The data is sourced from{" "}
           <a
             href="https://www.iucnredlist.org"
             target="_blank"
@@ -146,7 +180,7 @@ export default function RedListPage() {
           >
             IUCN Red List
           </a>
-          ,{" "}
+          {" "}(version 2026-1),{" "}
           <a
             href="https://www.gbif.org"
             target="_blank"
@@ -182,7 +216,7 @@ export default function RedListPage() {
           >
             CITES
           </a>
-          {" "}and{" "}
+          ,{" "}
           <a
             href="https://speciesplus.net"
             target="_blank"
@@ -191,7 +225,42 @@ export default function RedListPage() {
           >
             Species+
           </a>
-          {" "}data. Any errors in aggregation or presentation are my own. Please verify against the primary sources before use, and do get in touch if you notice any issues.
+          ,{" "}
+          <a
+            href="https://www.catalogueoflife.org"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
+          >
+            Catalogue of Life
+          </a>
+          , and{" "}
+          <a
+            href="https://eol.org"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
+          >
+            Encyclopedia of Life
+          </a>
+          {" "}data. This is a free, non-commercial research tool; commercial users should obtain IUCN Red List data via{" "}
+          <a
+            href="https://www.ibat-alliance.org/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
+          >
+            IBAT
+          </a>
+          . Any errors in aggregation or presentation are my own. Please verify against the primary sources before use, and do get in touch if you notice any issues.
+        </p>
+        <p className="text-center text-xs text-zinc-400 dark:text-zinc-500 mt-4">
+          <Link
+            href="/privacy"
+            className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
+          >
+            Privacy policy
+          </Link>
         </p>
       </footer>
     </div>

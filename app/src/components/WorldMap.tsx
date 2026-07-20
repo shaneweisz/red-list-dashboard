@@ -8,7 +8,9 @@ import {
   ZoomableGroup,
 } from "react-simple-maps";
 import { geoCentroid } from "d3-geo";
-import { IUCN_REGION_ORDER, countryToIucnRegion, iucnRegionCountries } from "@/lib/regions";
+import { IUCN_REGION_ORDER, matchingRegion } from "@/lib/regions";
+import CountryStatsList from "./CountryStatsList";
+import type { MapViewMode, MapSortKey } from "@/hooks/useFilterParams";
 
 // Using the recommended TopoJSON from react-simple-maps
 const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json";
@@ -48,17 +50,63 @@ const NAME_TO_ALPHA2: Record<string, string> = {
   "Turkey": "TR", "Turkmenistan": "TM", "Uganda": "UG", "Ukraine": "UA",
   "United Arab Emirates": "AE", "United Kingdom": "GB", "United States of America": "US",
   "Uruguay": "UY", "Uzbekistan": "UZ", "Vanuatu": "VU", "Venezuela": "VE", "Vietnam": "VN",
-  "Yemen": "YE", "Zambia": "ZM", "Zimbabwe": "ZW", "Palestine": "PS", "Kosovo": "XK",
-  "North Macedonia": "MK", "New Caledonia": "NC", "W. Sahara": "EH", "Fr. S. Antarctic Lands": "TF",
+  "Yemen": "YE", "Zambia": "ZM", "Zimbabwe": "ZW", "Palestine": "PS",
+  "Macedonia": "MK", "New Caledonia": "NC", "W. Sahara": "EH", "Fr. S. Antarctic Lands": "TF",
   "Falkland Is.": "FK",
-  // Small/micro nations not in 110m TopoJSON but useful for search
-  "Andorra": "AD", "Antigua and Barbuda": "AG", "Bahamas": "BS", "Bahrain": "BH", "Barbados": "BB",
-  "Belize": "BZ", "Cape Verde": "CV", "Comoros": "KM", "Dominica": "DM", "Grenada": "GD",
-  "Kiribati": "KI", "Liechtenstein": "LI", "Maldives": "MV", "Malta": "MT", "Marshall Islands": "MH",
+  // Small/micro nations not in the 50m TopoJSON at all — kept spelled out since
+  // there's no shape to match against; only useful for search.
+  "Andorra": "AD", "Bahamas": "BS", "Bahrain": "BH", "Barbados": "BB",
+  "Belize": "BZ", "Comoros": "KM", "Dominica": "DM", "Grenada": "GD",
+  "Kiribati": "KI", "Liechtenstein": "LI", "Maldives": "MV", "Malta": "MT",
   "Mauritius": "MU", "Micronesia": "FM", "Monaco": "MC", "Nauru": "NR", "Palau": "PW",
-  "Samoa": "WS", "San Marino": "SM", "São Tomé and Príncipe": "ST", "Seychelles": "SC",
-  "Saint Kitts and Nevis": "KN", "Saint Lucia": "LC", "Saint Vincent and the Grenadines": "VC",
-  "Tonga": "TO", "Tuvalu": "TV", "Vatican City": "VA",
+  "Samoa": "WS", "San Marino": "SM", "Seychelles": "SC", "Saint Lucia": "LC",
+  "Tonga": "TO", "Tuvalu": "TV",
+  // These ARE present in the 50m TopoJSON, just under an abbreviated/different
+  // name than the long form above — keyed here by the exact shape name so the
+  // map coloring lookup (NAME_TO_ALPHA2[geo.properties.name]) actually matches.
+  // (Long display names still shown elsewhere via ALPHA2_TO_NAME's own overrides below.)
+  "Antigua and Barb.": "AG", "Cabo Verde": "CV", "São Tomé and Principe": "ST",
+  "St. Kitts and Nevis": "KN", "St. Vin. and Gren.": "VC", "Vatican": "VA",
+  "Marshall Is.": "MH",
+  // Additional territories present as their own shape in the 50m TopoJSON that
+  // had no entry at all before (always rendered as "No data" regardless of the
+  // underlying Red List data).
+  "American Samoa": "AS", "Anguilla": "AI", "Aruba": "AW", "Bermuda": "BM",
+  "Br. Indian Ocean Ter.": "IO", "British Virgin Is.": "VG", "Cayman Is.": "KY",
+  "Cook Is.": "CK", "Curaçao": "CW", "Faeroe Is.": "FO", "Fr. Polynesia": "PF",
+  "Guam": "GU", "Guernsey": "GG", "Heard I. and McDonald Is.": "HM", "Hong Kong": "HK",
+  "Isle of Man": "IM", "Jersey": "JE", "Macao": "MO", "Montserrat": "MS",
+  "N. Mariana Is.": "MP", "Niue": "NU", "Norfolk Island": "NF", "Pitcairn Is.": "PN",
+  "S. Geo. and the Is.": "GS", "Saint Helena": "SH", "Sint Maarten": "SX",
+  "St-Barthélemy": "BL", "St-Martin": "MF", "St. Pierre and Miquelon": "PM",
+  "Turks and Caicos Is.": "TC", "U.S. Virgin Is.": "VI", "Wallis and Futuna Is.": "WF",
+  "Åland": "AX",
+  // Somaliland, N. Cyprus, and Kosovo are drawn as their own shape in the
+  // TopoJSON, but IUCN's public presentation doesn't treat any of them as a
+  // distinct country — fold each into its parent rather than leaving a
+  // "no data" gap that reads as a bug.
+  //
+  // Somaliland/N. Cyprus: IUCN's own Red List country standard (ISO 3166-1 +
+  // UN country names, per redlist.org/resources/country-codes) has no
+  // distinct code for either — both fold into Somalia/Cyprus, the same way
+  // IUCN's own species assessments do (e.g. the Gerenuk assessment's formal
+  // country field lists "Somalia", even though its range-description text
+  // separately mentions "Somaliland").
+  //
+  // Kosovo: unlike those two, IUCN's internal SIS database *does* carry a
+  // distinct location code (YUG-KO, a legacy former-Yugoslavia sub-code, not
+  // a modern ISO alpha-2) — which looked at first like grounds to treat it
+  // as its own country. But checking IUCN's own public page for a
+  // Kosovo-tagged species (Terranigra kosovica, iucnredlist.org/species/
+  // 155681/222427224) shows the official "Geographic Range" field lists only
+  // "Serbia" — Kosovo appears solely in the free-text range description,
+  // exactly how other legacy sub-codes (RU-EU "European Russia", FRA-FR
+  // "France (mainland)") behave: real in the internal data model, but never
+  // surfaced as their own entry in IUCN's own public country-of-occurrence
+  // presentation. So it gets the same treatment as Somaliland/N. Cyprus, not
+  // the Palestine/Taiwan/W. Sahara treatment (which do have their own
+  // "Geographic Range" line).
+  "Somaliland": "SO", "N. Cyprus": "CY", "Kosovo": "RS",
 };
 
 // Complete ISO 3166-1 alpha-2 to country name mapping (for display)
@@ -78,11 +126,12 @@ export const ALPHA2_TO_NAME: Record<string, string> = {
   "HM": "Heard Island", "IM": "Isle of Man", "IO": "British Indian Ocean Territory",
   "JE": "Jersey", "KI": "Kiribati", "KM": "Comoros", "KN": "Saint Kitts and Nevis",
   "KY": "Cayman Islands", "LC": "Saint Lucia", "LI": "Liechtenstein", "MC": "Monaco",
-  "MF": "Saint Martin", "MH": "Marshall Islands", "MO": "Macao", "MP": "Northern Mariana Islands",
+  "MF": "Saint Martin", "MH": "Marshall Islands", "MK": "North Macedonia", "MO": "Macao", "MP": "Northern Mariana Islands",
   "MQ": "Martinique", "MS": "Montserrat", "MT": "Malta", "MU": "Mauritius", "MV": "Maldives",
   "NF": "Norfolk Island", "NR": "Nauru", "NU": "Niue", "PF": "French Polynesia",
   "PM": "Saint Pierre and Miquelon", "PN": "Pitcairn", "PW": "Palau", "RE": "Réunion",
   "SC": "Seychelles", "SH": "Saint Helena", "SJ": "Svalbard", "SM": "San Marino",
+  "SO": "Somalia", "CY": "Cyprus", "RS": "Serbia",
   "ST": "São Tomé and Príncipe", "SV": "El Salvador", "SX": "Sint Maarten",
   "TC": "Turks and Caicos", "TK": "Tokelau", "TO": "Tonga", "TV": "Tuvalu",
   "UM": "U.S. Minor Outlying Islands", "VA": "Vatican City", "VC": "Saint Vincent and the Grenadines",
@@ -93,11 +142,26 @@ export const ALPHA2_TO_NAME: Record<string, string> = {
 // Sorted list of country names for search
 const COUNTRY_NAMES_SORTED = Object.keys(NAME_TO_ALPHA2).sort();
 
-interface CountryStats {
+export interface CountryStats {
   [countryCode: string]: {
     occurrences: number;
     species: number;
+    outdated?: number;
   };
+}
+
+// Linear gradient for % outdated: green (0%) -> amber (50%) -> red (100%).
+// Unlike the species/occurrence heatmap, % is already bounded and roughly
+// uniformly distributed, so a plain linear scale (no log) keeps countries
+// distinguishable across the full range instead of clumping most into one bucket.
+function getOutdatedColor(percent: number): string {
+  const p = Math.max(0, Math.min(100, percent));
+  const green: [number, number, number] = [34, 197, 94]; // #22c55e
+  const amber: [number, number, number] = [234, 179, 8]; // #eab308
+  const red: [number, number, number] = [239, 68, 68]; // #ef4444
+  const [from, to, t] = p <= 50 ? [green, amber, p / 50] : [amber, red, (p - 50) / 50];
+  const [r, g, b] = from.map((c, i) => Math.round(c + (to[i] - c) * t));
+  return `rgb(${r}, ${g}, ${b})`;
 }
 
 // Color scale for heatmap: pale green -> medium green -> dark green
@@ -141,7 +205,7 @@ function formatNumber(num: number): string {
   return num.toString();
 }
 
-type ColorMode = "species" | "occurrences";
+type ColorMode = "species" | "occurrences" | "outdated";
 
 const ALL_TAXA_IDS = ["mammals", "birds", "reptiles", "amphibians", "fishes", "invertebrates", "plantae", "fungi"];
 
@@ -151,16 +215,36 @@ interface WorldMapProps {
   selectedTaxon?: string | null;
   // Optional pre-computed stats (for Red List species counts - avoids API call)
   precomputedStats?: CountryStats;
+  // Same shape as precomputedStats, but with no filters applied beyond taxon/
+  // subgroup selection — the "true total" shown in the tooltip alongside the
+  // (possibly filtered) precomputedStats count, so e.g. "100% outdated" while
+  // the Outdated filter is on doesn't read as a fact about the country.
+  precomputedStatsTotal?: CountryStats;
   // Which taxa are selected (determines which GBIF occurrence stats to fetch)
   selectedTaxa?: Set<string>;
   // Label for the species count in tooltips (default: "# Assessed")
   speciesLabel?: string;
   // Callback when a region is selected from the dropdown (sets country filter)
   onRegionFilter?: (region: string) => void;
+  // Whether the "endemics only" filter is active (single-country species)
+  endemicsOnly?: boolean;
+  // Callback to toggle the endemics-only filter
+  onEndemicsToggle?: () => void;
   // Optional footer content rendered inside the panel below the map
   footer?: React.ReactNode;
   // Whether to show the Species/GBIF color mode toggle (only accurate for top-level taxa)
   showGbifToggle?: boolean;
+  // Whether the "% Outdated" color mode is meaningful (false for unassessed/NE species views,
+  // where every species has no assessment date rather than an outdated one)
+  showOutdatedMode?: boolean;
+  // Map/List toggle + list-view sort, URL-synced (see useFilterParams.ts's
+  // mapViewMode/mapSortKey/mapSortDirection) so a sorted list view is a
+  // shareable link. Falls back to local state when omitted (e.g. tests).
+  mapViewMode?: MapViewMode;
+  onMapViewModeChange?: (mode: MapViewMode) => void;
+  mapSortKey?: MapSortKey;
+  mapSortDirection?: "asc" | "desc";
+  onMapSortChange?: (key: MapSortKey, direction: "asc" | "desc") => void;
 }
 
 const DEFAULT_CENTER: [number, number] = [10, 10];
@@ -168,7 +252,7 @@ const DEFAULT_ZOOM = 1.0;
 const MIN_ZOOM = 1.0;
 const MAX_ZOOM = 8.0;
 
-function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, footer, showGbifToggle = true }: WorldMapProps) {
+function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, precomputedStatsTotal, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, endemicsOnly = false, onEndemicsToggle, footer, showGbifToggle = true, showOutdatedMode = true, mapViewMode, onMapViewModeChange, mapSortKey, mapSortDirection, onMapSortChange }: WorldMapProps) {
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoveredCountryCode, setHoveredCountryCode] = useState<string | null>(null);
   const [speciesStats, setSpeciesStats] = useState<CountryStats>(precomputedStats || {});
@@ -176,11 +260,33 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
   const [loading, setLoading] = useState(!precomputedStats);
   const [occurrenceLoading, setOccurrenceLoading] = useState(false);
   const [colorMode, setColorMode] = useState<ColorMode>("species");
+  // Falls back to local state when uncontrolled (mapViewMode/onMapViewModeChange
+  // omitted) — see the same pattern for sort just below.
+  const [localViewMode, setLocalViewMode] = useState<MapViewMode>("map");
+  const viewMode = mapViewMode ?? localViewMode;
+  const setViewMode = onMapViewModeChange ?? setLocalViewMode;
+  const [localSortKey, setLocalSortKey] = useState<MapSortKey>("species");
+  const [localSortDir, setLocalSortDir] = useState<"asc" | "desc">("desc");
+  const sortKey = mapSortKey ?? localSortKey;
+  const sortDir = mapSortDirection ?? localSortDir;
+  const setSort = useCallback(
+    (key: MapSortKey, dir: "asc" | "desc") => {
+      if (onMapSortChange) onMapSortChange(key, dir);
+      else { setLocalSortKey(key); setLocalSortDir(dir); }
+    },
+    [onMapSortChange]
+  );
 
-  // Reset to species mode when GBIF toggle is hidden
+  // Reset to species mode if GBIF is hidden while it's the active mode
+  // (Species and % Outdated stay available regardless of showGbifToggle,
+  // since unlike GBIF occurrence counts they already reflect active filters.)
   useEffect(() => {
-    if (!showGbifToggle) setColorMode("species");
-  }, [showGbifToggle]);
+    setColorMode(mode => {
+      if (mode === "occurrences" && !showGbifToggle) return "species";
+      if (mode === "outdated" && !showOutdatedMode) return "species";
+      return mode;
+    });
+  }, [showGbifToggle, showOutdatedMode]);
 
   // Zoom & pan state
   const [center, setCenter] = useState<[number, number]>(DEFAULT_CENTER);
@@ -205,9 +311,12 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
     if (coords) {
       setCenter(coords);
       // Zoom level depends on country size - small countries zoom more
-      const smallCountries = new Set(["Singapore", "Luxembourg", "Cyprus", "Jamaica", "Trinidad and Tobago", "Brunei", "Qatar", "Kuwait", "Lebanon", "Djibouti", "eSwatini", "Lesotho", "Gambia", "Guinea-Bissau", "Slovenia", "Montenegro", "Kosovo", "North Macedonia", "Andorra", "Antigua and Barbuda", "Bahrain", "Barbados", "Belize", "Cape Verde", "Comoros", "Dominica", "Grenada", "Kiribati", "Liechtenstein", "Maldives", "Malta", "Marshall Islands", "Mauritius", "Micronesia", "Monaco", "Nauru", "Palau", "Samoa", "San Marino", "São Tomé and Príncipe", "Seychelles", "Saint Kitts and Nevis", "Saint Lucia", "Saint Vincent and the Grenadines", "Tonga", "Tuvalu", "Vatican City"]);
+      const smallCountries = new Set(["Singapore", "Luxembourg", "Cyprus", "Jamaica", "Trinidad and Tobago", "Brunei", "Qatar", "Kuwait", "Lebanon", "Djibouti", "eSwatini", "Lesotho", "Gambia", "Guinea-Bissau", "Slovenia", "Montenegro", "Kosovo", "Macedonia", "Andorra", "Antigua and Barb.", "Bahrain", "Barbados", "Belize", "Cabo Verde", "Comoros", "Dominica", "Grenada", "Kiribati", "Liechtenstein", "Maldives", "Malta", "Marshall Is.", "Mauritius", "Micronesia", "Monaco", "Nauru", "Palau", "Samoa", "San Marino", "São Tomé and Principe", "Seychelles", "St. Kitts and Nevis", "Saint Lucia", "St. Vin. and Gren.", "Tonga", "Tuvalu", "Vatican", "American Samoa", "Anguilla", "Aruba", "Bermuda", "British Virgin Is.", "Cayman Is.", "Curaçao", "Faeroe Is.", "Guernsey", "Hong Kong", "Isle of Man", "Jersey", "Macao", "Montserrat", "N. Mariana Is.", "Niue", "Norfolk Island", "Pitcairn Is.", "Saint Helena", "Sint Maarten", "St-Barthélemy", "St-Martin", "St. Pierre and Miquelon", "Turks and Caicos Is.", "U.S. Virgin Is.", "Wallis and Futuna Is.", "Åland", "N. Cyprus"]);
       const largeCountries = new Set(["Russia", "Canada", "United States of America", "China", "Brazil", "Australia", "India", "Argentina"]);
-      const zoomLevel = smallCountries.has(countryName) ? 6 : largeCountries.has(countryName) ? 2.5 : 4;
+      // Small-country zoom capped lower than it used to be (was 6) — at 6 a
+      // small island could fill the whole visible frame, right where the
+      // bottom-left Map/List toggle and bottom-right zoom controls overlay it.
+      const zoomLevel = smallCountries.has(countryName) ? 4.5 : largeCountries.has(countryName) ? 2.5 : 4;
       setZoom(zoomLevel);
     }
     setSearchQuery("");
@@ -334,10 +443,18 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
     setOccurrenceStats(occurrenceCacheRef.current[taxaKey] || null);
   }, [taxaKey]);
 
-  // Active stats for coloring based on mode
-  const activeStats = colorMode === "species" ? speciesStats : (occurrenceStats || {});
+  // Active stats for coloring based on mode ("outdated" reuses the species stats,
+  // since outdated counts are computed alongside species counts, not fetched separately)
+  const activeStats = colorMode === "occurrences" ? (occurrenceStats || {}) : speciesStats;
 
-  // Calculate max value for heatmap scaling
+  // Which region (if any) is currently selected as a whole — shared by the
+  // region <select>'s own value (below) and the list view (which narrows its
+  // rows to this region, same as the map already implicitly does via the blue
+  // highlight over the whole region's shapes). See matchingRegion's own doc
+  // comment for exactly what "as a whole" means.
+  const activeRegion = useMemo(() => matchingRegion(selectedCountries) ?? "", [selectedCountries]);
+
+  // Calculate max value for heatmap scaling (unused in "outdated" mode, which uses a fixed 0-100% gradient)
   const maxValue = Object.values(activeStats).reduce(
     (max, stat) => Math.max(max, colorMode === "species" ? stat.species : stat.occurrences),
     0
@@ -350,11 +467,17 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
     const stats = activeStats[alpha2];
     if (!stats) return "#f4f4f5";
 
+    if (colorMode === "outdated") {
+      if (!stats.species) return "#f4f4f5";
+      return getOutdatedColor(((stats.outdated || 0) / stats.species) * 100);
+    }
+
     const value = colorMode === "species" ? stats.species : stats.occurrences;
     return getHeatmapColor(value, maxValue);
   };
 
   const hoveredSpeciesStats = hoveredCountryCode ? speciesStats[hoveredCountryCode] : null;
+  const hoveredTotalStats = hoveredCountryCode ? precomputedStatsTotal?.[hoveredCountryCode] : null;
   const hoveredOccurrenceStats = hoveredCountryCode && occurrenceStats ? occurrenceStats[hoveredCountryCode] : null;
   return (
     <div className="relative bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 p-3 h-full flex flex-col">
@@ -416,43 +539,36 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
               </div>
             )}
           </div>
-          {/* Color mode toggle (only shown when GBIF numbers are accurate for the current view) */}
-          {showGbifToggle && (
-          <div className="flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md p-0.5 text-[10px]">
+          {/* Color mode: Species and % Outdated are always accurate; GBIF only when
+              no extra filters are active (its counts aren't filterable per-country) */}
+          <select
+            value={colorMode}
+            onChange={(e) => setColorMode(e.target.value as ColorMode)}
+            className="text-[10px] bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          >
+            <option value="species">{speciesLabel}</option>
+            {showOutdatedMode && <option value="outdated">% Outdated</option>}
+            {showGbifToggle && <option value="occurrences"># GBIF Obs</option>}
+          </select>
+          {onEndemicsToggle && (
             <button
-              onClick={() => setColorMode("species")}
-              className={`px-1.5 py-0.5 rounded transition-colors ${colorMode === "species" ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm font-medium" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+              onClick={onEndemicsToggle}
+              title="Show only species endemic to a single country"
+              aria-pressed={endemicsOnly}
+              className={`px-1.5 py-0.5 rounded-md text-[10px] font-medium transition-colors border ${
+                endemicsOnly
+                  ? "bg-teal-500 text-white border-teal-500 shadow-sm"
+                  : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:text-zinc-700 dark:hover:text-zinc-300"
+              }`}
             >
-              Species
+              Endemics
             </button>
-            <button
-              onClick={() => setColorMode("occurrences")}
-              className={`px-1.5 py-0.5 rounded transition-colors ${colorMode === "occurrences" ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm font-medium" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
-            >
-              GBIF
-            </button>
-          </div>
           )}
           {onRegionFilter && (
             <select
-              value={(() => {
-                if (selectedCountries.size === 0) return "";
-                const regions = new Set<string>();
-                selectedCountries.forEach(c => regions.add(countryToIucnRegion(c)));
-                if (regions.size === 1) {
-                  const region = [...regions][0];
-                  if (region !== "Other") {
-                    // Only show region if ALL countries in that region are selected
-                    const regionCodes = iucnRegionCountries(region);
-                    if (regionCodes.length === selectedCountries.size && regionCodes.every(c => selectedCountries.has(c))) {
-                      return region;
-                    }
-                  }
-                }
-                return "";
-              })()}
+              value={activeRegion}
               onChange={(e) => onRegionFilter(e.target.value)}
-              className="text-xs bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500 max-w-[120px] truncate"
+              className="text-[10px] bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500 max-w-[96px] truncate"
             >
               <option value="">All Regions</option>
               {IUCN_REGION_ORDER.map(region => (
@@ -463,8 +579,8 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
         </div>
       </div>
 
-      {/* Hover tooltip */}
-      {hoveredCountry && (
+      {/* Hover tooltip (map view only) */}
+      {viewMode === "map" && hoveredCountry && (
         <div className="absolute top-12 left-1/2 -translate-x-1/2 z-10 bg-white dark:bg-zinc-800 px-3 py-2 rounded-lg shadow-lg text-sm text-zinc-700 dark:text-zinc-300 pointer-events-none border border-zinc-200 dark:border-zinc-700 min-w-[140px]">
           <div className="font-medium text-zinc-900 dark:text-zinc-100">{hoveredCountry}</div>
           {hoveredSpeciesStats || hoveredOccurrenceStats ? (
@@ -472,12 +588,35 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
               {hoveredSpeciesStats && (
                 <div className="flex justify-between gap-4 text-xs">
                   <span className="text-zinc-500">{speciesLabel}</span>
-                  <span className="font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">{formatNumber(hoveredSpeciesStats.species)}</span>
+                  <span className="font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">
+                    {formatNumber(hoveredSpeciesStats.species)}
+                    {/* Filters (e.g. Outdated, a category) can narrow this below the country's
+                        true total — show that total too so the count doesn't read as absolute. */}
+                    {hoveredTotalStats && hoveredTotalStats.species !== hoveredSpeciesStats.species && (
+                      <span className="text-zinc-400 font-normal"> (of {formatNumber(hoveredTotalStats.species)})</span>
+                    )}
+                  </span>
                 </div>
+              )}
+              {showOutdatedMode && hoveredSpeciesStats && hoveredSpeciesStats.species > 0 && (
+                <>
+                  <div className="flex justify-between gap-4 text-xs">
+                    <span className="text-zinc-500"># Outdated</span>
+                    <span className="font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">
+                      {formatNumber(hoveredSpeciesStats.outdated || 0)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-4 text-xs">
+                    <span className="text-zinc-500">% Outdated</span>
+                    <span className="font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">
+                      {(((hoveredSpeciesStats.outdated || 0) / hoveredSpeciesStats.species) * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                </>
               )}
               {showGbifToggle && (
               <div className="flex justify-between gap-4 text-xs">
-                <span className="text-zinc-500">GBIF Obs</span>
+                <span className="text-zinc-500"># GBIF Obs</span>
                 {occurrenceLoading ? (
                   <span className="text-zinc-400 tabular-nums">...</span>
                 ) : hoveredOccurrenceStats ? (
@@ -494,8 +633,29 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
         </div>
       )}
 
+      {/* List view: sortable table alternative, same stats/selection/click-through.
+          Narrowed to activeRegion's countries when a whole region is selected —
+          same scope the map already implies via its blue region highlight.
+          Shares this relative wrapper with the map below (rather than each
+          having its own) so the Map/List toggle can overlay bottom-left of
+          whichever one is actually showing. */}
+      <div className="relative flex-1 min-h-0 flex flex-col">
+      {viewMode === "list" && (
+        <CountryStatsList
+          stats={activeStats}
+          selectedCountries={selectedCountries}
+          onCountrySelect={onCountrySelect}
+          speciesLabel={speciesLabel}
+          showOutdatedMode={showOutdatedMode}
+          regionFilter={activeRegion || null}
+          sortKey={sortKey}
+          sortDir={sortDir}
+          onSortChange={setSort}
+        />
+      )}
+
       {/* Map */}
-      <div ref={mapContainerRef} className="flex-1 rounded-lg overflow-hidden relative" style={{ minHeight: "200px", touchAction: "none" }}>
+      <div className={viewMode === "list" ? "hidden" : "flex-1 rounded-lg overflow-hidden relative"} ref={mapContainerRef} style={{ minHeight: "200px", touchAction: "none" }}>
         {(loading || (colorMode === "occurrences" && !occurrenceStats)) && (
           <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-zinc-900/50 z-10">
             <svg className="animate-spin h-5 w-5 text-zinc-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -507,7 +667,7 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
         <ComposableMap
           projection="geoNaturalEarth1"
           projectionConfig={{
-            scale: 210,
+            scale: 140,
             center: [0, 0],
           }}
           style={{ width: "100%", height: "100%", position: "absolute", top: 0, left: 0 }}
@@ -620,6 +780,27 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
             &minus;
           </button>
         </div>
+      </div>
+      {/* Map/List toggle — a sortable table alternative to the choropleth for
+          users who'd rather scan/sort a list than read a map. Bottom-left,
+          overlaying whichever of the two is currently showing (see the shared
+          relative wrapper above), mirroring the zoom controls' bottom-right spot. */}
+      <div className="absolute bottom-2 left-2 z-10 flex items-center bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md p-0.5 text-[10px] shadow-sm">
+        {(["map", "list"] as const).map((mode) => (
+          <button
+            key={mode}
+            onClick={() => setViewMode(mode)}
+            aria-pressed={viewMode === mode}
+            className={`px-1.5 py-0.5 rounded capitalize transition-colors ${
+              viewMode === mode
+                ? "bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900"
+                : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+            }`}
+          >
+            {mode}
+          </button>
+        ))}
+      </div>
       </div>
       {footer}
     </div>

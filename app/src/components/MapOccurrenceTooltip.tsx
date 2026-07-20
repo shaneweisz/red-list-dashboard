@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useMap } from "react-map-gl/maplibre";
+import { QUALITY_FLAG_LABELS, type QualityFlag } from "@/lib/coordinate-cleaning";
 
 interface MapOccurrenceTooltipProps {
   lat: number;
@@ -14,6 +15,9 @@ interface MapOccurrenceTooltipProps {
   coordinateUncertaintyInMeters?: number | null;
   imageUrl?: string | null;
   observer?: string | null;
+  qualityFlags?: string[];
+  outsideNativeRange?: boolean;
+  country?: string;
 }
 
 // Format basisOfRecord to human-readable string
@@ -130,6 +134,16 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
           <div className="text-zinc-400 tabular-nums">
             {props.lat.toFixed(4)}, {props.lng.toFixed(4)}
           </div>
+          {props.qualityFlags && props.qualityFlags.length > 0 && (
+            <div className="text-amber-600 dark:text-amber-400 font-medium pt-0.5">
+              ⚠ Flagged: {props.qualityFlags.map((f) => QUALITY_FLAG_LABELS[f as QualityFlag] || f).join(", ")}
+            </div>
+          )}
+          {props.outsideNativeRange && (
+            <div className="text-amber-600 dark:text-amber-400 font-medium pt-0.5">
+              🌍 Outside native range{props.country ? ` (${props.country})` : ""}
+            </div>
+          )}
         </div>
       </div>
       {/* Arrow */}

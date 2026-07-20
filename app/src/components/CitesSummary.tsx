@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, type ReactNode } from "react";
 import CitesTradeSummary from "./CitesTradeSummary";
 import type { CountryAnnotation } from "./TradeFlowMap";
 
@@ -75,10 +75,79 @@ const APPENDIX_COLORS: Record<string, string> = {
 function AppendixBadge({ appendix }: { appendix: string }) {
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${APPENDIX_COLORS[appendix] || "bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200"}`}
+      className={`inline-flex items-center shrink-0 whitespace-nowrap px-2 py-0.5 rounded text-xs font-semibold ${APPENDIX_COLORS[appendix] || "bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200"}`}
     >
       Appendix {appendix}
     </span>
+  );
+}
+
+const fmtCitesDate = (d: string) =>
+  new Date(d).toLocaleDateString("en-GB", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+
+/** Compact section header with an optional count. */
+function SectionHeader({ title, count }: { title: string; count?: number }) {
+  return (
+    <div className="flex items-baseline gap-2 mb-1.5">
+      <h4 className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
+        {title}
+      </h4>
+      {count != null && (
+        <span className="text-[11px] text-zinc-400 dark:text-zinc-500 tabular-nums">
+          {count}
+        </span>
+      )}
+    </div>
+  );
+}
+
+const PAGE_SIZE = 5;
+
+/**
+ * Renders a fixed-size page (5) of a list with Prev/Next controls instead of an
+ * expand-all toggle. `children` receives the current page's slice.
+ */
+function PagedList<T>({
+  items,
+  children,
+}: {
+  items: T[];
+  children: (slice: T[]) => ReactNode;
+}) {
+  const [page, setPage] = useState(0);
+  const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages - 1);
+  const slice = items.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+
+  return (
+    <>
+      {children(slice)}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-1 text-[10px] text-zinc-400 dark:text-zinc-500">
+          <button
+            onClick={() => setPage(Math.max(0, safePage - 1))}
+            disabled={safePage === 0}
+            className="px-1.5 py-0.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            Prev
+          </button>
+          <span className="tabular-nums">
+            {safePage * PAGE_SIZE + 1}–{Math.min((safePage + 1) * PAGE_SIZE, items.length)} of {items.length}
+          </span>
+          <button
+            onClick={() => setPage(Math.min(totalPages - 1, safePage + 1))}
+            disabled={safePage >= totalPages - 1}
+            className="px-1.5 py-0.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            Next
+          </button>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -92,8 +161,6 @@ export default function CitesSummary({
   const [tradeLoading, setTradeLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showAllSuspensions, setShowAllSuspensions] = useState(false);
-  const [showAllQuotas, setShowAllQuotas] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -209,16 +276,39 @@ export default function CitesSummary({
     );
   }
 
-  const suspensionsToShow = showAllSuspensions
-    ? data.suspensions || []
-    : (data.suspensions || []).slice(0, 5);
-  const quotasToShow = showAllQuotas
-    ? data.quotas || []
-    : (data.quotas || []).slice(0, 5);
+  // Suspensions newest-first; quotas largest-first.
+  const sortedSuspensions = [...(data.suspensions || [])].sort(
+    (a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()
+  );
+  const sortedQuotas = [...(data.quotas || [])].sort(
+    (a, b) => (b.quota ?? -Infinity) - (a.quota ?? -Infinity)
+  );
+
+  // Group reservations that share an appendix + annotation, so the (often
+  // identical) annotation text isn't repeated per country.
+  const reservationGroups: {
+    appendix: string;
+    annotation: string | null;
+    parties: { name: string; effectiveAt: string }[];
+  }[] = [];
+  for (const r of data.reservations || []) {
+    const key = `${r.appendix}|${r.annotation ?? ""}`;
+    let group = reservationGroups.find(
+      (g) => `${g.appendix}|${g.annotation ?? ""}` === key
+    );
+    if (!group) {
+      group = { appendix: r.appendix, annotation: r.annotation, parties: [] };
+      reservationGroups.push(group);
+    }
+    group.parties.push({
+      name: r.country || r.countryCode || "Unknown party",
+      effectiveAt: r.effectiveAt,
+    });
+  }
 
   return (
-    <div className="p-4 md:p-6 space-y-5">
-      {/* Header: Listing summary */}
+    <div className="p-4 md:p-6 space-y-4">
+      {/* Listing summary + external links */}
       <div className="flex flex-wrap items-center gap-3">
         {data.citesListing ? (
           <div className="flex items-center gap-2">
@@ -252,73 +342,6 @@ export default function CitesSummary({
         </div>
       </div>
 
-      {/* Current listings detail */}
-      {data.currentListings && data.currentListings.length > 0 && (
-        <div>
-          <h4 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
-            Current Listings
-          </h4>
-          <div className="space-y-2">
-            {data.currentListings.map((listing, i) => (
-              <div
-                key={i}
-                className="flex flex-wrap items-start gap-2 text-sm"
-              >
-                <AppendixBadge appendix={listing.appendix} />
-                <span className="text-zinc-500 dark:text-zinc-400 text-xs mt-0.5">
-                  since{" "}
-                  {new Date(listing.effectiveAt).toLocaleDateString("en-GB", {
-                    year: "numeric",
-                    month: "short",
-                    day: "numeric",
-                  })}
-                </span>
-                {listing.annotation && (
-                  <p className="w-full text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 pl-0.5">
-                    {listing.annotation}
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Reservations — country-specific opt-outs from a listing */}
-      {data.reservations && data.reservations.length > 0 && (
-        <div>
-          <h4 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
-            Reservations ({data.reservations.length})
-          </h4>
-          <div className="space-y-2">
-            {data.reservations.map((r, i) => (
-              <div
-                key={i}
-                className="flex flex-wrap items-start gap-2 text-sm"
-              >
-                <AppendixBadge appendix={r.appendix} />
-                <span className="text-zinc-700 dark:text-zinc-300">
-                  {r.country || r.countryCode || "Unknown party"}
-                </span>
-                <span className="text-zinc-500 dark:text-zinc-400 text-xs mt-0.5">
-                  since{" "}
-                  {new Date(r.effectiveAt).toLocaleDateString("en-GB", {
-                    year: "numeric",
-                    month: "short",
-                    day: "numeric",
-                  })}
-                </span>
-                {r.annotation && (
-                  <p className="w-full text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 pl-0.5">
-                    {r.annotation}
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Trade overview from CITES Trade Database */}
       {data.citesId && (
         <div>
@@ -329,132 +352,168 @@ export default function CitesSummary({
         </div>
       )}
 
-      {/* Trade suspensions */}
-      {data.suspensions && data.suspensions.length > 0 && (
+      {/* Current Listings */}
+      {data.currentListings && data.currentListings.length > 0 && (
         <div>
-          <h4 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
-            Trade Suspensions ({data.suspensions.length})
-          </h4>
-          <div className="border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="bg-zinc-50 dark:bg-zinc-800/50">
-                  <th className="text-left px-3 py-1.5 font-medium text-zinc-500 dark:text-zinc-400">
-                    Country
-                  </th>
-                  <th className="text-left px-3 py-1.5 font-medium text-zinc-500 dark:text-zinc-400">
-                    Type
-                  </th>
-                  <th className="text-left px-3 py-1.5 font-medium text-zinc-500 dark:text-zinc-400">
-                    Since
-                  </th>
-                  <th className="text-left px-3 py-1.5 font-medium text-zinc-500 dark:text-zinc-400 hidden md:table-cell">
-                    Notification
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {suspensionsToShow.map((s, i) => (
-                  <tr
-                    key={i}
-                    className="border-t border-zinc-100 dark:border-zinc-800"
-                  >
-                    <td className="px-3 py-1.5 text-zinc-700 dark:text-zinc-300">
-                      {s.country}
-                    </td>
-                    <td className="px-3 py-1.5 text-zinc-500 dark:text-zinc-400 capitalize">
-                      {s.appliesTo}
-                    </td>
-                    <td className="px-3 py-1.5 text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
-                      {new Date(s.startDate).toLocaleDateString("en-GB", {
-                        year: "numeric",
-                        month: "short",
-                      })}
-                    </td>
-                    <td className="px-3 py-1.5 text-zinc-400 hidden md:table-cell">
-                      {s.notification?.url ? (
-                        <a
-                          href={s.notification.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 dark:text-blue-400 hover:underline"
-                        >
-                          {s.notification.name}
-                        </a>
-                      ) : (
-                        s.notification?.name || "—"
-                      )}
-                    </td>
-                  </tr>
+          <SectionHeader title="Current Listings" count={data.currentListings.length} />
+          <PagedList items={data.currentListings}>
+            {(slice) => (
+              <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800">
+                {slice.map((listing, i) => (
+                  <div key={i} className="px-3 py-2">
+                    <div className="flex items-center gap-2 text-xs">
+                      <AppendixBadge appendix={listing.appendix} />
+                      <span className="text-zinc-400 dark:text-zinc-500 ml-auto whitespace-nowrap">
+                        since {fmtCitesDate(listing.effectiveAt)}
+                      </span>
+                    </div>
+                    {listing.annotation && (
+                      <p
+                        title={listing.annotation}
+                        className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug line-clamp-3"
+                      >
+                        {listing.annotation}
+                      </p>
+                    )}
+                  </div>
                 ))}
-              </tbody>
-            </table>
-            {data.suspensions.length > 5 && (
-              <button
-                className="w-full px-3 py-1.5 text-xs text-blue-600 dark:text-blue-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 border-t border-zinc-100 dark:border-zinc-800"
-                onClick={() => setShowAllSuspensions(!showAllSuspensions)}
-              >
-                {showAllSuspensions
-                  ? "Show fewer"
-                  : `Show all ${data.suspensions.length} suspensions`}
-              </button>
+              </div>
             )}
-          </div>
+          </PagedList>
         </div>
       )}
 
-      {/* Trade quotas */}
-      {data.quotas && data.quotas.length > 0 && (
+      {/* Reservations */}
+      {reservationGroups.length > 0 && (
         <div>
-          <h4 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
-            Trade Quotas ({data.quotas.length})
-          </h4>
-          <div className="border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="bg-zinc-50 dark:bg-zinc-800/50">
-                  <th className="text-left px-3 py-1.5 font-medium text-zinc-500 dark:text-zinc-400">
-                    Country
-                  </th>
-                  <th className="text-right px-3 py-1.5 font-medium text-zinc-500 dark:text-zinc-400">
-                    Quota
-                  </th>
-                  <th className="text-left px-3 py-1.5 font-medium text-zinc-500 dark:text-zinc-400 hidden md:table-cell">
-                    Notes
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {quotasToShow.map((q, i) => (
-                  <tr
-                    key={i}
-                    className="border-t border-zinc-100 dark:border-zinc-800"
-                  >
-                    <td className="px-3 py-1.5 text-zinc-700 dark:text-zinc-300">
-                      {q.country}
-                    </td>
-                    <td className="px-3 py-1.5 text-right text-zinc-700 dark:text-zinc-300 tabular-nums">
-                      {q.quota != null ? q.quota.toLocaleString() : "—"}
-                      {q.unit ? ` ${q.unit}` : ""}
-                    </td>
-                    <td className="px-3 py-1.5 text-zinc-400 max-w-[250px] truncate hidden md:table-cell">
-                      {q.notes || "—"}
-                    </td>
-                  </tr>
+          <SectionHeader title="Reservations" count={data.reservations?.length} />
+          <PagedList items={reservationGroups}>
+            {(slice) => (
+              <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800">
+                {slice.map((group, i) => (
+                  <div key={i} className="px-3 py-2">
+                    <AppendixBadge appendix={group.appendix} />
+                    <div className="mt-1.5 space-y-0.5">
+                      {group.parties.map((p, j) => (
+                        <div key={j} className="flex items-baseline gap-2 text-xs">
+                          <span className="text-zinc-700 dark:text-zinc-300">
+                            {p.name}
+                          </span>
+                          <span className="text-zinc-400 dark:text-zinc-500 ml-auto shrink-0 whitespace-nowrap">
+                            since {fmtCitesDate(p.effectiveAt)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    {group.annotation && (
+                      <p
+                        title={group.annotation}
+                        className="mt-1.5 text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug line-clamp-3"
+                      >
+                        {group.annotation}
+                      </p>
+                    )}
+                  </div>
                 ))}
-              </tbody>
-            </table>
-            {data.quotas.length > 5 && (
-              <button
-                className="w-full px-3 py-1.5 text-xs text-blue-600 dark:text-blue-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 border-t border-zinc-100 dark:border-zinc-800"
-                onClick={() => setShowAllQuotas(!showAllQuotas)}
-              >
-                {showAllQuotas
-                  ? "Show fewer"
-                  : `Show all ${data.quotas.length} quotas`}
-              </button>
+              </div>
             )}
-          </div>
+          </PagedList>
+        </div>
+      )}
+
+      {/* Trade Quotas and Suspensions, side by side */}
+      {(sortedQuotas.length > 0 || sortedSuspensions.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+          {/* Trade Quotas */}
+          {sortedQuotas.length > 0 && (
+            <div>
+              <SectionHeader title="Trade Quotas" count={sortedQuotas.length} />
+              <PagedList items={sortedQuotas}>
+                {(slice) => (
+                  <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden">
+                    <table className="w-full text-[11px] table-fixed">
+                      <tbody>
+                        {slice.map((q, i) => (
+                          <tr
+                            key={i}
+                            className="border-t first:border-t-0 border-zinc-100 dark:border-zinc-800"
+                          >
+                            <td
+                              title={q.country}
+                              className="px-3 py-1 text-zinc-700 dark:text-zinc-300 truncate w-[28%]"
+                            >
+                              {q.country}
+                            </td>
+                            <td className="px-3 py-1 text-right text-zinc-700 dark:text-zinc-300 tabular-nums whitespace-nowrap w-[16%]">
+                              {q.quota != null ? q.quota.toLocaleString() : "—"}
+                              {q.unit ? ` ${q.unit}` : ""}
+                            </td>
+                            <td
+                              title={q.notes || undefined}
+                              className="px-3 py-1 text-zinc-400 truncate"
+                            >
+                              {q.notes || "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </PagedList>
+            </div>
+          )}
+
+          {/* Trade Suspensions */}
+          {sortedSuspensions.length > 0 && (
+            <div>
+              <SectionHeader title="Trade Suspensions" count={sortedSuspensions.length} />
+              <PagedList items={sortedSuspensions}>
+                {(slice) => (
+                  <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden">
+                    <table className="w-full text-[11px]">
+                      <tbody>
+                        {slice.map((s, i) => (
+                          <tr
+                            key={i}
+                            className="border-t first:border-t-0 border-zinc-100 dark:border-zinc-800"
+                          >
+                            <td className="px-3 py-1 text-zinc-700 dark:text-zinc-300">
+                              {s.country}
+                            </td>
+                            <td className="px-3 py-1 text-zinc-500 dark:text-zinc-400 capitalize whitespace-nowrap">
+                              {s.appliesTo}
+                            </td>
+                            <td className="px-3 py-1 text-zinc-500 dark:text-zinc-400 whitespace-nowrap tabular-nums">
+                              {new Date(s.startDate).toLocaleDateString("en-GB", {
+                                year: "numeric",
+                                month: "short",
+                              })}
+                            </td>
+                            <td className="px-3 py-1 text-right hidden md:table-cell">
+                              {s.notification?.url ? (
+                                <a
+                                  href={s.notification.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title={s.notification.name}
+                                  className="text-blue-600 dark:text-blue-400 hover:underline"
+                                >
+                                  {s.notification.name}
+                                </a>
+                              ) : (
+                                <span className="text-zinc-400">{s.notification?.name || "—"}</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </PagedList>
+            </div>
+          )}
         </div>
       )}
 

@@ -8,21 +8,31 @@
  *   Phase 4: fetch-gbif-country-data (GBIF API → country occurrences per species)
  *   Phase 5: fetch-gbif-new-counts  (GBIF API → updates GBIF CSVs)
  *   Phase 6: build-parquet          (CSVs → assessed/unassessed parquets + search)
- *   Phase 7: fetch-coldp            (CoL XR ColDP archive → NameUsage.tsv, full sync only)
- *   Phase 7b: fetch-col-checklist   (curated CoL Checklist ColDP → demotion overlay, full sync only)
- *   Phase 8: build-backbone         (NameUsage.tsv → backbone.parquet + species/)
- *   Phase 9: build-matching         (→ species_link.parquet, IUCN/GBIF → col_id)
- *   Phase 10: build-taxa-summary    (CSVs + CoL artifacts → taxa-summary.json, incl. col counts)
- *   Phase 11: upload-range-maps     (IUCN DB → R2, skips existing)
- *   Phase 12: upload-aoh-maps       (STAR GeoTIFFs → R2, skips existing)
+ *   Phase 7: fetch-col-xr           (CoL XR ColDP archive → NameUsage.tsv, full sync only)
+ *   Phase 8: fetch-col-checklist    (curated CoL Checklist ColDP → demotion overlay, full sync only)
+ *   Phase 9: build-backbone         (NameUsage.tsv → backbone.parquet + species/)
+ *   Phase 10: build-matching        (→ species_link.parquet, IUCN/GBIF → col_id)
+ *   Phase 11: build-synonym-index   (→ synonym-index.parquet, search)
+ *   Phase 12: build-col-taxon-ids   (taxonomy tree + backbone.parquet → src/config/col-taxon-ids.json, committed to git)
+ *   Phase 13: build-taxa-summary    (CSVs + CoL artifacts → taxa-summary.json, incl. col counts)
+ *   Phase 14: upload-range-maps     (IUCN DB → R2, skips existing)
+ *   Phase 15: upload-aoh-maps       (STAR GeoTIFFs → R2, skips existing)
  *
  * Prerequisites:
- *   1. DB connectivity to IUCN Postgres (direct via DB_HOST/DB_PORT, or SSH-tunneled to localhost:5433)
+ *   1. DB connectivity to IUCN Postgres — primary is a local restore from
+ *      ~/Data/RedList/*.bkp (`brew services start postgresql@16`); fallback
+ *      is an SSH tunnel to the remote SIS DB on localhost:5433
  *   2. Environment variables (see .env.example)
  *
  * Usage:
  *   npx tsx scripts/sync.ts                     # Full sync, all taxa
  *   npx tsx scripts/sync.ts mammalia aves        # Specific taxa only
+ *   npx tsx scripts/sync.ts --skip-redlist       # Skip phase 1 (no DB access needed) —
+ *                                                # reuses data/redlist/*.csv from the last
+ *                                                # fetch. See .github/workflows/weekly-sync.yml,
+ *                                                # which runs on a schedule without DB
+ *                                                # credentials, refreshing everything phase 1
+ *                                                # feeds EXCEPT the Red List data itself.
  */
 
 import * as fs from "fs";
@@ -35,11 +45,12 @@ import { run as fetchGbifNewCounts } from "./fetch-gbif-new-counts";
 import { run as fetchGbifCountryData } from "./fetch-gbif-country-data";
 import { run as buildTaxaSummary } from "./build-taxa-summary";
 import { run as buildSpeciesParquet } from "./build-parquet";
-import { run as fetchColdp } from "./fetch-coldp";
+import { run as fetchColXr } from "./fetch-col-xr";
 import { run as fetchColChecklist } from "./fetch-col-checklist";
 import { run as buildBackbone } from "./build-backbone";
 import { run as buildMatching } from "./build-matching";
 import { run as buildSynonymIndex } from "./build-synonym-index";
+import { run as buildColTaxonIds } from "./build-col-taxon-ids";
 import { run as uploadRangeMaps } from "./upload-range-maps";
 import { run as uploadAohMaps } from "./upload-aoh-maps";
 
@@ -47,12 +58,14 @@ async function main() {
   loadEnvFiles();
 
   const args = process.argv.slice(2);
-  const taxa = args.map((a) => a.toLowerCase());
+  const skipRedlist = args.includes("--skip-redlist");
+  const taxa = args.filter((a) => a !== "--skip-redlist").map((a) => a.toLowerCase());
   const taxaFilter = taxa.length > 0 ? taxa : undefined;
 
   console.log("sync: Full CSV pipeline");
   console.log("=".repeat(60));
   console.log(`Taxa: ${taxaFilter ? taxaFilter.join(", ") : "all"}`);
+  if (skipRedlist) console.log("Phase 1 (fetch-redlist-species): skipped (--skip-redlist)");
   console.log();
 
   const startTime = Date.now();
@@ -61,12 +74,17 @@ async function main() {
   let checklistTsv: string | null = null;
 
   try {
-    logger.log("sync_start", { taxa: taxaFilter ?? "all" });
+    logger.log("sync_start", { taxa: taxaFilter ?? "all", skipRedlist });
 
-    // Phase 1: Red List
-    console.log("Phase 1: fetch-redlist-species");
-    console.log("═".repeat(60));
-    await fetchRedlistSpecies({ taxa: taxaFilter, logger });
+    // Phase 1: Red List — the only phase needing IUCN Postgres access. Skippable
+    // for schedule-driven refreshes (e.g. CI, which never has DB credentials)
+    // that only need to pick up new GBIF/CoL data against the existing Red List
+    // snapshot, not a fresh DB pull (that's a separate, manual, ~6-monthly step).
+    if (!skipRedlist) {
+      console.log("Phase 1: fetch-redlist-species");
+      console.log("═".repeat(60));
+      await fetchRedlistSpecies({ taxa: taxaFilter, logger });
+    }
 
     // Phase 2: GBIF species
     console.log("\nPhase 2: fetch-gbif-species");
@@ -93,47 +111,54 @@ async function main() {
     console.log("═".repeat(60));
     await buildSpeciesParquet();
 
-    // Phases 7-9: Catalogue of Life backbone (#271). The backbone is the whole tree
+    // Phases 7-12: Catalogue of Life backbone (#271). The backbone is the whole tree
     // (taxon-independent) and matching needs the complete assessed/unassessed parquets,
     // so only run on a FULL sync; a partial-taxa sync leaves the existing CoL artifacts.
     if (!taxaFilter) {
-      console.log("\nPhase 7: fetch-coldp (CoL XR ColDP → NameUsage.tsv + Reference.tsv)");
+      console.log("\nPhase 7: fetch-col-xr (CoL XR ColDP → NameUsage.tsv + Reference.tsv)");
       console.log("═".repeat(60));
-      const coldp = await fetchColdp();
+      const coldp = await fetchColXr();
       coldpDir = coldp.dir;
 
-      console.log("\nPhase 7b: fetch-col-checklist (curated CoL Checklist → demotion overlay)");
+      console.log("\nPhase 8: fetch-col-checklist (curated CoL Checklist → demotion overlay)");
       console.log("═".repeat(60));
       checklistTsv = await fetchColChecklist();
 
-      console.log("\nPhase 8: build-backbone (→ backbone.parquet + species/)");
+      console.log("\nPhase 9: build-backbone (→ backbone.parquet + species/)");
       console.log("═".repeat(60));
       await buildBackbone({ tsv: coldp.nameUsage, referenceTsv: coldp.reference, demotionsTsv: checklistTsv });
 
-      console.log("\nPhase 9: build-matching (→ species_link.parquet)");
+      console.log("\nPhase 10: build-matching (→ species_link.parquet)");
       console.log("═".repeat(60));
       await buildMatching();
 
-      console.log("\nPhase 9b: build-synonym-index (→ synonym-index.parquet, search)");
+      console.log("\nPhase 11: build-synonym-index (→ synonym-index.parquet, search)");
       console.log("═".repeat(60));
       await buildSynonymIndex();
+
+      // Small + derived from committed source (the taxonomy tree), so this writes to
+      // src/config/ and gets committed to git, unlike the R2-published data/ outputs
+      // above — re-run whenever a node's filter changes, not just on every data sync.
+      console.log("\nPhase 12: build-col-taxon-ids (→ src/config/col-taxon-ids.json)");
+      console.log("═".repeat(60));
+      await buildColTaxonIds();
     } else {
-      console.log("\nPhases 7-9 (CoL backbone): skipped on a partial-taxa sync — run a full sync to refresh.");
+      console.log("\nPhases 7-12 (CoL backbone): skipped on a partial-taxa sync — run a full sync to refresh.");
     }
 
-    // Phase 10: Build taxa summary LAST — it reads the CoL artifacts (species/ +
+    // Phase 13: Build taxa summary LAST — it reads the CoL artifacts (species/ +
     // species_link) to add per-group col_described / col_ne counts to taxa-summary.json.
-    console.log("\nPhase 10: build-taxa-summary");
+    console.log("\nPhase 13: build-taxa-summary");
     console.log("═".repeat(60));
     await buildTaxaSummary();
 
-    // Phase 11: Upload range maps to R2
-    console.log("\nPhase 11: upload-range-maps");
+    // Phase 14: Upload range maps to R2
+    console.log("\nPhase 14: upload-range-maps");
     console.log("═".repeat(60));
     await uploadRangeMaps({ taxa: taxaFilter, logger });
 
-    // Phase 12: Upload AOH maps to R2
-    console.log("\nPhase 12: upload-aoh-maps");
+    // Phase 15: Upload AOH maps to R2
+    console.log("\nPhase 15: upload-aoh-maps");
     console.log("═".repeat(60));
     await uploadAohMaps({ taxa: taxaFilter, logger });
 

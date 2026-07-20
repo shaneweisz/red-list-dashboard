@@ -20,7 +20,11 @@ interface AssessorChartProps {
   onItemToggle: (code: string) => void;
   loading?: boolean;
   viewMode: ViewMode;
-  onViewModeChange: (mode: ViewMode) => void;
+  onViewModeChange?: (mode: ViewMode) => void;
+  /** When false, render a static title instead of the Assessors/Reviewers toggle. */
+  showToggle?: boolean;
+  /** Title shown when showToggle is false. */
+  title?: string;
 }
 
 const PAGE_SIZE = 10;
@@ -34,6 +38,8 @@ export default function AssessorChart({
   loading,
   viewMode,
   onViewModeChange,
+  showToggle = true,
+  title,
 }: AssessorChartProps) {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
@@ -67,7 +73,7 @@ export default function AssessorChart({
 
   // Reset search and pages when toggling view mode
   const handleViewModeChange = (mode: ViewMode) => {
-    onViewModeChange(mode);
+    onViewModeChange?.(mode);
     setSearch("");
     setPage(0);
     setSearchPage(0);
@@ -76,29 +82,33 @@ export default function AssessorChart({
   return (
     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
       <div className="flex items-center justify-between mb-1">
-        {/* Toggle between Assessors and Reviewers */}
-        <div className="inline-flex rounded-md bg-zinc-100 dark:bg-zinc-800 p-0.5">
-          <button
-            onClick={() => handleViewModeChange("assessors")}
-            className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
-              viewMode === "assessors"
-                ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
-                : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
-            }`}
-          >
-            Assessors
-          </button>
-          <button
-            onClick={() => handleViewModeChange("reviewers")}
-            className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
-              viewMode === "reviewers"
-                ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
-                : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
-            }`}
-          >
-            Reviewers
-          </button>
-        </div>
+        {showToggle ? (
+          /* Toggle between Assessors and Reviewers */
+          <div className="inline-flex rounded-md bg-zinc-100 dark:bg-zinc-800 p-0.5">
+            <button
+              onClick={() => handleViewModeChange("assessors")}
+              className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
+                viewMode === "assessors"
+                  ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
+                  : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+              }`}
+            >
+              Assessors
+            </button>
+            <button
+              onClick={() => handleViewModeChange("reviewers")}
+              className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
+                viewMode === "reviewers"
+                  ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
+                  : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+              }`}
+            >
+              Reviewers
+            </button>
+          </div>
+        ) : (
+          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{title}</span>
+        )}
         <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
       </div>
 
@@ -135,7 +145,7 @@ export default function AssessorChart({
         )}
       </div>
 
-      <div className="flex-1 min-h-[225px] flex items-center justify-center">
+      <div style={{ height: 240 }} className="flex items-center justify-center">
         {loading ? (
           <svg
             className="animate-spin h-5 w-5 text-zinc-400"
@@ -159,7 +169,7 @@ export default function AssessorChart({
                       onClick={() => onItemToggle(entry.code)}
                       className={`w-full flex items-center justify-between px-2 py-1 rounded text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors ${
                         isSelected
-                          ? "bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300"
+                          ? "bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300"
                           : "text-zinc-700 dark:text-zinc-300"
                       }`}
                     >
@@ -179,7 +189,7 @@ export default function AssessorChart({
             dataKey="code"
             selectedItems={selectedItems}
             onBarClick={onBarClick}
-            barColor="#8b5cf6"
+            barColor={viewMode === "assessors" ? "#fb923c" : "#818cf8"}
             yAxisWidth={150}
             leftMargin={-30}
             rightMargin={55}

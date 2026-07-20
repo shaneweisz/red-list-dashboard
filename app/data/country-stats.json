@@ -1,0 +1,1002 @@
+{
+  "BO": {
+    "species": 7413,
+    "outdated": 1273
+  },
+  "ID": {
+    "species": 18057,
+    "outdated": 3971
+  },
+  "PH": {
+    "species": 9398,
+    "outdated": 2552
+  },
+  "AO": {
+    "species": 5202,
+    "outdated": 1628
+  },
+  "BF": {
+    "species": 1679,
+    "outdated": 266
+  },
+  "BJ": {
+    "species": 3213,
+    "outdated": 1086
+  },
+  "BW": {
+    "species": 2181,
+    "outdated": 454
+  },
+  "CF": {
+    "species": 3039,
+    "outdated": 668
+  },
+  "DZ": {
+    "species": 1847,
+    "outdated": 944
+  },
+  "ET": {
+    "species": 3313,
+    "outdated": 865
+  },
+  "IR": {
+    "species": 2865,
+    "outdated": 1103
+  },
+  "KE": {
+    "species": 6806,
+    "outdated": 2594
+  },
+  "ML": {
+    "species": 1888,
+    "outdated": 332
+  },
+  "MZ": {
+    "species": 6540,
+    "outdated": 1907
+  },
+  "NA": {
+    "species": 3418,
+    "outdated": 1169
+  },
+  "NE": {
+    "species": 1306,
+    "outdated": 210
+  },
+  "TD": {
+    "species": 1663,
+    "outdated": 283
+  },
+  "TZ": {
+    "species": 9203,
+    "outdated": 3815
+  },
+  "UG": {
+    "species": 4058,
+    "outdated": 1124
+  },
+  "ZA": {
+    "species": 8340,
+    "outdated": 2413
+  },
+  "ZM": {
+    "species": 3890,
+    "outdated": 914
+  },
+  "ZW": {
+    "species": 3342,
+    "outdated": 724
+  },
+  "DJ": {
+    "species": 2141,
+    "outdated": 747
+  },
+  "EG": {
+    "species": 2865,
+    "outdated": 1114
+  },
+  "EH": {
+    "species": 1237,
+    "outdated": 751
+  },
+  "ER": {
+    "species": 2587,
+    "outdated": 788
+  },
+  "LY": {
+    "species": 1152,
+    "outdated": 544
+  },
+  "MA": {
+    "species": 2644,
+    "outdated": 1523
+  },
+  "MR": {
+    "species": 2063,
+    "outdated": 933
+  },
+  "SD": {
+    "species": 3591,
+    "outdated": 916
+  },
+  "TR": {
+    "species": 3035,
+    "outdated": 1597
+  },
+  "SO": {
+    "species": 3860,
+    "outdated": 1428
+  },
+  "GR": {
+    "species": 5340,
+    "outdated": 1277
+  },
+  "IL": {
+    "species": 2685,
+    "outdated": 1087
+  },
+  "JO": {
+    "species": 2040,
+    "outdated": 758
+  },
+  "SA": {
+    "species": 2665,
+    "outdated": 921
+  },
+  "YE": {
+    "species": 3421,
+    "outdated": 1501
+  },
+  "SS": {
+    "species": 2111,
+    "outdated": 333
+  },
+  "AR": {
+    "species": 4639,
+    "outdated": 1542
+  },
+  "CL": {
+    "species": 2262,
+    "outdated": 950
+  },
+  "CO": {
+    "species": 15900,
+    "outdated": 3436
+  },
+  "VE": {
+    "species": 11087,
+    "outdated": 2291
+  },
+  "MW": {
+    "species": 3329,
+    "outdated": 558
+  },
+  "RW": {
+    "species": 2197,
+    "outdated": 523
+  },
+  "SZ": {
+    "species": 1842,
+    "outdated": 243
+  },
+  "CN": {
+    "species": 12334,
+    "outdated": 4314
+  },
+  "BN": {
+    "species": 4556,
+    "outdated": 803
+  },
+  "MY": {
+    "species": 12463,
+    "outdated": 3037
+  },
+  "TH": {
+    "species": 9114,
+    "outdated": 2898
+  },
+  "CD": {
+    "species": 7794,
+    "outdated": 2812
+  },
+  "CM": {
+    "species": 6662,
+    "outdated": 2331
+  },
+  "BI": {
+    "species": 2266,
+    "outdated": 491
+  },
+  "LS": {
+    "species": 748,
+    "outdated": 160
+  },
+  "NG": {
+    "species": 5151,
+    "outdated": 1700
+  },
+  "BR": {
+    "species": 19708,
+    "outdated": 3475
+  },
+  "BZ": {
+    "species": 3866,
+    "outdated": 1345
+  },
+  "CR": {
+    "species": 7538,
+    "outdated": 2162
+  },
+  "EC": {
+    "species": 11890,
+    "outdated": 4195
+  },
+  "GF": {
+    "species": 4724,
+    "outdated": 1207
+  },
+  "GT": {
+    "species": 6031,
+    "outdated": 1873
+  },
+  "GY": {
+    "species": 5795,
+    "outdated": 1335
+  },
+  "HN": {
+    "species": 5781,
+    "outdated": 1925
+  },
+  "MX": {
+    "species": 12748,
+    "outdated": 4501
+  },
+  "NI": {
+    "species": 5585,
+    "outdated": 1842
+  },
+  "PA": {
+    "species": 7663,
+    "outdated": 2256
+  },
+  "PE": {
+    "species": 11094,
+    "outdated": 2411
+  },
+  "PY": {
+    "species": 2609,
+    "outdated": 574
+  },
+  "SR": {
+    "species": 4721,
+    "outdated": 1280
+  },
+  "SV": {
+    "species": 3069,
+    "outdated": 915
+  },
+  "TT": {
+    "species": 3111,
+    "outdated": 1288
+  },
+  "UY": {
+    "species": 1881,
+    "outdated": 595
+  },
+  "BT": {
+    "species": 1856,
+    "outdated": 461
+  },
+  "IN": {
+    "species": 11047,
+    "outdated": 4010
+  },
+  "MM": {
+    "species": 7068,
+    "outdated": 2209
+  },
+  "NP": {
+    "species": 2652,
+    "outdated": 781
+  },
+  "CI": {
+    "species": 4210,
+    "outdated": 1396
+  },
+  "GH": {
+    "species": 4176,
+    "outdated": 1448
+  },
+  "GN": {
+    "species": 4046,
+    "outdated": 1334
+  },
+  "GW": {
+    "species": 2534,
+    "outdated": 993
+  },
+  "SN": {
+    "species": 3263,
+    "outdated": 1206
+  },
+  "TG": {
+    "species": 3033,
+    "outdated": 1101
+  },
+  "MN": {
+    "species": 950,
+    "outdated": 288
+  },
+  "IQ": {
+    "species": 1531,
+    "outdated": 545
+  },
+  "KW": {
+    "species": 1024,
+    "outdated": 262
+  },
+  "LB": {
+    "species": 1406,
+    "outdated": 653
+  },
+  "SY": {
+    "species": 1567,
+    "outdated": 750
+  },
+  "AF": {
+    "species": 1168,
+    "outdated": 393
+  },
+  "PK": {
+    "species": 2942,
+    "outdated": 924
+  },
+  "KZ": {
+    "species": 1368,
+    "outdated": 450
+  },
+  "RU": {
+    "species": 3810,
+    "outdated": 1391
+  },
+  "UA": {
+    "species": 1887,
+    "outdated": 642
+  },
+  "UZ": {
+    "species": 905,
+    "outdated": 270
+  },
+  "TJ": {
+    "species": 836,
+    "outdated": 258
+  },
+  "TM": {
+    "species": 954,
+    "outdated": 310
+  },
+  "KG": {
+    "species": 822,
+    "outdated": 256
+  },
+  "CG": {
+    "species": 4069,
+    "outdated": 1430
+  },
+  "MG": {
+    "species": 9487,
+    "outdated": 3595
+  },
+  "CA": {
+    "species": 3732,
+    "outdated": 2064
+  },
+  "FI": {
+    "species": 1296,
+    "outdated": 442
+  },
+  "GL": {
+    "species": 429,
+    "outdated": 248
+  },
+  "IS": {
+    "species": 685,
+    "outdated": 344
+  },
+  "NO": {
+    "species": 1616,
+    "outdated": 588
+  },
+  "SE": {
+    "species": 1684,
+    "outdated": 607
+  },
+  "SJ": {
+    "species": 163,
+    "outdated": 57
+  },
+  "US": {
+    "species": 12007,
+    "outdated": 6683
+  },
+  "BQ": {
+    "species": 1868,
+    "outdated": 950
+  },
+  "TN": {
+    "species": 1503,
+    "outdated": 759
+  },
+  "PG": {
+    "species": 9767,
+    "outdated": 2364
+  },
+  "GA": {
+    "species": 4764,
+    "outdated": 1646
+  },
+  "GQ": {
+    "species": 3166,
+    "outdated": 1223
+  },
+  "LR": {
+    "species": 3400,
+    "outdated": 1226
+  },
+  "SL": {
+    "species": 3559,
+    "outdated": 1281
+  },
+  "AU": {
+    "species": 13467,
+    "outdated": 4023
+  },
+  "SB": {
+    "species": 3933,
+    "outdated": 1386
+  },
+  "CU": {
+    "species": 4004,
+    "outdated": 1412
+  },
+  "GM": {
+    "species": 2356,
+    "outdated": 983
+  },
+  "AM": {
+    "species": 1027,
+    "outdated": 407
+  },
+  "AT": {
+    "species": 2199,
+    "outdated": 640
+  },
+  "AZ": {
+    "species": 1168,
+    "outdated": 425
+  },
+  "BA": {
+    "species": 1891,
+    "outdated": 630
+  },
+  "BG": {
+    "species": 2081,
+    "outdated": 766
+  },
+  "BY": {
+    "species": 965,
+    "outdated": 290
+  },
+  "CZ": {
+    "species": 1691,
+    "outdated": 552
+  },
+  "DE": {
+    "species": 2297,
+    "outdated": 731
+  },
+  "DK": {
+    "species": 1484,
+    "outdated": 526
+  },
+  "EE": {
+    "species": 1149,
+    "outdated": 339
+  },
+  "GE": {
+    "species": 1285,
+    "outdated": 543
+  },
+  "HR": {
+    "species": 2577,
+    "outdated": 939
+  },
+  "HU": {
+    "species": 1593,
+    "outdated": 556
+  },
+  "IT": {
+    "species": 4262,
+    "outdated": 1691
+  },
+  "JP": {
+    "species": 6612,
+    "outdated": 2584
+  },
+  "KP": {
+    "species": 1402,
+    "outdated": 482
+  },
+  "KR": {
+    "species": 2483,
+    "outdated": 935
+  },
+  "LT": {
+    "species": 1096,
+    "outdated": 344
+  },
+  "LV": {
+    "species": 1113,
+    "outdated": 347
+  },
+  "MD": {
+    "species": 834,
+    "outdated": 251
+  },
+  "ME": {
+    "species": 2039,
+    "outdated": 702
+  },
+  "MK": {
+    "species": 1649,
+    "outdated": 505
+  },
+  "PL": {
+    "species": 1727,
+    "outdated": 588
+  },
+  "RO": {
+    "species": 1975,
+    "outdated": 719
+  },
+  "RS": {
+    "species": 1843,
+    "outdated": 618
+  },
+  "SI": {
+    "species": 2298,
+    "outdated": 812
+  },
+  "SK": {
+    "species": 1671,
+    "outdated": 503
+  },
+  "TW": {
+    "species": 5544,
+    "outdated": 2131
+  },
+  "AL": {
+    "species": 2056,
+    "outdated": 852
+  },
+  "CH": {
+    "species": 2053,
+    "outdated": 572
+  },
+  "ES": {
+    "species": 5631,
+    "outdated": 2298
+  },
+  "FR": {
+    "species": 4581,
+    "outdated": 1723
+  },
+  "GB": {
+    "species": 2084,
+    "outdated": 886
+  },
+  "LI": {
+    "species": 912,
+    "outdated": 249
+  },
+  "LU": {
+    "species": 959,
+    "outdated": 293
+  },
+  "NL": {
+    "species": 1540,
+    "outdated": 575
+  },
+  "PS": {
+    "species": 750,
+    "outdated": 254
+  },
+  "AD": {
+    "species": 739,
+    "outdated": 147
+  },
+  "BE": {
+    "species": 1559,
+    "outdated": 546
+  },
+  "IE": {
+    "species": 1517,
+    "outdated": 705
+  },
+  "MC": {
+    "species": 703,
+    "outdated": 308
+  },
+  "PT": {
+    "species": 3768,
+    "outdated": 1569
+  },
+  "FK": {
+    "species": 367,
+    "outdated": 114
+  },
+  "AQ": {
+    "species": 217,
+    "outdated": 92
+  },
+  "BV": {
+    "species": 101,
+    "outdated": 23
+  },
+  "GS": {
+    "species": 242,
+    "outdated": 60
+  },
+  "HM": {
+    "species": 153,
+    "outdated": 40
+  },
+  "TF": {
+    "species": 1119,
+    "outdated": 589
+  },
+  "SH": {
+    "species": 994,
+    "outdated": 558
+  },
+  "AG": {
+    "species": 1881,
+    "outdated": 942
+  },
+  "DM": {
+    "species": 1993,
+    "outdated": 978
+  },
+  "GP": {
+    "species": 1982,
+    "outdated": 945
+  },
+  "KN": {
+    "species": 1725,
+    "outdated": 896
+  },
+  "LC": {
+    "species": 1891,
+    "outdated": 948
+  },
+  "MQ": {
+    "species": 1948,
+    "outdated": 911
+  },
+  "MS": {
+    "species": 1718,
+    "outdated": 850
+  },
+  "VC": {
+    "species": 1928,
+    "outdated": 961
+  },
+  "JM": {
+    "species": 2752,
+    "outdated": 1312
+  },
+  "BB": {
+    "species": 1773,
+    "outdated": 921
+  },
+  "GD": {
+    "species": 1852,
+    "outdated": 984
+  },
+  "OM": {
+    "species": 2336,
+    "outdated": 870
+  },
+  "VU": {
+    "species": 2847,
+    "outdated": 1199
+  },
+  "BD": {
+    "species": 3196,
+    "outdated": 1001
+  },
+  "LA": {
+    "species": 3730,
+    "outdated": 1157
+  },
+  "VN": {
+    "species": 8593,
+    "outdated": 2756
+  },
+  "AI": {
+    "species": 1603,
+    "outdated": 880
+  },
+  "BM": {
+    "species": 1241,
+    "outdated": 740
+  },
+  "BS": {
+    "species": 2575,
+    "outdated": 1269
+  },
+  "CV": {
+    "species": 1281,
+    "outdated": 871
+  },
+  "DO": {
+    "species": 3052,
+    "outdated": 1231
+  },
+  "FO": {
+    "species": 498,
+    "outdated": 229
+  },
+  "MF": {
+    "species": 1535,
+    "outdated": 833
+  },
+  "NC": {
+    "species": 5060,
+    "outdated": 1966
+  },
+  "NZ": {
+    "species": 2028,
+    "outdated": 852
+  },
+  "PM": {
+    "species": 510,
+    "outdated": 230
+  },
+  "PR": {
+    "species": 2780,
+    "outdated": 1203
+  },
+  "SX": {
+    "species": 1427,
+    "outdated": 805
+  },
+  "TC": {
+    "species": 1715,
+    "outdated": 841
+  },
+  "VG": {
+    "species": 1995,
+    "outdated": 970
+  },
+  "VI": {
+    "species": 2040,
+    "outdated": 988
+  },
+  "GI": {
+    "species": 854,
+    "outdated": 322
+  },
+  "GU": {
+    "species": 1797,
+    "outdated": 793
+  },
+  "MP": {
+    "species": 1839,
+    "outdated": 807
+  },
+  "RE": {
+    "species": 1963,
+    "outdated": 837
+  },
+  "AE": {
+    "species": 1461,
+    "outdated": 454
+  },
+  "AS": {
+    "species": 1798,
+    "outdated": 801
+  },
+  "AW": {
+    "species": 1477,
+    "outdated": 783
+  },
+  "BH": {
+    "species": 894,
+    "outdated": 220
+  },
+  "BL": {
+    "species": 1236,
+    "outdated": 562
+  },
+  "CC": {
+    "species": 1094,
+    "outdated": 520
+  },
+  "CK": {
+    "species": 1418,
+    "outdated": 674
+  },
+  "CW": {
+    "species": 1584,
+    "outdated": 857
+  },
+  "FJ": {
+    "species": 3554,
+    "outdated": 1300
+  },
+  "FM": {
+    "species": 2557,
+    "outdated": 1102
+  },
+  "HT": {
+    "species": 3036,
+    "outdated": 1149
+  },
+  "KH": {
+    "species": 4386,
+    "outdated": 1290
+  },
+  "KI": {
+    "species": 1765,
+    "outdated": 824
+  },
+  "KM": {
+    "species": 2115,
+    "outdated": 808
+  },
+  "KY": {
+    "species": 1723,
+    "outdated": 876
+  },
+  "LK": {
+    "species": 4375,
+    "outdated": 1563
+  },
+  "MH": {
+    "species": 1844,
+    "outdated": 853
+  },
+  "MU": {
+    "species": 2443,
+    "outdated": 1075
+  },
+  "MV": {
+    "species": 1906,
+    "outdated": 827
+  },
+  "NR": {
+    "species": 1414,
+    "outdated": 631
+  },
+  "NU": {
+    "species": 1236,
+    "outdated": 555
+  },
+  "PF": {
+    "species": 2383,
+    "outdated": 1377
+  },
+  "PN": {
+    "species": 731,
+    "outdated": 376
+  },
+  "PW": {
+    "species": 2912,
+    "outdated": 1259
+  },
+  "QA": {
+    "species": 928,
+    "outdated": 231
+  },
+  "SC": {
+    "species": 2690,
+    "outdated": 1303
+  },
+  "SG": {
+    "species": 3725,
+    "outdated": 991
+  },
+  "ST": {
+    "species": 1283,
+    "outdated": 741
+  },
+  "TL": {
+    "species": 2950,
+    "outdated": 737
+  },
+  "TO": {
+    "species": 2095,
+    "outdated": 988
+  },
+  "TV": {
+    "species": 1497,
+    "outdated": 672
+  },
+  "WF": {
+    "species": 1712,
+    "outdated": 770
+  },
+  "WS": {
+    "species": 2013,
+    "outdated": 892
+  },
+  "NF": {
+    "species": 819,
+    "outdated": 418
+  },
+  "CY": {
+    "species": 1205,
+    "outdated": 506
+  },
+  "MT": {
+    "species": 978,
+    "outdated": 450
+  },
+  "HK": {
+    "species": 1921,
+    "outdated": 528
+  },
+  "SM": {
+    "species": 255,
+    "outdated": 57
+  },
+  "VA": {
+    "species": 174,
+    "outdated": 27
+  },
+  "YT": {
+    "species": 1811,
+    "outdated": 682
+  },
+  "TK": {
+    "species": 1169,
+    "outdated": 557
+  },
+  "GG": {
+    "species": 302,
+    "outdated": 204
+  },
+  "IM": {
+    "species": 386,
+    "outdated": 109
+  },
+  "JE": {
+    "species": 342,
+    "outdated": 213
+  },
+  "UM": {
+    "species": 1554,
+    "outdated": 748
+  },
+  "CX": {
+    "species": 1257,
+    "outdated": 575
+  },
+  "IO": {
+    "species": 1449,
+    "outdated": 596
+  },
+  "MO": {
+    "species": 763,
+    "outdated": 127
+  },
+  "AX": {
+    "species": 70,
+    "outdated": 19
+  },
+  "DT": {
+    "species": 1808,
+    "outdated": 694
+  }
+}

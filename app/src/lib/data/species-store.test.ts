@@ -12,7 +12,7 @@ vi.mock("./csv", () => ({
 
 import * as fs from "fs";
 import { readCsv } from "./csv";
-import { getAssessorCandidates, getAssessorCandidatesByCountry } from "./species-store";
+import { getAssessorCandidates, getAssessorCandidatesByCountry, getReviewerCandidatesByCountry } from "./species-store";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -636,5 +636,191 @@ describe("getAssessorCandidatesByCountry", () => {
     const beetleResult = getAssessorCandidatesByCountry([group], ["ZA"], { orderNames: ["coleoptera"] });
     expect(beetleResult).toHaveLength(1);
     expect(beetleResult[0].name).toBe("Beetle Expert");
+  });
+
+  it("strips parenthetical affiliations and merges them under one candidate", () => {
+    const group = uniqueGroup();
+    const row1 = makeRow({ countries: ["ZA"], scientific_name: "Testus one" });
+    const row2 = makeRow({ countries: ["ZA"], scientific_name: "Testus two" });
+    setup([row1, row2], {
+      [String(row1.sis_taxon_id)]: [
+        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "Amori, G. (Small Nonvolant Mammal Red List Authority)", reviewers: null },
+      ],
+      [String(row2.sis_taxon_id)]: [
+        { id: 2, year: "2021", category: "LC", date: "2021-01-01", assessors: "Amori, G.", reviewers: null },
+      ],
+    });
+
+    const result = getAssessorCandidatesByCountry([group], ["ZA"]);
+    // Both rows credit the same person despite the affiliation label on one
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("Amori, G.");
+    expect(result[0].totalInRegion).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getReviewerCandidatesByCountry
+// ---------------------------------------------------------------------------
+
+describe("getReviewerCandidatesByCountry", () => {
+  it("returns empty array when no countries provided", () => {
+    const group = uniqueGroup();
+    setup([]);
+    expect(getReviewerCandidatesByCountry([group], [])).toEqual([]);
+  });
+
+  it("returns empty array when no taxon groups provided", () => {
+    expect(getReviewerCandidatesByCountry([], ["ZA"])).toEqual([]);
+  });
+
+  it("returns empty array when species have only assessors, no reviewers", () => {
+    const group = uniqueGroup();
+    const row = makeRow({ countries: ["ZA"], scientific_name: "Testus one" });
+    setup([row], {
+      [String(row.sis_taxon_id)]: [
+        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "Dr. Africa", reviewers: null },
+      ],
+    });
+    expect(getReviewerCandidatesByCountry([group], ["ZA"])).toEqual([]);
+  });
+
+  it("finds reviewers for species with overlapping countries", () => {
+    const group = uniqueGroup();
+    const row = makeRow({ countries: ["ZA", "MZ"], scientific_name: "Testus one" });
+    setup([row], {
+      [String(row.sis_taxon_id)]: [
+        { id: 1, year: "2020", category: "LC", date: "2020-06-15", assessors: "Dr. Assessor", reviewers: "Dr. Reviewer" },
+      ],
+    });
+
+    const result = getReviewerCandidatesByCountry([group], ["ZA"]);
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("Dr. Reviewer");
+    expect(result[0].totalInRegion).toBe(1);
+    expect(result[0].latestDate).toBe("2020-06-15");
+  });
+
+  it("aggregates region and country counts from overlapping countries", () => {
+    const group = uniqueGroup();
+    const row = makeRow({ countries: ["ZA", "KE"], scientific_name: "Testus wide" });
+    setup([row], {
+      [String(row.sis_taxon_id)]: [
+        { id: 1, year: "2021", category: "VU", date: "2021-01-01", assessors: null, reviewers: "Dr. Wide" },
+      ],
+    });
+
+    const result = getReviewerCandidatesByCountry([group], ["ZA", "KE"]);
+    expect(result).toHaveLength(1);
+    expect(result[0].regionCounts["Southern Africa"]).toBe(1);
+    expect(result[0].regionCounts["Eastern Africa"]).toBe(1);
+    expect(result[0].countryCounts["ZA"]).toBe(1);
+    expect(result[0].countryCounts["KE"]).toBe(1);
+  });
+
+  it("counts unique species, not multiple assessments of the same species", () => {
+    const group = uniqueGroup();
+    const row = makeRow({ countries: ["ZA"], scientific_name: "Testus one" });
+    setup([row], {
+      [String(row.sis_taxon_id)]: [
+        { id: 1, year: "2010", category: "LC", date: "2010-01-01", assessors: null, reviewers: "Dr. Repeat" },
+        { id: 2, year: "2015", category: "VU", date: "2015-06-01", assessors: null, reviewers: "Dr. Repeat" },
+      ],
+    });
+
+    const result = getReviewerCandidatesByCountry([group], ["ZA"]);
+    expect(result).toHaveLength(1);
+    expect(result[0].totalInRegion).toBe(1);
+    expect(result[0].latestDate).toBe("2015-06-01");
+  });
+
+  it("tracks totalAll separately from totalInRegion", () => {
+    const group = uniqueGroup();
+    const rowInRegion = makeRow({ countries: ["ZA"], scientific_name: "Testus local" });
+    const rowOutside = makeRow({ countries: ["GB"], scientific_name: "Testus remote" });
+    setup([rowInRegion, rowOutside], {
+      [String(rowInRegion.sis_taxon_id)]: [
+        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: null, reviewers: "Dr. Both" },
+      ],
+      [String(rowOutside.sis_taxon_id)]: [
+        { id: 2, year: "2021", category: "VU", date: "2021-01-01", assessors: null, reviewers: "Dr. Both" },
+      ],
+    });
+
+    const result = getReviewerCandidatesByCountry([group], ["ZA"]);
+    expect(result).toHaveLength(1);
+    expect(result[0].totalInRegion).toBe(1);
+    expect(result[0].totalAll).toBe(2);
+  });
+
+  it("parses multiple reviewers from a single assessment", () => {
+    const group = uniqueGroup();
+    const row = makeRow({ countries: ["ZA"], scientific_name: "Testus one" });
+    setup([row], {
+      [String(row.sis_taxon_id)]: [
+        { id: 1, year: "2020", category: "EN", date: "2020-01-01", assessors: null, reviewers: "Smith, J.A. & Jones, B.C." },
+      ],
+    });
+
+    const names = getReviewerCandidatesByCountry([group], ["ZA"]).map((c) => c.name);
+    expect(names).toContain("Smith, J.A.");
+    expect(names).toContain("Jones, B.C.");
+  });
+
+  // The bug behind the reported broken filter link: a reviewer carries a
+  // "(... Red List Authority)" label in one assessment but not another, so the
+  // affiliated variant produced a separate candidate whose URL didn't match the
+  // species' latest_reviewers. Stripping the affiliation merges them.
+  it("strips parenthetical affiliations and merges them under one candidate", () => {
+    const group = uniqueGroup();
+    const row1 = makeRow({ countries: ["ZA"], scientific_name: "Testus one" });
+    const row2 = makeRow({ countries: ["ZA"], scientific_name: "Testus two" });
+    setup([row1, row2], {
+      [String(row1.sis_taxon_id)]: [
+        { id: 1, year: "2008", category: "LC", date: "2008-01-01", assessors: null, reviewers: "Amori, G. (Small Nonvolant Mammal Red List Authority)" },
+      ],
+      [String(row2.sis_taxon_id)]: [
+        { id: 2, year: "2016", category: "LC", date: "2016-01-01", assessors: null, reviewers: "Amori, G." },
+      ],
+    });
+
+    const result = getReviewerCandidatesByCountry([group], ["ZA"]);
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("Amori, G.");
+    expect(result[0].totalInRegion).toBe(2);
+  });
+
+  it("strips affiliations from each name in a multi-reviewer string", () => {
+    const group = uniqueGroup();
+    const row = makeRow({ countries: ["ZA"], scientific_name: "Testus one" });
+    setup([row], {
+      [String(row.sis_taxon_id)]: [
+        { id: 1, year: "2020", category: "EN", date: "2020-01-01", assessors: null, reviewers: "Amori, G. (Small Nonvolant Mammal Red List Authority) & Schipper, J. (Global Mammal Assessment Team)" },
+      ],
+    });
+
+    const names = getReviewerCandidatesByCountry([group], ["ZA"]).map((c) => c.name);
+    expect(names).toContain("Amori, G.");
+    expect(names).toContain("Schipper, J.");
+    expect(names).not.toContain("Amori, G. (Small Nonvolant Mammal Red List Authority)");
+  });
+
+  it("applies taxonomy filter to narrow scope", () => {
+    const group = uniqueGroup();
+    const beetleRow = makeRow({ countries: ["ZA"], scientific_name: "Beetlus one", order_name: "Coleoptera", class_name: "Insecta" });
+    const mothRow = makeRow({ countries: ["ZA"], scientific_name: "Mothus one", order_name: "Lepidoptera", class_name: "Insecta" });
+    setup([beetleRow, mothRow], {
+      [String(beetleRow.sis_taxon_id)]: [
+        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: null, reviewers: "Beetle Reviewer" },
+      ],
+      [String(mothRow.sis_taxon_id)]: [
+        { id: 2, year: "2021", category: "LC", date: "2021-01-01", assessors: null, reviewers: "Moth Reviewer" },
+      ],
+    });
+
+    expect(getReviewerCandidatesByCountry([group], ["ZA"])).toHaveLength(2);
+    const beetleResult = getReviewerCandidatesByCountry([group], ["ZA"], { orderNames: ["coleoptera"] });
+    expect(beetleResult).toHaveLength(1);
+    expect(beetleResult[0].name).toBe("Beetle Reviewer");
   });
 });

@@ -33,17 +33,30 @@ describe("parseParams", () => {
     expect(result.taxa).toEqual(new Set(["mammals", "birds"]));
   });
 
-  it("maps legacy taxa IDs to current ones (back-compat for old URLs)", () => {
-    const result = parseParams("?taxa=mammalia,aves,reptilia,amphibia,arachnida,mollusca,crustacea");
-    expect(result.taxa).toEqual(
-      new Set(["mammals", "birds", "reptiles", "amphibians", "arachnids", "molluscs", "crustaceans"])
-    );
+  it("maps legacy vertebrate taxa IDs to current root ids (back-compat for old URLs)", () => {
+    const result = parseParams("?taxa=mammalia,aves,reptilia,amphibia");
+    expect(result.taxa).toEqual(new Set(["mammals", "birds", "reptiles", "amphibians"]));
+    expect(result.subgroups.size).toBe(0);
   });
 
-  it("leaves unchanged and unknown taxa IDs as-is, and dedupes legacy+current", () => {
-    // insecta is still a valid node ID; beetles unchanged; mammalia → mammals collapses with mammals
+  it("expands legacy invertebrate taxa tokens to invertebrates + sub-group", () => {
+    // arachnida/mollusca/crustacea map to groups stored under `invertebrates`, so a
+    // single flat token expands to the root + its sub-group node.
+    const result = parseParams("?taxa=arachnida,mollusca,crustacea");
+    expect(result.taxa).toEqual(new Set(["invertebrates"]));
+    expect(result.subgroups).toEqual(new Set(["inv-arachnids", "inv-molluscs", "inv-crustaceans"]));
+  });
+
+  it("dedupes roots, expands group tokens, and passes unknown tokens through", () => {
     const result = parseParams("?taxa=mammalia,mammals,insecta,beetles,unknownthing");
-    expect(result.taxa).toEqual(new Set(["mammals", "insecta", "beetles", "unknownthing"]));
+    expect(result.taxa).toEqual(new Set(["mammals", "invertebrates", "unknownthing"]));
+    expect(result.subgroups).toEqual(new Set(["inv-insects", "inv-beetles"]));
+  });
+
+  it("expands a single flat group token (corals → invertebrates + inv-corals)", () => {
+    const result = parseParams("?taxa=corals");
+    expect(result.taxa).toEqual(new Set(["invertebrates"]));
+    expect(result.subgroups).toEqual(new Set(["inv-corals"]));
   });
 
   it("maps legacy IDs in the subgroups param too", () => {
@@ -57,9 +70,9 @@ describe("parseParams", () => {
     expect(result.subgroups).toEqual(new Set(["inv-crustaceans", "inv-molluscs", "inv-arachnids"]));
   });
 
-  it("leaves unchanged prefixed IDs alone (e.g. inv-insecta, inv-beetles)", () => {
+  it("canonicalizes the base of a prefixed ID while preserving the prefix (inv-insecta → inv-insects); non-aliased pass through", () => {
     const result = parseParams("?subgroups=inv-insecta,inv-beetles");
-    expect(result.subgroups).toEqual(new Set(["inv-insecta", "inv-beetles"]));
+    expect(result.subgroups).toEqual(new Set(["inv-insects", "inv-beetles"]));
   });
 
   it("parses categories", () => {
@@ -185,6 +198,37 @@ describe("parseParams", () => {
     const result = parseParams("");
     expect(result.tab).toBe(null);
   });
+
+  it("parses the exact URL-only filters", () => {
+    const result = parseParams(
+      "?outdated=yes&minObs=100&maxObs=5000&minAssessmentYear=2010&maxAssessmentYear=2020&minDescribedYear=1990&maxDescribedYear=2000"
+    );
+    expect(result.outdated).toBe("yes");
+    expect(result.minObs).toBe(100);
+    expect(result.maxObs).toBe(5000);
+    expect(result.minAssessmentYear).toBe(2010);
+    expect(result.maxAssessmentYear).toBe(2020);
+    expect(result.minDescribedYear).toBe(1990);
+    expect(result.maxDescribedYear).toBe(2000);
+  });
+
+  it("defaults exact filters to null when absent / invalid", () => {
+    const result = parseParams("?outdated=maybe&minObs=abc");
+    expect(result.outdated).toBe(null);
+    expect(result.minObs).toBe(null);
+    expect(result.maxObs).toBe(null);
+  });
+
+  it("expands a region param into its country codes (no separate region state)", () => {
+    const result = parseParams("?region=Sub-Saharan+Africa");
+    expect(result.countries.size).toBeGreaterThan(0);
+  });
+
+  it("unions region countries with an explicit countries param", () => {
+    const result = parseParams("?countries=ZA&region=Europe");
+    expect(result.countries.has("ZA")).toBe(true);
+    expect(result.countries.size).toBeGreaterThan(1);
+  });
 });
 
 describe("buildQs", () => {
@@ -201,7 +245,7 @@ describe("buildQs", () => {
     populationTrends: new Set<string>(),
     movementPatterns: new Set<string>(),
     threats: new Set<string>(),
-    hasMap: null as "yes" | "no" | null,
+    endemicsOnly: false,
     growthForms: new Set<string>(),
     assessors: new Set<string>(),
     reviewers: new Set<string>(),
@@ -271,18 +315,38 @@ describe("buildQs", () => {
     expect(params.get("search")).toBe("elephant");
   });
 
-  it("includes subgroups when set", () => {
-    const qs = buildQs({ ...emptyState, subgroups: new Set(["sharks-rays"]) });
-    const params = new URLSearchParams(qs);
-    expect(params.get("subgroups")).toBe("sharks-rays");
+  it("round-trips the endemics-only filter", () => {
+    const qs = buildQs({ ...emptyState, endemicsOnly: true });
+    expect(new URLSearchParams(qs).get("endemics")).toBe("1");
+    expect(parseParams(qs).endemicsOnly).toBe(true);
   });
 
-  it("includes multiple subgroups", () => {
+  it("omits endemics when false", () => {
+    const qs = buildQs({ ...emptyState, endemicsOnly: false });
+    expect(new URLSearchParams(qs).has("endemics")).toBe(false);
+  });
+
+  it("collapses a sub-group into the flat taxa token (no subgroups param)", () => {
+    const qs = buildQs({ ...emptyState, subgroups: new Set(["sharks-rays"]) });
+    const params = new URLSearchParams(qs);
+    expect(params.get("taxa")).toBe("sharks-rays");
+    expect(params.has("subgroups")).toBe(false);
+  });
+
+  it("collapses multiple sub-groups into the flat taxa list", () => {
     const qs = buildQs({ ...emptyState, subgroups: new Set(["sharks-rays", "ray-finned-fishes"]) });
     const params = new URLSearchParams(qs);
-    const sgs = params.get("subgroups")!.split(",");
-    expect(sgs).toContain("sharks-rays");
-    expect(sgs).toContain("ray-finned-fishes");
+    const t = params.get("taxa")!.split(",");
+    expect(t).toContain("sharks-rays");
+    expect(t).toContain("ray-finned-fishes");
+    expect(params.has("subgroups")).toBe(false);
+  });
+
+  it("collapses root + sub-group to a single flat token (invertebrates + inv-corals → corals)", () => {
+    const qs = buildQs({ ...emptyState, taxa: new Set(["invertebrates"]), subgroups: new Set(["inv-corals"]) });
+    const params = new URLSearchParams(qs);
+    expect(params.get("taxa")).toBe("corals");
+    expect(params.has("subgroups")).toBe(false);
   });
 
   it("omits subgroups when empty", () => {
@@ -353,6 +417,41 @@ describe("buildQs", () => {
     const params = new URLSearchParams(qs);
     expect(params.has("tab")).toBe(false);
   });
+
+  it("includes the exact URL-only filters when set", () => {
+    const qs = buildQs({
+      ...emptyState,
+      outdated: "yes", minObs: 100, maxObs: 5000,
+      minAssessmentYear: 2010, maxAssessmentYear: 2020,
+      minDescribedYear: 1990, maxDescribedYear: 2000,
+    });
+    const p = new URLSearchParams(qs);
+    expect(p.get("outdated")).toBe("yes");
+    expect(p.get("minObs")).toBe("100");
+    expect(p.get("maxObs")).toBe("5000");
+    expect(p.get("minAssessmentYear")).toBe("2010");
+    expect(p.get("maxAssessmentYear")).toBe("2020");
+    expect(p.get("minDescribedYear")).toBe("1990");
+    expect(p.get("maxDescribedYear")).toBe("2000");
+  });
+
+  it("omits exact filters when null/absent", () => {
+    const qs = buildQs({ ...emptyState, outdated: null, minObs: null });
+    expect(qs).toBe("");
+  });
+
+  it("round-trips the exact filters through parseParams", () => {
+    const qs = buildQs({
+      ...emptyState,
+      taxa: new Set(["mammals"]),
+      outdated: "no", minObs: 1, maxObs: 9, minAssessmentYear: 2000,
+    });
+    const parsed = parseParams(qs);
+    expect(parsed.outdated).toBe("no");
+    expect(parsed.minObs).toBe(1);
+    expect(parsed.maxObs).toBe(9);
+    expect(parsed.minAssessmentYear).toBe(2000);
+  });
 });
 
 describe("parseParams ↔ buildQs round-trip", () => {
@@ -371,7 +470,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
       populationTrends: new Set<string>(),
       movementPatterns: new Set<string>(),
       threats: new Set<string>(),
-      hasMap: null as "yes" | "no" | null,
+      endemicsOnly: false,
       growthForms: new Set<string>(),
       assessors: new Set<string>(),
       reviewers: new Set<string>(),
@@ -410,7 +509,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
       populationTrends: new Set<string>(),
       movementPatterns: new Set<string>(),
       threats: new Set<string>(),
-      hasMap: null as "yes" | "no" | null,
+      endemicsOnly: false,
       growthForms: new Set<string>(),
       assessors: new Set<string>(),
       reviewers: new Set<string>(),
@@ -446,7 +545,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
       populationTrends: new Set<string>(),
       movementPatterns: new Set<string>(),
       threats: new Set<string>(),
-      hasMap: null as "yes" | "no" | null,
+      endemicsOnly: false,
       growthForms: new Set<string>(),
       assessors: new Set<string>(),
       reviewers: new Set<string>(),
@@ -478,7 +577,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
       populationTrends: new Set<string>(),
       movementPatterns: new Set<string>(),
       threats: new Set<string>(),
-      hasMap: null as "yes" | "no" | null,
+      endemicsOnly: false,
       growthForms: new Set<string>(),
       assessors: new Set<string>(),
       reviewers: new Set<string>(),
@@ -509,7 +608,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
       populationTrends: new Set<string>(),
       movementPatterns: new Set<string>(),
       threats: new Set<string>(),
-      hasMap: null as "yes" | "no" | null,
+      endemicsOnly: false,
       growthForms: new Set<string>(),
       assessors: new Set<string>(),
       reviewers: new Set<string>(),

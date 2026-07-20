@@ -322,3 +322,42 @@ export function iucnRegionCountries(region: string): string[] {
     .filter(([, r]) => r === region)
     .map(([code]) => code);
 }
+
+/**
+ * Which region (if any) a set of country codes matches *exactly* — not just
+ * "some/one country within it", every code in the region and no others. Used
+ * to show a region's name (e.g. "Sub-Saharan Africa") instead of a generic
+ * "N countries" label wherever a whole region was selected as a unit, whether
+ * via the region dropdown or by happening to cmd-click every one of its
+ * countries individually. Returns null for an empty set, an arbitrary
+ * multi-select that doesn't line up with any one region, or a set spanning
+ * more than one region.
+ */
+export function matchingRegion(codes: Set<string> | string[]): string | null {
+  const codeSet = codes instanceof Set ? codes : new Set(codes);
+  if (codeSet.size === 0) return null;
+  const regions = new Set<string>();
+  codeSet.forEach((c) => regions.add(countryToIucnRegion(c)));
+  if (regions.size !== 1) return null;
+  const region = [...regions][0];
+  if (region === "Other") return null;
+  const regionCodes = iucnRegionCountries(region);
+  return regionCodes.length === codeSet.size && regionCodes.every((c) => codeSet.has(c)) ? region : null;
+}
+
+/**
+ * Resolve IUCN region names (case-insensitive, hyphen/space tolerant) to their
+ * country codes — the dashboard's region dropdown expands to countries the same
+ * way, so a region filter and its expanded country set select identically.
+ */
+export function resolveRegions(values: string[]): { codes: string[]; unresolved: string[] } {
+  const codes = new Set<string>();
+  const unresolved: string[] = [];
+  const norm = (s: string) => s.toLowerCase().replace(/[\s_-]+/g, " ").trim();
+  for (const v of values) {
+    const hit = IUCN_REGION_ORDER.find((r) => norm(r) === norm(v));
+    if (hit) iucnRegionCountries(hit).forEach((c) => codes.add(c));
+    else unresolved.push(v);
+  }
+  return { codes: [...codes], unresolved };
+}

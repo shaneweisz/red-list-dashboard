@@ -19,6 +19,9 @@ const MAP_POINTS = 200;
 interface InatObservationsPanelProps {
   scientificName: string;
   mounted: boolean;
+  /** Called once both feeds have loaded and iNaturalist has no observations either,
+   * letting the parent fall back to another tab (e.g. Catalogue of Life). */
+  onEmpty?: () => void;
 }
 
 /**
@@ -27,7 +30,7 @@ interface InatObservationsPanelProps {
  * GBIF's iNat-dataset occurrence search keyed by a GBIF taxonKey; that returns
  * nothing here, so this panel queries iNaturalist directly by scientific name.
  */
-export default function InatObservationsPanel({ scientificName, mounted }: InatObservationsPanelProps) {
+export default function InatObservationsPanel({ scientificName, mounted, onEmpty }: InatObservationsPanelProps) {
   const [observations, setObservations] = useState<InatObservation[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [inatTaxonId, setInatTaxonId] = useState<number | null>(null);
@@ -85,8 +88,18 @@ export default function InatObservationsPanel({ scientificName, mounted }: InatO
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
+  // Both feeds loaded and neither turned up anything: no occurrence data at all.
+  const noRecords = loaded && mapLoaded && observations.length === 0 && mapObs.length === 0;
+
+  // Notify the parent when there's nothing to show, so an unevaluated species can
+  // fall back to another tab (e.g. Catalogue of Life). The parent guards against
+  // acting more than once.
+  useEffect(() => {
+    if (noRecords) onEmpty?.();
+  }, [noRecords, onEmpty]);
+
   // Once both feeds have loaded, if iNaturalist has nothing either, say so plainly.
-  if (loaded && mapLoaded && observations.length === 0 && mapObs.length === 0) {
+  if (noRecords) {
     return (
       <div className="p-6 text-sm text-zinc-500 dark:text-zinc-400">
         No GBIF match found for <span className="italic">{scientificName}</span>, and no iNaturalist

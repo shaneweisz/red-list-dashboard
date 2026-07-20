@@ -5,8 +5,10 @@
  * species data to data/redlist/{taxonId}.csv.
  *
  * Prerequisites:
- *   1. DB connectivity — set DB_HOST/DB_PORT to the server directly if
- *      reachable, otherwise SSH-tunnel it to localhost:5433
+ *   1. DB connectivity — primary is a local Postgres restored from
+ *      ~/Data/RedList/*.bkp (`brew services start postgresql@16`), pointed
+ *      at on the default port. Fallback: SSH-tunnel the remote SIS DB to
+ *      localhost:5433 if you need data newer than your last local restore.
  *   2. Environment variables: DB_HOST, DB_NAME, DB_USER, DB_PASSWORD
  *
  * Usage:
@@ -24,7 +26,7 @@ import {
   readCsv,
   REDLIST_DIR,
 } from "./utils";
-import { getTaxa, type RedlistQuery, type Taxon } from "./taxa";
+import { getTaxa, TAXA, type RedlistQuery, type Taxon } from "./taxa";
 
 const POPULATION_TRENDS: Record<string, string> = {
   "0": "Increasing",
@@ -65,7 +67,6 @@ export interface RedlistSpecies {
   possibly_extinct_in_the_wild: boolean;
   criteria: string | null; // e.g. "B1ab(ii,iii)+2ab(ii,iii)"
   threat_codes: string[]; // Full threat codes e.g. ["1.1","2.1.2","5.3.3"]
-  has_map: boolean; // Whether a range map exists in assessment_ranges
   /**
    * Scientific-name synonyms from the IUCN taxon_synonyms table, after
    * dropping (a) the species's own canonical name and (b) any synonym whose
@@ -158,7 +159,6 @@ export async function fetchFromIucnDb(
       possibly_extinct_in_the_wild: row.possibly_extinct_in_the_wild === true,
       criteria: row.criteria || null,
       threat_codes: [],
-      has_map: false,
       synonyms: [],
     });
     assessmentIds.push(assessmentId);
@@ -167,8 +167,8 @@ export async function fetchFromIucnDb(
   if (assessmentIds.length > 0) {
     const sisIds = species.map((s) => s.sis_taxon_id);
 
-    // Batch-fetch countries, systems, growth forms, movement patterns, threats, range maps, and synonyms
-    const [countriesResult, systemsResult, growthFormsResult, movementResult, threatsResult, rangeMapResult, synonymsResult] = await Promise.all([
+    // Batch-fetch countries, systems, growth forms, movement patterns, threats, and synonyms
+    const [countriesResult, systemsResult, growthFormsResult, movementResult, threatsResult, synonymsResult] = await Promise.all([
       pgClient.query(`
         SELECT a.id as assessment_id, ll.code as country_code
         FROM assessments a
@@ -203,15 +203,6 @@ export async function fetchFromIucnDb(
         FROM assessment_threats at2
         JOIN threat_lookup tl ON tl.id = at2.threat_id
         WHERE at2.assessment_id = ANY($1)
-      `, [assessmentIds]),
-      pgClient.query(`
-        SELECT DISTINCT assessment_id
-        FROM assessment_ranges
-        WHERE assessment_id = ANY($1)
-        UNION
-        SELECT DISTINCT assessment_id
-        FROM assessment_points
-        WHERE assessment_id = ANY($1)
       `, [assessmentIds]),
       // Synonyms with global ambiguity filtering. The CTEs scan all latest
       // taxa (not just this batch) because ambiguity is a global property:
@@ -324,15 +315,6 @@ export async function fetchFromIucnDb(
       if (threats) s.threat_codes = Array.from(threats).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
     }
 
-    // Range maps (has_map boolean)
-    const assessmentsWithMaps = new Set<number>();
-    for (const row of rangeMapResult.rows) {
-      assessmentsWithMaps.add(Number(row.assessment_id));
-    }
-    for (const s of species) {
-      s.has_map = assessmentsWithMaps.has(s.assessment_id);
-    }
-
     // Synonyms (deduplicated per sis_id, excluding the species's own canonical name).
     // The SQL has already dropped ambiguous (multi-claimed) names.
     const synonymsBySisId = new Map<number, RedlistSynonym[]>();
@@ -363,6 +345,76 @@ export async function fetchFromIucnDb(
   }
 
   return species;
+}
+
+// =============================================================================
+// TAXON COVERAGE CHECK
+// =============================================================================
+
+const FILTER_COLUMN_TO_TAXON_FIELD: Record<RedlistQuery["filterColumn"], "kingdom_name" | "phylum_name" | "class_name" | "order_name"> = {
+  kingdom_name: "kingdom_name",
+  phylum_name: "phylum_name",
+  class_name: "class_name",
+  order_name: "order_name",
+};
+
+/**
+ * Sanity-checks that every (kingdom, phylum, class, order) combination with
+ * currently-assessed species is matched by exactly one Taxon's redlist
+ * filter — zero matches means those species are silently missing from every
+ * CSV; more than one means they're double-counted across CSVs. Runs against
+ * the SAME base "currently assessed" predicate as fetchFromIucnDb (minus the
+ * class/order/phylum filter), so it's just one extra query per sync, not a
+ * new DB round trip pattern.
+ *
+ * This is how the crustaceans gap was found: IUCN's SIS DB had already split
+ * 2 barnacle species out of the legacy "MAXILLOPODA" class into its own
+ * (misspelled) "THEOCOSTRACA" class, which no taxon's filterValues listed —
+ * see taxa.ts's crustaceans comment. The IUCN DB only refreshes ~every 6
+ * months, so this is cheap insurance against the same class of drift
+ * recurring silently at the next sync.
+ */
+async function checkTaxonCoverage(pgClient: Client): Promise<void> {
+  const result = await pgClient.query(`
+    SELECT t.kingdom_name, t.phylum_name, t.class_name, t.order_name, count(*) AS n
+    FROM taxons t
+    JOIN assessments a ON a.taxon_id = t.id
+    JOIN assessment_scopes ascope ON ascope.assessment_id = a.id
+    WHERE t.latest = true
+      AND (a.latest = true OR a.id = 288151174)
+      AND a.suppress = false
+      AND ascope.scope_lookup_id = 15
+      AND t.infra_name IS NULL
+      AND t.subpopulation_name IS NULL
+    GROUP BY 1, 2, 3, 4
+  `);
+
+  const unmatched: string[] = [];
+  const doubleMatched: string[] = [];
+  for (const row of result.rows) {
+    const hits = TAXA.filter((taxon) =>
+      taxon.redlist.some((q) => {
+        const value: string | null = row[FILTER_COLUMN_TO_TAXON_FIELD[q.filterColumn]];
+        return value != null && q.filterValues.includes(value.toUpperCase());
+      }),
+    ).map((t) => t.id);
+
+    const label = `kingdom=${row.kingdom_name} phylum=${row.phylum_name} class=${row.class_name} order=${row.order_name} (${row.n} species)`;
+    if (hits.length === 0) unmatched.push(label);
+    else if (hits.length > 1) doubleMatched.push(`${label} -> ${hits.join(", ")}`);
+  }
+
+  if (unmatched.length > 0) {
+    console.warn(`\n⚠️  taxon coverage: ${unmatched.length} group(s) matched by ZERO taxa — entirely missing from every CSV:`);
+    unmatched.forEach((l) => console.warn(`   ${l}`));
+  }
+  if (doubleMatched.length > 0) {
+    console.warn(`\n⚠️  taxon coverage: ${doubleMatched.length} group(s) matched by MULTIPLE taxa — species double-counted across CSVs:`);
+    doubleMatched.forEach((l) => console.warn(`   ${l}`));
+  }
+  if (unmatched.length === 0 && doubleMatched.length === 0) {
+    console.log("\n✓ taxon coverage: every currently-assessed species is matched by exactly one taxon.");
+  }
 }
 
 // =============================================================================
@@ -452,7 +504,7 @@ const REDLIST_CSV_COLUMNS = [
   "family", "taxon_group_table1a", "assessment_id", "iucn_category", "assessment_date",
   "year_published", "population_trend", "countries", "systems", "growth_forms",
   "movement_pattern", "possibly_extinct", "possibly_extinct_in_the_wild",
-  "criteria", "threat_codes", "has_map", "synonyms",
+  "criteria", "threat_codes", "synonyms",
 ];
 
 /**
@@ -503,7 +555,6 @@ export function writeRedlistCsv(species: RedlistSpecies[], outputPath: string): 
       possibly_extinct_in_the_wild: s.possibly_extinct_in_the_wild ? "true" : "",
       criteria: s.criteria,
       threat_codes: s.threat_codes.join(";"),
-      has_map: s.has_map ? "true" : "",
       synonyms: encodeSynonyms(s.synonyms),
     }));
 
@@ -533,7 +584,6 @@ export function readRedlistCsv(taxonId: string): RedlistSpecies[] {
     possibly_extinct_in_the_wild: r.possibly_extinct_in_the_wild === "true",
     criteria: r.criteria || null,
     threat_codes: r.threat_codes ? r.threat_codes.split(";").filter(Boolean) : [],
-    has_map: r.has_map === "true",
     synonyms: decodeSynonyms(r.synonyms),
   }));
 }
@@ -564,6 +614,12 @@ export async function run(opts: {
   try {
     await pgClient.connect();
     console.log("Connected to IUCN database\n");
+
+    // Only on a full sync (no taxon filter) — a single-taxon debug run
+    // shouldn't spam warnings about all the OTHER taxa it didn't touch.
+    if (!opts.taxa && !historyOnly) {
+      await checkTaxonCoverage(pgClient);
+    }
 
     logger.log("fetch_redlist_species_start", {
       taxa: taxaToSync.map((t) => t.id),

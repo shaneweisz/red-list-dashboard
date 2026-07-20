@@ -23,7 +23,6 @@ const CSV_COLUMNS: { header: string; getValue: (s: RedListSpecies) => string }[]
   { header: "Possibly Extinct in Wild", getValue: (s) => s.possibly_extinct_in_the_wild ? "Yes" : "" },
   { header: "Criteria", getValue: (s) => s.criteria ?? "" },
   { header: "Threat Codes", getValue: (s) => s.threat_codes.join("; ") },
-  { header: "Has Map", getValue: (s) => s.has_map ? "Yes" : "No" },
 ];
 
 function escapeCsvField(value: string): string {
