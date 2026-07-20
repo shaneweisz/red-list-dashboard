@@ -7,6 +7,29 @@ import { iucnRegionCountries } from "@/lib/regions";
 type SortKey = "name" | "species" | "outdated" | "percentOutdated";
 type SortDir = "asc" | "desc";
 
+// Per-column min/max filter — kept as strings (not numbers) so a field can sit
+// empty (no bound) or mid-edit without fighting a parsed/reformatted value.
+interface RangeFilter {
+  min: string;
+  max: string;
+}
+const EMPTY_RANGE: RangeFilter = { min: "", max: "" };
+
+// Blank bound = unbounded on that side; a non-numeric bound (still being
+// typed, e.g. "-" or "") doesn't filter anything out rather than hiding
+// every row while the input is mid-edit.
+function inRange(value: number, filter: RangeFilter): boolean {
+  if (filter.min !== "") {
+    const min = Number(filter.min);
+    if (!Number.isNaN(min) && value < min) return false;
+  }
+  if (filter.max !== "") {
+    const max = Number(filter.max);
+    if (!Number.isNaN(max) && value > max) return false;
+  }
+  return true;
+}
+
 interface CountryStatsListProps {
   stats: CountryStats;
   selectedCountries: Set<string>;
@@ -56,6 +79,43 @@ function SortHeader({
   );
 }
 
+// Min/max inputs for one numeric column, in their own header row below the
+// sort headers. stopPropagation on click/keydown so typing a filter (or just
+// clicking into the field) doesn't trigger the row-level onClick a click on
+// the table would otherwise bubble into elsewhere in this component.
+function RangeFilterCell({
+  value,
+  onChange,
+}: {
+  value: RangeFilter;
+  onChange: (next: RangeFilter) => void;
+}) {
+  return (
+    <th className="px-1 py-0.5 font-normal">
+      <div className="flex items-center justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
+        <input
+          type="number"
+          inputMode="decimal"
+          value={value.min}
+          onChange={(e) => onChange({ ...value, min: e.target.value })}
+          placeholder="min"
+          aria-label="Minimum"
+          className="w-0 min-w-0 flex-1 text-[10px] px-1 py-0.5 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+        />
+        <input
+          type="number"
+          inputMode="decimal"
+          value={value.max}
+          onChange={(e) => onChange({ ...value, max: e.target.value })}
+          placeholder="max"
+          aria-label="Maximum"
+          className="w-0 min-w-0 flex-1 text-[10px] px-1 py-0.5 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+        />
+      </div>
+    </th>
+  );
+}
+
 /**
  * Sortable table alternative to WorldMap's choropleth — same data (CountryStats),
  * same onCountrySelect click-through behavior, for users who'd rather scan/sort a
@@ -79,6 +139,13 @@ export default function CountryStatsList({
   const sortDir = controlledSortDir ?? localSortDir;
   const [page, setPage] = useState(0);
 
+  // Per-column min/max — local only (not URL-synced like sort), same as the
+  // map's own search/zoom state; narrowing the list this way is a scratch
+  // exploration, not something worth making a shareable link out of.
+  const [speciesFilter, setSpeciesFilter] = useState<RangeFilter>(EMPTY_RANGE);
+  const [outdatedFilter, setOutdatedFilter] = useState<RangeFilter>(EMPTY_RANGE);
+  const [percentOutdatedFilter, setPercentOutdatedFilter] = useState<RangeFilter>(EMPTY_RANGE);
+
   const regionCodes = useMemo(
     () => (regionFilter ? new Set(iucnRegionCountries(regionFilter)) : null),
     [regionFilter]
@@ -96,19 +163,27 @@ export default function CountryStatsList({
       }));
   }, [stats, regionCodes]);
 
+  const filteredRows = useMemo(() => {
+    return rows.filter((r) =>
+      inRange(r.species, speciesFilter) &&
+      (!showOutdatedMode || (inRange(r.outdated, outdatedFilter) && inRange(r.percentOutdated, percentOutdatedFilter)))
+    );
+  }, [rows, speciesFilter, outdatedFilter, percentOutdatedFilter, showOutdatedMode]);
+
   const sorted = useMemo(() => {
     const dir = sortDir === "asc" ? 1 : -1;
-    return [...rows].sort((a, b) =>
+    return [...filteredRows].sort((a, b) =>
       sortKey === "name" ? dir * a.name.localeCompare(b.name) : dir * (a[sortKey] - b[sortKey])
     );
-  }, [rows, sortKey, sortDir]);
+  }, [filteredRows, sortKey, sortDir]);
 
-  // Back to page 1 whenever the sort or the underlying row set changes —
-  // otherwise switching sort/region could strand the view on a now-empty page.
-  // Adjusted during render (React's documented alternative to an effect that
-  // just resets state) via a second piece of state, not a ref — this project's
-  // lint rules disallow mutating a ref during render.
-  const resetKey = `${sortKey}|${sortDir}|${regionFilter ?? ""}|${rows.length}`;
+  // Back to page 1 whenever the sort, filters, or the underlying row set
+  // changes — otherwise switching sort/region/filters could strand the view
+  // on a now-empty page. Adjusted during render (React's documented
+  // alternative to an effect that just resets state) via a second piece of
+  // state, not a ref — this project's lint rules disallow mutating a ref
+  // during render.
+  const resetKey = `${sortKey}|${sortDir}|${regionFilter ?? ""}|${filteredRows.length}|${speciesFilter.min}|${speciesFilter.max}|${outdatedFilter.min}|${outdatedFilter.max}|${percentOutdatedFilter.min}|${percentOutdatedFilter.max}`;
   const [prevResetKey, setPrevResetKey] = useState(resetKey);
   if (prevResetKey !== resetKey) {
     setPrevResetKey(resetKey);
@@ -154,6 +229,12 @@ export default function CountryStatsList({
               {showOutdatedMode && (
                 <SortHeader label="% Outdated" active={sortKey === "percentOutdated"} dir={sortDir} widthClass="w-[22%]" onClick={() => toggleSort("percentOutdated")} />
               )}
+            </tr>
+            <tr className="border-t border-zinc-200 dark:border-zinc-800">
+              <th className="px-1.5 py-0.5" />
+              <RangeFilterCell value={speciesFilter} onChange={setSpeciesFilter} />
+              {showOutdatedMode && <RangeFilterCell value={outdatedFilter} onChange={setOutdatedFilter} />}
+              {showOutdatedMode && <RangeFilterCell value={percentOutdatedFilter} onChange={setPercentOutdatedFilter} />}
             </tr>
           </thead>
           <tbody>

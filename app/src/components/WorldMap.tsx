@@ -553,16 +553,20 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
             )}
           </div>
           {/* Color mode: Species and % Outdated are always accurate; GBIF only when
-              no extra filters are active (its counts aren't filterable per-country) */}
-          <select
-            value={colorMode}
-            onChange={(e) => setColorMode(e.target.value as ColorMode)}
-            className="text-[10px] bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          >
-            <option value="species">{speciesLabel}</option>
-            {showOutdatedMode && <option value="outdated">% Outdated</option>}
-            {showGbifToggle && <option value="occurrences"># GBIF Obs</option>}
-          </select>
+              no extra filters are active (its counts aren't filterable per-country).
+              Only meaningful for the choropleth itself — hidden in List view, which
+              shows every column directly rather than color-coding by just one. */}
+          {viewMode === "map" && (
+            <select
+              value={colorMode}
+              onChange={(e) => setColorMode(e.target.value as ColorMode)}
+              className="text-[10px] bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="species">{speciesLabel}</option>
+              {showOutdatedMode && <option value="outdated">% Outdated</option>}
+              {showGbifToggle && <option value="occurrences"># GBIF Obs</option>}
+            </select>
+          )}
           {onEndemicsToggle && (
             <button
               onClick={onEndemicsToggle}
