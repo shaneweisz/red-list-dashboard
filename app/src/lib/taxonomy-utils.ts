@@ -12,6 +12,11 @@ import { canonicalizeTaxonId } from "@/lib/data/taxonomy-constants";
 import { NODE_DESCRIPTION_OVERRIDES, COL_NODE_TOOLTIP_NOTES, COL_EXCLUDE_ALL_NODES, COL_SPECIES_NAME_OVERRIDES } from "@/config/col-described-overrides";
 import COL_TAXON_IDS from "@/config/col-taxon-ids.json";
 import COL_RELEASE from "@/config/col-release.json";
+// dynamic-taxon.ts imports NODE_INDEX/getAncestors back from this file — a
+// circular import, but a safe one: both sides only reference the other inside
+// function bodies (never at module-eval time), so by the time either function
+// actually runs, both modules have finished initializing.
+import { dynamicNodeFilter } from "@/lib/dynamic-taxon";
 
 // ─── Indexes (built once at import) ──────────────────────────────────
 
@@ -285,7 +290,19 @@ export function speciesMatchesNode(
   nodeId: string,
 ): boolean {
   const node = NODE_INDEX.get(nodeId);
-  if (!node) return true; // Unknown node → don't filter
+  if (!node) {
+    // Dynamic (live taxonomic-drilldown) node — not a static tree entry, but a
+    // real, filterable rank chain (see dynamic-taxon.ts). Falling through to
+    // "don't filter" here would show every species in the csvGroup regardless
+    // of the selected order/family/genus — a serious correctness bug, not a
+    // graceful degradation, so this is resolved explicitly rather than assumed.
+    const dynFilter = dynamicNodeFilter(nodeId);
+    if (dynFilter) {
+      if (!dynFilter.csvGroups.includes(species.taxon_group)) return false;
+      return matchesFilter(species, dynFilter);
+    }
+    return true; // Genuinely unknown, non-dynamic id → don't filter
+  }
 
   const f = node.filter;
 
