@@ -12,6 +12,7 @@ import { findNode } from "@/lib/taxonomy-utils";
 import { canonicalizeTaxonId } from "@/lib/data/taxonomy-constants";
 import { resolveCountryToAlpha2, ALPHA2_TO_NAME } from "@/lib/countries";
 import { isDynamicNodeId, dynamicNodeFilter, dynamicNodeDisplayName } from "@/lib/dynamic-taxon";
+import { ensureVernacularNamesLoaded } from "@/lib/data/vernacular-names";
 
 // ─── Threats (IUCN threat classification) ────────────────────────────────
 
@@ -251,7 +252,10 @@ export function resolveTaxa(values: string[]): { ids: string[]; unresolved: stri
 }
 
 export function taxonLabel(id: string): string {
-  if (isDynamicNodeId(id)) return dynamicNodeDisplayName(id);
+  if (isDynamicNodeId(id)) {
+    ensureVernacularNamesLoaded();
+    return dynamicNodeDisplayName(id);
+  }
   return findNode(id)?.name ?? id;
 }
 

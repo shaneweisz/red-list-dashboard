@@ -24,6 +24,7 @@
  */
 import { getConn, parquetUri, ensureNeHelpers } from "./species-duckdb";
 import { outdatedSql } from "./country-taxa-summary-duckdb";
+import { ensureVernacularNamesLoaded } from "./vernacular-names";
 import { NODE_INDEX } from "@/lib/taxonomy-utils";
 import { filterToSql, canonicalOrderColumnSql, canonicalClassColumnSql } from "@/lib/taxonomy-sql";
 import { outdatedCutoffDate } from "@/lib/outdated";
@@ -75,6 +76,7 @@ export async function getLiveRankChildren(
   const parentFilter = isDynamicNodeId(parentId) ? dynamicNodeFilter(parentId) : NODE_INDEX.get(parentId)?.filter;
   if (!parentFilter) return [];
 
+  ensureVernacularNamesLoaded();
   const conn = await getConn();
   const cutoff = outdatedCutoffDate().toISOString().slice(0, 10);
   const assessedUri = parquetUri("assessed.parquet");

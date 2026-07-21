@@ -123,15 +123,33 @@ export function dynamicNodeRankInfo(id: string): { rank: DynamicRank; label: str
   return { rank, label: RANK_LABEL[rank] };
 }
 
-/** Display name for a dynamic node's own (deepest) segment — a curated common
- *  name where one exists (seeded from the tree nodes this feature replaces),
- *  else the capitalized scientific name; "" = "Unclassified <Rank>". */
+// CoL-derived vernacular names (class/order/family/genus rank — species already
+// have their own common name from our Red List/GBIF data), populated once per
+// warm server process by vernacular-names.ts's ensureVernacularNamesLoaded()
+// (see scripts/build-backbone.ts's vernacular-names.json output). Empty on the
+// client and before that call — dynamicNodeDisplayName then just shows the
+// capitalized scientific name alone, same as before this existed. Kept as a
+// plain settable Record (not an import from vernacular-names.ts) so this module
+// stays free of fs/DuckDB imports — it's bundled into the browser too.
+let EXTRA_VERNACULAR_NAMES: Record<string, string> = {};
+export function setVernacularNames(names: Record<string, string>): void {
+  EXTRA_VERNACULAR_NAMES = names;
+}
+
+/** Display name for a dynamic node's own (deepest) segment: "Scientific name
+ *  (Common name)" when a common name is known — checking the hand-curated
+ *  COMMON_NAME_BY_VALUE override first (Decision 3: lets us pick a nicer/more
+ *  specific name than CoL's own, e.g. "Beetles" over a more clinical CoL
+ *  phrasing, where they differ), then the CoL-derived EXTRA_VERNACULAR_NAMES —
+ *  else just the capitalized scientific name. "" = "Unclassified <Rank>". */
 export function dynamicNodeDisplayName(id: string): string {
   const parsed = parseDynamicNodeId(id);
   if (!parsed || parsed.segments.length === 0) return NODE_INDEX.get(id)?.name ?? id;
   const last = parsed.segments[parsed.segments.length - 1];
   if (last.value === "") return `Unclassified ${RANK_LABEL[last.rank]}`;
-  return COMMON_NAME_BY_VALUE[last.value] ?? (last.value.charAt(0).toUpperCase() + last.value.slice(1));
+  const sciName = last.value.charAt(0).toUpperCase() + last.value.slice(1);
+  const common = COMMON_NAME_BY_VALUE[last.value] ?? EXTRA_VERNACULAR_NAMES[last.value];
+  return common ? `${sciName} (${common})` : sciName;
 }
 
 // Static roots that get the new live, arbitrary-depth drilldown instead of the
@@ -222,4 +240,14 @@ export const COMMON_NAME_BY_VALUE: Record<string, string> = {
   actinopterygii: "Ray-finned Fishes",
   sarcopterygii: "Lobe-finned Fishes",
   chondrichthyes: "Sharks & Rays",
+  // CoL-derived vernacular-names.json overrides (see scripts/build-backbone.ts):
+  // its selection rule (prefer col:preferred=true, else the shortest candidate)
+  // picks a good name in the overwhelming majority of cases (checked 44
+  // multi-candidate order/class taxa against the real 2026-07-21 CoL XR data —
+  // "Ducks" for Anseriformes, "Pangolins" for Pholidota, "Frogs"/"Toads" for
+  // Anura, etc.), but Hyracoidea's candidates are "cories" (6 chars, an obscure
+  // archaic synonym) vs. "dassies"/"Hyraxes" (7 chars each) — "cories" wins on
+  // pure length despite being far less recognizable. Override here rather than
+  // trying to make the general heuristic smarter for one outlier.
+  hyracoidea: "Hyraxes",
 };

@@ -11,6 +11,7 @@ import {
   dynamicNodeFilter,
   dynamicNodeAncestors,
   dynamicNodeDisplayName,
+  setVernacularNames,
 } from "@/lib/dynamic-taxon";
 
 describe("dynamic node id round-trip", () => {
@@ -181,13 +182,23 @@ describe("URL token round-trip for a dynamic id (deep-link support)", () => {
 });
 
 describe("dynamicNodeDisplayName", () => {
-  it("uses the curated common name when one exists", () => {
-    expect(dynamicNodeDisplayName("mammals~order:rodentia")).toBe("Rodents");
+  it("shows 'Scientific name (Common name)' when a curated common name exists", () => {
+    expect(dynamicNodeDisplayName("mammals~order:rodentia")).toBe("Rodentia (Rodents)");
   });
-  it("falls back to a capitalized scientific name otherwise", () => {
+  it("falls back to just the capitalized scientific name when no common name is known", () => {
     expect(dynamicNodeDisplayName("mammals~order:zorotypida")).toBe("Zorotypida");
   });
   it("labels an empty-value segment as Unclassified <Rank>", () => {
     expect(dynamicNodeDisplayName("mammals~order:rodentia~family:")).toBe("Unclassified Family");
+  });
+  it("prefers the curated COMMON_NAME_BY_VALUE override over a CoL-derived vernacular name", () => {
+    setVernacularNames({ rodentia: "Some CoL Phrasing" });
+    expect(dynamicNodeDisplayName("mammals~order:rodentia")).toBe("Rodentia (Rodents)");
+    setVernacularNames({}); // reset for other tests
+  });
+  it("falls back to a CoL-derived vernacular name when there's no curated override", () => {
+    setVernacularNames({ zorotypida: "Angel Insects" });
+    expect(dynamicNodeDisplayName("mammals~order:zorotypida")).toBe("Zorotypida (Angel Insects)");
+    setVernacularNames({}); // reset for other tests
   });
 });

@@ -17,6 +17,7 @@
  * than failing the request.
  */
 import { getConn, parquetUri, ensureNeHelpers } from "./species-duckdb";
+import { ensureVernacularNamesLoaded } from "./vernacular-names";
 import {
   computeBreakdownEntry,
   SPLIT_CANDIDATES_SQL,
@@ -66,6 +67,7 @@ export async function getLiveBreakdown(nodeId: string): Promise<BreakdownEntry |
   const filter: NodeFilter | undefined = isDynamicNodeId(nodeId) ? (dynamicNodeFilter(nodeId) ?? undefined) : NODE_INDEX.get(nodeId)?.filter;
   if (!filter) return null;
 
+  ensureVernacularNamesLoaded();
   const conn = await getConn();
   const hasBackbone = await ensureBackboneHelpers(conn);
   const ctx: BreakdownQueryContext = {
