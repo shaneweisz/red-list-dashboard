@@ -30,7 +30,15 @@ const NO_MATCH_REASON_LABEL: Record<string, string> = {
   provisional: "matched to a Catalogue of Life name that's only provisionally accepted, not yet fully accepted",
   lumped: "Catalogue of Life treats this as the same species as",
   not_in_base: "not yet in Catalogue of Life's curated checklist",
-  extinct_unconfirmed: "Catalogue of Life flags this extinct, but IUCN hasn't confirmed Extinct/Extinct in the Wild",
+  // Usually a species-boundary disagreement, not a data error: e.g. Equus ferus
+  // (wild horse) — CoL treats it and Equus przewalskii (Przewalski's horse) as two
+  // separate species, one of them (the true wild tarpan) extinct; this IUCN
+  // assessment lumps them as one species, which is why IUCN doesn't call it
+  // Extinct/Extinct in the Wild even though CoL's own record for this exact name
+  // is flagged extinct. Verified case-by-case, not assumed — see the CoL/IUCN
+  // record comparison in this file's git history (2026-07-21) if this needs
+  // re-checking for a different species.
+  extinct_unconfirmed: "Catalogue of Life's record for this exact name is flagged extinct, but this IUCN assessment (a living-species category) isn't Extinct/Extinct in the Wild — usually because the two databases draw the species boundary differently here (e.g. IUCN's assessment covers a broader concept that includes a still-living population Catalogue of Life treats as its own separate species)",
   classified_elsewhere: "Catalogue of Life classifies this under a different name here",
 };
 
