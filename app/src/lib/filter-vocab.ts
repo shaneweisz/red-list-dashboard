@@ -11,6 +11,7 @@ import { CATEGORY_NAMES } from "@/config/taxa";
 import { findNode } from "@/lib/taxonomy-utils";
 import { canonicalizeTaxonId } from "@/lib/data/taxonomy-constants";
 import { resolveCountryToAlpha2, ALPHA2_TO_NAME } from "@/lib/countries";
+import { isDynamicNodeId, dynamicNodeFilter, dynamicNodeDisplayName } from "@/lib/dynamic-taxon";
 
 // ─── Threats (IUCN threat classification) ────────────────────────────────
 
@@ -183,16 +184,24 @@ export const FEATURED_TAXA: string[] = [
   "green_algae", "red_algae", "brown_algae", "mushrooms",
 ];
 
-// Common English names → taxonomy node id.
+// Common English names → taxonomy node id. A few values are dynamic ids
+// (dynamic-taxon.ts) rather than static tree nodes — Beetles/Butterflies &
+// Moths/Bees Wasps & Ants/Sharks & Rays were retired as static children once
+// their taxonomic groups gained live order/class-level drilldown (Phase 6/8);
+// toNode() below accepts either kind. "sharks-rays" points at the class-level
+// dynamic id "fishes~class:chondrichthyes" specifically (not "elasmobranchii"
+// or "holocephali") because canonicalClassColumnSql/expandClasses fold all
+// three into one bucket keyed by "chondrichthyes" — see taxonomy-sql.ts.
 const TAXA_ALIASES: Record<string, string> = {
   "mammals": "mammalia", "mammal": "mammalia",
   "birds": "aves", "bird": "aves",
   "reptiles": "reptilia", "reptile": "reptilia",
   "amphibians": "amphibia", "amphibian": "amphibia", "frogs": "amphibia", "frog": "amphibia", "toads": "amphibia",
   "fish": "fishes",
-  "sharks": "sharks-rays", "rays": "sharks-rays", "sharks-and-rays": "sharks-rays",
+  "sharks": "fishes~class:chondrichthyes", "rays": "fishes~class:chondrichthyes", "sharks-and-rays": "fishes~class:chondrichthyes",
   "insect": "insects",
-  "beetles": "beetles", "butterflies": "butterflies-moths", "moths": "butterflies-moths", "bees": "bees-wasps-ants", "wasps": "bees-wasps-ants", "ants": "bees-wasps-ants",
+  "beetles": "insects~order:coleoptera", "butterflies": "insects~order:lepidoptera", "moths": "insects~order:lepidoptera",
+  "bees": "insects~order:hymenoptera", "wasps": "insects~order:hymenoptera", "ants": "insects~order:hymenoptera",
   "spiders": "arachnida", "arachnids": "arachnida",
   "molluscs": "mollusca", "mollusks": "mollusca", "snails": "mollusca", "slugs": "mollusca",
   "crustaceans": "crustacea", "crabs": "crustacea", "crayfish": "crustacea",
@@ -212,9 +221,13 @@ export function resolveTaxa(values: string[]): { ids: string[]; unresolved: stri
   // Resolve a candidate to a current node id, normalizing legacy/latin ids
   // (aves→birds, mammalia→mammals, …) via canonicalizeTaxonId so common-name
   // aliases that still point at the old ids (TAXA_ALIASES) land on the live node.
+  // A dynamic id (see TAXA_ALIASES' file comment) is valid too — checked via
+  // dynamicNodeFilter rather than findNode, which only knows static ids.
   const toNode = (c: string): string | null => {
     const canon = canonicalizeTaxonId(c.toLowerCase());
-    return findNode(canon) ? canon : null;
+    if (findNode(canon)) return canon;
+    if (isDynamicNodeId(canon) && dynamicNodeFilter(canon)) return canon;
+    return null;
   };
   for (const raw of values) {
     const v = raw.trim();
@@ -238,6 +251,7 @@ export function resolveTaxa(values: string[]): { ids: string[]; unresolved: stri
 }
 
 export function taxonLabel(id: string): string {
+  if (isDynamicNodeId(id)) return dynamicNodeDisplayName(id);
   return findNode(id)?.name ?? id;
 }
 

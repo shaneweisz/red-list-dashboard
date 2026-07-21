@@ -23,8 +23,10 @@ describe("browseInputToDashboardQuery", () => {
 
   it("emits taxa as a single flat token list (no subgroups param)", () => {
     // The dashboard's parseParams expands these tokens (corals → invertebrates +
-    // inv-corals; sharks-rays → fishes + sharks-rays) — see the round-trip below.
-    expect(params({ taxa: ["sharks-rays"] }).get("taxa")).toBe("sharks-rays");
+    // inv-corals) — see the round-trip below. A dynamic id (fishes' live
+    // class-level drilldown — sharks-rays was retired as a static node in
+    // Phase 8) passes through the same way, unexpanded.
+    expect(params({ taxa: ["fishes~class:chondrichthyes"] }).get("taxa")).toBe("fishes~class:chondrichthyes");
     const p = params({ taxa: ["corals"] });
     expect(p.get("taxa")).toBe("corals");
     expect(p.has("subgroups")).toBe(false);

@@ -86,16 +86,6 @@ const CHRISTENHUSZ_URL = "https://doi.org/10.11646/phytotaxa.261.3.1";
 const SPECIES_FUNGORUM = "Species Fungorum Plus via Catalogue of Life";
 const SPECIES_FUNGORUM_URL = "https://doi.org/10.48580/dg9ld-4hj";
 
-// ─── Mammal subgroup helpers ─────────────────────────────────────────
-
-const MAMMAL_NAMED_ORDERS = [
-  "rodentia", "chiroptera", "eulipotyphla",
-  "primates", "diprotodontia", "dasyuromorphia", "didelphimorphia",
-  "peramelemorphia", "paucituberculata", "notoryctemorphia", "microbiotheria",
-  "carnivora", "artiodactyla", "lagomorpha", "sirenia",
-  "perissodactyla", "pholidota",
-];
-
 // Insect base CSV groups (the Table 1a "Insects" row, split by order)
 const ALL_INSECT_GROUPS = [
   "beetles", "butterflies_and_moths", "flies_and_mosquitoes", "bees_wasps_and_ants",
@@ -104,20 +94,16 @@ const ALL_INSECT_GROUPS = [
 
 // ─── Plant taxonomy ──────────────────────────────────────────────────
 //
-// Plant Table 1a groups are leaves. We deliberately do not drill down:
-// robust described-species counts at the class and order level don't
-// exist across the full tree, and showing "X assessed of 0 described"
-// would read as broken data to specialists.
-
-// Fungi ascomycota orders
-const ASCOMYCOTA_ORDERS = [
-  "eurotiales", "hypocreales", "xylariales", "pleosporales", "capnodiales",
-  "helotiales", "orbiliales", "pezizales", "rhytismatales", "leotiales",
-  "dothideales", "chaetothyriales", "verrucariales", "arthoniales",
-  "ostropales", "pertusariales", "lecanorales", "peltigerales",
-  "teloschistales", "caliciales", "acarosporales", "geoglossales",
-  "cyttariales", "coryneliales", "trypetheliales",
-];
+// Plant Table 1a groups have no STATIC order/class-level split — unlike
+// Insects/Mammals/etc. (retired in Phase 8 below), they never had one:
+// robust described-species counts at the class/order level weren't reliable
+// enough across the full tree for a hand-curated split, and showing "X
+// assessed of 0 described" would read as broken data to specialists (still
+// true for Molluscs/Crustaceans/Other Invertebrates — see
+// dynamic-taxon.ts's DYNAMIC_DRILLDOWN_ROOTS comment). Flowering Plants/
+// Gymnosperms/etc. DO get live order-level drilldown now (their CoL data
+// turned out clean when checked directly) — this comment is about why they
+// never had a STATIC one, not that they're undrillable today.
 
 // All 28 Table 1a CSV groups (Insects split into 8 order-based groups)
 export const ALL_CSV_GROUPS = [
@@ -154,6 +140,11 @@ function prefixTree(node: TaxonomyNode, prefix: string): TaxonomyNode {
 
 // ─── Canonical Table 1a nodes (reused in virtual grouping nodes) ─────
 
+// Static order-level children retired (Phase 8) — Insects is a
+// DYNAMIC_DRILLDOWN_ROOTS root now (dynamic-taxon.ts), replaced by live
+// order-level enumeration across ALL_INSECT_GROUPS. Their curated common
+// names (Beetles, Butterflies & Moths, ...) live on as a display-only overlay
+// in dynamic-taxon.ts's COMMON_NAME_BY_VALUE.
 const INSECTS_NODE: TaxonomyNode = {
   id: "insects",
   name: "Insects",
@@ -161,16 +152,6 @@ const INSECTS_NODE: TaxonomyNode = {
   estimatedDescribed: 1_008_355,
   estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ")",
   estimatedSourceUrl: IUCN_SOURCE_URL,
-  children: [
-    { id: "beetles", name: "Beetles", filter: { csvGroups: ["beetles"] }, },
-    { id: "butterflies-moths", name: "Butterflies & Moths", filter: { csvGroups: ["butterflies_and_moths"] }, },
-    { id: "flies-mosquitoes", name: "Flies & Mosquitoes", filter: { csvGroups: ["flies_and_mosquitoes"] }, },
-    { id: "bees-wasps-ants", name: "Bees, Wasps & Ants", filter: { csvGroups: ["bees_wasps_and_ants"] }, },
-    { id: "true-bugs", name: "True Bugs", filter: { csvGroups: ["true_bugs"] }, },
-    { id: "grasshoppers-crickets", name: "Grasshoppers, Crickets & Locusts", filter: { csvGroups: ["grasshoppers_crickets_locusts"] }, },
-    { id: "dragonflies-damselflies", name: "Dragonflies & Damselflies", filter: { csvGroups: ["dragonflies_and_damselflies"] }, },
-    { id: "other-insects", name: "Other Insects", filter: { csvGroups: ["other_insects"] }, },
-  ],
 };
 
 const ARACHNIDA_NODE: TaxonomyNode = {
@@ -334,6 +315,8 @@ const RED_ALGAE_NODE: TaxonomyNode = {
   estimatedSourceUrl: IUCN_SOURCE_URL,
 };
 
+// Static Ascomycota/Other-Fungi split retired (Phase 8) — Fungi is a
+// DYNAMIC_DRILLDOWN_ROOTS root now, replaced by live order-level enumeration.
 const MUSHROOMS_NODE: TaxonomyNode = {
   id: "mushrooms",
   name: "Fungi",
@@ -341,18 +324,6 @@ const MUSHROOMS_NODE: TaxonomyNode = {
   estimatedDescribed: 157_648,
   estimatedSource: IUCN_SOURCE + " (" + SPECIES_FUNGORUM + ")",
   estimatedSourceUrl: SPECIES_FUNGORUM_URL,
-  children: [
-    {
-      id: "ascomycota",
-      name: "Ascomycota",
-      filter: { csvGroups: ["mushrooms"], orderNames: ASCOMYCOTA_ORDERS },
-    },
-    {
-      id: "other-fungi",
-      name: "Other Fungi",
-      filter: { csvGroups: ["mushrooms"], excludeOrders: ASCOMYCOTA_ORDERS },
-    },
-  ],
 };
 
 const BROWN_ALGAE_NODE: TaxonomyNode = {
@@ -376,6 +347,10 @@ export const TAXONOMY_TREE: TaxonomyNode = {
   color: "#dc2626",
   children: [
     // ─── MAMMALS ───────────────────────────────────────────────────────
+    // Static order-level children retired (Phase 8) — Mammals is a
+    // DYNAMIC_DRILLDOWN_ROOTS root now, replaced by live order-level
+    // enumeration. Curated common names (Rodents, Bats, ...) live on as a
+    // display-only overlay in dynamic-taxon.ts's COMMON_NAME_BY_VALUE.
     {
       id: "mammals",
       name: "Mammals",
@@ -384,77 +359,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
       estimatedSource: IUCN_SOURCE,
       estimatedSourceUrl: IUCN_SOURCE_URL,
       color: "#f97316",
-      children: [
-        {
-          id: "rodents",
-          name: "Rodents",
-          filter: { csvGroups: ["mammals"], orderNames: ["rodentia"] },
-        },
-        {
-          id: "bats",
-          name: "Bats",
-          filter: { csvGroups: ["mammals"], orderNames: ["chiroptera"] },
-        },
-        {
-          id: "eulipotyphla",
-          name: "Eulipotyphla",
-          filter: { csvGroups: ["mammals"], orderNames: ["eulipotyphla"] },
-        },
-        {
-          id: "primates",
-          name: "Primates",
-          filter: { csvGroups: ["mammals"], orderNames: ["primates"] },
-        },
-        {
-          id: "marsupials",
-          name: "Marsupials",
-          filter: {
-            csvGroups: ["mammals"],
-            orderNames: [
-              "diprotodontia", "dasyuromorphia", "didelphimorphia",
-              "peramelemorphia", "paucituberculata", "notoryctemorphia", "microbiotheria",
-            ],
-          },
-        },
-        {
-          id: "carnivores",
-          name: "Carnivores",
-          filter: { csvGroups: ["mammals"], orderNames: ["carnivora"] },
-        },
-        {
-          id: "artiodactyls",
-          name: "Artiodactyls",
-          filter: { csvGroups: ["mammals"], orderNames: ["artiodactyla"] },
-        },
-        {
-          id: "rabbits-hares",
-          name: "Rabbits & Hares",
-          filter: { csvGroups: ["mammals"], orderNames: ["lagomorpha"] },
-        },
-        {
-          id: "sirenians",
-          name: "Sirenians",
-          filter: { csvGroups: ["mammals"], orderNames: ["sirenia"] },
-        },
-        {
-          id: "odd-toed-ungulates",
-          name: "Odd-toed Ungulates",
-          filter: { csvGroups: ["mammals"], orderNames: ["perissodactyla"] },
-        },
-        {
-          id: "pangolins",
-          name: "Pangolins",
-          filter: { csvGroups: ["mammals"], orderNames: ["pholidota"] },
-        },
-        {
-          id: "other-mammals",
-          name: "Other Mammals",
-          filter: {
-            csvGroups: ["mammals"],
-            excludeOrders: MAMMAL_NAMED_ORDERS,
-          },
-        },
-      ],
     },
 
     // ─── SSC SPECIALIST GROUPS (pilot: mammals) ─────────────────────────
@@ -1159,6 +1063,11 @@ export const TAXONOMY_TREE: TaxonomyNode = {
     },
 
     // ─── REPTILES ──────────────────────────────────────────────────────
+    // Static order-level children retired (Phase 8) — Reptiles is a
+    // DYNAMIC_DRILLDOWN_ROOTS root now, replaced by live order-level
+    // enumeration (incl. the Tuataras/Sphenodon punctatus CoL null-order_name
+    // fix, which lives on as canonicalOrderColumnSql's species-name override
+    // in taxonomy-sql.ts).
     {
       id: "reptiles",
       name: "Reptiles",
@@ -1167,38 +1076,11 @@ export const TAXONOMY_TREE: TaxonomyNode = {
       estimatedSource: IUCN_SOURCE,
       estimatedSourceUrl: IUCN_SOURCE_URL,
       color: "#84cc16",
-      children: [
-        {
-          id: "squamates",
-          name: "Squamates",
-          filter: { csvGroups: ["reptiles"], orderNames: ["squamata"] },
-        },
-        {
-          id: "turtles-tortoises",
-          name: "Turtles & Tortoises",
-          filter: { csvGroups: ["reptiles"], orderNames: ["testudines"] },
-        },
-        {
-          id: "crocodilians",
-          name: "Crocodilians",
-          filter: { csvGroups: ["reptiles"], orderNames: ["crocodylia"] },
-        },
-        {
-          id: "tuataras",
-          name: "Tuataras",
-          // orderNames alone matches zero live CoL species: the CoL backbone's own
-          // record for Sphenodon punctatus has a NULL order_name (IUCN's
-          // assessed.parquet correctly has "rhynchocephalia" — this is a CoL-side
-          // data gap, not an assessment issue). extraSpeciesNames names the species
-          // directly as an OR escape hatch (bypasses orderNames entirely, same
-          // mechanism used elsewhere for out-of-family exceptions), so colDescribed
-          // isn't stuck at 0 for this monotypic order.
-          filter: { csvGroups: ["reptiles"], orderNames: ["rhynchocephalia"], extraSpeciesNames: ["sphenodon punctatus"] },
-        },
-      ],
     },
 
     // ─── AMPHIBIANS ────────────────────────────────────────────────────
+    // Static order-level children retired (Phase 8) — Amphibians is a
+    // DYNAMIC_DRILLDOWN_ROOTS root now.
     {
       id: "amphibians",
       name: "Amphibians",
@@ -1207,26 +1089,18 @@ export const TAXONOMY_TREE: TaxonomyNode = {
       estimatedSource: IUCN_SOURCE,
       estimatedSourceUrl: IUCN_SOURCE_URL,
       color: "#14b8a6",
-      children: [
-        {
-          id: "frogs-toads",
-          name: "Frogs & Toads",
-          filter: { csvGroups: ["amphibians"], orderNames: ["anura"] },
-        },
-        {
-          id: "salamanders-newts",
-          name: "Salamanders & Newts",
-          filter: { csvGroups: ["amphibians"], orderNames: ["caudata"] },
-        },
-        {
-          id: "caecilians",
-          name: "Caecilians",
-          filter: { csvGroups: ["amphibians"], orderNames: ["gymnophiona"] },
-        },
-      ],
     },
 
     // ─── FISHES ────────────────────────────────────────────────────────
+    // Static class-level children retired (Phase 8) — Fishes is a
+    // DYNAMIC_DRILLDOWN_ROOTS root now, replaced by live CLASS-level
+    // enumeration (see dynamic-taxon.ts's ROOT_RANK_ORDER — Fishes is the one
+    // root that starts at class, not order) with the Cetacea-style label-split
+    // fixes (canonicalClassColumnSql) applied. "Jawless Fish" (Myxini +
+    // Petromyzonti) was a deliberate 2-class umbrella grouping, not a label
+    // mismatch — it now shows as two separate live class buckets instead,
+    // matching the same middle-path tradeoff already accepted for Insects'
+    // "Other Insects" catch-all.
     {
       id: "fishes",
       name: "Fishes",
@@ -1235,37 +1109,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
       estimatedSource: IUCN_SOURCE,
       estimatedSourceUrl: IUCN_SOURCE_URL,
       color: "#06b6d4",
-      children: [
-        {
-          id: "ray-finned-fishes",
-          name: "Ray-finned Fishes",
-          filter: { csvGroups: ["fishes"], classNames: ["actinopterygii"] },
-        },
-        {
-          id: "lobe-finned-fishes",
-          name: "Lobe-finned Fishes",
-          filter: { csvGroups: ["fishes"], classNames: ["sarcopterygii"] },
-        },
-        {
-          id: "sharks-rays",
-          name: "Sharks & Rays",
-          // "chondrichthyes" is only used as a class label in assessed.parquet;
-          // unassessed species carry "elasmobranchii"/"holocephali" instead —
-          // all three are listed to match the full universe. Excludes 2
-          // extinct fossil mako sharks + 1 unresolved-name placeholder found
-          // in the unassessed data (see ssc-shark's filter comment).
-          filter: {
-            csvGroups: ["fishes"],
-            classNames: ["chondrichthyes", "elasmobranchii", "holocephali"],
-            excludeSpeciesNames: ["isurus desori", "oxyrhina hastalis", "carcharhinus spec"],
-          },
-        },
-        {
-          id: "jawless-fish",
-          name: "Jawless Fish",
-          filter: { csvGroups: ["fishes"], classNames: ["myxini", "petromyzonti"] },
-        },
-      ],
     },
 
     // ─── SSC SPECIALIST GROUPS (fishes) ─────────────────────────────────
@@ -1307,7 +1150,8 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // "chondrichthyes" only appears as a class label in assessed.parquet;
           // unassessed species use "elasmobranchii"/"holocephali" instead — all
           // three are needed or the filter silently matches zero unassessed
-          // sharks (same fix as jawless-fish/sharks-rays above).
+          // sharks (same fix as canonicalClassColumnSql applies for the live
+          // Sharks & Rays class-level bucket, taxonomy-sql.ts).
           filter: {
             csvGroups: ["fishes"],
             classNames: ["chondrichthyes", "elasmobranchii", "holocephali"],
