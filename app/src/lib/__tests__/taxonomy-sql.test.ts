@@ -62,6 +62,14 @@ describe("filterToSql", () => {
     expect(struthioniformes).toContain("coalesce(lower(order_name), '') IN ('struthioniformes', 'tinamiformes', 'rheiformes', 'casuariiformes', 'apterygiformes')");
   });
 
+  it("includes an order filter, expanding the pinales/cupressales/araucariales legacy-lump CoL split", () => {
+    // Verified against real data (2026-07-21): IUCN's assessed.parquet lumps all
+    // conifers under the old "Pinales", while CoL splits Cupressaceae/Taxaceae
+    // into "Cupressales" and Podocarpaceae/Araucariaceae into "Araucariales".
+    const sql = filterToSql({ csvGroups: ["gymnosperms"], orderNames: ["pinales"] });
+    expect(sql).toContain("coalesce(lower(order_name), '') IN ('pinales', 'cupressales', 'araucariales')");
+  });
+
   it("an order with no known CoL split is unaffected", () => {
     const sql = filterToSql({ csvGroups: ["mammals"], orderNames: ["rodentia"] });
     expect(sql).toContain("coalesce(lower(order_name), '') IN ('rodentia')");

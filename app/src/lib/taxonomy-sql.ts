@@ -80,10 +80,18 @@ export function canonicalClassColumnSql(col: string): string {
 // covers all palaeognaths: ostriches, rheas, cassowaries, emus, kiwis, tinamous).
 // Without this, a live "Caprimulgiformes" bucket showed 603 assessed vs. only 119
 // CoL-described (533% "assessed"), and "Struthioniformes" showed 61 vs. 2 (3050%).
+// Third instance of the same pattern, found rolling out live drilldown to
+// Gymnosperms: IUCN's assessed.parquet lumps all conifers under the old
+// "Pinales" (616 spp: Pinaceae/Cupressaceae/Taxaceae/Sciadopityaceae/
+// Podocarpaceae/Araucariaceae), while CoL splits Cupressaceae/Taxaceae/
+// Sciadopityaceae into "Cupressales" (231 spp) and Podocarpaceae/Araucariaceae
+// into "Araucariales" (250 spp), keeping only Pinaceae under "Pinales" (300 spp)
+// — confirmed via family-level cross-check (2026-07-21).
 const COL_ORDER_ALIASES: Record<string, string[]> = {
   artiodactyla: ["cetacea"],
   caprimulgiformes: ["apodiformes", "nyctibiiformes", "steatornithiformes"],
   struthioniformes: ["tinamiformes", "rheiformes", "casuariiformes", "apterygiformes"],
+  pinales: ["cupressales", "araucariales"],
 };
 function expandOrders(names: string[]): string[] {
   return names.flatMap((n) => [n, ...(COL_ORDER_ALIASES[n.toLowerCase()] ?? [])]);

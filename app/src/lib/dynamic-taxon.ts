@@ -141,7 +141,46 @@ export function dynamicNodeDisplayName(id: string): string {
 // (it's a true leaf in the static tree today, per taxonomy-tree.test.ts's own
 // "Aves is a leaf" assertion) — isLiveDrilldownNode doesn't require existing
 // static children, so this alone is enough for it to become expandable.
-export const DYNAMIC_DRILLDOWN_ROOTS = new Set<string>(["mammals", "birds", "reptiles", "amphibians", "fishes"]);
+//
+// Deliberately NOT yet included: Molluscs, Crustaceans, Other Invertebrates.
+// Unlike every root above (and Insects/Arachnids/Corals/plant & algae/Fungi
+// groups below), these three have a large, genuine CoL order_name coverage gap
+// on the CoL side (confirmed via direct data query, 2026-07-21: 37% of Molluscs'
+// CoL rows, 18% of Crustaceans', 14% of Other Invertebrates' have a NULL
+// order_name, vs. <1% everywhere else) — not a clean alias-fixable split like
+// Cetacea/Struthioniformes/Pinales, but missing classification data outright.
+// Going live today would show large, well-populated real orders (e.g.
+// Stylommatophora, 3,338 assessed land snail species) as "0 described, 0%"
+// purely from this gap — the exact "reads as broken data to specialists"
+// failure mode the plant nodes' file comment already calls out for a related
+// reason. Revisit once there's a real fix (e.g. falling back to class-level
+// grouping for null-order CoL rows), rather than shipping a misleading view.
+// Insects/Arachnids/Corals/plant & algae groups/Fungi are each defined ONCE
+// (INSECTS_NODE etc. in taxonomy-tree.ts) but spliced into the tree TWICE:
+// once with their bare id under the "invertebrates"/"plantae"/"fungi" virtual
+// grouping nodes (id-prefixed via prefixTree — "inv-insects", "pl-gymnosperms",
+// "fu-mushrooms", etc. — these are what the default "By Taxon" view actually
+// renders and expands) and, separately, with their bare id for Table 1a mode
+// (which has its own flat, non-hierarchical rendering path — Table1aRowData —
+// and never consults this set, so including the bare id here is inert for it,
+// not a Decision-7 violation). Both forms are listed below so drilldown works
+// wherever a user can actually reach these nodes.
+export const DYNAMIC_DRILLDOWN_ROOTS = new Set<string>([
+  "mammals", "birds", "reptiles", "amphibians", "fishes",
+  "insects", "inv-insects",
+  "arachnids", "inv-arachnids",
+  "corals", "inv-corals",
+  "velvet_worms", "inv-velvet_worms",
+  "horseshoe_crabs", "inv-horseshoe_crabs",
+  "flowering_plants", "pl-flowering_plants",
+  "gymnosperms", "pl-gymnosperms",
+  "ferns_and_allies", "pl-ferns_and_allies",
+  "mosses", "pl-mosses",
+  "green_algae", "pl-green_algae",
+  "red_algae", "pl-red_algae",
+  "brown_algae", "fu-brown_algae",
+  "mushrooms", "fu-mushrooms",
+]);
 
 /** Is `id` (a bare root or a dynamic id under one) inside DYNAMIC_DRILLDOWN_ROOTS? */
 export function isLiveDrilldownNode(id: string): boolean {
