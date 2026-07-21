@@ -1060,7 +1060,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                  Loading species-level detail — may take a moment on a cold start…
+                  Loading species-level detail — may take several seconds…
                 </p>
               )}
               {liveBreakdownError && (
@@ -1154,6 +1154,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   // countries on in either order produces the same key (and cache-friendly
   // URL), not one per click order.
   const countryKey = countryScoped ? [...countryScope!].sort().join(",") : "";
+  // Kept in sync every render (plain assignment, not an effect — refs don't
+  // need one) so the promise-chained fetches below (toggleExpand, Table 1a,
+  // SSC groups — unlike the main fetchTaxa effect above, these aren't
+  // effect-cleanup-cancellable) can tell, once their response finally
+  // resolves, whether countryKey has already moved on to a different
+  // country and skip applying a now-stale result.
+  const countryKeyRef = useRef(countryKey);
+  countryKeyRef.current = countryKey;
   // Display name for the atop-table label: the one country's name, the whole
   // region's name if the selection exactly matches one (e.g. picked via the
   // region dropdown, or by happening to cmd-click every one of its countries),
@@ -1247,10 +1255,15 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   const ensureSubgroupData = useCallback(async (taxonId: string) => {
     if (subgroupDataRef.current[taxonId] || loadingSubgroupsRef.current.has(taxonId)) return;
     setLoadingSubgroups((prev) => new Set(prev).add(taxonId));
+    const requestCountryKey = countryKey;
     try {
       const countryQs = countryKey ? `&country=${encodeURIComponent(countryKey)}` : "";
       const res = await fetch(`/api/redlist/taxa-subgroups?nodeId=${taxonId}${countryQs}`);
-      if (res.ok) {
+      // Bail if the country changed while this was in flight — countryKey
+      // changing already clears subgroupData wholesale (see the effect
+      // above), and applying this now-stale response would silently
+      // re-add wrongly-scoped numbers for taxonId right after that clear.
+      if (res.ok && countryKeyRef.current === requestCountryKey) {
         const data = await res.json();
         setSubgroupData((prev) => ({ ...prev, [taxonId]: data.subgroups }));
       }
@@ -1370,10 +1383,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     if (!table1aMode || table1aData || table1aFetchStartedRef.current) return;
     table1aFetchStartedRef.current = true;
     setTable1aLoading(true);
+    const requestCountryKey = countryKey;
     const countryQs = countryKey ? `&country=${encodeURIComponent(countryKey)}` : "";
     fetch(`/api/redlist/taxa-summary?table1a=true${countryQs}`)
       .then(res => res.ok ? res.json() : null)
-      .then(data => { if (data) setTable1aData(data.sections); })
+      // countryKey changing already resets table1aData/table1aFetchStartedRef
+      // (see the effect above) so a fresh fetch can start — but doesn't cancel
+      // THIS one, so skip applying it if it resolves after that happened.
+      .then(data => { if (data && countryKeyRef.current === requestCountryKey) setTable1aData(data.sections); })
       .finally(() => setTable1aLoading(false));
   }, [table1aMode, table1aData, countryKey]);
 
@@ -1388,6 +1405,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     if (!sscMode || sscData || sscFetchStartedRef.current) return;
     sscFetchStartedRef.current = true;
     setSscLoading(true);
+    const requestCountryKey = countryKey;
     const countryQs = countryKey ? `&country=${encodeURIComponent(countryKey)}` : "";
     Promise.all(
       SSC_SECTIONS.map((section) =>
@@ -1422,7 +1440,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           })
       )
     )
-      .then((sections) => setSscData(sections.filter((s): s is Table1aSectionData => s != null)))
+      // Same staleness guard as the Table 1a fetch above — countryKey
+      // changing already reset sscData/sscFetchStartedRef, but didn't cancel
+      // this in-flight request.
+      .then((sections) => { if (countryKeyRef.current === requestCountryKey) setSscData(sections.filter((s): s is Table1aSectionData => s != null)); })
       .finally(() => setSscLoading(false));
   }, [sscMode, sscData, countryKey]);
 
@@ -1490,22 +1511,32 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     //   expands taxa (mutates expandedTaxa), which would re-trigger the effect
   }, [selectedSubgroups]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Aborts the in-flight request whenever countryKey changes again before it
+  // resolves — without this, rapid country hovering could fire many quick
+  // requests whose responses race each other, and whichever happened to
+  // resolve LAST (not necessarily the one for the currently-hovered/
+  // selected country) would win and overwrite `taxa` with stale, wrongly-
+  // scoped numbers — visibly "stuck" even after the hover preview and its
+  // pill had already cleared back to no selection.
   useEffect(() => {
+    const controller = new AbortController();
     async function fetchTaxa() {
       setLoading(true);
       try {
         const countryQs = countryKey ? `?country=${encodeURIComponent(countryKey)}` : "";
-        const res = await fetch(`/api/redlist/taxa-summary${countryQs}`);
+        const res = await fetch(`/api/redlist/taxa-summary${countryQs}`, { signal: controller.signal });
         if (!res.ok) throw new Error("Failed to load taxa");
         const data = await res.json();
         setTaxa(data.taxa);
       } catch (err) {
+        if (controller.signal.aborted) return;
         setError(err instanceof Error ? err.message : "Failed to load taxa");
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     }
     fetchTaxa();
+    return () => controller.abort();
   }, [countryKey]);
 
   // Only the very first load (no data yet) shows the full-table skeleton below —
@@ -2577,23 +2608,28 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         The table always uses the plain 3-column style in this mode
         (countryStyleColumns, derived from layoutMode — see its definition
         above), whether or not a country is picked yet. The selected
-        country's identity shows as removable chips in normal flow above
-        the table — countryPillsContent (built by RedListView) already
-        includes its own min-h-[34px] reserving wrapper (with a ref
-        RedListView measures via ResizeObserver), so it's rendered directly
-        here with no extra wrapper of our own. That measured height feeds
-        WorldMap's topSpacerHeight, which reserves the exact same blank
-        height at the top of the map's own card, so both columns' natural
-        heights always include the same "extra" amount and grid's align-
-        items: stretch below doesn't need to inflate either one to match
-        the other. Without a matching (and correctly *measured*, not
-        guessed) spacer, only growing the table's column stretched the
-        map's card via align-items: stretch, but WorldMap's choropleth
-        renders at a fixed projection scale — its content didn't grow to
-        fill the extra height, leaving a visible gap under the map. Uses
-        `contents` to no-op this grouping entirely outside country mode,
-        rather than branching (and duplicating) the huge table JSX below
-        per mode. */}
+        country's identity shows as removable chips in a row of its own
+        ABOVE this whole grid — same grid-cols template so its columns line
+        up with the map/table below, but with the left (map) cell left
+        empty and the chips confined to the right (table) cell. min-h-
+        [34px] on that cell reserves the space unconditionally (a blank gap
+        before anything's hovered/selected), so it never grows *this* grid
+        below it into needing align-items: stretch to force the map's card
+        to match a taller table. Chips living inside either component
+        (tried both: atop just the table, floated over the map, enclosed in
+        the table's own card) always ended up needing some mechanism to
+        keep the map's card the same height as the table's — a separate row
+        above both sidesteps the problem entirely, since neither column's
+        own natural height is ever affected by how many chips are showing.
+        Uses `contents` to no-op this grouping entirely outside country
+        mode, rather than branching (and duplicating) the huge table JSX
+        below per mode. */}
+    {countryMode && (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-1.5">
+        <div aria-hidden="true" />
+        <div className="min-h-[34px]">{countryPillsContent}</div>
+      </div>
+    )}
     <div className={countryMode ? "grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4" : "contents"}>
       {/* No extra wrapper here — WorldMap already renders its own card (bg/border/
           padding); wrapping it again doubled up the box and, since neither div had
@@ -2609,11 +2645,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           columns get cramped or triggering horizontal scroll). */}
       {countryMode && <div>{countryModeContent}</div>}
       <div className={countryMode ? "min-w-0 flex flex-col h-full" : "contents"}>
-        {countryMode && countryPillsContent}
         {/* Country name atop the table — shown whenever a country is scoped
             OUTSIDE Country View (the normal browsing view's "France ×" chip,
             via onClearCountryScope). Country View's own version is the
-            countryPillsContent block just above instead. */}
+            chips row above the grid instead. */}
         {countryScoped && !countryMode && (
           <div className="flex items-center gap-1.5 mb-1.5 min-w-0 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
             <span className="truncate" title={countryScopeLabel}>{countryScopeLabel}</span>
@@ -2641,7 +2676,15 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           )}
           <table className="w-full">
             {renderHead()}
-        <tbody>
+        {/* Dims every row's numbers (not just a corner spinner) while a
+            country-switch refetch is in flight — the row-level content below
+            deliberately keeps showing the previous country's numbers during
+            that refetch (see the skeleton-gate comment above) rather than
+            blanking to a skeleton, so without this there's no visual cue
+            that any given number might already be stale. Scoped to
+            !flatMode: Table 1a/SSC's own refetch (flatLoading) already
+            blanks to a loading row instead of leaving stale content up. */}
+        <tbody className={!flatMode && loading && taxa.length > 0 ? "opacity-50 transition-opacity duration-200" : "transition-opacity duration-200"}>
           {flatMode ? (
             /* Table 1a / SSC groups view: sections with headers, individual rows, subtotals */
             flatLoading ? (
