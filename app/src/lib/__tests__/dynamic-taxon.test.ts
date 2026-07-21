@@ -57,6 +57,17 @@ describe("nextDynamicRank", () => {
   it("a genus node has no further rank (a leaf)", () => {
     expect(nextDynamicRank("mammals~order:rodentia~family:muridae~genus:mus")).toBeNull();
   });
+
+  it("fishes is the one root that starts at class (Ray-finned/Lobe-finned/Sharks & Rays), not order", () => {
+    expect(nextDynamicRank("fishes")).toBe("class");
+    expect(nextDynamicRank("fishes~class:actinopterygii")).toBe("order");
+    expect(nextDynamicRank("fishes~class:actinopterygii~order:cypriniformes")).toBe("family");
+  });
+
+  it("other roots are unaffected by fishes' class-first override", () => {
+    expect(nextDynamicRank("birds")).toBe("order");
+    expect(nextDynamicRank("reptiles")).toBe("order");
+  });
 });
 
 describe("dynamicNodeFilter", () => {
@@ -71,6 +82,14 @@ describe("dynamicNodeFilter", () => {
 
   it("returns null for an unknown root", () => {
     expect(dynamicNodeFilter("not-a-real-root~order:rodentia")).toBeNull();
+  });
+
+  it("a class segment (fishes) ANDs in classNames", () => {
+    const filter = dynamicNodeFilter("fishes~class:actinopterygii");
+    expect(filter).toEqual({
+      csvGroups: NODE_INDEX.get("fishes")!.filter.csvGroups,
+      classNames: ["actinopterygii"],
+    });
   });
 
   it("an empty-string segment value matches a null/blank row via matchesFilter's existing coalesce behavior", () => {

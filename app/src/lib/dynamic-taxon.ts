@@ -16,19 +16,37 @@
 import { NODE_INDEX, getAncestors } from "@/lib/taxonomy-utils";
 import type { SpeciesFilter } from "@/config/taxonomy-tree";
 
-export type DynamicRank = "order" | "family" | "genus";
+export type DynamicRank = "class" | "order" | "family" | "genus";
 export interface DynamicSegment {
   rank: DynamicRank;
   value: string; // lowercase; "" = Unclassified bucket for this rank
 }
 
 const SEP = "~";
-const RANK_TO_FILTER_FIELD: Record<DynamicRank, "orderNames" | "families" | "genera"> = {
+const RANK_TO_FILTER_FIELD: Record<DynamicRank, "classNames" | "orderNames" | "families" | "genera"> = {
+  class: "classNames",
   order: "orderNames",
   family: "families",
   genus: "genera",
 };
-const RANK_ORDER: DynamicRank[] = ["order", "family", "genus"];
+const ALL_RANKS = new Set<DynamicRank>(["class", "order", "family", "genus"]);
+
+// Every root drills order -> family -> genus by default. Fishes is the one
+// exception today: its static tree already splits at CLASS first (Ray-finned
+// vs. Lobe-finned vs. Sharks & Rays — Actinopterygii/Sarcopterygii/
+// Chondrichthyes), a biologically meaningful distinction (bony vs. cartilaginous
+// fish) that would silently vanish if live enumeration jumped straight to order.
+// Single-class roots (Mammals, Birds, Reptiles, Amphibians) deliberately skip
+// "class" — enumerating it would return exactly one redundant bucket. Extend
+// this map if a future root (e.g. a live Molluscs/Crustaceans split) turns out
+// to span multiple classes too.
+const DEFAULT_RANK_ORDER: DynamicRank[] = ["order", "family", "genus"];
+const ROOT_RANK_ORDER: Record<string, DynamicRank[]> = {
+  fishes: ["class", "order", "family", "genus"],
+};
+function rankOrderFor(rootId: string): DynamicRank[] {
+  return ROOT_RANK_ORDER[rootId] ?? DEFAULT_RANK_ORDER;
+}
 
 export function isDynamicNodeId(id: string): boolean {
   return id.includes(SEP);
@@ -46,18 +64,20 @@ export function parseDynamicNodeId(id: string): { rootId: string; segments: Dyna
     const idx = part.indexOf(":");
     if (idx === -1) return null;
     const rank = part.slice(0, idx);
-    if (rank !== "order" && rank !== "family" && rank !== "genus") return null;
-    segments.push({ rank, value: part.slice(idx + 1) });
+    if (!ALL_RANKS.has(rank as DynamicRank)) return null;
+    segments.push({ rank: rank as DynamicRank, value: part.slice(idx + 1) });
   }
   return { rootId, segments };
 }
 
-/** The rank one level below this node's deepest segment (or "order" for a bare
- *  root) — the rank getLiveRankChildren should enumerate when expanding it. */
+/** The rank one level below this node's deepest segment (or the root's own
+ *  starting rank for a bare root — "order" for most roots, "class" for Fishes)
+ *  — the rank getLiveRankChildren should enumerate when expanding it. */
 export function nextDynamicRank(id: string): DynamicRank | null {
   const parsed = parseDynamicNodeId(id);
+  const rootId = parsed ? parsed.rootId : id;
   const depth = parsed ? parsed.segments.length : 0;
-  return RANK_ORDER[depth] ?? null; // null once already at genus (a leaf)
+  return rankOrderFor(rootId)[depth] ?? null; // null once already at genus (a leaf)
 }
 
 /** Root's own filter with every segment's rank ANDed in. Null for a malformed id
@@ -87,7 +107,7 @@ export function dynamicNodeAncestors(id: string): string[] {
   return [...ancestors, ...getAncestors(parsed.rootId)];
 }
 
-const RANK_LABEL: Record<DynamicRank, string> = { order: "Order", family: "Family", genus: "Genus" };
+const RANK_LABEL: Record<DynamicRank, string> = { class: "Class", order: "Order", family: "Family", genus: "Genus" };
 
 /** The rank + display label of a dynamic node's own (deepest) segment — e.g.
  *  {rank:"family", label:"Family"} for ".../family:muridae". Unlike
@@ -116,10 +136,12 @@ export function dynamicNodeDisplayName(id: string): string {
 
 // Static roots that get the new live, arbitrary-depth drilldown instead of the
 // old precomputed node-children-summaries.json path — see taxa-subgroups/
-// route.ts. Starts with just "mammals" (Phase 2); extended one root at a time
-// through Phase 6 once the mechanism is proven. Deliberately NOT all 8 roots
-// from day one — each addition is its own verified step.
-export const DYNAMIC_DRILLDOWN_ROOTS = new Set<string>(["mammals"]);
+// route.ts. Rolled out one root at a time (Phase 6) once the mechanism was
+// proven on Mammals (Phase 2). Birds gains drilldown for the first time here
+// (it's a true leaf in the static tree today, per taxonomy-tree.test.ts's own
+// "Aves is a leaf" assertion) — isLiveDrilldownNode doesn't require existing
+// static children, so this alone is enough for it to become expandable.
+export const DYNAMIC_DRILLDOWN_ROOTS = new Set<string>(["mammals", "birds", "reptiles", "amphibians", "fishes"]);
 
 /** Is `id` (a bare root or a dynamic id under one) inside DYNAMIC_DRILLDOWN_ROOTS? */
 export function isLiveDrilldownNode(id: string): boolean {
@@ -148,4 +170,17 @@ export const COMMON_NAME_BY_VALUE: Record<string, string> = {
   hemiptera: "True Bugs",
   orthoptera: "Grasshoppers, Crickets & Locusts",
   odonata: "Dragonflies & Damselflies",
+  // Reptiles
+  squamata: "Squamates",
+  testudines: "Turtles & Tortoises",
+  crocodylia: "Crocodilians",
+  rhynchocephalia: "Tuataras",
+  // Amphibians
+  anura: "Frogs & Toads",
+  caudata: "Salamanders & Newts",
+  gymnophiona: "Caecilians",
+  // Fishes (class-level split)
+  actinopterygii: "Ray-finned Fishes",
+  sarcopterygii: "Lobe-finned Fishes",
+  chondrichthyes: "Sharks & Rays",
 };

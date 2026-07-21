@@ -25,7 +25,7 @@
 import { getConn, parquetUri, ensureNeHelpers } from "./species-duckdb";
 import { outdatedSql } from "./country-taxa-summary-duckdb";
 import { NODE_INDEX } from "@/lib/taxonomy-utils";
-import { filterToSql, canonicalOrderColumnSql } from "@/lib/taxonomy-sql";
+import { filterToSql, canonicalOrderColumnSql, canonicalClassColumnSql } from "@/lib/taxonomy-sql";
 import { outdatedCutoffDate } from "@/lib/outdated";
 import type { NodeSummary } from "./species-store";
 import {
@@ -45,12 +45,15 @@ const EXCLUDED_COL_IDS_SQL = `('6MB3T')`;
 // is always derived from scientific_name, never a raw `genus` column, so a
 // species' bucket here is guaranteed consistent with how matchesFilter/
 // filterToSql would independently classify that same species into a filter.
-// order_name is additionally canonicalized (canonicalOrderColumnSql) so a known
-// CoL-only split (e.g. Cetacea, which IUCN already files under Artiodactyla)
-// folds into the one real-world order both datasets otherwise agree on, instead
-// of surfacing as its own misleading "0% assessed" bucket.
+// order_name and class_name are additionally canonicalized (canonicalOrderColumnSql/
+// canonicalClassColumnSql) so known CoL-only splits (e.g. Cetacea, which IUCN
+// already files under Artiodactyla; or Teleostei/Elasmobranchii/etc., which CoL
+// uses in place of IUCN's coarser Actinopterygii/Chondrichthyes) fold into the
+// one real-world order/class both datasets otherwise agree on, instead of
+// surfacing as their own misleading "0% assessed" buckets.
 const RANK_COLUMN_SQL: Record<DynamicRank, string> = {
-  order: canonicalOrderColumnSql("order_name"),
+  class: canonicalClassColumnSql("class_name"),
+  order: canonicalOrderColumnSql("order_name", "scientific_name"),
   family: "coalesce(lower(family), '')",
   genus: "coalesce(lower(split_part(scientific_name, ' ', 1)), '')",
 };

@@ -35,6 +35,28 @@ function expandClasses(names: string[]): string[] {
   return names.flatMap((n) => COL_CLASS_ALIASES[n.toLowerCase()] ?? [n]);
 }
 
+// Reverse of COL_CLASS_ALIASES: collapses a raw CoL-side class value (which is
+// always the finer name — CoL never literally uses "actinopterygii") to its
+// IUCN-canonical coarse name before grouping. Needed by live-taxa-children.ts's
+// class-level enumeration (Fishes only, today) — a plain `GROUP BY class_name`
+// would otherwise show "Teleostei"/"Elasmobranchii"/etc. as their own buckets
+// reading "0% assessed" (misleading: assessed.parquet only ever uses the coarse
+// name), instead of folding into the one real-world class both datasets
+// otherwise agree on. Same category of fix as canonicalOrderColumnSql, one rank up.
+const COL_CLASS_TO_CANONICAL: Record<string, string> = Object.fromEntries(
+  Object.entries(COL_CLASS_ALIASES).flatMap(([canonical, aliases]) => aliases.map((alias) => [alias, canonical])),
+);
+
+/** SQL expression collapsing a class_name column to its canonical value (see
+ *  COL_CLASS_TO_CANONICAL) before the usual coalesce(lower(...), '') — for
+ *  GROUP BY use, not filter matching (filterToSql/expandClasses handles that). */
+export function canonicalClassColumnSql(col: string): string {
+  const cases = Object.entries(COL_CLASS_TO_CANONICAL)
+    .map(([alias, canonical]) => `WHEN '${alias}' THEN '${canonical}'`)
+    .join(" ");
+  return `coalesce(lower(CASE lower(${col}) ${cases} ELSE lower(${col}) END), '')`;
+}
+
 // Same category of split as COL_CLASS_ALIASES, one rank down — but ADDITIVE, not
 // a replacement: unlike actinopterygii (which CoL never uses literally, only its
 // finer classes), CoL XR uses BOTH "artiodactyla" (498 mammal spp.) AND, for
@@ -44,11 +66,24 @@ function expandClasses(names: string[]): string[] {
 // "artiodactyla" too. Without this, a node filtering on
 // orderNames:["artiodactyla"] (e.g. the "Artiodactyls" node, or any live
 // order-level drilldown bucket) silently misses every CoL-labeled cetacean.
-// Confirmed this is the ONLY order-level split of its kind for mammals (no other
-// order name differs between the two datasets) — add more entries here if a
-// similar split is found for another taxon.
+// Same story for birds, found once Birds gained live order-level drilldown for the
+// first time (it was a true static leaf before, so no prior code path ever
+// GROUP-BY'd its orders against CoL): IUCN's assessed.parquet still uses two old
+// lumped orders (pre-modern-taxonomy palaeognath/caprimulgiform classification),
+// while CoL uses the finer modern splits. Confirmed via direct data query
+// (2026-07-21): every family under each CoL-only order name here maps to exactly
+// one IUCN order (a clean split, not an overlapping mess) —
+// apodiformes/nyctibiiformes/steatornithiformes -> caprimulgiformes (619 CoL spp.
+// folding into IUCN's single "Caprimulgiformes" bucket); tinamiformes/
+// rheiformes/casuariiformes/apterygiformes -> struthioniformes (62 CoL spp.
+// folding into IUCN's single "Struthioniformes" bucket, which despite the name
+// covers all palaeognaths: ostriches, rheas, cassowaries, emus, kiwis, tinamous).
+// Without this, a live "Caprimulgiformes" bucket showed 603 assessed vs. only 119
+// CoL-described (533% "assessed"), and "Struthioniformes" showed 61 vs. 2 (3050%).
 const COL_ORDER_ALIASES: Record<string, string[]> = {
   artiodactyla: ["cetacea"],
+  caprimulgiformes: ["apodiformes", "nyctibiiformes", "steatornithiformes"],
+  struthioniformes: ["tinamiformes", "rheiformes", "casuariiformes", "apterygiformes"],
 };
 function expandOrders(names: string[]): string[] {
   return names.flatMap((n) => [n, ...(COL_ORDER_ALIASES[n.toLowerCase()] ?? [])]);
@@ -64,14 +99,36 @@ const COL_ORDER_TO_CANONICAL: Record<string, string> = Object.fromEntries(
   Object.entries(COL_ORDER_ALIASES).flatMap(([canonical, aliases]) => aliases.map((alias) => [alias, canonical])),
 );
 
+// A handful of species whose CoL-side order_name is NULL despite having a real
+// IUCN order — a CoL backbone data gap, not an assessment issue. Confirmed for
+// Sphenodon punctatus (2026-07-21): the old static "Tuataras" node used an
+// extraSpeciesNames escape hatch for the same gap (see taxonomy-tree.ts) before
+// live order-rank enumeration existed to expose it as a GROUP BY problem too.
+// Without this, such a species' CoL row falls into the "Unclassified Order"
+// live bucket instead of its real order. Molluscs/Crustaceans/
+// other_invertebrates have many more of these (thousands, per a direct data
+// query) but aren't live-drillable yet — revisit generally once they are,
+// rather than growing this one-off list further.
+const COL_NULL_ORDER_SPECIES_OVERRIDE: Record<string, string> = {
+  "sphenodon punctatus": "rhynchocephalia",
+};
+
 /** SQL expression collapsing an order_name column to its canonical value (see
- *  COL_ORDER_TO_CANONICAL) before the usual coalesce(lower(...), '') — for
- *  GROUP BY use, not filter matching (filterToSql/expandOrders handles that). */
-export function canonicalOrderColumnSql(col: string): string {
-  const cases = Object.entries(COL_ORDER_TO_CANONICAL)
+ *  COL_ORDER_TO_CANONICAL and COL_NULL_ORDER_SPECIES_OVERRIDE) before the usual
+ *  coalesce(lower(...), '') — for GROUP BY use, not filter matching
+ *  (filterToSql/expandOrders handles that). sciNameCol backs the species-name
+ *  override; omit it (e.g. when `col` isn't paired with a scientific_name
+ *  column in this query) to skip that part and only apply the alias collapse. */
+export function canonicalOrderColumnSql(col: string, sciNameCol?: string): string {
+  const aliasCases = Object.entries(COL_ORDER_TO_CANONICAL)
     .map(([alias, canonical]) => `WHEN '${alias}' THEN '${canonical}'`)
     .join(" ");
-  return `coalesce(lower(CASE lower(${col}) ${cases} ELSE lower(${col}) END), '')`;
+  const aliasExpr = `CASE lower(${col}) ${aliasCases} ELSE lower(${col}) END`;
+  if (!sciNameCol) return `coalesce(lower(${aliasExpr}), '')`;
+  const sciCases = Object.entries(COL_NULL_ORDER_SPECIES_OVERRIDE)
+    .map(([sci, order]) => `WHEN lower(${sciNameCol}) = '${sci}' THEN '${order}'`)
+    .join(" ");
+  return `coalesce(lower(CASE ${sciCases} ELSE ${aliasExpr} END), '')`;
 }
 
 export function sqlStrList(vals: string[]): string {
