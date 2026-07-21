@@ -367,7 +367,7 @@ function speciesHref(nodeId: string, id: number, view: "reassessments" | "new-as
 
 // What SpeciesListPanel is currently showing — captured at click time from the
 // specific breakdown row/bucket clicked, so the panel doesn't need to re-derive it.
-type PanelBucket = "assessed" | "ne" | "colMatch" | "noColMatch";
+type PanelBucket = "assessed" | "ne" | "noColMatch";
 interface PanelRequest {
   rank: FilterRank;
   name: string;
@@ -392,7 +392,7 @@ const RECENT_DESCRIPTION_YEARS = 10;
 // right if there's room, else to the left, else (narrow viewports) directly under
 // it — same "best effort, not perfect" approach as the popup's own positioning.
 // Takes the popup's ACTUAL rendered rect (not just its {top,left} origin) — the
-// popup's width varies with its content (it's max-w-[340px], not a fixed width), so
+// popup's width varies with its content (it's max-w-[600px], not a fixed width), so
 // assuming the max width left a visible gap for any popup narrower than that.
 // Also clamps maxHeight so the panel's own bottom never runs off the viewport the
 // way the popup itself used to (see computePopoverPos below) — long species lists
@@ -427,9 +427,15 @@ function computePanelPos(popupRect: { top: number; left: number; right: number }
 // handles anything that doesn't fit. Always opens downward from the button — never
 // flips above it, so its position relative to the row that triggered it is always
 // predictable.
+// Widened from 340px to fit the breakdown table's 5 columns (name + 4 stat
+// columns) legibly — see BreakdownList. A popover with no breakdown (plain
+// source text) stays as narrow as its own content; max-w-[Npx] only caps how
+// wide it's ALLOWED to grow, so this doesn't force short popovers to widen.
+const POPOVER_MAX_WIDTH = 600;
+
 function computePopoverPos(rect: { top: number; bottom: number; left: number }): { top: number; left: number; maxHeight: number } {
   const margin = 8;
-  const left = Math.min(rect.left, window.innerWidth - 360);
+  const left = Math.min(rect.left, window.innerWidth - POPOVER_MAX_WIDTH - margin);
   const preferredMaxHeight = window.innerHeight * 0.7;
   const spaceBelow = window.innerHeight - rect.bottom - 4 - margin;
   return { top: rect.bottom + 4, left, maxHeight: Math.max(100, Math.min(preferredMaxHeight, spaceBelow)) };
@@ -499,10 +505,7 @@ function SpeciesListPanel({
   const filtered = useMemo(() => {
     if (!rows) return null;
     let matched = rows.filter((s) => speciesMatchesNode(s, nodeId) && matchesBreakdownName(s, request.rank, request.name, nodeId));
-    if (request.bucket === "colMatch" && request.noMatchIds?.length) {
-      const excl = new Set(request.noMatchIds);
-      matched = matched.filter((s) => s.sis_taxon_id == null || !excl.has(s.sis_taxon_id));
-    } else if (request.bucket === "noColMatch" && request.noMatchIds?.length) {
+    if (request.bucket === "noColMatch" && request.noMatchIds?.length) {
       const only = new Set(request.noMatchIds);
       matched = matched.filter((s) => s.sis_taxon_id != null && only.has(s.sis_taxon_id));
     }
@@ -557,8 +560,8 @@ function SpeciesListPanel({
   const fullListHref = nodeSpeciesListHref(
     nodeId,
     isNe ? "new-assessments" : "reassessments",
-    request.bucket === "colMatch" || request.bucket === "noColMatch"
-      ? { rank: request.rank, name: request.name, [request.bucket === "colMatch" ? "excl" : "only"]: request.noMatchIds }
+    request.bucket === "noColMatch"
+      ? { rank: request.rank, name: request.name, only: request.noMatchIds }
       : { rank: request.rank, name: request.name },
   );
 
@@ -716,69 +719,6 @@ function SpeciesListPanel({
   );
 }
 
-// The "Assessed" row within one breakdown name — a plain clickable leaf when CoL and
-// IUCN agree on the count (the common case), or its own nested expand into CoL
-// Match / No CoL Match when they don't, so the split is visible right where it
-// happens instead of needing a separate warning affordance. Clicking any count opens
-// the species-level panel (onOpenPanel) instead of navigating away.
-function AssessedBreakdownRow({
-  rank,
-  name,
-  trueAssessed,
-  noMatchIds,
-  noMatchDetails,
-  onOpenPanel,
-}: {
-  rank: FilterRank;
-  name: string;
-  trueAssessed: number;
-  noMatchIds: number[];
-  noMatchDetails?: NoMatchDetail[];
-  onOpenPanel: (request: PanelRequest) => void;
-}) {
-  const label = breakdownDisplayName(rank, name);
-  if (noMatchIds.length === 0) {
-    return (
-      <li>
-        <button
-          type="button"
-          className="underline decoration-dotted underline-offset-2 hover:text-white"
-          onClick={() => onOpenPanel({ rank, name, bucket: "assessed", label: `${label} — Assessed` })}
-        >
-          Assessed ({trueAssessed})
-        </button>
-      </li>
-    );
-  }
-  const colMatchCount = trueAssessed - noMatchIds.length;
-  return (
-    <li>
-      Assessed ({trueAssessed})
-      <ul className="ml-4 mt-0.5 space-y-0.5">
-        <li>
-          <button
-            type="button"
-            className="underline decoration-dotted underline-offset-2 hover:text-white"
-            onClick={() => onOpenPanel({ rank, name, bucket: "colMatch", label: `${label} — 1:1 CoL Match`, noMatchIds })}
-          >
-            1:1 CoL Match ({colMatchCount})
-          </button>
-        </li>
-        <li>
-          <button
-            type="button"
-            className="underline decoration-dotted underline-offset-2 hover:text-white"
-            title="Assessed by IUCN, but doesn't cleanly correspond to one counted Catalogue of Life species here — most of these DO have a Catalogue of Life record (see the reason shown per species): a demoted subspecies, a provisionally-accepted name, a taxonomic split/lump, or a coverage gap. Only a small minority have no Catalogue of Life record at all."
-            onClick={() => onOpenPanel({ rank, name, bucket: "noColMatch", label: `${label} — No 1:1 CoL Match`, noMatchIds, noMatchDetails })}
-          >
-            No 1:1 CoL Match ({noMatchIds.length})
-          </button>
-        </li>
-      </ul>
-    </li>
-  );
-}
-
 // Renders a describeFilter() result: plain text, or a link where we resolved a CoL id.
 function renderFilterSegs(segs: DescribeFilterSegment[]): React.ReactNode {
   return segs.map((seg, i) =>
@@ -798,13 +738,16 @@ function renderFilterSegs(segs: DescribeFilterSegment[]): React.ReactNode {
   );
 }
 
-// Expandable per-name breakdown for the "# Described Species" popover — lets a
-// specialist see, for each name in the node's primary filter dimension (e.g. each
-// order in Small Mammal SG), how its colDescribed splits into Assessed vs Not
-// Evaluated, without leaving the tooltip. Clicking Assessed/Not Evaluated navigates
-// to the node's species list in that view, narrowed client-side to just this one
-// name via the `bd=` URL param (RedListView's taxaFilteredSpecies) — species are
-// already fully fetched per node, so no new API param was needed.
+// Per-name breakdown table for the "# Described Species" popover — one row per
+// name in the node's primary filter dimension (e.g. each order in Small Mammal
+// SG), columns for the whole colDescribed -> Assessed -> {1:1 CoL Match, No 1:1
+// CoL Match} -> Not Evaluated split, all visible at once instead of needing to
+// expand each name to compare them (a real cost for a multi-name breakdown —
+// spotting which family has the most unmatched species used to mean opening
+// every row one at a time). Clicking # Assessed / No 1:1 CoL Match / # Not
+// Evaluated opens the species-level panel (onOpenPanel) narrowed to that exact
+// slice; # Described has no drill-down (it's CoL's own count, not a species
+// list this dashboard can independently show).
 function BreakdownList({
   rank,
   label,
@@ -816,68 +759,81 @@ function BreakdownList({
   breakdown: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[]; splitDetails?: SplitDetail[] }[];
   onOpenPanel: (request: PanelRequest) => void;
 }) {
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const toggle = (name: string) => setExpanded((prev) => {
-    const next = new Set(prev);
-    if (next.has(name)) next.delete(name); else next.add(name);
-    return next;
-  });
   return (
     <div className="mt-1">
-      <p className="text-zinc-300">{label}:</p>
-      <ul className="mt-0.5">
-        {breakdown.map((b) => {
-          const isOpen = expanded.has(b.name);
-          const href = breakdownHref(rank, b.name);
-          return (
-            <li key={b.name} className="mt-0.5">
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => toggle(b.name)}
-                  className="flex items-center gap-1 hover:text-white"
-                >
-                  <FaChevronRight size={7} className={`text-zinc-400 transition-transform ${isOpen ? "rotate-90" : ""}`} />
-                  {breakdownDisplayName(rank, b.name)} ({b.count})
-                </button>
-                {href && (
-                  <a
-                    href={href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="text-zinc-400 hover:text-blue-300"
-                    title={`View ${breakdownDisplayName(rank, b.name)} on Catalogue of Life`}
+      <p className="text-zinc-300 mb-1">{label}:</p>
+      <table className="border-collapse">
+        <thead>
+          <tr className="text-zinc-400">
+            <th className="pr-3 pb-1 font-normal text-left">Name</th>
+            <th className="px-2 pb-1 font-normal text-right"># Described</th>
+            <th className="px-2 pb-1 font-normal text-right"># Assessed</th>
+            <th
+              className="px-2 pb-1 font-normal text-right"
+              title="Assessed by IUCN, but doesn't cleanly correspond to one counted Catalogue of Life species here — most of these DO have a Catalogue of Life record (see the reason shown per species): a demoted subspecies, a provisionally-accepted name, a taxonomic split/lump, or a coverage gap. Only a small minority have no Catalogue of Life record at all."
+            >
+              Assessed (No 1:1 CoL Match)
+            </th>
+            <th className="pl-2 pb-1 font-normal text-right"># Not Evaluated</th>
+          </tr>
+        </thead>
+        <tbody>
+          {breakdown.map((b) => {
+            const rowLabel = breakdownDisplayName(rank, b.name);
+            const href = breakdownHref(rank, b.name);
+            return (
+              <tr key={b.name} className="border-t border-zinc-700/60">
+                <td className="pr-3 py-1 whitespace-nowrap">
+                  {rowLabel}
+                  {href && (
+                    <a
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="ml-1 text-zinc-400 hover:text-blue-300 inline-block align-text-top"
+                      title={`View ${rowLabel} on Catalogue of Life`}
+                    >
+                      <FaInfoCircle size={9} />
+                    </a>
+                  )}
+                </td>
+                <td className="px-2 py-1 text-right text-zinc-300">{b.count}</td>
+                <td className="px-2 py-1 text-right">
+                  <button
+                    type="button"
+                    className="underline decoration-dotted underline-offset-2 hover:text-white"
+                    onClick={() => onOpenPanel({ rank, name: b.name, bucket: "assessed", label: `${rowLabel} — Assessed` })}
                   >
-                    <FaInfoCircle size={9} />
-                  </a>
-                )}
-              </div>
-              {isOpen && (
-                <ul className="ml-4 mt-0.5 space-y-0.5">
-                  <AssessedBreakdownRow
-                    rank={rank}
-                    name={b.name}
-                    trueAssessed={b.trueAssessed}
-                    noMatchIds={b.noMatchIds}
-                    noMatchDetails={b.noMatchDetails}
-                    onOpenPanel={onOpenPanel}
-                  />
-                  <li>
+                    {b.trueAssessed}
+                  </button>
+                </td>
+                <td className="px-2 py-1 text-right">
+                  {b.noMatchIds.length > 0 ? (
                     <button
                       type="button"
                       className="underline decoration-dotted underline-offset-2 hover:text-white"
-                      onClick={() => onOpenPanel({ rank, name: b.name, bucket: "ne", label: `${breakdownDisplayName(rank, b.name)} — Not Evaluated`, splitDetails: b.splitDetails })}
+                      onClick={() => onOpenPanel({ rank, name: b.name, bucket: "noColMatch", label: `${rowLabel} — No 1:1 CoL Match`, noMatchIds: b.noMatchIds, noMatchDetails: b.noMatchDetails })}
                     >
-                      Not Evaluated ({b.neCount})
+                      {b.noMatchIds.length}
                     </button>
-                  </li>
-                </ul>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+                  ) : (
+                    <span className="text-zinc-300">0</span>
+                  )}
+                </td>
+                <td className="pl-2 py-1 text-right">
+                  <button
+                    type="button"
+                    className="underline decoration-dotted underline-offset-2 hover:text-white"
+                    onClick={() => onOpenPanel({ rank, name: b.name, bucket: "ne", label: `${rowLabel} — Not Evaluated`, splitDetails: b.splitDetails })}
+                  >
+                    {b.neCount}
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -1030,7 +986,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
         <div
           ref={popoverRef}
           onClick={(e) => e.stopPropagation()}
-          className="fixed z-[9999] px-3 py-2 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded-lg shadow-lg normal-case max-w-[340px] overflow-y-auto text-left"
+          className="fixed z-[9999] px-3 py-2 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded-lg shadow-lg normal-case max-w-[600px] overflow-y-auto text-left"
           style={{ top: pos.top, left: pos.left, maxHeight: pos.maxHeight }}
         >
           {source === "iucn" ? (
