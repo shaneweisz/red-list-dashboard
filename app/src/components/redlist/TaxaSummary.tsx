@@ -759,6 +759,64 @@ function BreakdownList({
   breakdown: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[]; splitDetails?: SplitDetail[] }[];
   onOpenPanel: (request: PanelRequest) => void;
 }) {
+  // A single-row breakdown (every dynamic taxonomic-drilldown node, plus any
+  // single-name catch-all/remainder static node) has nothing new to say in a
+  // # Described / Assessed (Total) table — those are the EXACT numbers already
+  // sitting in the row this popover was opened from, one line above. The only
+  // genuinely new information is the two species-list click-throughs (No 1:1
+  // CoL Match, Not Evaluated), so skip the table entirely and show just those.
+  // A multi-row breakdown (an SSC group spanning several families, a Table 1a
+  // row spanning several CoL groups) is a different story: THOSE numbers are
+  // brand new — the parent row's aggregate never told you how each constituent
+  // name individually splits — so the full comparison table stays valuable.
+  if (breakdown.length === 1) {
+    const b = breakdown[0];
+    const rowLabel = breakdownDisplayName(rank, b.name);
+    const href = breakdownHref(rank, b.name);
+    return (
+      <div className="mt-1">
+        <p className="text-zinc-300">
+          {label}: {rowLabel}
+          {href && (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ml-1 text-zinc-400 hover:text-blue-300 inline-block align-text-top"
+              title={`View ${rowLabel} on Catalogue of Life`}
+            >
+              <FaInfoCircle size={9} />
+            </a>
+          )}
+        </p>
+        <ul className="mt-0.5 space-y-0.5">
+          <li>
+            {b.noMatchIds.length > 0 ? (
+              <button
+                type="button"
+                className="underline decoration-dotted underline-offset-2 hover:text-white"
+                title="Assessed by IUCN, but doesn't cleanly correspond to one counted Catalogue of Life species here — most of these DO have a Catalogue of Life record (see the reason shown per species): a demoted subspecies, a provisionally-accepted name, a taxonomic split/lump, or a coverage gap. Only a small minority have no Catalogue of Life record at all."
+                onClick={() => onOpenPanel({ rank, name: b.name, bucket: "noColMatch", label: `${rowLabel} — No 1:1 CoL Match`, noMatchIds: b.noMatchIds, noMatchDetails: b.noMatchDetails })}
+              >
+                No 1:1 CoL Match ({b.noMatchIds.length})
+              </button>
+            ) : (
+              <span className="text-zinc-300">No 1:1 CoL Match (0)</span>
+            )}
+          </li>
+          <li>
+            <button
+              type="button"
+              className="underline decoration-dotted underline-offset-2 hover:text-white"
+              onClick={() => onOpenPanel({ rank, name: b.name, bucket: "ne", label: `${rowLabel} — Not Evaluated`, splitDetails: b.splitDetails })}
+            >
+              Not Evaluated ({b.neCount})
+            </button>
+          </li>
+        </ul>
+      </div>
+    );
+  }
   return (
     <div className="mt-1">
       <p className="text-zinc-300 mb-1">{label}:</p>
