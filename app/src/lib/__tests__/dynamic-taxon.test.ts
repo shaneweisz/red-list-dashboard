@@ -11,6 +11,7 @@ import {
   dynamicNodeFilter,
   dynamicNodeAncestors,
   dynamicNodeDisplayName,
+  dynamicNodeMatchValue,
   setVernacularNames,
 } from "@/lib/dynamic-taxon";
 
@@ -200,5 +201,22 @@ describe("dynamicNodeDisplayName", () => {
     setVernacularNames({ zorotypida: "Angel Insects" });
     expect(dynamicNodeDisplayName("mammals~order:zorotypida")).toBe("Zorotypida (Angel Insects)");
     setVernacularNames({}); // reset for other tests
+  });
+});
+
+describe("dynamicNodeMatchValue", () => {
+  // Regression coverage: live-breakdown.ts's getLiveBreakdown used to pass
+  // dynamicNodeDisplayName's "Scientific name (Common name)" string as a
+  // BreakdownEntry's `name`, which matchesBreakdownName then compared against a
+  // species row's raw family/order_name/etc. column — "muridae (mice)" never
+  // equals "muridae", so the species-list click-through silently returned zero
+  // species for any bucket with a known common name. dynamicNodeMatchValue is
+  // the fix: the raw, lowercase, matchable value alone.
+  it("returns the raw lowercase scientific value regardless of any known common name", () => {
+    expect(dynamicNodeMatchValue("mammals~order:rodentia")).toBe("rodentia");
+    expect(dynamicNodeMatchValue("mammals~order:rodentia~family:muridae")).toBe("muridae");
+  });
+  it("returns '' for an empty-value (Unclassified) segment", () => {
+    expect(dynamicNodeMatchValue("mammals~order:rodentia~family:")).toBe("");
   });
 });

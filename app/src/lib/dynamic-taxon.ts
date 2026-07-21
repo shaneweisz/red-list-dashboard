@@ -123,6 +123,22 @@ export function dynamicNodeRankInfo(id: string): { rank: DynamicRank; label: str
   return { rank, label: RANK_LABEL[rank] };
 }
 
+/** The raw (lowercase) scientific value of a dynamic node's own (deepest)
+ *  segment — e.g. "muridae" for ".../family:muridae". This is the MATCHABLE
+ *  identifier: unlike dynamicNodeDisplayName (a human-facing "Scientific name
+ *  (Common name)" string), it's safe to compare case-insensitively against a
+ *  species row's own order_name/family/etc. column (taxonomy-utils.ts's
+ *  matchesBreakdownName does exactly this for the live no-match-breakdown
+ *  species-list click-through — see live-breakdown.ts's getLiveBreakdown,
+ *  which passes this, not dynamicNodeDisplayName, as a BreakdownEntry's
+ *  `name`). Returns `id` itself for a malformed/non-dynamic id (shouldn't
+ *  happen in practice — callers only reach this for a confirmed dynamic id). */
+export function dynamicNodeMatchValue(id: string): string {
+  const parsed = parseDynamicNodeId(id);
+  if (!parsed || parsed.segments.length === 0) return id;
+  return parsed.segments[parsed.segments.length - 1].value;
+}
+
 // CoL-derived vernacular names (class/order/family/genus rank — species already
 // have their own common name from our Red List/GBIF data), populated once per
 // warm server process by vernacular-names.ts's ensureVernacularNamesLoaded()

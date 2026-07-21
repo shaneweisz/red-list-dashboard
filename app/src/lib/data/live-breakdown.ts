@@ -25,7 +25,7 @@ import {
   type BreakdownEntry,
   type BreakdownQueryContext,
 } from "./col-breakdown";
-import { dynamicNodeFilter, isDynamicNodeId, dynamicNodeDisplayName } from "@/lib/dynamic-taxon";
+import { dynamicNodeFilter, isDynamicNodeId, dynamicNodeMatchValue } from "@/lib/dynamic-taxon";
 import { NODE_INDEX } from "@/lib/taxonomy-utils";
 import type { NodeFilter } from "@/lib/taxonomy-sql";
 
@@ -81,6 +81,13 @@ export async function getLiveBreakdown(nodeId: string): Promise<BreakdownEntry |
     hasBackbone,
     backbonePath: hasBackbone ? parquetUri("backbone.parquet") : undefined,
   };
-  const name = isDynamicNodeId(nodeId) ? dynamicNodeDisplayName(nodeId) : (NODE_INDEX.get(nodeId)?.name ?? nodeId);
+  // The raw matchable scientific value (e.g. "muridae"), NOT dynamicNodeDisplayName's
+  // "Scientific name (Common name)" string — this becomes BreakdownEntry.name, which
+  // the client's matchesBreakdownName compares case-insensitively against a species
+  // row's own family/order_name/etc. column (TaxaSummary.tsx's SpeciesListPanel).
+  // Passing the display string there was a real bug: for any bucket with a known
+  // common name, "muridae (mice)" never equals a row's family "muridae", so the
+  // breakdown's species-list click-through silently returned zero species.
+  const name = isDynamicNodeId(nodeId) ? dynamicNodeMatchValue(nodeId) : (NODE_INDEX.get(nodeId)?.name ?? nodeId);
   return computeBreakdownEntry(ctx, name, filter, isDynamicNodeId(nodeId) ? undefined : nodeId);
 }
