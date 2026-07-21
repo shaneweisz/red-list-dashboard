@@ -59,8 +59,13 @@ export async function getConn(): Promise<DuckDBConnection> {
 // scanned twice. Materialize both once per warm container as temp tables; large
 // groups (plants ~280k) stop paying for the ~557k-row GBIF aggregation + the 173k
 // anti-set on each request. Reset on failure so a transient R2 error can retry.
+// Exported for src/lib/data/live-taxa-children.ts, which needs the exact same
+// "assessed col_ids" / "CoL-extinct but IUCN-confirmed EX/EW" universe (ne_assessed_
+// col_ids / ne_ex_ew_col_ids) for its own colDescribed/colNe counts — reusing these
+// avoids building a second, redundant set of identical temp tables on the same
+// warm connection.
 let neHelpersPromise: Promise<void> | null = null;
-function ensureNeHelpers(conn: DuckDBConnection): Promise<void> {
+export function ensureNeHelpers(conn: DuckDBConnection): Promise<void> {
   if (!neHelpersPromise) {
     neHelpersPromise = (async () => {
       const linkUri = parquetUri("species_link.parquet");

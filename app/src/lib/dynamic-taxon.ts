@@ -100,6 +100,19 @@ export function dynamicNodeDisplayName(id: string): string {
   return COMMON_NAME_BY_VALUE[last.value] ?? (last.value.charAt(0).toUpperCase() + last.value.slice(1));
 }
 
+// Static roots that get the new live, arbitrary-depth drilldown instead of the
+// old precomputed node-children-summaries.json path — see taxa-subgroups/
+// route.ts. Starts with just "mammals" (Phase 2); extended one root at a time
+// through Phase 6 once the mechanism is proven. Deliberately NOT all 8 roots
+// from day one — each addition is its own verified step.
+export const DYNAMIC_DRILLDOWN_ROOTS = new Set<string>(["mammals"]);
+
+/** Is `id` (a bare root or a dynamic id under one) inside DYNAMIC_DRILLDOWN_ROOTS? */
+export function isLiveDrilldownNode(id: string): boolean {
+  const parsed = parseDynamicNodeId(id);
+  return DYNAMIC_DRILLDOWN_ROOTS.has(parsed ? parsed.rootId : id);
+}
+
 // Seeded from the curated node names this feature replaces (Decisions 3/9) —
 // purely a display overlay over live-computed data, never used for filtering.
 // Extend this as more taxa roll out (Phase 6).

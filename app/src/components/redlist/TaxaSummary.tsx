@@ -14,6 +14,7 @@ import {
   type FilterRank, type DescribeFilterSegment,
 } from "@/lib/taxonomy-utils";
 import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
+import { isLiveDrilldownNode, nextDynamicRank } from "@/lib/dynamic-taxon";
 import type { RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import { outdatedCutoffDate } from "@/lib/outdated";
 import { ALPHA2_TO_NAME } from "@/lib/countries";
@@ -172,8 +173,10 @@ interface Props {
   onClearCountryScope?: () => void;
 }
 
-// Dynamic: any tree node with children is expandable
-const isExpandable = (id: string) => hasChildren(id);
+// Any static tree node with children is expandable — plus any node under a live
+// taxonomic-drilldown root (see dynamic-taxon.ts) that isn't already at genus
+// rank (a leaf; further drilling happens via the existing species-list view).
+const isExpandable = (id: string) => hasChildren(id) || (isLiveDrilldownNode(id) && nextDynamicRank(id) !== null);
 
 // Expand affordance for tree rows: a chevron that points right when collapsed and rotates
 // down when expanded, so it's obvious a row drills into sub-groups. Leaf rows get a
