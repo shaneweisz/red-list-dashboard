@@ -89,6 +89,20 @@ export function dynamicNodeAncestors(id: string): string[] {
 
 const RANK_LABEL: Record<DynamicRank, string> = { order: "Order", family: "Family", genus: "Genus" };
 
+/** The rank + display label of a dynamic node's own (deepest) segment — e.g.
+ *  {rank:"family", label:"Family"} for ".../family:muridae". Unlike
+ *  taxonomy-utils.ts's primaryFilterRank (which picks the FIRST set dimension —
+ *  correct for a static node's single-dimension filter, but wrong for a dynamic
+ *  node's multi-dimension one: an order+family filter's "primary" rank for
+ *  display purposes is the deepest one, not the first), this always reflects
+ *  the node's actual identity. Null for a bare root (no segments yet). */
+export function dynamicNodeRankInfo(id: string): { rank: DynamicRank; label: string } | null {
+  const parsed = parseDynamicNodeId(id);
+  if (!parsed || parsed.segments.length === 0) return null;
+  const rank = parsed.segments[parsed.segments.length - 1].rank;
+  return { rank, label: RANK_LABEL[rank] };
+}
+
 /** Display name for a dynamic node's own (deepest) segment — a curated common
  *  name where one exists (seeded from the tree nodes this feature replaces),
  *  else the capitalized scientific name; "" = "Unclassified <Rank>". */

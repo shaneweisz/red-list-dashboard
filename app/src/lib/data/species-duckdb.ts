@@ -15,6 +15,8 @@ import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
 import { NODE_INDEX, getCsvGroupsForNode } from "@/lib/taxonomy-utils";
 import { canonicalizeTaxonId, mapTaxonId } from "@/lib/data/taxonomy-constants";
 import { getTaxaSummary } from "@/lib/data/species-store";
+import { isDynamicNodeId, dynamicNodeFilter } from "@/lib/dynamic-taxon";
+import { filterToSql } from "@/lib/taxonomy-sql";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 // Dev has the parquets on disk; on Vercel they aren't bundled → read from R2.
@@ -108,6 +110,16 @@ export function resolveWhere(taxonId: string): WhereParts {
   if (NODE_INDEX.has(id)) {
     const groups = getCsvGroupsForNode(id);
     return { clauses: ["taxon_group = ANY(string_split($g, '|'))"], params: { g: groups.join("|") } };
+  }
+  // Dynamic (live taxonomic-drilldown) id — not in NODE_INDEX, but a real,
+  // unambiguous, rank-disambiguated filter (see dynamic-taxon.ts). Checked
+  // before the arbitrary-rank fallback below, which would otherwise compare the
+  // whole raw id string (e.g. "mammals~order:rodentia~family:muridae") against
+  // class_name/order_name/family and match nothing — filterToSql already
+  // inlines its own escaped literals, so this clause needs no bind params.
+  if (isDynamicNodeId(id)) {
+    const filter = dynamicNodeFilter(id);
+    if (filter) return { clauses: [filterToSql(filter)], params: {} };
   }
   // arbitrary rank (e.g. family=turdidae): match the value at class/order/family
   return {

@@ -14,7 +14,7 @@ import {
   type FilterRank, type DescribeFilterSegment,
 } from "@/lib/taxonomy-utils";
 import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
-import { isLiveDrilldownNode, nextDynamicRank, isDynamicNodeId, dynamicNodeDisplayName, dynamicNodeFilter } from "@/lib/dynamic-taxon";
+import { isLiveDrilldownNode, nextDynamicRank, isDynamicNodeId, dynamicNodeDisplayName, dynamicNodeFilter, dynamicNodeRankInfo } from "@/lib/dynamic-taxon";
 import type { RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import { outdatedCutoffDate } from "@/lib/outdated";
 import { ALPHA2_TO_NAME } from "@/lib/countries";
@@ -901,6 +901,28 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
   // sit beside rather than replace the counts view. Closes whenever the popup does.
   const [activePanel, setActivePanel] = useState<PanelRequest | null>(null);
   const [panelPos, setPanelPos] = useState({ top: 0, left: 0, maxHeight: 0 });
+  // Live, on-demand breakdown for a dynamic (taxonomic-drilldown) node — see
+  // live-breakdown.ts. A dynamic node's colBreakdown prop is always undefined
+  // (never precomputed, unlike an official/SSC node's), so this fetches the
+  // one-bucket equivalent when the popover opens, not eagerly for a whole
+  // level. Skipped entirely for real nodes (breakdown is already provided, or
+  // there's genuinely none). Loading state is surfaced explicitly (a spinner
+  // + "may take a moment" note) rather than hidden, since the underlying
+  // backbone-dependent query can be slow on a cold server start.
+  const [liveBreakdown, setLiveBreakdown] = useState<typeof breakdown>(undefined);
+  const [liveBreakdownLoading, setLiveBreakdownLoading] = useState(false);
+  const [liveBreakdownError, setLiveBreakdownError] = useState(false);
+  useEffect(() => {
+    if (!open || !isDynamicNodeId(nodeId) || breakdown?.length || liveBreakdown || liveBreakdownLoading) return;
+    setLiveBreakdownLoading(true);
+    setLiveBreakdownError(false);
+    fetch(`/api/redlist/taxa-breakdown-live?nodeId=${encodeURIComponent(nodeId)}`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`Live breakdown failed (${res.status})`))))
+      .then((data) => setLiveBreakdown([data.breakdown]))
+      .catch(() => setLiveBreakdownError(true))
+      .finally(() => setLiveBreakdownLoading(false));
+  }, [open, nodeId, breakdown, liveBreakdown, liveBreakdownLoading]);
+  const effectiveBreakdown = breakdown?.length ? breakdown : liveBreakdown;
 
   useEffect(() => {
     if (!open) return;
@@ -986,7 +1008,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
   // the breakdown list rather than before, so "excluding X, Y, Z" reads as a
   // qualifier on "Family: Bovidae (217)" instead of floating above it with nothing
   // to attach to.
-  const filterSegs = source === "col" ? describeFilter(filter, node ? nodeId : undefined, Boolean(breakdown?.length)) : [];
+  const filterSegs = source === "col" ? describeFilter(filter, node ? nodeId : undefined, Boolean(effectiveBreakdown?.length)) : [];
 
   return (
     <>
@@ -1029,21 +1051,37 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
             </>
           ) : (
             <>
-              {!breakdown?.length && filterSegs.length > 0 && (
+              {!effectiveBreakdown?.length && filterSegs.length > 0 && (
                 <p>{renderFilterSegs(filterSegs)}</p>
               )}
-              {breakdown?.length ? (() => {
-                const dim = primaryFilterRank(filter);
+              {liveBreakdownLoading && (
+                <p className="flex items-center gap-1.5 text-zinc-300">
+                  <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Loading species-level detail — may take a moment on a cold start…
+                </p>
+              )}
+              {liveBreakdownError && (
+                <p className="text-zinc-300">Species-level detail unavailable right now.</p>
+              )}
+              {effectiveBreakdown?.length ? (() => {
+                // A dynamic node's rank is its own deepest segment (e.g. "Family"
+                // for a family-level node), not primaryFilterRank's "first set
+                // dimension" pick — wrong for a multi-dimension dynamic filter
+                // (order+family both set) since that always picks "order" first.
+                const dim = isDynamicNodeId(nodeId) ? dynamicNodeRankInfo(nodeId) : primaryFilterRank(filter);
                 return dim ? (
                   <BreakdownList
                     rank={dim.rank}
                     label={dim.label}
-                    breakdown={breakdown}
+                    breakdown={effectiveBreakdown}
                     onOpenPanel={setActivePanel}
                   />
                 ) : null;
               })() : null}
-              {breakdown?.length && filterSegs.length > 0 && (
+              {effectiveBreakdown?.length && filterSegs.length > 0 && (
                 <p className="mt-1">{renderFilterSegs(filterSegs)}</p>
               )}
               <p className="mt-1.5 text-zinc-300">
