@@ -764,17 +764,27 @@ function BreakdownList({
       <p className="text-zinc-300 mb-1">{label}:</p>
       <table className="border-collapse">
         <thead>
+          {/* Two-row header: "No 1:1 CoL Match" sits UNDER a shared "Assessed"
+              group header (colSpan 2, underlined) alongside "Total" — a
+              standard grouped-column convention that shows it's a SUBSET of
+              Assessed, not a sibling stat, without needing to cram both
+              numbers into one cell (each still needs its own click target). */}
           <tr className="text-zinc-400">
-            <th className="pr-3 pb-1 font-normal text-left">Name</th>
-            <th className="px-2 pb-1 font-normal text-right"># Described</th>
-            <th className="px-2 pb-1 font-normal text-right"># Assessed</th>
+            <th rowSpan={2} className="pr-3 pb-1 font-normal text-left align-bottom">Name</th>
+            <th rowSpan={2} className="px-2 pb-1 font-normal text-right align-bottom"># Described</th>
+            <th colSpan={2} className="px-2 pb-0.5 font-normal text-center border-b border-zinc-600">
+              Assessed
+            </th>
+            <th rowSpan={2} className="pl-2 pb-1 font-normal text-right align-bottom"># Not Evaluated</th>
+          </tr>
+          <tr className="text-zinc-400">
+            <th className="px-2 pb-1 pt-0.5 font-normal text-right">Total</th>
             <th
-              className="px-2 pb-1 font-normal text-right"
+              className="px-2 pb-1 pt-0.5 font-normal text-right"
               title="Assessed by IUCN, but doesn't cleanly correspond to one counted Catalogue of Life species here — most of these DO have a Catalogue of Life record (see the reason shown per species): a demoted subspecies, a provisionally-accepted name, a taxonomic split/lump, or a coverage gap. Only a small minority have no Catalogue of Life record at all."
             >
-              Assessed (No 1:1 CoL Match)
+              No 1:1 CoL Match
             </th>
-            <th className="pl-2 pb-1 font-normal text-right"># Not Evaluated</th>
           </tr>
         </thead>
         <tbody>
@@ -870,7 +880,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
   const [liveBreakdownError, setLiveBreakdownError] = useState(false);
   useEffect(() => {
     if (!open || !isDynamicNodeId(nodeId) || breakdown?.length || liveBreakdown || liveBreakdownLoading) return;
-    setLiveBreakdownLoading(true);
+    setLiveBreakdownLoading(true); // eslint-disable-line react-hooks/set-state-in-effect -- kick off the fetch's loading state
     setLiveBreakdownError(false);
     fetch(`/api/redlist/taxa-breakdown-live?nodeId=${encodeURIComponent(nodeId)}`)
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`Live breakdown failed (${res.status})`))))

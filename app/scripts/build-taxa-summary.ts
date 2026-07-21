@@ -30,8 +30,6 @@ import {
   computeBreakdownEntry,
   SPLIT_CANDIDATES_SQL,
   COL_TO_ASSESSED_SQL,
-  type NoMatchDetail,
-  type SplitDetail,
   type BreakdownQueryContext,
 } from "../src/lib/data/col-breakdown";
 
