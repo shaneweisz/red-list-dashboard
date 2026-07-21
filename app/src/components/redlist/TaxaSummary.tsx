@@ -14,7 +14,7 @@ import {
   type FilterRank, type DescribeFilterSegment,
 } from "@/lib/taxonomy-utils";
 import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
-import { isLiveDrilldownNode, nextDynamicRank, isDynamicNodeId, dynamicNodeDisplayName } from "@/lib/dynamic-taxon";
+import { isLiveDrilldownNode, nextDynamicRank, isDynamicNodeId, dynamicNodeDisplayName, dynamicNodeFilter } from "@/lib/dynamic-taxon";
 import type { RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import { outdatedCutoffDate } from "@/lib/outdated";
 import { ALPHA2_TO_NAME } from "@/lib/countries";
@@ -968,8 +968,17 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
     if (rect) setPanelPos(computePanelPos(rect)); // eslint-disable-line react-hooks/set-state-in-effect -- track the popup's DOM position, not React state
   }, [open, activePanel, pos]);
 
-  if (!node) return null;
-  if (source === "iucn" && !node.estimatedSource) return null;
+  // A dynamic (live taxonomic-drilldown) node isn't in NODE_INDEX, but is a real,
+  // describable filter (see dynamic-taxon.ts) — build one on the fly instead of
+  // requiring findNode to succeed. Its `source` is always "col" in practice
+  // (resolveDescribed forces useCol for every non-official node, and dynamic
+  // nodes are never official), so the "iucn" branch below — which needs real
+  // node.estimatedSource/estimatedSourceUrl — is never reached for one; the
+  // early return just below handles that safely either way.
+  const dynFilter = !node ? dynamicNodeFilter(nodeId) : null;
+  if (!node && !dynFilter) return null;
+  if (source === "iucn" && !node?.estimatedSource) return null;
+  const filter = node?.filter ?? dynFilter!;
 
   // With a breakdown, describeFilter's primary dimension (e.g. "Family: Bovidae") is
   // hidden — the BreakdownList below shows it instead — leaving just the exclude
@@ -977,7 +986,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
   // the breakdown list rather than before, so "excluding X, Y, Z" reads as a
   // qualifier on "Family: Bovidae (217)" instead of floating above it with nothing
   // to attach to.
-  const filterSegs = source === "col" ? describeFilter(node.filter, nodeId, Boolean(breakdown?.length)) : [];
+  const filterSegs = source === "col" ? describeFilter(filter, node ? nodeId : undefined, Boolean(breakdown?.length)) : [];
 
   return (
     <>
@@ -1003,11 +1012,13 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
           style={{ top: pos.top, left: pos.left, maxHeight: pos.maxHeight }}
         >
           {source === "iucn" ? (
+            // Only ever reached for a real (non-dynamic) node — see the early
+            // return above, which bails out for "iucn" whenever node is absent.
             <>
-              <p>{node.estimatedSource}</p>
-              {node.estimatedSourceUrl && (
+              <p>{node!.estimatedSource}</p>
+              {node!.estimatedSourceUrl && (
                 <a
-                  href={node.estimatedSourceUrl}
+                  href={node!.estimatedSourceUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="mt-1 inline-block text-blue-300 hover:text-blue-200 underline"
@@ -1022,7 +1033,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
                 <p>{renderFilterSegs(filterSegs)}</p>
               )}
               {breakdown?.length ? (() => {
-                const dim = primaryFilterRank(node.filter);
+                const dim = primaryFilterRank(filter);
                 return dim ? (
                   <BreakdownList
                     rank={dim.rank}
