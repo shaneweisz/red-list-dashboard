@@ -25,7 +25,7 @@
 import { getConn, parquetUri, ensureNeHelpers } from "./species-duckdb";
 import { outdatedSql } from "./country-taxa-summary-duckdb";
 import { NODE_INDEX } from "@/lib/taxonomy-utils";
-import { filterToSql } from "@/lib/taxonomy-sql";
+import { filterToSql, canonicalOrderColumnSql } from "@/lib/taxonomy-sql";
 import { outdatedCutoffDate } from "@/lib/outdated";
 import type { NodeSummary } from "./species-store";
 import {
@@ -45,8 +45,12 @@ const EXCLUDED_COL_IDS_SQL = `('6MB3T')`;
 // is always derived from scientific_name, never a raw `genus` column, so a
 // species' bucket here is guaranteed consistent with how matchesFilter/
 // filterToSql would independently classify that same species into a filter.
+// order_name is additionally canonicalized (canonicalOrderColumnSql) so a known
+// CoL-only split (e.g. Cetacea, which IUCN already files under Artiodactyla)
+// folds into the one real-world order both datasets otherwise agree on, instead
+// of surfacing as its own misleading "0% assessed" bucket.
 const RANK_COLUMN_SQL: Record<DynamicRank, string> = {
-  order: "coalesce(lower(order_name), '')",
+  order: canonicalOrderColumnSql("order_name"),
   family: "coalesce(lower(family), '')",
   genus: "coalesce(lower(split_part(scientific_name, ' ', 1)), '')",
 };

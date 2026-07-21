@@ -35,6 +35,45 @@ function expandClasses(names: string[]): string[] {
   return names.flatMap((n) => COL_CLASS_ALIASES[n.toLowerCase()] ?? [n]);
 }
 
+// Same category of split as COL_CLASS_ALIASES, one rank down — but ADDITIVE, not
+// a replacement: unlike actinopterygii (which CoL never uses literally, only its
+// finer classes), CoL XR uses BOTH "artiodactyla" (498 mammal spp.) AND, for
+// whales/dolphins/porpoises specifically, its own separate traditional order
+// label "cetacea" (111 spp.) — while IUCN's assessed.parquet already reflects
+// the modern Cetartiodactyla merger and files every cetacean under
+// "artiodactyla" too. Without this, a node filtering on
+// orderNames:["artiodactyla"] (e.g. the "Artiodactyls" node, or any live
+// order-level drilldown bucket) silently misses every CoL-labeled cetacean.
+// Confirmed this is the ONLY order-level split of its kind for mammals (no other
+// order name differs between the two datasets) — add more entries here if a
+// similar split is found for another taxon.
+const COL_ORDER_ALIASES: Record<string, string[]> = {
+  artiodactyla: ["cetacea"],
+};
+function expandOrders(names: string[]): string[] {
+  return names.flatMap((n) => [n, ...(COL_ORDER_ALIASES[n.toLowerCase()] ?? [])]);
+}
+
+// Reverse of COL_ORDER_ALIASES: collapses a raw CoL order value to its
+// IUCN-canonical name before grouping. Needed by live-taxa-children.ts's
+// order-level enumeration — a plain `GROUP BY order_name` would otherwise show
+// "Cetacea" as its own bucket reading "0% assessed" (misleading: every one of
+// those species IS assessed, just filed under "Artiodactyla" there), instead of
+// folding into the same real-world order both datasets otherwise agree on.
+const COL_ORDER_TO_CANONICAL: Record<string, string> = Object.fromEntries(
+  Object.entries(COL_ORDER_ALIASES).flatMap(([canonical, aliases]) => aliases.map((alias) => [alias, canonical])),
+);
+
+/** SQL expression collapsing an order_name column to its canonical value (see
+ *  COL_ORDER_TO_CANONICAL) before the usual coalesce(lower(...), '') — for
+ *  GROUP BY use, not filter matching (filterToSql/expandOrders handles that). */
+export function canonicalOrderColumnSql(col: string): string {
+  const cases = Object.entries(COL_ORDER_TO_CANONICAL)
+    .map(([alias, canonical]) => `WHEN '${alias}' THEN '${canonical}'`)
+    .join(" ");
+  return `coalesce(lower(CASE lower(${col}) ${cases} ELSE lower(${col}) END), '')`;
+}
+
 export function sqlStrList(vals: string[]): string {
   return vals.map((v) => `'${v.toLowerCase().replace(/'/g, "''")}'`).join(", ");
 }
@@ -62,12 +101,14 @@ export function filterToSql(filter: NodeFilter, nodeId?: string): string {
   if (filter.classNames?.length) conds.push(`${cls} IN (${sqlStrList(expandClasses(filter.classNames))})`);
   if (filter.excludeClasses?.length) conds.push(`${cls} NOT IN (${sqlStrList(expandClasses(filter.excludeClasses))})`);
   if (filter.orderNames?.length) {
-    const l = sqlStrList(filter.orderNames);
-    conds.push(`(${ord} IN (${l}) OR (${ord} = '' AND ${cls} IN (${l})))`);
+    // The class_name fallback (order_name empty -> check class_name instead)
+    // deliberately uses the UNEXPANDED list — expandOrders' cetacea alias is a
+    // CoL-order-label quirk, not a class name, so it has no place in a
+    // class-name comparison.
+    conds.push(`(${ord} IN (${sqlStrList(expandOrders(filter.orderNames))}) OR (${ord} = '' AND ${cls} IN (${sqlStrList(filter.orderNames)})))`);
   }
   if (filter.excludeOrders?.length) {
-    const l = sqlStrList(filter.excludeOrders);
-    conds.push(`NOT (${ord} IN (${l}) OR (${ord} = '' AND ${cls} IN (${l})))`);
+    conds.push(`NOT (${ord} IN (${sqlStrList(expandOrders(filter.excludeOrders))}) OR (${ord} = '' AND ${cls} IN (${sqlStrList(filter.excludeOrders)})))`);
   }
   if (filter.families?.length) conds.push(`${fam} IN (${sqlStrList(filter.families)})`);
   if (filter.excludeFamilies?.length) conds.push(`${fam} NOT IN (${sqlStrList(filter.excludeFamilies)})`);

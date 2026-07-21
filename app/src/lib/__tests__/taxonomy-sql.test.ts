@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { filterToSql, sqlStrList } from "@/lib/taxonomy-sql";
+import { filterToSql, sqlStrList, canonicalOrderColumnSql } from "@/lib/taxonomy-sql";
 import { matchesFilter } from "@/lib/taxonomy-utils";
 
 // filterToSql is the SQL mirror of matchesFilter (taxonomy-utils.ts) — previously
@@ -37,6 +37,27 @@ describe("filterToSql", () => {
     expect(sql).toContain("coalesce(lower(class_name), '') NOT IN ('elasmobranchii', 'holocephali')");
   });
 
+  it("includes an order filter, expanding the artiodactyla/cetacea CoL order-label split", () => {
+    // Verified against real data (2026-07-21): IUCN's assessed.parquet already files
+    // whales/dolphins under order_name "artiodactyla" (the modern Cetartiodactyla
+    // merger), but CoL XR still keeps "Cetacea" as its own separate, traditional
+    // order label — a node filtering orderNames:["artiodactyla"] would otherwise
+    // silently miss all 111 CoL-labeled cetaceans.
+    const sql = filterToSql({ csvGroups: ["mammals"], orderNames: ["artiodactyla"] });
+    expect(sql).toContain("coalesce(lower(order_name), '') IN ('artiodactyla', 'cetacea')");
+  });
+
+  it("excludes orders, also expanding the artiodactyla/cetacea split", () => {
+    const sql = filterToSql({ csvGroups: ["mammals"], excludeOrders: ["artiodactyla"] });
+    expect(sql).toContain("coalesce(lower(order_name), '') IN ('artiodactyla', 'cetacea')");
+  });
+
+  it("an order with no known CoL split is unaffected", () => {
+    const sql = filterToSql({ csvGroups: ["mammals"], orderNames: ["rodentia"] });
+    expect(sql).toContain("coalesce(lower(order_name), '') IN ('rodentia')");
+    expect(sql).not.toContain("cetacea");
+  });
+
   it("falls back to class_name when order_name is empty, matching matchesFilter's GBIF-taxonomy quirk", () => {
     const filter = { csvGroups: ["mammals"], orderNames: ["primates"] };
     const sql = filterToSql(filter);
@@ -67,5 +88,17 @@ describe("filterToSql", () => {
     const withUnknownNode = filterToSql({ csvGroups: ["mammals"], genera: ["ursus"] }, "not-a-real-node-id");
     const withoutNode = filterToSql({ csvGroups: ["mammals"], genera: ["ursus"] });
     expect(withUnknownNode).toBe(withoutNode);
+  });
+});
+
+describe("canonicalOrderColumnSql", () => {
+  it("collapses a known CoL-only order label to its IUCN-canonical form", () => {
+    const sql = canonicalOrderColumnSql("order_name");
+    expect(sql).toContain("WHEN 'cetacea' THEN 'artiodactyla'");
+  });
+
+  it("leaves any other order value as-is (lowercased)", () => {
+    const sql = canonicalOrderColumnSql("order_name");
+    expect(sql).toMatch(/ELSE lower\(order_name\) END/);
   });
 });
