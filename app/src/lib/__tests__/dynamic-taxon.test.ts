@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { NODE_INDEX, getAncestors, matchesFilter, speciesMatchesNode } from "@/lib/taxonomy-utils";
+import {
+  NODE_INDEX, getAncestors, matchesFilter, speciesMatchesNode,
+  expandTaxaToken, collapseTaxaToTokens, getViewRootForNode,
+} from "@/lib/taxonomy-utils";
 import {
   isDynamicNodeId,
   buildDynamicNodeId,
@@ -121,6 +124,40 @@ describe("speciesMatchesNode with a dynamic node id", () => {
 
   it("a genuinely unknown, non-dynamic id still falls back to 'don't filter' (unchanged legacy behavior)", () => {
     expect(speciesMatchesNode(rodent, "this-id-does-not-exist-anywhere")).toBe(true);
+  });
+});
+
+describe("taxonomy-utils integration: getAncestors/getViewRootForNode with a dynamic id", () => {
+  it("getAncestors returns the dynamic ancestor chain then the root's real ancestors", () => {
+    const id = "mammals~order:rodentia~family:muridae";
+    expect(getAncestors(id)).toEqual([
+      "mammals~order:rodentia",
+      "mammals",
+      ...getAncestors("mammals"),
+    ]);
+  });
+
+  it("getViewRootForNode resolves a dynamic id to its real display root", () => {
+    expect(getViewRootForNode("mammals~order:rodentia~family:muridae")).toBe("mammals");
+  });
+});
+
+describe("URL token round-trip for a dynamic id (deep-link support)", () => {
+  it("expandTaxaToken resolves a dynamic token straight to its root + itself as subgroup", () => {
+    const id = "mammals~order:rodentia~family:muridae";
+    expect(expandTaxaToken(id)).toEqual({ taxa: "mammals", subgroup: id });
+  });
+
+  it("collapseTaxaToTokens emits the dynamic id as its own token and drops the redundant root", () => {
+    const id = "mammals~order:rodentia";
+    const tokens = collapseTaxaToTokens(["mammals"], [id]);
+    expect(tokens).toEqual([id]);
+  });
+
+  it("round-trips: collapse then expand recovers the original selection", () => {
+    const id = "mammals~order:rodentia~family:muridae~genus:mus";
+    const [token] = collapseTaxaToTokens(["mammals"], [id]);
+    expect(expandTaxaToken(token)).toEqual({ taxa: "mammals", subgroup: id });
   });
 });
 

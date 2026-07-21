@@ -14,7 +14,7 @@ import {
   type FilterRank, type DescribeFilterSegment,
 } from "@/lib/taxonomy-utils";
 import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
-import { isLiveDrilldownNode, nextDynamicRank } from "@/lib/dynamic-taxon";
+import { isLiveDrilldownNode, nextDynamicRank, isDynamicNodeId, dynamicNodeDisplayName } from "@/lib/dynamic-taxon";
 import type { RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import { outdatedCutoffDate } from "@/lib/outdated";
 import { ALPHA2_TO_NAME } from "@/lib/countries";
@@ -1189,6 +1189,31 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     }
   }, [taxa, autoScroll]);
 
+  // Fetch a node's subgroup data if not already loaded/loading (read from refs to
+  // avoid stale closures) — factored out of toggleExpand so the ancestor-breadcrumb
+  // effect below can ensure an intermediate ancestor's data is fetched WITHOUT also
+  // toggling it into expandedTaxa (that Set drives renderTaxonWithSubgroups' "show
+  // this node's own children inline" rendering, which the breadcrumb branch doesn't
+  // use — see its own separate rendering, further down).
+  const ensureSubgroupData = useCallback(async (taxonId: string) => {
+    if (subgroupDataRef.current[taxonId] || loadingSubgroupsRef.current.has(taxonId)) return;
+    setLoadingSubgroups((prev) => new Set(prev).add(taxonId));
+    try {
+      const countryQs = countryKey ? `&country=${encodeURIComponent(countryKey)}` : "";
+      const res = await fetch(`/api/redlist/taxa-subgroups?nodeId=${taxonId}${countryQs}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSubgroupData((prev) => ({ ...prev, [taxonId]: data.subgroups }));
+      }
+    } finally {
+      setLoadingSubgroups((prev) => {
+        const next = new Set(prev);
+        next.delete(taxonId);
+        return next;
+      });
+    }
+  }, [countryKey]);
+
   // Fetch subgroup data when a taxon is expanded
   const toggleExpand = useCallback(async (taxonId: string) => {
     setExpandedTaxa((prev) => {
@@ -1200,26 +1225,8 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       }
       return next;
     });
-
-    // Fetch subgroup data if not already loaded (read from refs to avoid stale closures)
-    if (!subgroupDataRef.current[taxonId] && !loadingSubgroupsRef.current.has(taxonId)) {
-      setLoadingSubgroups((prev) => new Set(prev).add(taxonId));
-      try {
-        const countryQs = countryKey ? `&country=${encodeURIComponent(countryKey)}` : "";
-        const res = await fetch(`/api/redlist/taxa-subgroups?nodeId=${taxonId}${countryQs}`);
-        if (res.ok) {
-          const data = await res.json();
-          setSubgroupData((prev) => ({ ...prev, [taxonId]: data.subgroups }));
-        }
-      } finally {
-        setLoadingSubgroups((prev) => {
-          const next = new Set(prev);
-          next.delete(taxonId);
-          return next;
-        });
-      }
-    }
-  }, [countryKey]);
+    await ensureSubgroupData(taxonId);
+  }, [ensureSubgroupData]);
 
   // Table 1a mode / SSC groups mode — derived from the URL-synced layoutMode
   // prop (see useFilterParams) rather than local state, so a page load or
@@ -1404,17 +1411,30 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     for (const sgId of selectedSubgroups) {
       // Expand all ancestors up to the view root (which is in selectedTaxa)
       for (const ancestorId of getAncestors(sgId)) {
-        if (selectedTaxa.has(ancestorId)) break; // Stop at the view root
+        if (selectedTaxa.has(ancestorId)) {
+          // The view root itself isn't toggled into expandedTaxa — it drives a
+          // different, always-shown rendering path while selectedSubgroups is
+          // non-empty (the ancestor-breadcrumb branch below, not
+          // renderTaxonWithSubgroups' isExpanded-gated one) — but its
+          // subgroupData must still be fetched: the breadcrumb rendering looks
+          // up each INTERMEDIATE ancestor's own summary there (e.g. Rodentia's
+          // row, one level below the root), and nothing else would ever fetch
+          // it for a dynamic ancestor that isn't itself a toggle-expand target.
+          void ensureSubgroupData(ancestorId);
+          break;
+        }
         if (!expandedTaxa.has(ancestorId)) toExpand.add(ancestorId);
       }
-      // Expand the node itself if it has children
-      if (hasChildren(sgId) && !expandedTaxa.has(sgId)) {
+      // Expand the node itself if it has children (static or live/dynamic)
+      if (isExpandable(sgId) && !expandedTaxa.has(sgId)) {
         toExpand.add(sgId);
       }
     }
     for (const id of toExpand) toggleExpand(id);
     // Deps intentionally limited to selectedSubgroups only:
-    // - toggleExpand: stable identity (useCallback with empty deps + refs)
+    // - toggleExpand/ensureSubgroupData: stable identity (useCallback, only
+    //   countryKey as a real dep — a country change already resets subgroupData
+    //   entirely elsewhere, so refetching here isn't needed on that change)
     // - selectedTaxa: would cause re-runs when taxa selection changes, but this
     //   effect only needs to react to subgroup URL changes
     // - expandedTaxa: including it would create an infinite loop since this effect
@@ -2919,9 +2939,19 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                           }
                           if (!ancestorData) {
                             const node = findNode(aId);
-                            if (!node) return;
-                            ancestorData = { id: node.id, name: node.name, estimatedDescribed: node.estimatedDescribed ?? 0,
-                                             totalAssessed: 0, outdated: 0, gbifNeSpeciesCount: 0, byCategory: {} };
+                            if (node) {
+                              ancestorData = { id: node.id, name: node.name, estimatedDescribed: node.estimatedDescribed ?? 0,
+                                               totalAssessed: 0, outdated: 0, gbifNeSpeciesCount: 0, byCategory: {} };
+                            } else if (isDynamicNodeId(aId)) {
+                              // A dynamic ancestor whose real data hasn't streamed in yet
+                              // (ensureSubgroupData, triggered by the auto-expand effect, is
+                              // still in flight) — show its real name now rather than
+                              // vanishing the row entirely; counts fill in once it resolves.
+                              ancestorData = { id: aId, name: dynamicNodeDisplayName(aId), estimatedDescribed: 0,
+                                               totalAssessed: 0, outdated: 0, gbifNeSpeciesCount: 0, byCategory: {} };
+                            } else {
+                              return;
+                            }
                           }
                           rows.push(renderAncestorRow(ancestorData, parentTaxon.color, i + 1, parentTaxon.id, false));
                         });
@@ -2935,9 +2965,15 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                         // Fallback: construct from taxonomy node while data loads
                         if (!sgData) {
                           const node = findNode(sgId);
-                          if (!node) continue;
-                          sgData = { id: node.id, name: node.name, estimatedDescribed: node.estimatedDescribed ?? 0,
-                                     totalAssessed: 0, outdated: 0, gbifNeSpeciesCount: 0, byCategory: {} };
+                          if (node) {
+                            sgData = { id: node.id, name: node.name, estimatedDescribed: node.estimatedDescribed ?? 0,
+                                       totalAssessed: 0, outdated: 0, gbifNeSpeciesCount: 0, byCategory: {} };
+                          } else if (isDynamicNodeId(sgId)) {
+                            sgData = { id: sgId, name: dynamicNodeDisplayName(sgId), estimatedDescribed: 0,
+                                       totalAssessed: 0, outdated: 0, gbifNeSpeciesCount: 0, byCategory: {} };
+                          } else {
+                            continue;
+                          }
                         }
 
                         rows.push(renderCollapsedSubgroupRow(parentTaxon, sgData));

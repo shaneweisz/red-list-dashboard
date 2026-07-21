@@ -13,6 +13,7 @@ import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME, type CountryStats } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID, THREATENED_CATEGORIES } from "@/config/taxa";
 import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode, matchesBreakdownName, breakdownDisplayName } from "@/lib/taxonomy-utils";
+import { dynamicNodeDisplayName } from "@/lib/dynamic-taxon";
 import ReviewerChart from "./ReviewerChart";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { iucnRegionCountries, countryToIucnRegion } from "@/lib/regions";
@@ -3327,7 +3328,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   onClick={() => setSelectedSubgroups(prev => { const next = new Set(prev); next.delete(sgId); return next; })}
                   className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
                 >
-                  {sgInfo?.node.name ?? sgId}
+                  {sgInfo?.node.name ?? dynamicNodeDisplayName(sgId)}
                   <span className="text-xs">×</span>
                 </button>
               );
@@ -4104,7 +4105,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                             <div style={{ display: activeDetailTab === "assessors" ? undefined : "none" }}>
                               <AssessorCandidatesTable
                                 taxaId={[...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group}
-                                taxaName={findNode([...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group)?.name ?? TAXA_BY_ID[[...selectedTaxa][0] ?? s.taxon_group]?.name ?? "Species"}
+                                taxaName={findNode([...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group)?.name ?? (selectedSubgroups.size > 0 ? dynamicNodeDisplayName([...selectedSubgroups][0]) : undefined) ?? TAXA_BY_ID[[...selectedTaxa][0] ?? s.taxon_group]?.name ?? "Species"}
                                 countries={s.countries}
                               />
                             </div>
@@ -4113,7 +4114,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                             <div style={{ display: activeDetailTab === "reviewers" ? undefined : "none" }}>
                               <ReviewerCandidatesTable
                                 taxaId={[...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group}
-                                taxaName={findNode([...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group)?.name ?? TAXA_BY_ID[[...selectedTaxa][0] ?? s.taxon_group]?.name ?? "Species"}
+                                taxaName={findNode([...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group)?.name ?? (selectedSubgroups.size > 0 ? dynamicNodeDisplayName([...selectedSubgroups][0]) : undefined) ?? TAXA_BY_ID[[...selectedTaxa][0] ?? s.taxon_group]?.name ?? "Species"}
                                 countries={s.countries}
                               />
                             </div>

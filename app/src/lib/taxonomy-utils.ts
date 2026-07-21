@@ -16,7 +16,7 @@ import COL_RELEASE from "@/config/col-release.json";
 // circular import, but a safe one: both sides only reference the other inside
 // function bodies (never at module-eval time), so by the time either function
 // actually runs, both modules have finished initializing.
-import { dynamicNodeFilter } from "@/lib/dynamic-taxon";
+import { dynamicNodeFilter, isDynamicNodeId, dynamicNodeAncestors } from "@/lib/dynamic-taxon";
 
 // ─── Indexes (built once at import) ──────────────────────────────────
 
@@ -47,6 +47,11 @@ export function findNode(id: string): TaxonomyNode | undefined {
 
 /** Get ancestor IDs from immediate parent up to root (exclusive). */
 export function getAncestors(id: string): string[] {
+  // Dynamic (live taxonomic-drilldown) ids delegate to dynamic-taxon.ts, which
+  // walks the rank-segment chain down to the real root and then calls back into
+  // this function for that root's own (static) ancestors — safe, not circular,
+  // since the recursive call is always for a non-dynamic id.
+  if (isDynamicNodeId(id)) return dynamicNodeAncestors(id);
   const ancestors: string[] = [];
   let current = PARENT_INDEX.get(id);
   while (current) {
@@ -152,6 +157,14 @@ for (const id of NODE_INDEX.keys()) {
 export function expandTaxaToken(token: string): { taxa: string; subgroup?: string } {
   const id = canonicalizeTaxonId(token.trim());
   if (DEFAULT_VIEW_ROOTS.has(id)) return { taxa: id };
+  // A dynamic (live taxonomic-drilldown) id round-trips through the URL as
+  // itself — no DEFAULT_VIEW_TOKEN_INDEX lookup needed, since its root is
+  // always its own first "~"-separated segment (see dynamic-taxon.ts), and
+  // getViewRootForNode already resolves it correctly via getAncestors.
+  if (isDynamicNodeId(id)) {
+    const root = getViewRootForNode(id);
+    if (root) return { taxa: root, subgroup: id };
+  }
   const nodeId = DEFAULT_VIEW_TOKEN_INDEX.get(id) ?? DEFAULT_VIEW_TOKEN_INDEX.get(stripNodePrefix(id));
   if (nodeId) {
     const root = getViewRootForNode(nodeId);
