@@ -1519,10 +1519,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         }
         if (!expandedTaxa.has(ancestorId)) toExpand.add(ancestorId);
       }
-      // Expand the node itself if it has children (static or live/dynamic)
-      if (isExpandable(sgId) && !expandedTaxa.has(sgId)) {
-        toExpand.add(sgId);
-      }
+      // Deliberately NOT auto-expanding sgId itself here (unlike ancestors
+      // above) — selecting a node should show its own collapsed row first,
+      // requiring an explicit second click to expand into children, matching
+      // renderTaxonWithSubgroups'/renderSubgroupRow's click pattern. Auto-
+      // expanding here would silently undo that on every selection change.
     }
     for (const id of toExpand) toggleExpand(id);
     // Deps intentionally limited to selectedSubgroups only:
@@ -2256,14 +2257,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           }`}
           onClick={() => {
             if (sgHasChildren && isSgSelected) {
-              // Already selected parent → toggle expand/collapse
+              // Already selected → toggle expand/collapse
               toggleExpand(sg.id);
             } else {
               onToggleSubgroup(sg.id);
-              if (sgHasChildren && !isSgExpanded) {
-                // Selecting → expand to show children
-                toggleExpand(sg.id);
-              }
+              // Selecting → show collapsed view first (don't auto-expand),
+              // matching renderTaxonWithSubgroups' top-level pattern — a
+              // second click is needed to expand into children.
+              setExpandedTaxa(new Set());
             }
           }}
         >
