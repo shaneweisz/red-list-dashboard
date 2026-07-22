@@ -379,14 +379,11 @@ interface PanelRequest {
 }
 
 const PANEL_PAGE_SIZE = 10;
-const PANEL_WIDTH = 300;
+// Widened from 300 — the panel now renders a Name/Explanation/Year table
+// (see SpeciesListPanel) instead of a single-column list, and 300px crammed
+// the Explanation column's reason text (e.g. "Lumped Ctenomys mendocinus").
+const PANEL_WIDTH = 440;
 const PANEL_GAP = 8;
-// A recently-described species not yet having an IUCN assessment is a genuine,
-// likely explanation for NE status (assessment backlog) — an old description year
-// doesn't reliably explain anything, so this is only surfaced within a recency
-// window, not shown for every NE row with a described_year. 10 years mirrors the
-// existing "# Outdated (>10 yrs old)" threshold used elsewhere in this dashboard.
-const RECENT_DESCRIPTION_YEARS = 10;
 
 // Positions the species-list panel beside the popup it was opened from: to the
 // right if there's room, else to the left, else (narrow viewports) directly under
@@ -433,12 +430,26 @@ function computePanelPos(popupRect: { top: number; left: number; right: number }
 // wide it's ALLOWED to grow, so this doesn't force short popovers to widen.
 const POPOVER_MAX_WIDTH = 600;
 
-function computePopoverPos(rect: { top: number; bottom: number; left: number }): { top: number; left: number; maxHeight: number } {
+// Anchored by its RIGHT edge (opens leftward from the button), not its left —
+// the button sits partway across the taxa table, so opening rightward (the old
+// behavior) routinely left too little room to the right for the species-list
+// panel (computePanelPos below), pushing it below the popup instead of beside
+// it. maxWidth (not a fixed left position) is derived from the actual space
+// available to the left of the button, so the popup never runs off the left
+// edge of the viewport regardless of how wide its content wants to be.
+function computePopoverPos(rect: { top: number; bottom: number; left: number }): { top: number; right: number; maxWidth: number; maxHeight: number } {
   const margin = 8;
-  const left = Math.min(rect.left, window.innerWidth - POPOVER_MAX_WIDTH - margin);
+  const gap = 4;
+  const spaceLeft = rect.left - gap - margin;
+  const maxWidth = Math.max(120, Math.min(POPOVER_MAX_WIDTH, spaceLeft));
   const preferredMaxHeight = window.innerHeight * 0.7;
   const spaceBelow = window.innerHeight - rect.bottom - 4 - margin;
-  return { top: rect.bottom + 4, left, maxHeight: Math.max(100, Math.min(preferredMaxHeight, spaceBelow)) };
+  return {
+    top: rect.bottom + 4,
+    right: window.innerWidth - rect.left + gap,
+    maxWidth,
+    maxHeight: Math.max(100, Math.min(preferredMaxHeight, spaceBelow)),
+  };
 }
 
 // Paginated species-level list rendered beside the main popup when a count row
@@ -632,75 +643,82 @@ function SpeciesListPanel({
       )}
       {!error && sorted && sorted.length > 0 && (
         <>
-          <ul className="space-y-1">
-            {pageRows.map((s) => {
-              const detail = s.sis_taxon_id != null ? reasonBySisId.get(s.sis_taxon_id) : undefined;
-              const split = s.col_id != null ? splitByColId.get(s.col_id) : undefined;
-              return (
-                <li key={s.id}>
-                  <a
-                    href={speciesHref(nodeId, s.id, isNe ? "new-assessments" : "reassessments")}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-300 hover:text-blue-200 underline"
-                  >
-                    {s.scientific_name}
-                  </a>
-                  {s.category && s.category !== "NE" && (
-                    <span
-                      className="ml-1 px-1 rounded text-[10px] font-medium"
-                      style={{ backgroundColor: `${CATEGORY_COLORS[s.category] || "#999"}33`, color: CATEGORY_COLORS[s.category] || "#999" }}
-                    >
-                      {s.category}
-                    </span>
-                  )}
-                  {s.assessment_date && (
-                    <span className="text-zinc-400">{` ${s.assessment_date.slice(0, 4)}`}</span>
-                  )}
-                  {detail && (
-                    <span className="text-zinc-300">
-                      {" — "}
-                      {NO_MATCH_REASON_LABEL[detail.reason] ?? detail.reason}
-                      {detail.detail && (
-                        detail.detailId != null ? (
-                          <>
-                            {" "}
-                            <a
-                              href={speciesHref(nodeId, detail.detailId, "reassessments")}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-300 hover:text-blue-200 underline"
-                            >
-                              {detail.detail}
-                            </a>
-                          </>
-                        ) : ` ${detail.detail}`
-                      )}
-                    </span>
-                  )}
-                  {split && (
-                    <span
-                      className="text-zinc-300"
-                      title="Heuristic: Catalogue of Life still records this name as a former subspecies of the linked species — not a confirmed taxonomic changelog."
-                    >
-                      {" — likely split from "}
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="text-zinc-400">
+                <th className="pb-1 pr-2 font-normal text-left">Name</th>
+                <th className="pb-1 pr-2 font-normal text-left">Explanation</th>
+                <th className="pb-1 font-normal text-right whitespace-nowrap">{isNe ? "Described" : "Assessed"}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pageRows.map((s) => {
+                const detail = s.sis_taxon_id != null ? reasonBySisId.get(s.sis_taxon_id) : undefined;
+                const split = s.col_id != null ? splitByColId.get(s.col_id) : undefined;
+                const year = isNe ? s.described_year : (s.assessment_date ? s.assessment_date.slice(0, 4) : null);
+                return (
+                  <tr key={s.id} className="border-t border-zinc-700/60 align-top">
+                    <td className="py-1 pr-2">
                       <a
-                        href={speciesHref(nodeId, split.parentId, "reassessments")}
+                        href={speciesHref(nodeId, s.id, isNe ? "new-assessments" : "reassessments")}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-blue-300 hover:text-blue-200 underline"
                       >
-                        {split.parentName}
+                        {s.scientific_name}
                       </a>
-                    </span>
-                  )}
-                  {!split && isNe && s.described_year != null && new Date().getFullYear() - s.described_year <= RECENT_DESCRIPTION_YEARS && (
-                    <span className="text-zinc-300">{` (described in ${s.described_year})`}</span>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+                      {s.category && s.category !== "NE" && (
+                        <span
+                          className="ml-1 px-1 rounded text-[10px] font-medium"
+                          style={{ backgroundColor: `${CATEGORY_COLORS[s.category] || "#999"}33`, color: CATEGORY_COLORS[s.category] || "#999" }}
+                        >
+                          {s.category}
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-1 pr-2 text-zinc-300">
+                      {detail && (
+                        <>
+                          {NO_MATCH_REASON_LABEL[detail.reason] ?? detail.reason}
+                          {detail.detail && (
+                            detail.detailId != null ? (
+                              <>
+                                {" "}
+                                <a
+                                  href={speciesHref(nodeId, detail.detailId, "reassessments")}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-300 hover:text-blue-200 underline"
+                                >
+                                  {detail.detail}
+                                </a>
+                              </>
+                            ) : ` ${detail.detail}`
+                          )}
+                        </>
+                      )}
+                      {split && (
+                        <span
+                          title="Heuristic: Catalogue of Life still records this name as a former subspecies of the linked species — not a confirmed taxonomic changelog."
+                        >
+                          {"Likely split from "}
+                          <a
+                            href={speciesHref(nodeId, split.parentId, "reassessments")}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-300 hover:text-blue-200 underline"
+                          >
+                            {split.parentName}
+                          </a>
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-1 text-right text-zinc-400 whitespace-nowrap">{year ?? "—"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
           <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-zinc-700">
             <button type="button" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="disabled:opacity-30 hover:text-white">
               ‹ Prev
@@ -867,7 +885,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
   const btnRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState({ top: 0, left: 0, maxHeight: 0 });
+  const [pos, setPos] = useState({ top: 0, right: 0, maxWidth: 0, maxHeight: 0 });
   // Species-level panel opened by clicking a count row (Assessed/Not Evaluated/CoL
   // Match/No CoL Match) — a sibling of the popup, not nested inside it, so it can
   // sit beside rather than replace the counts view. Closes whenever the popup does.
@@ -1002,8 +1020,8 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
         <div
           ref={popoverRef}
           onClick={(e) => e.stopPropagation()}
-          className="fixed z-[9999] px-3 py-2 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded-lg shadow-lg normal-case max-w-[600px] overflow-y-auto text-left"
-          style={{ top: pos.top, left: pos.left, maxHeight: pos.maxHeight }}
+          className="fixed z-[9999] px-3 py-2 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded-lg shadow-lg normal-case overflow-y-auto text-left"
+          style={{ top: pos.top, right: pos.right, maxWidth: pos.maxWidth, maxHeight: pos.maxHeight }}
         >
           {source === "iucn" ? (
             // Only ever reached for a real (non-dynamic) node — see the early
