@@ -22,7 +22,6 @@ interface EolTraitGroup {
   value: string;
   recordCount: number;
   source: string | null;
-  priority: boolean;
 }
 
 interface EolTraitsData {
@@ -131,20 +130,12 @@ function CommonNamesList({ names, englishCount, languageCount }: { names: EolCom
   );
 }
 
-const TRAIT_GROUPS_SHOWN = 15;
-
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 function TraitsTable({ traits, dataUrl }: { traits: EolTraitGroup[]; dataUrl: string }) {
-  const shown = traits.slice(0, TRAIT_GROUPS_SHOWN);
-  const remaining = traits.length - shown.length;
-  const anyPriority = shown.some((t) => t.priority);
   return (
     <div>
-      <div className="text-xs uppercase tracking-wider text-zinc-400 mb-1.5">
-        Traits ({traits.length})
-        {anyPriority && <span className="normal-case tracking-normal"> · <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 align-middle" aria-hidden /> most relevant to assessment</span>}
-      </div>
+      <div className="text-xs uppercase tracking-wider text-zinc-400 mb-1.5">Traits ({traits.length})</div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -155,19 +146,16 @@ function TraitsTable({ traits, dataUrl }: { traits: EolTraitGroup[]; dataUrl: st
             </tr>
           </thead>
           <tbody>
-            {shown.map((t, i) => {
+            {traits.map((t, i) => {
               const tooltip = [t.definition, t.recordCount > 1 ? `${t.recordCount} records` : null].filter(Boolean).join(" — ");
               return (
                 <tr key={i} className="border-t border-zinc-100 dark:border-zinc-800">
                   <td className="py-1 pr-3 align-top whitespace-nowrap">
                     <span className="text-zinc-600 dark:text-zinc-300" title={tooltip || undefined}>
-                      {t.priority && <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 align-middle" aria-hidden />}
                       {capitalize(t.predicate)}
                     </span>
                   </td>
-                  <td className="py-1 pr-3 align-top text-zinc-700 dark:text-zinc-300 max-w-[320px]">
-                    <span className="block truncate" title={t.value}>{t.value}</span>
-                  </td>
+                  <td className="py-1 pr-3 align-top text-zinc-700 dark:text-zinc-300">{t.value}</td>
                   <td className="py-1 align-top text-right">
                     {t.source && (
                       <a href={t.source} target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400" title={`Source: ${t.source}`}>
@@ -182,7 +170,7 @@ function TraitsTable({ traits, dataUrl }: { traits: EolTraitGroup[]; dataUrl: st
         </table>
       </div>
       <a href={dataUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 dark:text-blue-400 hover:underline mt-1.5 inline-block">
-        {remaining > 0 ? `+${remaining} more trait${remaining === 1 ? "" : "s"} on EOL ↗` : "View trait data on EOL ↗"}
+        View full trait data on EOL ↗
       </a>
     </div>
   );

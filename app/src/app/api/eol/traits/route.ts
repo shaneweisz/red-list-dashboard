@@ -8,18 +8,23 @@ const EOL_CYPHER_API = "https://eol.org/service/cypher";
 const traitsCache = new Map<number, { data: object; timestamp: number }>();
 const CACHE_DURATION = 60 * 60 * 1000;
 
-const MAX_RECORDS = 60;
-const MAX_GROUPS_RETURNED = 20;
+const MAX_RECORDS = 200;
 
-// Predicates that are pure data-provenance bookkeeping (record/specimen counts
-// in other systems), not biological information — never useful to an assessor.
-const NOISE_PATTERNS = [/^number of /i, /ggbn/i];
-
-// Substrings (checked against the lowercased predicate name) that flag traits
-// of particular interest to a Red List assessor — generation length and
-// longevity feed directly into Criterion A/E timeframes, body size/density/
-// reproduction feed into population and habitat-specificity judgments. Order
-// here is the display priority (most decision-relevant first).
+// Substrings (checked against the lowercased predicate name) of traits
+// relevant to a Red List assessor — generation length and longevity feed
+// directly into Criterion A/E timeframes, body size/density/reproduction
+// feed into population and habitat-specificity judgments. We only ever show
+// this subset (matched directly in the Cypher WHERE, not filtered after the
+// fact), for two reasons: it's what an assessor actually wants, and it keeps
+// the query itself narrow. EOL's Cypher endpoint has no ORDER BY guarantee,
+// so a broad unfiltered query (e.g. every trait a well-studied predator has,
+// including hundreds of "eat"/"prey on" association records) can have LIMIT
+// applied to an arbitrary ordering — flooding the window with irrelevant
+// records before it ever reaches, say, "age at maturity". Filtering by
+// keyword in the WHERE clause avoids that entirely, and also means every
+// record for a matched predicate is fetched (nothing partial).
+//
+// Order here is also the display order (most decision-relevant first).
 const ASSESSOR_PRIORITY = [
   "generation length",
   "longevity",
@@ -69,7 +74,6 @@ interface TraitGroup {
   value: string;
   recordCount: number;
   source: string | null;
-  priority: boolean;
 }
 
 function priorityRank(predicate: string): number {
@@ -93,17 +97,20 @@ function formatNumber(n: number): string {
 // vast majority of body-mass/weight traits.
 function normalizeUnit(value: number, unit: string): { value: number; unit: string } {
   if (unit === "g" && Math.abs(value) >= 1000) return { value: value / 1000, unit: "kg" };
+  // Home range / territory size areas are normalized to m^2, which reads as
+  // an unreadable string of digits at animal-territory scale (e.g. "79520000
+  // m^2" for a lion pride).
+  if (unit === "m^2" && Math.abs(value) >= 1_000_000) return { value: value / 1_000_000, unit: "km²" };
   return { value, unit };
 }
 
-const CATEGORICAL_VALUES_CAP = 5;
-
 /**
- * Collapse a group's raw records into one clean display value.
- * Numeric records (e.g. repeated "body mass" measurements from different
- * sources) collapse to their median — a single representative number rather
- * than a noisy list of every reported figure. Categorical records (e.g.
- * "habitat") collapse to a deduped, capped, comma-joined list.
+ * Collapse a group's raw records into one clean display value. Numeric
+ * records (e.g. repeated "body mass" measurements from different sources)
+ * collapse to their median — a single representative number rather than a
+ * noisy list of every reported figure. Categorical records (e.g. "habitat",
+ * "diet includes") collapse to a deduped, comma-joined list — every distinct
+ * value is shown, since silently truncating a list is worse than a long row.
  */
 function summarizeGroup(records: TraitRecord[]): string {
   const numeric = records.filter((r) => r.measurement != null);
@@ -117,21 +124,18 @@ function summarizeGroup(records: TraitRecord[]): string {
     return `${formatNumber(normalized.value)}${normalized.unit ? ` ${normalized.unit}` : ""}`;
   }
 
-  const distinct = Array.from(new Set(records.map((r) => r.text)));
-  if (distinct.length <= CATEGORICAL_VALUES_CAP) return distinct.join(", ");
-  return `${distinct.slice(0, CATEGORICAL_VALUES_CAP).join(", ")} +${distinct.length - CATEGORICAL_VALUES_CAP} more`;
+  return Array.from(new Set(records.map((r) => r.text))).join(", ");
 }
 
 /**
  * GET /api/eol/traits?pageId=<eol_page_id>
  *
- * Fetches a bounded set of TraitBank records for a single EOL page via the
- * authenticated Cypher endpoint, groups repeated predicates (e.g. multiple
- * "habitat" records) into one row, and ranks traits most relevant to a Red
- * List assessor (generation length, body size, density, reproduction,
- * habitat) first. Scoped to one species per request (never a bulk/crawl
- * query) to stay well within EOL's fair-use expectations for the token
- * issued to this project — see EOL_TOKEN in .env.example.
+ * Fetches the subset of TraitBank records relevant to a Red List assessor
+ * for a single EOL page via the authenticated Cypher endpoint, and groups
+ * repeated predicates (e.g. multiple "habitat" records) into one row.
+ * Scoped to one species per request (never a bulk/crawl query) to stay well
+ * within EOL's fair-use expectations for the token issued to this project
+ * — see EOL_TOKEN in .env.example.
  */
 export async function GET(request: NextRequest) {
   const pageIdParam = request.nextUrl.searchParams.get("pageId");
@@ -150,19 +154,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "EOL_TOKEN environment variable not set" }, { status: 500 });
   }
 
-  // pageId is validated as a positive integer above, so it's safe to inline
-  // directly into the Cypher query string (the EOL cypher service only takes
-  // a single raw `query` CGI param — no parameterized-query support).
-  // Exclude pred.type = "association" (e.g. "eat", "prey on", "pollinates" —
-  // one record per interacting species). Well-studied predators/prey can have
-  // thousands of these, and since Cypher applies LIMIT to an unordered result
-  // set, they'd otherwise flood the window and crowd out the handful of
-  // actual attribute records (habitat, body mass, age at maturity, ...) we
-  // want. This is a WHERE, not a post-fetch filter, precisely so the LIMIT
-  // is spent on useful rows.
+  // pageId is validated as a positive integer above, and ASSESSOR_PRIORITY is
+  // a fixed literal array of lowercase alphabetic strings, so it's safe to
+  // inline both directly into the Cypher query string (the EOL cypher
+  // service only takes a single raw `query` CGI param — no parameterized
+  // query support).
+  const keywords = ASSESSOR_PRIORITY.map((k) => `"${k}"`).join(", ");
   const query = `
     MATCH (p:Page {page_id: ${pageId}})-[:trait|inferred_trait]->(t:Trait)-[:predicate]->(pred:Term)
-    WHERE pred.type <> "association"
+    WHERE ANY(kw IN [${keywords}] WHERE toLower(pred.name) CONTAINS kw)
     OPTIONAL MATCH (t)-[:object_term]->(obj:Term)
     OPTIONAL MATCH (t)-[:normal_units_term]->(units:Term)
     RETURN pred.name AS predicate, pred.definition AS predicateDefinition,
@@ -195,7 +195,7 @@ export async function GET(request: NextRequest) {
     const records: TraitRecord[] = [];
     for (const row of body.data || []) {
       const predicate = row[predicateIdx] as string | null;
-      if (!predicate || NOISE_PATTERNS.some((re) => re.test(predicate))) continue;
+      if (!predicate) continue;
 
       const rawMeasurement = row[measurementIdx] as string | number | null;
       const measurement = rawMeasurement != null ? Number(rawMeasurement) : null;
@@ -229,10 +229,8 @@ export async function GET(request: NextRequest) {
         value: summarizeGroup(recs),
         recordCount: recs.length,
         source: recs.find((r) => r.source)?.source || null,
-        priority: priorityRank(recs[0].predicate) !== Infinity,
       }))
-      .sort((a, b) => priorityRank(a.predicate) - priorityRank(b.predicate) || a.predicate.localeCompare(b.predicate))
-      .slice(0, MAX_GROUPS_RETURNED);
+      .sort((a, b) => priorityRank(a.predicate) - priorityRank(b.predicate) || a.predicate.localeCompare(b.predicate));
 
     const result = {
       found: traits.length > 0,
