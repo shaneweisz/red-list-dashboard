@@ -190,55 +190,21 @@ const CORALS_NODE: TaxonomyNode = {
   estimatedSourceUrl: "https://www.marinespecies.org",
 };
 
-// The "Other Invertebrates" Table 1a group is a grab-bag of animal phyla with no
-// group of their own. We carve it into recognizable phylum sub-groups by their CoL
-// classes (the read layer filters by taxon_group; class sub-filtering is client-side
-// via matchesFilter, so this needs no data change). Class lists are derived from the
-// CoL universe (species/) so they're complete per phylum. Caveat: species with a NULL
-// class — notably ~6k flatworms (Platyhelminthes) and all gastrotrichs — can't be
-// routed by class, so they land in the catch-all rather than their phylum node (the
-// IUCN-assessed species, which the reassessments view shows, all carry a class, so
-// only the NE browse is affected). A `phylum` column on the parquets would close that
-// gap but needs a data rebuild.
-// IUCN Table 1a "Others" (invertebrates) described total — shown on the parent node
-// only (an official Table 1a row); these phylum children below always show the live
-// CoL-derived count instead (see resolveDescribed in TaxaSummary.tsx).
-const OTHER_INVERTEBRATES_DESCRIBED = 171_981;
-const OTHER_INVERTEBRATE_PHYLA: { id: string; name: string; classes: string[] }[] = [
-  { id: "flatworms", name: "Flatworms", classes: ["trematoda", "monogenea", "cestoda", "turbellaria", "rhabditophora", "catenulida"] },
-  { id: "roundworms", name: "Roundworms", classes: ["chromadorea", "enoplea"] },
-  { id: "annelids", name: "Annelids", classes: ["polychaeta", "clitellata"] },
-  { id: "myriapods", name: "Myriapods (Centipedes & Millipedes)", classes: ["diplopoda", "chilopoda", "symphyla", "pauropoda"] },
-  { id: "sponges", name: "Sponges", classes: ["demospongiae", "calcarea", "hexactinellida", "homoscleromorpha"] },
-  { id: "cnidarians", name: "Cnidarians (non-coral)", classes: ["hydrozoa", "myxozoa", "anthozoa", "scyphozoa", "staurozoa", "cubozoa"] },
-  { id: "echinoderms", name: "Echinoderms", classes: ["asteroidea", "echinoidea", "holothuroidea", "ophiuroidea", "crinoidea"] },
-  { id: "bryozoans", name: "Bryozoans (Moss Animals)", classes: ["gymnolaemata", "stenolaemata", "phylactolaemata"] },
-  { id: "tunicates", name: "Tunicates & Lancelets", classes: ["ascidiacea", "thaliacea", "appendicularia", "leptocardii"] },
-];
-
-function OTHER_INVERTEBRATE_PHYLA_CHILDREN(): TaxonomyNode[] {
-  const allClasses = OTHER_INVERTEBRATE_PHYLA.flatMap((p) => p.classes);
-  const children: TaxonomyNode[] = OTHER_INVERTEBRATE_PHYLA.map((p) => ({
-    id: p.id,
-    name: p.name,
-    filter: { csvGroups: ["other_invertebrates"], classNames: p.classes },
-  }));
-  children.push({
-    id: "other-invertebrates-catch-all",
-    name: "Others",
-    filter: { csvGroups: ["other_invertebrates"], excludeClasses: allClasses },
-  });
-  return children;
-}
-
+// Static phylum-sub-group split retired (2026-07-22) — Other Invertebrates is a
+// DYNAMIC_DRILLDOWN_ROOTS root now (class-first, see dynamic-taxon.ts's
+// ROOT_RANK_ORDER), replaced by live class-level enumeration. The old static
+// split (Flatworms/Roundworms/Annelids/Myriapods/Sponges/Cnidarians/
+// Echinoderms/Bryozoans/Tunicates + an "Others" catch-all, each a hand-curated
+// CoL-class allowlist) had the exact same NULL-class caveat the live version
+// now handles generically via its "Unclassified Class" bucket instead of a
+// silent catch-all.
 const OTHER_INVERTEBRATES_NODE: TaxonomyNode = {
   id: "other_invertebrates",
   name: "Other Invertebrates",
   filter: { csvGroups: ["other_invertebrates"] },
-  estimatedDescribed: OTHER_INVERTEBRATES_DESCRIBED,
+  estimatedDescribed: 171_981,
   estimatedSource: IUCN_SOURCE,
   estimatedSourceUrl: COL_2025_URL,
-  children: OTHER_INVERTEBRATE_PHYLA_CHILDREN(),
 };
 
 const VELVET_WORMS_NODE: TaxonomyNode = {

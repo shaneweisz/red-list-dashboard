@@ -129,13 +129,14 @@ const VIEW_ROOT_OVERRIDES: Record<string, string> = {
   "corals": "invertebrates",
   "velvet_worms": "invertebrates",
   "horseshoe_crabs": "invertebrates",
-  // NOT molluscs/crustaceans/other_invertebrates — those are deliberately held
-  // back from live drilldown (see DYNAMIC_DRILLDOWN_ROOTS's own doc comment;
-  // no dynamic id is ever rooted at them, so they don't need an override here),
-  // and other_invertebrates additionally has real static children of its own
-  // (flatworms, roundworms, ...) whose existing "inv-flatworms" virtual-node
-  // URL tokens depend on the BARE ids resolving to null here — same reasoning
-  // as insects/molluscs/etc. below.
+  "molluscs": "invertebrates",
+  "crustaceans": "invertebrates",
+  "other_invertebrates": "invertebrates",
+  // other_invertebrates' own former static children (flatworms, roundworms,
+  // ...) are gone now, superseded by its live class-level drilldown (see
+  // taxonomy-tree.ts) — so there's no lingering "inv-flatworms"-style token
+  // to worry about colliding with, unlike the insects/molluscs/etc. case
+  // just above (see getViewRootForNode's own doc comment for that reasoning).
   "mosses": "plantae",
   "ferns_and_allies": "plantae",
   "gymnosperms": "plantae",

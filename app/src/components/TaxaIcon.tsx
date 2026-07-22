@@ -47,7 +47,6 @@ import {
   GiRat,
   GiSalamander,
   GiScarabBeetle,
-  GiSeaStar,
   GiSharkFin,
   GiSnake,
   GiSpermWhale,
@@ -120,9 +119,6 @@ const ICON_MAP: Record<string, React.ComponentType<IconBaseProps>> = {
   crustaceans: GiCrab,
   corals: GiCoral,
   other_invertebrates: FaBug,
-  echinoderms: GiSeaStar,
-  annelids: GiEarthWorm,
-  "other-invertebrates-catch-all": FaBug,
   velvet_worms: GiEarthWorm,
   horseshoe_crabs: GiCrab,
 

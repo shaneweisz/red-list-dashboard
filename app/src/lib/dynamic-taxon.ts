@@ -31,18 +31,36 @@ const RANK_TO_FILTER_FIELD: Record<DynamicRank, "classNames" | "orderNames" | "f
 };
 const ALL_RANKS = new Set<DynamicRank>(["class", "order", "family", "genus"]);
 
-// Every root drills order -> family -> genus by default. Fishes is the one
-// exception today: its static tree already splits at CLASS first (Ray-finned
-// vs. Lobe-finned vs. Sharks & Rays — Actinopterygii/Sarcopterygii/
-// Chondrichthyes), a biologically meaningful distinction (bony vs. cartilaginous
-// fish) that would silently vanish if live enumeration jumped straight to order.
-// Single-class roots (Mammals, Birds, Reptiles, Amphibians) deliberately skip
-// "class" — enumerating it would return exactly one redundant bucket. Extend
-// this map if a future root (e.g. a live Molluscs/Crustaceans split) turns out
-// to span multiple classes too.
+// Every root drills order -> family -> genus by default. Fishes was the first
+// exception: its static tree already split at CLASS first (Ray-finned vs.
+// Lobe-finned vs. Sharks & Rays — Actinopterygii/Sarcopterygii/Chondrichthyes),
+// a biologically meaningful distinction that would silently vanish if live
+// enumeration jumped straight to order. Single-class roots (Mammals, Birds,
+// Reptiles, Amphibians) deliberately skip "class" — enumerating it would
+// return exactly one redundant bucket.
+//
+// Molluscs/Crustaceans/Other Invertebrates need the same treatment for a
+// DIFFERENT reason: on CoL's side, `order_name` has real, large coverage gaps
+// (e.g. 36.8% null for molluscs, driven almost entirely by Gastropoda), while
+// `class_name` is nearly fully populated everywhere (confirmed via direct data
+// query, 2026-07-22) — these three were held back from live drilldown entirely
+// until now specifically because starting at order would show real, populous
+// orders as "0 described, 0%" purely from missing CoL classification data.
+// Starting at class instead gets a fully live, accurate top level; drilling
+// into a class still surfaces a real (if sometimes large — Gastropoda is
+// ~44% unclassified at order) "Unclassified Order" bucket for the remainder,
+// same graceful NULL-segment handling used everywhere else, rather than
+// silently zeroing out a named order.
 const DEFAULT_RANK_ORDER: DynamicRank[] = ["order", "family", "genus"];
+const CLASS_FIRST_RANK_ORDER: DynamicRank[] = ["class", "order", "family", "genus"];
 const ROOT_RANK_ORDER: Record<string, DynamicRank[]> = {
-  fishes: ["class", "order", "family", "genus"],
+  fishes: CLASS_FIRST_RANK_ORDER,
+  molluscs: CLASS_FIRST_RANK_ORDER,
+  "inv-molluscs": CLASS_FIRST_RANK_ORDER,
+  crustaceans: CLASS_FIRST_RANK_ORDER,
+  "inv-crustaceans": CLASS_FIRST_RANK_ORDER,
+  other_invertebrates: CLASS_FIRST_RANK_ORDER,
+  "inv-other_invertebrates": CLASS_FIRST_RANK_ORDER,
 };
 function rankOrderFor(rootId: string): DynamicRank[] {
   return ROOT_RANK_ORDER[rootId] ?? DEFAULT_RANK_ORDER;
@@ -176,19 +194,21 @@ export function dynamicNodeDisplayName(id: string): string {
 // "Aves is a leaf" assertion) — isLiveDrilldownNode doesn't require existing
 // static children, so this alone is enough for it to become expandable.
 //
-// Deliberately NOT yet included: Molluscs, Crustaceans, Other Invertebrates.
-// Unlike every root above (and Insects/Arachnids/Corals/plant & algae/Fungi
-// groups below), these three have a large, genuine CoL order_name coverage gap
-// on the CoL side (confirmed via direct data query, 2026-07-21: 37% of Molluscs'
-// CoL rows, 18% of Crustaceans', 14% of Other Invertebrates' have a NULL
-// order_name, vs. <1% everywhere else) — not a clean alias-fixable split like
-// Cetacea/Struthioniformes/Pinales, but missing classification data outright.
-// Going live today would show large, well-populated real orders (e.g.
-// Stylommatophora, 3,338 assessed land snail species) as "0 described, 0%"
-// purely from this gap — the exact "reads as broken data to specialists"
-// failure mode the plant nodes' file comment already calls out for a related
-// reason. Revisit once there's a real fix (e.g. falling back to class-level
-// grouping for null-order CoL rows), rather than shipping a misleading view.
+// Molluscs, Crustaceans, and Other Invertebrates were held back at first: on
+// CoL's side, order_name has a large, genuine coverage gap (confirmed via
+// direct data query, 2026-07-21: 37% of Molluscs' CoL rows, 18% of
+// Crustaceans', 14% of Other Invertebrates' have a NULL order_name, vs. <1%
+// everywhere else) — not a clean alias-fixable split like Cetacea/
+// Struthioniformes/Pinales, but missing classification data outright. Order-
+// first would've shown large, well-populated real orders (e.g. Stylommatophora,
+// 3,338 assessed land snail species) as "0 described, 0%" purely from this gap.
+// Fixed (2026-07-22) by putting these three on the class-first rank order too
+// (see ROOT_RANK_ORDER above) — class_name is nearly fully populated even where
+// order_name isn't (per-class breakdown confirmed the gap concentrates in a
+// few specific classes: Gastropoda ~44% null order, Copepoda ~98%, Diplopoda
+// ~96%, vs. ~0% in most others), so the live top level is now fully accurate;
+// drilling into an affected class still surfaces a real "Unclassified Order"
+// bucket for its remainder rather than a misleadingly-zeroed named order.
 // Insects/Arachnids/Corals/plant & algae groups/Fungi are each defined ONCE
 // (INSECTS_NODE etc. in taxonomy-tree.ts) but spliced into the tree TWICE:
 // once with their bare id under the "invertebrates"/"plantae"/"fungi" virtual
@@ -206,6 +226,9 @@ export const DYNAMIC_DRILLDOWN_ROOTS = new Set<string>([
   "corals", "inv-corals",
   "velvet_worms", "inv-velvet_worms",
   "horseshoe_crabs", "inv-horseshoe_crabs",
+  "molluscs", "inv-molluscs",
+  "crustaceans", "inv-crustaceans",
+  "other_invertebrates", "inv-other_invertebrates",
   "flowering_plants", "pl-flowering_plants",
   "gymnosperms", "pl-gymnosperms",
   "ferns_and_allies", "pl-ferns_and_allies",

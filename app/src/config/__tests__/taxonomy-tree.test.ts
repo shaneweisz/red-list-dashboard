@@ -1264,18 +1264,18 @@ describe("Subgroup partition coverage", () => {
     }
   });
 
-  // Mushrooms' Ascomycota/Other-Fungi split was retired in Phase 8 (Fungi is a
-  // DYNAMIC_DRILLDOWN_ROOTS root now). Other Invertebrates' phylum-by-class
-  // split below is DELIBERATELY still static — held back from live drilldown
-  // due to a genuine CoL order_name coverage gap (see dynamic-taxon.ts's
-  // DYNAMIC_DRILLDOWN_ROOTS comment) — so this partition check still applies.
-  it("other_invertebrates subgroups: included classes match catch-all excludeClasses", () => {
-    const subs = findNode("other_invertebrates")!.children!;
-    const catchAll = subs.find(sg => sg.id === "other-invertebrates-catch-all")!;
-    const namedClasses = subs
-      .filter(sg => sg.id !== "other-invertebrates-catch-all")
-      .flatMap(sg => sg.filter.classNames ?? []);
-    expect([...namedClasses].sort()).toEqual([...catchAll.filter.excludeClasses!].sort());
+  // Molluscs/Crustaceans/Other Invertebrates' static phylum-by-class splits
+  // (Other Invertebrates only had one; Molluscs/Crustaceans were already
+  // leaves) were retired 2026-07-22 once class-name aliasing (COL_CLASS_ALIASES:
+  // copepoda/thecostraca/hoplonemertea) closed the real CoL order_name gap that
+  // held them back from live drilldown — see dynamic-taxon.ts's
+  // DYNAMIC_DRILLDOWN_ROOTS/ROOT_RANK_ORDER comments.
+  it("Molluscs/Crustaceans/Other Invertebrates have no STATIC children (they get live class-level drilldown instead)", () => {
+    for (const id of ["molluscs", "crustaceans", "other_invertebrates"]) {
+      const node = findNode(id)!;
+      expect(node, `${id} not found`).toBeDefined();
+      expect(node.children, `${id} should have no static children`).toBeUndefined();
+    }
   });
 
 });
@@ -1333,13 +1333,6 @@ describe("prefixTree virtual nodes", () => {
     });
   }
 
-  it("prefixed children have prefixed IDs recursively (Other Invertebrates — the one invertebrate group that kept its static phylum-by-class split, see dynamic-taxon.ts)", () => {
-    const invOtherInvertebrates = findNode("inv-other_invertebrates")!;
-    expect(invOtherInvertebrates.children).toBeDefined();
-    for (const child of invOtherInvertebrates.children!) {
-      expect(child.id).toMatch(/^inv-/);
-    }
-  });
 
   it("prefixed nodes are in NODE_INDEX", () => {
     expect(NODE_INDEX.has("inv-insects")).toBe(true);
@@ -1460,7 +1453,7 @@ describe("flat taxa-token mapping is a bijection over the default view", () => {
     // Sample a few representative pairs across the prefixed roots.
     const cases: Array<[string, string]> = [
       ["invertebrates", "inv-corals"],
-      ["invertebrates", "inv-flatworms"], // still-static (Other Invertebrates' phylum split — deliberately not live yet)
+      ["invertebrates", "ssc-mollusc"], // Molluscs/Crustaceans/Other Invertebrates lost their last static children 2026-07-22; SSC groups are still a real static sub-group
       ["fishes", "ssc-shark"], // Fishes lost its static children in Phase 8; SSC groups are still a real static sub-group
       ["plantae", "pl-flowering_plants"],
       ["fungi", "fu-mushrooms"],

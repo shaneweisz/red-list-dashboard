@@ -26,10 +26,31 @@ export type NodeFilter = TaxonomyNode["filter"];
 // (which are `teleostei`, `holostei`, …). Expand those display classes to the CoL
 // classes they contain so the four fish sub-groups count correctly. Identity for any
 // class name that already exists in CoL (orders are unaffected).
+// Unlike the fish entries above (canonical = IUCN's coarse label, alias = CoL's
+// finer split), these three fold the OTHER way — CoL's label is the one kept,
+// IUCN's is the alias — since IUCN's term is outdated/imprecise or a plain typo,
+// not a meaningful coarser grouping worth preserving as its own bucket:
+//  - copepoda: IUCN's assessed.parquet never uses "Copepoda" at all, only the
+//    older "Maxillopoda" (74 crustacean spp.) or "Hexanauplia" (36) — CoL never
+//    uses either literally. Confirmed via direct data query (2026-07-22): every
+//    single one of those species' CoL-linked record is class Copepoda, a clean
+//    fold, not an ambiguous split across multiple CoL classes.
+//  - thecostraca: "Theocostraca" in assessed.parquet (3 crustacean spp.) is a
+//    plain misspelling of "Thecostraca" (barnacles etc.), which CoL uses
+//    correctly — folding it in also fixes the display name, not just the count.
+//  - hoplonemertea: IUCN labels ribbon worms by their phylum name "Nemertea"
+//    (6 other_invertebrates spp., all confirmed linked to CoL's actual class
+//    Hoplonemertea) rather than a true class-rank name — same pattern as fish
+//    classes needing a coarser IUCN label expanded to CoL's finer real one,
+//    just the canonical/alias roles swapped since CoL's name is the more
+//    precise, correct one here.
 const COL_CLASS_ALIASES: Record<string, string[]> = {
   actinopterygii: ["teleostei", "chondrostei", "cladistii", "holostei"],
   sarcopterygii: ["dipneusti", "coelacanthi"],
   chondrichthyes: ["elasmobranchii", "holocephali"],
+  copepoda: ["maxillopoda", "hexanauplia"],
+  thecostraca: ["theocostraca"],
+  hoplonemertea: ["nemertea"],
 };
 function expandClasses(names: string[]): string[] {
   return names.flatMap((n) => COL_CLASS_ALIASES[n.toLowerCase()] ?? [n]);
