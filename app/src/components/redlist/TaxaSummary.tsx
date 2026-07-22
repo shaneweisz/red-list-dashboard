@@ -2166,7 +2166,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   };
 
   // Render a standalone subgroup row (used when table is collapsed to a selected subgroup)
-  const renderCollapsedSubgroupRow = (taxon: TaxonSummary, sg: SubGroupSummary) => {
+  const renderCollapsedSubgroupRow = (taxon: TaxonSummary, sg: SubGroupSummary, depth: number) => {
     const { value: sgDescribed, source: sgDescribedSource } = resolveDescribed(sg.id, sg.estimatedDescribed, sg.colDescribed);
     const sgPctAssessed = sgDescribed > 0 ? (sg.totalAssessed / sgDescribed) * 100 : 0;
     const sgPctOutdated = sg.totalAssessed > 0 ? (sg.outdated / sg.totalAssessed) * 100 : 0;
@@ -2182,7 +2182,13 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         }}
       >
         <td className={`${stickyClasses} ${taxonCellPad} whitespace-nowrap w-0 bg-zinc-100 dark:bg-zinc-800`}>
-          <div className="flex items-center gap-2">
+          {/* paddingLeft continues the same depth*12 staircase renderAncestorRow
+              uses above this row — without it, the selected node snapped back
+              to flush-left regardless of how many ancestor rows preceded it,
+              breaking the indentation right at the "current" row (e.g. Muridae
+              indented correctly as an ancestor, then its own selected child
+              Gerbillus resetting to 0 instead of continuing one step further). */}
+          <div className="flex items-center gap-2" style={{ paddingLeft: `${depth * 12}px` }}>
             {expandToggle(isExpandable(sg.id), expandedTaxa.has(sg.id))}
             <TaxaIcon taxonId={sg.id} size={18} className="flex-shrink-0" style={{ color: taxon.color }} />
             <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{sg.name}</span>
@@ -3133,20 +3139,26 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                           }
                         }
 
-                        rows.push(renderCollapsedSubgroupRow(parentTaxon, sgData));
-                        // Render children if expanded. depth=2 (not 1) here: these
-                        // are one level BELOW the already-rendered collapsed sgId
-                        // row (e.g. Muridae under an expanded Rodentia), and
+                        // The collapsed/selected row continues the same
+                        // depth*12 staircase as the ancestor rows above it —
+                        // one step past the last intermediate ancestor (0 if
+                        // there are none, i.e. sgId is a direct child of the
+                        // view root, e.g. Rodentia under Mammals).
+                        const selectedDepth = intermediateAncestorIds.length + 1;
+                        rows.push(renderCollapsedSubgroupRow(parentTaxon, sgData, selectedDepth));
+                        // Render children if expanded — one step further still.
                         // renderSubgroupRow's own paddingLeft formula is
-                        // `(depth-1)*12` — depth=1 collapses to 0px, which left
-                        // Muridae flush with Mammals/Rodentia instead of indented
-                        // under them. depth=2 also matches the icon-size step
-                        // (16 → 14) the normal recursive tree mode already uses
-                        // for the same order → family transition.
+                        // `(depth-1)*12`, so to land one indent past
+                        // selectedDepth we pass selectedDepth+2 here (not +1):
+                        // e.g. selectedDepth=1 (Rodentia selected, 0 ancestors)
+                        // → depth=3 → (3-1)*12 = 24px, one step past Rodentia's
+                        // own 12px. Also keeps the icon-size step (16 → 14)
+                        // aligned with the normal recursive tree mode's order →
+                        // family sizing.
                         const sgChildren = subgroupData[sgId] ?? [];
                         if (expandedTaxa.has(sgId)) {
                           rows.push(...sgChildren.map(child =>
-                            renderSubgroupRow(child, parentTaxon.color, 2, parentTaxon.id)));
+                            renderSubgroupRow(child, parentTaxon.color, selectedDepth + 2, parentTaxon.id)));
                         }
                       }
                       return rows;
