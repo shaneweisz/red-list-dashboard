@@ -3134,11 +3134,19 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                         }
 
                         rows.push(renderCollapsedSubgroupRow(parentTaxon, sgData));
-                        // Render children if expanded
+                        // Render children if expanded. depth=2 (not 1) here: these
+                        // are one level BELOW the already-rendered collapsed sgId
+                        // row (e.g. Muridae under an expanded Rodentia), and
+                        // renderSubgroupRow's own paddingLeft formula is
+                        // `(depth-1)*12` — depth=1 collapses to 0px, which left
+                        // Muridae flush with Mammals/Rodentia instead of indented
+                        // under them. depth=2 also matches the icon-size step
+                        // (16 → 14) the normal recursive tree mode already uses
+                        // for the same order → family transition.
                         const sgChildren = subgroupData[sgId] ?? [];
                         if (expandedTaxa.has(sgId)) {
                           rows.push(...sgChildren.map(child =>
-                            renderSubgroupRow(child, parentTaxon.color, 1, parentTaxon.id)));
+                            renderSubgroupRow(child, parentTaxon.color, 2, parentTaxon.id)));
                         }
                       }
                       return rows;
