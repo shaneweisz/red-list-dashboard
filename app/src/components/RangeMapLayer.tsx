@@ -35,6 +35,11 @@ interface RangeMapLayerProps {
   onNotFound?: (notFound: boolean) => void;
   onSimplificationChange?: (info: SimplificationInfo | null) => void;
   visibleCategories?: Set<string>;
+  // Reports the currently-visible range polygons (post category-filtering) up to
+  // the parent, which pairs them with the filtered GBIF points to compute an
+  // in-range/out-of-range breakdown. Point localities are excluded — they're not
+  // areas to test containment against.
+  onPolygonsChange?: (polygons: Feature[] | null) => void;
 }
 
 const PRESENCE_LABELS: Record<number, string> = {
@@ -110,6 +115,7 @@ export default function RangeMapLayer({
   onNotFound,
   onSimplificationChange,
   visibleCategories,
+  onPolygonsChange,
 }: RangeMapLayerProps) {
   const [geojson, setGeojson] = useState<FeatureCollection | null>(null);
   const [loading, setLoading] = useState(false);
@@ -224,6 +230,12 @@ export default function RangeMapLayer({
       colorExpr: expr,
     };
   }, [geojson, visibleCategories]);
+
+  useEffect(() => {
+    onPolygonsChange?.(polygonData?.features ?? null);
+    return () => onPolygonsChange?.(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [polygonData]);
 
   if (!visible || error || !polygonData || !colorExpr) return null;
   if (loading) return null;

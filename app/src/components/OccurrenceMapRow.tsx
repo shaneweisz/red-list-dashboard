@@ -8,6 +8,8 @@ import { mapTaxonId } from "@/lib/data/taxonomy-constants";
 import { InatObservation, getThumbUrl, InatPhotoWithPreview } from "./InatPhotoCard";
 import { QualityFlag, QUALITY_FLAG_LABELS, QUALITY_FLAG_DESCRIPTIONS, QUALITY_FLAG_SOURCES } from "@/lib/coordinate-cleaning";
 import { FaInfoCircle } from "react-icons/fa";
+import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
+import type { Feature, Polygon, MultiPolygon } from "geojson";
 
 // Fixed page size for iNat photo grid (2 columns x 5 rows)
 const INAT_PAGE_SIZE = 10;
@@ -416,6 +418,10 @@ export default function OccurrenceMapRow({
   const [visibleCategories, setVisibleCategories] = useState<Set<string> | undefined>(undefined);
   const [rangeCategoriesExpanded, setRangeCategoriesExpanded] = useState(false);
   const [rangeSimplification, setRangeSimplification] = useState<import("./RangeMapLayer").SimplificationInfo | null>(null);
+  // Currently-visible range polygons (post category-filtering), reported up from
+  // RangeMapLayer — paired with filteredOccurrences below to compute the
+  // in-range/out-of-range breakdown shown in the corner stats table.
+  const [rangePolygons, setRangePolygons] = useState<Feature[] | null>(null);
 
   // AOH layer state
   const isAohAvailable = !!(sisTaxonId && taxonGroup &&
@@ -799,6 +805,35 @@ export default function OccurrenceMapRow({
     };
   }, [splitView, splitDate, filteredOccurrences]);
 
+  // % of currently-filtered GBIF occurrences that fall inside the currently-visible
+  // IUCN range polygons — recomputed whenever the range layer's polygons or the
+  // filtered occurrence set change, so it tracks both the coordinate-cleaning /
+  // basis-of-record filters and the range category toggles automatically.
+  const rangeCoverageStats = useMemo(() => {
+    if (!rangePolygons || rangePolygons.length === 0) return null;
+    const polygons = rangePolygons as Feature<Polygon | MultiPolygon>[];
+    const computeFor = (occs: OccurrenceFeature[]) => {
+      let inRange = 0;
+      for (const o of occs) {
+        const point: Feature<GeoJSON.Point> = { type: "Feature", properties: {}, geometry: o.geometry };
+        const isInside = polygons.some((poly) => {
+          try {
+            return booleanPointInPolygon(point, poly);
+          } catch {
+            return false;
+          }
+        });
+        if (isInside) inRange++;
+      }
+      return { inRange, outRange: occs.length - inRange, total: occs.length };
+    };
+    return {
+      main: computeFor(filteredOccurrences),
+      before: splitView ? computeFor(preAssessmentOccs) : null,
+      after: splitView ? computeFor(postAssessmentOccs) : null,
+    };
+  }, [rangePolygons, filteredOccurrences, splitView, preAssessmentOccs, postAssessmentOccs]);
+
   // Date range for color gradient (uses full eventDate for finer granularity)
   const { minDateNum, maxDateNum, minDateLabel, maxDateLabel } = useMemo(() => {
     const nums = filteredOccurrences
@@ -1034,6 +1069,10 @@ export default function OccurrenceMapRow({
     panelId: string = "main",
   ) => {
     const styledGeoJson = buildStyledFeatureCollection(panelOccurrences);
+    const rangeStatsForPanel =
+      panelId === "before" ? rangeCoverageStats?.before
+      : panelId === "after" ? rangeCoverageStats?.after
+      : rangeCoverageStats?.main;
 
     // Circle layer paint properties (data-driven from feature properties)
     const circleLayerStyle = {
@@ -1188,6 +1227,7 @@ export default function OccurrenceMapRow({
                   }}
                   onNotFound={setRangeNotFound}
                   onSimplificationChange={setRangeSimplification}
+                  onPolygonsChange={setRangePolygons}
                   visibleCategories={visibleCategories}
                 />
               )}
@@ -1409,6 +1449,34 @@ export default function OccurrenceMapRow({
               {filteredOccurrences.length < occurrences.length && (
                 <> Showing <strong>{filteredOccurrences.length.toLocaleString()}</strong> after filters.</>
               )}
+            </div>
+          )}
+          {/* In-range / out-of-range breakdown — only shown while the IUCN range
+              layer is on and has at least one visible polygon to test against.
+              Auto-updates with every filter (basis of record, uncertainty,
+              coordinate-cleaning checks, native range) and every range category
+              toggle, since it's derived from the same filteredOccurrences /
+              rangePolygons state those already react to. */}
+          {showRange && rangeStatsForPanel && rangeStatsForPanel.total > 0 && (
+            <div className="absolute bottom-2 right-2 z-[1000] px-2 py-1.5 rounded-lg shadow-md bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-[11px] text-zinc-600 dark:text-zinc-300 min-w-[130px]">
+              <div className="font-medium text-zinc-700 dark:text-zinc-200 mb-1">GBIF vs. range map</div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
+                  In range
+                </span>
+                <strong>{rangeStatsForPanel.inRange.toLocaleString()}</strong>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-rose-500 flex-shrink-0" />
+                  Out of range
+                </span>
+                <strong>{rangeStatsForPanel.outRange.toLocaleString()}</strong>
+              </div>
+              <div className="mt-1 pt-1 border-t border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400">
+                {Math.round((rangeStatsForPanel.inRange / rangeStatsForPanel.total) * 100)}% in range
+              </div>
             </div>
           )}
         </div>
