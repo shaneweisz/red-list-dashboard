@@ -7,14 +7,22 @@
  * when a user actually expands one in the popover (TaxaSummary.tsx's
  * BreakdownList), not eagerly for a whole level.
  *
- * The backbone.parquet-dependent temp tables (split_candidates, col_to_assessed)
- * are expensive to build (full backbone scans/joins) — memoized once per warm
- * server connection (mirrors ensureNeHelpers in species-duckdb.ts), so only the
- * first request after a cold start pays that cost; every request after reuses
- * them. If backbone.parquet is unavailable for any reason, degrades gracefully
- * to a breakdown with no noMatchDetails/splitDetails (same fallback
- * scripts/build-taxa-summary.ts's hasBackbone flag already provides) rather
- * than failing the request.
+ * The split_candidates/col_to_assessed temp tables are fully determined by the
+ * data sync (never by which taxon/bucket a user is viewing), so
+ * scripts/build-taxa-summary.ts precomputes them once at sync time into
+ * data/col-split-candidates.parquet / data/col-to-assessed.parquet — tiny
+ * files (~6K / ~173K rows) loaded here directly. This used to instead rebuild
+ * both from scratch on the first breakdown request after every cold server
+ * start via a full scan + self-join over backbone.parquet (8M rows, ~125MB) —
+ * memoized once per warm server connection (mirrors ensureNeHelpers in
+ * species-duckdb.ts) so only that first request paid the cost, but that cost
+ * was still several seconds of real backbone-scanning work. If the
+ * precomputed files are missing (e.g. an older data sync from before this
+ * existed), falls back to rebuilding from backbone.parquet directly, same as
+ * before. If backbone.parquet itself is unavailable for any reason, degrades
+ * gracefully to a breakdown with no noMatchDetails/splitDetails (same
+ * fallback scripts/build-taxa-summary.ts's hasBackbone flag already provides)
+ * rather than failing the request.
  */
 import { getConn, parquetUri, ensureNeHelpers } from "./species-duckdb";
 import { ensureVernacularNamesLoaded } from "./vernacular-names";
@@ -39,11 +47,20 @@ async function ensureBackboneHelpers(conn: Awaited<ReturnType<typeof getConn>>):
     backboneHelpersPromise = (async () => {
       await ensureNeHelpers(conn); // ne_assessed_col_ids / ne_ex_ew_col_ids
       try {
-        const backbonePath = parquetUri("backbone.parquet");
-        const assessedPath = parquetUri("assessed.parquet");
-        const linkPath = parquetUri("species_link.parquet");
-        await conn.run(SPLIT_CANDIDATES_SQL(backbonePath, assessedPath, "ne_assessed_col_ids"));
-        await conn.run(COL_TO_ASSESSED_SQL(linkPath, assessedPath));
+        try {
+          // Fast path: load the precomputed tables directly — no backbone scan.
+          await conn.run(`CREATE TEMP TABLE split_candidates AS SELECT * FROM read_parquet('${parquetUri("col-split-candidates.parquet")}')`);
+          await conn.run(`CREATE TEMP TABLE col_to_assessed AS SELECT * FROM read_parquet('${parquetUri("col-to-assessed.parquet")}')`);
+        } catch (precomputeError) {
+          // Precomputed files missing (e.g. an older data sync from before these
+          // existed) — fall back to building them from backbone.parquet directly.
+          console.error("live-breakdown: precomputed CoL match helpers unavailable, rebuilding from backbone.parquet:", precomputeError);
+          const backbonePath = parquetUri("backbone.parquet");
+          const assessedPath = parquetUri("assessed.parquet");
+          const linkPath = parquetUri("species_link.parquet");
+          await conn.run(SPLIT_CANDIDATES_SQL(backbonePath, assessedPath, "ne_assessed_col_ids"));
+          await conn.run(COL_TO_ASSESSED_SQL(linkPath, assessedPath));
+        }
         return true;
       } catch (e) {
         // backbone.parquet missing/unreadable — degrade to no diagnostic detail

@@ -47,6 +47,8 @@ yarn-error.log*
 !/data/ssc-group-children-summaries.json
 !/data/country-stats.json
 !/data/vernacular-names.json
+!/data/col-split-candidates.parquet
+!/data/col-to-assessed.parquet
 
 # DuckDB httpfs extension — vendored at build time by scripts/fetch-duckdb-ext.ts
 # (downloaded, not committed; traced into the v2 function via next.config).

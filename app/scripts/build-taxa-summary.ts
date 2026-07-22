@@ -185,6 +185,18 @@ async function attachColCounts(summaries: Record<string, NodeSummary[]>): Promis
   if (hasBackbone) {
     await conn.run(SPLIT_CANDIDATES_SQL(backbonePath, assessedPath, "assessed_cids"));
     await conn.run(COL_TO_ASSESSED_SQL(link, assessedPath));
+    // Dump both to small precomputed parquet files — they're fully determined by
+    // this data sync (never by which taxon/bucket a user is viewing), but building
+    // them requires a full scan + self-join over backbone.parquet (8M rows,
+    // ~125MB). live-breakdown.ts's ensureBackboneHelpers used to redo that same
+    // scan+join from scratch on the first breakdown request after every cold
+    // server start; loading these tiny files instead (~6K / ~173K rows) is
+    // effectively instant. See that file's fallback if these are ever missing.
+    const splitCandidatesOut = path.join(DATA_DIR, "col-split-candidates.parquet");
+    const colToAssessedOut = path.join(DATA_DIR, "col-to-assessed.parquet");
+    await conn.run(`COPY split_candidates TO '${splitCandidatesOut}' (FORMAT PARQUET)`);
+    await conn.run(`COPY col_to_assessed TO '${colToAssessedOut}' (FORMAT PARQUET)`);
+    console.log(`  CoL match helpers: ${splitCandidatesOut}, ${colToAssessedOut}`);
   }
   const breakdownCtx: BreakdownQueryContext = {
     conn, speciesGlob, assessedPath, linkPath: link,
