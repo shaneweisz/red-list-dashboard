@@ -3,7 +3,7 @@
  * col-breakdown.ts) for dynamic taxonomic-drilldown nodes (dynamic-taxon.ts) —
  * the same "why doesn't this species have a clean 1:1 CoL match" click-through
  * that official/SSC nodes get for free from the precomputed
- * node-children-summaries.json, computed here per (rank, value) bucket only
+ * table1a/ssc-group-children-summaries.json, computed here per (rank, value) bucket only
  * when a user actually expands one in the popover (TaxaSummary.tsx's
  * BreakdownList), not eagerly for a whole level.
  *

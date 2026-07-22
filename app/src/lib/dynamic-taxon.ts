@@ -169,7 +169,7 @@ export function dynamicNodeDisplayName(id: string): string {
 }
 
 // Static roots that get the new live, arbitrary-depth drilldown instead of the
-// old precomputed node-children-summaries.json path — see taxa-subgroups/
+// old precomputed table1a/ssc-group-children-summaries.json path — see taxa-subgroups/
 // route.ts. Rolled out one root at a time (Phase 6) once the mechanism was
 // proven on Mammals (Phase 2). Birds gains drilldown for the first time here
 // (it's a true leaf in the static tree today, per taxonomy-tree.test.ts's own

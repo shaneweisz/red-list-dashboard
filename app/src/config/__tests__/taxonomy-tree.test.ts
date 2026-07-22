@@ -1382,14 +1382,25 @@ describe("Table 1a → default view mapping", () => {
 
 // ─── Precomputed summaries structure ──────────────────────────────────
 
-describe("node-children-summaries.json", () => {
-   
-  const data = JSON.parse(
-    fs.readFileSync(
-      path.join(process.cwd(), "data/node-children-summaries.json"),
-      "utf-8"
-    )
-  );
+describe("table1a-children-summaries.json + ssc-group-children-summaries.json", () => {
+  // Merged the same way species-store.ts's getPrecomputedChildrenSummaries
+  // does — the two files are a plain split (by "ssc-" id prefix) of what used
+  // to be one node-children-summaries.json, so every check below still
+  // applies to their union.
+  const data = {
+    ...JSON.parse(
+      fs.readFileSync(
+        path.join(process.cwd(), "data/table1a-children-summaries.json"),
+        "utf-8"
+      )
+    ),
+    ...JSON.parse(
+      fs.readFileSync(
+        path.join(process.cwd(), "data/ssc-group-children-summaries.json"),
+        "utf-8"
+      )
+    ),
+  };
 
   it("has entries for all parent nodes in the tree", () => {
     for (const [id] of NODE_INDEX) {

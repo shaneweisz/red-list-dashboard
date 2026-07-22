@@ -1,9 +1,16 @@
 /**
  * build-taxa-summary: Compute per-taxon summary stats → taxa-summary.json
- *                     + node-children-summaries.json for instant drill-down
+ *                     + table1a-children-summaries.json / ssc-group-children-
+ *                     summaries.json for instant drill-down
  *
- * Reads per-taxon redlist and GBIF CSVs, computes summary statistics,
- * and writes to data/taxa-summary.json and data/node-children-summaries.json.
+ * Reads per-taxon redlist and GBIF CSVs, computes summary statistics, and
+ * writes to data/taxa-summary.json plus the two remaining static-tree
+ * children-summary files — the only parent nodes left in the tree after the
+ * ordinary-subgroup drilldown moved to live DuckDB queries (live-taxa-
+ * children.ts) are the Table 1a official rows and the SSC Specialist Groups
+ * subtree, so the single old node-children-summaries.json is split in two
+ * along that same line (id.startsWith("ssc-")) rather than kept as one file
+ * mixing two conceptually distinct, separately-versioned data sources.
  *
  * Usage:
  *   npx tsx scripts/build-taxa-summary.ts
@@ -502,23 +509,37 @@ export async function run(): Promise<void> {
   }
 
   const nodeChildrenSummaries: Record<string, NodeSummary[]> = {};
-  let parentCount = 0;
   let childCount = 0;
 
   for (const [nodeId, node] of NODE_INDEX) {
     if (!hasChildren(nodeId)) continue;
     const childSummaries = computeChildrenSummaries(node);
     nodeChildrenSummaries[nodeId] = childSummaries;
-    parentCount++;
     childCount += childSummaries.length;
     console.log(`  ${nodeId}: ${childSummaries.length} children`);
   }
 
   await attachColCounts(nodeChildrenSummaries);
 
-  const childrenOutputPath = path.join(DATA_DIR, "node-children-summaries.json");
-  fs.writeFileSync(childrenOutputPath, JSON.stringify(nodeChildrenSummaries, null, 2) + "\n");
-  console.log(`\nWrote ${parentCount} parents (${childCount} children) → ${childrenOutputPath}`);
+  // Split along the same "ssc-" id prefix TaxaSummary.tsx's SSC_SECTIONS
+  // already uses to distinguish SSC breadcrumbs — Table 1a's official rows
+  // and the SSC Specialist Groups subtree are two unrelated data sources
+  // (citation-sourced counts vs. curated organizational units) that happened
+  // to share one file only because both were leftovers of the same static
+  // tree the ordinary-subgroup drilldown used to live in.
+  const table1aChildrenSummaries: Record<string, NodeSummary[]> = {};
+  const sscGroupChildrenSummaries: Record<string, NodeSummary[]> = {};
+  for (const [nodeId, summaries] of Object.entries(nodeChildrenSummaries)) {
+    (nodeId.startsWith("ssc-") ? sscGroupChildrenSummaries : table1aChildrenSummaries)[nodeId] = summaries;
+  }
+
+  const table1aOutputPath = path.join(DATA_DIR, "table1a-children-summaries.json");
+  fs.writeFileSync(table1aOutputPath, JSON.stringify(table1aChildrenSummaries, null, 2) + "\n");
+  console.log(`\nWrote ${Object.keys(table1aChildrenSummaries).length} Table 1a parents → ${table1aOutputPath}`);
+
+  const sscOutputPath = path.join(DATA_DIR, "ssc-group-children-summaries.json");
+  fs.writeFileSync(sscOutputPath, JSON.stringify(sscGroupChildrenSummaries, null, 2) + "\n");
+  console.log(`Wrote ${Object.keys(sscGroupChildrenSummaries).length} SSC group parents (${childCount} total children across both files) → ${sscOutputPath}`);
 }
 
 async function main() {
