@@ -33,11 +33,12 @@ const ASSESSOR_PRIORITY = [
   "age at maturity",
   "age at first reproduction",
   "sexual maturity",
+  "population trend",
+  "population density",
   "body mass",
   "body length",
   "wingspan",
   "snout-vent length",
-  "population density",
   "litter size",
   "clutch size",
   "brood size",
@@ -45,6 +46,13 @@ const ASSESSOR_PRIORITY = [
   "clutches per year",
   "inter-birth interval",
   "gestation",
+  // Plant-specific analogs of the animal size/life-history traits above.
+  "growth form", // catches "plant growth form" and "primary growth form"
+  "growth habit",
+  "life cycle habit", // annual/biennial/perennial — the plant equivalent of a lifeform/habit classification
+  "plant height",
+  "seed mass",
+  "wood density",
   "habitat",
   "trophic guild",
   "diet",
@@ -52,6 +60,11 @@ const ASSESSOR_PRIORITY = [
   "migrat",
   "dispersal",
   "home range",
+  "drought tolerance",
+  "shade tolerance",
+  "salt tolerance",
+  "fire tolerance",
+  "low temperature tolerance",
 ];
 
 interface CypherResponse {
@@ -101,6 +114,9 @@ function normalizeUnit(value: number, unit: string): { value: number; unit: stri
   // an unreadable string of digits at animal-territory scale (e.g. "79520000
   // m^2" for a lion pride).
   if (unit === "m^2" && Math.abs(value) >= 1_000_000) return { value: value / 1_000_000, unit: "km²" };
+  // Plant height is normalized to cm, which reads oddly for trees (e.g.
+  // "3500 cm" for a 35m oak).
+  if (unit === "cm" && Math.abs(value) >= 100) return { value: value / 100, unit: "m" };
   return { value, unit };
 }
 
@@ -159,15 +175,24 @@ export async function GET(request: NextRequest) {
   // inline both directly into the Cypher query string (the EOL cypher
   // service only takes a single raw `query` CGI param — no parameterized
   // query support).
-  const keywords = ASSESSOR_PRIORITY.map((k) => `"${k}"`).join(", ");
+  //
+  // A single regex alternation is used instead of Cypher's
+  // `ANY(kw IN [...] WHERE pred.name CONTAINS kw)` list form: the latter got
+  // 502'd by EOL's WAF once ASSESSOR_PRIORITY grew past ~37 entries (adding
+  // plant-tolerance traits pushed it over) even though the query is still
+  // scoped to one page and well-formed — apparently a length/complexity
+  // ceiling, not a rate limit. The regex form encodes to meaningfully fewer
+  // characters for the same keyword set, giving headroom to keep growing
+  // this list.
+  const pattern = ASSESSOR_PRIORITY.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
   const query = `
     MATCH (p:Page {page_id: ${pageId}})-[:trait|inferred_trait]->(t:Trait)-[:predicate]->(pred:Term)
-    WHERE ANY(kw IN [${keywords}] WHERE toLower(pred.name) CONTAINS kw)
+    WHERE pred.name =~ "(?i).*(${pattern}).*"
     OPTIONAL MATCH (t)-[:object_term]->(obj:Term)
     OPTIONAL MATCH (t)-[:normal_units_term]->(units:Term)
     RETURN pred.name AS predicate, pred.definition AS predicateDefinition,
            t.normal_measurement AS measurement, units.name AS units,
-           obj.name AS value, t.source AS source
+           obj.name AS value, t.literal AS literal, t.source AS source
     LIMIT ${MAX_RECORDS}
   `.trim();
 
@@ -190,6 +215,7 @@ export async function GET(request: NextRequest) {
     const measurementIdx = idx("measurement");
     const unitsIdx = idx("units");
     const valueIdx = idx("value");
+    const literalIdx = idx("literal");
     const sourceIdx = idx("source");
 
     const records: TraitRecord[] = [];
@@ -200,8 +226,10 @@ export async function GET(request: NextRequest) {
       const rawMeasurement = row[measurementIdx] as string | number | null;
       const measurement = rawMeasurement != null ? Number(rawMeasurement) : null;
       const unit = (row[unitsIdx] as string | null) || "";
-      const categorical = row[valueIdx] as string | null;
-      if (measurement == null && !categorical) continue; // no displayable value (e.g. literal-only records)
+      // Prefer the ontology term name; some predicates (e.g. "population
+      // trend") record free text via t.literal instead of an object_term.
+      const categorical = (row[valueIdx] as string | null) || (row[literalIdx] as string | null);
+      if (measurement == null && !categorical) continue; // no displayable value
       if (measurement != null && Number.isNaN(measurement)) continue;
 
       records.push({
