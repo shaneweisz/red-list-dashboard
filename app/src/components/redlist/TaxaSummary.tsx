@@ -2103,7 +2103,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                 width before the text, at the same left edge) every time the
                 view switches between the normal tree and this ancestor-
                 breadcrumb mode. Intermediate ancestors stay smaller (16) since
-                they're a level down, same as elsewhere in this file. */}
+                they're a level down, same as elsewhere in this file.
+                expandToggle(false, false) reserves the same chevron-width
+                spacer every other row type (renderRow, renderSubgroupRow)
+                puts before its icon — omitting it here was a second,
+                independent cause of the same left-shift, since ancestor rows
+                navigate on click rather than expand and so never render a
+                real chevron. */}
+            {expandToggle(false, false)}
             <TaxaIcon taxonId={sg.id} size={isViewRoot ? 22 : 16} className="flex-shrink-0" style={{ color }} />
             <span className={isViewRoot ? "font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100" : "text-sm text-zinc-700 dark:text-zinc-300"}>{sg.name}</span>
           </div>
@@ -2713,7 +2720,15 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             )}
           </div>
         )}
-        <div ref={scrollRef} className={`relative bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto ${countryMode ? "flex-1 [zoom:.75]" : ""}`}>
+        {/* mb-4 here (not left to the parent's space-y-4) because this whole
+            subtree's outer wrappers (lines above) render as `display: contents`
+            outside country mode — a contents element's own margin is dropped
+            per spec, so space-y-4's margin-bottom on it silently no-ops,
+            leaving zero visible gap before the charts/species-table block
+            below. Country mode already gets its gap from the real grid box's
+            own mb-4 (see the ternary a few lines up), so skip it here to avoid
+            doubling up. */}
+        <div ref={scrollRef} className={`relative bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto ${countryMode ? "flex-1 [zoom:.75]" : "mb-4"}`}>
           {/* Country-switch refetch indicator — see the loading-gate comment
               above renderRow's skeleton branch for why this doesn't blank the table. */}
           {loading && taxa.length > 0 && (
