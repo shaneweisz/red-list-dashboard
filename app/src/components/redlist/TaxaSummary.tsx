@@ -2080,13 +2080,31 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         key={`ancestor-${sg.id}`}
         className="transition-colors cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
         onClick={() => {
+          // Navigating up to this ancestor: collapse anything expanded BELOW
+          // it (a previously-drilled-into deeper branch) so it doesn't show
+          // pre-expanded if the user drills back into it later — only prune
+          // descendants of sg.id, leaving its own state, ancestors, and
+          // unrelated branches (e.g. an independently-expanded sibling taxon)
+          // untouched.
+          setExpandedTaxa((prev) => {
+            const next = new Set([...prev].filter((id) => id === sg.id || !getAncestors(id).includes(sg.id)));
+            return next.size === prev.size ? prev : next;
+          });
           onToggleSubgroup(sg.id);
         }}
       >
         <td className={`${stickyClasses} ${taxonCellPad} whitespace-nowrap w-0 bg-white dark:bg-zinc-900`}>
           <div className="flex items-center gap-2" style={{ paddingLeft: `${depth * 12}px` }}>
-            <TaxaIcon taxonId={sg.id} size={isViewRoot ? 18 : 16} className="flex-shrink-0" style={{ color }} />
-            <span className="text-sm text-zinc-700 dark:text-zinc-300">{sg.name}</span>
+            {/* The view root row (depth 0) is the SAME conceptual taxon row as
+                renderRow's/renderTaxonWithSubgroups' top-level display (e.g.
+                "Mammals") — match their icon size (22) and text styling
+                exactly, or it visibly shifts left (a smaller icon leaves less
+                width before the text, at the same left edge) every time the
+                view switches between the normal tree and this ancestor-
+                breadcrumb mode. Intermediate ancestors stay smaller (16) since
+                they're a level down, same as elsewhere in this file. */}
+            <TaxaIcon taxonId={sg.id} size={isViewRoot ? 22 : 16} className="flex-shrink-0" style={{ color }} />
+            <span className={isViewRoot ? "font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100" : "text-sm text-zinc-700 dark:text-zinc-300"}>{sg.name}</span>
           </div>
         </td>
         {isVisible("described") && (
@@ -2144,6 +2162,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     const { value: sgDescribed, source: sgDescribedSource } = resolveDescribed(sg.id, sg.estimatedDescribed, sg.colDescribed);
     const sgPctAssessed = sgDescribed > 0 ? (sg.totalAssessed / sgDescribed) * 100 : 0;
     const sgPctOutdated = sg.totalAssessed > 0 ? (sg.outdated / sg.totalAssessed) * 100 : 0;
+    const isLoadingSgSubs = loadingSubgroups.has(sg.id);
     return (
       <tr
         key={`collapsed-${sg.id}`}
@@ -2159,6 +2178,12 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             {expandToggle(isExpandable(sg.id), expandedTaxa.has(sg.id))}
             <TaxaIcon taxonId={sg.id} size={18} className="flex-shrink-0" style={{ color: taxon.color }} />
             <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{sg.name}</span>
+            {isLoadingSgSubs && (
+              <svg className="animate-spin h-3 w-3 text-zinc-400" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            )}
           </div>
         </td>
         {isVisible("described") && (
