@@ -1402,16 +1402,17 @@ describe("table1a-children-summaries.json + ssc-group-children-summaries.json", 
     ),
   };
 
-  it("has entries for all parent nodes in the tree", () => {
+  it("has entries for all parent nodes in the tree, except 'all' (deliberately excluded — see build-taxa-summary.ts)", () => {
     for (const [id] of NODE_INDEX) {
-      if (!hasChildren(id)) continue;
+      if (!hasChildren(id) || id === "all") continue;
       expect(data[id], `missing precomputed entry for parent "${id}"`).toBeDefined();
     }
+    expect(data["all"]).toBeUndefined();
   });
 
   it("child IDs match the tree structure", () => {
     for (const [id, node] of NODE_INDEX) {
-      if (!node.children) continue;
+      if (!node.children || id === "all") continue;
       const treeChildIds = node.children.map(c => c.id);
       const dataChildIds = (data[id] ?? []).map((c: { id: string }) => c.id);
       expect(dataChildIds).toEqual(treeChildIds);

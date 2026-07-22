@@ -513,6 +513,17 @@ export async function run(): Promise<void> {
 
   for (const [nodeId, node] of NODE_INDEX) {
     if (!hasChildren(nodeId)) continue;
+    // "all" is a special case: its tree children mix the 8 real top-level taxa
+    // with the SSC wrapper ids (ssc-groups, ssc-fish-groups, ...), which stay
+    // nested under "all" purely so NODE_INDEX/getAncestors can resolve them
+    // (see VIEW_ROOT_OVERRIDES in taxonomy-utils.ts) — not because "all" has
+    // a real UI that shows its own children list. The landing page and Table
+    // 1a mode both get their row lists from TAXONOMY_VIEWS instead (explicit
+    // id lists with no "all" or "ssc-*" entries), and "all" is never
+    // expandable in the UI, so nothing ever reads getPrecomputedChildrenSummaries("all").
+    // Skipping it here avoids baking those SSC rollup duplicates into the
+    // output for no consumer.
+    if (nodeId === "all") continue;
     const childSummaries = computeChildrenSummaries(node);
     nodeChildrenSummaries[nodeId] = childSummaries;
     childCount += childSummaries.length;
