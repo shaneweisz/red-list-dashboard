@@ -16,6 +16,19 @@ interface EolCommonName {
   lang: string;
 }
 
+interface EolTrait {
+  predicate: string;
+  value: string;
+  source: string | null;
+  traitId: string | null;
+}
+
+interface EolTraitsData {
+  found: boolean;
+  traits?: EolTrait[];
+  dataUrl?: string;
+}
+
 interface EolSummaryData {
   found: boolean;
   eolId?: number;
@@ -116,22 +129,55 @@ function CommonNamesList({ names, englishCount, languageCount }: { names: EolCom
   );
 }
 
+const TRAITS_SHOWN = 12;
+
+function TraitsList({ traits, dataUrl }: { traits: EolTrait[]; dataUrl: string }) {
+  const shown = traits.slice(0, TRAITS_SHOWN);
+  const remaining = traits.length - shown.length;
+  return (
+    <div>
+      <div className="text-xs uppercase tracking-wider text-zinc-400 mb-1.5">Traits ({traits.length})</div>
+      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+        {shown.map((t, i) => (
+          <li key={i} className="flex items-baseline justify-between gap-2 text-sm">
+            <span className="text-zinc-500 dark:text-zinc-400 truncate">{t.predicate}</span>
+            <span className="text-zinc-700 dark:text-zinc-300 text-right">{t.value}</span>
+          </li>
+        ))}
+      </ul>
+      <a href={dataUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 dark:text-blue-400 hover:underline mt-1 inline-block">
+        {remaining > 0 ? `+${remaining} more trait${remaining === 1 ? "" : "s"} on EOL ↗` : "View trait data on EOL ↗"}
+      </a>
+    </div>
+  );
+}
+
 export default function EolSummary({ scientificName }: { scientificName: string }) {
   const [data, setData] = useState<EolSummaryData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [traitsData, setTraitsData] = useState<EolTraitsData | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
     setData(null);
+    setTraitsData(null);
     (async () => {
       try {
         const res = await fetch(`/api/eol?name=${encodeURIComponent(scientificName)}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const result = await res.json();
         if (!cancelled) setData(result);
+        if (!cancelled && result.found && result.eolId) {
+          fetch(`/api/eol/traits?pageId=${result.eolId}`)
+            .then((r) => (r.ok ? r.json() : null))
+            .then((t) => {
+              if (!cancelled && t) setTraitsData(t);
+            })
+            .catch(() => {});
+        }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Unknown error");
       } finally {
@@ -172,6 +218,11 @@ export default function EolSummary({ scientificName }: { scientificName: string 
       {/* Common names — paginated, English first, with language labels */}
       {commonNames.length > 0 && (
         <CommonNamesList names={commonNames} englishCount={englishNameCount} languageCount={languageCount} />
+      )}
+
+      {/* Traits (TraitBank) */}
+      {traitsData?.found && traitsData.traits && traitsData.dataUrl && (
+        <TraitsList traits={traitsData.traits} dataUrl={traitsData.dataUrl} />
       )}
 
       {/* Image gallery */}
