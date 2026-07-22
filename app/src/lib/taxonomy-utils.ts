@@ -100,6 +100,23 @@ export const OFFICIAL_IUCN_DESCRIBED_NODE_IDS = new Set([
 // sscLeafId)) — so redirect their view-root resolution there without actually
 // re-parenting them. Add an entry here whenever a new taxon's SSC wrapper is added
 // (see SSC_SECTIONS in TaxaSummary.tsx for the matching UI-side list).
+//
+// Same story, different reason, for "invertebrates"/"plantae"/"fungi"'s own CSV-
+// group children (insects, molluscs, ..., mushrooms, brown_algae — see
+// TAXONOMY_VIEWS.table1a.sections for the full membership): "invertebrates" is a
+// virtual grouping node used only for the "all" node's Table 1a-style children
+// list and DEFAULT_VIEW_ROOTS — insects/molluscs/etc. are each their OWN direct
+// child of "all" in the real tree (PARENT_INDEX), not nested under
+// "invertebrates" at all. Without an override here, getAncestors(nodeId) for a
+// dynamic id rooted at one of these (e.g. "insects~order:coleoptera") walks
+// straight from "insects" to "all" and never finds a DEFAULT_VIEW_ROOTS member —
+// getViewRootForNode returned null, so expandTaxaToken's dynamic branch silently
+// fell through to treating the WHOLE dynamic id as an unrecognized "arbitrary
+// rank" token. Confirmed broken for every root except mammals/birds/reptiles/
+// amphibians/fishes (which ARE themselves literal DEFAULT_VIEW_ROOTS members, so
+// never hit this path) — reloading a deep-linked URL into Insects/Molluscs/
+// Arachnids/Corals/Mosses/Ferns/Gymnosperms/Flowering Plants/Algae/Mushrooms/
+// Brown Algae showed the raw dynamic id string instead of a labeled breadcrumb.
 const VIEW_ROOT_OVERRIDES: Record<string, string> = {
   "ssc-groups": "mammals",
   "ssc-reptile-groups": "reptiles",
@@ -107,9 +124,44 @@ const VIEW_ROOT_OVERRIDES: Record<string, string> = {
   "ssc-invertebrate-groups": "invertebrates",
   "ssc-plant-groups": "plantae",
   "ssc-fungi-groups": "fungi",
+  "insects": "invertebrates",
+  "arachnids": "invertebrates",
+  "corals": "invertebrates",
+  "velvet_worms": "invertebrates",
+  "horseshoe_crabs": "invertebrates",
+  // NOT molluscs/crustaceans/other_invertebrates — those are deliberately held
+  // back from live drilldown (see DYNAMIC_DRILLDOWN_ROOTS's own doc comment;
+  // no dynamic id is ever rooted at them, so they don't need an override here),
+  // and other_invertebrates additionally has real static children of its own
+  // (flatworms, roundworms, ...) whose existing "inv-flatworms" virtual-node
+  // URL tokens depend on the BARE ids resolving to null here — same reasoning
+  // as insects/molluscs/etc. below.
+  "mosses": "plantae",
+  "ferns_and_allies": "plantae",
+  "gymnosperms": "plantae",
+  "flowering_plants": "plantae",
+  "green_algae": "plantae",
+  "red_algae": "plantae",
+  "mushrooms": "fungi",
+  "brown_algae": "fungi",
 };
 
-/** Find the default-view ancestor for a node (one of the 8 display roots). */
+/**
+ * Find the default-view ancestor for a node (one of the 8 display roots).
+ * Deliberately does NOT check `VIEW_ROOT_OVERRIDES[nodeId]` itself before the
+ * ancestor loop (only its ancestors) — insects/molluscs/etc. each already have
+ * a distinct "inv-"-prefixed virtual duplicate node (e.g. "inv-insects") whose
+ * real tree ancestors correctly include "invertebrates" with no override
+ * needed. DEFAULT_VIEW_TOKEN_INDEX (below) relies on the BARE id ("insects")
+ * resolving to null here so the "inv-" one claims that URL token instead;
+ * making the bare id resolve directly would make it win that race instead
+ * (NODE_INDEX iteration visits it first) and break every legacy insects/
+ * molluscs/etc. URL. The loop still correctly resolves a DYNAMIC id rooted at
+ * one of these (e.g. "insects~order:coleoptera") without this direct check,
+ * since dynamicNodeAncestors already includes the bare rootId ("insects")
+ * itself as part of the walked ancestor list, unlike a plain node's own
+ * getAncestors (exclusive of self).
+ */
 export function getViewRootForNode(nodeId: string): string | null {
   if (DEFAULT_VIEW_ROOTS.has(nodeId)) return nodeId;
   for (const a of getAncestors(nodeId)) {

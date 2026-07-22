@@ -818,19 +818,17 @@ function BreakdownList({
             return (
               <tr key={b.name} className="border-t border-zinc-700/60">
                 <td className="pr-3 py-1 whitespace-nowrap">
-                  {label}:{" "}
-                  {href ? (
+                  {label}: {rowLabel}
+                  {href && (
                     <a
                       href={href}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-blue-300 hover:text-blue-200 underline"
+                      className="ml-1 text-zinc-400 hover:text-blue-300 inline-block align-text-top"
                       title={`View ${rowLabel} on Catalogue of Life`}
                     >
-                      {rowLabel}
+                      <FaInfoCircle size={9} />
                     </a>
-                  ) : (
-                    rowLabel
                   )}
                 </td>
                 <td className="px-2 py-1 text-right text-zinc-300">{b.count}</td>
@@ -994,14 +992,13 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
   if (source === "iucn" && !node?.estimatedSource) return null;
   const filter = node?.filter ?? dynFilter!;
 
-  // Always includes the primary dimension (e.g. "Family: Bovidae", linked to its
-  // CoL page) — previously hidden once a breakdown loaded (the BreakdownList
-  // table shows the same rank/name per row instead), but that meant this line
-  // was visible only during the loading/no-breakdown state and then vanished
-  // the instant the table appeared, an unwanted "replace" every time. Kept
-  // stable across load state now: same content shown the whole time, rendered
-  // once, above wherever the loading spinner / table / error ends up.
-  const filterSegs = source === "col" ? describeFilter(filter, node ? nodeId : undefined) : [];
+  // With a breakdown, describeFilter's primary dimension (e.g. "Family: Bovidae") is
+  // hidden — the BreakdownList below shows it instead — leaving just the exclude
+  // clause (e.g. "(excluding Bos, Bubalus, ...)") and any CoL note. Rendered AFTER
+  // the breakdown list rather than before, so "excluding X, Y, Z" reads as a
+  // qualifier on "Family: Bovidae (217)" instead of floating above it with nothing
+  // to attach to.
+  const filterSegs = source === "col" ? describeFilter(filter, node ? nodeId : undefined, Boolean(effectiveBreakdown?.length)) : [];
 
   return (
     <>
@@ -1044,7 +1041,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
             </>
           ) : (
             <>
-              {filterSegs.length > 0 && (
+              {!effectiveBreakdown?.length && filterSegs.length > 0 && (
                 <p>{renderFilterSegs(filterSegs)}</p>
               )}
               {liveBreakdownLoading && (
@@ -1074,6 +1071,9 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
                   />
                 ) : null;
               })() : null}
+              {effectiveBreakdown?.length && filterSegs.length > 0 && (
+                <p className="mt-1">{renderFilterSegs(filterSegs)}</p>
+              )}
               <p className="mt-1.5 text-zinc-300">
                 Source:{" "}
                 <a href={COL_RELEASE_URL} target="_blank" rel="noopener noreferrer" className="text-blue-300 hover:text-blue-200 underline">
@@ -3052,6 +3052,16 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                           // their children navigate as if parented by their real taxon
                           // (mammals, reptiles, ...) instead — see SSC_SECTIONS.
                           if (SSC_SECTIONS.some((s) => s.nodeId === aId)) break;
+                          // The true tree root — reached without ever hitting the view
+                          // root above for a node whose root is one of "invertebrates"/
+                          // "plantae"/"fungi"'s CSV-group children (e.g. "mushrooms",
+                          // "insects"): their real PARENT_INDEX parent is "all" directly,
+                          // never the virtual view-root grouping (see
+                          // VIEW_ROOT_OVERRIDES in taxonomy-utils.ts) — so `selectedTaxa.
+                          // has(aId)` above never matches and this loop would otherwise
+                          // keep going all the way to "all", rendering a spurious
+                          // "All Species" breadcrumb row.
+                          if (aId === "all") break;
                           intermediateAncestorIds.push(aId);
                         }
 
