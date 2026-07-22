@@ -26,6 +26,7 @@ const ASSESSOR_PRIORITY = [
   "life span",
   "lifespan",
   "age at maturity",
+  "age at first reproduction",
   "sexual maturity",
   "body mass",
   "body length",
@@ -35,6 +36,10 @@ const ASSESSOR_PRIORITY = [
   "litter size",
   "clutch size",
   "brood size",
+  "litters per year",
+  "clutches per year",
+  "inter-birth interval",
+  "gestation",
   "habitat",
   "trophic guild",
   "diet",
@@ -148,8 +153,16 @@ export async function GET(request: NextRequest) {
   // pageId is validated as a positive integer above, so it's safe to inline
   // directly into the Cypher query string (the EOL cypher service only takes
   // a single raw `query` CGI param — no parameterized-query support).
+  // Exclude pred.type = "association" (e.g. "eat", "prey on", "pollinates" —
+  // one record per interacting species). Well-studied predators/prey can have
+  // thousands of these, and since Cypher applies LIMIT to an unordered result
+  // set, they'd otherwise flood the window and crowd out the handful of
+  // actual attribute records (habitat, body mass, age at maturity, ...) we
+  // want. This is a WHERE, not a post-fetch filter, precisely so the LIMIT
+  // is spent on useful rows.
   const query = `
     MATCH (p:Page {page_id: ${pageId}})-[:trait|inferred_trait]->(t:Trait)-[:predicate]->(pred:Term)
+    WHERE pred.type <> "association"
     OPTIONAL MATCH (t)-[:object_term]->(obj:Term)
     OPTIONAL MATCH (t)-[:normal_units_term]->(units:Term)
     RETURN pred.name AS predicate, pred.definition AS predicateDefinition,
