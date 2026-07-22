@@ -16,16 +16,18 @@ interface EolCommonName {
   lang: string;
 }
 
-interface EolTrait {
+interface EolTraitGroup {
   predicate: string;
+  definition: string | null;
   value: string;
+  recordCount: number;
   source: string | null;
-  traitId: string | null;
+  priority: boolean;
 }
 
 interface EolTraitsData {
   found: boolean;
-  traits?: EolTrait[];
+  traits?: EolTraitGroup[];
   dataUrl?: string;
 }
 
@@ -129,23 +131,57 @@ function CommonNamesList({ names, englishCount, languageCount }: { names: EolCom
   );
 }
 
-const TRAITS_SHOWN = 12;
+const TRAIT_GROUPS_SHOWN = 15;
 
-function TraitsList({ traits, dataUrl }: { traits: EolTrait[]; dataUrl: string }) {
-  const shown = traits.slice(0, TRAITS_SHOWN);
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+function TraitsTable({ traits, dataUrl }: { traits: EolTraitGroup[]; dataUrl: string }) {
+  const shown = traits.slice(0, TRAIT_GROUPS_SHOWN);
   const remaining = traits.length - shown.length;
+  const anyPriority = shown.some((t) => t.priority);
   return (
     <div>
-      <div className="text-xs uppercase tracking-wider text-zinc-400 mb-1.5">Traits ({traits.length})</div>
-      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
-        {shown.map((t, i) => (
-          <li key={i} className="flex items-baseline justify-between gap-2 text-sm">
-            <span className="text-zinc-500 dark:text-zinc-400 truncate">{t.predicate}</span>
-            <span className="text-zinc-700 dark:text-zinc-300 text-right">{t.value}</span>
-          </li>
-        ))}
-      </ul>
-      <a href={dataUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 dark:text-blue-400 hover:underline mt-1 inline-block">
+      <div className="text-xs uppercase tracking-wider text-zinc-400 mb-1.5">
+        Traits ({traits.length})
+        {anyPriority && <span className="normal-case tracking-normal"> · <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 align-middle" aria-hidden /> most relevant to assessment</span>}
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-[10px] uppercase tracking-wide text-zinc-400">
+              <th className="text-left font-medium pb-1 pr-3">Trait</th>
+              <th className="text-left font-medium pb-1 pr-3">Value</th>
+              <th className="text-right font-medium pb-1">Source</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((t, i) => {
+              const tooltip = [t.definition, t.recordCount > 1 ? `${t.recordCount} records` : null].filter(Boolean).join(" — ");
+              return (
+                <tr key={i} className="border-t border-zinc-100 dark:border-zinc-800">
+                  <td className="py-1 pr-3 align-top whitespace-nowrap">
+                    <span className="text-zinc-600 dark:text-zinc-300" title={tooltip || undefined}>
+                      {t.priority && <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 align-middle" aria-hidden />}
+                      {capitalize(t.predicate)}
+                    </span>
+                  </td>
+                  <td className="py-1 pr-3 align-top text-zinc-700 dark:text-zinc-300 max-w-[320px]">
+                    <span className="block truncate" title={t.value}>{t.value}</span>
+                  </td>
+                  <td className="py-1 align-top text-right">
+                    {t.source && (
+                      <a href={t.source} target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400" title={`Source: ${t.source}`}>
+                        ↗
+                      </a>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <a href={dataUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 dark:text-blue-400 hover:underline mt-1.5 inline-block">
         {remaining > 0 ? `+${remaining} more trait${remaining === 1 ? "" : "s"} on EOL ↗` : "View trait data on EOL ↗"}
       </a>
     </div>
@@ -215,14 +251,15 @@ export default function EolSummary({ scientificName }: { scientificName: string 
         )}
       </div>
 
+      {/* Traits (TraitBank) — surfaced above common names since this is the
+          data an assessor is most likely to be looking for. */}
+      {traitsData?.found && traitsData.traits && traitsData.dataUrl && (
+        <TraitsTable traits={traitsData.traits} dataUrl={traitsData.dataUrl} />
+      )}
+
       {/* Common names — paginated, English first, with language labels */}
       {commonNames.length > 0 && (
         <CommonNamesList names={commonNames} englishCount={englishNameCount} languageCount={languageCount} />
-      )}
-
-      {/* Traits (TraitBank) */}
-      {traitsData?.found && traitsData.traits && traitsData.dataUrl && (
-        <TraitsList traits={traitsData.traits} dataUrl={traitsData.dataUrl} />
       )}
 
       {/* Image gallery */}
