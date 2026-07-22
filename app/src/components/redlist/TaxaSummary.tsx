@@ -2095,7 +2095,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         }}
       >
         <td className={`${stickyClasses} ${taxonCellPad} whitespace-nowrap w-0 bg-white dark:bg-zinc-900`}>
-          <div className="flex items-center gap-2" style={{ paddingLeft: `${depth * 12}px` }}>
+          {/* 20px/level, not 12 — each level's icon also shrinks a few px
+              (e.g. 22 → 18 → 14), which eats into the padding and nets a
+              visibly-too-subtle ~8px shift at 12px/level (confirmed by
+              measuring rendered positions: a single indent step was easy to
+              miss). 20px/level keeps the net shift clearly perceptible even
+              after that dilution. Kept in sync with the same constant in
+              renderSubgroupRow/renderCollapsedSubgroupRow below. */}
+          <div className="flex items-center gap-2" style={{ paddingLeft: `${depth * 20}px` }}>
             {/* The view root row (depth 0) is the SAME conceptual taxon row as
                 renderRow's/renderTaxonWithSubgroups' top-level display (e.g.
                 "Mammals") — match their icon size (22) and text styling
@@ -2188,7 +2195,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               breaking the indentation right at the "current" row (e.g. Muridae
               indented correctly as an ancestor, then its own selected child
               Gerbillus resetting to 0 instead of continuing one step further). */}
-          <div className="flex items-center gap-2" style={{ paddingLeft: `${depth * 12}px` }}>
+          <div className="flex items-center gap-2" style={{ paddingLeft: `${depth * 20}px` }}>
             {expandToggle(isExpandable(sg.id), expandedTaxa.has(sg.id))}
             <TaxaIcon taxonId={sg.id} size={18} className="flex-shrink-0" style={{ color: taxon.color }} />
             <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{sg.name}</span>
@@ -2282,7 +2289,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           }}
         >
           <td className={`${stickyClasses} ${taxonCellPad} whitespace-nowrap w-0 ${isSgSelected ? "bg-violet-50 dark:bg-violet-900/20" : "bg-white dark:bg-zinc-900"}`}>
-            <div className="flex items-center gap-2" style={{ paddingLeft: `${(depth - 1) * 12}px` }}>
+            <div className="flex items-center gap-2" style={{ paddingLeft: `${(depth - 1) * 20}px` }}>
               {expandToggle(sgHasChildren, isSgExpanded)}
               <TaxaIcon taxonId={sg.id} size={depth === 1 ? 16 : 14} className="flex-shrink-0" style={{ color: parentColor, opacity: isSgSelected ? 1 : 0.6 }} />
               <span className={`text-sm ${isSgSelected ? "font-medium text-violet-700 dark:text-violet-300" : "text-zinc-700 dark:text-zinc-300"}`}>{sg.name}</span>
