@@ -117,7 +117,14 @@ jobs:
           # Explicit allowlist ONLY — see the safety notes above. Never `git add
           # -A`/`.` here: data/ holds ~400MB of raw per-species data that must
           # never touch git, only these small, already-committed aggregate files.
-          git add latest-sync.txt data/taxa-summary.json data/node-children-summaries.json data/country-stats.json
+          # Keep this list in exact sync with app/.gitignore's `!/data/...`
+          # exceptions (the 7 dual git-tracked-and-R2-published data/ files) plus
+          # the 2 git-tracked src/config/ pipeline outputs — data/node-children-
+          # summaries.json (referenced here until now) was split into the two
+          # table1a-/ssc-group- files below a while back and this list was never
+          # updated, so this step would have failed with "pathspec did not match
+          # any files" on the next run to actually reach it.
+          git add latest-sync.txt data/taxa-summary.json data/table1a-children-summaries.json data/ssc-group-children-summaries.json data/country-stats.json data/vernacular-names.json data/col-split-candidates.parquet data/col-to-assessed.parquet
           git add src/config/col-taxon-ids.json src/config/col-release.json
 
           if git diff --cached --quiet; then
