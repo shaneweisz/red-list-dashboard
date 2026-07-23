@@ -182,6 +182,17 @@ function dateToNumeric(eventDate?: string | null, year?: number | null): number 
   return null;
 }
 
+// Comparable yyyy-mm-dd key for the date-range filter — full eventDate when
+// available, otherwise Jan 1 of `year` (same fallback the split-view before/after
+// partition uses). Records with neither can't be placed in a date window, so they
+// have no key and are excluded whenever the date-range filter is active.
+function occurrenceDateKey(o: OccurrenceFeature): string | null {
+  const e = o.properties.eventDate;
+  if (e && e.length >= 10) return e.slice(0, 10);
+  if (o.properties.year != null) return `${String(o.properties.year).padStart(4, "0")}-01-01`;
+  return null;
+}
+
 // Fixed absolute color scale so the same year always maps to the same color
 // across all species. Simple continuous hue gradient: orange-red(20) → green(130).
 // Anchored so that the last ~20 years span the full visible range.
@@ -233,6 +244,10 @@ const GBIF_BASIS_OF_RECORD: Record<string, string> = {
 
 // How many additional records to fetch per "Load more" click on a Basis of Record row.
 const BASIS_OF_RECORD_LOAD_MORE_BATCH = 200;
+
+// How many additional records to fetch per click of the general "Load N more" button
+// next to the "Loaded X of Y" badge (all basis-of-record categories together).
+const OVERALL_LOAD_MORE_BATCH = 200;
 
 interface RecordTypeBreakdown {
   humanObservation: number;
@@ -339,6 +354,12 @@ export default function OccurrenceMapRow({
   // Custom max-uncertainty entry, shown instead of the preset <select> when active
   const [customUncertaintyMode, setCustomUncertaintyMode] = useState(false);
   const [customUncertaintyInput, setCustomUncertaintyInput] = useState("");
+  // Date-range filter — client-side, narrows the *already-loaded* sample to an
+  // eventDate window. null means "no restriction on that end" (mirrors
+  // maxUncertainty's null-means-off pattern); both start null so the slider's
+  // handles sit at the full loaded range until the user actually drags one.
+  const [dateRangeFrom, setDateRangeFrom] = useState<string | null>(null);
+  const [dateRangeTo, setDateRangeTo] = useState<string | null>(null);
   // Coordinate-cleaning checks (zero/equal coords, GBIF HQ, duplicates — see
   // src/lib/coordinate-cleaning.ts), individually toggleable. Default all off —
   // opt-in, since these are plausibility heuristics with real false-positive risk
@@ -400,6 +421,10 @@ export default function OccurrenceMapRow({
   const [cleaningFilterOpen, setCleaningFilterOpen] = useState(false);
   const cleaningFilterRef = useRef<HTMLDivElement>(null);
 
+  // Date-range filter dropdown state
+  const [dateRangeOpen, setDateRangeOpen] = useState(false);
+  const dateRangeRef = useRef<HTMLDivElement>(null);
+
   // Overlays dropdown state (Protected areas / POWO native range / IUCN native range)
   const [overlaysOpen, setOverlaysOpen] = useState(false);
   const overlaysRef = useRef<HTMLDivElement>(null);
@@ -436,6 +461,18 @@ export default function OccurrenceMapRow({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [cleaningFilterOpen]);
+
+  // Close date-range popover on outside click
+  useEffect(() => {
+    if (!dateRangeOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (dateRangeRef.current && !dateRangeRef.current.contains(e.target as Node)) {
+        setDateRangeOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [dateRangeOpen]);
 
   // Close overlays popover on outside click
   useEffect(() => {
@@ -476,6 +513,13 @@ export default function OccurrenceMapRow({
   const [totalOccurrences, setTotalOccurrences] = useState<number | null>(null);
   // Bounding box from API: [minLon, minLat, maxLon, maxLat]
   const [bbox, setBbox] = useState<[number, number, number, number] | null>(null);
+  // How far into GBIF's own (unfiltered, all-basis-of-record) result ordering we've
+  // paged — GBIF has no date-sort param (see api/occurrences/route.ts), but its default
+  // order is newest-year-first, so paging further with this offset surfaces the next
+  // oldest batch. Kept separate from occurrences.length, which also grows via
+  // loadMoreForCategory's per-category fetches and would desync from what GBIF's
+  // unfiltered ordering actually considers "next" if reused here.
+  const [generalOffset, setGeneralOffset] = useState(0);
 
   // Fetch occurrences (re-fetches when sample size changes)
   useEffect(() => {
@@ -494,6 +538,7 @@ export default function OccurrenceMapRow({
         setOccurrences(features);
         setTotalOccurrences(data.metadata?.total ?? null);
         setBbox(data.metadata?.bbox ?? null);
+        setGeneralOffset(features.length);
       })
       .catch(console.error)
       .finally(() => setLoadingOccurrences(false));
@@ -502,6 +547,10 @@ export default function OccurrenceMapRow({
   // Basis-of-record category currently fetching more records, if any (drives the
   // per-row "Load more" spinner/disabled state in the dropdown).
   const [loadingMoreCategory, setLoadingMoreCategory] = useState<string | null>(null);
+  // True while the general "Load N more" button (next to the "Loaded X of Y" badge)
+  // is fetching the next unfiltered batch — separate from loadingMoreCategory since
+  // this isn't scoped to one basis-of-record category.
+  const [loadingMoreOverall, setLoadingMoreOverall] = useState(false);
 
   // Load another batch of just one basis-of-record category (e.g. "load 200 more
   // Preserved specimen records"), independent of the overall sample-size selector —
@@ -536,6 +585,37 @@ export default function OccurrenceMapRow({
       .catch(console.error)
       .finally(() => setLoadingMoreCategory(null));
   }, [occurrences, speciesKey, countryCode]);
+
+  // Load the next batch across all basis-of-record categories together — the general
+  // "Load N more" button next to the "Loaded X of Y" badge. Paginates via generalOffset
+  // rather than occurrences.length so per-category loads (loadMoreForCategory) don't
+  // desync it from GBIF's own unfiltered offset; de-dupes the merge by gbifID for the
+  // same reason (a record already pulled in by a per-category load may reappear here).
+  const loadMoreOverall = useCallback(() => {
+    setLoadingMoreOverall(true);
+    const params = new URLSearchParams({
+      speciesKey: speciesKey.toString(),
+      limit: OVERALL_LOAD_MORE_BATCH.toString(),
+      offset: generalOffset.toString(),
+    });
+    if (countryCode) {
+      params.set("country", countryCode);
+    }
+    fetch(`/api/occurrences?${params}`)
+      .then((res) => res.json())
+      .then((data) => {
+        const newFeatures: OccurrenceFeature[] = data.features || [];
+        setOccurrences((prev) => {
+          const seen = new Set(prev.map((o) => o.properties.gbifID));
+          const toAdd = newFeatures.filter((f) => !seen.has(f.properties.gbifID));
+          return [...prev, ...toAdd];
+        });
+        setGeneralOffset((prev) => prev + newFeatures.length);
+        setTotalOccurrences(data.metadata?.total ?? null);
+      })
+      .catch(console.error)
+      .finally(() => setLoadingMoreOverall(false));
+  }, [generalOffset, speciesKey, countryCode]);
 
   // Fetch breakdown data
   useEffect(() => {
@@ -643,8 +723,11 @@ export default function OccurrenceMapRow({
   const powoRangeGeoJson = useMemo(() => buildRangeGeoJson(nativeCountriesWcvp), [buildRangeGeoJson, nativeCountriesWcvp]);
   const iucnRangeGeoJson = useMemo(() => buildRangeGeoJson(nativeCountriesRedList), [buildRangeGeoJson, nativeCountriesRedList]);
 
-  // Multi-stage filtering pipeline
-  const filteredOccurrences = useMemo(() => {
+  // Multi-stage filtering pipeline, minus the date-range filter — kept as a separate
+  // memo so the date-range slider's own track (sliderMinDate/sliderMaxDate below)
+  // reflects the full span these other filters allow through, not a span already
+  // narrowed by wherever the slider's own handles currently sit.
+  const dateFilterableOccurrences = useMemo(() => {
     let result = occurrences;
     // 1. Basis of record checkboxes
     result = result.filter((o) => checkedTypes[classifyOccurrence(o) as keyof typeof checkedTypes]);
@@ -664,6 +747,18 @@ export default function OccurrenceMapRow({
     return result;
   }, [occurrences, checkedTypes, maxUncertainty, appliedChecks, nativeRangeOnly, effectiveNativeCountries]);
 
+  // 5. Date range — applied last, on top of every filter above.
+  const filteredOccurrences = useMemo(() => {
+    if (dateRangeFrom == null && dateRangeTo == null) return dateFilterableOccurrences;
+    return dateFilterableOccurrences.filter((o) => {
+      const d = occurrenceDateKey(o);
+      if (!d) return false;
+      if (dateRangeFrom != null && d < dateRangeFrom) return false;
+      if (dateRangeTo != null && d > dateRangeTo) return false;
+      return true;
+    });
+  }, [dateFilterableOccurrences, dateRangeFrom, dateRangeTo]);
+
   // Of the loaded occurrences that pass every other active filter, how many are
   // outside the species' native range — i.e. how many the "Native range only"
   // checkbox would additionally hide if switched on right now.
@@ -677,10 +772,16 @@ export default function OccurrenceMapRow({
         if (u == null || u > maxUncertainty) continue;
       }
       if (o.properties.qualityFlags?.some((f) => appliedChecks[f as QualityFlag])) continue;
+      if (dateRangeFrom != null || dateRangeTo != null) {
+        const d = occurrenceDateKey(o);
+        if (!d) continue;
+        if (dateRangeFrom != null && d < dateRangeFrom) continue;
+        if (dateRangeTo != null && d > dateRangeTo) continue;
+      }
       if (isOutsideNativeRange(o.properties.countryCode, effectiveNativeCountries)) count++;
     }
     return count;
-  }, [occurrences, checkedTypes, maxUncertainty, appliedChecks, effectiveNativeCountries]);
+  }, [occurrences, checkedTypes, maxUncertainty, appliedChecks, effectiveNativeCountries, dateRangeFrom, dateRangeTo]);
 
   // Per-check counts among the currently loaded occurrences (independent of whether
   // that check is applied), for the coordinate-cleaning dropdown
@@ -697,7 +798,7 @@ export default function OccurrenceMapRow({
 
   // For each check: of the loaded records it flags, how many would actually appear on
   // the map if just this one check were switched off (i.e. they still pass every other
-  // active filter — basis of record, uncertainty, year range, native range, and every
+  // active filter — basis of record, uncertainty, date range, native range, and every
   // other applied coordinate-cleaning check). Mirrors basisLoadedShownCounts's "shown
   // of loaded" semantics so both dropdowns read the same way.
   const flagShownCounts = useMemo(() => {
@@ -709,6 +810,12 @@ export default function OccurrenceMapRow({
         if (u == null || u > maxUncertainty) continue;
       }
       if (nativeRangeOnly && isOutsideNativeRange(o.properties.countryCode, effectiveNativeCountries)) continue;
+      if (dateRangeFrom != null || dateRangeTo != null) {
+        const d = occurrenceDateKey(o);
+        if (!d) continue;
+        if (dateRangeFrom != null && d < dateRangeFrom) continue;
+        if (dateRangeTo != null && d > dateRangeTo) continue;
+      }
       const flags = o.properties.qualityFlags ?? [];
       for (const f of flags) {
         const key = f as QualityFlag;
@@ -717,7 +824,7 @@ export default function OccurrenceMapRow({
       }
     }
     return counts;
-  }, [occurrences, checkedTypes, maxUncertainty, appliedChecks, nativeRangeOnly, effectiveNativeCountries]);
+  }, [occurrences, checkedTypes, maxUncertainty, appliedChecks, nativeRangeOnly, effectiveNativeCountries, dateRangeFrom, dateRangeTo]);
 
   const flagDefs = useMemo(
     () =>
@@ -736,16 +843,19 @@ export default function OccurrenceMapRow({
     setAppliedChecks((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  // Date range for the split view slider
+  // Full date span of what's currently loaded and passing every filter except the
+  // date-range filter itself — shared as the track bounds for both the split-view
+  // before/after slider and the date-range filter slider below, so neither slider's
+  // own bounds shrink as the user drags it.
   const { sliderMinDate, sliderMaxDate } = useMemo(() => {
-    const dates = filteredOccurrences
+    const dates = dateFilterableOccurrences
       .map((o) => o.properties.eventDate)
       .filter((d): d is string => d != null && d.length >= 10)
       .map((d) => d.slice(0, 10));
     if (dates.length === 0) return { sliderMinDate: splitDate, sliderMaxDate: splitDate };
     dates.sort();
     return { sliderMinDate: dates[0], sliderMaxDate: dates[dates.length - 1] };
-  }, [filteredOccurrences, splitDate]);
+  }, [dateFilterableOccurrences, splitDate]);
 
   // Split view: partition occurrences by exact assessment date
   const { preAssessmentOccs, postAssessmentOccs } = useMemo(() => {
@@ -810,7 +920,7 @@ export default function OccurrenceMapRow({
 
   // Per-category counts among the currently loaded occurrences: how many are in this
   // basis-of-record category at all ("loaded"), and of those, how many also survive
-  // every other active filter — uncertainty, year range, coordinate cleaning, native
+  // every other active filter — uncertainty, date range, coordinate cleaning, native
   // range — but not the basis-of-record checkboxes themselves ("shown"). Distinct from
   // pillDefs' counts, which are true GBIF-wide totals from a separate server aggregation.
   const basisLoadedShownCounts = useMemo(() => {
@@ -825,10 +935,16 @@ export default function OccurrenceMapRow({
       }
       if (o.properties.qualityFlags?.some((f) => appliedChecks[f as QualityFlag])) continue;
       if (nativeRangeOnly && isOutsideNativeRange(o.properties.countryCode, effectiveNativeCountries)) continue;
+      if (dateRangeFrom != null || dateRangeTo != null) {
+        const d = occurrenceDateKey(o);
+        if (!d) continue;
+        if (dateRangeFrom != null && d < dateRangeFrom) continue;
+        if (dateRangeTo != null && d > dateRangeTo) continue;
+      }
       entry.shown++;
     }
     return counts;
-  }, [occurrences, maxUncertainty, appliedChecks, nativeRangeOnly, effectiveNativeCountries]);
+  }, [occurrences, maxUncertainty, appliedChecks, nativeRangeOnly, effectiveNativeCountries, dateRangeFrom, dateRangeTo]);
 
   // Build GeoJSON FeatureCollection with computed styling properties for the circle layer
   const buildStyledFeatureCollection = useCallback((
@@ -1239,6 +1355,20 @@ export default function OccurrenceMapRow({
               {filteredOccurrences.length < occurrences.length && (
                 <> Showing <strong>{filteredOccurrences.length.toLocaleString()}</strong> after filters.</>
               )}
+              {!isFullSample && (
+                <>
+                  {" "}
+                  <button
+                    onClick={loadMoreOverall}
+                    disabled={loadingMoreOverall}
+                    className="underline decoration-dotted hover:decoration-solid disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {loadingMoreOverall
+                      ? "Loading…"
+                      : `Load ${Math.min(OVERALL_LOAD_MORE_BATCH, totalOccurrences - occurrences.length).toLocaleString()} more`}
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -1620,6 +1750,105 @@ export default function OccurrenceMapRow({
                         </select>
                       )}
                     </div>
+                  </div>
+                )}
+              </div>
+              {/* Date range — client-side slider filtering the currently loaded sample
+                  to an eventDate window. The track spans whatever the filters above
+                  allow through (dateFilterableOccurrences), not the species' full GBIF
+                  history — the "Load N more" button next to the map's "Loaded X of Y"
+                  badge is what extends that span. GBIF's search API has no server-side
+                  date sort/filter of its own (see api/occurrences/route.ts), so this
+                  operates entirely on what's already been paged in. */}
+              <div className="relative" ref={dateRangeRef}>
+                <button
+                  onClick={() => setDateRangeOpen(!dateRangeOpen)}
+                  className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border text-xs transition-colors ${
+                    dateRangeOpen
+                      ? "bg-zinc-100 dark:bg-zinc-800 border-zinc-400 dark:border-zinc-500"
+                      : "border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                  } text-zinc-700 dark:text-zinc-300`}
+                  title="Filter the loaded sample to an observation date range"
+                >
+                  <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <rect x="3" y="4" width="18" height="17" rx="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 9h18M8 2v4M16 2v4" />
+                  </svg>
+                  Date range
+                  <span className="text-[10px] text-zinc-400 tabular-nums">
+                    {dateRangeFrom == null && dateRangeTo == null
+                      ? "All dates"
+                      : `${dateRangeFrom ?? sliderMinDate} – ${dateRangeTo ?? sliderMaxDate}`}
+                  </span>
+                  <svg className={`w-3 h-3 text-zinc-400 transition-transform ${dateRangeOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {dateRangeOpen && (
+                  <div className="absolute left-0 top-full mt-1 z-50 w-72 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg p-3">
+                    {sliderMinDate === sliderMaxDate ? (
+                      <p className="text-xs text-zinc-400 dark:text-zinc-500">Not enough dated records loaded to filter by range.</p>
+                    ) : (
+                      (() => {
+                        const totalDays = Math.max(1, Math.round((new Date(sliderMaxDate).getTime() - new Date(sliderMinDate).getTime()) / 86400000));
+                        const fromDays = dateRangeFrom != null
+                          ? Math.round((new Date(dateRangeFrom).getTime() - new Date(sliderMinDate).getTime()) / 86400000)
+                          : 0;
+                        const toDays = dateRangeTo != null
+                          ? Math.round((new Date(dateRangeTo).getTime() - new Date(sliderMinDate).getTime()) / 86400000)
+                          : totalDays;
+                        const dayOffsetToDate = (days: number) => {
+                          const d = new Date(sliderMinDate);
+                          d.setDate(d.getDate() + days);
+                          return d.toISOString().slice(0, 10);
+                        };
+                        return (
+                          <div className="flex flex-col gap-2">
+                            <div className="flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-300">
+                              <span className="font-medium">{dateRangeFrom ?? sliderMinDate}</span>
+                              <span className="text-zinc-400">to</span>
+                              <span className="font-medium">{dateRangeTo ?? sliderMaxDate}</span>
+                            </div>
+                            <label className="flex items-center gap-2 text-[10px] text-zinc-400">
+                              From
+                              <input
+                                type="range"
+                                min={0}
+                                max={totalDays}
+                                value={Math.min(fromDays, toDays)}
+                                onChange={(e) => {
+                                  const days = Math.min(parseInt(e.target.value, 10), toDays);
+                                  setDateRangeFrom(days <= 0 ? null : dayOffsetToDate(days));
+                                }}
+                                className="flex-1 h-2.5 sm:h-1.5 accent-blue-500"
+                              />
+                            </label>
+                            <label className="flex items-center gap-2 text-[10px] text-zinc-400">
+                              To
+                              <input
+                                type="range"
+                                min={0}
+                                max={totalDays}
+                                value={Math.max(toDays, fromDays)}
+                                onChange={(e) => {
+                                  const days = Math.max(parseInt(e.target.value, 10), fromDays);
+                                  setDateRangeTo(days >= totalDays ? null : dayOffsetToDate(days));
+                                }}
+                                className="flex-1 h-2.5 sm:h-1.5 accent-blue-500"
+                              />
+                            </label>
+                            {(dateRangeFrom != null || dateRangeTo != null) && (
+                              <button
+                                onClick={() => { setDateRangeFrom(null); setDateRangeTo(null); }}
+                                className="self-start text-[10px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:underline"
+                              >
+                                Reset to all dates
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()
+                    )}
                   </div>
                 )}
               </div>
