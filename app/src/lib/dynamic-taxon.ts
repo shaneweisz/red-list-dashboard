@@ -3,10 +3,11 @@
  * chain grafted onto one of the static default-view roots, e.g.
  * "mammals~order:rodentia~family:muridae". `~` never appears in a real static
  * node id (taxonomy-tree.ts ids are all lowercase-hyphen), so isDynamicNodeId is
- * unambiguous and never collides with NODE_INDEX or the unrelated bare-token
- * arbitrary-rank search feature (species-duckdb.ts's resolveWhere/suggestTaxa,
- * used by the search bar to jump straight to e.g. "turdidae" as a root
- * selection — untouched by this module).
+ * unambiguous and never collides with NODE_INDEX or the bare-token arbitrary-rank
+ * search feature (species-duckdb.ts's resolveWhere, used as a fallback when a
+ * search-bar taxon suggestion can't be resolved to a real node — see
+ * suggestTaxa/resolveTaxonSuggestionNode, which DOES build ids via this module's
+ * buildDynamicNodeId/nextDynamicRank when a match resolves to one).
  *
  * matchesFilter/filterToSql already support multiple simultaneous positive
  * dimensions ANDed together and already coalesce null order_name/family to ""

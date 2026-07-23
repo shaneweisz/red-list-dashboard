@@ -15,7 +15,7 @@ import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
 import { NODE_INDEX, getCsvGroupsForNode } from "@/lib/taxonomy-utils";
 import { canonicalizeTaxonId, mapTaxonId } from "@/lib/data/taxonomy-constants";
 import { getTaxaSummary } from "@/lib/data/species-store";
-import { isDynamicNodeId, dynamicNodeFilter } from "@/lib/dynamic-taxon";
+import { isDynamicNodeId, dynamicNodeFilter, buildDynamicNodeId, nextDynamicRank } from "@/lib/dynamic-taxon";
 import { filterToSql } from "@/lib/taxonomy-sql";
 
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -657,8 +657,51 @@ export interface TaxonSuggestion {
   name: string;
   /** Rank the query matched at. */
   rank: "class" | "order" | "family";
-  /** Lowercased token to pass as ?taxa= (what resolveWhere/querySpecies match on). */
+  /** Lowercased token to pass as ?taxa= (what resolveWhere/querySpecies match on) —
+   * kept as the fallback when nodeId can't be resolved. */
   taxon: string;
+  /** A curated static node id (e.g. "felidae") or a synthetic dynamic drilldown id
+   * (e.g. "reptiles~order:squamata") this rank+value resolves to, or null if neither
+   * — in which case the caller falls back to the old bare `taxon` browse. Resolving
+   * to a real node means the caller can select it as a sub-group (selectedSubgroups)
+   * instead of an arbitrary ?taxa= token, so TaxaSummary's ancestor-breadcrumb rows
+   * and the per-taxon stat card both pick it up for free (see resolveTaxonSuggestionNode). */
+  nodeId: string | null;
+}
+
+// rank+value → a curated static node whose filter is EXACTLY that one class/order/family
+// dimension (a single value, no other filters/exclusions) — the same node a user reaches
+// by clicking through the tree, so a search jump to it gets full ancestor breadcrumbs and
+// curated labels for free. Mirrors GROUP_TO_LEAF_NODE's single-dimension-match pattern above.
+const RANK_VALUE_TO_NODE: Map<string, string> = (() => {
+  const m = new Map<string, string>();
+  const DIMS = ["classNames", "orderNames", "families"] as const;
+  for (const [id, node] of NODE_INDEX) {
+    const f = node.filter;
+    const dims = DIMS.filter((k) => f[k]?.length);
+    if (dims.length !== 1 || f[dims[0]]!.length !== 1) continue;
+    if (f.excludeClasses || f.excludeOrders || f.excludeFamilies || f.genera || f.excludeGenera ||
+        f.speciesNames || f.excludeSpeciesNames || f.extraSpeciesNames) continue;
+    const rank = dims[0] === "classNames" ? "class" : dims[0] === "orderNames" ? "order" : "family";
+    const key = `${rank}:${f[dims[0]]![0]}`;
+    if (!m.has(key)) m.set(key, id);
+  }
+  return m;
+})();
+
+// Resolves a suggestTaxa match to a real node: a curated static node if one matches
+// exactly, else a single-segment dynamic id built against the CSV group's leaf display
+// node — but only when this rank is genuinely the FIRST live-enumerable level for that
+// root (nextDynamicRank on the bare root), so the id is well-formed for later expansion.
+// A "family" match under a root that drills order-first (the common case) would produce
+// a malformed skip-ahead id if built here, so it's left null and falls back to the bare
+// ?taxa= browse instead — no ancestor breadcrumb for that one, but no broken node either.
+function resolveTaxonSuggestionNode(rank: TaxonSuggestion["rank"], value: string, taxonGroup: string): string | null {
+  const staticHit = RANK_VALUE_TO_NODE.get(`${rank}:${value}`);
+  if (staticHit) return staticHit;
+  const leafRoot = GROUP_TO_LEAF_NODE.get(taxonGroup);
+  if (!leafRoot || nextDynamicRank(leafRoot) !== rank) return null;
+  return buildDynamicNodeId(leafRoot, [{ rank, value }]);
 }
 
 // Recognize a higher-rank taxon (class / order / family) the user is typing, so the
@@ -680,7 +723,7 @@ export async function suggestTaxa(query: string, limit = 3): Promise<TaxonSugges
     { col: "class_name", rank: "class" },
   ];
   const part = (src: string, col: string, rank: string) =>
-    `SELECT DISTINCT ${col} AS name, '${rank}' AS rank FROM '${parquetUri(src)}'
+    `SELECT DISTINCT ${col} AS name, '${rank}' AS rank, taxon_group FROM '${parquetUri(src)}'
      WHERE ${col} IS NOT NULL AND ${col} LIKE $q || '%'`;
   const parts = RANKS.flatMap(({ col, rank }) =>
     [part("assessed.parquet", col, rank), part("unassessed.parquet", col, rank)]);
@@ -688,17 +731,20 @@ export async function suggestTaxa(query: string, limit = 3): Promise<TaxonSugges
   // Exact match first, then shortest (closest) name, then alphabetical. DISTINCT in the
   // sub-selects collapses per-file dupes; the outer query dedupes across ranks by name.
   const sql = `
-    SELECT name, any_value(rank) AS rank FROM (${parts.join(" UNION ALL ")})
+    SELECT name, any_value(rank) AS rank, any_value(taxon_group) AS taxon_group
+    FROM (${parts.join(" UNION ALL ")})
     GROUP BY name
     ORDER BY (name = $q) DESC, length(name), name
     LIMIT ${lim}`;
   const rows = (await conn.runAndReadAll(sql, { q })).getRowObjects();
   return rows.map((r) => {
     const name = String(r.name);
+    const rank = String(r.rank) as TaxonSuggestion["rank"];
     return {
       name: name.charAt(0).toUpperCase() + name.slice(1),
-      rank: String(r.rank) as TaxonSuggestion["rank"],
+      rank,
       taxon: name,
+      nodeId: resolveTaxonSuggestionNode(rank, name, String(r.taxon_group)),
     };
   });
 }
