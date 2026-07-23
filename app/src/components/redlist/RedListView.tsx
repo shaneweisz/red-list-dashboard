@@ -310,13 +310,14 @@ function GbifInfoTooltip() {
 
 interface RedListViewProps {
   viewMode?: "reassessments" | "new-assessments";
+  onViewModeChange?: (mode: "reassessments" | "new-assessments") => void;
   sharedTaxa?: Set<string>;
   sharedSubgroups?: Set<string>;
   onTaxaChange?: (taxa: Set<string>) => void;
   onSubgroupsChange?: (subgroups: Set<string>) => void;
 }
 
-export default function RedListView({ viewMode = "reassessments", sharedTaxa, sharedSubgroups, onTaxaChange, onSubgroupsChange }: RedListViewProps = {}) {
+export default function RedListView({ viewMode = "reassessments", onViewModeChange, sharedTaxa, sharedSubgroups, onTaxaChange, onSubgroupsChange }: RedListViewProps = {}) {
   const isNewAssessments = viewMode === "new-assessments";
 
   // The species table scrolls horizontally on narrow screens, so an expanded
@@ -2228,9 +2229,24 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     return null;
   }, [selectedSubgroups]);
 
-  // Whichever of the two applies — a selected sub-group takes priority since
-  // it's the more specific selection whenever both could theoretically apply.
-  const focusedTaxonCard = selectedSubgroupTaxon ?? arbitraryTaxon;
+  // A single selected top-level taxon (Mammals, or the "All Species" root
+  // itself) with no sub-group drilled into — the same stat-card treatment as
+  // above, so the card (and the view-mode toggle it now carries — see below)
+  // is reachable at every level, not just once you're already several rows
+  // deep. primaryFilterRank returns null for "All Species" (no positive
+  // dimension in its filter), which is fine — the card falls back to the
+  // generic "Taxon" label for it, same as for a remainder/catch-all node.
+  const selectedTopLevelTaxon = useMemo(() => {
+    if (selectedSubgroups.size !== 0 || selectedTaxa.size !== 1) return null;
+    const node = findNode([...selectedTaxa][0]);
+    if (!node) return null; // arbitraryTaxon handles the non-tree-node case
+    return { name: node.name, rank: primaryFilterRank(node.filter)?.label ?? null };
+  }, [selectedTaxa, selectedSubgroups]);
+
+  // Whichever of the three applies — a selected sub-group takes priority
+  // (most specific), then a selected top-level taxon, then an arbitrary
+  // search-reached rank.
+  const focusedTaxonCard = selectedSubgroupTaxon ?? selectedTopLevelTaxon ?? arbitraryTaxon;
 
   // GBIF occurrence counts aren't filterable per-country/category/etc. — only show
   // that color/list column when no filter narrower than "a whole top-level taxon"
@@ -2493,15 +2509,20 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       ) : (
       <div className="space-y-3">
 
-          {/* Taxon-focus header — a non-curated arbitrary rank reached via search
-              (arbitraryTaxon), or a specific sub-group row drilled into via
-              TaxaSummary's own tree (selectedSubgroupTaxon: dynamic order/family/
-              genus, or a static SSC group). Two stat cards: the taxon (name +
-              rank) and the matched-species count (mirrors the table's
-              totalFiltered). TaxaSummary's own breadcrumb table above already
-              shows the tree branch that led here (Mammals → Rodentia →
-              Heteromyidae → ...) — this is purely an additional, more prominent
-              summary once you're this deep, not a replacement for it. */}
+          {/* Taxon-focus header — any single selected taxon: a top-level taxon
+              (selectedTopLevelTaxon, e.g. Mammals, or "All Species" itself), a
+              sub-group row drilled into via TaxaSummary's own tree
+              (selectedSubgroupTaxon: dynamic order/family/genus, or a static SSC
+              group), or a non-curated arbitrary rank reached via search
+              (arbitraryTaxon). Two stat cards: the taxon (name + rank) and the
+              matched-species count (mirrors the table's totalFiltered) — the
+              latter also carries the Assessed/Not Evaluated view-mode toggle
+              (previously a page-header control, moved here since this is where
+              the mode actually changes what's shown). TaxaSummary's own
+              breadcrumb table above already shows the tree branch that led here
+              (Mammals → Rodentia → Heteromyidae → ...) when applicable — this is
+              purely an additional, more prominent summary, not a replacement
+              for it. */}
           {focusedTaxonCard && !isSingleSpecies && (
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
@@ -2512,15 +2533,43 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   {focusedTaxonCard.name}
                 </div>
               </div>
-              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
-                <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                  {isNewAssessments ? "Not Evaluated Species" : "Assessed Species"}
+              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                    {isNewAssessments ? "Not Evaluated Species" : "Assessed Species"}
+                  </div>
+                  <div className="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+                    {speciesLoading && assessedSpecies.length === 0
+                      ? <Spinner className="h-6 w-6" />
+                      : totalFiltered.toLocaleString()}
+                  </div>
                 </div>
-                <div className="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                  {speciesLoading && assessedSpecies.length === 0
-                    ? <Spinner className="h-6 w-6" />
-                    : totalFiltered.toLocaleString()}
-                </div>
+                {onViewModeChange && (
+                  <div className="flex rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden text-xs shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => onViewModeChange("reassessments")}
+                      className={`px-2 py-1 font-medium transition-colors ${
+                        !isNewAssessments
+                          ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                          : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+                      }`}
+                    >
+                      Assessed
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onViewModeChange("new-assessments")}
+                      className={`px-2 py-1 font-medium transition-colors ${
+                        isNewAssessments
+                          ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                          : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+                      }`}
+                    >
+                      Not Evaluated
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -2804,8 +2853,12 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
           </div>
           )}
 
-          {/* Charts row 2: Country map + (Threats or GBIF Observations for new-assessments) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Charts row 2: Country map + (Threats, 2-col) for reassessments; Country
+              map + GBIF Observations + Year Described (3-col, 1/3 each) for
+              new-assessments — Year Described used to sit alone in its own row
+              below (a half-width chart with empty space beside it, since that row
+              was also grid-cols-2), now folded into this one instead. */}
+          <div className={`grid grid-cols-1 gap-4 ${isNewAssessments ? "sm:grid-cols-3" : "md:grid-cols-2"}`}>
             {/* Country Map */}
             <div>
               {speciesLoading && assessedSpecies.length === 0 ? (
@@ -2986,11 +3039,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 </div>
               );
             })()}
-          </div>
 
-          {/* Charts row 3 (new-assessments only): Year Described (CoL) */}
-          {isNewAssessments && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Year Described (new-assessments only) — third column of this same row. */}
+            {isNewAssessments && (
               <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">
@@ -3021,8 +3072,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   )}
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* More Filters (collapsible) - hidden for New Assessments */}
           {!isNewAssessments && <div>
