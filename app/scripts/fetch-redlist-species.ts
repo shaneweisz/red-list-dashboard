@@ -426,6 +426,7 @@ export interface AssessmentHistoryEntry {
   year: string;
   category: string;
   date: string | null;
+  criteria: string | null;
   assessors: string | null;
   reviewers: string | null;
 }
@@ -446,6 +447,7 @@ export async function fetchAssessmentHistory(
         a.year_published,
         rlc.code as category,
         a.assessment_date,
+        a.criteria,
         ac_assessors.supplementary_fields->>'full' as assessors,
         ac_reviewers.supplementary_fields->>'full' as reviewers
       FROM taxons t
@@ -486,6 +488,7 @@ export async function fetchAssessmentHistory(
         year: yearPublished,
         category: row.category,
         date: assessmentDate,
+        criteria: row.criteria || null,
         assessors: row.assessors || null,
         reviewers: row.reviewers || null,
       });
