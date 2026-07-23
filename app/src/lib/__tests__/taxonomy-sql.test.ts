@@ -29,12 +29,26 @@ describe("filterToSql", () => {
     expect(sql).toContain("coalesce(lower(class_name), '') IN ('mammalia')");
   });
 
+  it("includes a class filter with a known alias, keeping the canonical name alongside CoL's finer classes", () => {
+    // actinopterygii is IUCN's coarse class label (assessed.parquet only ever uses
+    // this literally); CoL splits it into teleostei/chondrostei/cladistii/holostei.
+    // Both must be in the IN-list — filterToSql runs against assessed.parquet too
+    // (getLiveRankChildren's parentWhere), which would otherwise silently match
+    // zero rows for every Fishes order once drilled past class level (regression:
+    // expandClasses used to REPLACE the canonical name with its aliases instead of
+    // adding to it, unlike expandOrders' equivalent split-handling below).
+    const sql = filterToSql({ csvGroups: ["fishes"], classNames: ["actinopterygii"] });
+    expect(sql).toContain("coalesce(lower(class_name), '') IN ('actinopterygii', 'teleostei', 'chondrostei', 'cladistii', 'holostei')");
+  });
+
   it("excludes classes, expanding a display-class alias to CoL's finer classes", () => {
     // chondrichthyes is a display-tree class name; CoL splits it into elasmobranchii/
     // holocephali — expandClasses() covers both so the exclusion actually matches CoL
-    // rows (a plain "chondrichthyes" exclusion would never match anything there).
+    // rows (a plain "chondrichthyes" exclusion would never match anything there),
+    // while still keeping "chondrichthyes" itself so an assessed.parquet-scoped
+    // query (which only ever uses the coarse label) is excluded correctly too.
     const sql = filterToSql({ csvGroups: ["fishes"], excludeClasses: ["chondrichthyes"] });
-    expect(sql).toContain("coalesce(lower(class_name), '') NOT IN ('elasmobranchii', 'holocephali')");
+    expect(sql).toContain("coalesce(lower(class_name), '') NOT IN ('chondrichthyes', 'elasmobranchii', 'holocephali')");
   });
 
   it("includes an order filter, expanding the artiodactyla/cetacea CoL order-label split", () => {

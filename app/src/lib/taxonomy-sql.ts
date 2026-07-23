@@ -53,7 +53,16 @@ const COL_CLASS_ALIASES: Record<string, string[]> = {
   hoplonemertea: ["nemertea"],
 };
 function expandClasses(names: string[]): string[] {
-  return names.flatMap((n) => COL_CLASS_ALIASES[n.toLowerCase()] ?? [n]);
+  // Include the canonical name itself, not just its aliases (expandOrders' own
+  // pattern) — filterToSql runs against BOTH species/ (CoL, which never uses the
+  // coarse canonical label) AND assessed.parquet (IUCN, which ONLY uses the coarse
+  // label, never the finer aliases). Dropping the canonical name here silently
+  // zeroed out every IUCN-assessed match for a class with any alias (e.g.
+  // "actinopterygii") — found via live-taxa-children.ts showing 0% assessed for
+  // every order under Fishes/Molluscs/Crustaceans/Other Invertebrates once drilled
+  // past the class level, since getLiveRankChildren's parentWhere is filterToSql'd
+  // straight against assessed.parquet.
+  return names.flatMap((n) => [n, ...(COL_CLASS_ALIASES[n.toLowerCase()] ?? [])]);
 }
 
 // Reverse of COL_CLASS_ALIASES: collapses a raw CoL-side class value (which is
@@ -108,11 +117,73 @@ export function canonicalClassColumnSql(col: string): string {
 // Sciadopityaceae into "Cupressales" (231 spp) and Podocarpaceae/Araucariaceae
 // into "Araucariales" (250 spp), keeping only Pinaceae under "Pinales" (300 spp)
 // — confirmed via family-level cross-check (2026-07-21).
+// Batch found by build-taxa-summary.ts's automated checkTaxonomyAliasDrift
+// (2026-07-23) — each confirmed via direct data query to be a clean fold (the
+// dominant or sole CoL target for every/nearly every assessed species under
+// that IUCN order), same verification standard as the entries above. Not
+// exhaustive: the same drift check also surfaced several genuinely AMBIGUOUS
+// splits (e.g. IUCN's "Alcyonacea" → CoL's Malacalcyonacea/Scleralcyonacea
+// roughly 50/50; "Gasterosteiformes" → three different CoL orders) and IUCN's
+// literal "Not assigned" placeholder (confirmed multi-order via mushrooms'
+// scatter — not a real name to alias) — deliberately left unaliased rather
+// than guessing a single target for cases with no clean answer. Most of the
+// order-level "no CoL match at all" drift the same check found (Mollusca's
+// Stylommatophora & co., several Crustacea/Other-Invertebrate orders) is a
+// genuine CoL data gap, not an alias-fixable mismatch — see the
+// DYNAMIC_DRILLDOWN_ROOTS comment in dynamic-taxon.ts.
 const COL_ORDER_ALIASES: Record<string, string[]> = {
   artiodactyla: ["cetacea"],
   caprimulgiformes: ["apodiformes", "nyctibiiformes", "steatornithiformes"],
   struthioniformes: ["tinamiformes", "rheiformes", "casuariiformes", "apterygiformes"],
   pinales: ["cupressales", "araucariales"],
+  // New World vultures: IUCN keeps its own order; CoL lumps them into
+  // Accipitriformes (birds of prey) alongside hawks/eagles.
+  accipitriformes: ["cathartiformes"],
+  // Mite order, alternate spelling.
+  holothyrida: ["holothyroidae"],
+  // Sea pens: CoL's modern octocoral split keeps these under Scleralcyonacea
+  // (hard-axis octocorals) — unlike "Alcyonacea" below, this one IS clean.
+  scleralcyonacea: ["pennatulacea"],
+  // Krill order, alternate spelling ("euphasiacea" drops a "u").
+  euphausiacea: ["euphasiacea"],
+  // Whalefishes + pricklefishes: IUCN keeps each as its own order; CoL folds
+  // both into Beryciformes.
+  beryciformes: ["cetomimiformes", "stephanoberyciformes"],
+  // South American lungfish: IUCN keeps its own order; CoL folds it into
+  // Ceratodontiformes alongside the Australian lungfish.
+  ceratodontiformes: ["lepidosireniformes"],
+  // Gulper eels: IUCN keeps its own order; CoL folds them into the true-eel
+  // order Anguilliformes.
+  anguilliformes: ["saccopharyngiformes"],
+  // Scorpionfish: IUCN's older "Scorpaeniformes" is ~99% CoL Perciformes
+  // (605/611 assessed species) — the small remainder (Dactylopteriformes, one
+  // clearly-mislinked outlier) isn't enough to make this an ambiguous split.
+  perciformes: ["scorpaeniformes"],
+  // Horseshoe crabs, alternate spelling.
+  xiphosurida: ["xiphosura"],
+  // Pygmy squid, alternate spelling ("idiosepiida" doubles the "i").
+  idiosepida: ["idiosepiida"],
+  // Pea clams: IUCN's "Sphaeriida" is ~92% CoL Venerida (146/159 assessed
+  // species) — modern classification folds pea clams into the venerid clams.
+  venerida: ["sphaeriida"],
+  // A single peat-moss species, reclassified.
+  sphagnales: ["ambuchananiales"],
+  // A single lichen species, reclassified.
+  baeomycetales: ["trapeliales"],
+  // Ribbon worms, ORDER-level (distinct from COL_CLASS_ALIASES' hoplonemertea
+  // entry, which is the CLASS-level fix for the same group's IUCN "Nemertea"
+  // class label) — IUCN's "Hoplonemertea" order is CoL's "Monostilifera".
+  monostilifera: ["hoplonemertea"],
+  // A single soft-coral species, alternate spelling ("malacalcyoncaea" drops
+  // an "a") — Malacalcyonacea itself is a real, distinct CoL order (see the
+  // corals/other_invertebrates split noted above), just misspelled for this
+  // one IUCN record.
+  malacalcyonacea: ["malacalcyoncaea"],
+  // A single tube-anemone species: IUCN's "Penicillaria" is CoL's Ceriantharia.
+  ceriantharia: ["penicillaria"],
+  // IUCN keeps "Brassicales"; CoL's modern classification is ~94.5% Capparales
+  // (582/616 assessed species) — same category of split as Pinales above.
+  capparales: ["brassicales"],
 };
 function expandOrders(names: string[]): string[] {
   return names.flatMap((n) => [n, ...(COL_ORDER_ALIASES[n.toLowerCase()] ?? [])]);
