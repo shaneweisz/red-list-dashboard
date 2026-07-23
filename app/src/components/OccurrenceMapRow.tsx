@@ -784,9 +784,11 @@ export default function OccurrenceMapRow({
     return { sliderMinDate: dates[0], sliderMaxDate: dates[dates.length - 1] };
   }, [filteredOccurrences, splitDate]);
 
-  // Split view: partition occurrences by exact assessment date
+  // Partition occurrences by exact assessment date — computed regardless of
+  // split view so the Before/After rows of the range coverage table below stay
+  // populated even when the user isn't in split view.
   const { preAssessmentOccs, postAssessmentOccs } = useMemo(() => {
-    if (!splitView || !splitDate) {
+    if (!splitDate) {
       return { preAssessmentOccs: [], postAssessmentOccs: [] };
     }
     const pre: OccurrenceFeature[] = [];
@@ -803,12 +805,14 @@ export default function OccurrenceMapRow({
       preAssessmentOccs: pre,
       postAssessmentOccs: post,
     };
-  }, [splitView, splitDate, filteredOccurrences]);
+  }, [splitDate, filteredOccurrences]);
 
-  // % of currently-filtered GBIF occurrences that fall inside the currently-visible
-  // IUCN range polygons — recomputed whenever the range layer's polygons or the
-  // filtered occurrence set change, so it tracks both the coordinate-cleaning /
-  // basis-of-record filters and the range category toggles automatically.
+  // In-range/out-of-range breakdown of the currently-filtered GBIF occurrences
+  // against the currently-visible IUCN range polygons — recomputed whenever the
+  // range layer's polygons or the filtered occurrence set change, so it tracks
+  // both the coordinate-cleaning/basis-of-record filters and the range category
+  // toggles automatically. Before/after rows use the same assessment-date split
+  // as split view, but are populated regardless of whether split view is open.
   const rangeCoverageStats = useMemo(() => {
     if (!rangePolygons || rangePolygons.length === 0) return null;
     const polygons = rangePolygons as Feature<Polygon | MultiPolygon>[];
@@ -828,11 +832,11 @@ export default function OccurrenceMapRow({
       return { inRange, outRange: occs.length - inRange, total: occs.length };
     };
     return {
-      main: computeFor(filteredOccurrences),
-      before: splitView ? computeFor(preAssessmentOccs) : null,
-      after: splitView ? computeFor(postAssessmentOccs) : null,
+      total: computeFor(filteredOccurrences),
+      before: splitDate ? computeFor(preAssessmentOccs) : null,
+      after: splitDate ? computeFor(postAssessmentOccs) : null,
     };
-  }, [rangePolygons, filteredOccurrences, splitView, preAssessmentOccs, postAssessmentOccs]);
+  }, [rangePolygons, filteredOccurrences, splitDate, preAssessmentOccs, postAssessmentOccs]);
 
   // Date range for color gradient (uses full eventDate for finer granularity)
   const { minDateNum, maxDateNum, minDateLabel, maxDateLabel } = useMemo(() => {
@@ -1069,10 +1073,6 @@ export default function OccurrenceMapRow({
     panelId: string = "main",
   ) => {
     const styledGeoJson = buildStyledFeatureCollection(panelOccurrences);
-    const rangeStatsForPanel =
-      panelId === "before" ? rangeCoverageStats?.before
-      : panelId === "after" ? rangeCoverageStats?.after
-      : rangeCoverageStats?.main;
 
     // Circle layer paint properties (data-driven from feature properties)
     const circleLayerStyle = {
@@ -1449,34 +1449,6 @@ export default function OccurrenceMapRow({
               {filteredOccurrences.length < occurrences.length && (
                 <> Showing <strong>{filteredOccurrences.length.toLocaleString()}</strong> after filters.</>
               )}
-            </div>
-          )}
-          {/* In-range / out-of-range breakdown — only shown while the IUCN range
-              layer is on and has at least one visible polygon to test against.
-              Auto-updates with every filter (basis of record, uncertainty,
-              coordinate-cleaning checks, native range) and every range category
-              toggle, since it's derived from the same filteredOccurrences /
-              rangePolygons state those already react to. */}
-          {showRange && rangeStatsForPanel && rangeStatsForPanel.total > 0 && (
-            <div className="absolute bottom-2 right-2 z-[1000] px-2 py-1.5 rounded-lg shadow-md bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-[11px] text-zinc-600 dark:text-zinc-300 min-w-[130px]">
-              <div className="font-medium text-zinc-700 dark:text-zinc-200 mb-1">GBIF vs. range map</div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-3 flex-shrink-0 text-center font-semibold text-zinc-500 dark:text-zinc-400" aria-hidden="true">✓</span>
-                  In range
-                </span>
-                <strong>{rangeStatsForPanel.inRange.toLocaleString()}</strong>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-3 flex-shrink-0 text-center font-semibold text-zinc-500 dark:text-zinc-400" aria-hidden="true">✕</span>
-                  Out of range
-                </span>
-                <strong>{rangeStatsForPanel.outRange.toLocaleString()}</strong>
-              </div>
-              <div className="mt-1 pt-1 border-t border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400">
-                {Math.round((rangeStatsForPanel.inRange / rangeStatsForPanel.total) * 100)}% in range
-              </div>
             </div>
           )}
         </div>
@@ -2061,52 +2033,96 @@ export default function OccurrenceMapRow({
 
             {/* Map(s) — takes remaining width, stretches to match left column */}
             <div className="flex-1 min-w-0 flex flex-col gap-2">
-              {splitView && splitDate ? (
-                <div className="flex flex-col gap-2">
-                  {/* Split view control bar */}
-                  <div className="flex flex-wrap items-center gap-2 px-2 py-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-xs text-zinc-600 dark:text-zinc-300">
-                    <span className="font-medium">Split view</span>
-                    <span className="text-zinc-400">|</span>
-                    <span className="text-zinc-500 dark:text-zinc-400 whitespace-nowrap">Date: <span className="font-medium text-zinc-700 dark:text-zinc-200">{splitDate}</span></span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={Math.max(0, Math.round((new Date(sliderMaxDate).getTime() - new Date(sliderMinDate).getTime()) / 86400000))}
-                      value={Math.max(0, Math.round((new Date(splitDate).getTime() - new Date(sliderMinDate).getTime()) / 86400000))}
-                      onChange={(e) => {
-                        const days = parseInt(e.target.value, 10);
-                        const d = new Date(sliderMinDate);
-                        d.setDate(d.getDate() + days);
-                        setSplitDate(d.toISOString().slice(0, 10));
-                      }}
-                      className="flex-1 min-w-[100px] h-2.5 sm:h-1.5 accent-blue-500"
-                    />
-                    {assessmentDate && splitDate !== assessmentDate.split("T")[0] && (
+                {splitView && splitDate ? (
+                  <div className="flex flex-col gap-2">
+                    {/* Split view control bar */}
+                    <div className="flex flex-wrap items-center gap-2 px-2 py-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-xs text-zinc-600 dark:text-zinc-300">
+                      <span className="font-medium">Split view</span>
+                      <span className="text-zinc-400">|</span>
+                      <span className="text-zinc-500 dark:text-zinc-400 whitespace-nowrap">Date: <span className="font-medium text-zinc-700 dark:text-zinc-200">{splitDate}</span></span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={Math.max(0, Math.round((new Date(sliderMaxDate).getTime() - new Date(sliderMinDate).getTime()) / 86400000))}
+                        value={Math.max(0, Math.round((new Date(splitDate).getTime() - new Date(sliderMinDate).getTime()) / 86400000))}
+                        onChange={(e) => {
+                          const days = parseInt(e.target.value, 10);
+                          const d = new Date(sliderMinDate);
+                          d.setDate(d.getDate() + days);
+                          setSplitDate(d.toISOString().slice(0, 10));
+                        }}
+                        className="flex-1 min-w-[100px] h-2.5 sm:h-1.5 accent-blue-500"
+                      />
+                      {assessmentDate && splitDate !== assessmentDate.split("T")[0] && (
+                        <button
+                          onClick={() => setSplitDate(assessmentDate.split("T")[0])}
+                          className="text-xs sm:text-[10px] px-2 py-1 sm:px-1.5 sm:py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 hover:bg-white dark:hover:bg-zinc-700 transition-colors whitespace-nowrap"
+                        >
+                          Reset to assessment date
+                        </button>
+                      )}
                       <button
-                        onClick={() => setSplitDate(assessmentDate.split("T")[0])}
-                        className="text-xs sm:text-[10px] px-2 py-1 sm:px-1.5 sm:py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 hover:bg-white dark:hover:bg-zinc-700 transition-colors whitespace-nowrap"
+                        onClick={() => setSplitView(false)}
+                        className="ml-auto p-1.5 sm:p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                        title="Close split view"
                       >
-                        Reset to assessment date
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
                       </button>
-                    )}
-                    <button
-                      onClick={() => setSplitView(false)}
-                      className="ml-auto p-1.5 sm:p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                      title="Close split view"
-                    >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      {renderMapPanel(preAssessmentOccs, bbox, `Before ${splitDate} (${preAssessmentOccs.length})`, "before")}
+                      {renderMapPanel(postAssessmentOccs, bbox, `After ${splitDate} (${postAssessmentOccs.length})`, "after")}
+                    </div>
                   </div>
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    {renderMapPanel(preAssessmentOccs, bbox, `Before ${splitDate} (${preAssessmentOccs.length})`, "before")}
-                    {renderMapPanel(postAssessmentOccs, bbox, `After ${splitDate} (${postAssessmentOccs.length})`, "after")}
+                ) : (
+                  renderMapPanel(filteredOccurrences, bbox, null)
+                )}
+                {/* In-range/out-of-range breakdown vs. the currently-visible IUCN
+                    range polygons — one table covering Total plus (when an
+                    assessment date is available) Before/After assessment rows,
+                    regardless of whether split view is open. Auto-updates with
+                    every occurrence filter and every range category toggle.
+                    Rendered in-flow below the map(s) (not floated over them) —
+                    it collides with the bottom legend/toolbar row when floated,
+                    since that row can grow wide enough to reach the corner. */}
+                {showRange && rangeCoverageStats && rangeCoverageStats.total.total > 0 && (
+                  <div className="flex justify-end">
+                    <div className="px-2 py-1.5 rounded-lg shadow-md bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-[11px] text-zinc-600 dark:text-zinc-300">
+                      <table className="border-collapse">
+                        <thead>
+                          <tr>
+                            <th className="text-left font-medium text-zinc-700 dark:text-zinc-200 pr-3 pb-1">GBIF vs. range map</th>
+                            <th className="text-right font-medium text-zinc-400 dark:text-zinc-500 px-1.5 pb-1"># Total</th>
+                            <th className="text-right font-medium text-zinc-400 dark:text-zinc-500 px-1.5 pb-1"># In range</th>
+                            <th className="text-right font-medium text-zinc-400 dark:text-zinc-500 px-1.5 pb-1"># Out range</th>
+                            <th className="text-right font-medium text-zinc-400 dark:text-zinc-500 pl-1.5 pb-1">% In range</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(
+                            [
+                              ["Total", rangeCoverageStats.total],
+                              ...(rangeCoverageStats.before ? [["Before assessment", rangeCoverageStats.before] as const] : []),
+                              ...(rangeCoverageStats.after ? [["After assessment", rangeCoverageStats.after] as const] : []),
+                            ] as [string, { inRange: number; outRange: number; total: number }][]
+                          ).map(([rowLabel, stats]) => (
+                            <tr key={rowLabel} className="border-t border-zinc-100 dark:border-zinc-700">
+                              <td className="text-left pr-3 py-0.5">{rowLabel}</td>
+                              <td className="text-right px-1.5 py-0.5">{stats.total.toLocaleString()}</td>
+                              <td className="text-right px-1.5 py-0.5">{stats.inRange.toLocaleString()}</td>
+                              <td className="text-right px-1.5 py-0.5">{stats.outRange.toLocaleString()}</td>
+                              <td className="text-right pl-1.5 py-0.5">
+                                {stats.total > 0 ? `${Math.round((stats.inRange / stats.total) * 100)}%` : "—"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
-              ) : (
-                renderMapPanel(filteredOccurrences, bbox, null)
-              )}
+                )}
             </div>
           </div>
         </div>
