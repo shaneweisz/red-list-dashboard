@@ -41,7 +41,10 @@ describe("resolveTaxa", () => {
     expect(resolveTaxa(["aves"]).ids).toEqual(["birds"]); // legacy/latin alias normalizes
     expect(resolveTaxa(["frogs"]).ids).toEqual(["amphibians"]);
     expect(resolveTaxa(["mammals"]).ids).toEqual(["mammals"]);
-    expect(resolveTaxa(["sharks"]).ids).toEqual(["sharks-rays"]);
+    // "sharks-rays" was retired as a static node once Fishes gained live
+    // class-level drilldown (Phase 6/8) — the alias now points at the
+    // equivalent dynamic id instead.
+    expect(resolveTaxa(["sharks"]).ids).toEqual(["fishes~class:chondrichthyes"]);
   });
   it("treats 'all' as unresolved; passes single-word scientific names through as arbitrary-rank ids", () => {
     expect(resolveTaxa(["all"]).ids).toEqual([]);

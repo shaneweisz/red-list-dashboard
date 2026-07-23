@@ -1,7 +1,7 @@
 /**
  * Country-scoped taxa-summary / node-children-summary, computed LIVE via DuckDB
  * instead of precomputed at sync time (contrast with taxa-summary.json /
- * node-children-summaries.json, read by species-store.ts).
+ * table1a-children-summaries.json / ssc-group-children-summaries.json, read by species-store.ts).
  *
  * Precomputing one file per country (~150-200 countries) was rejected: it would
  * multiply scripts/build-taxa-summary.ts's runtime ~200x, add a staleness window,

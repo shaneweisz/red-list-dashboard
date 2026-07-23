@@ -15,6 +15,8 @@ import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
 import { NODE_INDEX, getCsvGroupsForNode } from "@/lib/taxonomy-utils";
 import { canonicalizeTaxonId, mapTaxonId } from "@/lib/data/taxonomy-constants";
 import { getTaxaSummary } from "@/lib/data/species-store";
+import { isDynamicNodeId, dynamicNodeFilter } from "@/lib/dynamic-taxon";
+import { filterToSql } from "@/lib/taxonomy-sql";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 // Dev has the parquets on disk; on Vercel they aren't bundled → read from R2.
@@ -59,8 +61,13 @@ export async function getConn(): Promise<DuckDBConnection> {
 // scanned twice. Materialize both once per warm container as temp tables; large
 // groups (plants ~280k) stop paying for the ~557k-row GBIF aggregation + the 173k
 // anti-set on each request. Reset on failure so a transient R2 error can retry.
+// Exported for src/lib/data/live-taxa-children.ts, which needs the exact same
+// "assessed col_ids" / "CoL-extinct but IUCN-confirmed EX/EW" universe (ne_assessed_
+// col_ids / ne_ex_ew_col_ids) for its own colDescribed/colNe counts — reusing these
+// avoids building a second, redundant set of identical temp tables on the same
+// warm connection.
 let neHelpersPromise: Promise<void> | null = null;
-function ensureNeHelpers(conn: DuckDBConnection): Promise<void> {
+export function ensureNeHelpers(conn: DuckDBConnection): Promise<void> {
   if (!neHelpersPromise) {
     neHelpersPromise = (async () => {
       const linkUri = parquetUri("species_link.parquet");
@@ -103,6 +110,16 @@ export function resolveWhere(taxonId: string): WhereParts {
   if (NODE_INDEX.has(id)) {
     const groups = getCsvGroupsForNode(id);
     return { clauses: ["taxon_group = ANY(string_split($g, '|'))"], params: { g: groups.join("|") } };
+  }
+  // Dynamic (live taxonomic-drilldown) id — not in NODE_INDEX, but a real,
+  // unambiguous, rank-disambiguated filter (see dynamic-taxon.ts). Checked
+  // before the arbitrary-rank fallback below, which would otherwise compare the
+  // whole raw id string (e.g. "mammals~order:rodentia~family:muridae") against
+  // class_name/order_name/family and match nothing — filterToSql already
+  // inlines its own escaped literals, so this clause needs no bind params.
+  if (isDynamicNodeId(id)) {
+    const filter = dynamicNodeFilter(id);
+    if (filter) return { clauses: [filterToSql(filter)], params: {} };
   }
   // arbitrary rank (e.g. family=turdidae): match the value at class/order/family
   return {
@@ -287,7 +304,6 @@ export async function querySpecies(opts: {
         ) u
         LEFT JOIN ne_gbif_by_col g ON g.col_id = u.col_id`;
       const univRows = (await conn.runAndReadAll(univSql, where.params)).getRowObjects();
-      let synthId = -2_000_000_000;
       for (const r of univRows) {
         // Slim NE row — only the 13 populated fields. The other 16 (assessment-only:
         // assessment_id/date, trend, criteria, threats, systems, assessors, …) are always
@@ -295,11 +311,21 @@ export async function querySpecies(opts: {
         // serialization (beetles ~262k rows: 178MB → ~90MB). The client handles their
         // absence exactly as the nulls it receives today (audited: every access is
         // optional-chained, falsy-checked, or NE-skipped). Synthetic negative id (no IUCN
-        // sis); taxon_group is the REAL CoL group (sub-group filter), taxon_id forced to
-        // the requested taxon (top-level filter); GBIF key/count/countries/common_name
-        // overlaid when the species is GBIF-observed.
+        // sis) derived from col_id via colIdToSearchId — stable across queries, unlike a
+        // per-query decrementing counter (the previous approach): a species fetched once
+        // as part of "Mammals" and again scoped to "Rodentia" got a DIFFERENT counter-based
+        // id each time (each query restarts its own count from -2,000,000,000), while an
+        // unrelated species from the two different queries could easily land on the exact
+        // same id — RedListView.tsx's speciesDetails cache is keyed by id and never
+        // revalidates an existing entry, so the second species silently rendered under the
+        // first's cached photo/common name/etc (reported: a cached Giraffe thumbnail
+        // showing for Fictidomys parvidens after drilling from Mammals into Rodentia).
+        // colIdToSearchId is already proven collision-free/stable for this exact purpose
+        // (search results); taxon_group is the REAL CoL group (sub-group filter), taxon_id
+        // forced to the requested taxon (top-level filter); GBIF key/count/countries/
+        // common_name overlaid when the species is GBIF-observed.
         result.push({
-          id: synthId--,
+          id: colIdToSearchId((r.col_id as string) ?? (r.scientific_name as string) ?? String(taxonId)),
           col_id: (r.col_id as string) ?? null,
           scientific_name: r.scientific_name ?? "",
           common_name: r.common_name ?? null,
@@ -359,9 +385,10 @@ const GROUP_TO_LEAF_NODE: Map<string, string> = (() => {
 
 // Stable negative int id for a CoL-only species (no IUCN sis id / GBIF key). Used as the
 // search result's id — the URL `species=` param + the cached-preview key — and never
-// collides with real positive sis/gbif ids. (The NE list itself assigns its own per-query
-// synthetic ids; the cached preview, built from this result, is what renders on click.)
-function colIdToSearchId(colId: string): number {
+// collides with real positive sis/gbif ids. Also used by the NE branch of querySpecies
+// above (same reasoning: a stable, collision-free id independent of which query produced
+// the row — see that call site's comment for the bug a per-query counter caused here).
+export function colIdToSearchId(colId: string): number {
   let h = 0;
   for (let i = 0; i < colId.length; i++) h = (Math.imul(h, 31) + colId.charCodeAt(i)) | 0;
   return -(Math.abs(h) || 1);

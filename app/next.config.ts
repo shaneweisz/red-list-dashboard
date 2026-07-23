@@ -74,6 +74,14 @@ const nextConfig: NextConfig = {
     // ?country=, since the throw happens before GET() ever runs).
     "/api/redlist/taxa-summary": DUCKDB_TRACE,
     "/api/redlist/taxa-subgroups": DUCKDB_TRACE,
+    // Live no-match diagnostic breakdown for dynamic taxonomic-drilldown nodes
+    // (live-breakdown.ts) — queries assessed/species_link/species/backbone
+    // parquets in R2 via the same DuckDB connection, needs the same trace.
+    "/api/redlist/taxa-breakdown-live": DUCKDB_TRACE,
+    // Live CoL-taxon-id lookup for a dynamic node's ancestor chain
+    // (live-breakdown.ts's getLiveColTaxonIds) — same backbone.parquet-via-R2
+    // DuckDB query as taxa-breakdown-live above, needs the same trace.
+    "/api/redlist/col-taxon-ids-live": DUCKDB_TRACE,
     // Queries the committed (not R2) wcvp-native-countries.parquet directly via
     // DuckDB read_parquet() — a raw file path, not a JS import, so Next's tracer
     // needs telling explicitly (same class of miss as the dlopen'd libduckdb.so).
@@ -103,7 +111,7 @@ const nextConfig: NextConfig = {
     // keep that one file. CRITICAL: keep ALL parquets out — USE_R2 is gated on
     // assessed.parquet NOT existing locally, so bundling any parquet flips the route to
     // local mode and the R2-only files (species_link) then 404.
-    "/api/redlist/species": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", "**/data/node-children-summaries.json", "**/data/*.parquet", ...COL_ARTIFACTS],
+    "/api/redlist/species": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", "**/data/table1a-children-summaries.json", "**/data/ssc-group-children-summaries.json", "**/data/*.parquet", ...COL_ARTIFACTS],
     "/api/redlist/species/history": ["**/data/**"],
     // Queries backbone.parquet + species_link in R2 (httpfs) — no local data.
     "/api/redlist/synonyms": ["**/data/**"],
@@ -119,14 +127,22 @@ const nextConfig: NextConfig = {
     "/api/redlist/taxa-subgroups": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", "**/data/*.parquet", ...COL_ARTIFACTS],
     // Reads only the small precomputed country-stats.json (no DuckDB — this is
     // a static aggregate, not a live query, see species-store.ts's getCountryStats).
-    "/api/redlist/country-stats": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", "**/data/node-children-summaries.json", "**/data/*.parquet", ...COL_ARTIFACTS],
+    "/api/redlist/country-stats": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", "**/data/table1a-children-summaries.json", "**/data/ssc-group-children-summaries.json", "**/data/*.parquet", ...COL_ARTIFACTS],
     // Backbone tree navigation queries backbone.parquet in R2 (httpfs) — no local data.
     "/api/taxa/species": ["**/data/**"],
+    // Reads assessed/species_link/species/backbone entirely from R2 (httpfs) — no
+    // local data, same as /api/redlist/synonyms and /api/taxa/species above.
+    "/api/redlist/taxa-breakdown-live": ["**/data/**"],
+    // Reads only backbone.parquet, entirely from R2 (httpfs) — no local data,
+    // same as taxa-breakdown-live above (without this, Next traces the whole
+    // dataset into the function via the shared live-breakdown.ts import,
+    // blowing well past Vercel's 250MB uncompressed function-size limit).
+    "/api/redlist/col-taxon-ids-live": ["**/data/**"],
     // /browse mirrors /api/redlist/species (same querySpecies): keep taxa-summary.json
     // for the instant NE tooLarge check, drop the heavy data + ALL parquets (the USE_R2
     // gate keys on assessed.parquet being absent locally). /llms.txt reads no data.
-    "/browse": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", "**/data/node-children-summaries.json", "**/data/*.parquet", ...COL_ARTIFACTS],
-    "/api/mcp": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", "**/data/node-children-summaries.json", "**/data/*.parquet", ...COL_ARTIFACTS],
+    "/browse": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", "**/data/table1a-children-summaries.json", "**/data/ssc-group-children-summaries.json", "**/data/*.parquet", ...COL_ARTIFACTS],
+    "/api/mcp": ["**/data/search-index.json", "**/data/redlist/**", "**/data/gbif/**", "**/data/mapping.csv", "**/data/table1a-children-summaries.json", "**/data/ssc-group-children-summaries.json", "**/data/*.parquet", ...COL_ARTIFACTS],
     "/llms.txt": ["**/data/**"],
   },
 };

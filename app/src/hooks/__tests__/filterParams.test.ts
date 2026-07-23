@@ -48,9 +48,14 @@ describe("parseParams", () => {
   });
 
   it("dedupes roots, expands group tokens, and passes unknown tokens through", () => {
+    // "beetles" was a static sub-node of Insects before Phase 8 retired it for
+    // live order-level drilldown (dynamic-taxon.ts) — it no longer resolves to
+    // a real node, so (like "unknownthing") it now passes through unexpanded
+    // rather than 404ing; this is the accepted tradeoff for old shared/
+    // bookmarked URLs referencing a retired static id.
     const result = parseParams("?taxa=mammalia,mammals,insecta,beetles,unknownthing");
-    expect(result.taxa).toEqual(new Set(["mammals", "invertebrates", "unknownthing"]));
-    expect(result.subgroups).toEqual(new Set(["inv-insects", "inv-beetles"]));
+    expect(result.taxa).toEqual(new Set(["mammals", "invertebrates", "beetles", "unknownthing"]));
+    expect(result.subgroups).toEqual(new Set(["inv-insects"]));
   });
 
   it("expands a single flat group token (corals → invertebrates + inv-corals)", () => {
@@ -531,10 +536,12 @@ describe("parseParams ↔ buildQs round-trip", () => {
   });
 
   it("round-trips subgroups", () => {
+    // Fishes' static children (sharks-rays/ray-finned-fishes) were retired for
+    // live class-level drilldown (Phase 8) — use the equivalent dynamic ids.
     const original = {
       viewMode: "reassessments" as const,
       taxa: new Set(["fishes"]),
-      subgroups: new Set(["sharks-rays", "ray-finned-fishes"]),
+      subgroups: new Set(["fishes~class:chondrichthyes", "fishes~class:actinopterygii"]),
       categories: new Set<string>(),
       yearRanges: new Set<string>(),
       assessmentYears: new Set<string>(),
@@ -558,7 +565,7 @@ describe("parseParams ↔ buildQs round-trip", () => {
 
     const qs = buildQs(original);
     const parsed = parseParams(qs);
-    expect(parsed.subgroups).toEqual(new Set(["sharks-rays", "ray-finned-fishes"]));
+    expect(parsed.subgroups).toEqual(new Set(["fishes~class:chondrichthyes", "fishes~class:actinopterygii"]));
     expect(parsed.taxa).toEqual(new Set(["fishes"]));
   });
 

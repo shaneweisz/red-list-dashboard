@@ -59,6 +59,8 @@ const ROWS: string[][] = [
   ["4", "F", "provisionally accepted", "species", "Felis dubia", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "Felis", "100", "false", "", "", ""],
   ["5", "1", "synonym", "species", "Felis leo", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "Felis", "100", "", "", "", ""],
   ["F", "R", "accepted", "family", "Felidae", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "", "100", "", "", "", ""],
+  // Genus-rank row for the vernacular-names.json tests below.
+  ["G1", "F", "accepted", "genus", "Panthera", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "Panthera", "100", "", "", "", ""],
   // An XR over-split: accepted species + in_base + extant, but the curated checklist
   // demotes col_id "10" to a synonym (injected via demotedColIds) → dropped from species/.
   ["10", "F", "accepted", "species", "Felis splitta", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "Felis", "100", "false", "", "", ""],
@@ -82,9 +84,29 @@ const REF_ROWS: string[][] = [
 // Curated-checklist demotion set (injected, no network): "10" = Felis splitta.
 const DEMOTED_COL_IDS = ["10"];
 
+// Minimal ColDP VernacularName. Exercises: (1) preferred=true wins over other
+// candidates regardless of length ("Cats" is shorter than "Felids" but Felidae's
+// preferred name is "Felids"); (2) with no preferred flag set, the shortest name
+// wins (Panthera: "Panther", 7 chars, beats "Big Cats", 8 chars, and
+// "Pantherines", 11 chars); (3) non-English names are dropped (Felidae's French
+// "Chats" never competes); (4) species-rank vernacular names (Panthera leo,
+// col_id "1") are excluded from the output entirely — species get their common
+// name from our own Red List/GBIF data.
+const VERN_COLS = ["col:taxonID", "col:name", "col:language", "col:preferred"];
+const VERN_ROWS: string[][] = [
+  ["F", "Cats", "eng", ""],
+  ["F", "Felids", "eng", "true"],
+  ["F", "Chats", "fra", "true"],
+  ["G1", "Big Cats", "eng", ""],
+  ["G1", "Panther", "eng", ""],
+  ["G1", "Pantherines", "eng", ""],
+  ["1", "Lion", "eng", "true"],
+];
+
 let tmp: string;
 let speciesGlob: string;
 let backbone: string;
+let vernacularNames: Record<string, string>;
 
 beforeAll(async () => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), "backbone-test-"));
@@ -92,9 +114,12 @@ beforeAll(async () => {
   fs.writeFileSync(tsv, [COLS.join("\t"), ...ROWS.map((r) => r.join("\t"))].join("\n") + "\n");
   const referenceTsv = path.join(tmp, "Reference.tsv");
   fs.writeFileSync(referenceTsv, [REF_COLS.join("\t"), ...REF_ROWS.map((r) => r.join("\t"))].join("\n") + "\n");
-  await run({ tsv, referenceTsv, outDir: tmp, baseSourceIds: BASE_SOURCE_IDS, demotedColIds: DEMOTED_COL_IDS });
+  const vernacularTsv = path.join(tmp, "VernacularName.tsv");
+  fs.writeFileSync(vernacularTsv, [VERN_COLS.join("\t"), ...VERN_ROWS.map((r) => r.join("\t"))].join("\n") + "\n");
+  await run({ tsv, referenceTsv, vernacularTsv, outDir: tmp, baseSourceIds: BASE_SOURCE_IDS, demotedColIds: DEMOTED_COL_IDS });
   speciesGlob = path.join(tmp, "species", "**", "*.parquet");
   backbone = path.join(tmp, "backbone.parquet");
+  vernacularNames = JSON.parse(fs.readFileSync(path.join(tmp, "vernacular-names.json"), "utf-8"));
 });
 
 afterAll(() => fs.rmSync(tmp, { recursive: true, force: true }));
@@ -181,7 +206,34 @@ describe("build-backbone species universe", () => {
 describe("build-backbone backbone.parquet", () => {
   it("carries every usage (all ranks + synonyms) for tree + synonym resolution", async () => {
     const rows = await query(`SELECT count(*) n, count(*) FILTER (status LIKE '%synonym%') syn FROM read_parquet('${backbone}')`);
-    expect(Number(rows[0].n)).toBe(13);  // all rows: family, synonym, demoted species + the rest
+    expect(Number(rows[0].n)).toBe(14);  // all rows: family, genus, synonym, demoted species + the rest
     expect(Number(rows[0].syn)).toBe(1);
+  });
+});
+
+describe("build-backbone vernacular-names.json", () => {
+  it("picks the preferred=true name over a shorter, unpreferred one", () => {
+    // "Cats" (4 chars, no preferred flag) loses to "Felids" (6 chars,
+    // preferred=true) — preferred always wins regardless of length.
+    expect(vernacularNames["felidae"]).toBe("Felids");
+  });
+
+  it("picks the shortest name when no candidate is marked preferred", () => {
+    // Panthera: "Panther" (7) beats "Big Cats" (8) and "Pantherines" (11).
+    expect(vernacularNames["panthera"]).toBe("Panther");
+  });
+
+  it("drops non-English names (Felidae's French 'Chats' never competes)", () => {
+    expect(Object.values(vernacularNames)).not.toContain("Chats");
+  });
+
+  it("excludes species-rank vernacular names (they get a common name from our own Red List/GBIF data instead)", () => {
+    expect(vernacularNames["panthera leo"]).toBeUndefined();
+    expect(Object.values(vernacularNames)).not.toContain("Lion");
+  });
+
+  it("keys names by lowercased scientific name", () => {
+    expect(Object.keys(vernacularNames)).toContain("felidae");
+    expect(Object.keys(vernacularNames)).not.toContain("Felidae");
   });
 });

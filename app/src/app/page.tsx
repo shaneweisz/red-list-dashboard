@@ -43,6 +43,22 @@ export default function RedListPage() {
   const [sharedTaxa, setSharedTaxa] = useState<Set<string>>(new Set());
   const [sharedSubgroups, setSharedSubgroups] = useState<Set<string>>(new Set());
 
+  // View-mode switch — previously two header buttons here, now surfaced
+  // instead by RedListView itself (next to its own Assessed/Not Evaluated
+  // stat card, where the mode actually matters), via this callback.
+  const handleViewModeChange = (mode: ViewMode) => {
+    if (viewMode === mode) return;
+    setViewMode(mode);
+    // Preserve the current taxa/subgroup/layout selection (and any other
+    // URL-only filters) across the switch — only the `view` param changes.
+    const params = new URLSearchParams(window.location.search);
+    if (mode === "reassessments") params.delete("view");
+    else params.set("view", "new-assessments");
+    const qs = params.toString();
+    window.history.pushState(null, "", qs ? `/?${qs}` : "/");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950 px-4 sm:px-6 py-4 md:px-16 md:py-8">
       <main className="max-w-5xl w-full min-w-0 mx-auto flex-1">
@@ -54,22 +70,21 @@ export default function RedListPage() {
             <button
               type="button"
               onClick={() => {
-                // "Go home": drop every filter/selection, but keep the layout
-                // (Standard/Table 1a/SSC/Country) and view (Reassessments/New
-                // Assessments) choices — same fields clearAllFiltersAndTaxa
-                // preserves, replicated here via raw URL params since this
-                // click lives outside RedListView's useFilterParams instance.
-                // Falls back to `origin` when `layout` itself is absent — a
-                // taxon drill-down out of Country View clears `layout` but
-                // leaves `origin=country` behind (see useFilterParams.ts's
-                // originLayout), so Home still lands back on that view
-                // instead of the generic default.
+                // "Go home": drop every filter/selection AND reset back to the
+                // default Assessed view (dropping any New Assessments choice),
+                // but keep the layout (Standard/Table 1a/SSC/Country) choice —
+                // same fields clearAllFiltersAndTaxa preserves minus `view`,
+                // replicated here via raw URL params since this click lives
+                // outside RedListView's useFilterParams instance. Falls back to
+                // `origin` when `layout` itself is absent — a taxon drill-down
+                // out of Country View clears `layout` but leaves
+                // `origin=country` behind (see useFilterParams.ts's
+                // originLayout), so Home still lands back on that view instead
+                // of the generic default.
                 const params = new URLSearchParams(window.location.search);
                 const kept = new URLSearchParams();
                 const layout = params.get("layout") || params.get("origin");
-                const view = params.get("view");
                 if (layout) kept.set("layout", layout);
-                if (view) kept.set("view", view);
                 const qs = kept.toString();
                 window.history.pushState(null, "", qs ? `/?${qs}` : "/");
                 window.dispatchEvent(new PopStateEvent("popstate"));
@@ -86,48 +101,6 @@ export default function RedListPage() {
               <p className="[grid-area:subtitle] text-[15px] md:text-[1.375rem] text-zinc-500 dark:text-zinc-400">{brand.subtitle}</p>
             )}
             <div className="[grid-area:controls] flex items-center gap-2 sm:justify-self-end">
-              {/* View mode toggle */}
-              <div className="flex rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden text-sm">
-                <button
-                  onClick={() => {
-                    if (viewMode === "reassessments") return;
-                    setViewMode("reassessments");
-                    // Preserve the current taxa/subgroup/layout selection (and any other
-                    // URL-only filters) across the switch — only the `view` param changes.
-                    const params = new URLSearchParams(window.location.search);
-                    params.delete("view");
-                    const qs = params.toString();
-                    window.history.pushState(null, "", qs ? `/?${qs}` : "/");
-                    window.dispatchEvent(new PopStateEvent("popstate"));
-                  }}
-                  className={`px-3 py-2 sm:py-1.5 font-medium transition-colors ${
-                    viewMode === "reassessments"
-                      ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
-                      : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
-                  }`}
-                >
-                  {brand.assessedTabLabel ?? "Reassessments"}
-                </button>
-                <button
-                  onClick={() => {
-                    if (viewMode === "new-assessments") return;
-                    setViewMode("new-assessments");
-                    // Preserve the current taxa/subgroup/layout selection (and any other
-                    // URL-only filters) across the switch — only the `view` param changes.
-                    const params = new URLSearchParams(window.location.search);
-                    params.set("view", "new-assessments");
-                    window.history.pushState(null, "", `/?${params.toString()}`);
-                    window.dispatchEvent(new PopStateEvent("popstate"));
-                  }}
-                  className={`px-3 py-2 sm:py-1.5 font-medium transition-colors ${
-                    viewMode === "new-assessments"
-                      ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
-                      : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
-                  }`}
-                >
-                  {brand.unassessedTabLabel ?? "New Assessments"}
-                </button>
-              </div>
               <ThemeToggle />
             </div>
             <div className="[grid-area:search] sm:justify-self-end">
@@ -139,6 +112,7 @@ export default function RedListPage() {
         {/* Content — single component instance stays mounted on viewMode switch */}
         <RedListView
           viewMode={viewMode}
+          onViewModeChange={handleViewModeChange}
           sharedTaxa={sharedTaxa}
           sharedSubgroups={sharedSubgroups}
           onTaxaChange={setSharedTaxa}

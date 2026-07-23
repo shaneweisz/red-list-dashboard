@@ -17,7 +17,8 @@ import { countryToRegion } from "../regions";
 const DATA_DIR = path.join(process.cwd(), "data");
 const REDLIST_DIR = path.join(DATA_DIR, "redlist");
 const TAXA_SUMMARY_PATH = path.join(DATA_DIR, "taxa-summary.json");
-const NODE_CHILDREN_SUMMARIES_PATH = path.join(DATA_DIR, "node-children-summaries.json");
+const TABLE1A_CHILDREN_SUMMARIES_PATH = path.join(DATA_DIR, "table1a-children-summaries.json");
+const SSC_GROUP_CHILDREN_SUMMARIES_PATH = path.join(DATA_DIR, "ssc-group-children-summaries.json");
 const COUNTRY_STATS_PATH = path.join(DATA_DIR, "country-stats.json");
 
 // =============================================================================
@@ -160,12 +161,15 @@ export function getTaxaSummary(): TaxaSummaryRow[] {
 
 /**
  * Get precomputed children summaries for a parent node.
- * Reads from data/node-children-summaries.json (cached in memory).
+ * Reads from data/table1a-children-summaries.json + data/ssc-group-children-
+ * summaries.json (cached in memory, merged — callers don't care which of the
+ * two static-tree sources a given parent id belongs to).
  */
 export function getPrecomputedChildrenSummaries(parentNodeId: string): NodeSummary[] {
   if (!nodeChildrenSummariesCache) {
-    const content = fs.readFileSync(NODE_CHILDREN_SUMMARIES_PATH, "utf-8");
-    nodeChildrenSummariesCache = JSON.parse(content) as Record<string, NodeSummary[]>;
+    const table1a = JSON.parse(fs.readFileSync(TABLE1A_CHILDREN_SUMMARIES_PATH, "utf-8")) as Record<string, NodeSummary[]>;
+    const ssc = JSON.parse(fs.readFileSync(SSC_GROUP_CHILDREN_SUMMARIES_PATH, "utf-8")) as Record<string, NodeSummary[]>;
+    nodeChildrenSummariesCache = { ...table1a, ...ssc };
   }
   return nodeChildrenSummariesCache[parentNodeId] ?? [];
 }

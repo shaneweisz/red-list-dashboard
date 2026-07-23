@@ -77,34 +77,18 @@ export interface TaxonomyNode {
 // ─── Sources ─────────────────────────────────────────────────────────
 
 const IUCN_SOURCE = "IUCN 2026-1";
-const IUCN_SOURCE_URL = "https://nc.iucnredlist.org/redlist/content/attachment_files/2026-1_RL_Table1a.pdf";
-const MDD = "Mammal Diversity Database (v2.0, 2025)";
-const MDD_URL = "https://www.mammaldiversity.org/explore/taxonomy-table/";
+// Exported so the "# Described" info popover (TaxaSummary.tsx) can link to the
+// official Table 1a PDF itself, in addition to a node's own specific citation
+// (MolluscaBase, WoRMS, etc.) — a node's estimatedSourceUrl is that specific
+// citation, not this one, whenever the two differ.
+export const IUCN_SOURCE_URL = "https://nc.iucnredlist.org/redlist/content/attachment_files/2026-1_RL_Table1a.pdf";
 const SSC_GROUP_URL_BASE = "https://iucn.org/our-union/commissions/group/";
-const REPTILE_DB = "Reptile Database, Sep 2025";
-const REPTILE_DB_URL = "http://www.reptile-database.org/db-info/SpeciesStat.html";
-const AMPHIBIAWEB = "AmphibiaWeb, 2025";
-const AMPHIBIAWEB_URL = "https://amphibiaweb.org/amphibian/speciesnums.html";
-const ESCHMEYER = "Eschmeyer's Catalog of Fishes, Sep 2025";
-const ESCHMEYER_URL = "https://researcharchive.calacademy.org/research/ichthyology/catalog/SpeciesByFamily.asp";
-const ZHANG_2011 = "Zhang 2011, Zootaxa 3148";
-const ZHANG_2011_URL = "https://doi.org/10.11646/zootaxa.3148.1.1";
 const COL_2025 = "Catalogue of Life 2025";
 const COL_2025_URL = "https://doi.org/10.48580/dgnfb";
 const CHRISTENHUSZ = "Christenhusz & Byng 2016, Phytotaxa 261(3)";
 const CHRISTENHUSZ_URL = "https://doi.org/10.11646/phytotaxa.261.3.1";
 const SPECIES_FUNGORUM = "Species Fungorum Plus via Catalogue of Life";
 const SPECIES_FUNGORUM_URL = "https://doi.org/10.48580/dg9ld-4hj";
-
-// ─── Mammal subgroup helpers ─────────────────────────────────────────
-
-const MAMMAL_NAMED_ORDERS = [
-  "rodentia", "chiroptera", "eulipotyphla",
-  "primates", "diprotodontia", "dasyuromorphia", "didelphimorphia",
-  "peramelemorphia", "paucituberculata", "notoryctemorphia", "microbiotheria",
-  "carnivora", "artiodactyla", "lagomorpha", "sirenia",
-  "perissodactyla", "pholidota",
-];
 
 // Insect base CSV groups (the Table 1a "Insects" row, split by order)
 const ALL_INSECT_GROUPS = [
@@ -114,20 +98,16 @@ const ALL_INSECT_GROUPS = [
 
 // ─── Plant taxonomy ──────────────────────────────────────────────────
 //
-// Plant Table 1a groups are leaves. We deliberately do not drill down:
-// robust described-species counts at the class and order level don't
-// exist across the full tree, and showing "X assessed of 0 described"
-// would read as broken data to specialists.
-
-// Fungi ascomycota orders
-const ASCOMYCOTA_ORDERS = [
-  "eurotiales", "hypocreales", "xylariales", "pleosporales", "capnodiales",
-  "helotiales", "orbiliales", "pezizales", "rhytismatales", "leotiales",
-  "dothideales", "chaetothyriales", "verrucariales", "arthoniales",
-  "ostropales", "pertusariales", "lecanorales", "peltigerales",
-  "teloschistales", "caliciales", "acarosporales", "geoglossales",
-  "cyttariales", "coryneliales", "trypetheliales",
-];
+// Plant Table 1a groups have no STATIC order/class-level split — unlike
+// Insects/Mammals/etc. (retired in Phase 8 below), they never had one:
+// robust described-species counts at the class/order level weren't reliable
+// enough across the full tree for a hand-curated split, and showing "X
+// assessed of 0 described" would read as broken data to specialists (still
+// true for Molluscs/Crustaceans/Other Invertebrates — see
+// dynamic-taxon.ts's DYNAMIC_DRILLDOWN_ROOTS comment). Flowering Plants/
+// Gymnosperms/etc. DO get live order-level drilldown now (their CoL data
+// turned out clean when checked directly) — this comment is about why they
+// never had a STATIC one, not that they're undrillable today.
 
 // All 28 Table 1a CSV groups (Insects split into 8 order-based groups)
 export const ALL_CSV_GROUPS = [
@@ -164,6 +144,11 @@ function prefixTree(node: TaxonomyNode, prefix: string): TaxonomyNode {
 
 // ─── Canonical Table 1a nodes (reused in virtual grouping nodes) ─────
 
+// Static order-level children retired (Phase 8) — Insects is a
+// DYNAMIC_DRILLDOWN_ROOTS root now (dynamic-taxon.ts), replaced by live
+// order-level enumeration across ALL_INSECT_GROUPS. Their curated common
+// names (Beetles, Butterflies & Moths, ...) live on as a display-only overlay
+// in dynamic-taxon.ts's COMMON_NAME_BY_VALUE.
 const INSECTS_NODE: TaxonomyNode = {
   id: "insects",
   name: "Insects",
@@ -171,16 +156,6 @@ const INSECTS_NODE: TaxonomyNode = {
   estimatedDescribed: 1_008_355,
   estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ")",
   estimatedSourceUrl: IUCN_SOURCE_URL,
-  children: [
-    { id: "beetles", name: "Beetles", filter: { csvGroups: ["beetles"] }, estimatedDescribed: 392_000, estimatedSource: ZHANG_2011, estimatedSourceUrl: ZHANG_2011_URL },
-    { id: "butterflies-moths", name: "Butterflies & Moths", filter: { csvGroups: ["butterflies_and_moths"] }, estimatedDescribed: 160_000, estimatedSource: ZHANG_2011, estimatedSourceUrl: ZHANG_2011_URL },
-    { id: "flies-mosquitoes", name: "Flies & Mosquitoes", filter: { csvGroups: ["flies_and_mosquitoes"] }, estimatedDescribed: 155_000, estimatedSource: ZHANG_2011, estimatedSourceUrl: ZHANG_2011_URL },
-    { id: "bees-wasps-ants", name: "Bees, Wasps & Ants", filter: { csvGroups: ["bees_wasps_and_ants"] }, estimatedDescribed: 153_000, estimatedSource: ZHANG_2011, estimatedSourceUrl: ZHANG_2011_URL },
-    { id: "true-bugs", name: "True Bugs", filter: { csvGroups: ["true_bugs"] }, estimatedDescribed: 82_000, estimatedSource: ZHANG_2011, estimatedSourceUrl: ZHANG_2011_URL },
-    { id: "grasshoppers-crickets", name: "Grasshoppers, Crickets & Locusts", filter: { csvGroups: ["grasshoppers_crickets_locusts"] }, estimatedDescribed: 26_000, estimatedSource: "Orthoptera Species File, 2025", estimatedSourceUrl: "https://orthoptera.speciesfile.org/" },
-    { id: "dragonflies-damselflies", name: "Dragonflies & Damselflies", filter: { csvGroups: ["dragonflies_and_damselflies"] }, estimatedDescribed: 6_400, estimatedSource: "World Odonata List, 2025", estimatedSourceUrl: "https://www.pugetsound.edu/puget-sound-museum-natural-history/biodiversity-resources/insects/dragonflies/world-odonata-list" },
-    { id: "other-insects", name: "Other Insects", filter: { csvGroups: ["other_insects"] }, estimatedDescribed: 33_955, estimatedSource: "Remainder from IUCN Table 1a total of 1,008,355 (" + COL_2025 + ")", estimatedSourceUrl: COL_2025_URL },
-  ],
 };
 
 const ARACHNIDA_NODE: TaxonomyNode = {
@@ -219,75 +194,21 @@ const CORALS_NODE: TaxonomyNode = {
   estimatedSourceUrl: "https://www.marinespecies.org",
 };
 
-// The "Other Invertebrates" Table 1a group is a grab-bag of animal phyla with no
-// group of their own. We carve it into recognizable phylum sub-groups by their CoL
-// classes (the read layer filters by taxon_group; class sub-filtering is client-side
-// via matchesFilter, so this needs no data change). Class lists are derived from the
-// CoL universe (species/) so they're complete per phylum. Caveat: species with a NULL
-// class — notably ~6k flatworms (Platyhelminthes) and all gastrotrichs — can't be
-// routed by class, so they land in the catch-all rather than their phylum node (the
-// IUCN-assessed species, which the reassessments view shows, all carry a class, so
-// only the NE browse is affected). A `phylum` column on the parquets would close that
-// gap but needs a data rebuild.
-// Described-species estimates: Zhang 2011 (Zootaxa 3148) phylum totals where they're
-// extant-dominated; WoRMS extant figures where Zhang includes a large fossil record
-// (Bryozoa, Echinodermata) or where we use a subset (Cnidaria here excludes corals,
-// which are their own group). Rounded — these populate the "Described (IUCN)" column.
-const WORMS_URL = "https://www.marinespecies.org/";
-// IUCN Table 1a "Others" (invertebrates) described total — the parent estimate the
-// phylum children partition (the catch-all takes the remainder).
-const OTHER_INVERTEBRATES_DESCRIBED = 171_981;
-const OTHER_INVERTEBRATE_PHYLA: { id: string; name: string; classes: string[]; estimatedDescribed?: number; estimatedSource?: string; estimatedSourceUrl?: string }[] = [
-  { id: "flatworms", name: "Flatworms", classes: ["trematoda", "monogenea", "cestoda", "turbellaria", "rhabditophora", "catenulida"],
-    estimatedDescribed: 29_000, estimatedSource: "~29,285 Platyhelminthes spp. (" + ZHANG_2011 + ")", estimatedSourceUrl: ZHANG_2011_URL },
-  { id: "roundworms", name: "Roundworms", classes: ["chromadorea", "enoplea"],
-    estimatedDescribed: 25_000, estimatedSource: "~24,783 Nematoda spp. (" + ZHANG_2011 + ")", estimatedSourceUrl: ZHANG_2011_URL },
-  { id: "annelids", name: "Annelids", classes: ["polychaeta", "clitellata"],
-    estimatedDescribed: 22_000, estimatedSource: "~22K Annelida spp. (WoRMS; Catalogue of Life)", estimatedSourceUrl: "https://www.marinespecies.org/aphia.php?p=taxdetails&id=882" },
-  { id: "myriapods", name: "Myriapods (Centipedes & Millipedes)", classes: ["diplopoda", "chilopoda", "symphyla", "pauropoda"],
-    estimatedDescribed: 12_000, estimatedSource: "~11,885 Myriapoda spp. (" + ZHANG_2011 + ")", estimatedSourceUrl: ZHANG_2011_URL },
-  { id: "sponges", name: "Sponges", classes: ["demospongiae", "calcarea", "hexactinellida", "homoscleromorpha"],
-    estimatedDescribed: 9_000, estimatedSource: "~9,000 extant Porifera spp. (WoRMS)", estimatedSourceUrl: WORMS_URL },
-  { id: "cnidarians", name: "Cnidarians (non-coral)", classes: ["hydrozoa", "myxozoa", "anthozoa", "scyphozoa", "staurozoa", "cubozoa"],
-    estimatedDescribed: 8_000, estimatedSource: "~8,000 non-coral extant spp. (WoRMS; corals counted separately)", estimatedSourceUrl: WORMS_URL },
-  { id: "echinoderms", name: "Echinoderms", classes: ["asteroidea", "echinoidea", "holothuroidea", "ophiuroidea", "crinoidea"],
-    estimatedDescribed: 7_000, estimatedSource: "~7,000 extant spp. (WoRMS; Animal Diversity Web)", estimatedSourceUrl: "https://www.marinespecies.org/aphia.php?p=taxdetails&id=1806" },
-  { id: "bryozoans", name: "Bryozoans (Moss Animals)", classes: ["gymnolaemata", "stenolaemata", "phylactolaemata"],
-    estimatedDescribed: 6_000, estimatedSource: "~6,000 extant spp. (WoRMS; Zhang 2011 total incl. fossils)", estimatedSourceUrl: WORMS_URL },
-  { id: "tunicates", name: "Tunicates & Lancelets", classes: ["ascidiacea", "thaliacea", "appendicularia", "leptocardii"],
-    estimatedDescribed: 3_000, estimatedSource: "~3,000 spp., Tunicata + lancelets (" + ZHANG_2011 + ")", estimatedSourceUrl: ZHANG_2011_URL },
-];
-
-function OTHER_INVERTEBRATE_PHYLA_CHILDREN(): TaxonomyNode[] {
-  const allClasses = OTHER_INVERTEBRATE_PHYLA.flatMap((p) => p.classes);
-  const children: TaxonomyNode[] = OTHER_INVERTEBRATE_PHYLA.map((p) => ({
-    id: p.id,
-    name: p.name,
-    filter: { csvGroups: ["other_invertebrates"], classNames: p.classes },
-    ...(p.estimatedDescribed != null ? { estimatedDescribed: p.estimatedDescribed, estimatedSource: p.estimatedSource, estimatedSourceUrl: p.estimatedSourceUrl } : {}),
-  }));
-  // Catch-all described estimate = the group total minus the named phyla above, so the
-  // children sum to the parent (mirrors the "Other Insects" remainder approach).
-  const named = OTHER_INVERTEBRATE_PHYLA.reduce((s, p) => s + (p.estimatedDescribed ?? 0), 0);
-  children.push({
-    id: "other-invertebrates-catch-all",
-    name: "Others",
-    filter: { csvGroups: ["other_invertebrates"], excludeClasses: allClasses },
-    estimatedDescribed: Math.max(OTHER_INVERTEBRATES_DESCRIBED - named, 0),
-    estimatedSource: `Remainder of IUCN Table 1a 'Others' (${OTHER_INVERTEBRATES_DESCRIBED.toLocaleString()}) minus the named phyla above`,
-    estimatedSourceUrl: COL_2025_URL,
-  });
-  return children;
-}
-
+// Static phylum-sub-group split retired (2026-07-22) — Other Invertebrates is a
+// DYNAMIC_DRILLDOWN_ROOTS root now (class-first, see dynamic-taxon.ts's
+// ROOT_RANK_ORDER), replaced by live class-level enumeration. The old static
+// split (Flatworms/Roundworms/Annelids/Myriapods/Sponges/Cnidarians/
+// Echinoderms/Bryozoans/Tunicates + an "Others" catch-all, each a hand-curated
+// CoL-class allowlist) had the exact same NULL-class caveat the live version
+// now handles generically via its "Unclassified Class" bucket instead of a
+// silent catch-all.
 const OTHER_INVERTEBRATES_NODE: TaxonomyNode = {
   id: "other_invertebrates",
   name: "Other Invertebrates",
   filter: { csvGroups: ["other_invertebrates"] },
-  estimatedDescribed: OTHER_INVERTEBRATES_DESCRIBED,
+  estimatedDescribed: 171_981,
   estimatedSource: IUCN_SOURCE,
   estimatedSourceUrl: COL_2025_URL,
-  children: OTHER_INVERTEBRATE_PHYLA_CHILDREN(),
 };
 
 const VELVET_WORMS_NODE: TaxonomyNode = {
@@ -364,6 +285,8 @@ const RED_ALGAE_NODE: TaxonomyNode = {
   estimatedSourceUrl: IUCN_SOURCE_URL,
 };
 
+// Static Ascomycota/Other-Fungi split retired (Phase 8) — Fungi is a
+// DYNAMIC_DRILLDOWN_ROOTS root now, replaced by live order-level enumeration.
 const MUSHROOMS_NODE: TaxonomyNode = {
   id: "mushrooms",
   name: "Fungi",
@@ -371,24 +294,6 @@ const MUSHROOMS_NODE: TaxonomyNode = {
   estimatedDescribed: 157_648,
   estimatedSource: IUCN_SOURCE + " (" + SPECIES_FUNGORUM + ")",
   estimatedSourceUrl: SPECIES_FUNGORUM_URL,
-  children: [
-    {
-      id: "ascomycota",
-      name: "Ascomycota",
-      filter: { csvGroups: ["mushrooms"], orderNames: ASCOMYCOTA_ORDERS },
-      estimatedDescribed: 98_000,
-      estimatedSource: "~98K Ascomycota spp. (" + SPECIES_FUNGORUM + "; He et al. 2019)",
-      estimatedSourceUrl: SPECIES_FUNGORUM_URL,
-    },
-    {
-      id: "other-fungi",
-      name: "Other Fungi",
-      filter: { csvGroups: ["mushrooms"], excludeOrders: ASCOMYCOTA_ORDERS },
-      estimatedDescribed: 59_648,
-      estimatedSource: "Remainder of 157,648 total fungi — mostly Basidiomycota, plus Chytridiomycota, Zygomycota, etc. (" + SPECIES_FUNGORUM + ")",
-      estimatedSourceUrl: SPECIES_FUNGORUM_URL,
-    },
-  ],
 };
 
 const BROWN_ALGAE_NODE: TaxonomyNode = {
@@ -412,6 +317,10 @@ export const TAXONOMY_TREE: TaxonomyNode = {
   color: "#dc2626",
   children: [
     // ─── MAMMALS ───────────────────────────────────────────────────────
+    // Static order-level children retired (Phase 8) — Mammals is a
+    // DYNAMIC_DRILLDOWN_ROOTS root now, replaced by live order-level
+    // enumeration. Curated common names (Rodents, Bats, ...) live on as a
+    // display-only overlay in dynamic-taxon.ts's COMMON_NAME_BY_VALUE.
     {
       id: "mammals",
       name: "Mammals",
@@ -420,113 +329,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
       estimatedSource: IUCN_SOURCE,
       estimatedSourceUrl: IUCN_SOURCE_URL,
       color: "#f97316",
-      children: [
-        {
-          id: "rodents",
-          name: "Rodents",
-          filter: { csvGroups: ["mammals"], orderNames: ["rodentia"] },
-          estimatedDescribed: 2_747,
-          estimatedSource: MDD + " — Rodentia",
-          estimatedSourceUrl: MDD_URL,
-        },
-        {
-          id: "bats",
-          name: "Bats",
-          filter: { csvGroups: ["mammals"], orderNames: ["chiroptera"] },
-          estimatedDescribed: 1_485,
-          estimatedSource: MDD + " — Chiroptera",
-          estimatedSourceUrl: MDD_URL,
-        },
-        {
-          id: "eulipotyphla",
-          name: "Eulipotyphla",
-          filter: { csvGroups: ["mammals"], orderNames: ["eulipotyphla"] },
-          estimatedDescribed: 599,
-          estimatedSource: MDD + " — Eulipotyphla (hedgehogs, shrews, moles, solenodons)",
-          estimatedSourceUrl: MDD_URL,
-        },
-        {
-          id: "primates",
-          name: "Primates",
-          filter: { csvGroups: ["mammals"], orderNames: ["primates"] },
-          estimatedDescribed: 522,
-          estimatedSource: MDD + " — Primates",
-          estimatedSourceUrl: MDD_URL,
-        },
-        {
-          id: "marsupials",
-          name: "Marsupials",
-          filter: {
-            csvGroups: ["mammals"],
-            orderNames: [
-              "diprotodontia", "dasyuromorphia", "didelphimorphia",
-              "peramelemorphia", "paucituberculata", "notoryctemorphia", "microbiotheria",
-            ],
-          },
-          estimatedDescribed: 416,
-          estimatedSource: MDD + " — sum of 7 marsupial orders",
-          estimatedSourceUrl: MDD_URL,
-        },
-        {
-          id: "carnivores",
-          name: "Carnivores",
-          filter: { csvGroups: ["mammals"], orderNames: ["carnivora"] },
-          estimatedDescribed: 319,
-          estimatedSource: MDD + " — Carnivora",
-          estimatedSourceUrl: MDD_URL,
-        },
-        {
-          id: "artiodactyls",
-          name: "Artiodactyls",
-          filter: { csvGroups: ["mammals"], orderNames: ["artiodactyla"] },
-          estimatedDescribed: 371,
-          estimatedSource: MDD + " — Artiodactyla (includes cetaceans under Cetartiodactyla)",
-          estimatedSourceUrl: MDD_URL,
-        },
-        {
-          id: "rabbits-hares",
-          name: "Rabbits & Hares",
-          filter: { csvGroups: ["mammals"], orderNames: ["lagomorpha"] },
-          estimatedDescribed: 112,
-          estimatedSource: MDD + " — Lagomorpha",
-          estimatedSourceUrl: MDD_URL,
-        },
-        {
-          id: "sirenians",
-          name: "Sirenians",
-          filter: { csvGroups: ["mammals"], orderNames: ["sirenia"] },
-          estimatedDescribed: 5,
-          estimatedSource: MDD + " — Sirenia (manatees + dugong)",
-          estimatedSourceUrl: MDD_URL,
-        },
-        {
-          id: "odd-toed-ungulates",
-          name: "Odd-toed Ungulates",
-          filter: { csvGroups: ["mammals"], orderNames: ["perissodactyla"] },
-          estimatedDescribed: 18,
-          estimatedSource: MDD + " — Perissodactyla",
-          estimatedSourceUrl: MDD_URL,
-        },
-        {
-          id: "pangolins",
-          name: "Pangolins",
-          filter: { csvGroups: ["mammals"], orderNames: ["pholidota"] },
-          estimatedDescribed: 8,
-          estimatedSource: MDD + " — Pholidota",
-          estimatedSourceUrl: MDD_URL,
-        },
-        {
-          id: "other-mammals",
-          name: "Other Mammals",
-          filter: {
-            csvGroups: ["mammals"],
-            excludeOrders: MAMMAL_NAMED_ORDERS,
-          },
-          estimatedDescribed: 217,
-          estimatedSource: "Remainder of IUCN Table 1a total of 6,819 minus " + MDD + " named orders (incl. Afrosoricida ~55 + Macroscelidea ~20 + other small orders)",
-          estimatedSourceUrl: IUCN_SOURCE_URL,
-        },
-      ],
     },
 
     // ─── SSC SPECIALIST GROUPS (pilot: mammals) ─────────────────────────
@@ -556,36 +358,24 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           id: "ssc-african-elephant",
           name: "African Elephant Specialist Group",
           filter: { csvGroups: ["mammals"], genera: ["loxodonta"] },
-          estimatedDescribed: 2,
-          estimatedSource: MDD + " — Loxodonta (approx.)",
-          estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-african-elephant-specialist-group",
         },
         {
           id: "ssc-asian-elephant",
           name: "Asian Elephant Specialist Group",
           filter: { csvGroups: ["mammals"], genera: ["elephas"] },
-          estimatedDescribed: 1,
-          estimatedSource: MDD + " — Elephas (approx.)",
-          estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-asian-elephant-specialist-group",
         },
         {
           id: "ssc-african-rhino",
           name: "African Rhino Specialist Group",
           filter: { csvGroups: ["mammals"], genera: ["diceros", "ceratotherium"] },
-          estimatedDescribed: 2,
-          estimatedSource: MDD + " — Diceros + Ceratotherium (approx.)",
-          estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-african-rhino-specialist-group",
         },
         {
           id: "ssc-asian-rhino",
           name: "Asian Rhino Specialist Group",
           filter: { csvGroups: ["mammals"], genera: ["rhinoceros", "dicerorhinus"] },
-          estimatedDescribed: 3,
-          estimatedSource: MDD + " — Rhinoceros + Dicerorhinus (approx.)",
-          estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-asian-rhino-specialist-group",
         },
         {
@@ -608,9 +398,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
             // group names. Excluded to avoid a genus-match false positive.
             excludeSpeciesNames: ["bos primigenius"],
           },
-          estimatedDescribed: 9,
-          estimatedSource: MDD + " — Bos + Bubalus + Pseudoryx minus the extinct aurochs (approx.; excludes Syncerus caffer, covered by the Antelope SG)",
-          estimatedSourceUrl: MDD_URL,
           sourceUrl: "https://www.asianwildcattle.org/",
         },
         {
@@ -621,9 +408,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // golden moles, 34 tenrecs" = 81 (golden moles + tenrecs are both
           // subsumed under order Afrosoricida in our data, not separate
           // "groups" as the group's own site describes them informally).
-          estimatedDescribed: 81,
-          estimatedSource: "Own site (afrotheria.net) — 1 aardvark + 6 hyraxes + 19 sengis + 21 golden moles + 34 tenrecs",
-          estimatedSourceUrl: "https://afrotheria.net/",
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-afrotheria-specialist-group",
         },
         {
@@ -633,9 +417,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Own site (xenarthrans.org): "seven sloth species, ten anteater
           // species, and 25 armadillo species" = 42; stale MDD-derived figure
           // (31) reflected pre-2025 traditional Xenarthra taxonomy.
-          estimatedDescribed: 42,
-          estimatedSource: "Own site (xenarthrans.org) — 7 sloths + 10 anteaters + 25 armadillos",
-          estimatedSourceUrl: "https://xenarthrans.org/species/",
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-anteater-sloth-and-armadillo-specialist-group",
         },
         {
@@ -676,9 +457,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
             //    the species into both (this tree assumes one node per species).
             extraSpeciesNames: ["antilocapra americana", "hyemoschus aquaticus", "camelus ferus"],
           },
-          estimatedDescribed: 93,
-          estimatedSource: MDD + " — Bovidae minus wild cattle/bison (Wild Cattle/Bison SG) and Caprinae (Caprinae SG), plus Pronghorn, Water Chevrotain, and Wild Camel per the group's own stated remit (approx.)",
-          estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-antelope-specialist-group",
         },
         {
@@ -692,54 +470,36 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // monotreme species and approximately 265 marsupial species of
           // Australia, New Guinea, Indonesia and the Solomon Islands" = ~270;
           // stale MDD-derived figure (250) undercounted.
-          estimatedDescribed: 270,
-          estimatedSource: "Own 2024-2025 SSC annual report — 5 monotremes + ~265 marsupials",
-          estimatedSourceUrl: "https://iucn.org/sites/default/files/2025-09/2024-2025-iucn-ssc-australasian-marsupial-and-monotreme-sg-report_post-pub-rev-r1.pdf",
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-australasian-marsupial-and-monotreme-specialist-group",
         },
         {
           id: "ssc-bat",
           name: "Bat Specialist Group",
           filter: { csvGroups: ["mammals"], orderNames: ["chiroptera"] },
-          estimatedDescribed: 1_485,
-          estimatedSource: MDD + " — Chiroptera",
-          estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-bat-specialist-group",
         },
         {
           id: "ssc-bear",
           name: "Bear Specialist Group",
           filter: { csvGroups: ["mammals"], families: ["ursidae"], excludeSpeciesNames: ["ursus maritimus"] },
-          estimatedDescribed: 7,
-          estimatedSource: MDD + " — Ursidae minus polar bear (Polar Bear SG)",
-          estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-bear-specialist-group",
         },
         {
           id: "ssc-polar-bear",
           name: "Polar Bear Specialist Group",
           filter: { csvGroups: ["mammals"], speciesNames: ["ursus maritimus"] },
-          estimatedDescribed: 1,
-          estimatedSource: MDD + " — Ursus maritimus",
-          estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-polar-bear-specialist-group",
         },
         {
           id: "ssc-bison",
           name: "Bison Specialist Group",
           filter: { csvGroups: ["mammals"], genera: ["bison"] },
-          estimatedDescribed: 2,
-          estimatedSource: MDD + " — Bison (approx.)",
-          estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-bison-specialist-group",
         },
         {
           id: "ssc-canid",
           name: "Canid Specialist Group",
           filter: { csvGroups: ["mammals"], families: ["canidae"] },
-          estimatedDescribed: 37,
-          estimatedSource: MDD + " — Canidae (approx.)",
-          estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-canid-specialist-group",
         },
         {
@@ -753,18 +513,12 @@ export const TAXONOMY_TREE: TaxonomyNode = {
               "ammotragus", "hemitragus", "nilgiritragus", "arabitragus", "pseudois",
             ],
           },
-          estimatedDescribed: 42,
-          estimatedSource: MDD + " — Caprinae genera within Bovidae (approx.)",
-          estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-caprinae-specialist-group",
         },
         {
           id: "ssc-cat",
           name: "Cat Specialist Group",
           filter: { csvGroups: ["mammals"], families: ["felidae"] },
-          estimatedDescribed: 41,
-          estimatedSource: MDD + " — Felidae (approx.)",
-          estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-cat-specialist-group",
         },
         {
@@ -778,9 +532,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
               "phocoenidae", "iniidae", "lipotidae", "platanistidae", "pontoporiidae",
             ],
           },
-          estimatedDescribed: 94,
-          estimatedSource: MDD + " — cetacean families (order_name is shared with Artiodactyla under Cetartiodactyla, so filtered by family instead; hyperoodontidae is CoL's current name for the beaked whales traditionally in ziphiidae — both kept since IUCN's own data still uses ziphiidae; neobalaenidae is the pygmy right whale) (approx.)",
-          estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-cetacean-specialist-group",
         },
         {
@@ -796,54 +547,36 @@ export const TAXONOMY_TREE: TaxonomyNode = {
             // so it stays there via extraSpeciesNames rather than double-counting.
             excludeSpeciesNames: ["hyemoschus aquaticus"],
           },
-          estimatedDescribed: 72,
-          estimatedSource: MDD + " — Cervidae + Moschidae + Tragulidae minus Water Chevrotain (Antelope SG) (approx.)",
-          estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-deer-specialist-group",
         },
         {
           id: "ssc-equid",
           name: "Equid Specialist Group",
           filter: { csvGroups: ["mammals"], families: ["equidae"] },
-          estimatedDescribed: 7,
-          estimatedSource: MDD + " — Equidae",
-          estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-equid-specialist-group",
         },
         {
           id: "ssc-giraffe-okapi",
           name: "Giraffe and Okapi Specialist Group",
           filter: { csvGroups: ["mammals"], families: ["giraffidae"] },
-          estimatedDescribed: 5,
-          estimatedSource: MDD + " — Giraffidae (GSG 4-species giraffe taxonomy + okapi) (approx.)",
-          estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-giraffe-and-okapi-specialist-group",
         },
         {
           id: "ssc-hippo",
           name: "Hippo Specialist Group",
           filter: { csvGroups: ["mammals"], families: ["hippopotamidae"] },
-          estimatedDescribed: 2,
-          estimatedSource: MDD + " — Hippopotamidae",
-          estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-hippo-specialist-group",
         },
         {
           id: "ssc-hyaena",
           name: "Hyaena Specialist Group",
           filter: { csvGroups: ["mammals"], families: ["hyaenidae"] },
-          estimatedDescribed: 4,
-          estimatedSource: MDD + " — Hyaenidae",
-          estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-hyaena-specialist-group",
         },
         {
           id: "ssc-lagomorph",
           name: "Lagomorph Specialist Group",
           filter: { csvGroups: ["mammals"], orderNames: ["lagomorpha"] },
-          estimatedDescribed: 112,
-          estimatedSource: MDD + " — Lagomorpha",
-          estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-lagomorph-specialist-group",
         },
         {
@@ -857,9 +590,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Marsupials (NWMs) comprise over 135 species... classified within
           // the orders Didelphimorphia, Microbiotheria and Paucituberculata"
           // — Didelphimorphia 127 + Microbiotheria 1 + Paucituberculata 7 = 135.
-          estimatedDescribed: 135,
-          estimatedSource: "Martin & Carmignotto 2024, Mammal Review — \"over 135 species\" (127 Didelphimorphia + 1 Microbiotheria + 7 Paucituberculata)",
-          estimatedSourceUrl: "https://iucn.org/sites/default/files/2024-06/2024-martin-carmignotto-new-world-marsupials.pdf",
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-new-world-marsupial-specialist-group",
         },
         {
@@ -869,36 +599,24 @@ export const TAXONOMY_TREE: TaxonomyNode = {
             csvGroups: ["mammals"],
             genera: ["lutra", "pteronura", "aonyx", "lutrogale", "enhydra", "hydrictis", "lontra"],
           },
-          estimatedDescribed: 14,
-          estimatedSource: MDD + " — Lutrinae genera within Mustelidae (approx.)",
-          estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-otter-specialist-group",
         },
         {
           id: "ssc-pangolin",
           name: "Pangolin Specialist Group",
           filter: { csvGroups: ["mammals"], orderNames: ["pholidota"] },
-          estimatedDescribed: 8,
-          estimatedSource: MDD + " — Pholidota",
-          estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-pangolin-specialist-group",
         },
         {
           id: "ssc-peccary",
           name: "Peccary Specialist Group",
           filter: { csvGroups: ["mammals"], families: ["tayassuidae"] },
-          estimatedDescribed: 3,
-          estimatedSource: MDD + " — Tayassuidae",
-          estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-peccary-specialist-group",
         },
         {
           id: "ssc-pinniped",
           name: "Pinniped Specialist Group",
           filter: { csvGroups: ["mammals"], families: ["otariidae", "phocidae", "odobenidae"] },
-          estimatedDescribed: 36,
-          estimatedSource: MDD + " — Otariidae + Phocidae + Odobenidae (approx.)",
-          estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-pinniped-specialist-group",
         },
         {
@@ -909,18 +627,12 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // data's 527 assessed Primates rows (assessed can't exceed
           // described). Corrected to the Primate SG's own self-reported
           // count.
-          estimatedDescribed: 527,
-          estimatedSource: "IUCN SSC Primate Specialist Group's own count — \"there are 527 known species of primates\"",
-          estimatedSourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-primate-specialist-group",
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-primate-specialist-group",
         },
         {
           id: "ssc-sirenia",
           name: "Sirenia Specialist Group",
           filter: { csvGroups: ["mammals"], orderNames: ["sirenia"] },
-          estimatedDescribed: 5,
-          estimatedSource: MDD + " — Sirenia (manatees + dugong)",
-          estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-sirenia-specialist-group",
         },
         {
@@ -937,27 +649,18 @@ export const TAXONOMY_TREE: TaxonomyNode = {
             families: ["mustelidae", "viverridae", "herpestidae", "eupleridae", "procyonidae", "mephitidae", "nandiniidae", "prionodontidae", "ailuridae"],
             excludeGenera: ["lutra", "pteronura", "aonyx", "lutrogale", "enhydra", "hydrictis", "lontra"],
           },
-          estimatedDescribed: 159,
-          estimatedSource: MDD + " — small-carnivore families (incl. Ailuridae/red pandas) minus Lutrinae/otters (Otter SG) (approx.)",
-          estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-small-carnivore-specialist-group",
         },
         {
           id: "ssc-small-mammal",
           name: "Small Mammal Specialist Group",
           filter: { csvGroups: ["mammals"], orderNames: ["rodentia", "eulipotyphla", "scandentia"] },
-          estimatedDescribed: 3_366,
-          estimatedSource: MDD + " — Rodentia + Eulipotyphla + Scandentia (approx.)",
-          estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-small-mammal-specialist-group",
         },
         {
           id: "ssc-tapir",
           name: "Tapir Specialist Group",
           filter: { csvGroups: ["mammals"], families: ["tapiridae"] },
-          estimatedDescribed: 4,
-          estimatedSource: MDD + " — Tapiridae",
-          estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-tapir-specialist-group",
         },
         {
@@ -969,18 +672,12 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Wild Cattle SG above.
           name: "South American Camelid Specialist Group",
           filter: { csvGroups: ["mammals"], genera: ["lama", "vicugna"] },
-          estimatedDescribed: 2,
-          estimatedSource: MDD + " — Lama + Vicugna (South American camelids; excludes wild Bactrian camel, Camelus ferus, not part of this group's remit)",
-          estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-wild-camelid-specialist-group-0",
         },
         {
           id: "ssc-wild-pig",
           name: "Wild Pig Specialist Group",
           filter: { csvGroups: ["mammals"], families: ["suidae"] },
-          estimatedDescribed: 18,
-          estimatedSource: MDD + " — Suidae (approx.)",
-          estimatedSourceUrl: MDD_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-wild-pig-specialist-group",
         },
         // Catch-all: mammal orders/families/genera not claimed by any of the 35
@@ -1037,9 +734,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // (e.g. Primate SG 522→527, Anteater/Sloth/Armadillo SG 31→42,
           // Australasian Marsupial SG 250→270). Recomputed as the actual sum
           // of all 35 sibling nodes' current estimatedDescribed values.
-          estimatedDescribed: 163,
-          estimatedSource: "Remainder of IUCN Table 1a mammals total (6,854) minus the 35 SSC pilot groups above (approx.)",
-          estimatedSourceUrl: IUCN_SOURCE_URL,
         },
       ],
     },
@@ -1067,9 +761,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Own site (iucncsg.org): "There are 26 recognised species of extant
           // crocodilians... divided into three Families - Alligatoridae...
           // Crocodylidae... and Gavialidae" — all of order Crocodylia, no exceptions.
-          estimatedDescribed: 27,
-          estimatedSource: REPTILE_DB + " — Crocodylidae + Alligatoridae + Gavialidae (all of Crocodylia)",
-          estimatedSourceUrl: REPTILE_DB_URL,
           sourceUrl: "http://www.iucncsg.org/",
         },
         {
@@ -1089,9 +780,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // the separate Marine Turtle SG below. No source states the marine
           // exclusion in so many words; it's implied by "freshwater and
           // terrestrial" plus the existence of a dedicated Marine Turtle SG.
-          estimatedDescribed: 357,
-          estimatedSource: REPTILE_DB + " — all Testudines families except Cheloniidae/Dermochelyidae (Marine Turtle SG)",
-          estimatedSourceUrl: REPTILE_DB_URL,
           sourceUrl: "https://iucn-tftsg.org/",
         },
         {
@@ -1101,9 +789,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Own site (iucn-mtsg.org): "responsible for providing information on
           // the seven species of sea turtles" — Cheloniidae (6) + Dermochelyidae
           // (1, leatherback), all 7 recognized species, no exceptions.
-          estimatedDescribed: 7,
-          estimatedSource: REPTILE_DB + " — Cheloniidae + Dermochelyidae (all 7 sea turtle species)",
-          estimatedSourceUrl: REPTILE_DB_URL,
           sourceUrl: "https://www.iucn-mtsg.org/",
         },
         {
@@ -1115,9 +800,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // recognised by the SSG" — whole family Scincidae, no exceptions
           // found. Dibamidae (legless "skink-like" lizards) is a separate
           // family, not mentioned by the group either way — left out of scope.
-          estimatedDescribed: 1_704,
-          estimatedSource: REPTILE_DB + " — Scincidae",
-          estimatedSourceUrl: REPTILE_DB_URL,
           sourceUrl: "https://www.skinks.org/",
         },
         {
@@ -1127,9 +809,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Own site (iucnchameleons.org): "there are currently 228 species of
           // chameleon recognized by the Chameleon Specialist Group" — whole
           // family Chamaeleonidae, no carve-outs.
-          estimatedDescribed: 217,
-          estimatedSource: REPTILE_DB + " — Chamaeleonidae",
-          estimatedSourceUrl: REPTILE_DB_URL,
           sourceUrl: "http://iucnchameleons.org/",
         },
         {
@@ -1146,9 +825,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // bypassed) — users clicking through may see a browser security
           // warning; this is a hosting issue on the group's end, not a data
           // problem here.
-          estimatedDescribed: 87,
-          estimatedSource: REPTILE_DB + " — Varanidae + Lanthanotidae",
-          estimatedSourceUrl: REPTILE_DB_URL,
           sourceUrl: "https://iucn-mlsg.org/",
         },
         {
@@ -1161,9 +837,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Cyclura, Dipsosaurus, Iguana, Sauromalus). Confirmed against our
           // data: every species under the "iguanidae" family label is one of
           // these 9 genera (no stray genus), so a plain family filter is exact.
-          estimatedDescribed: 48,
-          estimatedSource: REPTILE_DB + " — Iguanidae (confirmed = the 9 genera in the group's own checklist, no stray genera)",
-          estimatedSourceUrl: REPTILE_DB_URL,
           sourceUrl: "http://www.iucn-isg.org/",
         },
         {
@@ -1185,9 +858,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // reflects Reptile Database's larger global described-species count
           // vs. this file's assessed/candidate subset, not an in-file
           // family-label split.
-          estimatedDescribed: 432,
-          estimatedSource: REPTILE_DB + " — genus Anolis (filed under family \"anolidae\" in our data; excludes Polychrus)",
-          estimatedSourceUrl: REPTILE_DB_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-anoline-lizard-specialist-group",
         },
         {
@@ -1203,9 +873,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Specialist Groups, respectively" — i.e. Viperidae in full, no
           // subfamily carve-out (covers Viperinae, Crotalinae, and Azemiopinae
           // alike).
-          estimatedDescribed: 377,
-          estimatedSource: REPTILE_DB + " — Viperidae",
-          estimatedSourceUrl: REPTILE_DB_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-viper-specialist-group",
         },
         {
@@ -1247,9 +914,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // 3 families (a genus-level subset of Elapidae + all of Homalopsidae
           // + all of Acrochordidae), confirmed by the neighboring Snake
           // Specialist Group's own exclusion statement (see Viper SG above).
-          estimatedDescribed: 130,
-          estimatedSource: REPTILE_DB + " — marine Elapidae genera + Homalopsidae + Acrochordidae",
-          estimatedSourceUrl: REPTILE_DB_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-sea-snake-specialist-group",
         },
         {
@@ -1266,9 +930,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // distributed across seven families" — the 7 standard,
           // universally-recognized Gekkota families (all geckos), all
           // present in our data.
-          estimatedDescribed: 2_300,
-          estimatedSource: IUCN_SOURCE + " — Gekkota (7 families, per the group's own stated scope)",
-          estimatedSourceUrl: IUCN_SOURCE_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-gekkota-lizard-specialist-group",
         },
         {
@@ -1309,9 +970,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // December 2020 — an organizational change not otherwise
           // documented here, though the group appears to still be active per
           // SSC quadrennium reporting.
-          estimatedDescribed: 112,
-          estimatedSource: REPTILE_DB + " — Boidae + Pythonidae + 5 genera IUCN's own assessments still classify under Boidae (approx.; excludes ~10 more distant families named in an unconfirmed brochure — see comment)",
-          estimatedSourceUrl: REPTILE_DB_URL,
           sourceUrl: "https://iucn.org/content/kering-and-iucn-boa-python-specialist-group-announce-first-report-captive-breeding",
         },
         // Catch-all: NOT a "no group" placeholder like ssc-other-mammals — this
@@ -1358,9 +1016,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // account for other sibling groups' own estimates changing since.
           // Recomputed as the actual sum of all 12 sibling nodes' current
           // estimatedDescribed values.
-          estimatedDescribed: 6_770,
-          estimatedSource: "Remainder of " + REPTILE_DB + " reptile total minus the 12 SSC groups above, plus the tuatara (approx.)",
-          estimatedSourceUrl: REPTILE_DB_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-snake-and-lizard-red-list-authority",
         },
       ],
@@ -1378,6 +1033,11 @@ export const TAXONOMY_TREE: TaxonomyNode = {
     },
 
     // ─── REPTILES ──────────────────────────────────────────────────────
+    // Static order-level children retired (Phase 8) — Reptiles is a
+    // DYNAMIC_DRILLDOWN_ROOTS root now, replaced by live order-level
+    // enumeration (incl. the Tuataras/Sphenodon punctatus CoL null-order_name
+    // fix, which lives on as canonicalOrderColumnSql's species-name override
+    // in taxonomy-sql.ts).
     {
       id: "reptiles",
       name: "Reptiles",
@@ -1386,43 +1046,11 @@ export const TAXONOMY_TREE: TaxonomyNode = {
       estimatedSource: IUCN_SOURCE,
       estimatedSourceUrl: IUCN_SOURCE_URL,
       color: "#84cc16",
-      children: [
-        {
-          id: "squamates",
-          name: "Squamates",
-          filter: { csvGroups: ["reptiles"], orderNames: ["squamata"] },
-          estimatedDescribed: 12_108,
-          estimatedSource: "Reptile Database, Sep 2025 — Squamata (lizards, snakes, amphisbaenians)",
-          estimatedSourceUrl: REPTILE_DB_URL,
-        },
-        {
-          id: "turtles-tortoises",
-          name: "Turtles & Tortoises",
-          filter: { csvGroups: ["reptiles"], orderNames: ["testudines"] },
-          estimatedDescribed: 366,
-          estimatedSource: REPTILE_DB,
-          estimatedSourceUrl: REPTILE_DB_URL,
-        },
-        {
-          id: "crocodilians",
-          name: "Crocodilians",
-          filter: { csvGroups: ["reptiles"], orderNames: ["crocodylia"] },
-          estimatedDescribed: 27,
-          estimatedSource: REPTILE_DB,
-          estimatedSourceUrl: REPTILE_DB_URL,
-        },
-        {
-          id: "tuataras",
-          name: "Tuataras",
-          filter: { csvGroups: ["reptiles"], orderNames: ["rhynchocephalia"] },
-          estimatedDescribed: 1,
-          estimatedSource: REPTILE_DB + " — Rhynchocephalia (Sphenodon punctatus)",
-          estimatedSourceUrl: REPTILE_DB_URL,
-        },
-      ],
     },
 
     // ─── AMPHIBIANS ────────────────────────────────────────────────────
+    // Static order-level children retired (Phase 8) — Amphibians is a
+    // DYNAMIC_DRILLDOWN_ROOTS root now.
     {
       id: "amphibians",
       name: "Amphibians",
@@ -1431,35 +1059,18 @@ export const TAXONOMY_TREE: TaxonomyNode = {
       estimatedSource: IUCN_SOURCE,
       estimatedSourceUrl: IUCN_SOURCE_URL,
       color: "#14b8a6",
-      children: [
-        {
-          id: "frogs-toads",
-          name: "Frogs & Toads",
-          filter: { csvGroups: ["amphibians"], orderNames: ["anura"] },
-          estimatedDescribed: 7_948,
-          estimatedSource: AMPHIBIAWEB,
-          estimatedSourceUrl: AMPHIBIAWEB_URL,
-        },
-        {
-          id: "salamanders-newts",
-          name: "Salamanders & Newts",
-          filter: { csvGroups: ["amphibians"], orderNames: ["caudata"] },
-          estimatedDescribed: 829,
-          estimatedSource: AMPHIBIAWEB,
-          estimatedSourceUrl: AMPHIBIAWEB_URL,
-        },
-        {
-          id: "caecilians",
-          name: "Caecilians",
-          filter: { csvGroups: ["amphibians"], orderNames: ["gymnophiona"] },
-          estimatedDescribed: 231,
-          estimatedSource: AMPHIBIAWEB,
-          estimatedSourceUrl: AMPHIBIAWEB_URL,
-        },
-      ],
     },
 
     // ─── FISHES ────────────────────────────────────────────────────────
+    // Static class-level children retired (Phase 8) — Fishes is a
+    // DYNAMIC_DRILLDOWN_ROOTS root now, replaced by live CLASS-level
+    // enumeration (see dynamic-taxon.ts's ROOT_RANK_ORDER — Fishes is the one
+    // root that starts at class, not order) with the Cetacea-style label-split
+    // fixes (canonicalClassColumnSql) applied. "Jawless Fish" (Myxini +
+    // Petromyzonti) was a deliberate 2-class umbrella grouping, not a label
+    // mismatch — it now shows as two separate live class buckets instead,
+    // matching the same middle-path tradeoff already accepted for Insects'
+    // "Other Insects" catch-all.
     {
       id: "fishes",
       name: "Fishes",
@@ -1468,49 +1079,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
       estimatedSource: IUCN_SOURCE,
       estimatedSourceUrl: IUCN_SOURCE_URL,
       color: "#06b6d4",
-      children: [
-        {
-          id: "ray-finned-fishes",
-          name: "Ray-finned Fishes",
-          filter: { csvGroups: ["fishes"], classNames: ["actinopterygii"] },
-          estimatedDescribed: 35_872,
-          estimatedSource: ESCHMEYER + " — Actinopterygii",
-          estimatedSourceUrl: ESCHMEYER_URL,
-        },
-        {
-          id: "lobe-finned-fishes",
-          name: "Lobe-finned Fishes",
-          filter: { csvGroups: ["fishes"], classNames: ["sarcopterygii"] },
-          estimatedDescribed: 8,
-          estimatedSource: ESCHMEYER + " — Sarcopterygii (coelacanths + lungfish; paraphyletic once tetrapods are excluded)",
-          estimatedSourceUrl: ESCHMEYER_URL,
-        },
-        {
-          id: "sharks-rays",
-          name: "Sharks & Rays",
-          // "chondrichthyes" is only used as a class label in assessed.parquet;
-          // unassessed species carry "elasmobranchii"/"holocephali" instead —
-          // all three are listed to match the full universe. Excludes 2
-          // extinct fossil mako sharks + 1 unresolved-name placeholder found
-          // in the unassessed data (see ssc-shark's filter comment).
-          filter: {
-            csvGroups: ["fishes"],
-            classNames: ["chondrichthyes", "elasmobranchii", "holocephali"],
-            excludeSpeciesNames: ["isurus desori", "oxyrhina hastalis", "carcharhinus spec"],
-          },
-          estimatedDescribed: 1_282,
-          estimatedSource: ESCHMEYER,
-          estimatedSourceUrl: ESCHMEYER_URL,
-        },
-        {
-          id: "jawless-fish",
-          name: "Jawless Fish",
-          filter: { csvGroups: ["fishes"], classNames: ["myxini", "petromyzonti"] },
-          estimatedDescribed: 126,
-          estimatedSource: ESCHMEYER + " (~82 Myxini + ~44 Petromyzonti)",
-          estimatedSourceUrl: ESCHMEYER_URL,
-        },
-      ],
     },
 
     // ─── SSC SPECIALIST GROUPS (fishes) ─────────────────────────────────
@@ -1552,7 +1120,8 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // "chondrichthyes" only appears as a class label in assessed.parquet;
           // unassessed species use "elasmobranchii"/"holocephali" instead — all
           // three are needed or the filter silently matches zero unassessed
-          // sharks (same fix as jawless-fish/sharks-rays above).
+          // sharks (same fix as canonicalClassColumnSql applies for the live
+          // Sharks & Rays class-level bucket, taxonomy-sql.ts).
           filter: {
             csvGroups: ["fishes"],
             classNames: ["chondrichthyes", "elasmobranchii", "holocephali"],
@@ -1565,9 +1134,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Own site (iucnssg.org): "leading authority on the status of sharks,
           // rays, and chimaeras" — the entire class Chondrichthyes, repeatedly
           // and explicitly including chimaeras (not just elasmobranchs).
-          estimatedDescribed: 1_266,
-          estimatedSource: ESCHMEYER + " — Chondrichthyes (sharks, rays, skates, and chimaeras)",
-          estimatedSourceUrl: ESCHMEYER_URL,
           sourceUrl: "https://www.iucnssg.org",
         },
         {
@@ -1579,9 +1145,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Scaridae)" — explicit, both grouper family labels (Epinephelidae
           // was split out of Serranidae, and our data still carries both) plus
           // wrasses and parrotfishes.
-          estimatedDescribed: 1_066,
-          estimatedSource: ESCHMEYER + " — Serranidae + Epinephelidae + Labridae + Scaridae",
-          estimatedSourceUrl: ESCHMEYER_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-groupers-and-wrasses-specialist-group",
         },
         {
@@ -1594,9 +1157,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Lethrinidae, Caesionidae. Gerreidae (mojarras) is NOT named
           // anywhere in the group's own materials despite being a similar
           // reef-fish family — deliberately left out, falls to the catch-all.
-          estimatedDescribed: 547,
-          estimatedSource: ESCHMEYER + " — Lutjanidae + Sparidae + Haemulidae + Nemipteridae + Lethrinidae + Caesionidae",
-          estimatedSourceUrl: ESCHMEYER_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-snapper-seabream-and-grunt-specialist-group",
         },
         {
@@ -1613,9 +1173,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // core family) plus Solenostomidae (ghost pipefish), Aulostomidae
           // (trumpetfish), Fistulariidae (cornetfish), and Centriscidae
           // (shrimpfish) — all explicitly named, not just the core family.
-          estimatedDescribed: 324,
-          estimatedSource: ESCHMEYER + " — Syngnathidae + Solenostomidae + Aulostomidae + Fistulariidae + Centriscidae (order Syngnathiformes)",
-          estimatedSourceUrl: ESCHMEYER_URL,
           sourceUrl: "https://iucn-seahorse.org/",
         },
         {
@@ -1627,9 +1184,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // include revising and submitting assessments of all 300 species of
           // Croaker and Drum Fishes" — the whole family Sciaenidae, no
           // exceptions found.
-          estimatedDescribed: 302,
-          estimatedSource: ESCHMEYER + " — Sciaenidae",
-          estimatedSourceUrl: ESCHMEYER_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-croaker-and-drum-fishes-red-list-authority",
         },
         {
@@ -1642,9 +1196,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // family Salmonidae)... throughout their native range," naming
           // genera across all 3 subfamilies (Salmoninae, Coregoninae,
           // Thymallinae) — the whole family, no carve-outs found.
-          estimatedDescribed: 248,
-          estimatedSource: ESCHMEYER + " — Salmonidae",
-          estimatedSourceUrl: ESCHMEYER_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-salmonid-specialist-group",
         },
         {
@@ -1660,9 +1211,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // (not just the tuna genera — includes mackerels/bonitos too), and
           // 10 = Istiophoridae (9 species) + monotypic Xiphiidae (swordfish).
           // 51 + 10 = 61, confirming full-family scope for all 3 families.
-          estimatedDescribed: 63,
-          estimatedSource: ESCHMEYER + " — Scombridae + Istiophoridae + Xiphiidae (matches the group's own self-declared total of 61 species)",
-          estimatedSourceUrl: ESCHMEYER_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-tuna-and-billfish-specialist-group",
         },
         {
@@ -1675,9 +1223,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // = sturgeons; Polyodontidae = paddlefish, only 2 species exist:
           // American paddlefish + the now-extinct Chinese paddlefish), not
           // sturgeons alone.
-          estimatedDescribed: 27,
-          estimatedSource: ESCHMEYER + " — Acipenseridae + Polyodontidae (order Acipenseriformes)",
-          estimatedSourceUrl: ESCHMEYER_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-sturgeon-specialist-group",
         },
         {
@@ -1690,9 +1235,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // species. Its own site (a page of iucnffsg.org) was found compromised
           // with injected gambling/casino content during review, so sourceUrl
           // points to the iucn.org directory listing instead.
-          estimatedDescribed: 16,
-          estimatedSource: ESCHMEYER + " — Anguillidae (genus Anguilla)",
-          estimatedSourceUrl: ESCHMEYER_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-anguillid-eel-specialist-group",
         },
         // Catch-all: NOT a claim on behalf of Freshwater Fish SG (see the
@@ -1715,9 +1257,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
               "anguillidae",
             ],
           },
-          estimatedDescribed: 29_185,
-          estimatedSource: "Fish species (assessed + unassessed, per our own data) not in any of the 9 SSC groups above (approx.; includes species that would belong to the Freshwater Fish SG or Marine Fishes RLA's much broader habitat-defined remits in reality — see exclusion note above)",
-          estimatedSourceUrl: ESCHMEYER_URL,
         },
       ],
     },
@@ -1805,9 +1344,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // homepage reports 145,412 accepted names, and this app's own
           // COL_2025 data for taxon_group=molluscs totals ~89,648 rows,
           // matching independent literature (~90,000 valid Recent species).
-          estimatedDescribed: 89_648,
-          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Mollusca (whole phylum, incl. cephalopods)",
-          estimatedSourceUrl: COL_2025_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-mollusc-specialist-group",
         },
         {
@@ -1827,9 +1363,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // reports ~53,000-53,700 described spider species alone, plus
           // ~2,600-2,900 scorpions, matching this app's own COL_2025 data
           // (~54,938 Araneae + 2,955 Scorpiones).
-          estimatedDescribed: 57_893,
-          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Araneae + Scorpiones (evidenced core; own mission language claims broader \"all arachnids\" but no other order has any demonstrated group activity)",
-          estimatedSourceUrl: COL_2025_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-spider-and-scorpion-specialist-group",
         },
         {
@@ -1868,9 +1401,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // estimatedDescribed corrected — the prior figure (14,269)
           // undercounted by ~1.5x against this app's own COL_2025 data for
           // the exact 8-family filter (~21,600-23,000 rows).
-          estimatedDescribed: 21_631,
-          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Papilionoidea (6 butterfly families) + Hedylidae + Saturniidae (evidenced core; group's own mission statement literally says \"butterflies and moths\" and it has published scattered assessments in 4 other moth families, but has never claimed those families wholesale — see comment)",
-          estimatedSourceUrl: COL_2025_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-butterfly-and-moth-specialist-group",
         },
         {
@@ -1893,9 +1423,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // undercounted by ~3x; Orthoptera Species File alone lists
           // ~28,000-29,500 valid species, matching this app's own COL_2025
           // data (~28,701 Orthoptera + 3,439 Phasmida + 2,522 Mantodea).
-          estimatedDescribed: 34_662,
-          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Orthoptera + Phasmida + Mantodea",
-          estimatedSourceUrl: COL_2025_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-grasshopper-specialist-group",
         },
         {
@@ -1918,9 +1445,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // estimatedDescribed corrected to match the group's own "more than
           // 20,000" figure quoted directly above — the prior value (7,411)
           // directly contradicted it.
-          estimatedDescribed: 20_400,
-          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Apidae + Halictidae + Megachilidae + Andrenidae + Colletidae + Melittidae + Stenotritidae (clade Anthophila, all bees; matches the group's own \">20,000\" claim)",
-          estimatedSourceUrl: COL_2025_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-wild-bee-specialist-group",
         },
         {
@@ -1933,9 +1457,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // estimatedDescribed corrected — the COL_2025-derived figure
           // (6,390) badly undercounted real diversity, especially Trichoptera
           // (~16,000 species alone per the Trichoptera World Checklist).
-          estimatedDescribed: 23_000,
-          estimatedSource: "Trichoptera World Checklist (~16,000) + Ephemeroptera (~3,500) + Plecoptera (~3,700) literature figures",
-          estimatedSourceUrl: "https://trichopt.app.clemson.edu/welcome.php",
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-mayfly-stonefly-and-caddisfly-specialist-group",
         },
         {
@@ -1947,9 +1468,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // dragonflies)" — the entire order, both suborders (Anisoptera +
           // Zygoptera), which is exactly this whole Table 1a CSV group (no
           // other order appears in our "dragonflies_and_damselflies" data).
-          estimatedDescribed: 6_353,
-          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Odonata (whole CSV group)",
-          estimatedSourceUrl: COL_2025_URL,
           sourceUrl: "https://worlddragonfly.org/",
         },
         {
@@ -1962,9 +1480,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Formicidae — so there's no competing claim to check against).
           // estimatedDescribed corrected — the COL_2025-derived figure
           // (5,976) undercounted real global ant diversity by ~2.7x.
-          estimatedDescribed: 16_308,
-          estimatedSource: "AntWiki — total valid extant ant species",
-          estimatedSourceUrl: "https://www.antwiki.org/wiki/Category:Extant_species",
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-ant-specialist-group",
         },
         {
@@ -2095,9 +1610,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // be identified directly and named individually via
           // extraSpeciesNames instead (see below), the same OR escape hatch
           // already used for Antelope SG's out-of-family exceptions.
-          estimatedDescribed: 2_965,
-          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — 3 crayfish families + Aeglidae + 5 freshwater-crab families + Atyidae + Gecarcinidae (land crabs) + 4 small freshwater-shrimp families + 300 freshwater-tagged Palaemonidae species",
-          estimatedSourceUrl: COL_2025_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-freshwater-crustacean-specialist-group",
         },
         {
@@ -2120,9 +1632,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // revisit if per-species range data ever becomes reliable enough to
           // narrow this correctly. estimatedDescribed corrected — the prior
           // figure (2,330) undercounted real global Syrphidae by ~2.8x.
-          estimatedDescribed: 6_535,
-          estimatedSource: "Syrphidae World Checklist — whole family (group's own current mission is explicitly \"European hoverflies\" only, ~892 species — see comment)",
-          estimatedSourceUrl: "https://www.syrphidae.com/checklist.php",
           sourceUrl: "https://iucn-hsg.pmf.uns.ac.rs/",
         },
         {
@@ -2138,9 +1647,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // the standard technical term for "reef-building corals." No
           // source confirms or denies broader Anthozoa inclusion, so the
           // rest is left to the catch-all rather than guessed either way.
-          estimatedDescribed: 1_841,
-          estimatedSource: IUCN_SOURCE + " (WoRMS 2025) — Scleractinia (reef-building corals; narrower than all of Anthozoa)",
-          estimatedSourceUrl: "https://www.marinespecies.org",
           sourceUrl: "https://iucncoralsg.org/",
         },
         {
@@ -2150,9 +1656,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Own site (fireflyersinternational.net/iucn): "Fireflies
           // (Coleoptera: Lampyridae)" — the whole family, no narrower
           // carve-out found.
-          estimatedDescribed: 2_400,
-          estimatedSource: "Wikipedia (Lampyridae) — \"more than 2,400 described species\"; previous estimate of 538 was a stale undercount",
-          estimatedSourceUrl: "https://en.wikipedia.org/wiki/Firefly",
           sourceUrl: "https://fireflyersinternational.net/iucn",
         },
         {
@@ -2241,9 +1744,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Scarabaeinae is real but incomplete relative to true global
           // diversity (Wikipedia: "The Scarabaeinae alone comprises more
           // than 5,000 species").
-          estimatedDescribed: 6_000,
-          estimatedSource: "Own co-chairs' founding announcement (Oryx 57(2), 2023) — \"over 6,000 described species\" across Geotrupidae + Scarabaeinae",
-          estimatedSourceUrl: "https://doi.org/10.1017/S0030605323000032",
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-dung-beetle-specialist-group",
         },
         {
@@ -2254,9 +1754,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // whole-class mapping, same pattern as Mollusc SG. Class
           // Holothuroidea (sea cucumbers) within the "other_invertebrates"
           // Table 1a CSV group.
-          estimatedDescribed: 990,
-          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Holothuroidea",
-          estimatedSourceUrl: COL_2025_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-sea-cucumber-specialist-group",
         },
         {
@@ -2269,9 +1766,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // CSV group (horseshoe crabs are chelicerates, not true
           // crustaceans, despite the common name — already modeled
           // separately in this tree).
-          estimatedDescribed: 4,
-          estimatedSource: IUCN_SOURCE + " — all 4 living horseshoe crab species (whole CSV group)",
-          estimatedSourceUrl: IUCN_SOURCE_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-horseshoe-crab-specialist-group",
         },
         {
@@ -2288,9 +1782,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Acanthobdellida, Branchiobdellida) and aquatic
           // oligochaetes/potworms (Tubificida, Lumbriculida, Enchytraeida,
           // Haplotaxida, etc.) are not earthworms.
-          estimatedDescribed: 935,
-          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Crassiclitellata + Moniligastrida",
-          estimatedSourceUrl: COL_2025_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-earthworm-specialist-group",
         },
         {
@@ -2306,9 +1797,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Homoscleromorpha, doesn't appear as a distinct label here — its
           // species are filed under Demospongiae, the older classification
           // still used by this dataset).
-          estimatedDescribed: 3_567,
-          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Demospongiae + Hexactinellida + Calcarea (whole phylum Porifera, per our data's class labels)",
-          estimatedSourceUrl: COL_2025_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-sponge-specialist-group-2021-2025",
         },
         // Catch-all: a plain "No SSC Group" remainder (NOT a claim on behalf
@@ -2474,9 +1962,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
               "troglomexicanus huastecae", "troglomexicanus perezfarfanteae", "troglomexicanus tamaulipasensis",
             ],
           },
-          estimatedDescribed: 247_666,
-          estimatedSource: "Invertebrate species (assessed + unassessed, per our own data) not in any of the 17 SSC groups above (approx.; includes species that would belong to Cave Invertebrate SG, the Terrestrial and Freshwater Invertebrate RLA, or the Marine Invertebrates RLA in reality — see exclusion note above)",
-          estimatedSourceUrl: COL_2025_URL,
         },
       ],
     },
@@ -2579,9 +2064,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // estimatedDescribed corrected — the prior figure (12,767)
           // undercounted by ~2.5x against both literature (Christenhusz &
           // Byng 2016 cite >28,000) and this app's own COL_2025 data.
-          estimatedDescribed: 31_992,
-          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Orchidaceae",
-          estimatedSourceUrl: COL_2025_URL,
           sourceUrl: "https://www.orchidspecialistgroup.com/about",
         },
         {
@@ -2597,9 +2079,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
                     // estimatedDescribed reconciled with MOSSES_NODE above — both use
           // the identical csvGroups:["mosses"] filter and should never have
           // diverged.
-          estimatedDescribed: 19_539,
-          estimatedSource: IUCN_SOURCE + " (" + CHRISTENHUSZ + ") — Bryophyta + Marchantiophyta + Anthocerotophyta (whole CSV group)",
-          estimatedSourceUrl: CHRISTENHUSZ_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-bryophyte-specialist-group",
         },
         {
@@ -2623,9 +2102,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Agave, Pachypodium, Hoodia, Dudleya, Fouquieria, ...) that no
           // source could verify with confidence, so they're deliberately
           // left to the catch-all rather than guessed.
-          estimatedDescribed: 1_830,
-          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Cactaceae + Didiereaceae (the group's own remit is broader, growth-form-based, spanning several other mixed families we can't safely isolate — see comment)",
-          estimatedSourceUrl: COL_2025_URL,
           sourceUrl: "https://iucn-cssg.org/en/cacti_and_succulents/",
         },
         {
@@ -2641,9 +2117,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // undercounted by ~30-35% against both literature (Dransfield et
           // al., Genera Palmarum, ~2,600 species) and this app's own
           // COL_2025 data.
-          estimatedDescribed: 2_538,
-          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Arecaceae",
-          estimatedSourceUrl: COL_2025_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-palm-specialist-group",
         },
         {
@@ -2663,9 +2136,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // named in an unverifiable cached source — excluded here pending a
           // first-party confirmation, consistent with treating the
           // well-evidenced core as the safe default.
-          estimatedDescribed: 828,
-          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Droseraceae + Nepenthaceae + Sarraceniaceae + Lentibulariaceae + Byblidaceae + Roridulaceae + Cephalotaceae + Drosophyllaceae",
-          estimatedSourceUrl: COL_2025_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-carnivorous-plant-specialist-group",
         },
         {
@@ -2682,9 +2152,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // other group in our list claims them either — a genuine, open
           // gap (3-4 species total) rather than an oversight; they fall to
           // the catch-all.
-          estimatedDescribed: 672,
-          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Pinales (excludes Ginkgo + gnetophytes, which no SSC group in this pilot claims)",
-          estimatedSourceUrl: COL_2025_URL,
           sourceUrl: "https://threatenedconifers.rbge.org.uk/",
         },
         {
@@ -2695,9 +2162,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // accepted genera" across exactly the 2 families of order
           // Cycadales (Cycadaceae, Zamiaceae) — matches our data exactly, no
           // exceptions found.
-          estimatedDescribed: 358,
-          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — Cycadales (Cycadaceae + Zamiaceae)",
-          estimatedSourceUrl: COL_2025_URL,
           sourceUrl: "http://www.cycadgroup.org/",
         },
         {
@@ -2735,9 +2199,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // species," produced by the ~70-member group) and its ongoing 2025
           // regional Red List reassessments, which consistently work from
           // exactly this genus list.
-          estimatedDescribed: 76,
-          estimatedSource: IUCN_SOURCE + " (" + COL_2025 + ") — 4 whole seagrass families + the 3 marine genera within Hydrocharitaceae (Enhalus, Halophila, Thalassia); inferred from the group's own assessment practice, not a quoted scope statement",
-          estimatedSourceUrl: COL_2025_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-seagrass-species-specialist-group",
         },
         // Catch-all: a plain "No SSC Group" remainder (NOT a claim on behalf
@@ -2770,9 +2231,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // CSV-group totals (flowering_plants + gymnosperms +
           // ferns_and_allies + green_algae + red_algae = 404,464) imply once
           // the 8 named sibling groups' current estimates are subtracted.
-          estimatedDescribed: 346_631,
-          estimatedSource: "Plant species (assessed + unassessed, per our own data) not in any of the 8 SSC groups above (approx.; includes species that would belong to Crop Wild Relative SG, Freshwater Plant SG, Global Trees SG, or Medicinal Plant SG in reality — see exclusion note above)",
-          estimatedSourceUrl: COL_2025_URL,
         },
       ],
     },
@@ -2809,9 +2267,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // the entire "mushrooms" CSV group under one group's banner —
           // exactly the kind of overclaim this pilot has consistently
           // avoided elsewhere.
-          estimatedDescribed: 1_463,
-          estimatedSource: SPECIES_FUNGORUM + " — Pezizales (the group's own remit is broader — non-lichenized Ascomycota generally — but not safely encodable without per-species lichenization data; see comment)",
-          estimatedSourceUrl: SPECIES_FUNGORUM_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-cup-fungi-truffles-and-allies-specialist-group",
         },
         {
@@ -2852,9 +2307,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // oomycete, and myxomycete classes) — UNVERIFIED against real data
           // since none currently exists to check against; revisit naming if
           // this ever needs to match a real assessed species.
-          estimatedDescribed: 0,
-          estimatedSource: "No known described-species estimate published for this specific 4-lineage grouping; near-zero global IUCN Red List assessment activity confirmed for all 4 (see comment)",
-          estimatedSourceUrl: SPECIES_FUNGORUM_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-chytrid-zygomycete-downy-mildew-and-myxomycete-specialist",
         },
         {
@@ -2879,9 +2331,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Lichinomycetes, Coniocybomycetes, Candelariomycetes) but weren't
           // confirmed as explicitly in-scope by the group's own materials, so
           // they're left to the catch-all rather than assumed.
-          estimatedDescribed: 7_301,
-          estimatedSource: SPECIES_FUNGORUM + " — Lecanoromycetes (evidenced core; see comment for flagged gaps)",
-          estimatedSourceUrl: SPECIES_FUNGORUM_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-lichen-specialist-group",
         },
         {
@@ -2898,9 +2347,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // Agaricomycetes with no narrower restriction implied. Standard
           // mycological usage: mushrooms/brackets/puffballs collectively
           // describe class Agaricomycetes.
-          estimatedDescribed: 18_793,
-          estimatedSource: SPECIES_FUNGORUM + " — Agaricomycetes",
-          estimatedSourceUrl: SPECIES_FUNGORUM_URL,
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-mushroom-bracket-and-puffball-specialist-group",
         },
         {
@@ -2951,9 +2397,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
           // filter happens to match in our own dataset, not a real-world
           // described-species estimate — same category error as Dung Beetle
           // SG's first-pass estimate).
-          estimatedDescribed: 10_200,
-          estimatedSource: "GBIF backbone (Pucciniales, ~8,500) + literature (Ustilaginomycotina smuts, ~1,700)",
-          estimatedSourceUrl: "https://www.gbif.org/species/search?q=Pucciniales&rank=ORDER",
           sourceUrl: SSC_GROUP_URL_BASE + "iucn-ssc-rusts-and-smuts-specialist-group",
         },
         // Catch-all: a plain "No SSC Group" remainder. Kept in sync
@@ -2978,16 +2421,12 @@ export const TAXONOMY_TREE: TaxonomyNode = {
             ],
             excludeClasses: ["chytridiomycetes", "mucoromycetes", "zoopagomycetes", "oomycetes", "myxomycetes", "lecanoromycetes", "agaricomycetes"],
           },
-          estimatedDescribed: 23_835,
-          estimatedSource: SPECIES_FUNGORUM + " — fungi species (assessed + unassessed, per our own data) not in any of the 5 SSC groups above (approx.)",
-          estimatedSourceUrl: SPECIES_FUNGORUM_URL,
         },
       ],
     },
 
     // ─── VIRTUAL GROUPING NODES ────────────────────────────────────────
     // These aggregate Table 1a groups for the default view
-
     {
       id: "invertebrates",
       name: "Invertebrates",
@@ -3007,7 +2446,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         prefixTree(OTHER_INVERTEBRATES_NODE, "inv-"),
       ],
     },
-
     {
       id: "plantae",
       name: "Plants",
@@ -3025,7 +2463,6 @@ export const TAXONOMY_TREE: TaxonomyNode = {
         prefixTree(RED_ALGAE_NODE, "pl-"),
       ],
     },
-
     {
       id: "fungi",
       name: "Fungi & Protists",
