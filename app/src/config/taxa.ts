@@ -193,3 +193,21 @@ export const CATEGORY_NAMES: Record<string, string> = {
   DD: "Data Deficient",
   NE: "Not Evaluated",
 };
+
+// Older/historical Red List assessments sometimes use legacy category codes
+// (pre-1994 system letters, or the old "LR/xx" Lower Risk subdivisions) —
+// normalize those to their modern equivalent so callers can key straight
+// into CATEGORY_COLORS/CATEGORY_NAMES above.
+export function normalizeCategory(code: string): string {
+  if (code.startsWith("LR/")) {
+    const sub = code.split("/")[1];
+    if (sub === "lc") return "LC";
+    if (sub === "nt") return "NT";
+    if (sub === "cd") return "VU"; // Conservation Dependent -> treat as VU-adjacent
+    return code;
+  }
+  if (code === "V") return "VU";
+  if (code === "E") return "EN";
+  if (code === "R") return "VU";
+  return code;
+}

@@ -7,6 +7,7 @@ import type maplibregl from "maplibre-gl";
 import { mapTaxonId } from "@/lib/data/taxonomy-constants";
 import { InatObservation, getThumbUrl, InatPhotoWithPreview } from "./InatPhotoCard";
 import { QualityFlag, QUALITY_FLAG_LABELS, QUALITY_FLAG_DESCRIPTIONS, QUALITY_FLAG_SOURCES } from "@/lib/coordinate-cleaning";
+import { CATEGORY_COLORS, normalizeCategory } from "@/config/taxa";
 import { FaInfoCircle } from "react-icons/fa";
 
 // Fixed page size for iNat photo grid (2 columns x 5 rows)
@@ -271,6 +272,10 @@ interface OccurrenceMapRowProps {
   mounted: boolean;
   assessmentYear?: number | null;
   assessmentDate?: string | null;
+  /** This species' current IUCN Red List category (e.g. "VU", "EN") — shown as a
+   * small colored badge on the current-assessment marker in the date-range
+   * timeline, alongside the same badges for previousAssessments' categories. */
+  category?: string | null;
   /** CSV taxon group (e.g. "flowering_plants", "mushrooms") — used to default
    * preserved specimens ON for plants & fungi, where herbarium/fungarium
    * records are a core data source. */
@@ -333,6 +338,7 @@ export default function OccurrenceMapRow({
   mounted,
   assessmentYear,
   assessmentDate,
+  category,
   taxonGroup,
   scientificName,
   nativeCountriesRedList,
@@ -877,19 +883,19 @@ export default function OccurrenceMapRow({
   // may not already include the current assessment depending on the caller.
   const assessmentMarkers = useMemo(() => {
     const seen = new Set<string>();
-    const markers: { date: string; label: string; isCurrent: boolean }[] = [];
-    const add = (date: string | null | undefined, year: string | number | null | undefined, isCurrent: boolean, category?: string | null) => {
+    const markers: { date: string; category: string | null; isCurrent: boolean }[] = [];
+    const add = (date: string | null | undefined, year: string | number | null | undefined, isCurrent: boolean, cat?: string | null) => {
       const d = date && date.length >= 10 ? date.slice(0, 10) : year != null ? `${year}-01-01` : null;
       if (!d || seen.has(d)) return;
       seen.add(d);
-      markers.push({ date: d, label: category ? `${d} (${category})` : d, isCurrent });
+      markers.push({ date: d, category: cat ? normalizeCategory(cat) : null, isCurrent });
     };
-    add(assessmentDate, assessmentYear, true);
+    add(assessmentDate, assessmentYear, true, category);
     for (const a of previousAssessments ?? []) {
       add(a.date, a.year, false, a.category);
     }
     return markers.sort((a, b) => a.date.localeCompare(b.date));
-  }, [assessmentDate, assessmentYear, previousAssessments]);
+  }, [assessmentDate, assessmentYear, category, previousAssessments]);
 
   // Split view: partition occurrences by exact assessment date
   const { preAssessmentOccs, postAssessmentOccs } = useMemo(() => {
@@ -1853,7 +1859,27 @@ export default function OccurrenceMapRow({
                         const beforeMarkers = markerDays.filter((m) => m.days < 0);
                         const afterMarkers = markerDays.filter((m) => m.days > totalDays);
                         const titleFor = (list: typeof markerDays) =>
-                          list.map((m) => `${m.date}${m.isCurrent ? " (current)" : ""}`).join("\n");
+                          list.map((m) => `${m.date}${m.category ? ` — ${m.category}` : ""}${m.isCurrent ? " (current)" : ""}`).join("\n");
+
+                        // Snap a handle onto a nearby in-range assessment marker (within
+                        // ~1.5% of the track) so it's easy to trim exactly to "everything
+                        // since this assessment" rather than fighting day-by-day precision.
+                        // Returns the marker itself (not just its day offset) so callers can
+                        // use its exact date string — going back through dayOffsetToDate's
+                        // UTC-parsed-diff/local-reconstructed round trip can drift by a day.
+                        const snapThresholdDays = Math.max(1, Math.round(totalDays * 0.015));
+                        const snapToMarker = (days: number) => {
+                          let closest: (typeof inRangeMarkers)[number] | null = null;
+                          let closestDist = Infinity;
+                          for (const m of inRangeMarkers) {
+                            const dist = Math.abs(m.days - days);
+                            if (dist <= snapThresholdDays && dist < closestDist) {
+                              closest = m;
+                              closestDist = dist;
+                            }
+                          }
+                          return closest;
+                        };
 
                         return (
                           <div className="flex flex-col gap-1">
@@ -1867,20 +1893,39 @@ export default function OccurrenceMapRow({
                                 in globals.css for how the inputs stack without one
                                 swallowing the other's clicks. Markers and track share the
                                 same relative coordinate space so their % positions line up. */}
-                            <div className={`relative ${assessmentMarkers.length > 0 ? "pt-2.5" : ""}`}>
+                            <div className={`relative ${assessmentMarkers.length > 0 ? "pt-4" : ""}`}>
                               {assessmentMarkers.length > 0 && (
-                                <div className="absolute inset-x-0 top-0 h-2.5">
-                                  {inRangeMarkers.map((m) => (
-                                    <div
-                                      key={m.date}
-                                      className="absolute bottom-0"
-                                      style={{ left: `${pct(m.days)}%`, transform: "translateX(-50%)" }}
-                                      title={`Assessed ${m.date}${m.isCurrent ? " (current)" : ""}`}
-                                    >
-                                      <div className={`w-1.5 h-1.5 rounded-full mx-auto ${m.isCurrent ? "bg-amber-500" : "bg-amber-400/70 dark:bg-amber-500/60"}`} />
-                                      <div className={`w-px h-1 mx-auto ${m.isCurrent ? "bg-amber-500" : "bg-amber-400/70 dark:bg-amber-500/60"}`} />
-                                    </div>
-                                  ))}
+                                <div className="absolute inset-x-0 top-0 h-4">
+                                  {inRangeMarkers.map((m) => {
+                                    const color = m.category ? CATEGORY_COLORS[m.category] : null;
+                                    const solidText = m.category === "EX" || m.category === "EW";
+                                    return (
+                                      <div
+                                        key={m.date}
+                                        className="absolute bottom-0"
+                                        style={{ left: `${pct(m.days)}%`, transform: "translateX(-50%)" }}
+                                        title={`Assessed ${m.date}${m.category ? ` — ${m.category}` : ""}${m.isCurrent ? " (current)" : ""}`}
+                                      >
+                                        {color ? (
+                                          <span
+                                            className={`block px-1 rounded-sm text-[8px] leading-[11px] font-semibold whitespace-nowrap ${
+                                              m.isCurrent ? "ring-1 ring-offset-1 ring-zinc-400 dark:ring-zinc-500 dark:ring-offset-zinc-900" : ""
+                                            }`}
+                                            style={
+                                              solidText
+                                                ? { backgroundColor: color, color: "#fff" }
+                                                : { backgroundColor: `${color}20`, color }
+                                            }
+                                          >
+                                            {m.category}
+                                          </span>
+                                        ) : (
+                                          <div className={`w-1.5 h-1.5 rounded-full mx-auto ${m.isCurrent ? "bg-amber-500" : "bg-amber-400/70 dark:bg-amber-500/60"}`} />
+                                        )}
+                                        <div className={`w-px h-1 mx-auto ${m.isCurrent ? "bg-amber-500" : "bg-zinc-300 dark:bg-zinc-600"}`} />
+                                      </div>
+                                    );
+                                  })}
                                   {beforeMarkers.length > 0 && (
                                     <div
                                       className="absolute bottom-0 left-0 text-[9px] leading-none text-amber-600 dark:text-amber-400 cursor-default"
@@ -1914,8 +1959,13 @@ export default function OccurrenceMapRow({
                                   max={totalDays}
                                   value={Math.min(fromDays, toDays)}
                                   onChange={(e) => {
-                                    const days = Math.min(parseInt(e.target.value, 10), toDays);
-                                    setDateRangeFrom(days <= 0 ? null : dayOffsetToDate(days));
+                                    const raw = Math.min(parseInt(e.target.value, 10), toDays);
+                                    const snapped = snapToMarker(raw);
+                                    if (snapped) {
+                                      setDateRangeFrom(snapped.days <= 0 ? null : snapped.date);
+                                    } else {
+                                      setDateRangeFrom(raw <= 0 ? null : dayOffsetToDate(raw));
+                                    }
                                   }}
                                   onPointerDown={() => setActiveDateHandle("from")}
                                   style={{ zIndex: activeDateHandle === "from" ? 5 : 3 }}
@@ -1928,8 +1978,13 @@ export default function OccurrenceMapRow({
                                   max={totalDays}
                                   value={Math.max(toDays, fromDays)}
                                   onChange={(e) => {
-                                    const days = Math.max(parseInt(e.target.value, 10), fromDays);
-                                    setDateRangeTo(days >= totalDays ? null : dayOffsetToDate(days));
+                                    const raw = Math.max(parseInt(e.target.value, 10), fromDays);
+                                    const snapped = snapToMarker(raw);
+                                    if (snapped) {
+                                      setDateRangeTo(snapped.days >= totalDays ? null : snapped.date);
+                                    } else {
+                                      setDateRangeTo(raw >= totalDays ? null : dayOffsetToDate(raw));
+                                    }
                                   }}
                                   onPointerDown={() => setActiveDateHandle("to")}
                                   style={{ zIndex: activeDateHandle === "to" ? 5 : 4 }}
@@ -1943,9 +1998,8 @@ export default function OccurrenceMapRow({
                               </div>
                             </div>
                             {assessmentMarkers.length > 0 && (
-                              <div className="flex items-center gap-1 text-[9px] text-zinc-400 dark:text-zinc-500">
-                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
-                                Red List assessment date{assessmentMarkers.length > 1 ? "s" : ""}
+                              <div className="text-[9px] text-zinc-400 dark:text-zinc-500">
+                                Marked dates are Red List assessments, colored by category — drag a handle near one to snap to it.
                               </div>
                             )}
                             {(dateRangeFrom != null || dateRangeTo != null) && (

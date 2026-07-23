@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { CATEGORY_COLORS, CATEGORY_NAMES } from "@/config/taxa";
+import { CATEGORY_COLORS, CATEGORY_NAMES, normalizeCategory } from "@/config/taxa";
 
 interface PreviousAssessment {
   year: string;
@@ -75,21 +75,6 @@ function formatDate(iso: string): string {
   } catch {
     return iso;
   }
-}
-
-// Map category code to a normalized form (handle legacy codes like LR/lc, LR/nt, V)
-function normalizeCategory(code: string): string {
-  if (code.startsWith("LR/")) {
-    const sub = code.split("/")[1];
-    if (sub === "lc") return "LC";
-    if (sub === "nt") return "NT";
-    if (sub === "cd") return "VU"; // Conservation Dependent -> treat as VU-adjacent
-    return code;
-  }
-  if (code === "V") return "VU";
-  if (code === "E") return "EN";
-  if (code === "R") return "VU";
-  return code;
 }
 
 // Safely extract category code from red_list_category (can be string or object)

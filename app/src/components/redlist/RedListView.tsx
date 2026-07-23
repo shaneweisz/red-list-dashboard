@@ -4005,6 +4005,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                 mounted={mounted}
                                 assessmentYear={assessmentYear}
                                 assessmentDate={s.assessment_date}
+                                category={s.category}
                                 taxonGroup={s.taxon_group}
                                 scientificName={s.scientific_name}
                                 nativeCountriesRedList={s.countries}
