@@ -59,6 +59,22 @@ const RANK_COLUMN_SQL: Record<DynamicRank, string> = {
   genus: "coalesce(lower(split_part(scientific_name, ' ', 1)), '')",
 };
 
+// A value can appear in colByValue's GROUP BY (at least one raw CoL row has
+// it) yet still carry colDescribed=0 once the in_base/universe/exclusion
+// FILTERs zero it out (e.g. Reptiles' blank order_name: 202 raw rows, but
+// 201 are non-accepted synonyms/extinct-unconfirmed and the 1 real one gets
+// reclassified away by canonicalOrderColumnSql's species override — see
+// taxonomy-sql.ts). col_ne can never exceed col_described (its FILTER is a
+// strict superset), so colDescribed===0 alone is a safe "nothing real here"
+// check. Skip these entirely rather than showing an empty "Unclassified X:
+// 0 described, 0 assessed" row with nothing to click into. Extracted to its
+// own function (rather than left inline) so this bucket-hiding rule — easy to
+// get backwards (hiding a real bucket, or showing an empty one) and previously
+// untested — has a direct unit test.
+export function isEmptyLiveBucket(totalAssessed: number, colDescribed: number | undefined): boolean {
+  return totalAssessed === 0 && (colDescribed ?? 0) === 0;
+}
+
 /**
  * Enumerate the live children of `parentId` at `nextRank`. `parentId` is either
  * a real static root (e.g. "mammals") or a dynamic id (e.g.
@@ -130,16 +146,7 @@ export async function getLiveRankChildren(
   for (const value of new Set([...byValue.keys(), ...colByValue.keys()])) {
     const acc = byValue.get(value) ?? { totalAssessed: 0, outdated: 0, byCategory: {} };
     const col = colByValue.get(value);
-    // A value can appear in colByValue's GROUP BY (at least one raw CoL row has
-    // it) yet still carry colDescribed=0 once the in_base/universe/exclusion
-    // FILTERs zero it out (e.g. Reptiles' blank order_name: 202 raw rows, but
-    // 201 are non-accepted synonyms/extinct-unconfirmed and the 1 real one gets
-    // reclassified away by canonicalOrderColumnSql's species override — see
-    // taxonomy-sql.ts). col_ne can never exceed col_described (its FILTER is a
-    // strict superset), so colDescribed===0 alone is a safe "nothing real here"
-    // check. Skip these entirely rather than showing an empty "Unclassified X:
-    // 0 described, 0 assessed" row with nothing to click into.
-    if (acc.totalAssessed === 0 && (col?.colDescribed ?? 0) === 0) continue;
+    if (isEmptyLiveBucket(acc.totalAssessed, col?.colDescribed)) continue;
     const childId = buildDynamicNodeId(rootId, [...parentSegments, { rank: nextRank, value }]);
     out.push({
       id: childId,

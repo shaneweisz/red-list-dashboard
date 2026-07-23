@@ -32,7 +32,8 @@ import {
   COL_DOMESTIC_EXCLUDE_NAMES,
 } from "../src/config/col-described-overrides";
 import { isOutdated } from "../src/lib/outdated";
-import { filterToSql, sqlStrList, type NodeFilter } from "../src/lib/taxonomy-sql";
+import { filterToSql, sqlStrList, canonicalClassColumnSql, canonicalOrderColumnSql, type NodeFilter } from "../src/lib/taxonomy-sql";
+import { DYNAMIC_DRILLDOWN_ROOTS, nextDynamicRank } from "../src/lib/dynamic-taxon";
 import {
   computeBreakdownEntry,
   SPLIT_CANDIDATES_SQL,
@@ -563,6 +564,68 @@ export async function run(): Promise<void> {
   const sscOutputPath = path.join(DATA_DIR, "ssc-group-children-summaries.json");
   fs.writeFileSync(sscOutputPath, JSON.stringify(sscGroupChildrenSummaries, null, 2) + "\n");
   console.log(`Wrote ${Object.keys(sscGroupChildrenSummaries).length} SSC group parents (${childCount} total children across both files) → ${sscOutputPath}`);
+
+  console.log("\nChecking for new IUCN/CoL class-order alias drift...");
+  await checkTaxonomyAliasDrift();
+}
+
+// Warns (does not fail the sync) about any IUCN class/order value with zero
+// matching CoL rows after canonical aliasing — the exact failure mode behind
+// every alias fixed in this PR (Cetacea/Artiodactyla, Struthioniformes,
+// Pinales, Maxillopoda/Hexanauplia→Copepoda, Theocostraca→Thecostraca,
+// Nemertea→Hoplonemertea): each was found by a human noticing an implausible
+// percentage and then manually querying assessed.parquet vs. species/ by
+// hand. This automates that same query across every taxon group on every
+// sync, so the next CoL taxonomy shift gets caught here rather than waiting
+// for someone to spot a "0% assessed" row again. Deliberately just a console
+// warning — a real mismatch here doesn't corrupt any data (a live bucket just
+// reads oddly until someone adds the alias to COL_CLASS_ALIASES/
+// COL_ORDER_ALIASES in taxonomy-sql.ts), so it shouldn't block a sync the way
+// a thrown error would.
+//
+// Scoped to only what could actually show up as a misleading live bucket —
+// order for every DYNAMIC_DRILLDOWN_ROOTS group (order is somewhere in all
+// of their rank chains, first or second), class only for the ones that group
+// by class at all (nextDynamicRank(id) === "class" on a bare root, i.e. the
+// class-first roots — see dynamic-taxon.ts's ROOT_RANK_ORDER). Checking every
+// taxon/rank combination regardless of relevance (e.g. Gymnosperms' class,
+// which nothing ever groups by) was tried first and buried the few real,
+// actionable mismatches under ~50 lines of noise nobody would keep reading.
+async function checkTaxonomyAliasDrift(): Promise<void> {
+  const speciesGlob = path.join(DATA_DIR, "species", "**", "*.parquet");
+  const assessedPath = path.join(DATA_DIR, "assessed.parquet");
+  if (!fs.existsSync(path.join(DATA_DIR, "species")) || !fs.existsSync(assessedPath)) {
+    console.log("  Skipping — species/ or assessed.parquet missing.");
+    return;
+  }
+  const liveTaxa = TAXA.filter((t) => DYNAMIC_DRILLDOWN_ROOTS.has(t.id));
+  const conn = await (await DuckDBInstance.create(":memory:")).connect();
+  const dimensions: { label: "class" | "order"; col: string; taxa: typeof TAXA }[] = [
+    { label: "class", col: canonicalClassColumnSql("class_name"), taxa: liveTaxa.filter((t) => nextDynamicRank(t.id) === "class") },
+    { label: "order", col: canonicalOrderColumnSql("order_name", "scientific_name"), taxa: liveTaxa },
+  ];
+  let driftFound = false;
+  for (const { label, col, taxa } of dimensions) {
+    for (const taxon of taxa) {
+      const rows = await (await conn.run(`
+        WITH iucn AS (
+          SELECT ${col} AS v, count(*) AS n FROM read_parquet('${assessedPath}')
+          WHERE taxon_group = '${taxon.id}' GROUP BY v
+        ),
+        col_side AS (
+          SELECT DISTINCT ${col} AS v FROM read_parquet('${speciesGlob}', hive_partitioning=true)
+          WHERE taxon_group = '${taxon.id}' AND in_base
+        )
+        SELECT iucn.v AS value, iucn.n AS assessed_count FROM iucn
+        WHERE iucn.v != '' AND iucn.v NOT IN (SELECT v FROM col_side)
+        ORDER BY iucn.n DESC`)).getRowObjects();
+      for (const row of rows) {
+        driftFound = true;
+        console.warn(`  ⚠ ${taxon.id}: IUCN ${label} "${row.value}" (${row.assessed_count} assessed) has zero matching CoL rows — check COL_${label.toUpperCase()}_ALIASES in taxonomy-sql.ts`);
+      }
+    }
+  }
+  if (!driftFound) console.log("  None found.");
 }
 
 async function main() {

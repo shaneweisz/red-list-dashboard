@@ -13,6 +13,7 @@ import {
   dynamicNodeDisplayName,
   dynamicNodeMatchValue,
   setVernacularNames,
+  DYNAMIC_DRILLDOWN_ROOTS,
 } from "@/lib/dynamic-taxon";
 
 describe("dynamic node id round-trip", () => {
@@ -69,6 +70,34 @@ describe("nextDynamicRank", () => {
   it("other roots are unaffected by fishes' class-first override", () => {
     expect(nextDynamicRank("birds")).toBe("order");
     expect(nextDynamicRank("reptiles")).toBe("order");
+  });
+
+  // Molluscs/Crustaceans/Other Invertebrates joined fishes on the class-first
+  // rank order (2026-07-22) — CoL's order_name has a large real coverage gap
+  // for these three specifically, while class_name is nearly fully populated.
+  // Both the bare and "inv-"-prefixed ids need the override (DYNAMIC_DRILLDOWN_
+  // ROOTS lists both forms for every non-fishes root — see that set's own doc
+  // comment for why), which is exactly the kind of pairing this PR's own
+  // review flagged as easy to half-wire (this test would have caught it: the
+  // bare id alone was initially added to ROOT_RANK_ORDER without its "inv-"
+  // twin during development).
+  it("Molluscs/Crustaceans/Other Invertebrates also start at class, both bare and inv-prefixed forms", () => {
+    for (const root of ["molluscs", "inv-molluscs", "crustaceans", "inv-crustaceans", "other_invertebrates", "inv-other_invertebrates"]) {
+      expect(nextDynamicRank(root), `${root} should start at class`).toBe("class");
+    }
+  });
+
+  // Structural consistency check: every DYNAMIC_DRILLDOWN_ROOTS member must
+  // resolve to SOME real first rank — guards against a root being registered
+  // as live-drillable (making its row show a chevron in the UI) without a
+  // working rank chain behind it, which would silently return no children at
+  // all rather than a helpful error.
+  it("every DYNAMIC_DRILLDOWN_ROOTS member has a real (non-null) first rank", () => {
+    for (const root of DYNAMIC_DRILLDOWN_ROOTS) {
+      const rank = nextDynamicRank(root);
+      expect(rank, `${root} has no first rank`).not.toBeNull();
+      expect(["class", "order"]).toContain(rank);
+    }
   });
 });
 
