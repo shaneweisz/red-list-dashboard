@@ -1436,6 +1436,19 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     }
   }, [countryKey]);
 
+  // A node's own summary comes from its PARENT's subgroupData bucket (that's what
+  // ensureSubgroupData(parentId) fetches — the parent's children, one of which is
+  // this node). So "has this node's real data arrived yet" is exactly "does the
+  // parent's bucket exist in subgroupData" — not yet present means either the fetch
+  // is still in flight or hasn't been dispatched yet, both of which read the same to
+  // the user (show a loading state, not a misleading zero). The immediate parent
+  // (getAncestors(id)[0]) is the right bucket regardless of static or dynamic id —
+  // both delegate through the same getAncestors contract.
+  const isSummaryPending = useCallback((id: string): boolean => {
+    const parentId = getAncestors(id)[0];
+    return parentId != null && !(parentId in subgroupData);
+  }, [subgroupData]);
+
   // Fetch subgroup data when a taxon is expanded
   const toggleExpand = useCallback(async (taxonId: string) => {
     setExpandedTaxa((prev) => {
@@ -1933,6 +1946,19 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     );
   };
 
+  // Same footprint as renderBar (count/bar/percent), but a pulsing skeleton instead
+  // of real numbers — used in place of renderBar for a breadcrumb/collapsed row whose
+  // summary hasn't streamed in yet (see isSummaryPending), so a still-loading
+  // Assessed/Outdated/Not-Evaluated cell doesn't flash a misleading "0" for the
+  // several seconds a live-drilldown fetch can take.
+  const renderPendingBar = () => (
+    <div className="flex items-center gap-1.5 sm:gap-3 min-w-[150px] sm:min-w-[230px] md:min-w-[250px]">
+      <div className="w-[48px] sm:w-[60px] h-3.5 sm:h-2.5 rounded bg-zinc-200 dark:bg-zinc-700 animate-pulse flex-shrink-0" />
+      <div className="flex-1 min-w-[40px] h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700 animate-pulse" />
+      <div className="w-[44px] sm:w-[52px] h-3.5 sm:h-2.5 rounded bg-zinc-200 dark:bg-zinc-700 animate-pulse flex-shrink-0" />
+    </div>
+  );
+
   // Render a stacked category breakdown bar
   const renderBreakdownBar = (byCategory: Record<string, number>) => {
     const total = Object.values(byCategory).reduce((sum, n) => sum + n, 0);
@@ -2208,7 +2234,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   };
 
   // Render an ancestor context row with full data — clicking navigates to that level.
-  const renderAncestorRow = (sg: SubGroupSummary, color: string, depth: number, topTaxonId: string, isViewRoot: boolean) => {
+  const renderAncestorRow = (sg: SubGroupSummary, color: string, depth: number, topTaxonId: string, isViewRoot: boolean, isPending = false) => {
     const { value: sgDescribed, source: sgDescribedSource } = resolveDescribed(sg.id, sg.estimatedDescribed, sg.colDescribed);
     const sgPctAssessed = sgDescribed > 0 ? (sg.totalAssessed / sgDescribed) * 100 : 0;
     const sgPctOutdated = sg.totalAssessed > 0 ? (sg.outdated / sg.totalAssessed) * 100 : 0;
@@ -2260,30 +2286,38 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         </td>
         {isVisible("described") && (
           <td className={numericTdNoDividerClasses}>
-            <span className="text-sm text-zinc-700 dark:text-zinc-300 tabular-nums inline-flex items-center gap-1">
-              {sgDescribed.toLocaleString()}
-              <DescribedInfoIcon nodeId={sg.id} source={sgDescribedSource} breakdown={sg.colBreakdown} />
-            </span>
+            {isPending && sgDescribed === 0 ? (
+              <span className="inline-block w-12 h-3.5 rounded bg-zinc-200 dark:bg-zinc-700 animate-pulse" />
+            ) : (
+              <span className="text-sm text-zinc-700 dark:text-zinc-300 tabular-nums inline-flex items-center gap-1">
+                {sgDescribed.toLocaleString()}
+                <DescribedInfoIcon nodeId={sg.id} source={sgDescribedSource} breakdown={sg.colBreakdown} />
+              </span>
+            )}
           </td>
         )}
         {colDescribedCell(sg.colDescribed)}
         {isVisible("assessed") && (
           <td className={flexTdClasses}>
-            {renderBar(sgPctAssessed, getAssessedBarColor(sgPctAssessed), false, sg.totalAssessed)}
+            {isPending ? renderPendingBar() : renderBar(sgPctAssessed, getAssessedBarColor(sgPctAssessed), false, sg.totalAssessed)}
           </td>
         )}
         {isVisible("outdated") && (
           <td className={flexTdClasses}>
-            {sg.totalAssessed > 0
-              ? renderBar(sgPctOutdated, getOutdatedBarColor(sgPctOutdated), false, sg.outdated)
-              : <span className="text-sm text-zinc-400">—</span>}
+            {isPending
+              ? renderPendingBar()
+              : sg.totalAssessed > 0
+                ? renderBar(sgPctOutdated, getOutdatedBarColor(sgPctOutdated), false, sg.outdated)
+                : <span className="text-sm text-zinc-400">—</span>}
           </td>
         )}
         {isVisible("gbifUnassessed") && (
           <td className={flexTdClasses}>
-            {sg.gbifNeSpeciesCount > 0 && sgDescribed > 0
-              ? renderBar((sg.gbifNeSpeciesCount / sgDescribed) * 100, "#3b82f6", false, sg.gbifNeSpeciesCount)
-              : <span className="text-sm text-zinc-400">—</span>}
+            {isPending
+              ? renderPendingBar()
+              : sg.gbifNeSpeciesCount > 0 && sgDescribed > 0
+                ? renderBar((sg.gbifNeSpeciesCount / sgDescribed) * 100, "#3b82f6", false, sg.gbifNeSpeciesCount)
+                : <span className="text-sm text-zinc-400">—</span>}
           </td>
         )}
         {colNeCell(sg.colNe, sgDescribed)}
@@ -2309,7 +2343,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   };
 
   // Render a standalone subgroup row (used when table is collapsed to a selected subgroup)
-  const renderCollapsedSubgroupRow = (taxon: TaxonSummary, sg: SubGroupSummary, depth: number) => {
+  const renderCollapsedSubgroupRow = (taxon: TaxonSummary, sg: SubGroupSummary, depth: number, isPending = false) => {
     const { value: sgDescribed, source: sgDescribedSource } = resolveDescribed(sg.id, sg.estimatedDescribed, sg.colDescribed);
     const sgPctAssessed = sgDescribed > 0 ? (sg.totalAssessed / sgDescribed) * 100 : 0;
     const sgPctOutdated = sg.totalAssessed > 0 ? (sg.outdated / sg.totalAssessed) * 100 : 0;
@@ -2345,30 +2379,38 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         </td>
         {isVisible("described") && (
           <td className={numericTdNoDividerClasses}>
-            <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums inline-flex items-center gap-1">
-              {sgDescribed.toLocaleString()}
-              <DescribedInfoIcon nodeId={sg.id} source={sgDescribedSource} breakdown={sg.colBreakdown} />
-            </span>
+            {isPending && sgDescribed === 0 ? (
+              <span className="inline-block w-12 h-3.5 rounded bg-zinc-200 dark:bg-zinc-700 animate-pulse" />
+            ) : (
+              <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums inline-flex items-center gap-1">
+                {sgDescribed.toLocaleString()}
+                <DescribedInfoIcon nodeId={sg.id} source={sgDescribedSource} breakdown={sg.colBreakdown} />
+              </span>
+            )}
           </td>
         )}
         {colDescribedCell(sg.colDescribed)}
         {isVisible("assessed") && (
           <td className={flexTdClasses}>
-            {renderBar(sgPctAssessed, getAssessedBarColor(sgPctAssessed), false, sg.totalAssessed)}
+            {isPending ? renderPendingBar() : renderBar(sgPctAssessed, getAssessedBarColor(sgPctAssessed), false, sg.totalAssessed)}
           </td>
         )}
         {isVisible("outdated") && (
           <td className={flexTdClasses}>
-            {sg.totalAssessed > 0
-              ? renderBar(sgPctOutdated, getOutdatedBarColor(sgPctOutdated), false, sg.outdated)
-              : <span className="text-sm text-zinc-400">—</span>}
+            {isPending
+              ? renderPendingBar()
+              : sg.totalAssessed > 0
+                ? renderBar(sgPctOutdated, getOutdatedBarColor(sgPctOutdated), false, sg.outdated)
+                : <span className="text-sm text-zinc-400">—</span>}
           </td>
         )}
         {isVisible("gbifUnassessed") && (
           <td className={flexTdClasses}>
-            {sg.gbifNeSpeciesCount > 0 && sgDescribed > 0
-              ? renderBar((sg.gbifNeSpeciesCount / sgDescribed) * 100, "#3b82f6", false, sg.gbifNeSpeciesCount)
-              : <span className="text-sm text-zinc-400">—</span>}
+            {isPending
+              ? renderPendingBar()
+              : sg.gbifNeSpeciesCount > 0 && sgDescribed > 0
+                ? renderBar((sg.gbifNeSpeciesCount / sgDescribed) * 100, "#3b82f6", false, sg.gbifNeSpeciesCount)
+                : <span className="text-sm text-zinc-400">—</span>}
           </td>
         )}
         {colNeCell(sg.colNe, sgDescribed)}
@@ -3254,7 +3296,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                               return;
                             }
                           }
-                          rows.push(renderAncestorRow(ancestorData, parentTaxon.color, i + 1, parentTaxon.id, false));
+                          rows.push(renderAncestorRow(ancestorData, parentTaxon.color, i + 1, parentTaxon.id, false, isSummaryPending(aId)));
                         });
 
                         // Search ALL fetched subgroup data for this node (any depth)
@@ -3283,7 +3325,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                         // there are none, i.e. sgId is a direct child of the
                         // view root, e.g. Rodentia under Mammals).
                         const selectedDepth = intermediateAncestorIds.length + 1;
-                        rows.push(renderCollapsedSubgroupRow(parentTaxon, sgData, selectedDepth));
+                        rows.push(renderCollapsedSubgroupRow(parentTaxon, sgData, selectedDepth, isSummaryPending(sgId)));
                         // Render children if expanded — one step further still.
                         // renderSubgroupRow's own paddingLeft formula is
                         // `(depth-1)*12`, so to land one indent past
