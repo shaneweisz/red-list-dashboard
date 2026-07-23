@@ -560,8 +560,15 @@ export async function warmConnection(): Promise<void> {
 // a single row group.
 export async function getAssessmentHistory(sisTaxonId: number): Promise<PreviousAssessment[]> {
   const conn = await getConn();
+  // SELECT * rather than naming `criteria` explicitly: assessments.parquet is
+  // rebuilt by a separate scheduled sync (scripts/build-parquet.ts), not by this
+  // deploy, so there's a window where the deployed code expects a column the
+  // currently-synced parquet doesn't have yet. Naming it would throw a DuckDB
+  // Binder Error for every request in that window — this deploy's whole history
+  // fetch failing (not just criteria) until the next sync catches up. `pa.criteria`
+  // below is simply undefined/null on old data instead.
   const sql = `
-    SELECT id, "year", category, "date", criteria, assessors, reviewers
+    SELECT *
     FROM '${parquetUri("assessments.parquet")}'
     WHERE sis_taxon_id = $id
     ORDER BY seq`;
