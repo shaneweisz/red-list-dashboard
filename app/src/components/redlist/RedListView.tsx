@@ -12,7 +12,8 @@ import EolSummary from "../EolSummary";
 import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME, type CountryStats } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID, THREATENED_CATEGORIES } from "@/config/taxa";
-import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode, matchesBreakdownName, breakdownDisplayName } from "@/lib/taxonomy-utils";
+import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode, matchesBreakdownName, breakdownDisplayName, primaryFilterRank } from "@/lib/taxonomy-utils";
+import { dynamicNodeDisplayName, isDynamicNodeId, dynamicNodeRankInfo } from "@/lib/dynamic-taxon";
 import ReviewerChart from "./ReviewerChart";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { iucnRegionCountries, countryToIucnRegion } from "@/lib/regions";
@@ -309,14 +310,26 @@ function GbifInfoTooltip() {
 
 interface RedListViewProps {
   viewMode?: "reassessments" | "new-assessments";
+  onViewModeChange?: (mode: "reassessments" | "new-assessments") => void;
   sharedTaxa?: Set<string>;
   sharedSubgroups?: Set<string>;
   onTaxaChange?: (taxa: Set<string>) => void;
   onSubgroupsChange?: (subgroups: Set<string>) => void;
 }
 
-export default function RedListView({ viewMode = "reassessments", sharedTaxa, sharedSubgroups, onTaxaChange, onSubgroupsChange }: RedListViewProps = {}) {
+export default function RedListView({ viewMode = "reassessments", onViewModeChange, sharedTaxa, sharedSubgroups, onTaxaChange, onSubgroupsChange }: RedListViewProps = {}) {
   const isNewAssessments = viewMode === "new-assessments";
+  // Every species/truncation cache below is keyed by (mode, taxonId), not taxonId
+  // alone — a taxon's Assessed and Not Evaluated species lists are entirely
+  // different data. Previously taxonId alone was the key, with the whole cache
+  // wiped on every mode switch (see the effect below that used to do this) to
+  // avoid serving one mode's data under the other's key — meaning toggling back
+  // to a mode you'd already loaded for this taxon still paid the full fetch cost
+  // again (reported: several seconds each time for a large taxon like Plants,
+  // whose Not Evaluated list is huge). Prefixing the key means each mode's data
+  // is cached independently: revisiting a mode you've already loaded for this
+  // taxon is instant, and only a genuinely new (mode, taxon) pair fetches.
+  const modeKeyPrefix = isNewAssessments ? "ne:" : "assessed:";
 
   // The species table scrolls horizontally on narrow screens, so an expanded
   // detail row's `<td colSpan>` is as wide as the (often off-screen) table, not
@@ -336,10 +349,11 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // Filters synced with URL search params for shareable links
   const {
     layoutMode, setLayoutMode,
+    originLayout,
     navigateToTaxonSubgroup,
+    exitCountryModeForTaxon,
     returnToLayoutMode,
     enterCountryDrilldown,
-    returnToCountryList,
     selectedTaxa, setSelectedTaxa,
     selectedSubgroups, setSelectedSubgroups,
     selectedCategories, setSelectedCategories,
@@ -410,14 +424,31 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     setUrlViewMode(viewMode);
   }, [viewMode, setUrlViewMode]);
 
-  // Clear mode-specific caches when switching between reassessments and new-assessments
+  // Reset to Assessed whenever the taxon/sub-group selection changes — Not
+  // Evaluated is something to opt into per-taxon, not a mode that should
+  // silently follow you from one taxon to the next (you'd otherwise land on a
+  // brand-new taxon already in NE mode from browsing a previous one, with no
+  // visual cue you're not seeing its Assessed data). Skips the very first
+  // render so a shared link's own ?view=new-assessments still works.
+  const prevSelectionRef = useRef<{ taxa: Set<string>; subgroups: Set<string> } | null>(null);
+  useEffect(() => {
+    const prev = prevSelectionRef.current;
+    prevSelectionRef.current = { taxa: selectedTaxa, subgroups: selectedSubgroups };
+    if (prev === null) return;
+    const setsEqual = (a: Set<string>, b: Set<string>) => a.size === b.size && [...a].every((v) => b.has(v));
+    const changed = !setsEqual(prev.taxa, selectedTaxa) || !setsEqual(prev.subgroups, selectedSubgroups);
+    if (changed && isNewAssessments) onViewModeChange?.("reassessments");
+  }, [selectedTaxa, selectedSubgroups, isNewAssessments, onViewModeChange]);
+
+  // Reset mode-specific filter state when switching between reassessments and
+  // new-assessments. speciesByTaxon/truncationByTaxon are NOT cleared here — they're
+  // keyed by (mode, taxonId) (see modeKeyPrefix above), so each mode's data survives
+  // the switch independently and toggling back to a mode already loaded for the
+  // current taxon is instant instead of re-fetching from scratch every time.
   const prevViewModeRef = useRef(viewMode);
   useEffect(() => {
     if (prevViewModeRef.current === viewMode) return;
     prevViewModeRef.current = viewMode;
-    // Same taxon key maps to different data per mode — clear cache
-    setSpeciesByTaxon({});
-    setTruncationByTaxon({});
     setNeSpecies([]);
     setNeSpeciesFetched(false);
     // Clear assessment-specific filters (preserve search + species so search-bar navigation survives mode
@@ -453,15 +484,20 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   const handleToggleTaxon = useCallback((taxonId: string, event: React.MouseEvent) => {
     const isMulti = event.metaKey || event.ctrlKey;
 
-    // Clicking any taxon row while browsing a country-scoped bare summary
-    // table (Country view, one country selected, no taxon picked yet — see
-    // TaxaSummary's countryMode rendering) exits to the full charts+species-
-    // table view, still scoped to that country (selectedCountries untouched).
-    // Safe to fire alongside the setSelectedTaxa call below without the
-    // fromPopstateRef trick enterCountryDrilldown needs: this is always an
-    // empty->non-empty taxa transition, which RedListView's own "reset filters
-    // on taxa change" effect already no-ops on (see its `prev.size === 0`
-    // guard), so selectedCountries survives untouched either way.
+    // Clicking a specific taxon row while browsing a country-scoped bare
+    // summary table (Country view, one country selected, no taxon picked yet
+    // — see TaxaSummary's countryMode rendering) exits to the full charts+
+    // species-table view, still scoped to that country (selectedCountries
+    // untouched). Atomic (one history push) via exitCountryModeForTaxon, so
+    // a single "back" press cleanly restores the Country View landing page
+    // instead of layoutMode and taxa unwinding as separate history entries.
+    // The "all" row and multi-select (ctrl/cmd-click) cases fall through to
+    // the general path below instead — rarer, and "all" isn't a real taxon
+    // drill-down (see its own branch just below).
+    if (layoutMode === "country" && taxonId !== "all" && !isMulti) {
+      exitCountryModeForTaxon(taxonId);
+      return;
+    }
     if (layoutMode === "country") setLayoutMode(null);
 
     // "all" row behavior:
@@ -470,6 +506,20 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     // Disabled in new-assessments mode (NE dataset too large for "all")
     if (taxonId === "all") {
       if (selectedTaxa.size > 0 || selectedSubgroups.size > 0) {
+        if (originLayout === "country") {
+          // Came from Country View's landing page via a taxon drill-down
+          // (exitCountryModeForTaxon) — return there instead of the generic
+          // default view. See originLayout's own doc in useFilterParams.ts.
+          // fromPopstateRef first: this taxa non-empty→empty transition is
+          // part of one atomic, fully-specified navigation (countries stays
+          // as-is), not a generic "taxon deselected" — without the ref, the
+          // "reset filters on taxa change" effect below would immediately
+          // clear the very countries this navigation means to keep (see its
+          // own comment on enterCountryDrilldown for the same escape hatch).
+          fromPopstateRef.current = true;
+          returnToLayoutMode("country");
+          return;
+        }
         // Return to landing page
         setSelectedSubgroups(new Set());
         setSelectedTaxa(new Set());
@@ -509,7 +559,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       setSelectedSubgroups(new Set());
       return new Set([taxonId]);
     });
-  }, [setSelectedTaxa, setSelectedSubgroups, selectedTaxa, selectedSubgroups, isNewAssessments, searchFilter, urlSpecies, clearAllFilters, layoutMode, setLayoutMode]);
+  }, [setSelectedTaxa, setSelectedSubgroups, selectedTaxa, selectedSubgroups, isNewAssessments, searchFilter, urlSpecies, clearAllFilters, layoutMode, setLayoutMode, exitCountryModeForTaxon, originLayout, returnToLayoutMode, fromPopstateRef]);
 
   // Reset all other filters when taxa selection changes
   const prevTaxaRef = useRef(selectedTaxa);
@@ -580,21 +630,30 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // Declared before the taxa-fetch effect below so that on initial mount (e.g. landing directly on
   // "All Species"), prefetchPromiseRef is already set by the time that effect runs — avoiding a
   // duplicate concurrent fetch of the same "all" data and letting it attach to this one instead.
+  // Also re-runs whenever isNewAssessments flips back to false (switching back to Assessed mode),
+  // since that's this effect's own dependency — the guard below skips the fetch entirely once
+  // "assessed:all" is already cached (not just skipping the cache WRITE after an unnecessary
+  // request completes, which the old code did), which is what makes switching back to Assessed
+  // mode instant instead of re-fetching the whole dataset every time. speciesByTaxon deliberately
+  // ISN'T a dependency here — this only needs its value at the moment isNewAssessments changes
+  // (which the effect's own closure already captures fresh each time it re-runs), not a re-run on
+  // every unrelated speciesByTaxon update (e.g. an NE per-taxon fetch elsewhere completing), which
+  // would abort and restart this fetch pointlessly.
   useEffect(() => {
-    if (isNewAssessments) return;
+    if (isNewAssessments || speciesByTaxon["assessed:all"]) return;
     const controller = new AbortController();
     const promise = fetch(`${SPECIES_API}?taxon=all`, { signal: controller.signal })
       .then(res => res.ok ? res.json() : null)
       .then(data => {
         if (data && !controller.signal.aborted) {
-          setSpeciesByTaxon(prev => prev["all"] ? prev : { ...prev, all: data.species });
+          setSpeciesByTaxon(prev => prev["assessed:all"] ? prev : { ...prev, "assessed:all": data.species });
         }
       })
       .catch(() => {})
       .finally(() => { prefetchPromiseRef.current = null; });
     prefetchPromiseRef.current = promise;
     return () => { controller.abort(); prefetchPromiseRef.current = null; };
-  }, [isNewAssessments]);
+  }, [isNewAssessments]); // eslint-disable-line react-hooks/exhaustive-deps -- speciesByTaxon read intentionally excluded, see comment above
 
   // Determine which taxa need fetching
   useEffect(() => {
@@ -609,36 +668,41 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       : [...selectedTaxa];
     const taxaToFetch = fetchSet.filter(t => {
       if (isNewAssessments && t === "all") return false;
-      return !speciesByTaxon[t] && !loadingTaxa.has(t);
+      const key = modeKeyPrefix + t;
+      return !speciesByTaxon[key] && !loadingTaxa.has(key);
     });
-    // If "all" is already cached, no individual fetches needed
-    if (speciesByTaxon["all"] && !selectedTaxa.has("all")) {
+    // If "all" is already cached for this mode, no individual fetches needed
+    if (speciesByTaxon[modeKeyPrefix + "all"] && !selectedTaxa.has("all")) {
       // "all" data covers everything — no new fetches needed
       return;
     }
     if (taxaToFetch.length === 0) return;
 
     for (const taxonId of taxaToFetch) {
+      const key = modeKeyPrefix + taxonId;
       // Reuse the in-flight background prefetch instead of duplicating the request
-      if (taxonId === "all" && prefetchPromiseRef.current) {
-        setLoadingTaxa(prev => new Set(prev).add("all"));
+      // (the prefetch is assessed-only — see its own effect above — so only applies
+      // when this fetch is also for assessed mode).
+      if (taxonId === "all" && !isNewAssessments && prefetchPromiseRef.current) {
+        setLoadingTaxa(prev => new Set(prev).add(key));
         prefetchPromiseRef.current.then(() => {
-          setLoadingTaxa(prev => { const next = new Set(prev); next.delete("all"); return next; });
+          setLoadingTaxa(prev => { const next = new Set(prev); next.delete(key); return next; });
         });
         continue;
       }
 
-      // If fetching "all", abort any in-flight individual taxon fetches
+      // If fetching "all", abort any in-flight individual taxon fetches FOR THIS MODE
+      // (a different mode's in-flight fetch is unrelated and shouldn't be aborted).
       if (taxonId === "all") {
         Object.entries(abortRefs.current).forEach(([id, ctrl]) => {
-          if (id !== "all") ctrl.abort();
+          if (id !== key && id.startsWith(modeKeyPrefix)) ctrl.abort();
         });
       }
 
       const controller = new AbortController();
-      abortRefs.current[taxonId] = controller;
+      abortRefs.current[key] = controller;
 
-      setLoadingTaxa(prev => new Set(prev).add(taxonId));
+      setLoadingTaxa(prev => new Set(prev).add(key));
 
       const categoryParam = isNewAssessments ? "&category=NE" : "";
       fetch(`${SPECIES_API}?taxon=${encodeURIComponent(taxonId)}${categoryParam}`, { signal: controller.signal })
@@ -651,8 +715,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         })
         .then(data => {
           if (!controller.signal.aborted) {
-            setSpeciesByTaxon(prev => ({ ...prev, [taxonId]: data.species }));
-            setTruncationByTaxon(prev => ({ ...prev, [taxonId]: { truncated: !!data.truncated, tooLarge: !!data.tooLarge, neTotal: data.neTotal ?? null, shown: data.species.length } }));
+            setSpeciesByTaxon(prev => ({ ...prev, [key]: data.species }));
+            setTruncationByTaxon(prev => ({ ...prev, [key]: { truncated: !!data.truncated, tooLarge: !!data.tooLarge, neTotal: data.neTotal ?? null, shown: data.species.length } }));
           }
         })
         .catch(err => {
@@ -662,29 +726,30 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         })
         .finally(() => {
           if (!controller.signal.aborted) {
-            setLoadingTaxa(prev => { const next = new Set(prev); next.delete(taxonId); return next; });
+            setLoadingTaxa(prev => { const next = new Set(prev); next.delete(key); return next; });
           }
-          delete abortRefs.current[taxonId];
+          delete abortRefs.current[key];
         });
     }
-  }, [selectedTaxa, selectedSubgroups, speciesByTaxon, loadingTaxa, isNewAssessments]);
+  }, [selectedTaxa, selectedSubgroups, speciesByTaxon, loadingTaxa, isNewAssessments, modeKeyPrefix]);
 
   const speciesLoading = loadingTaxa.size > 0;
 
   // Merge species from all fetched taxa relevant to current selection
   const assessedSpecies = useMemo(() => {
     if (selectedTaxa.size === 0) return [];
-    // If "all" is cached, use it directly
-    if (speciesByTaxon["all"]) return speciesByTaxon["all"];
+    // If "all" is cached for this mode, use it directly
+    if (speciesByTaxon[modeKeyPrefix + "all"]) return speciesByTaxon[modeKeyPrefix + "all"];
     // In new-assessments mode a drill-down is fetched per sub-group, so merge those caches
     // when sub-groups are selected; otherwise merge the per-taxon caches.
     const sourceIds = isNewAssessments && selectedSubgroups.size > 0 ? [...selectedSubgroups] : [...selectedTaxa];
     let merged: RedListSpecies[] = [];
     for (const taxonId of sourceIds) {
-      if (speciesByTaxon[taxonId]) merged = merged.concat(speciesByTaxon[taxonId]);
+      const key = modeKeyPrefix + taxonId;
+      if (speciesByTaxon[key]) merged = merged.concat(speciesByTaxon[key]);
     }
     return merged;
-  }, [selectedTaxa, selectedSubgroups, speciesByTaxon, isNewAssessments]);
+  }, [selectedTaxa, selectedSubgroups, speciesByTaxon, isNewAssessments, modeKeyPrefix]);
 
   // NE species lazy loading (only fetched when NE category is selected)
   const [neSpecies, setNeSpecies] = useState<RedListSpecies[]>([]);
@@ -996,7 +1061,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       return;
     }
     // Skip if species is already in bulk-loaded data
-    const allSpecies = [...(speciesByTaxon[selectedTaxa.size === 1 ? [...selectedTaxa][0] : "all"] ?? []), ...neSpecies];
+    const allSpecies = [...(speciesByTaxon[modeKeyPrefix + (selectedTaxa.size === 1 ? [...selectedTaxa][0] : "all")] ?? []), ...neSpecies];
     if (allSpecies.some(s => s.id === urlSpecies)) {
       setSingleSpeciesPreview(null);
       return;
@@ -1680,11 +1745,11 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     if (!isNewAssessments) return null;
     let truncated = false; let neTotal = 0; let shown = 0;
     for (const t of selectedTaxa) {
-      const info = truncationByTaxon[t];
+      const info = truncationByTaxon[modeKeyPrefix + t];
       if (info?.truncated) { truncated = true; neTotal += info.neTotal ?? 0; shown += info.shown; }
     }
     return truncated ? { neTotal, shown } : null;
-  }, [isNewAssessments, selectedTaxa, truncationByTaxon]);
+  }, [isNewAssessments, selectedTaxa, truncationByTaxon, modeKeyPrefix]);
 
   // A giant aggregate (insects, invertebrates) exceeds the cap — the API returns no rows
   // and flags tooLarge. Don't render the charts/list; prompt a drill-down into a sub-group.
@@ -1698,11 +1763,11 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     const names: string[] = [];
     let neTotal = 0;
     for (const t of targets) {
-      const info = truncationByTaxon[t];
+      const info = truncationByTaxon[modeKeyPrefix + t];
       if (info?.tooLarge) { names.push(findNode(t)?.name ?? t); neTotal += info.neTotal ?? 0; }
     }
     return names.length > 0 ? { names, neTotal } : null;
-  }, [isNewAssessments, selectedTaxa, selectedSubgroups, truncationByTaxon]);
+  }, [isNewAssessments, selectedTaxa, selectedSubgroups, truncationByTaxon, modeKeyPrefix]);
 
   // ── Client-side pagination ─────────────────────────────────────────
   const totalFiltered = filteredSpecies.length;
@@ -2188,6 +2253,44 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     return { name: id.charAt(0).toUpperCase() + id.slice(1), rank };
   }, [selectedTaxa, species]);
 
+  // A single selected sub-group — a dynamic taxonomic-drilldown node (e.g. an
+  // order/family/genus reached via TaxaSummary's own tree) or a static SSC
+  // group/subgroup node — gets the exact same stat-card treatment as
+  // arbitraryTaxon above, even though it's reached through a completely
+  // different mechanism (selectedSubgroups, not a raw ?taxa= search token: see
+  // TaxaSummary.tsx's ancestor-breadcrumb rendering, which keeps its own tree
+  // branch — Mammals → Rodentia → Heteromyidae → ... — visible in the table
+  // above this regardless). A dynamic node has no NODE_INDEX entry (findNode
+  // fails), so it's resolved via dynamicNodeRankInfo/dynamicNodeDisplayName
+  // instead — the same distinction DescribedInfoIcon already draws.
+  const selectedSubgroupTaxon = useMemo(() => {
+    if (selectedSubgroups.size !== 1) return null;
+    const id = [...selectedSubgroups][0];
+    const node = findNode(id);
+    if (node) return { name: node.name, rank: primaryFilterRank(node.filter)?.label ?? null };
+    if (isDynamicNodeId(id)) return { name: dynamicNodeDisplayName(id), rank: dynamicNodeRankInfo(id)?.label ?? null };
+    return null;
+  }, [selectedSubgroups]);
+
+  // A single selected top-level taxon (Mammals, or the "All Species" root
+  // itself) with no sub-group drilled into — the same stat-card treatment as
+  // above, so the card (and the view-mode toggle it now carries — see below)
+  // is reachable at every level, not just once you're already several rows
+  // deep. primaryFilterRank returns null for "All Species" (no positive
+  // dimension in its filter), which is fine — the card falls back to the
+  // generic "Taxon" label for it, same as for a remainder/catch-all node.
+  const selectedTopLevelTaxon = useMemo(() => {
+    if (selectedSubgroups.size !== 0 || selectedTaxa.size !== 1) return null;
+    const node = findNode([...selectedTaxa][0]);
+    if (!node) return null; // arbitraryTaxon handles the non-tree-node case
+    return { name: node.name, rank: primaryFilterRank(node.filter)?.label ?? null };
+  }, [selectedTaxa, selectedSubgroups]);
+
+  // Whichever of the three applies — a selected sub-group takes priority
+  // (most specific), then a selected top-level taxon, then an arbitrary
+  // search-reached rank.
+  const focusedTaxonCard = selectedSubgroupTaxon ?? selectedTopLevelTaxon ?? arbitraryTaxon;
+
   // GBIF occurrence counts aren't filterable per-country/category/etc. — only show
   // that color/list column when no filter narrower than "a whole top-level taxon"
   // is active. Shared by both WorldMap instances (the always-visible Country chart
@@ -2220,25 +2323,46 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // each species once regardless of how many of these codes it matches (see
   // country-taxa-summary-duckdb.ts's countriesWhere), so there's no reason to
   // special-case region vs. multi-select here.
-  const countryScope = selectedCountries.size > 0 ? [...selectedCountries] : null;
+  // Hover preview — separate from selectedCountries (the real, locked
+  // selection) so scanning the map with the mouse never itself writes to
+  // URL-synced state. Only consulted as a countryScope fallback below when
+  // nothing's actually locked yet; once selectedCountries is non-empty this
+  // is ignored entirely, matching "hover only works if no country is
+  // selected" (see handleCountryDrilldown/selectOnHover).
+  const [hoverPreviewCountry, setHoverPreviewCountry] = useState<string | null>(null);
 
-  // Country view's own map/list click — same plain-click-replaces/ctrl-click-
-  // toggles gesture as handleCountrySelect (the normal browsing view's country
-  // filter), just routed through enterCountryDrilldown so the country change
-  // stays atomic with clearing taxa/subgroups (see its own comment).
+  const countryScope = selectedCountries.size > 0 ? [...selectedCountries]
+    : hoverPreviewCountry ? [hoverPreviewCountry]
+    : null;
+
+  // Country view's own map/list select. Before anything's picked, hovering
+  // previews the table (see WorldMap's selectOnHover, gated below on
+  // selectedCountries.size === 0 so it stops once a country's locked in).
+  // The first click locks in a single country and switches off hover; every
+  // click after that toggles a country in/out of the selection, so you can
+  // build up a multi-select by clicking (no ctrl/cmd needed) — clicking the
+  // already-sole-selected country again clears back to the empty/hover state.
+  // ctrl/cmd-click still toggles directly even before anything's locked, for
+  // building a multi-select from scratch without an initial single pick.
+  // Routed through enterCountryDrilldown so the country change stays atomic
+  // with clearing taxa/subgroups (see its own comment).
   const handleCountryDrilldown = useCallback(
     (code: string, _name: string, event: React.MouseEvent) => {
       const isMultiSelect = event.metaKey || event.ctrlKey;
+      // A real click always supersedes any leftover hover preview — without
+      // this, clearing a locked selection back to empty (self-toggle-off)
+      // would leave the table reading a stale hoverPreviewCountry from
+      // before the lock, since countryScope falls back to it whenever
+      // selectedCountries is empty (see its definition above).
+      setHoverPreviewCountry(null);
       enterCountryDrilldown(prev => {
-        if (isMultiSelect) {
-          const next = new Set(prev);
-          if (next.has(code)) next.delete(code);
-          else next.add(code);
-          return next;
-        } else {
-          if (prev.size === 1 && prev.has(code)) return new Set();
+        if (prev.size === 0 && !isMultiSelect) {
           return new Set([code]);
         }
+        const next = new Set(prev);
+        if (next.has(code)) next.delete(code);
+        else next.add(code);
+        return next;
       });
     },
     [enterCountryDrilldown]
@@ -2280,6 +2404,8 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     <WorldMap
       selectedCountries={selectedCountries}
       onCountrySelect={handleCountryDrilldown}
+      selectOnHover={selectedCountries.size === 0}
+      onCountryHover={setHoverPreviewCountry}
       precomputedStats={countryLandingStats ?? {}}
       selectedTaxa={selectedTaxa}
       speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
@@ -2294,6 +2420,59 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     />
   );
 
+  // Selection chips — rendered by TaxaSummary in a dedicated row of its own
+  // above BOTH the map and the table (aligned under the table's half via a
+  // matching grid template, with the map's half left blank), not inside
+  // either component, so neither one's own height is ever affected by how
+  // many chips are showing or whether they've wrapped to a second line.
+  // One chip per selected country (not collapsed into a region name,
+  // unlike the atop-table "France ×" chip elsewhere), each individually
+  // removable, plus "Clear all" once there's more than one.
+  // Before anything's locked, hovering shows its own preview chip (dashed,
+  // non-removable — there's nothing to remove yet, moving the mouse away
+  // already clears it) so the table's live hover-preview has a visual
+  // anchor. Reuses handleCountryDrilldown for removal — clicking a chip's ✕
+  // for a country that's already selected always toggles it off, whichever
+  // branch handleCountryDrilldown takes.
+  const countryPillsContent = (selectedCountries.size > 0 || hoverPreviewCountry) && (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {selectedCountries.size > 0 ? (
+        <>
+          {[...selectedCountries]
+            .map(code => ({ code, name: ALPHA2_TO_NAME[code] ?? code }))
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map(({ code, name }) => (
+              <span
+                key={code}
+                className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-sm text-zinc-700 dark:text-zinc-300 max-w-full"
+              >
+                <span className="truncate">{name}</span>
+                <button
+                  onClick={(e) => handleCountryDrilldown(code, name, e)}
+                  className="shrink-0 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                  title={`Remove ${name}`}
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+          {selectedCountries.size > 1 && (
+            <button
+              onClick={() => { enterCountryDrilldown(new Set()); setHoverPreviewCountry(null); }}
+              className="text-sm text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 underline transition-colors"
+            >
+              Clear all
+            </button>
+          )}
+        </>
+      ) : (
+        <span className="inline-flex items-center pl-3 pr-3 py-1 rounded-full bg-white dark:bg-zinc-800 border border-dashed border-zinc-300 dark:border-zinc-600 text-sm text-zinc-500 dark:text-zinc-400 max-w-full">
+          <span className="truncate">{ALPHA2_TO_NAME[hoverPreviewCountry!] ?? hoverPreviewCountry}</span>
+        </span>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-4 min-w-0">
       {/* Always show Taxa Summary table */}
@@ -2306,9 +2485,9 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
         layoutMode={layoutMode}
         onLayoutModeChange={setLayoutMode}
         countryModeContent={countryModeContent}
+        countryPillsContent={countryPillsContent}
         countryScope={countryScope}
-        onExitCountryScope={returnToCountryList}
-        onClearCountryScope={() => setSelectedCountries(new Set())}
+        onClearCountryScope={() => { setSelectedCountries(new Set()); setHoverPreviewCountry(null); }}
         onToggleSubgroup={(sgId) => {
           // Clicking a view root ancestor → clear subgroups to show its children.
           // If the currently-selected subgroup is an SSC group, we got here by
@@ -2373,29 +2552,67 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       ) : (
       <div className="space-y-3">
 
-          {/* Arbitrary-taxon header — a non-curated rank (e.g. Carnivora) reached via
-              search. Two stat cards: the taxon (name + matched rank) and the
-              matched-species count (mirrors the table's totalFiltered). No landing
-              cards / drill-down — no honest data for arbitrary ranks. */}
-          {arbitraryTaxon && !isSingleSpecies && (
+          {/* Taxon-focus header — any single selected taxon: a top-level taxon
+              (selectedTopLevelTaxon, e.g. Mammals, or "All Species" itself), a
+              sub-group row drilled into via TaxaSummary's own tree
+              (selectedSubgroupTaxon: dynamic order/family/genus, or a static SSC
+              group), or a non-curated arbitrary rank reached via search
+              (arbitraryTaxon). Two stat cards: the taxon (name + rank) and the
+              matched-species count (mirrors the table's totalFiltered) — the
+              latter also carries the Assessed/Not Evaluated view-mode toggle
+              (previously a page-header control, moved here since this is where
+              the mode actually changes what's shown). TaxaSummary's own
+              breadcrumb table above already shows the tree branch that led here
+              (Mammals → Rodentia → Heteromyidae → ...) when applicable — this is
+              purely an additional, more prominent summary, not a replacement
+              for it. */}
+          {focusedTaxonCard && !isSingleSpecies && (
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
                 <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                  {arbitraryTaxon.rank ?? "Taxon"}
+                  {focusedTaxonCard.rank ?? "Taxon"}
                 </div>
                 <div className="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                  {arbitraryTaxon.name}
+                  {focusedTaxonCard.name}
                 </div>
               </div>
-              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
-                <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                  {isNewAssessments ? "Not Evaluated Species" : "Assessed Species"}
+              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                    {isNewAssessments ? "Not Evaluated Species" : "Assessed Species"}
+                  </div>
+                  <div className="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+                    {speciesLoading && assessedSpecies.length === 0
+                      ? <Spinner className="h-6 w-6" />
+                      : totalFiltered.toLocaleString()}
+                  </div>
                 </div>
-                <div className="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                  {speciesLoading && assessedSpecies.length === 0
-                    ? <Spinner className="h-6 w-6" />
-                    : totalFiltered.toLocaleString()}
-                </div>
+                {onViewModeChange && (
+                  <div className="flex rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden text-xs shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => onViewModeChange("reassessments")}
+                      className={`px-2 py-1 font-medium transition-colors ${
+                        !isNewAssessments
+                          ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                          : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+                      }`}
+                    >
+                      Assessed
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onViewModeChange("new-assessments")}
+                      className={`px-2 py-1 font-medium transition-colors ${
+                        isNewAssessments
+                          ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                          : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+                      }`}
+                    >
+                      Not Evaluated
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -2679,8 +2896,12 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
           </div>
           )}
 
-          {/* Charts row 2: Country map + (Threats or GBIF Observations for new-assessments) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Charts row 2: Country map + (Threats, 2-col) for reassessments; Country
+              map + Year Described + Geospatial GBIF Records (3-col, 1/3 each) for
+              new-assessments — Year Described used to sit alone in its own row
+              below (a half-width chart with empty space beside it, since that row
+              was also grid-cols-2), now folded into this one instead. */}
+          <div className={`grid grid-cols-1 gap-4 ${isNewAssessments ? "sm:grid-cols-3" : "md:grid-cols-2"}`}>
             {/* Country Map */}
             <div>
               {speciesLoading && assessedSpecies.length === 0 ? (
@@ -2703,9 +2924,10 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   selectedTaxa={selectedTaxa}
                   speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
                   showOutdatedMode={!isNewAssessments}
+                  showColorModeDropdown={!isNewAssessments}
                   onRegionFilter={handleRegionFilter}
                   endemicsOnly={endemicsOnly}
-                  onEndemicsToggle={() => setEndemicsOnly(!endemicsOnly)}
+                  onEndemicsToggle={isNewAssessments ? undefined : () => setEndemicsOnly(!endemicsOnly)}
                   showGbifToggle={showGbifToggle}
                   mapViewMode={mapViewMode}
                   onMapViewModeChange={setMapViewMode}
@@ -2715,6 +2937,40 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                 />
               )}
             </div>
+
+            {/* Year Described (new-assessments only) — second column of this row. */}
+            {isNewAssessments && (
+              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">
+                    Year Described
+                    <HoverTooltip text="Year the species was scientifically described, from the Catalogue of Life. Available for ~99% of animals; many plants, fungi and algae have no datable record in CoL and fall under 'Unknown'.">
+                      <svg className="w-3 h-3 text-zinc-400 dark:text-zinc-500 cursor-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M12 16v-4M12 8h.01" />
+                      </svg>
+                    </HoverTooltip>
+                  </span>
+                </div>
+                <div style={{ height: 180 }} className="flex items-center justify-center">
+                  {speciesLoading && assessedSpecies.length === 0 ? (
+                    <Spinner />
+                  ) : describedYearData.length > 0 ? (
+                    <FilterBarChart
+                      data={describedYearData}
+                      dataKey="shortRange"
+                      selectedItems={selectedDescribedYears}
+                      onBarClick={handleDescribedYearClick}
+                      barColor="#3b82f6"
+                      yAxisWidth={64}
+                      rightMargin={85}
+                    />
+                  ) : (
+                    <span className="text-sm text-zinc-400 dark:text-zinc-500">No description-year data</span>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Threats (reassessments) or GBIF Observations chart (new-assessments) */}
             {isNewAssessments ? (
@@ -2862,42 +3118,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
               );
             })()}
           </div>
-
-          {/* Charts row 3 (new-assessments only): Year Described (CoL) */}
-          {isNewAssessments && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">
-                    Year Described
-                    <HoverTooltip text="Year the species was scientifically described, from the Catalogue of Life. Available for ~99% of animals; many plants, fungi and algae have no datable record in CoL and fall under 'Unknown'.">
-                      <svg className="w-3 h-3 text-zinc-400 dark:text-zinc-500 cursor-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="12" cy="12" r="10" />
-                        <path d="M12 16v-4M12 8h.01" />
-                      </svg>
-                    </HoverTooltip>
-                  </span>
-                </div>
-                <div style={{ height: 180 }} className="flex items-center justify-center">
-                  {speciesLoading && assessedSpecies.length === 0 ? (
-                    <Spinner />
-                  ) : describedYearData.length > 0 ? (
-                    <FilterBarChart
-                      data={describedYearData}
-                      dataKey="shortRange"
-                      selectedItems={selectedDescribedYears}
-                      onBarClick={handleDescribedYearClick}
-                      barColor="#8b5cf6"
-                      yAxisWidth={64}
-                      rightMargin={85}
-                    />
-                  ) : (
-                    <span className="text-sm text-zinc-400 dark:text-zinc-500">No description-year data</span>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* More Filters (collapsible) - hidden for New Assessments */}
           {!isNewAssessments && <div>
@@ -3197,7 +3417,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                   onClick={() => setSelectedSubgroups(prev => { const next = new Set(prev); next.delete(sgId); return next; })}
                   className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
                 >
-                  {sgInfo?.node.name ?? sgId}
+                  {sgInfo?.node.name ?? dynamicNodeDisplayName(sgId)}
                   <span className="text-xs">×</span>
                 </button>
               );
@@ -3877,9 +4097,12 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                                 assessmentDate={s.assessment_date}
                                 assessmentId={s.assessment_id}
                                 sisTaxonId={s.sis_taxon_id}
+                                category={s.category}
+                                criteria={s.criteria}
                                 taxonGroup={s.taxon_group}
                                 scientificName={s.scientific_name}
                                 nativeCountriesRedList={s.countries}
+                                previousAssessments={(s.sis_taxon_id ? assessmentHistory[s.sis_taxon_id] : null) ?? s.previous_assessments}
                                 onEmpty={s.category === "NE" ? handleOccurrenceEmpty : undefined}
                               />
                             </div>
@@ -3976,7 +4199,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                             <div style={{ display: activeDetailTab === "assessors" ? undefined : "none" }}>
                               <AssessorCandidatesTable
                                 taxaId={[...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group}
-                                taxaName={findNode([...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group)?.name ?? TAXA_BY_ID[[...selectedTaxa][0] ?? s.taxon_group]?.name ?? "Species"}
+                                taxaName={findNode([...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group)?.name ?? (selectedSubgroups.size > 0 ? dynamicNodeDisplayName([...selectedSubgroups][0]) : undefined) ?? TAXA_BY_ID[[...selectedTaxa][0] ?? s.taxon_group]?.name ?? "Species"}
                                 countries={s.countries}
                               />
                             </div>
@@ -3985,7 +4208,7 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
                             <div style={{ display: activeDetailTab === "reviewers" ? undefined : "none" }}>
                               <ReviewerCandidatesTable
                                 taxaId={[...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group}
-                                taxaName={findNode([...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group)?.name ?? TAXA_BY_ID[[...selectedTaxa][0] ?? s.taxon_group]?.name ?? "Species"}
+                                taxaName={findNode([...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group)?.name ?? (selectedSubgroups.size > 0 ? dynamicNodeDisplayName([...selectedSubgroups][0]) : undefined) ?? TAXA_BY_ID[[...selectedTaxa][0] ?? s.taxon_group]?.name ?? "Species"}
                                 countries={s.countries}
                               />
                             </div>

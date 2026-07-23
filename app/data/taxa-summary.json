@@ -2,7 +2,7 @@
   {
     "table1a_taxon_group": "mammals",
     "total_assessed": 6054,
-    "outdated": 2617,
+    "outdated": 2631,
     "by_category": {
       "CR": 236,
       "VU": 571,
@@ -47,7 +47,7 @@
   {
     "table1a_taxon_group": "reptiles",
     "total_assessed": 10371,
-    "outdated": 5727,
+    "outdated": 5728,
     "by_category": {
       "EN": 804,
       "LR/nt": 9,
@@ -72,7 +72,7 @@
   {
     "table1a_taxon_group": "amphibians",
     "total_assessed": 8095,
-    "outdated": 1143,
+    "outdated": 1149,
     "by_category": {
       "LC": 3772,
       "EN": 1300,
@@ -94,7 +94,7 @@
   {
     "table1a_taxon_group": "fishes",
     "total_assessed": 29371,
-    "outdated": 11233,
+    "outdated": 11236,
     "by_category": {
       "CR": 898,
       "EX": 96,
@@ -441,7 +441,7 @@
   {
     "table1a_taxon_group": "mosses",
     "total_assessed": 327,
-    "outdated": 98,
+    "outdated": 99,
     "by_category": {
       "CR": 48,
       "NT": 35,
@@ -506,7 +506,7 @@
   {
     "table1a_taxon_group": "flowering_plants",
     "total_assessed": 76102,
-    "outdated": 18311,
+    "outdated": 18425,
     "by_category": {
       "LR/cd": 102,
       "VU": 10376,

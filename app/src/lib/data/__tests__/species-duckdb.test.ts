@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveWhere, toSpeciesRow } from "@/lib/data/species-duckdb";
+import { resolveWhere, toSpeciesRow, colIdToSearchId } from "@/lib/data/species-duckdb";
 
 // Unit tests for the parity-critical pure logic of the DuckDB read layer (#261):
 // the taxon→SQL resolver and the row→SpeciesRow mapping. (Full v1-vs-v2 parity is
@@ -35,6 +35,35 @@ describe("resolveWhere", () => {
 
   it("lowercases arbitrary values", () => {
     expect(resolveWhere("Turdidae").params.arv).toBe("turdidae");
+  });
+});
+
+// Regression coverage for a real reported bug: querySpecies' NE branch used to assign
+// each row a synthetic id from a counter that RESET on every single query (per-taxon
+// fetch) — so the same species got a DIFFERENT id depending on which taxon scope it was
+// fetched through, while two UNRELATED species from two different queries could easily
+// land on the identical counter value. RedListView.tsx's client-side speciesDetails
+// cache is keyed purely by id and never revalidates an existing entry, so the second
+// species silently rendered under the first's cached iNaturalist photo/common name (a
+// Giraffe's cached thumbnail showing for Fictidomys parvidens after drilling from
+// Mammals into Rodentia — the Giraffe's query-local id and the squirrel's query-local id
+// collided). Fixed by deriving the id from col_id via this function instead — stable
+// across queries (same species, same id, however it was fetched) and collision-resistant
+// across species (a hash, not a fixed decrementing range every query restarts).
+describe("colIdToSearchId", () => {
+  it("is stable: the same col_id always maps to the same id", () => {
+    expect(colIdToSearchId("3LLS")).toBe(colIdToSearchId("3LLS"));
+  });
+
+  it("gives different col_ids different ids (spot-checked, not exhaustive)", () => {
+    const ids = new Set(["3LLS", "6255W", "3Z5", "KTYZ7", "B3FVX"].map(colIdToSearchId));
+    expect(ids.size).toBe(5);
+  });
+
+  it("is always negative, so it never collides with a real positive sis/gbif id", () => {
+    for (const colId of ["3LLS", "6255W", "3Z5", "", "a", "zzzzzz"]) {
+      expect(colIdToSearchId(colId)).toBeLessThan(0);
+    }
   });
 });
 

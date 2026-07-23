@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { FaInfoCircle, FaExpandAlt, FaCompressAlt, FaChevronRight } from "react-icons/fa";
+import { FaInfoCircle, FaChevronRight } from "react-icons/fa";
 
 import { HiOutlineAdjustmentsHorizontal } from "react-icons/hi2";
 import TaxaIcon from "@/components/TaxaIcon";
@@ -14,6 +14,8 @@ import {
   type FilterRank, type DescribeFilterSegment,
 } from "@/lib/taxonomy-utils";
 import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
+import { IUCN_SOURCE_URL } from "@/config/taxonomy-tree";
+import { isLiveDrilldownNode, nextDynamicRank, isDynamicNodeId, dynamicNodeDisplayName, dynamicNodeFilter, dynamicNodeRankInfo, parseDynamicNodeId } from "@/lib/dynamic-taxon";
 import type { RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import { outdatedCutoffDate } from "@/lib/outdated";
 import { ALPHA2_TO_NAME } from "@/lib/countries";
@@ -30,7 +32,15 @@ const NO_MATCH_REASON_LABEL: Record<string, string> = {
   provisional: "matched to a Catalogue of Life name that's only provisionally accepted, not yet fully accepted",
   lumped: "Catalogue of Life treats this as the same species as",
   not_in_base: "not yet in Catalogue of Life's curated checklist",
-  extinct_unconfirmed: "Catalogue of Life flags this extinct, but IUCN hasn't confirmed Extinct/Extinct in the Wild",
+  // Usually a species-boundary disagreement, not a data error: e.g. Equus ferus
+  // (wild horse) — CoL treats it and Equus przewalskii (Przewalski's horse) as two
+  // separate species, one of them (the true wild tarpan) extinct; this IUCN
+  // assessment lumps them as one species, which is why IUCN doesn't call it
+  // Extinct/Extinct in the Wild even though CoL's own record for this exact name
+  // is flagged extinct. Verified case-by-case, not assumed — see the CoL/IUCN
+  // record comparison in this file's git history (2026-07-21) if this needs
+  // re-checking for a different species.
+  extinct_unconfirmed: "Catalogue of Life's record for this exact name is flagged extinct, but this IUCN assessment (a living-species category) isn't Extinct/Extinct in the Wild — usually because the two databases draw the species boundary differently here (e.g. IUCN's assessment covers a broader concept that includes a still-living population Catalogue of Life treats as its own separate species)",
   classified_elsewhere: "Catalogue of Life classifies this under a different name here",
 };
 
@@ -73,14 +83,9 @@ interface Table1aSectionData {
   catchAllId?: string;
 }
 
-const IUCN_SOURCE_URL = "https://nc.iucnredlist.org/redlist/content/attachment_files/2026-1_RL_Table1a.pdf";
-
 // SSC groups mode — one section per taxon that has an SSC pilot built out.
 // Add an entry here (nodeId, parentTaxon, title, catch-all id) when a new
 // taxon's SSC groups are added.
-// Named groups shown per section before collapsing behind "Show all" — the
-// catch-all row is never counted against this and always stays visible.
-const SSC_SECTION_COLLAPSE_SIZE = 5;
 const SSC_SECTIONS: { nodeId: string; parentTaxon: string; title: string; catchAllId: string }[] = [
   { nodeId: "ssc-groups", parentTaxon: "mammals", title: "MAMMAL SPECIALIST GROUPS", catchAllId: "ssc-other-mammals" },
   { nodeId: "ssc-reptile-groups", parentTaxon: "reptiles", title: "REPTILE SPECIALIST GROUPS", catchAllId: "ssc-snake-lizard-rla" },
@@ -149,23 +154,28 @@ interface Props {
    * owns the country-stats data and click-through wiring), kept out of this
    * component so it doesn't need its own dynamic WorldMap import. */
   countryModeContent?: React.ReactNode;
+  /** Rendered above BOTH the map and the table in Country View — the current
+   * selection as removable name chips (built by RedListView, which owns the
+   * selection/hover state). Living above the whole grid rather than inside
+   * either column means neither the map nor the (zoomed) table ever resizes
+   * as chips are added/removed while hovering/locking/clearing countries. */
+  countryPillsContent?: React.ReactNode;
   /** Set whenever at least one country is selected — independent of layoutMode,
    * so selecting countries anywhere (not just via the Country view landing page)
    * scopes this table's own fetches too. One country, a whole region, or an
    * arbitrary multi-select are all just "the current set of codes" here. */
   countryScope?: string[] | null;
-  /** Clears the country selection and re-enters the Country view landing page —
-   * used for the clear button atop the table while layoutMode is "country". */
-  onExitCountryScope?: () => void;
   /** Clears the country selection without changing layoutMode — used for the
-   * same clear button atop the table once a taxon's been clicked and this has
-   * exited to the full view (returning to the Country view landing page from
-   * there would be a surprising jump). */
+   * "France ×" chip atop the table when a country's scoped outside Country
+   * View. Country View's own equivalent lives on the map now (see WorldMap's
+   * country chips), not routed through here. */
   onClearCountryScope?: () => void;
 }
 
-// Dynamic: any tree node with children is expandable
-const isExpandable = (id: string) => hasChildren(id);
+// Any static tree node with children is expandable — plus any node under a live
+// taxonomic-drilldown root (see dynamic-taxon.ts) that isn't already at genus
+// rank (a leaf; further drilling happens via the existing species-list view).
+const isExpandable = (id: string) => hasChildren(id) || (isLiveDrilldownNode(id) && nextDynamicRank(id) !== null);
 
 // Expand affordance for tree rows: a chevron that points right when collapsed and rotates
 // down when expanded, so it's obvious a row drills into sub-groups. Leaf rows get a
@@ -356,7 +366,7 @@ function speciesHref(nodeId: string, id: number, view: "reassessments" | "new-as
 
 // What SpeciesListPanel is currently showing — captured at click time from the
 // specific breakdown row/bucket clicked, so the panel doesn't need to re-derive it.
-type PanelBucket = "assessed" | "ne" | "colMatch" | "noColMatch";
+type PanelBucket = "assessed" | "ne" | "noColMatch";
 interface PanelRequest {
   rank: FilterRank;
   name: string;
@@ -368,20 +378,17 @@ interface PanelRequest {
 }
 
 const PANEL_PAGE_SIZE = 10;
-const PANEL_WIDTH = 300;
+// Widened from 300 — the panel now renders a Name/Explanation/Year table
+// (see SpeciesListPanel) instead of a single-column list, and 300px crammed
+// the Explanation column's reason text (e.g. "Lumped Ctenomys mendocinus").
+const PANEL_WIDTH = 440;
 const PANEL_GAP = 8;
-// A recently-described species not yet having an IUCN assessment is a genuine,
-// likely explanation for NE status (assessment backlog) — an old description year
-// doesn't reliably explain anything, so this is only surfaced within a recency
-// window, not shown for every NE row with a described_year. 10 years mirrors the
-// existing "# Outdated (>10 yrs old)" threshold used elsewhere in this dashboard.
-const RECENT_DESCRIPTION_YEARS = 10;
 
 // Positions the species-list panel beside the popup it was opened from: to the
 // right if there's room, else to the left, else (narrow viewports) directly under
 // it — same "best effort, not perfect" approach as the popup's own positioning.
 // Takes the popup's ACTUAL rendered rect (not just its {top,left} origin) — the
-// popup's width varies with its content (it's max-w-[340px], not a fixed width), so
+// popup's width varies with its content (it's max-w-[600px], not a fixed width), so
 // assuming the max width left a visible gap for any popup narrower than that.
 // Also clamps maxHeight so the panel's own bottom never runs off the viewport the
 // way the popup itself used to (see computePopoverPos below) — long species lists
@@ -416,12 +423,51 @@ function computePanelPos(popupRect: { top: number; left: number; right: number }
 // handles anything that doesn't fit. Always opens downward from the button — never
 // flips above it, so its position relative to the row that triggered it is always
 // predictable.
-function computePopoverPos(rect: { top: number; bottom: number; left: number }): { top: number; left: number; maxHeight: number } {
+// Widened from 340px to fit the breakdown table's 5 columns (name + 4 stat
+// columns) legibly — see BreakdownList. A popover with no breakdown (plain
+// source text) stays as narrow as its own content; max-w-[Npx] only caps how
+// wide it's ALLOWED to grow, so this doesn't force short popovers to widen.
+const POPOVER_MAX_WIDTH = 600;
+
+// Anchored by its RIGHT edge (opens leftward from the button), not its left —
+// the button sits partway across the taxa table, so opening rightward (the old
+// behavior) routinely left too little room to the right for the species-list
+// panel (computePanelPos below), pushing it below the popup instead of beside
+// it. maxWidth (not a fixed left position) is derived from the actual space
+// available to the left of the button, so the popup never runs off the left
+// edge of the viewport regardless of how wide its content wants to be.
+function computePopoverPos(rect: { top: number; bottom: number; left: number }): { top: number; right: number; maxWidth: number; maxHeight: number } {
   const margin = 8;
-  const left = Math.min(rect.left, window.innerWidth - 360);
+  const gap = 4;
+  const spaceLeft = rect.left - gap - margin;
+  const maxWidth = Math.max(120, Math.min(POPOVER_MAX_WIDTH, spaceLeft));
   const preferredMaxHeight = window.innerHeight * 0.7;
   const spaceBelow = window.innerHeight - rect.bottom - 4 - margin;
-  return { top: rect.bottom + 4, left, maxHeight: Math.max(100, Math.min(preferredMaxHeight, spaceBelow)) };
+  return {
+    top: rect.bottom + 4,
+    right: window.innerWidth - rect.left + gap,
+    maxWidth,
+    maxHeight: Math.max(100, Math.min(preferredMaxHeight, spaceBelow)),
+  };
+}
+
+// Same idea as computePopoverPos, but opens ABOVE the trigger instead of below —
+// for a column HEADER icon (DescribedSourceInfoIcon), where opening below would
+// drop the popover straight onto the table's own first data row instead of into
+// the open space above the header.
+function computePopoverPosAbove(rect: { top: number; bottom: number; left: number }): { bottom: number; right: number; maxWidth: number; maxHeight: number } {
+  const margin = 8;
+  const gap = 4;
+  const spaceLeft = rect.left - gap - margin;
+  const maxWidth = Math.max(120, Math.min(POPOVER_MAX_WIDTH, spaceLeft));
+  const preferredMaxHeight = window.innerHeight * 0.7;
+  const spaceAbove = rect.top - 4 - margin;
+  return {
+    bottom: window.innerHeight - rect.top + 4,
+    right: window.innerWidth - rect.left + gap,
+    maxWidth,
+    maxHeight: Math.max(100, Math.min(preferredMaxHeight, spaceAbove)),
+  };
 }
 
 // Paginated species-level list rendered beside the main popup when a count row
@@ -488,10 +534,7 @@ function SpeciesListPanel({
   const filtered = useMemo(() => {
     if (!rows) return null;
     let matched = rows.filter((s) => speciesMatchesNode(s, nodeId) && matchesBreakdownName(s, request.rank, request.name, nodeId));
-    if (request.bucket === "colMatch" && request.noMatchIds?.length) {
-      const excl = new Set(request.noMatchIds);
-      matched = matched.filter((s) => s.sis_taxon_id == null || !excl.has(s.sis_taxon_id));
-    } else if (request.bucket === "noColMatch" && request.noMatchIds?.length) {
+    if (request.bucket === "noColMatch" && request.noMatchIds?.length) {
       const only = new Set(request.noMatchIds);
       matched = matched.filter((s) => s.sis_taxon_id != null && only.has(s.sis_taxon_id));
     }
@@ -546,8 +589,8 @@ function SpeciesListPanel({
   const fullListHref = nodeSpeciesListHref(
     nodeId,
     isNe ? "new-assessments" : "reassessments",
-    request.bucket === "colMatch" || request.bucket === "noColMatch"
-      ? { rank: request.rank, name: request.name, [request.bucket === "colMatch" ? "excl" : "only"]: request.noMatchIds }
+    request.bucket === "noColMatch"
+      ? { rank: request.rank, name: request.name, only: request.noMatchIds }
       : { rank: request.rank, name: request.name },
   );
 
@@ -618,75 +661,82 @@ function SpeciesListPanel({
       )}
       {!error && sorted && sorted.length > 0 && (
         <>
-          <ul className="space-y-1">
-            {pageRows.map((s) => {
-              const detail = s.sis_taxon_id != null ? reasonBySisId.get(s.sis_taxon_id) : undefined;
-              const split = s.col_id != null ? splitByColId.get(s.col_id) : undefined;
-              return (
-                <li key={s.id}>
-                  <a
-                    href={speciesHref(nodeId, s.id, isNe ? "new-assessments" : "reassessments")}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-300 hover:text-blue-200 underline"
-                  >
-                    {s.scientific_name}
-                  </a>
-                  {s.category && s.category !== "NE" && (
-                    <span
-                      className="ml-1 px-1 rounded text-[10px] font-medium"
-                      style={{ backgroundColor: `${CATEGORY_COLORS[s.category] || "#999"}33`, color: CATEGORY_COLORS[s.category] || "#999" }}
-                    >
-                      {s.category}
-                    </span>
-                  )}
-                  {s.assessment_date && (
-                    <span className="text-zinc-400">{` ${s.assessment_date.slice(0, 4)}`}</span>
-                  )}
-                  {detail && (
-                    <span className="text-zinc-300">
-                      {" — "}
-                      {NO_MATCH_REASON_LABEL[detail.reason] ?? detail.reason}
-                      {detail.detail && (
-                        detail.detailId != null ? (
-                          <>
-                            {" "}
-                            <a
-                              href={speciesHref(nodeId, detail.detailId, "reassessments")}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-300 hover:text-blue-200 underline"
-                            >
-                              {detail.detail}
-                            </a>
-                          </>
-                        ) : ` ${detail.detail}`
-                      )}
-                    </span>
-                  )}
-                  {split && (
-                    <span
-                      className="text-zinc-300"
-                      title="Heuristic: Catalogue of Life still records this name as a former subspecies of the linked species — not a confirmed taxonomic changelog."
-                    >
-                      {" — likely split from "}
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="text-zinc-400">
+                <th className="pb-1 pr-2 font-normal text-left">Name</th>
+                <th className="pb-1 pr-2 font-normal text-left">Explanation</th>
+                <th className="pb-1 font-normal text-right whitespace-nowrap">{isNe ? "Described" : "Assessed"}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pageRows.map((s) => {
+                const detail = s.sis_taxon_id != null ? reasonBySisId.get(s.sis_taxon_id) : undefined;
+                const split = s.col_id != null ? splitByColId.get(s.col_id) : undefined;
+                const year = isNe ? s.described_year : (s.assessment_date ? s.assessment_date.slice(0, 4) : null);
+                return (
+                  <tr key={s.id} className="border-t border-zinc-700/60 align-top">
+                    <td className="py-1 pr-2">
                       <a
-                        href={speciesHref(nodeId, split.parentId, "reassessments")}
+                        href={speciesHref(nodeId, s.id, isNe ? "new-assessments" : "reassessments")}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-blue-300 hover:text-blue-200 underline"
                       >
-                        {split.parentName}
+                        {s.scientific_name}
                       </a>
-                    </span>
-                  )}
-                  {!split && isNe && s.described_year != null && new Date().getFullYear() - s.described_year <= RECENT_DESCRIPTION_YEARS && (
-                    <span className="text-zinc-300">{` (described in ${s.described_year})`}</span>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+                      {s.category && s.category !== "NE" && (
+                        <span
+                          className="ml-1 px-1 rounded text-[10px] font-medium"
+                          style={{ backgroundColor: `${CATEGORY_COLORS[s.category] || "#999"}33`, color: CATEGORY_COLORS[s.category] || "#999" }}
+                        >
+                          {s.category}
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-1 pr-2 text-zinc-300">
+                      {detail && (
+                        <>
+                          {NO_MATCH_REASON_LABEL[detail.reason] ?? detail.reason}
+                          {detail.detail && (
+                            detail.detailId != null ? (
+                              <>
+                                {" "}
+                                <a
+                                  href={speciesHref(nodeId, detail.detailId, "reassessments")}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-300 hover:text-blue-200 underline"
+                                >
+                                  {detail.detail}
+                                </a>
+                              </>
+                            ) : ` ${detail.detail}`
+                          )}
+                        </>
+                      )}
+                      {split && (
+                        <span
+                          title="Heuristic: Catalogue of Life still records this name as a former subspecies of the linked species — not a confirmed taxonomic changelog."
+                        >
+                          {"Likely split from "}
+                          <a
+                            href={speciesHref(nodeId, split.parentId, "reassessments")}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-300 hover:text-blue-200 underline"
+                          >
+                            {split.parentName}
+                          </a>
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-1 text-right text-zinc-400 whitespace-nowrap">{year ?? "—"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
           <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-zinc-700">
             <button type="button" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="disabled:opacity-30 hover:text-white">
               ‹ Prev
@@ -702,69 +752,6 @@ function SpeciesListPanel({
       )}
     </div>,
     document.body
-  );
-}
-
-// The "Assessed" row within one breakdown name — a plain clickable leaf when CoL and
-// IUCN agree on the count (the common case), or its own nested expand into CoL
-// Match / No CoL Match when they don't, so the split is visible right where it
-// happens instead of needing a separate warning affordance. Clicking any count opens
-// the species-level panel (onOpenPanel) instead of navigating away.
-function AssessedBreakdownRow({
-  rank,
-  name,
-  trueAssessed,
-  noMatchIds,
-  noMatchDetails,
-  onOpenPanel,
-}: {
-  rank: FilterRank;
-  name: string;
-  trueAssessed: number;
-  noMatchIds: number[];
-  noMatchDetails?: NoMatchDetail[];
-  onOpenPanel: (request: PanelRequest) => void;
-}) {
-  const label = breakdownDisplayName(rank, name);
-  if (noMatchIds.length === 0) {
-    return (
-      <li>
-        <button
-          type="button"
-          className="underline decoration-dotted underline-offset-2 hover:text-white"
-          onClick={() => onOpenPanel({ rank, name, bucket: "assessed", label: `${label} — Assessed` })}
-        >
-          Assessed ({trueAssessed})
-        </button>
-      </li>
-    );
-  }
-  const colMatchCount = trueAssessed - noMatchIds.length;
-  return (
-    <li>
-      Assessed ({trueAssessed})
-      <ul className="ml-4 mt-0.5 space-y-0.5">
-        <li>
-          <button
-            type="button"
-            className="underline decoration-dotted underline-offset-2 hover:text-white"
-            onClick={() => onOpenPanel({ rank, name, bucket: "colMatch", label: `${label} — 1:1 CoL Match`, noMatchIds })}
-          >
-            1:1 CoL Match ({colMatchCount})
-          </button>
-        </li>
-        <li>
-          <button
-            type="button"
-            className="underline decoration-dotted underline-offset-2 hover:text-white"
-            title="Assessed by IUCN, but doesn't cleanly correspond to one counted Catalogue of Life species here — most of these DO have a Catalogue of Life record (see the reason shown per species): a demoted subspecies, a provisionally-accepted name, a taxonomic split/lump, or a coverage gap. Only a small minority have no Catalogue of Life record at all."
-            onClick={() => onOpenPanel({ rank, name, bucket: "noColMatch", label: `${label} — No 1:1 CoL Match`, noMatchIds, noMatchDetails })}
-          >
-            No 1:1 CoL Match ({noMatchIds.length})
-          </button>
-        </li>
-      </ul>
-    </li>
   );
 }
 
@@ -787,87 +774,216 @@ function renderFilterSegs(segs: DescribeFilterSegment[]): React.ReactNode {
   );
 }
 
-// Expandable per-name breakdown for the "# Described Species" popover — lets a
-// specialist see, for each name in the node's primary filter dimension (e.g. each
-// order in Small Mammal SG), how its colDescribed splits into Assessed vs Not
-// Evaluated, without leaving the tooltip. Clicking Assessed/Not Evaluated navigates
-// to the node's species list in that view, narrowed client-side to just this one
-// name via the `bd=` URL param (RedListView's taxaFilteredSpecies) — species are
-// already fully fetched per node, so no new API param was needed.
+// Per-name breakdown table for the "# Described Species" popover — one row per
+// name in the node's primary filter dimension (e.g. each order in Small Mammal
+// SG), columns for the whole colDescribed -> Assessed -> {1:1 CoL Match, No 1:1
+// CoL Match} -> Not Evaluated split, all visible at once instead of needing to
+// expand each name to compare them (a real cost for a multi-name breakdown —
+// spotting which family has the most unmatched species used to mean opening
+// every row one at a time). Clicking # Assessed / No 1:1 CoL Match / # Not
+// Evaluated opens the species-level panel (onOpenPanel) narrowed to that exact
+// slice; # Described has no drill-down (it's CoL's own count, not a species
+// list this dashboard can independently show).
 function BreakdownList({
   rank,
   label,
   breakdown,
   onOpenPanel,
+  liveColIds,
 }: {
   rank: FilterRank;
   label: string;
   breakdown: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[]; splitDetails?: SplitDetail[] }[];
   onOpenPanel: (request: PanelRequest) => void;
+  liveColIds?: Record<string, string>;
 }) {
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const toggle = (name: string) => setExpanded((prev) => {
-    const next = new Set(prev);
-    if (next.has(name)) next.delete(name); else next.add(name);
-    return next;
-  });
   return (
     <div className="mt-1">
-      <p className="text-zinc-300">{label}:</p>
-      <ul className="mt-0.5">
-        {breakdown.map((b) => {
-          const isOpen = expanded.has(b.name);
-          const href = breakdownHref(rank, b.name);
-          return (
-            <li key={b.name} className="mt-0.5">
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => toggle(b.name)}
-                  className="flex items-center gap-1 hover:text-white"
-                >
-                  <FaChevronRight size={7} className={`text-zinc-400 transition-transform ${isOpen ? "rotate-90" : ""}`} />
-                  {breakdownDisplayName(rank, b.name)} ({b.count})
-                </button>
-                {href && (
-                  <a
-                    href={href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="text-zinc-400 hover:text-blue-300"
-                    title={`View ${breakdownDisplayName(rank, b.name)} on Catalogue of Life`}
+      <table className="border-collapse">
+        <thead>
+          {/* Two-row header: "No 1:1 CoL Match" sits UNDER a shared "Assessed"
+              group header (colSpan 2, underlined) alongside "Total" — a
+              standard grouped-column convention that shows it's a SUBSET of
+              Assessed, not a sibling stat, without needing to cram both
+              numbers into one cell (each still needs its own click target).
+              The first column header is deliberately blank, not "Name" or the
+              rank ("Family"/"Order"/...) — each row already states its own
+              rank inline ("Family: Muridae"), which reads better than a single
+              rank word doing that job once for the whole table, especially
+              for a single-row breakdown (every dynamic taxonomic-drilldown
+              node) where a lone header word above one row felt disconnected
+              from it. */}
+          <tr className="text-zinc-400">
+            <th rowSpan={2} className="pr-3 pb-1 font-normal text-left align-bottom" />
+            <th rowSpan={2} className="px-2 pb-1 font-normal text-right align-bottom"># Described</th>
+            <th colSpan={2} className="px-2 pb-0.5 font-normal text-center border-b border-zinc-600">
+              Assessed
+            </th>
+            <th rowSpan={2} className="pl-2 pb-1 font-normal text-right align-bottom"># Not Evaluated</th>
+          </tr>
+          <tr className="text-zinc-400">
+            <th className="px-2 pb-1 pt-0.5 font-normal text-right">Total</th>
+            <th
+              className="px-2 pb-1 pt-0.5 font-normal text-right"
+              title="Assessed by IUCN, but doesn't cleanly correspond to one counted Catalogue of Life species here — most of these DO have a Catalogue of Life record (see the reason shown per species): a demoted subspecies, a provisionally-accepted name, a taxonomic split/lump, or a coverage gap. Only a small minority have no Catalogue of Life record at all."
+            >
+              No 1:1 CoL Match
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {breakdown.map((b) => {
+            const rowLabel = breakdownDisplayName(rank, b.name);
+            const href = breakdownHref(rank, b.name, liveColIds);
+            return (
+              <tr key={b.name} className="border-t border-zinc-700/60">
+                <td className="pr-3 py-1 whitespace-nowrap">
+                  {label}:{" "}
+                  {href ? (
+                    <a
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-300 hover:text-blue-200 underline"
+                      title={`View ${rowLabel} on Catalogue of Life`}
+                    >
+                      {rowLabel}
+                    </a>
+                  ) : (
+                    rowLabel
+                  )}
+                </td>
+                <td className="px-2 py-1 text-right text-zinc-300">{b.count}</td>
+                <td className="px-2 py-1 text-right">
+                  <button
+                    type="button"
+                    className="underline decoration-dotted underline-offset-2 hover:text-white"
+                    onClick={() => onOpenPanel({ rank, name: b.name, bucket: "assessed", label: `${rowLabel} — Assessed` })}
                   >
-                    <FaInfoCircle size={9} />
-                  </a>
-                )}
-              </div>
-              {isOpen && (
-                <ul className="ml-4 mt-0.5 space-y-0.5">
-                  <AssessedBreakdownRow
-                    rank={rank}
-                    name={b.name}
-                    trueAssessed={b.trueAssessed}
-                    noMatchIds={b.noMatchIds}
-                    noMatchDetails={b.noMatchDetails}
-                    onOpenPanel={onOpenPanel}
-                  />
-                  <li>
+                    {b.trueAssessed}
+                  </button>
+                </td>
+                <td className="px-2 py-1 text-right">
+                  {b.noMatchIds.length > 0 ? (
                     <button
                       type="button"
                       className="underline decoration-dotted underline-offset-2 hover:text-white"
-                      onClick={() => onOpenPanel({ rank, name: b.name, bucket: "ne", label: `${breakdownDisplayName(rank, b.name)} — Not Evaluated`, splitDetails: b.splitDetails })}
+                      onClick={() => onOpenPanel({ rank, name: b.name, bucket: "noColMatch", label: `${rowLabel} — No 1:1 CoL Match`, noMatchIds: b.noMatchIds, noMatchDetails: b.noMatchDetails })}
                     >
-                      Not Evaluated ({b.neCount})
+                      {b.noMatchIds.length}
                     </button>
-                  </li>
-                </ul>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+                  ) : (
+                    <span className="text-zinc-300">0</span>
+                  )}
+                </td>
+                <td className="pl-2 py-1 text-right">
+                  <button
+                    type="button"
+                    className="underline decoration-dotted underline-offset-2 hover:text-white"
+                    onClick={() => onOpenPanel({ rank, name: b.name, bucket: "ne", label: `${rowLabel} — Not Evaluated`, splitDetails: b.splitDetails })}
+                  >
+                    {b.neCount}
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
+  );
+}
+
+// "# Described Species" COLUMN HEADER info icon — explains what the number means
+// (IUCN Table 1a estimate vs. CoL backbone count) and, since #272/#274's IUCN↔CoL
+// toggle used to live as its own persistent row below the whole table, now also
+// carries that toggle instead — one info icon doing both jobs rather than a
+// tooltip AND a separate always-visible control. Click-to-open (not hover), same
+// reasoning as DescribedInfoIcon below: a hover-only tooltip vanishes the instant
+// the cursor leaves the tiny icon, before it reaches the toggle buttons inside.
+function DescribedSourceInfoIcon({ describedSource, setDescribedSource }: { describedSource: "iucn" | "col"; setDescribedSource: (s: "iucn" | "col") => void }) {
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ bottom: 0, right: 0, maxWidth: 0, maxHeight: 0 });
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: Event) => {
+      if (e instanceof KeyboardEvent && e.key !== "Escape") return;
+      if (e.type === "mousedown") {
+        const target = e.target as Node;
+        if (popoverRef.current?.contains(target) || btnRef.current?.contains(target)) return;
+      }
+      setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, [open]);
+
+  return (
+    <span className="relative inline-flex">
+      <button
+        type="button"
+        ref={btnRef}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (!open && btnRef.current) setPos(computePopoverPosAbove(btnRef.current.getBoundingClientRect()));
+          setOpen((v) => !v);
+        }}
+        className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+      >
+        <FaInfoCircle size={12} />
+      </button>
+      {open && typeof document !== "undefined" && createPortal(
+        <div
+          ref={popoverRef}
+          onClick={(e) => e.stopPropagation()}
+          className="fixed z-[9999] px-3 py-2 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded-lg shadow-lg normal-case overflow-y-auto text-left"
+          style={{ bottom: pos.bottom, right: pos.right, maxWidth: pos.maxWidth, maxHeight: pos.maxHeight }}
+        >
+          <p>
+            {describedSource === "col"
+              ? `Described species from the ${COL_RELEASE_LABEL} backbone`
+              : "Estimates from IUCN Red List Table 1a (2026-1)"}
+          </p>
+          <p className="mt-1">
+            <a
+              href={describedSource === "col" ? COL_RELEASE_URL : IUCN_SOURCE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-300 hover:text-blue-200 underline"
+            >
+              View source
+            </a>
+          </p>
+          <p className="mt-1.5 flex items-center gap-1.5 text-zinc-300">
+            Source:
+            <span className="inline-flex rounded-md overflow-hidden border border-zinc-600 text-[10px] font-semibold">
+              {(["iucn", "col"] as const).map((src) => (
+                <button
+                  key={src}
+                  type="button"
+                  onClick={() => setDescribedSource(src)}
+                  className={`px-1.5 py-0.5 transition-colors ${
+                    describedSource === src
+                      ? "bg-zinc-200 text-zinc-900"
+                      : "text-zinc-300 hover:bg-zinc-600"
+                  }`}
+                >
+                  {src === "iucn" ? "IUCN" : "CoL"}
+                </button>
+              ))}
+            </span>
+          </p>
+        </div>,
+        document.body
+      )}
+    </span>
   );
 }
 
@@ -884,12 +1000,55 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
   const btnRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState({ top: 0, left: 0, maxHeight: 0 });
+  const [pos, setPos] = useState({ top: 0, right: 0, maxWidth: 0, maxHeight: 0 });
   // Species-level panel opened by clicking a count row (Assessed/Not Evaluated/CoL
   // Match/No CoL Match) — a sibling of the popup, not nested inside it, so it can
   // sit beside rather than replace the counts view. Closes whenever the popup does.
   const [activePanel, setActivePanel] = useState<PanelRequest | null>(null);
   const [panelPos, setPanelPos] = useState({ top: 0, left: 0, maxHeight: 0 });
+  // Live, on-demand breakdown for a dynamic (taxonomic-drilldown) node — see
+  // live-breakdown.ts. A dynamic node's colBreakdown prop is always undefined
+  // (never precomputed, unlike an official/SSC node's), so this fetches the
+  // one-bucket equivalent when the popover opens, not eagerly for a whole
+  // level. Skipped entirely for real nodes (breakdown is already provided, or
+  // there's genuinely none). Loading state is surfaced explicitly (a spinner
+  // + "may take a moment" note) rather than hidden, since the underlying
+  // backbone-dependent query can be slow on a cold server start.
+  const [liveBreakdown, setLiveBreakdown] = useState<typeof breakdown>(undefined);
+  const [liveBreakdownLoading, setLiveBreakdownLoading] = useState(false);
+  const [liveBreakdownError, setLiveBreakdownError] = useState(false);
+  useEffect(() => {
+    if (!open || !isDynamicNodeId(nodeId) || breakdown?.length || liveBreakdown || liveBreakdownLoading) return;
+    setLiveBreakdownLoading(true); // eslint-disable-line react-hooks/set-state-in-effect -- kick off the fetch's loading state
+    setLiveBreakdownError(false);
+    fetch(`/api/redlist/taxa-breakdown-live?nodeId=${encodeURIComponent(nodeId)}`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`Live breakdown failed (${res.status})`))))
+      .then((data) => setLiveBreakdown([data.breakdown]))
+      .catch(() => setLiveBreakdownError(true))
+      .finally(() => setLiveBreakdownLoading(false));
+  }, [open, nodeId, breakdown, liveBreakdown, liveBreakdownLoading]);
+  const effectiveBreakdown = breakdown?.length ? breakdown : liveBreakdown;
+  // CoL taxon ids for this dynamic node's own ancestor chain (e.g.
+  // "rodentia"/"heteromyidae"/"chaetodipus"), used as a fallback wherever the
+  // precomputed static-tree COL_TAXON_IDS snapshot doesn't cover a name (which
+  // is always, for a name reached purely through live drilldown). Fetched via
+  // its own separate, much faster endpoint (see the API route's doc comment) —
+  // NOT bundled into the liveBreakdown fetch above — so the rank/name header
+  // (visible only while that slower breakdown is still loading, below) can
+  // show every ancestor as a working link well before the table itself
+  // finishes, rather than both arriving together only once the slow query
+  // does.
+  const [liveColIds, setLiveColIds] = useState<Record<string, string> | undefined>(undefined);
+  const [liveColIdsLoading, setLiveColIdsLoading] = useState(false);
+  useEffect(() => {
+    if (!open || !isDynamicNodeId(nodeId) || liveColIds || liveColIdsLoading) return;
+    setLiveColIdsLoading(true); // eslint-disable-line react-hooks/set-state-in-effect -- kick off the fetch's loading state
+    fetch(`/api/redlist/col-taxon-ids-live?nodeId=${encodeURIComponent(nodeId)}`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`Live CoL taxon id lookup failed (${res.status})`))))
+      .then((data) => setLiveColIds(data.colIds))
+      .catch(() => setLiveColIds({})) // degrade to unlinked plain text, don't retry forever
+      .finally(() => setLiveColIdsLoading(false));
+  }, [open, nodeId, liveColIds, liveColIdsLoading]);
 
   useEffect(() => {
     if (!open) return;
@@ -957,16 +1116,40 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
     if (rect) setPanelPos(computePanelPos(rect)); // eslint-disable-line react-hooks/set-state-in-effect -- track the popup's DOM position, not React state
   }, [open, activePanel, pos]);
 
-  if (!node) return null;
-  if (source === "iucn" && !node.estimatedSource) return null;
+  // A dynamic (live taxonomic-drilldown) node isn't in NODE_INDEX, but is a real,
+  // describable filter (see dynamic-taxon.ts) — build one on the fly instead of
+  // requiring findNode to succeed. Its `source` is always "col" in practice
+  // (resolveDescribed forces useCol for every non-official node, and dynamic
+  // nodes are never official), so the "iucn" branch below — which needs real
+  // node.estimatedSource/estimatedSourceUrl — is never reached for one; the
+  // early return just below handles that safely either way.
+  const dynFilter = !node ? dynamicNodeFilter(nodeId) : null;
+  if (!node && !dynFilter) return null;
+  if (source === "iucn" && !node?.estimatedSource) return null;
+  const filter = node?.filter ?? dynFilter!;
 
-  // With a breakdown, describeFilter's primary dimension (e.g. "Family: Bovidae") is
-  // hidden — the BreakdownList below shows it instead — leaving just the exclude
-  // clause (e.g. "(excluding Bos, Bubalus, ...)") and any CoL note. Rendered AFTER
-  // the breakdown list rather than before, so "excluding X, Y, Z" reads as a
-  // qualifier on "Family: Bovidae (217)" instead of floating above it with nothing
-  // to attach to.
-  const filterSegs = source === "col" ? describeFilter(node.filter, nodeId, Boolean(breakdown?.length)) : [];
+  // A dynamic node's full ancestor chain (e.g. "Order: Rodentia; Family:
+  // Heteromyidae; Genus: Chaetodipus"), each part linked to CoL — liveColIds
+  // fills in a link for names the precomputed static-tree snapshot can't cover
+  // (see its own fetch above for why it's a separate, faster request than the
+  // breakdown itself: this line is only ever rendered BELOW while
+  // effectiveBreakdown hasn't loaded yet, so every ancestor needs to already be
+  // linked by then, not whenever the slower breakdown eventually finishes).
+  // Once the breakdown table loads, this line is hidden — the table's own
+  // per-name rows (also using liveColIds) take over as the click-through.
+  const filterSegs = source === "col" ? describeFilter(filter, node ? nodeId : undefined, liveColIds) : [];
+
+  // True for an "Unclassified <Rank>" bucket (dynamicNodeDisplayName's blank-
+  // segment case) — most visible for Molluscs' Gastropoda, where ~44% of
+  // species have no order recorded in Catalogue of Life's data at all (e.g.
+  // Stylommatophora, 3,338+ assessed land snail species, has zero CoL
+  // order-level records). Called out explicitly here rather than left for a
+  // reader to infer from an otherwise-unremarkable row — a real, sizeable
+  // bucket that looks exactly like any other order/family/genus bucket
+  // without this note.
+  const dynSegments = isDynamicNodeId(nodeId) ? parseDynamicNodeId(nodeId)?.segments : undefined;
+  const isUnclassifiedBucket = Boolean(dynSegments?.length && dynSegments[dynSegments.length - 1].value === "");
+  const unclassifiedRankLabel = isUnclassifiedBucket ? dynamicNodeRankInfo(nodeId)!.label.toLowerCase() : "";
 
   return (
     <>
@@ -988,42 +1171,79 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
         <div
           ref={popoverRef}
           onClick={(e) => e.stopPropagation()}
-          className="fixed z-[9999] px-3 py-2 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded-lg shadow-lg normal-case max-w-[340px] overflow-y-auto text-left"
-          style={{ top: pos.top, left: pos.left, maxHeight: pos.maxHeight }}
+          className="fixed z-[9999] px-3 py-2 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded-lg shadow-lg normal-case overflow-y-auto text-left"
+          style={{ top: pos.top, right: pos.right, maxWidth: pos.maxWidth, maxHeight: pos.maxHeight }}
         >
           {source === "iucn" ? (
+            // Only ever reached for a real (non-dynamic) node — see the early
+            // return above, which bails out for "iucn" whenever node is absent.
+            // estimatedSource often names a specific citation ALONGSIDE IUCN
+            // ("IUCN 2026-1 (MolluscaBase 2025)") but estimatedSourceUrl only
+            // ever links that specific citation — the IUCN Table 1a PDF itself
+            // (where this figure is actually published) had no link at all.
+            // Show both whenever they genuinely differ; nodes that cite IUCN
+            // alone (estimatedSourceUrl === IUCN_SOURCE_URL) still get just one.
             <>
-              <p>{node.estimatedSource}</p>
-              {node.estimatedSourceUrl && (
+              <p>{node!.estimatedSource}</p>
+              <p className="mt-1 flex flex-col items-start gap-0.5">
                 <a
-                  href={node.estimatedSourceUrl}
+                  href={IUCN_SOURCE_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-1 inline-block text-blue-300 hover:text-blue-200 underline"
+                  className="text-blue-300 hover:text-blue-200 underline"
                 >
-                  View source
+                  View IUCN Red List Table 1a
                 </a>
-              )}
+                {node!.estimatedSourceUrl && node!.estimatedSourceUrl !== IUCN_SOURCE_URL && (
+                  <a
+                    href={node!.estimatedSourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-300 hover:text-blue-200 underline"
+                  >
+                    View source
+                  </a>
+                )}
+              </p>
             </>
           ) : (
             <>
-              {!breakdown?.length && filterSegs.length > 0 && (
+              {isUnclassifiedBucket && (
+                <p className="text-zinc-300 mb-1">
+                  These are real, counted species — they just have no {unclassifiedRankLabel} recorded in Catalogue of Life&apos;s data, so they land here rather than under a named {unclassifiedRankLabel}.
+                </p>
+              )}
+              {!effectiveBreakdown?.length && filterSegs.length > 0 && (
                 <p>{renderFilterSegs(filterSegs)}</p>
               )}
-              {breakdown?.length ? (() => {
-                const dim = primaryFilterRank(node.filter);
+              {liveBreakdownLoading && (
+                <p className="flex items-center gap-1.5 text-zinc-300">
+                  <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Loading species-level detail — may take several seconds…
+                </p>
+              )}
+              {liveBreakdownError && (
+                <p className="text-zinc-300">Species-level detail unavailable right now.</p>
+              )}
+              {effectiveBreakdown?.length ? (() => {
+                // A dynamic node's rank is its own deepest segment (e.g. "Family"
+                // for a family-level node), not primaryFilterRank's "first set
+                // dimension" pick — wrong for a multi-dimension dynamic filter
+                // (order+family both set) since that always picks "order" first.
+                const dim = isDynamicNodeId(nodeId) ? dynamicNodeRankInfo(nodeId) : primaryFilterRank(filter);
                 return dim ? (
                   <BreakdownList
                     rank={dim.rank}
                     label={dim.label}
-                    breakdown={breakdown}
+                    breakdown={effectiveBreakdown}
                     onOpenPanel={setActivePanel}
+                    liveColIds={liveColIds}
                   />
                 ) : null;
               })() : null}
-              {breakdown?.length && filterSegs.length > 0 && (
-                <p className="mt-1">{renderFilterSegs(filterSegs)}</p>
-              )}
               <p className="mt-1.5 text-zinc-300">
                 Source:{" "}
                 <a href={COL_RELEASE_URL} target="_blank" rel="noopener noreferrer" className="text-blue-300 hover:text-blue-200 underline">
@@ -1049,7 +1269,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
   );
 }
 
-export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", layoutMode, onLayoutModeChange, countryModeContent, countryScope, onExitCountryScope, onClearCountryScope }: Props) {
+export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", layoutMode, onLayoutModeChange, countryModeContent, countryPillsContent, countryScope, onClearCountryScope }: Props) {
   const isNewAssessments = viewMode === "new-assessments";
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1094,6 +1314,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   // countries on in either order produces the same key (and cache-friendly
   // URL), not one per click order.
   const countryKey = countryScoped ? [...countryScope!].sort().join(",") : "";
+  // Kept in sync every render (plain assignment, not an effect — refs don't
+  // need one) so the promise-chained fetches below (toggleExpand, Table 1a,
+  // SSC groups — unlike the main fetchTaxa effect above, these aren't
+  // effect-cleanup-cancellable) can tell, once their response finally
+  // resolves, whether countryKey has already moved on to a different
+  // country and skip applying a now-stale result.
+  const countryKeyRef = useRef(countryKey);
+  countryKeyRef.current = countryKey;
   // Display name for the atop-table label: the one country's name, the whole
   // region's name if the selection exactly matches one (e.g. picked via the
   // region dropdown, or by happening to cmd-click every one of its countries),
@@ -1178,6 +1406,36 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     }
   }, [taxa, autoScroll]);
 
+  // Fetch a node's subgroup data if not already loaded/loading (read from refs to
+  // avoid stale closures) — factored out of toggleExpand so the ancestor-breadcrumb
+  // effect below can ensure an intermediate ancestor's data is fetched WITHOUT also
+  // toggling it into expandedTaxa (that Set drives renderTaxonWithSubgroups' "show
+  // this node's own children inline" rendering, which the breadcrumb branch doesn't
+  // use — see its own separate rendering, further down).
+  const ensureSubgroupData = useCallback(async (taxonId: string) => {
+    if (subgroupDataRef.current[taxonId] || loadingSubgroupsRef.current.has(taxonId)) return;
+    setLoadingSubgroups((prev) => new Set(prev).add(taxonId));
+    const requestCountryKey = countryKey;
+    try {
+      const countryQs = countryKey ? `&country=${encodeURIComponent(countryKey)}` : "";
+      const res = await fetch(`/api/redlist/taxa-subgroups?nodeId=${taxonId}${countryQs}`);
+      // Bail if the country changed while this was in flight — countryKey
+      // changing already clears subgroupData wholesale (see the effect
+      // above), and applying this now-stale response would silently
+      // re-add wrongly-scoped numbers for taxonId right after that clear.
+      if (res.ok && countryKeyRef.current === requestCountryKey) {
+        const data = await res.json();
+        setSubgroupData((prev) => ({ ...prev, [taxonId]: data.subgroups }));
+      }
+    } finally {
+      setLoadingSubgroups((prev) => {
+        const next = new Set(prev);
+        next.delete(taxonId);
+        return next;
+      });
+    }
+  }, [countryKey]);
+
   // Fetch subgroup data when a taxon is expanded
   const toggleExpand = useCallback(async (taxonId: string) => {
     setExpandedTaxa((prev) => {
@@ -1189,26 +1447,8 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       }
       return next;
     });
-
-    // Fetch subgroup data if not already loaded (read from refs to avoid stale closures)
-    if (!subgroupDataRef.current[taxonId] && !loadingSubgroupsRef.current.has(taxonId)) {
-      setLoadingSubgroups((prev) => new Set(prev).add(taxonId));
-      try {
-        const countryQs = countryKey ? `&country=${encodeURIComponent(countryKey)}` : "";
-        const res = await fetch(`/api/redlist/taxa-subgroups?nodeId=${taxonId}${countryQs}`);
-        if (res.ok) {
-          const data = await res.json();
-          setSubgroupData((prev) => ({ ...prev, [taxonId]: data.subgroups }));
-        }
-      } finally {
-        setLoadingSubgroups((prev) => {
-          const next = new Set(prev);
-          next.delete(taxonId);
-          return next;
-        });
-      }
-    }
-  }, [countryKey]);
+    await ensureSubgroupData(taxonId);
+  }, [ensureSubgroupData]);
 
   // Table 1a mode / SSC groups mode — derived from the URL-synced layoutMode
   // prop (see useFilterParams) rather than local state, so a page load or
@@ -1233,12 +1473,12 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         }}
         className="text-xs bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
       >
-        <option value="taxonomic">Standard view</option>
-        <option value="table1a">Table 1a view</option>
-        <option value="ssc">SSC group view</option>
+        <option value="taxonomic">By Taxon</option>
         <option value="country" disabled={isNewAssessments} title={isNewAssessments ? "Not available for New Assessments — Not Evaluated species have no location data" : undefined}>
-          Country view
+          By Country
         </option>
+        <option value="ssc">By SSC Specialist Group (WIP)</option>
+        <option value="table1a">Table 1a</option>
       </select>
     </span>
   );
@@ -1264,8 +1504,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       // more honest signal than silently reverting to a static, never-re-verified
       // citation — it means this specific CoL release is missing species IUCN's own
       // assessors already recognize (e.g. the pygmy hippo, or a handful of recent
-      // Artiodactyla splits), and that's worth surfacing, not hiding.
-      if (useCol && colDescribed != null) return { value: colDescribed, source: "col" };
+      // Artiodactyla splits), and that's worth surfacing, not hiding. For the same
+      // reason, non-official nodes have no estimatedDescribed fallback at all (the
+      // field no longer exists on them, see taxonomy-tree.ts) — colDescribed ?? 0 is
+      // the only number they ever show.
+      if (useCol) return { value: colDescribed ?? 0, source: "col" };
       return { value: estimatedDescribed, source: "iucn" };
     },
     [describedSource]
@@ -1290,34 +1533,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   }, [taxa, applySource]);
   const perTaxa = useMemo(() => taxa.filter((t) => t.id !== "all").map(t => applySource(t, t.id)), [taxa, applySource]);
 
-  // Expand all expandable taxa
-  const expandAll = useCallback(async () => {
-    const expandableTaxaIds = perTaxa.filter(t => isExpandable(t.id)).map(t => t.id);
-    setExpandedTaxa(new Set(expandableTaxaIds));
-    for (const taxonId of expandableTaxaIds) {
-      if (!subgroupDataRef.current[taxonId] && !loadingSubgroupsRef.current.has(taxonId)) {
-        setLoadingSubgroups((prev) => new Set(prev).add(taxonId));
-        const countryQs = countryKey ? `&country=${encodeURIComponent(countryKey)}` : "";
-        fetch(`/api/redlist/taxa-subgroups?nodeId=${taxonId}${countryQs}`)
-          .then(res => res.ok ? res.json() : null)
-          .then(data => {
-            if (data) setSubgroupData((prev) => ({ ...prev, [taxonId]: data.subgroups }));
-          })
-          .finally(() => {
-            setLoadingSubgroups((prev) => {
-              const next = new Set(prev);
-              next.delete(taxonId);
-              return next;
-            });
-          });
-      }
-    }
-  }, [perTaxa, countryKey]);
-
-  const collapseAll = useCallback(() => {
-    setExpandedTaxa(new Set());
-  }, []);
-
   // Fetch-if-needed, driven by table1aMode rather than a click handler, so it
   // also runs when the mode is entered via URL load or browser back/forward.
   // Uses a ref (not the loading state) to gate the fetch — including the
@@ -1328,10 +1543,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     if (!table1aMode || table1aData || table1aFetchStartedRef.current) return;
     table1aFetchStartedRef.current = true;
     setTable1aLoading(true);
+    const requestCountryKey = countryKey;
     const countryQs = countryKey ? `&country=${encodeURIComponent(countryKey)}` : "";
     fetch(`/api/redlist/taxa-summary?table1a=true${countryQs}`)
       .then(res => res.ok ? res.json() : null)
-      .then(data => { if (data) setTable1aData(data.sections); })
+      // countryKey changing already resets table1aData/table1aFetchStartedRef
+      // (see the effect above) so a fresh fetch can start — but doesn't cancel
+      // THIS one, so skip applying it if it resolves after that happened.
+      .then(data => { if (data && countryKeyRef.current === requestCountryKey) setTable1aData(data.sections); })
       .finally(() => setTable1aLoading(false));
   }, [table1aMode, table1aData, countryKey]);
 
@@ -1339,19 +1558,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   // the precomputed SSC wrapper nodes' children instead of the top-level
   // Table 1a CSV groups (see SSC_SECTIONS above).
   const [sscData, setSscData] = useState<Table1aSectionData[] | null>(null);
-  // Which SSC sections (keyed by title) are expanded past the first
-  // SSC_SECTION_COLLAPSE_SIZE rows — collapsed by default so a taxon with 36
-  // groups (mammals) doesn't dwarf the page; the catch-all row always shows
-  // regardless of this state (see the render loop below).
-  const [expandedSscSections, setExpandedSscSections] = useState<Set<string>>(new Set());
-  const toggleSscSection = useCallback((title: string) => {
-    setExpandedSscSections((prev) => {
-      const next = new Set(prev);
-      if (next.has(title)) next.delete(title);
-      else next.add(title);
-      return next;
-    });
-  }, []);
   const [sscLoading, setSscLoading] = useState(false);
   const sscFetchStartedRef = useRef(false);
 
@@ -1359,6 +1565,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     if (!sscMode || sscData || sscFetchStartedRef.current) return;
     sscFetchStartedRef.current = true;
     setSscLoading(true);
+    const requestCountryKey = countryKey;
     const countryQs = countryKey ? `&country=${encodeURIComponent(countryKey)}` : "";
     Promise.all(
       SSC_SECTIONS.map((section) =>
@@ -1393,7 +1600,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           })
       )
     )
-      .then((sections) => setSscData(sections.filter((s): s is Table1aSectionData => s != null)))
+      // Same staleness guard as the Table 1a fetch above — countryKey
+      // changing already reset sscData/sscFetchStartedRef, but didn't cancel
+      // this in-flight request.
+      .then((sections) => { if (countryKeyRef.current === requestCountryKey) setSscData(sections.filter((s): s is Table1aSectionData => s != null)); })
       .finally(() => setSscLoading(false));
   }, [sscMode, sscData, countryKey]);
 
@@ -1417,8 +1627,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     setSubgroupData({});
   }, [countryKey]);
 
-  const allExpanded = useMemo(() => perTaxa.filter(t => isExpandable(t.id)).every(t => expandedTaxa.has(t.id)), [perTaxa, expandedTaxa]);
-
   // Collapse all when returning to landing page (no taxa selected)
   useEffect(() => {
     if (selectedTaxa.size === 0 && selectedSubgroups.size === 0) {
@@ -1433,39 +1641,63 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     for (const sgId of selectedSubgroups) {
       // Expand all ancestors up to the view root (which is in selectedTaxa)
       for (const ancestorId of getAncestors(sgId)) {
-        if (selectedTaxa.has(ancestorId)) break; // Stop at the view root
+        if (selectedTaxa.has(ancestorId)) {
+          // The view root itself isn't toggled into expandedTaxa — it drives a
+          // different, always-shown rendering path while selectedSubgroups is
+          // non-empty (the ancestor-breadcrumb branch below, not
+          // renderTaxonWithSubgroups' isExpanded-gated one) — but its
+          // subgroupData must still be fetched: the breadcrumb rendering looks
+          // up each INTERMEDIATE ancestor's own summary there (e.g. Rodentia's
+          // row, one level below the root), and nothing else would ever fetch
+          // it for a dynamic ancestor that isn't itself a toggle-expand target.
+          void ensureSubgroupData(ancestorId);
+          break;
+        }
         if (!expandedTaxa.has(ancestorId)) toExpand.add(ancestorId);
       }
-      // Expand the node itself if it has children
-      if (hasChildren(sgId) && !expandedTaxa.has(sgId)) {
-        toExpand.add(sgId);
-      }
+      // Deliberately NOT auto-expanding sgId itself here (unlike ancestors
+      // above) — selecting a node should show its own collapsed row first,
+      // requiring an explicit second click to expand into children, matching
+      // renderTaxonWithSubgroups'/renderSubgroupRow's click pattern. Auto-
+      // expanding here would silently undo that on every selection change.
     }
     for (const id of toExpand) toggleExpand(id);
     // Deps intentionally limited to selectedSubgroups only:
-    // - toggleExpand: stable identity (useCallback with empty deps + refs)
+    // - toggleExpand/ensureSubgroupData: stable identity (useCallback, only
+    //   countryKey as a real dep — a country change already resets subgroupData
+    //   entirely elsewhere, so refetching here isn't needed on that change)
     // - selectedTaxa: would cause re-runs when taxa selection changes, but this
     //   effect only needs to react to subgroup URL changes
     // - expandedTaxa: including it would create an infinite loop since this effect
     //   expands taxa (mutates expandedTaxa), which would re-trigger the effect
   }, [selectedSubgroups]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Aborts the in-flight request whenever countryKey changes again before it
+  // resolves — without this, rapid country hovering could fire many quick
+  // requests whose responses race each other, and whichever happened to
+  // resolve LAST (not necessarily the one for the currently-hovered/
+  // selected country) would win and overwrite `taxa` with stale, wrongly-
+  // scoped numbers — visibly "stuck" even after the hover preview and its
+  // pill had already cleared back to no selection.
   useEffect(() => {
+    const controller = new AbortController();
     async function fetchTaxa() {
       setLoading(true);
       try {
         const countryQs = countryKey ? `?country=${encodeURIComponent(countryKey)}` : "";
-        const res = await fetch(`/api/redlist/taxa-summary${countryQs}`);
+        const res = await fetch(`/api/redlist/taxa-summary${countryQs}`, { signal: controller.signal });
         if (!res.ok) throw new Error("Failed to load taxa");
         const data = await res.json();
         setTaxa(data.taxa);
       } catch (err) {
+        if (controller.signal.aborted) return;
         setError(err instanceof Error ? err.message : "Failed to load taxa");
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     }
     fetchTaxa();
+    return () => controller.abort();
   }, [countryKey]);
 
   // Only the very first load (no data yet) shows the full-table skeleton below —
@@ -1985,13 +2217,45 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         key={`ancestor-${sg.id}`}
         className="transition-colors cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
         onClick={() => {
+          // Navigating up to this ancestor: collapse anything expanded BELOW
+          // it (a previously-drilled-into deeper branch) so it doesn't show
+          // pre-expanded if the user drills back into it later — only prune
+          // descendants of sg.id, leaving its own state, ancestors, and
+          // unrelated branches (e.g. an independently-expanded sibling taxon)
+          // untouched.
+          setExpandedTaxa((prev) => {
+            const next = new Set([...prev].filter((id) => id === sg.id || !getAncestors(id).includes(sg.id)));
+            return next.size === prev.size ? prev : next;
+          });
           onToggleSubgroup(sg.id);
         }}
       >
         <td className={`${stickyClasses} ${taxonCellPad} whitespace-nowrap w-0 bg-white dark:bg-zinc-900`}>
-          <div className="flex items-center gap-2" style={{ paddingLeft: `${depth * 12}px` }}>
-            <TaxaIcon taxonId={sg.id} size={isViewRoot ? 18 : 16} className="flex-shrink-0" style={{ color }} />
-            <span className="text-sm text-zinc-700 dark:text-zinc-300">{sg.name}</span>
+          {/* 20px/level, not 12 — each level's icon also shrinks a few px
+              (e.g. 22 → 18 → 14), which eats into the padding and nets a
+              visibly-too-subtle ~8px shift at 12px/level (confirmed by
+              measuring rendered positions: a single indent step was easy to
+              miss). 20px/level keeps the net shift clearly perceptible even
+              after that dilution. Kept in sync with the same constant in
+              renderSubgroupRow/renderCollapsedSubgroupRow below. */}
+          <div className="flex items-center gap-2" style={{ paddingLeft: `${depth * 20}px` }}>
+            {/* The view root row (depth 0) is the SAME conceptual taxon row as
+                renderRow's/renderTaxonWithSubgroups' top-level display (e.g.
+                "Mammals") — match their icon size (22) and text styling
+                exactly, or it visibly shifts left (a smaller icon leaves less
+                width before the text, at the same left edge) every time the
+                view switches between the normal tree and this ancestor-
+                breadcrumb mode. Intermediate ancestors stay smaller (16) since
+                they're a level down, same as elsewhere in this file.
+                expandToggle(false, false) reserves the same chevron-width
+                spacer every other row type (renderRow, renderSubgroupRow)
+                puts before its icon — omitting it here was a second,
+                independent cause of the same left-shift, since ancestor rows
+                navigate on click rather than expand and so never render a
+                real chevron. */}
+            {expandToggle(false, false)}
+            <TaxaIcon taxonId={sg.id} size={isViewRoot ? 22 : 16} className="flex-shrink-0" style={{ color }} />
+            <span className={isViewRoot ? "font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100" : "text-sm text-zinc-700 dark:text-zinc-300"}>{sg.name}</span>
           </div>
         </td>
         {isVisible("described") && (
@@ -2045,10 +2309,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   };
 
   // Render a standalone subgroup row (used when table is collapsed to a selected subgroup)
-  const renderCollapsedSubgroupRow = (taxon: TaxonSummary, sg: SubGroupSummary) => {
+  const renderCollapsedSubgroupRow = (taxon: TaxonSummary, sg: SubGroupSummary, depth: number) => {
     const { value: sgDescribed, source: sgDescribedSource } = resolveDescribed(sg.id, sg.estimatedDescribed, sg.colDescribed);
     const sgPctAssessed = sgDescribed > 0 ? (sg.totalAssessed / sgDescribed) * 100 : 0;
     const sgPctOutdated = sg.totalAssessed > 0 ? (sg.outdated / sg.totalAssessed) * 100 : 0;
+    const isLoadingSgSubs = loadingSubgroups.has(sg.id);
     return (
       <tr
         key={`collapsed-${sg.id}`}
@@ -2060,10 +2325,22 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         }}
       >
         <td className={`${stickyClasses} ${taxonCellPad} whitespace-nowrap w-0 bg-zinc-100 dark:bg-zinc-800`}>
-          <div className="flex items-center gap-2">
+          {/* paddingLeft continues the same depth*12 staircase renderAncestorRow
+              uses above this row — without it, the selected node snapped back
+              to flush-left regardless of how many ancestor rows preceded it,
+              breaking the indentation right at the "current" row (e.g. Muridae
+              indented correctly as an ancestor, then its own selected child
+              Gerbillus resetting to 0 instead of continuing one step further). */}
+          <div className="flex items-center gap-2" style={{ paddingLeft: `${depth * 20}px` }}>
             {expandToggle(isExpandable(sg.id), expandedTaxa.has(sg.id))}
             <TaxaIcon taxonId={sg.id} size={18} className="flex-shrink-0" style={{ color: taxon.color }} />
             <span className="font-medium text-sm md:text-base text-zinc-900 dark:text-zinc-100">{sg.name}</span>
+            {isLoadingSgSubs && (
+              <svg className="animate-spin h-3 w-3 text-zinc-400" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            )}
           </div>
         </td>
         {isVisible("described") && (
@@ -2136,19 +2413,19 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           }`}
           onClick={() => {
             if (sgHasChildren && isSgSelected) {
-              // Already selected parent → toggle expand/collapse
+              // Already selected → toggle expand/collapse
               toggleExpand(sg.id);
             } else {
               onToggleSubgroup(sg.id);
-              if (sgHasChildren && !isSgExpanded) {
-                // Selecting → expand to show children
-                toggleExpand(sg.id);
-              }
+              // Selecting → show collapsed view first (don't auto-expand),
+              // matching renderTaxonWithSubgroups' top-level pattern — a
+              // second click is needed to expand into children.
+              setExpandedTaxa(new Set());
             }
           }}
         >
           <td className={`${stickyClasses} ${taxonCellPad} whitespace-nowrap w-0 ${isSgSelected ? "bg-violet-50 dark:bg-violet-900/20" : "bg-white dark:bg-zinc-900"}`}>
-            <div className="flex items-center gap-2" style={{ paddingLeft: `${(depth - 1) * 12}px` }}>
+            <div className="flex items-center gap-2" style={{ paddingLeft: `${(depth - 1) * 20}px` }}>
               {expandToggle(sgHasChildren, isSgExpanded)}
               <TaxaIcon taxonId={sg.id} size={depth === 1 ? 16 : 14} className="flex-shrink-0" style={{ color: parentColor, opacity: isSgSelected ? 1 : 0.6 }} />
               <span className={`text-sm ${isSgSelected ? "font-medium text-violet-700 dark:text-violet-300" : "text-zinc-700 dark:text-zinc-300"}`}>{sg.name}</span>
@@ -2398,22 +2675,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           <th className={flatMode ? numericThWrapClasses : numericThNoDividerClasses}>
             <span className="inline-flex items-center gap-1">
               # Described Species
-              <span className="relative group">
-                <a
-                  href={describedSource === "col" ? COL_RELEASE_URL : IUCN_SOURCE_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-                >
-                  <FaInfoCircle size={12} />
-                </a>
-                <span className="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible z-50 shadow-lg normal-case">
-                  {describedSource === "col"
-                    ? `Described species from the ${COL_RELEASE_LABEL} backbone`
-                    : "Estimates from IUCN Red List Table 1a (2026-1)"}
-                </span>
-              </span>
+              <DescribedSourceInfoIcon describedSource={describedSource} setDescribedSource={setDescribedSource} />
             </span>
           </th>
         )}
@@ -2533,15 +2795,33 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       </div>,
       document.body
     )}
-    {/* Country view: map on the left third, taxa table on the right two-thirds.
+    {/* Country view: map on the left half, taxa table on the right half.
         The table always uses the plain 3-column style in this mode
         (countryStyleColumns, derived from layoutMode — see its definition
-        above), whether or not a country is picked yet. The selected country's
-        identity shows atop the table itself (below) in both this landing mode
-        and, once a taxon's clicked, the full view too. Uses `contents` to
-        no-op this grouping entirely outside country mode, rather than
-        branching (and duplicating) the huge table JSX below per mode. */}
-    <div className={countryMode ? "grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4" : "contents"}>
+        above), whether or not a country is picked yet. The selected
+        country's identity shows as removable chips in a row of its own
+        ABOVE this whole grid — same grid-cols template so its columns line
+        up with the map/table below, but with the left (map) cell left
+        empty and the chips confined to the right (table) cell. min-h-
+        [34px] on that cell reserves the space unconditionally (a blank gap
+        before anything's hovered/selected), so it never grows *this* grid
+        below it into needing align-items: stretch to force the map's card
+        to match a taller table. Chips living inside either component
+        (tried both: atop just the table, floated over the map, enclosed in
+        the table's own card) always ended up needing some mechanism to
+        keep the map's card the same height as the table's — a separate row
+        above both sidesteps the problem entirely, since neither column's
+        own natural height is ever affected by how many chips are showing.
+        Uses `contents` to no-op this grouping entirely outside country
+        mode, rather than branching (and duplicating) the huge table JSX
+        below per mode. */}
+    {countryMode && (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-1.5">
+        <div aria-hidden="true" />
+        <div className="min-h-[34px]">{countryPillsContent}</div>
+      </div>
+    )}
+    <div className={countryMode ? "grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4" : "contents"}>
       {/* No extra wrapper here — WorldMap already renders its own card (bg/border/
           padding); wrapping it again doubled up the box and, since neither div had
           an explicit height, left the map's own h-full with nothing to fill,
@@ -2549,21 +2829,23 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           align-items: stretch now makes both columns match the taller one — no
           artificial min-height on the map side, so the row settles at the
           table's own natural content height instead of leaving dead space
-          below the last row. 1/3 map, 2/3 table (col-span-1/col-span-2). */}
-      {countryMode && <div className="lg:col-span-1">{countryModeContent}</div>}
-      <div className={countryMode ? "min-w-0 flex flex-col h-full lg:col-span-2" : "contents"}>
-        {/* Country name atop the table — shown whenever a country is scoped,
-            in both Country View's landing layout and the full (post-taxon-click)
-            view. The clear button behaves differently per context: in Country
-            View it returns to the country list (onExitCountryScope); in the
-            full view it just drops the country filter and stays put
-            (onClearCountryScope) — same as the "France ×" chip elsewhere. */}
-        {countryScoped && (
+          below the last row. Even 1/2-1/2 split (col-span-1 each); the table's
+          own scrollRef box below is zoomed down to compensate for the narrower
+          column (was 2/3 width, now 1/2 — zoom-[.75] keeps everything, fonts
+          included, at the same proportions just smaller, rather than letting
+          columns get cramped or triggering horizontal scroll). */}
+      {countryMode && <div>{countryModeContent}</div>}
+      <div className={countryMode ? "min-w-0 flex flex-col h-full" : "contents"}>
+        {/* Country name atop the table — shown whenever a country is scoped
+            OUTSIDE Country View (the normal browsing view's "France ×" chip,
+            via onClearCountryScope). Country View's own version is the
+            chips row above the grid instead. */}
+        {countryScoped && !countryMode && (
           <div className="flex items-center gap-1.5 mb-1.5 min-w-0 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
             <span className="truncate" title={countryScopeLabel}>{countryScopeLabel}</span>
-            {(countryMode ? onExitCountryScope : onClearCountryScope) && (
+            {onClearCountryScope && (
               <button
-                onClick={countryMode ? onExitCountryScope : onClearCountryScope}
+                onClick={onClearCountryScope}
                 className="text-sm font-normal text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors shrink-0"
                 title="Clear selected country"
               >
@@ -2572,7 +2854,15 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             )}
           </div>
         )}
-        <div ref={scrollRef} className={`relative bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto ${countryMode ? "flex-1" : ""}`}>
+        {/* mb-4 here (not left to the parent's space-y-4) because this whole
+            subtree's outer wrappers (lines above) render as `display: contents`
+            outside country mode — a contents element's own margin is dropped
+            per spec, so space-y-4's margin-bottom on it silently no-ops,
+            leaving zero visible gap before the charts/species-table block
+            below. Country mode already gets its gap from the real grid box's
+            own mb-4 (see the ternary a few lines up), so skip it here to avoid
+            doubling up. */}
+        <div ref={scrollRef} className={`relative bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto ${countryMode ? "flex-1 [zoom:.75]" : "mb-4"}`}>
           {/* Country-switch refetch indicator — see the loading-gate comment
               above renderRow's skeleton branch for why this doesn't blank the table. */}
           {loading && taxa.length > 0 && (
@@ -2585,7 +2875,15 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           )}
           <table className="w-full">
             {renderHead()}
-        <tbody>
+        {/* Dims every row's numbers (not just a corner spinner) while a
+            country-switch refetch is in flight — the row-level content below
+            deliberately keeps showing the previous country's numbers during
+            that refetch (see the skeleton-gate comment above) rather than
+            blanking to a skeleton, so without this there's no visual cue
+            that any given number might already be stale. Scoped to
+            !flatMode: Table 1a/SSC's own refetch (flatLoading) already
+            blanks to a loading row instead of leaving stale content up. */}
+        <tbody className={!flatMode && loading && taxa.length > 0 ? "opacity-50 transition-opacity duration-200" : "transition-opacity duration-200"}>
           {flatMode ? (
             /* Table 1a / SSC groups view: sections with headers, individual rows, subtotals */
             flatLoading ? (
@@ -2685,20 +2983,15 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                           <td className={flexTdClasses}>{renderBreakdownBar(subByCategory)}</td>
                         )}
                       </tr>
-                      {/* Section rows — collapsed to SSC_SECTION_COLLAPSE_SIZE named
-                          groups by default in SSC mode (a 36-row mammal section would
-                          otherwise dwarf every other taxon); the catch-all row is
-                          pulled out of the collapse/expand entirely and always shown,
-                          since it's usually the largest, most load-bearing row. Table
-                          1a mode has no catch-all concept (section.catchAllId is
-                          undefined there), so it always renders every row. */}
+                      {/* Section rows — all named groups always shown; the catch-all
+                          row is pulled out and rendered last, since it's usually the
+                          largest, most load-bearing row. Table 1a mode has no
+                          catch-all concept (section.catchAllId is undefined there),
+                          so it always renders every row too. */}
                       {(() => {
                         const isSscSection = sscMode && section.catchAllId != null;
                         const catchAllRow = isSscSection ? rows.find(r => r.group === section.catchAllId) : undefined;
                         const namedRows = catchAllRow ? rows.filter(r => r.group !== section.catchAllId) : rows;
-                        const isExpanded = expandedSscSections.has(section.title);
-                        const visibleNamedRows = isSscSection && !isExpanded ? namedRows.slice(0, SSC_SECTION_COLLAPSE_SIZE) : namedRows;
-                        const hiddenCount = namedRows.length - visibleNamedRows.length;
                         const renderGroupRow = (row: (typeof rows)[number]) => (
                         <tr
                           key={row.group}
@@ -2833,29 +3126,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                         );
                         return (
                           <>
-                            {visibleNamedRows.map(renderGroupRow)}
-                            {isSscSection && hiddenCount > 0 && (
-                              <tr
-                                className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer"
-                                onClick={() => toggleSscSection(section.title)}
-                              >
-                                <td colSpan={visibleColCount} className={`${cellPad} text-center`}>
-                                  <span className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors">
-                                    Show all {namedRows.length} groups ({hiddenCount} more)
-                                  </span>
-                                </td>
-                              </tr>
-                            )}
-                            {isSscSection && isExpanded && namedRows.length > SSC_SECTION_COLLAPSE_SIZE && (
-                              <tr
-                                className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer"
-                                onClick={() => toggleSscSection(section.title)}
-                              >
-                                <td colSpan={visibleColCount} className={`${cellPad} text-center`}>
-                                  <span className="text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors">Show less</span>
-                                </td>
-                              </tr>
-                            )}
+                            {namedRows.map(renderGroupRow)}
                             {catchAllRow && renderGroupRow(catchAllRow)}
                           </>
                         );
@@ -2936,6 +3207,16 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                           // their children navigate as if parented by their real taxon
                           // (mammals, reptiles, ...) instead — see SSC_SECTIONS.
                           if (SSC_SECTIONS.some((s) => s.nodeId === aId)) break;
+                          // The true tree root — reached without ever hitting the view
+                          // root above for a node whose root is one of "invertebrates"/
+                          // "plantae"/"fungi"'s CSV-group children (e.g. "mushrooms",
+                          // "insects"): their real PARENT_INDEX parent is "all" directly,
+                          // never the virtual view-root grouping (see
+                          // VIEW_ROOT_OVERRIDES in taxonomy-utils.ts) — so `selectedTaxa.
+                          // has(aId)` above never matches and this loop would otherwise
+                          // keep going all the way to "all", rendering a spurious
+                          // "All Species" breadcrumb row.
+                          if (aId === "all") break;
                           intermediateAncestorIds.push(aId);
                         }
 
@@ -2959,9 +3240,19 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                           }
                           if (!ancestorData) {
                             const node = findNode(aId);
-                            if (!node) return;
-                            ancestorData = { id: node.id, name: node.name, estimatedDescribed: node.estimatedDescribed ?? 0,
-                                             totalAssessed: 0, outdated: 0, gbifNeSpeciesCount: 0, byCategory: {} };
+                            if (node) {
+                              ancestorData = { id: node.id, name: node.name, estimatedDescribed: node.estimatedDescribed ?? 0,
+                                               totalAssessed: 0, outdated: 0, gbifNeSpeciesCount: 0, byCategory: {} };
+                            } else if (isDynamicNodeId(aId)) {
+                              // A dynamic ancestor whose real data hasn't streamed in yet
+                              // (ensureSubgroupData, triggered by the auto-expand effect, is
+                              // still in flight) — show its real name now rather than
+                              // vanishing the row entirely; counts fill in once it resolves.
+                              ancestorData = { id: aId, name: dynamicNodeDisplayName(aId), estimatedDescribed: 0,
+                                               totalAssessed: 0, outdated: 0, gbifNeSpeciesCount: 0, byCategory: {} };
+                            } else {
+                              return;
+                            }
                           }
                           rows.push(renderAncestorRow(ancestorData, parentTaxon.color, i + 1, parentTaxon.id, false));
                         });
@@ -2975,17 +3266,37 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                         // Fallback: construct from taxonomy node while data loads
                         if (!sgData) {
                           const node = findNode(sgId);
-                          if (!node) continue;
-                          sgData = { id: node.id, name: node.name, estimatedDescribed: node.estimatedDescribed ?? 0,
-                                     totalAssessed: 0, outdated: 0, gbifNeSpeciesCount: 0, byCategory: {} };
+                          if (node) {
+                            sgData = { id: node.id, name: node.name, estimatedDescribed: node.estimatedDescribed ?? 0,
+                                       totalAssessed: 0, outdated: 0, gbifNeSpeciesCount: 0, byCategory: {} };
+                          } else if (isDynamicNodeId(sgId)) {
+                            sgData = { id: sgId, name: dynamicNodeDisplayName(sgId), estimatedDescribed: 0,
+                                       totalAssessed: 0, outdated: 0, gbifNeSpeciesCount: 0, byCategory: {} };
+                          } else {
+                            continue;
+                          }
                         }
 
-                        rows.push(renderCollapsedSubgroupRow(parentTaxon, sgData));
-                        // Render children if expanded
+                        // The collapsed/selected row continues the same
+                        // depth*12 staircase as the ancestor rows above it —
+                        // one step past the last intermediate ancestor (0 if
+                        // there are none, i.e. sgId is a direct child of the
+                        // view root, e.g. Rodentia under Mammals).
+                        const selectedDepth = intermediateAncestorIds.length + 1;
+                        rows.push(renderCollapsedSubgroupRow(parentTaxon, sgData, selectedDepth));
+                        // Render children if expanded — one step further still.
+                        // renderSubgroupRow's own paddingLeft formula is
+                        // `(depth-1)*12`, so to land one indent past
+                        // selectedDepth we pass selectedDepth+2 here (not +1):
+                        // e.g. selectedDepth=1 (Rodentia selected, 0 ancestors)
+                        // → depth=3 → (3-1)*12 = 24px, one step past Rodentia's
+                        // own 12px. Also keeps the icon-size step (16 → 14)
+                        // aligned with the normal recursive tree mode's order →
+                        // family sizing.
                         const sgChildren = subgroupData[sgId] ?? [];
                         if (expandedTaxa.has(sgId)) {
                           rows.push(...sgChildren.map(child =>
-                            renderSubgroupRow(child, parentTaxon.color, 1, parentTaxon.id)));
+                            renderSubgroupRow(child, parentTaxon.color, selectedDepth + 2, parentTaxon.id)));
                         }
                       }
                       return rows;
@@ -3015,47 +3326,12 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     {perTaxa.length > 0 && selectedTaxa.size === 0 && (
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 mt-1.5">
         {/* Usage hint — desktop only; the toggles below matter more on mobile than this prose.
-            Country View has no multi-select (a country click always narrows to that one
-            country — see handleCountryDrilldown), so the normal hint doesn't apply there. */}
+            Country View starts hover-driven, then locks to click+multi-select once a
+            country's picked (see handleCountryDrilldown), so it gets its own wording. */}
         <span className="hidden sm:inline pl-3 md:pl-4 text-xs text-zinc-400 dark:text-zinc-500">
-          {countryMode ? "Click a country to view its data." : "Click to filter, Cmd/Ctrl+click to multi-select."}
+          {countryMode ? "Hover over a country, or click to lock it and multi-select." : "Click to filter, Cmd/Ctrl+click to multi-select."}
         </span>
         <div className="flex flex-wrap items-center gap-3 pl-3 sm:pl-0">
-          {/* IUCN ↔ CoL source toggle: flips the described count + recomputes % Assessed */}
-          <span className="inline-flex items-center gap-1.5">
-            <span className="text-xs text-zinc-400 dark:text-zinc-500">Source for # Described:</span>
-            <span className="inline-flex rounded-md overflow-hidden border border-zinc-300 dark:border-zinc-600 text-[10px] font-semibold" title="Switch # Described Species between IUCN Table 1a estimates and the Catalogue of Life backbone, for the rows with an official IUCN figure — every other row (sub-groups, SSC groups) always shows the CoL-derived count">
-              {(["iucn", "col"] as const).map((src) => (
-                <button
-                  key={src}
-                  onClick={(e) => { e.stopPropagation(); setDescribedSource(src); }}
-                  className={`px-1.5 py-0.5 transition-colors ${
-                    describedSource === src
-                      ? "bg-zinc-700 text-white dark:bg-zinc-200 dark:text-zinc-900"
-                      : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700"
-                  }`}
-                >
-                  {src === "iucn" ? "IUCN" : "CoL"}
-                </button>
-              ))}
-            </span>
-          </span>
-          <span className="text-zinc-300 dark:text-zinc-700">|</span>
-          {/* Expand/Collapse all doesn't apply to Country View — its subgroup tree
-              stays collapsed by default there regardless (fewer controls, per its
-              single-country-focus design). */}
-          {!flatMode && !countryMode && (
-            <>
-              <button
-                onClick={allExpanded ? collapseAll : expandAll}
-                className="inline-flex items-center gap-1 text-xs text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-              >
-                {allExpanded ? <FaCompressAlt size={9} /> : <FaExpandAlt size={9} />}
-                {allExpanded ? "Collapse all" : "Expand all"}
-              </button>
-              <span className="text-zinc-300 dark:text-zinc-700">|</span>
-            </>
-          )}
           {layoutModeSelect}
           {(table1aMode || sscMode) && (
             <span className="relative group/lm">

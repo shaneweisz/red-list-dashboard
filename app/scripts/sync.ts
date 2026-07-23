@@ -115,7 +115,7 @@ async function main() {
     // (taxon-independent) and matching needs the complete assessed/unassessed parquets,
     // so only run on a FULL sync; a partial-taxa sync leaves the existing CoL artifacts.
     if (!taxaFilter) {
-      console.log("\nPhase 7: fetch-col-xr (CoL XR ColDP → NameUsage.tsv + Reference.tsv)");
+      console.log("\nPhase 7: fetch-col-xr (CoL XR ColDP → NameUsage.tsv + Reference.tsv + VernacularName.tsv)");
       console.log("═".repeat(60));
       const coldp = await fetchColXr();
       coldpDir = coldp.dir;
@@ -124,9 +124,9 @@ async function main() {
       console.log("═".repeat(60));
       checklistTsv = await fetchColChecklist();
 
-      console.log("\nPhase 9: build-backbone (→ backbone.parquet + species/)");
+      console.log("\nPhase 9: build-backbone (→ backbone.parquet + species/ + vernacular-names.json)");
       console.log("═".repeat(60));
-      await buildBackbone({ tsv: coldp.nameUsage, referenceTsv: coldp.reference, demotionsTsv: checklistTsv });
+      await buildBackbone({ tsv: coldp.nameUsage, referenceTsv: coldp.reference, vernacularTsv: coldp.vernacularNames, demotionsTsv: checklistTsv });
 
       console.log("\nPhase 10: build-matching (→ species_link.parquet)");
       console.log("═".repeat(60));

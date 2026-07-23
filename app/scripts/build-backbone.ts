@@ -125,7 +125,7 @@ async function fetchBaseSourceIds(): Promise<string[]> {
 }
 
 export async function run(
-  opts: { tsv?: string; referenceTsv?: string; outDir?: string; baseSourceIds?: string[]; demotionsTsv?: string; demotedColIds?: string[] } = {},
+  opts: { tsv?: string; referenceTsv?: string; vernacularTsv?: string; outDir?: string; baseSourceIds?: string[]; demotionsTsv?: string; demotedColIds?: string[] } = {},
 ): Promise<void> {
   const tsv = opts.tsv || process.env.COLDP_TSV || path.join(DATA_DIR, "_coldp_xr.tsv");
   if (!fs.existsSync(tsv)) {
@@ -139,6 +139,16 @@ export async function run(
   const hasReferences = fs.existsSync(referenceTsv);
   if (!hasReferences) {
     console.warn(`build-backbone: Reference.tsv not found (${referenceTsv}); described_year will use author-year columns only (botanical/fungal years will be null).`);
+  }
+  // VernacularName.tsv (taxonID → common name) sits beside NameUsage.tsv too. Powers
+  // order/family/genus/class-level common names in the dynamic taxonomic drilldown
+  // (dynamic-taxon.ts) — see the vernacular-names.json write below. Optional: if
+  // absent, dynamic nodes just fall back to their capitalized scientific name, same
+  // as before this existed.
+  const vernacularTsv = opts.vernacularTsv || process.env.COLDP_VERNACULAR_TSV || path.join(path.dirname(tsv), "VernacularName.tsv");
+  const hasVernacularNames = fs.existsSync(vernacularTsv);
+  if (!hasVernacularNames) {
+    console.warn(`build-backbone: VernacularName.tsv not found (${vernacularTsv}); vernacular-names.json will not be (re)written.`);
   }
   const demotionsTsv = opts.demotionsTsv || process.env.COL_CHECKLIST_TSV;
   const outDir = opts.outDir || DATA_DIR;
@@ -210,6 +220,58 @@ export async function run(
     COPY (SELECT col_id, parent_id, status, rank, scientific_name, authorship FROM nu)
     TO '${backboneOut}' (FORMAT PARQUET, COMPRESSION ZSTD);
   `);
+
+  // vernacular-names.json — lowercased scientific name -> one common name, for
+  // class/order/family/genus ranks only (species already get a common name from
+  // our own Red List/GBIF data — see species-store.ts — so those ranks are
+  // deliberately excluded here to avoid a second, potentially-conflicting source).
+  // A taxon can have several vernacular names (e.g. Anseriformes: "Ducks",
+  // "Geese", "Swans", "Waterfowl", "Screamers") — pick one per col:taxonID via
+  // ROW_NUMBER, preferring col:preferred=true, else the shortest name (a decent
+  // proxy for "the primary/most generic" one), alphabetical as a final tiebreak
+  // for determinism. Multiple col_ids can share the same scientific_name (e.g. a
+  // synonym and its accepted name) — collapse to one row per name the same way.
+  // Two data-quality fixes applied at the final SELECT (checked against real
+  // 2026-07-21 CoL XR data): (1) ~3.8% of entries are just the scientific name
+  // itself relisted as its own "vernacular name" (e.g. "Acacia" -> "acacia") —
+  // pure noise, filtered out; (2) CoL's own casing is inconsistent (~31% start
+  // lowercase, e.g. "rodentia" -> "rodents") — the first letter is capitalized
+  // for a more consistent display (this DuckDB build has no initcap(); a plain
+  // first-letter capitalization is enough to stop a name from looking like a
+  // typo without mangling multi-word phrases DuckDB has no easy word-boundary
+  // function for).
+  const vernacularOut = path.join(outDir, "vernacular-names.json");
+  if (hasVernacularNames) {
+    await conn.run(`
+      CREATE TEMP TABLE vern_best AS
+        SELECT col_id, name FROM (
+          SELECT "col:taxonID" AS col_id, "col:name" AS name,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY "col:taxonID"
+                   ORDER BY (lower(coalesce("col:preferred", '')) = 'true') DESC, length("col:name") ASC, "col:name" ASC
+                 ) AS rn
+          FROM read_csv('${vernacularTsv}', delim='\t', header=true, quote='', ignore_errors=true, all_varchar=true)
+          WHERE "col:language" = 'eng' AND "col:name" IS NOT NULL AND trim("col:name") != ''
+        ) WHERE rn = 1;
+    `);
+    const rows = (await (await conn.run(`
+      SELECT name_lower, name FROM (
+        SELECT lower(n.scientific_name) AS name_lower,
+               upper(substr(v.name, 1, 1)) || substr(v.name, 2) AS name,
+               ROW_NUMBER() OVER (PARTITION BY lower(n.scientific_name) ORDER BY length(v.name) ASC, v.name ASC) AS rn
+        FROM vern_best v
+        JOIN nu n ON n.col_id = v.col_id
+        WHERE n.rank IN ('class', 'order', 'family', 'genus')
+          -- Some CoL vernacular entries are just the scientific name itself
+          -- (e.g. "Acacia" -> "acacia") — pure noise, not an actual common name.
+          AND lower(v.name) != lower(n.scientific_name)
+      ) WHERE rn = 1;
+    `)).getRowObjects());
+    const vernacularMap: Record<string, string> = {};
+    for (const r of rows) vernacularMap[String(r.name_lower)] = String(r.name);
+    fs.writeFileSync(vernacularOut, JSON.stringify(vernacularMap, null, 0));
+    console.log(`Wrote ${vernacularOut}: ${Object.keys(vernacularMap).length.toLocaleString()} class/order/family/genus common names`);
+  }
 
   // Plausible-publication-year window. Upper bound: next calendar year (tolerates
   // early-release dates; also drops 4-digit plate/figure numbers above it). Lower bound:

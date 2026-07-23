@@ -99,19 +99,29 @@ export async function run(): Promise<void> {
   if (fs.existsSync(historyDir)) {
     for (const file of fs.readdirSync(historyDir).filter((f) => f.endsWith(".json"))) {
       const data = JSON.parse(fs.readFileSync(path.join(historyDir, file), "utf-8")) as
-        Record<string, Array<{ id: number; year: string; category: string; date: string | null; assessors: string | null; reviewers: string | null }>>;
+        // criteria is optional on the parsed shape (not just the type) — history
+        // files regenerated before it was added to fetchAssessmentHistory won't
+        // have the key at all; `x.criteria ?? null` below handles that at runtime.
+        Record<string, Array<{ id: number; year: string; category: string; date: string | null; criteria?: string | null; assessors: string | null; reviewers: string | null }>>;
       for (const [sis, arr] of Object.entries(data)) {
-        arr.forEach((x, seq) => ws.write(JSON.stringify({ sis_taxon_id: Number(sis), seq, id: x.id, year: x.year, category: x.category, date: x.date, assessors: x.assessors, reviewers: x.reviewers }) + "\n"));
+        arr.forEach((x, seq) => ws.write(JSON.stringify({ sis_taxon_id: Number(sis), seq, id: x.id, year: x.year, category: x.category, date: x.date, criteria: x.criteria ?? null, assessors: x.assessors, reviewers: x.reviewers }) + "\n"));
       }
     }
   }
   await new Promise<void>((res) => ws.end(res));
+  // Explicit column types (not read_json_auto's sampled inference): criteria is
+  // null on most pre-2001 assessments, and auto-inference over a column that's
+  // sometimes null/sometimes string can land on JSON type instead of VARCHAR —
+  // casting a JSON-typed value to VARCHAR then serializes it (embedding literal
+  // quotes in the string) rather than unwrapping it.
   await conn.run(`
     CREATE TEMP TABLE hist AS
-      SELECT CAST(sis_taxon_id AS BIGINT) sis_taxon_id, CAST(seq AS INTEGER) seq,
-             CAST(id AS BIGINT) id, CAST("year" AS VARCHAR) AS "year", category,
-             CAST("date" AS VARCHAR) AS "date", assessors, reviewers
-      FROM read_json_auto('${ndjson}', format='newline_delimited');
+      SELECT sis_taxon_id, seq, id, "year", category, "date", criteria, assessors, reviewers
+      FROM read_json('${ndjson}', format='newline_delimited', columns={
+        sis_taxon_id: 'BIGINT', seq: 'INTEGER', id: 'BIGINT', "year": 'VARCHAR',
+        category: 'VARCHAR', "date": 'VARCHAR', criteria: 'VARCHAR',
+        assessors: 'VARCHAR', reviewers: 'VARCHAR'
+      });
   `);
   fs.unlinkSync(ndjson);
   // Latest (seq 0 = most recent) assessors/reviewers per species. Denormalized
@@ -181,7 +191,7 @@ export async function run(): Promise<void> {
   // sis_taxon_id so a single-species lazy lookup prunes to one row group.
   await conn.run(`
     COPY (
-      SELECT sis_taxon_id, seq, id, "year", category, "date", assessors, reviewers
+      SELECT sis_taxon_id, seq, id, "year", category, "date", criteria, assessors, reviewers
       FROM hist
       ORDER BY sis_taxon_id, seq
     ) TO '${assessmentsOut}' (FORMAT PARQUET, COMPRESSION ZSTD);

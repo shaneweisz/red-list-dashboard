@@ -12,6 +12,11 @@ import { canonicalizeTaxonId } from "@/lib/data/taxonomy-constants";
 import { NODE_DESCRIPTION_OVERRIDES, COL_NODE_TOOLTIP_NOTES, COL_EXCLUDE_ALL_NODES, COL_SPECIES_NAME_OVERRIDES } from "@/config/col-described-overrides";
 import COL_TAXON_IDS from "@/config/col-taxon-ids.json";
 import COL_RELEASE from "@/config/col-release.json";
+// dynamic-taxon.ts imports NODE_INDEX/getAncestors back from this file — a
+// circular import, but a safe one: both sides only reference the other inside
+// function bodies (never at module-eval time), so by the time either function
+// actually runs, both modules have finished initializing.
+import { dynamicNodeFilter, isDynamicNodeId, dynamicNodeAncestors } from "@/lib/dynamic-taxon";
 
 // ─── Indexes (built once at import) ──────────────────────────────────
 
@@ -42,6 +47,11 @@ export function findNode(id: string): TaxonomyNode | undefined {
 
 /** Get ancestor IDs from immediate parent up to root (exclusive). */
 export function getAncestors(id: string): string[] {
+  // Dynamic (live taxonomic-drilldown) ids delegate to dynamic-taxon.ts, which
+  // walks the rank-segment chain down to the real root and then calls back into
+  // this function for that root's own (static) ancestors — safe, not circular,
+  // since the recursive call is always for a non-dynamic id.
+  if (isDynamicNodeId(id)) return dynamicNodeAncestors(id);
   const ancestors: string[] = [];
   let current = PARENT_INDEX.get(id);
   while (current) {
@@ -90,6 +100,23 @@ export const OFFICIAL_IUCN_DESCRIBED_NODE_IDS = new Set([
 // sscLeafId)) — so redirect their view-root resolution there without actually
 // re-parenting them. Add an entry here whenever a new taxon's SSC wrapper is added
 // (see SSC_SECTIONS in TaxaSummary.tsx for the matching UI-side list).
+//
+// Same story, different reason, for "invertebrates"/"plantae"/"fungi"'s own CSV-
+// group children (insects, molluscs, ..., mushrooms, brown_algae — see
+// TAXONOMY_VIEWS.table1a.sections for the full membership): "invertebrates" is a
+// virtual grouping node used only for the "all" node's Table 1a-style children
+// list and DEFAULT_VIEW_ROOTS — insects/molluscs/etc. are each their OWN direct
+// child of "all" in the real tree (PARENT_INDEX), not nested under
+// "invertebrates" at all. Without an override here, getAncestors(nodeId) for a
+// dynamic id rooted at one of these (e.g. "insects~order:coleoptera") walks
+// straight from "insects" to "all" and never finds a DEFAULT_VIEW_ROOTS member —
+// getViewRootForNode returned null, so expandTaxaToken's dynamic branch silently
+// fell through to treating the WHOLE dynamic id as an unrecognized "arbitrary
+// rank" token. Confirmed broken for every root except mammals/birds/reptiles/
+// amphibians/fishes (which ARE themselves literal DEFAULT_VIEW_ROOTS members, so
+// never hit this path) — reloading a deep-linked URL into Insects/Molluscs/
+// Arachnids/Corals/Mosses/Ferns/Gymnosperms/Flowering Plants/Algae/Mushrooms/
+// Brown Algae showed the raw dynamic id string instead of a labeled breadcrumb.
 const VIEW_ROOT_OVERRIDES: Record<string, string> = {
   "ssc-groups": "mammals",
   "ssc-reptile-groups": "reptiles",
@@ -97,9 +124,45 @@ const VIEW_ROOT_OVERRIDES: Record<string, string> = {
   "ssc-invertebrate-groups": "invertebrates",
   "ssc-plant-groups": "plantae",
   "ssc-fungi-groups": "fungi",
+  "insects": "invertebrates",
+  "arachnids": "invertebrates",
+  "corals": "invertebrates",
+  "velvet_worms": "invertebrates",
+  "horseshoe_crabs": "invertebrates",
+  "molluscs": "invertebrates",
+  "crustaceans": "invertebrates",
+  "other_invertebrates": "invertebrates",
+  // other_invertebrates' own former static children (flatworms, roundworms,
+  // ...) are gone now, superseded by its live class-level drilldown (see
+  // taxonomy-tree.ts) — so there's no lingering "inv-flatworms"-style token
+  // to worry about colliding with, unlike the insects/molluscs/etc. case
+  // just above (see getViewRootForNode's own doc comment for that reasoning).
+  "mosses": "plantae",
+  "ferns_and_allies": "plantae",
+  "gymnosperms": "plantae",
+  "flowering_plants": "plantae",
+  "green_algae": "plantae",
+  "red_algae": "plantae",
+  "mushrooms": "fungi",
+  "brown_algae": "fungi",
 };
 
-/** Find the default-view ancestor for a node (one of the 8 display roots). */
+/**
+ * Find the default-view ancestor for a node (one of the 8 display roots).
+ * Deliberately does NOT check `VIEW_ROOT_OVERRIDES[nodeId]` itself before the
+ * ancestor loop (only its ancestors) — insects/molluscs/etc. each already have
+ * a distinct "inv-"-prefixed virtual duplicate node (e.g. "inv-insects") whose
+ * real tree ancestors correctly include "invertebrates" with no override
+ * needed. DEFAULT_VIEW_TOKEN_INDEX (below) relies on the BARE id ("insects")
+ * resolving to null here so the "inv-" one claims that URL token instead;
+ * making the bare id resolve directly would make it win that race instead
+ * (NODE_INDEX iteration visits it first) and break every legacy insects/
+ * molluscs/etc. URL. The loop still correctly resolves a DYNAMIC id rooted at
+ * one of these (e.g. "insects~order:coleoptera") without this direct check,
+ * since dynamicNodeAncestors already includes the bare rootId ("insects")
+ * itself as part of the walked ancestor list, unlike a plain node's own
+ * getAncestors (exclusive of self).
+ */
 export function getViewRootForNode(nodeId: string): string | null {
   if (DEFAULT_VIEW_ROOTS.has(nodeId)) return nodeId;
   for (const a of getAncestors(nodeId)) {
@@ -147,6 +210,14 @@ for (const id of NODE_INDEX.keys()) {
 export function expandTaxaToken(token: string): { taxa: string; subgroup?: string } {
   const id = canonicalizeTaxonId(token.trim());
   if (DEFAULT_VIEW_ROOTS.has(id)) return { taxa: id };
+  // A dynamic (live taxonomic-drilldown) id round-trips through the URL as
+  // itself — no DEFAULT_VIEW_TOKEN_INDEX lookup needed, since its root is
+  // always its own first "~"-separated segment (see dynamic-taxon.ts), and
+  // getViewRootForNode already resolves it correctly via getAncestors.
+  if (isDynamicNodeId(id)) {
+    const root = getViewRootForNode(id);
+    if (root) return { taxa: root, subgroup: id };
+  }
   const nodeId = DEFAULT_VIEW_TOKEN_INDEX.get(id) ?? DEFAULT_VIEW_TOKEN_INDEX.get(stripNodePrefix(id));
   if (nodeId) {
     const root = getViewRootForNode(nodeId);
@@ -164,7 +235,21 @@ export function collapseTaxaToTokens(taxa: Iterable<string>, subgroups: Iterable
   const tokens = new Set<string>();
   const rootsWithSubgroup = new Set<string>();
   for (const sg of subgroups) {
-    tokens.add(stripNodePrefix(sg));
+    // A dynamic id round-trips through the URL as itself (see expandTaxaToken's own
+    // comment) — stripNodePrefix is only correct for a STATIC node id's token form
+    // (inv-corals -> corals). Applying it unconditionally here was a real bug: a
+    // dynamic id whose OWN root segment happens to start with one of these same
+    // three letters (e.g. "pl-flowering_plants~order:malpighiales", reached by
+    // drilling into a virtual-view-group child like Flowering Plants) had its
+    // prefix silently stripped too, rewriting it to a DIFFERENT dynamic id
+    // ("flowering_plants~order:malpighiales" — a different root identity as far as
+    // isDynamicNodeId/DYNAMIC_DRILLDOWN_ROOTS-based lookups are concerned) every
+    // time the URL was rewritten for an unrelated reason (e.g. toggling the
+    // Assessed/Not Evaluated view mode). TaxaSummary.tsx's subgroupData cache is
+    // keyed by whichever root string first populated it, so this second, bare-
+    // rooted id was a fresh cache miss — its ancestor row silently fell back to a
+    // zeroed placeholder instead of the already-fetched real data.
+    tokens.add(isDynamicNodeId(sg) ? sg : stripNodePrefix(sg));
     const root = getViewRootForNode(sg);
     if (root) rootsWithSubgroup.add(root);
   }
@@ -285,7 +370,19 @@ export function speciesMatchesNode(
   nodeId: string,
 ): boolean {
   const node = NODE_INDEX.get(nodeId);
-  if (!node) return true; // Unknown node → don't filter
+  if (!node) {
+    // Dynamic (live taxonomic-drilldown) node — not a static tree entry, but a
+    // real, filterable rank chain (see dynamic-taxon.ts). Falling through to
+    // "don't filter" here would show every species in the csvGroup regardless
+    // of the selected order/family/genus — a serious correctness bug, not a
+    // graceful degradation, so this is resolved explicitly rather than assumed.
+    const dynFilter = dynamicNodeFilter(nodeId);
+    if (dynFilter) {
+      if (!dynFilter.csvGroups.includes(species.taxon_group)) return false;
+      return matchesFilter(species, dynFilter);
+    }
+    return true; // Genuinely unknown, non-dynamic id → don't filter
+  }
 
   const f = node.filter;
 
@@ -339,7 +436,10 @@ const capitalize = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1)
 // Binomial convention: capitalize the genus, leave the species epithet lowercase.
 const capitalizeSpeciesName = (s: string): string => s.split(" ").map((w, i) => (i === 0 ? capitalize(w) : w)).join(" ");
 
-export type FilterRank = "class" | "order" | "family" | "genus" | "species";
+// "remainder": a catch-all/remainder node (e.g. "Other Mammals", any "No/Other SSC
+// Group") whose filter has no positive dimension to enumerate, only exclude*
+// clauses — see primaryFilterRank below.
+export type FilterRank = "class" | "order" | "family" | "genus" | "species" | "remainder";
 
 // name → CoL taxon id, built by scripts/build-col-taxon-ids.ts from the taxonomy tree
 // + backbone.parquet. Only covers names actually referenced by a SpeciesFilter
@@ -378,6 +478,19 @@ export function primaryFilterRank(filter: SpeciesFilter): { rank: FilterRank; la
   if (filter.families?.length) return { rank: "family", label: "Family" };
   if (filter.genera?.length) return { rank: "genus", label: "Genus" };
   if (filter.speciesNames?.length) return { rank: "species", label: "Species" };
+  // Catch-all/remainder node (excludeOrders/excludeClasses/excludeFamilies/
+  // excludeGenera/excludeSpeciesNames only, no positive dimension) — mirrors
+  // isExcludeOnlyCatchAll in scripts/build-taxa-summary.ts, which computes exactly
+  // one colBreakdown bucket (keyed by the node's own name) for these nodes.
+  if (
+    filter.excludeOrders?.length ||
+    filter.excludeClasses?.length ||
+    filter.excludeFamilies?.length ||
+    filter.excludeGenera?.length ||
+    filter.excludeSpeciesNames?.length
+  ) {
+    return { rank: "remainder", label: "Group" };
+  }
   return null;
 }
 
@@ -386,9 +499,15 @@ export function breakdownDisplayName(rank: FilterRank, name: string): string {
   return rank === "species" ? capitalizeSpeciesName(name) : capitalize(name);
 }
 
-/** CoL page/search link for one breakdown row's name, if we could resolve its taxon id. */
-export function breakdownHref(rank: FilterRank, name: string): string | undefined {
-  const colId = COL_TAXON_ID_MAP[`${rank}:${name.toLowerCase()}`];
+/** CoL page/search link for one breakdown row's name, if we could resolve its taxon id.
+ *  Checks the precomputed static-tree snapshot first, then `liveColIds` (a dynamic
+ *  node's own ancestor chain, resolved live — see live-breakdown.ts's
+ *  resolveLiveColTaxonIds — since a genus like "Chaetodipus" reached purely via live
+ *  drilldown is never referenced by any static SpeciesFilter and so never in the
+ *  snapshot). */
+export function breakdownHref(rank: FilterRank, name: string, liveColIds?: Record<string, string>): string | undefined {
+  const key = `${rank}:${name.toLowerCase()}`;
+  const colId = COL_TAXON_ID_MAP[key] ?? liveColIds?.[key];
   return colId ? colHref(rank, colId) : undefined;
 }
 
@@ -433,6 +552,12 @@ export function matchesBreakdownName(
       return ((row.scientific_name ?? "").trim().split(/\s+/)[0] ?? "").toLowerCase() === n;
     case "species":
       return (row.scientific_name ?? "").trim().toLowerCase() === n;
+    case "remainder":
+      // A remainder bucket represents the WHOLE node's filter, not one narrower
+      // name within it — speciesMatchesNode (checked alongside this, see
+      // SpeciesListPanel) already fully qualifies membership, so no further
+      // narrowing is meaningful here.
+      return true;
   }
 }
 
@@ -446,20 +571,20 @@ export interface DescribeFilterSegment {
 // Every name gets its own segment (linked when we have a CoL id for it) — no capping,
 // so a skeptical reviewer can see and click through to every single name, even for a
 // long list like Antelope SG's 14-genus excludeGenera.
-function joinSegments(rank: FilterRank, names: string[]): DescribeFilterSegment[] {
+function joinSegments(rank: FilterRank, names: string[], liveColIds?: Record<string, string>): DescribeFilterSegment[] {
   const segs: DescribeFilterSegment[] = [];
   names.forEach((n, i) => {
     if (i > 0) segs.push({ text: ", " });
-    segs.push({ text: capitalize(n), href: breakdownHref(rank, n) });
+    segs.push({ text: capitalize(n), href: breakdownHref(rank, n, liveColIds) });
   });
   return segs;
 }
 
-function speciesSegments(names: string[]): DescribeFilterSegment[] {
+function speciesSegments(names: string[], liveColIds?: Record<string, string>): DescribeFilterSegment[] {
   const segs: DescribeFilterSegment[] = [];
   names.forEach((n, i) => {
     if (i > 0) segs.push({ text: ", " });
-    segs.push({ text: capitalizeSpeciesName(n), href: breakdownHref("species", n) });
+    segs.push({ text: capitalizeSpeciesName(n), href: breakdownHref("species", n, liveColIds) });
   });
   return segs;
 }
@@ -475,15 +600,24 @@ function speciesSegments(names: string[]): DescribeFilterSegment[] {
  *
  * Returns segments rather than a plain string so the caller can render each taxon
  * name as a link to its Catalogue of Life page where we have one (see
- * COL_TAXON_IDS). `hideBreakdownRank` (pass true when the node has a NodeSummary
- * .colBreakdown) omits the primary include dimension here — the caller renders that
- * as an expandable per-name Assessed/Not-Evaluated list instead (see
- * BreakdownList in TaxaSummary.tsx), so it isn't shown twice.
+ * COL_TAXON_IDS, and `liveColIds` for a dynamic node's ancestor chain — resolved
+ * live, since names reached purely through live drilldown are never in that
+ * build-time snapshot). Unlike an older version of this function, always includes
+ * EVERY set dimension (e.g. a dynamic node's full "Order: Rodentia; Family:
+ * Heteromyidae; Genus: Chaetodipus" ancestor chain), never just the primary one —
+ * that used to matter because a caller could ask to hide the primary dimension
+ * once a breakdown loaded (on the theory BreakdownList's own rows already showed
+ * it), but that only ever covers the node's own DEEPEST segment, not its
+ * ancestors, so hiding uniformly silently dropped ancestor context nothing else
+ * showed. Whether/when the caller actually displays these segments (e.g.
+ * TaxaSummary.tsx shows them only while a dynamic node's breakdown is still
+ * loading, then hands off to the table) is entirely the caller's own decision —
+ * this function no longer has an opinion on that.
  */
 export function describeFilter(
   filter: SpeciesFilter,
   nodeId?: string,
-  hideBreakdownRank?: boolean
+  liveColIds?: Record<string, string>
 ): DescribeFilterSegment[] {
   const override = nodeId ? NODE_DESCRIPTION_OVERRIDES[nodeId] : undefined;
   const note = nodeId ? COL_NODE_TOOLTIP_NOTES[nodeId] : undefined;
@@ -497,21 +631,21 @@ export function describeFilter(
   const segs: DescribeFilterSegment[] = [];
   let hasPart = false;
   const addPart = (label: string, rank: FilterRank, names: string[] | undefined) => {
-    if (!names?.length || hideBreakdownRank) return;
+    if (!names?.length) return;
     if (hasPart) segs.push({ text: "; " });
     hasPart = true;
-    segs.push({ text: `${label}: ` }, ...joinSegments(rank, names));
+    segs.push({ text: `${label}: ` }, ...joinSegments(rank, names, liveColIds));
   };
   addPart("Class", "class", filter.classNames);
   addPart("Order", "order", filter.orderNames);
   addPart("Family", "family", filter.families);
   addPart("Genus", "genus", filter.genera);
-  if (filter.speciesNames?.length && !hideBreakdownRank) {
+  if (filter.speciesNames?.length) {
     if (hasPart) segs.push({ text: "; " });
     hasPart = true;
-    segs.push({ text: "Species: " }, ...speciesSegments(filter.speciesNames));
+    segs.push({ text: "Species: " }, ...speciesSegments(filter.speciesNames, liveColIds));
   }
-  if (!hasPart && !hideBreakdownRank) segs.push({ text: "All species in this group" });
+  if (!hasPart) segs.push({ text: "All species in this group" });
 
   const excludeSegs: DescribeFilterSegment[] = [];
   let hasExclude = false;
@@ -519,7 +653,7 @@ export function describeFilter(
     if (!names?.length) return;
     if (hasExclude) excludeSegs.push({ text: "; " });
     hasExclude = true;
-    excludeSegs.push(...joinSegments(rank, names));
+    excludeSegs.push(...joinSegments(rank, names, liveColIds));
   };
   addExclude("class", filter.excludeClasses);
   addExclude("order", filter.excludeOrders);
@@ -528,7 +662,7 @@ export function describeFilter(
   if (filter.excludeSpeciesNames?.length) {
     if (hasExclude) excludeSegs.push({ text: "; " });
     hasExclude = true;
-    excludeSegs.push(...speciesSegments(filter.excludeSpeciesNames));
+    excludeSegs.push(...speciesSegments(filter.excludeSpeciesNames, liveColIds));
   }
   if (hasExclude) segs.push({ text: " (excluding " }, ...excludeSegs, { text: ")" });
 

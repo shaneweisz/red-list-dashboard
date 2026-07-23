@@ -5,10 +5,6 @@ export type Brand = {
   description: string;
   /** Browser-tab title; falls back to `title` when omitted. */
   tabTitle?: string;
-  /** Label for the "reassessments" view-mode tab; defaults to "Reassessments". */
-  assessedTabLabel?: string;
-  /** Label for the "new-assessments" view-mode tab; defaults to "New Assessments". */
-  unassessedTabLabel?: string;
   /** Show the globe icon before the title (used by the Dash of Life brand). */
   showGlobe?: boolean;
 };
@@ -19,8 +15,6 @@ const DEFAULT_BRAND: Brand = {
   subtitle: "A Dashboard for Conservation of Threatened Species",
   tabTitle: "Dash for Life",
   description: "A dashboard for biodiversity data about life on Earth",
-  assessedTabLabel: "Red List Assessed",
-  unassessedTabLabel: "Unassessed",
   showGlobe: true,
 };
 
@@ -40,7 +34,14 @@ export const DASH_OF_LIFE_BRAND: Brand = {
 };
 
 // Per-hostname overrides. Keys are bare hostnames (no port, no "www.").
-const BRANDS: Record<string, Brand> = {};
+// Each production domain gets its own brand; unknown hosts (localhost,
+// previews) fall back to DEFAULT_BRAND.
+const BRANDS: Record<string, Brand> = {
+  "red.cst.cam.ac.uk": RED_LIST_BRAND,
+  "red-list-dashboard.vercel.app": RED_LIST_BRAND,
+  "dashoflife.org": DASH_OF_LIFE_BRAND,
+  "dashforlife.org": DEFAULT_BRAND,
+};
 
 /** Resolve the brand for an incoming request's `Host` header. */
 export function brandForHost(host: string | null | undefined): Brand {

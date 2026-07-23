@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPrecomputedChildrenSummaries } from "@/lib/data/species-store";
-import { getCountryChildrenSummaries } from "@/lib/data/country-taxa-summary-duckdb";
+import { getCountryChildrenSummaries, countriesWhere } from "@/lib/data/country-taxa-summary-duckdb";
+import { getLiveRankChildren } from "@/lib/data/live-taxa-children";
 import { findNode, hasChildren } from "@/lib/taxonomy-utils";
+import { isLiveDrilldownNode, nextDynamicRank } from "@/lib/dynamic-taxon";
 import { CACHE_1H } from "@/lib/cache-headers";
 
 export async function GET(request: NextRequest) {
@@ -17,11 +19,27 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  if (!findNode(nodeId) || !hasChildren(nodeId)) {
-    return NextResponse.json({ subgroups: [], countryScoped }, { headers: CACHE_1H });
-  }
-
   try {
+    // Live, arbitrary-depth taxonomic drilldown (see dynamic-taxon.ts) — takes
+    // over from the static tree + precomputed JSON for DYNAMIC_DRILLDOWN_ROOTS,
+    // country-scoped or not (Phase 7: country-scoping ports onto the same
+    // getLiveRankChildren mechanism via an extra countriesWhere predicate ANDed
+    // into the assessed-side query only, mirroring getCountryChildrenSummaries'
+    // existing precedent of omitting CoL/GBIF fields — no country dimension
+    // exists for either — when extraWhere is set).
+    if (isLiveDrilldownNode(nodeId)) {
+      const nextRank = nextDynamicRank(nodeId);
+      // No further rank below genus — the leaf is the existing species-list view.
+      if (!nextRank) return NextResponse.json({ subgroups: [], countryScoped }, { headers: CACHE_1H });
+      const extraWhere = countryScoped ? countriesWhere(countries) : undefined;
+      const subgroups = await getLiveRankChildren(nodeId, nextRank, extraWhere);
+      return NextResponse.json({ subgroups, countryScoped }, { headers: CACHE_1H });
+    }
+
+    if (!findNode(nodeId) || !hasChildren(nodeId)) {
+      return NextResponse.json({ subgroups: [], countryScoped }, { headers: CACHE_1H });
+    }
+
     // Country-scoped summaries carry zeroed estimatedDescribed/gbifNeSpeciesCount
     // (no country dimension exists in that data) — countryScoped tells the client
     // to hide those columns rather than render a misleading 0.

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { filterToSql, sqlStrList } from "@/lib/taxonomy-sql";
+import { filterToSql, sqlStrList, canonicalOrderColumnSql, canonicalClassColumnSql } from "@/lib/taxonomy-sql";
 import { matchesFilter } from "@/lib/taxonomy-utils";
 
 // filterToSql is the SQL mirror of matchesFilter (taxonomy-utils.ts) — previously
@@ -29,12 +29,65 @@ describe("filterToSql", () => {
     expect(sql).toContain("coalesce(lower(class_name), '') IN ('mammalia')");
   });
 
+  it("includes a class filter with a known alias, keeping the canonical name alongside CoL's finer classes", () => {
+    // actinopterygii is IUCN's coarse class label (assessed.parquet only ever uses
+    // this literally); CoL splits it into teleostei/chondrostei/cladistii/holostei.
+    // Both must be in the IN-list — filterToSql runs against assessed.parquet too
+    // (getLiveRankChildren's parentWhere), which would otherwise silently match
+    // zero rows for every Fishes order once drilled past class level (regression:
+    // expandClasses used to REPLACE the canonical name with its aliases instead of
+    // adding to it, unlike expandOrders' equivalent split-handling below).
+    const sql = filterToSql({ csvGroups: ["fishes"], classNames: ["actinopterygii"] });
+    expect(sql).toContain("coalesce(lower(class_name), '') IN ('actinopterygii', 'teleostei', 'chondrostei', 'cladistii', 'holostei')");
+  });
+
   it("excludes classes, expanding a display-class alias to CoL's finer classes", () => {
     // chondrichthyes is a display-tree class name; CoL splits it into elasmobranchii/
     // holocephali — expandClasses() covers both so the exclusion actually matches CoL
-    // rows (a plain "chondrichthyes" exclusion would never match anything there).
+    // rows (a plain "chondrichthyes" exclusion would never match anything there),
+    // while still keeping "chondrichthyes" itself so an assessed.parquet-scoped
+    // query (which only ever uses the coarse label) is excluded correctly too.
     const sql = filterToSql({ csvGroups: ["fishes"], excludeClasses: ["chondrichthyes"] });
-    expect(sql).toContain("coalesce(lower(class_name), '') NOT IN ('elasmobranchii', 'holocephali')");
+    expect(sql).toContain("coalesce(lower(class_name), '') NOT IN ('chondrichthyes', 'elasmobranchii', 'holocephali')");
+  });
+
+  it("includes an order filter, expanding the artiodactyla/cetacea CoL order-label split", () => {
+    // Verified against real data (2026-07-21): IUCN's assessed.parquet already files
+    // whales/dolphins under order_name "artiodactyla" (the modern Cetartiodactyla
+    // merger), but CoL XR still keeps "Cetacea" as its own separate, traditional
+    // order label — a node filtering orderNames:["artiodactyla"] would otherwise
+    // silently miss all 111 CoL-labeled cetaceans.
+    const sql = filterToSql({ csvGroups: ["mammals"], orderNames: ["artiodactyla"] });
+    expect(sql).toContain("coalesce(lower(order_name), '') IN ('artiodactyla', 'cetacea')");
+  });
+
+  it("excludes orders, also expanding the artiodactyla/cetacea split", () => {
+    const sql = filterToSql({ csvGroups: ["mammals"], excludeOrders: ["artiodactyla"] });
+    expect(sql).toContain("coalesce(lower(order_name), '') IN ('artiodactyla', 'cetacea')");
+  });
+
+  it("includes an order filter, expanding the caprimulgiformes/struthioniformes legacy-lump CoL splits", () => {
+    // Verified against real data (2026-07-21): IUCN's assessed.parquet still uses
+    // two old lumped bird orders, while CoL uses the finer modern splits (found
+    // once Birds gained live order-level drilldown for the first time).
+    const caprimulgiformes = filterToSql({ csvGroups: ["birds"], orderNames: ["caprimulgiformes"] });
+    expect(caprimulgiformes).toContain("coalesce(lower(order_name), '') IN ('caprimulgiformes', 'apodiformes', 'nyctibiiformes', 'steatornithiformes')");
+    const struthioniformes = filterToSql({ csvGroups: ["birds"], orderNames: ["struthioniformes"] });
+    expect(struthioniformes).toContain("coalesce(lower(order_name), '') IN ('struthioniformes', 'tinamiformes', 'rheiformes', 'casuariiformes', 'apterygiformes')");
+  });
+
+  it("includes an order filter, expanding the pinales/cupressales/araucariales legacy-lump CoL split", () => {
+    // Verified against real data (2026-07-21): IUCN's assessed.parquet lumps all
+    // conifers under the old "Pinales", while CoL splits Cupressaceae/Taxaceae
+    // into "Cupressales" and Podocarpaceae/Araucariaceae into "Araucariales".
+    const sql = filterToSql({ csvGroups: ["gymnosperms"], orderNames: ["pinales"] });
+    expect(sql).toContain("coalesce(lower(order_name), '') IN ('pinales', 'cupressales', 'araucariales')");
+  });
+
+  it("an order with no known CoL split is unaffected", () => {
+    const sql = filterToSql({ csvGroups: ["mammals"], orderNames: ["rodentia"] });
+    expect(sql).toContain("coalesce(lower(order_name), '') IN ('rodentia')");
+    expect(sql).not.toContain("cetacea");
   });
 
   it("falls back to class_name when order_name is empty, matching matchesFilter's GBIF-taxonomy quirk", () => {
@@ -67,5 +120,54 @@ describe("filterToSql", () => {
     const withUnknownNode = filterToSql({ csvGroups: ["mammals"], genera: ["ursus"] }, "not-a-real-node-id");
     const withoutNode = filterToSql({ csvGroups: ["mammals"], genera: ["ursus"] });
     expect(withUnknownNode).toBe(withoutNode);
+  });
+});
+
+describe("canonicalOrderColumnSql", () => {
+  it("collapses a known CoL-only order label to its IUCN-canonical form", () => {
+    const sql = canonicalOrderColumnSql("order_name");
+    expect(sql).toContain("WHEN 'cetacea' THEN 'artiodactyla'");
+  });
+
+  it("leaves any other order value as-is (lowercased)", () => {
+    const sql = canonicalOrderColumnSql("order_name");
+    expect(sql).toMatch(/ELSE lower\(order_name\) END/);
+  });
+
+  it("without sciNameCol, skips the species-name override entirely", () => {
+    const sql = canonicalOrderColumnSql("order_name");
+    expect(sql).not.toContain("sphenodon");
+  });
+
+  it("with sciNameCol, collapses a known CoL null-order-name species to its real order", () => {
+    // Regression coverage for the Tuataras live-drilldown bug: CoL's Sphenodon
+    // punctatus row has a NULL order_name, so a plain GROUP BY put it in
+    // "Unclassified Order" instead of "Rhynchocephalia".
+    const sql = canonicalOrderColumnSql("order_name", "scientific_name");
+    expect(sql).toContain("WHEN lower(scientific_name) = 'sphenodon punctatus' THEN 'rhynchocephalia'");
+  });
+});
+
+describe("canonicalClassColumnSql", () => {
+  it("collapses CoL's finer fish class labels to IUCN's coarser canonical ones", () => {
+    // Same category of fix as canonicalOrderColumnSql, one rank up — CoL never
+    // literally uses "actinopterygii"/"sarcopterygii"/"chondrichthyes" as a raw
+    // class_name (only their finer subdivisions), so a plain GROUP BY class_name
+    // would otherwise surface e.g. "Teleostei" as its own misleading "0%
+    // assessed" bucket instead of folding into Ray-finned Fishes.
+    const sql = canonicalClassColumnSql("class_name");
+    expect(sql).toContain("WHEN 'teleostei' THEN 'actinopterygii'");
+    expect(sql).toContain("WHEN 'chondrostei' THEN 'actinopterygii'");
+    expect(sql).toContain("WHEN 'cladistii' THEN 'actinopterygii'");
+    expect(sql).toContain("WHEN 'holostei' THEN 'actinopterygii'");
+    expect(sql).toContain("WHEN 'dipneusti' THEN 'sarcopterygii'");
+    expect(sql).toContain("WHEN 'coelacanthi' THEN 'sarcopterygii'");
+    expect(sql).toContain("WHEN 'elasmobranchii' THEN 'chondrichthyes'");
+    expect(sql).toContain("WHEN 'holocephali' THEN 'chondrichthyes'");
+  });
+
+  it("leaves any other class value as-is (lowercased)", () => {
+    const sql = canonicalClassColumnSql("class_name");
+    expect(sql).toMatch(/ELSE lower\(class_name\) END/);
   });
 });
