@@ -1,0 +1,57 @@
+import { describe, it, expect } from "vitest";
+import { describeFilter, breakdownHref } from "../taxonomy-utils";
+
+// Regression coverage for a bug that shipped and got silently reverted once
+// already in this same PR (35f10ce fixed it, a35ff0f's diff accidentally
+// undid it without anyone noticing until a user reported the symptom): once a
+// node's breakdown table loaded, describeFilter used to drop EVERY set
+// dimension (not just the one the table itself renders), wiping a dynamic
+// node's whole ancestor breadcrumb (e.g. "Order: Rodentia; Family:
+// Heteromyidae; Genus: Chaetodipus") the instant the popover finished
+// loading. describeFilter no longer takes a "hide" flag at all — it always
+// includes every set dimension.
+describe("describeFilter", () => {
+  it("includes every set dimension, unconditionally (no hideBreakdownRank escape hatch)", () => {
+    const segs = describeFilter({ csvGroups: ["mammals"], orderNames: ["rodentia"], families: ["heteromyidae"], genera: ["chaetodipus"] });
+    const text = segs.map((s) => s.text).join("");
+    expect(text).toBe("Order: Rodentia; Family: Heteromyidae; Genus: Chaetodipus");
+  });
+
+  it("links a name resolvable in the static COL_TAXON_IDS snapshot", () => {
+    const segs = describeFilter({ csvGroups: ["fishes"], families: ["acipenseridae"] });
+    const linked = segs.find((s) => s.text === "Acipenseridae");
+    expect(linked?.href).toContain("TAXON_ID=KTYZ7");
+  });
+
+  it("falls back to liveColIds for a name the static snapshot doesn't cover", () => {
+    const segs = describeFilter(
+      { csvGroups: ["mammals"], genera: ["chaetodipus"] },
+      undefined,
+      { "genus:chaetodipus": "3LLS" }
+    );
+    const linked = segs.find((s) => s.text === "Chaetodipus");
+    expect(linked?.href).toContain("TAXON_ID=3LLS");
+  });
+
+  it("leaves a name unlinked when neither the static snapshot nor liveColIds resolve it", () => {
+    const segs = describeFilter({ csvGroups: ["mammals"], genera: ["nonexistentgenusxyz"] });
+    const seg = segs.find((s) => s.text === "Nonexistentgenusxyz");
+    expect(seg?.href).toBeUndefined();
+  });
+});
+
+describe("breakdownHref", () => {
+  it("prefers the static snapshot over liveColIds when both resolve the same name", () => {
+    const href = breakdownHref("family", "acipenseridae", { "family:acipenseridae": "OTHERID" });
+    expect(href).toContain("TAXON_ID=KTYZ7");
+  });
+
+  it("uses liveColIds when the static snapshot has nothing for this name", () => {
+    const href = breakdownHref("genus", "chaetodipus", { "genus:chaetodipus": "3LLS" });
+    expect(href).toContain("TAXON_ID=3LLS");
+  });
+
+  it("returns undefined when neither source resolves the name", () => {
+    expect(breakdownHref("genus", "nonexistentgenusxyz")).toBeUndefined();
+  });
+});

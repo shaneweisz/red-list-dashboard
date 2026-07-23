@@ -33,7 +33,7 @@ import {
   type BreakdownEntry,
   type BreakdownQueryContext,
 } from "./col-breakdown";
-import { dynamicNodeFilter, isDynamicNodeId, dynamicNodeMatchValue } from "@/lib/dynamic-taxon";
+import { dynamicNodeFilter, isDynamicNodeId, dynamicNodeMatchValue, parseDynamicNodeId } from "@/lib/dynamic-taxon";
 import { NODE_INDEX } from "@/lib/taxonomy-utils";
 import type { NodeFilter } from "@/lib/taxonomy-sql";
 
@@ -74,13 +74,46 @@ async function ensureBackboneHelpers(conn: Awaited<ReturnType<typeof getConn>>):
 }
 
 /**
+ * Resolves each (rank, name) pair to its Catalogue of Life accepted taxon id via
+ * backbone.parquet — the same match rule scripts/build-col-taxon-ids.ts uses to
+ * build the precomputed static-tree snapshot (COL_TAXON_IDS in
+ * col-taxon-ids.json), just run live for names that snapshot can't cover: a
+ * dynamic node's own ancestor chain (e.g. "Genus: Chaetodipus") is reached
+ * purely through live order/family/genus enumeration, never referenced by any
+ * static SpeciesFilter, so it's never in that build-time snapshot. Cheap point
+ * lookups (a handful of names per popover) against a parquet already read
+ * elsewhere in this same request (ensureBackboneHelpers).
+ */
+async function resolveLiveColTaxonIds(
+  conn: Awaited<ReturnType<typeof getConn>>,
+  backbonePath: string,
+  pairs: { rank: string; name: string }[],
+): Promise<Record<string, string>> {
+  if (!pairs.length) return {};
+  const values = pairs.map((p) => `('${p.rank}', '${p.name.toLowerCase().replace(/'/g, "''")}')`).join(", ");
+  const rows = await (await conn.run(`
+    WITH pairs(rank, name) AS (VALUES ${values})
+    SELECT p.rank AS rank, p.name AS name, b.col_id AS col_id
+    FROM pairs p
+    JOIN read_parquet('${backbonePath}') b ON b.rank = p.rank AND lower(b.scientific_name) = p.name AND b.status = 'accepted'
+  `)).getRowObjects();
+  const map: Record<string, string> = {};
+  for (const r of rows) map[`${r.rank}:${r.name}`] = String(r.col_id);
+  return map;
+}
+
+/**
  * One breakdown entry for a dynamic node's own (whole) filter — mirrors
  * build-taxa-summary.ts's isExcludeOnlyCatchAll case (a single bucket keyed by
  * the node's own name), since a dynamic node's live-enumerated siblings are
  * already each their own separate node/request, not multiple names under one
- * parent the way a static multi-name SSC group is.
+ * parent the way a static multi-name SSC group is. Also returns a live-resolved
+ * CoL taxon id for each real (non-Unclassified) segment of the node's own
+ * ancestor chain (see resolveLiveColTaxonIds), so the frontend can link every
+ * part of e.g. "Order: Rodentia; Family: Heteromyidae; Genus: Chaetodipus" —
+ * not just whichever names happen to already be in the static COL_TAXON_IDS map.
  */
-export async function getLiveBreakdown(nodeId: string): Promise<BreakdownEntry | null> {
+export async function getLiveBreakdown(nodeId: string): Promise<{ breakdown: BreakdownEntry; colIds: Record<string, string> } | null> {
   const filter: NodeFilter | undefined = isDynamicNodeId(nodeId) ? (dynamicNodeFilter(nodeId) ?? undefined) : NODE_INDEX.get(nodeId)?.filter;
   if (!filter) return null;
 
@@ -106,5 +139,14 @@ export async function getLiveBreakdown(nodeId: string): Promise<BreakdownEntry |
   // common name, "muridae (mice)" never equals a row's family "muridae", so the
   // breakdown's species-list click-through silently returned zero species.
   const name = isDynamicNodeId(nodeId) ? dynamicNodeMatchValue(nodeId) : (NODE_INDEX.get(nodeId)?.name ?? nodeId);
-  return computeBreakdownEntry(ctx, name, filter, isDynamicNodeId(nodeId) ? undefined : nodeId);
+  const breakdown = await computeBreakdownEntry(ctx, name, filter, isDynamicNodeId(nodeId) ? undefined : nodeId);
+
+  let colIds: Record<string, string> = {};
+  if (hasBackbone && isDynamicNodeId(nodeId)) {
+    const segments = parseDynamicNodeId(nodeId)?.segments ?? [];
+    const pairs = segments.filter((s) => s.value !== "").map((s) => ({ rank: s.rank, name: s.value }));
+    colIds = await resolveLiveColTaxonIds(conn, ctx.backbonePath!, pairs);
+  }
+
+  return { breakdown, colIds };
 }

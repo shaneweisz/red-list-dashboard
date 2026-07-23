@@ -485,9 +485,15 @@ export function breakdownDisplayName(rank: FilterRank, name: string): string {
   return rank === "species" ? capitalizeSpeciesName(name) : capitalize(name);
 }
 
-/** CoL page/search link for one breakdown row's name, if we could resolve its taxon id. */
-export function breakdownHref(rank: FilterRank, name: string): string | undefined {
-  const colId = COL_TAXON_ID_MAP[`${rank}:${name.toLowerCase()}`];
+/** CoL page/search link for one breakdown row's name, if we could resolve its taxon id.
+ *  Checks the precomputed static-tree snapshot first, then `liveColIds` (a dynamic
+ *  node's own ancestor chain, resolved live — see live-breakdown.ts's
+ *  resolveLiveColTaxonIds — since a genus like "Chaetodipus" reached purely via live
+ *  drilldown is never referenced by any static SpeciesFilter and so never in the
+ *  snapshot). */
+export function breakdownHref(rank: FilterRank, name: string, liveColIds?: Record<string, string>): string | undefined {
+  const key = `${rank}:${name.toLowerCase()}`;
+  const colId = COL_TAXON_ID_MAP[key] ?? liveColIds?.[key];
   return colId ? colHref(rank, colId) : undefined;
 }
 
@@ -551,20 +557,20 @@ export interface DescribeFilterSegment {
 // Every name gets its own segment (linked when we have a CoL id for it) — no capping,
 // so a skeptical reviewer can see and click through to every single name, even for a
 // long list like Antelope SG's 14-genus excludeGenera.
-function joinSegments(rank: FilterRank, names: string[]): DescribeFilterSegment[] {
+function joinSegments(rank: FilterRank, names: string[], liveColIds?: Record<string, string>): DescribeFilterSegment[] {
   const segs: DescribeFilterSegment[] = [];
   names.forEach((n, i) => {
     if (i > 0) segs.push({ text: ", " });
-    segs.push({ text: capitalize(n), href: breakdownHref(rank, n) });
+    segs.push({ text: capitalize(n), href: breakdownHref(rank, n, liveColIds) });
   });
   return segs;
 }
 
-function speciesSegments(names: string[]): DescribeFilterSegment[] {
+function speciesSegments(names: string[], liveColIds?: Record<string, string>): DescribeFilterSegment[] {
   const segs: DescribeFilterSegment[] = [];
   names.forEach((n, i) => {
     if (i > 0) segs.push({ text: ", " });
-    segs.push({ text: capitalizeSpeciesName(n), href: breakdownHref("species", n) });
+    segs.push({ text: capitalizeSpeciesName(n), href: breakdownHref("species", n, liveColIds) });
   });
   return segs;
 }
@@ -580,15 +586,19 @@ function speciesSegments(names: string[]): DescribeFilterSegment[] {
  *
  * Returns segments rather than a plain string so the caller can render each taxon
  * name as a link to its Catalogue of Life page where we have one (see
- * COL_TAXON_IDS). `hideBreakdownRank` (pass true when the node has a NodeSummary
- * .colBreakdown) omits the primary include dimension here — the caller renders that
- * as an expandable per-name Assessed/Not-Evaluated list instead (see
- * BreakdownList in TaxaSummary.tsx), so it isn't shown twice.
+ * COL_TAXON_IDS, and `liveColIds` for a dynamic node's ancestor chain — resolved
+ * live, since names reached purely through live drilldown are never in that
+ * build-time snapshot). Always includes every set dimension (e.g. a dynamic node's
+ * full "Order: Rodentia; Family: Heteromyidae; Genus: Chaetodipus" ancestor chain) —
+ * this used to omit the primary dimension once a breakdown loaded, on the theory
+ * that BreakdownList's own per-name rows already showed it, but that only ever
+ * covers the node's own DEEPEST segment, not its ancestors, and made the whole line
+ * visibly vanish the instant the breakdown table appeared (a jarring "replace").
  */
 export function describeFilter(
   filter: SpeciesFilter,
   nodeId?: string,
-  hideBreakdownRank?: boolean
+  liveColIds?: Record<string, string>
 ): DescribeFilterSegment[] {
   const override = nodeId ? NODE_DESCRIPTION_OVERRIDES[nodeId] : undefined;
   const note = nodeId ? COL_NODE_TOOLTIP_NOTES[nodeId] : undefined;
@@ -602,21 +612,21 @@ export function describeFilter(
   const segs: DescribeFilterSegment[] = [];
   let hasPart = false;
   const addPart = (label: string, rank: FilterRank, names: string[] | undefined) => {
-    if (!names?.length || hideBreakdownRank) return;
+    if (!names?.length) return;
     if (hasPart) segs.push({ text: "; " });
     hasPart = true;
-    segs.push({ text: `${label}: ` }, ...joinSegments(rank, names));
+    segs.push({ text: `${label}: ` }, ...joinSegments(rank, names, liveColIds));
   };
   addPart("Class", "class", filter.classNames);
   addPart("Order", "order", filter.orderNames);
   addPart("Family", "family", filter.families);
   addPart("Genus", "genus", filter.genera);
-  if (filter.speciesNames?.length && !hideBreakdownRank) {
+  if (filter.speciesNames?.length) {
     if (hasPart) segs.push({ text: "; " });
     hasPart = true;
-    segs.push({ text: "Species: " }, ...speciesSegments(filter.speciesNames));
+    segs.push({ text: "Species: " }, ...speciesSegments(filter.speciesNames, liveColIds));
   }
-  if (!hasPart && !hideBreakdownRank) segs.push({ text: "All species in this group" });
+  if (!hasPart) segs.push({ text: "All species in this group" });
 
   const excludeSegs: DescribeFilterSegment[] = [];
   let hasExclude = false;
@@ -624,7 +634,7 @@ export function describeFilter(
     if (!names?.length) return;
     if (hasExclude) excludeSegs.push({ text: "; " });
     hasExclude = true;
-    excludeSegs.push(...joinSegments(rank, names));
+    excludeSegs.push(...joinSegments(rank, names, liveColIds));
   };
   addExclude("class", filter.excludeClasses);
   addExclude("order", filter.excludeOrders);
@@ -633,7 +643,7 @@ export function describeFilter(
   if (filter.excludeSpeciesNames?.length) {
     if (hasExclude) excludeSegs.push({ text: "; " });
     hasExclude = true;
-    excludeSegs.push(...speciesSegments(filter.excludeSpeciesNames));
+    excludeSegs.push(...speciesSegments(filter.excludeSpeciesNames, liveColIds));
   }
   if (hasExclude) segs.push({ text: " (excluding " }, ...excludeSegs, { text: ")" });
 

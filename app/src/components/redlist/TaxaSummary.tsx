@@ -770,11 +770,13 @@ function BreakdownList({
   label,
   breakdown,
   onOpenPanel,
+  liveColIds,
 }: {
   rank: FilterRank;
   label: string;
   breakdown: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[]; splitDetails?: SplitDetail[] }[];
   onOpenPanel: (request: PanelRequest) => void;
+  liveColIds?: Record<string, string>;
 }) {
   return (
     <div className="mt-1">
@@ -813,21 +815,23 @@ function BreakdownList({
         <tbody>
           {breakdown.map((b) => {
             const rowLabel = breakdownDisplayName(rank, b.name);
-            const href = breakdownHref(rank, b.name);
+            const href = breakdownHref(rank, b.name, liveColIds);
             return (
               <tr key={b.name} className="border-t border-zinc-700/60">
                 <td className="pr-3 py-1 whitespace-nowrap">
-                  {label}: {rowLabel}
-                  {href && (
+                  {label}:{" "}
+                  {href ? (
                     <a
                       href={href}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="ml-1 text-zinc-400 hover:text-blue-300 inline-block align-text-top"
+                      className="text-blue-300 hover:text-blue-200 underline"
                       title={`View ${rowLabel} on Catalogue of Life`}
                     >
-                      <FaInfoCircle size={9} />
+                      {rowLabel}
                     </a>
+                  ) : (
+                    rowLabel
                   )}
                 </td>
                 <td className="px-2 py-1 text-right text-zinc-300">{b.count}</td>
@@ -901,13 +905,19 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
   const [liveBreakdown, setLiveBreakdown] = useState<typeof breakdown>(undefined);
   const [liveBreakdownLoading, setLiveBreakdownLoading] = useState(false);
   const [liveBreakdownError, setLiveBreakdownError] = useState(false);
+  // CoL taxon ids resolved live for this dynamic node's own ancestor chain (e.g.
+  // "rodentia"/"heteromyidae"/"chaetodipus") — see live-breakdown.ts's
+  // resolveLiveColTaxonIds. Fetched alongside liveBreakdown itself (same request),
+  // used as a fallback wherever the precomputed static-tree COL_TAXON_IDS snapshot
+  // doesn't cover a name (which is always, for a purely dynamic node).
+  const [liveColIds, setLiveColIds] = useState<Record<string, string> | undefined>(undefined);
   useEffect(() => {
     if (!open || !isDynamicNodeId(nodeId) || breakdown?.length || liveBreakdown || liveBreakdownLoading) return;
     setLiveBreakdownLoading(true); // eslint-disable-line react-hooks/set-state-in-effect -- kick off the fetch's loading state
     setLiveBreakdownError(false);
     fetch(`/api/redlist/taxa-breakdown-live?nodeId=${encodeURIComponent(nodeId)}`)
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`Live breakdown failed (${res.status})`))))
-      .then((data) => setLiveBreakdown([data.breakdown]))
+      .then((data) => { setLiveBreakdown([data.breakdown]); setLiveColIds(data.colIds); })
       .catch(() => setLiveBreakdownError(true))
       .finally(() => setLiveBreakdownLoading(false));
   }, [open, nodeId, breakdown, liveBreakdown, liveBreakdownLoading]);
@@ -991,13 +1001,12 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
   if (source === "iucn" && !node?.estimatedSource) return null;
   const filter = node?.filter ?? dynFilter!;
 
-  // With a breakdown, describeFilter's primary dimension (e.g. "Family: Bovidae") is
-  // hidden — the BreakdownList below shows it instead — leaving just the exclude
-  // clause (e.g. "(excluding Bos, Bubalus, ...)") and any CoL note. Rendered AFTER
-  // the breakdown list rather than before, so "excluding X, Y, Z" reads as a
-  // qualifier on "Family: Bovidae (217)" instead of floating above it with nothing
-  // to attach to.
-  const filterSegs = source === "col" ? describeFilter(filter, node ? nodeId : undefined, Boolean(effectiveBreakdown?.length)) : [];
+  // Always includes every set dimension (e.g. a dynamic node's full "Order:
+  // Rodentia; Family: Heteromyidae; Genus: Chaetodipus" ancestor chain, each part
+  // linked to CoL — see describeFilter's own doc comment for why this used to
+  // vanish the instant a breakdown loaded, and no longer does). liveColIds fills
+  // in a CoL link for names the precomputed static-tree snapshot can't cover.
+  const filterSegs = source === "col" ? describeFilter(filter, node ? nodeId : undefined, liveColIds) : [];
 
   // True for an "Unclassified <Rank>" bucket (dynamicNodeDisplayName's blank-
   // segment case) — most visible for Molluscs' Gastropoda, where ~44% of
@@ -1073,7 +1082,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
                   These are real, counted species — they just have no {unclassifiedRankLabel} recorded in Catalogue of Life&apos;s data, so they land here rather than under a named {unclassifiedRankLabel}.
                 </p>
               )}
-              {!effectiveBreakdown?.length && filterSegs.length > 0 && (
+              {filterSegs.length > 0 && (
                 <p>{renderFilterSegs(filterSegs)}</p>
               )}
               {liveBreakdownLoading && (
@@ -1100,12 +1109,10 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
                     label={dim.label}
                     breakdown={effectiveBreakdown}
                     onOpenPanel={setActivePanel}
+                    liveColIds={liveColIds}
                   />
                 ) : null;
               })() : null}
-              {effectiveBreakdown?.length && filterSegs.length > 0 && (
-                <p className="mt-1">{renderFilterSegs(filterSegs)}</p>
-              )}
               <p className="mt-1.5 text-zinc-300">
                 Source:{" "}
                 <a href={COL_RELEASE_URL} target="_blank" rel="noopener noreferrer" className="text-blue-300 hover:text-blue-200 underline">
