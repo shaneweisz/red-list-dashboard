@@ -237,6 +237,12 @@ interface WorldMapProps {
   // Whether the "% Outdated" color mode is meaningful (false for unassessed/NE species views,
   // where every species has no assessment date rather than an outdated one)
   showOutdatedMode?: boolean;
+  // Whether to show the color-mode <select> at all (species/outdated/GBIF) — false
+  // for new-assessments/NE views, where it's not just missing its "% Outdated"
+  // option but pointless outright: color-coding a map of species that are all,
+  // definitionally, unassessed conveys nothing. Independent of showGbifToggle/
+  // showOutdatedMode (which only control which OPTIONS appear once shown).
+  showColorModeDropdown?: boolean;
   // Map/List toggle + list-view sort, URL-synced (see useFilterParams.ts's
   // mapViewMode/mapSortKey/mapSortDirection) so a sorted list view is a
   // shareable link. Falls back to local state when omitted (e.g. tests).
@@ -264,7 +270,7 @@ const DEFAULT_ZOOM = 1.0;
 const MIN_ZOOM = 1.0;
 const MAX_ZOOM = 8.0;
 
-function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, precomputedStatsTotal, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, endemicsOnly = false, onEndemicsToggle, footer, showGbifToggle = true, showOutdatedMode = true, mapViewMode, onMapViewModeChange, mapSortKey, mapSortDirection, onMapSortChange, selectOnHover = false, onCountryHover }: WorldMapProps) {
+function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, precomputedStatsTotal, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, endemicsOnly = false, onEndemicsToggle, footer, showGbifToggle = true, showOutdatedMode = true, showColorModeDropdown = true, mapViewMode, onMapViewModeChange, mapSortKey, mapSortDirection, onMapSortChange, selectOnHover = false, onCountryHover }: WorldMapProps) {
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoveredCountryCode, setHoveredCountryCode] = useState<string | null>(null);
   const [speciesStats, setSpeciesStats] = useState<CountryStats>(precomputedStats || {});
@@ -556,7 +562,7 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
               no extra filters are active (its counts aren't filterable per-country).
               Only meaningful for the choropleth itself — hidden in List view, which
               shows every column directly rather than color-coding by just one. */}
-          {viewMode === "map" && (
+          {viewMode === "map" && showColorModeDropdown && (
             <select
               value={colorMode}
               onChange={(e) => setColorMode(e.target.value as ColorMode)}

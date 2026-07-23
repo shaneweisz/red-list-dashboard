@@ -2854,7 +2854,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
           )}
 
           {/* Charts row 2: Country map + (Threats, 2-col) for reassessments; Country
-              map + GBIF Observations + Year Described (3-col, 1/3 each) for
+              map + Year Described + Geospatial GBIF Records (3-col, 1/3 each) for
               new-assessments — Year Described used to sit alone in its own row
               below (a half-width chart with empty space beside it, since that row
               was also grid-cols-2), now folded into this one instead. */}
@@ -2881,9 +2881,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   selectedTaxa={selectedTaxa}
                   speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
                   showOutdatedMode={!isNewAssessments}
+                  showColorModeDropdown={!isNewAssessments}
                   onRegionFilter={handleRegionFilter}
                   endemicsOnly={endemicsOnly}
-                  onEndemicsToggle={() => setEndemicsOnly(!endemicsOnly)}
+                  onEndemicsToggle={isNewAssessments ? undefined : () => setEndemicsOnly(!endemicsOnly)}
                   showGbifToggle={showGbifToggle}
                   mapViewMode={mapViewMode}
                   onMapViewModeChange={setMapViewMode}
@@ -2893,6 +2894,40 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 />
               )}
             </div>
+
+            {/* Year Described (new-assessments only) — second column of this row. */}
+            {isNewAssessments && (
+              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">
+                    Year Described
+                    <HoverTooltip text="Year the species was scientifically described, from the Catalogue of Life. Available for ~99% of animals; many plants, fungi and algae have no datable record in CoL and fall under 'Unknown'.">
+                      <svg className="w-3 h-3 text-zinc-400 dark:text-zinc-500 cursor-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M12 16v-4M12 8h.01" />
+                      </svg>
+                    </HoverTooltip>
+                  </span>
+                </div>
+                <div style={{ height: 180 }} className="flex items-center justify-center">
+                  {speciesLoading && assessedSpecies.length === 0 ? (
+                    <Spinner />
+                  ) : describedYearData.length > 0 ? (
+                    <FilterBarChart
+                      data={describedYearData}
+                      dataKey="shortRange"
+                      selectedItems={selectedDescribedYears}
+                      onBarClick={handleDescribedYearClick}
+                      barColor="#3b82f6"
+                      yAxisWidth={64}
+                      rightMargin={85}
+                    />
+                  ) : (
+                    <span className="text-sm text-zinc-400 dark:text-zinc-500">No description-year data</span>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Threats (reassessments) or GBIF Observations chart (new-assessments) */}
             {isNewAssessments ? (
@@ -3039,40 +3074,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 </div>
               );
             })()}
-
-            {/* Year Described (new-assessments only) — third column of this same row. */}
-            {isNewAssessments && (
-              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">
-                    Year Described
-                    <HoverTooltip text="Year the species was scientifically described, from the Catalogue of Life. Available for ~99% of animals; many plants, fungi and algae have no datable record in CoL and fall under 'Unknown'.">
-                      <svg className="w-3 h-3 text-zinc-400 dark:text-zinc-500 cursor-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="12" cy="12" r="10" />
-                        <path d="M12 16v-4M12 8h.01" />
-                      </svg>
-                    </HoverTooltip>
-                  </span>
-                </div>
-                <div style={{ height: 180 }} className="flex items-center justify-center">
-                  {speciesLoading && assessedSpecies.length === 0 ? (
-                    <Spinner />
-                  ) : describedYearData.length > 0 ? (
-                    <FilterBarChart
-                      data={describedYearData}
-                      dataKey="shortRange"
-                      selectedItems={selectedDescribedYears}
-                      onBarClick={handleDescribedYearClick}
-                      barColor="#8b5cf6"
-                      yAxisWidth={64}
-                      rightMargin={85}
-                    />
-                  ) : (
-                    <span className="text-sm text-zinc-400 dark:text-zinc-500">No description-year data</span>
-                  )}
-                </div>
-              </div>
-            )}
           </div>
 
           {/* More Filters (collapsible) - hidden for New Assessments */}
