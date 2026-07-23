@@ -2248,32 +2248,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
   // selected" (see handleCountryDrilldown/selectOnHover).
   const [hoverPreviewCountry, setHoverPreviewCountry] = useState<string | null>(null);
 
-  // Measures the actual rendered height of the pills row below (it wraps to
-  // multiple lines once enough countries are selected, or long names push
-  // it past one line) so WorldMap's matching top spacer — see
-  // countryModeContent's topSpacerHeight — can reserve exactly that much,
-  // not a fixed guess. A fixed guess only matched the common 1-pill case;
-  // once pills wrapped to two lines, the table's column grew past what the
-  // map's spacer accounted for, and the paired grid's align-items: stretch
-  // inflated the map's card to match without its (fixed-projection-scale)
-  // content growing to fill it — the same gap-under-the-map problem this
-  // whole spacer exists to avoid, just reappearing at the wrap threshold.
-  // ResizeObserver (not just a selection-keyed effect) so a pure window-
-  // resize reflow — more/fewer pills fitting per line at the same
-  // selection — is caught too.
-  const pillsRef = useRef<HTMLDivElement>(null);
-  const [pillsHeight, setPillsHeight] = useState(34);
-  useEffect(() => {
-    const el = pillsRef.current;
-    if (!el) return;
-    const observer = new ResizeObserver((entries) => {
-      const height = entries[0]?.contentRect.height;
-      if (height != null) setPillsHeight(Math.max(34, Math.ceil(height)));
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
   const countryScope = selectedCountries.size > 0 ? [...selectedCountries]
     : hoverPreviewCountry ? [hoverPreviewCountry]
     : null;
@@ -2349,7 +2323,6 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       onCountrySelect={handleCountryDrilldown}
       selectOnHover={selectedCountries.size === 0}
       onCountryHover={setHoverPreviewCountry}
-      topSpacerHeight={pillsHeight}
       precomputedStats={countryLandingStats ?? {}}
       selectedTaxa={selectedTaxa}
       speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
@@ -2364,62 +2337,55 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     />
   );
 
-  // Selection chips shown in normal flow above the table. Wrapped in its
-  // own min-h-[34px] div with pillsRef attached — that's the box
-  // ResizeObserver measures above to drive WorldMap's topSpacerHeight, so
-  // the map's matching blank spacer always reserves exactly this box's
-  // real height (min 34px, taller once chips wrap to a second line) rather
-  // than a fixed guess that only held for the common 1-pill case. The
-  // wrapper renders unconditionally (even with nothing to show) so the
-  // measurement is always live; only the actual chip row inside is
-  // conditional. One chip per selected country (not collapsed into a
-  // region name, unlike the atop-table "France ×" chip elsewhere), each
-  // individually removable, plus "Clear all" once there's more than one.
+  // Selection chips — rendered by TaxaSummary in a dedicated row of its own
+  // above BOTH the map and the table (aligned under the table's half via a
+  // matching grid template, with the map's half left blank), not inside
+  // either component, so neither one's own height is ever affected by how
+  // many chips are showing or whether they've wrapped to a second line.
+  // One chip per selected country (not collapsed into a region name,
+  // unlike the atop-table "France ×" chip elsewhere), each individually
+  // removable, plus "Clear all" once there's more than one.
   // Before anything's locked, hovering shows its own preview chip (dashed,
   // non-removable — there's nothing to remove yet, moving the mouse away
   // already clears it) so the table's live hover-preview has a visual
   // anchor. Reuses handleCountryDrilldown for removal — clicking a chip's ✕
   // for a country that's already selected always toggles it off, whichever
   // branch handleCountryDrilldown takes.
-  const countryPillsContent = (
-    <div ref={pillsRef} className="min-h-[34px] mb-1.5">
-      {(selectedCountries.size > 0 || hoverPreviewCountry) && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {selectedCountries.size > 0 ? (
-            <>
-              {[...selectedCountries]
-                .map(code => ({ code, name: ALPHA2_TO_NAME[code] ?? code }))
-                .sort((a, b) => a.name.localeCompare(b.name))
-                .map(({ code, name }) => (
-                  <span
-                    key={code}
-                    className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-sm text-zinc-700 dark:text-zinc-300 max-w-full"
-                  >
-                    <span className="truncate">{name}</span>
-                    <button
-                      onClick={(e) => handleCountryDrilldown(code, name, e)}
-                      className="shrink-0 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                      title={`Remove ${name}`}
-                    >
-                      ✕
-                    </button>
-                  </span>
-                ))}
-              {selectedCountries.size > 1 && (
+  const countryPillsContent = (selectedCountries.size > 0 || hoverPreviewCountry) && (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {selectedCountries.size > 0 ? (
+        <>
+          {[...selectedCountries]
+            .map(code => ({ code, name: ALPHA2_TO_NAME[code] ?? code }))
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map(({ code, name }) => (
+              <span
+                key={code}
+                className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-sm text-zinc-700 dark:text-zinc-300 max-w-full"
+              >
+                <span className="truncate">{name}</span>
                 <button
-                  onClick={() => { enterCountryDrilldown(new Set()); setHoverPreviewCountry(null); }}
-                  className="text-sm text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 underline transition-colors"
+                  onClick={(e) => handleCountryDrilldown(code, name, e)}
+                  className="shrink-0 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                  title={`Remove ${name}`}
                 >
-                  Clear all
+                  ✕
                 </button>
-              )}
-            </>
-          ) : (
-            <span className="inline-flex items-center pl-3 pr-3 py-1 rounded-full bg-white dark:bg-zinc-800 border border-dashed border-zinc-300 dark:border-zinc-600 text-sm text-zinc-500 dark:text-zinc-400 max-w-full">
-              <span className="truncate">{ALPHA2_TO_NAME[hoverPreviewCountry!] ?? hoverPreviewCountry}</span>
-            </span>
+              </span>
+            ))}
+          {selectedCountries.size > 1 && (
+            <button
+              onClick={() => { enterCountryDrilldown(new Set()); setHoverPreviewCountry(null); }}
+              className="text-sm text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 underline transition-colors"
+            >
+              Clear all
+            </button>
           )}
-        </div>
+        </>
+      ) : (
+        <span className="inline-flex items-center pl-3 pr-3 py-1 rounded-full bg-white dark:bg-zinc-800 border border-dashed border-zinc-300 dark:border-zinc-600 text-sm text-zinc-500 dark:text-zinc-400 max-w-full">
+          <span className="truncate">{ALPHA2_TO_NAME[hoverPreviewCountry!] ?? hoverPreviewCountry}</span>
+        </span>
       )}
     </div>
   );
