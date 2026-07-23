@@ -588,12 +588,17 @@ function speciesSegments(names: string[], liveColIds?: Record<string, string>): 
  * name as a link to its Catalogue of Life page where we have one (see
  * COL_TAXON_IDS, and `liveColIds` for a dynamic node's ancestor chain — resolved
  * live, since names reached purely through live drilldown are never in that
- * build-time snapshot). Always includes every set dimension (e.g. a dynamic node's
- * full "Order: Rodentia; Family: Heteromyidae; Genus: Chaetodipus" ancestor chain) —
- * this used to omit the primary dimension once a breakdown loaded, on the theory
- * that BreakdownList's own per-name rows already showed it, but that only ever
- * covers the node's own DEEPEST segment, not its ancestors, and made the whole line
- * visibly vanish the instant the breakdown table appeared (a jarring "replace").
+ * build-time snapshot). Unlike an older version of this function, always includes
+ * EVERY set dimension (e.g. a dynamic node's full "Order: Rodentia; Family:
+ * Heteromyidae; Genus: Chaetodipus" ancestor chain), never just the primary one —
+ * that used to matter because a caller could ask to hide the primary dimension
+ * once a breakdown loaded (on the theory BreakdownList's own rows already showed
+ * it), but that only ever covers the node's own DEEPEST segment, not its
+ * ancestors, so hiding uniformly silently dropped ancestor context nothing else
+ * showed. Whether/when the caller actually displays these segments (e.g.
+ * TaxaSummary.tsx shows them only while a dynamic node's breakdown is still
+ * loading, then hands off to the table) is entirely the caller's own decision —
+ * this function no longer has an opinion on that.
  */
 export function describeFilter(
   filter: SpeciesFilter,

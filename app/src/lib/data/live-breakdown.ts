@@ -107,13 +107,9 @@ async function resolveLiveColTaxonIds(
  * build-taxa-summary.ts's isExcludeOnlyCatchAll case (a single bucket keyed by
  * the node's own name), since a dynamic node's live-enumerated siblings are
  * already each their own separate node/request, not multiple names under one
- * parent the way a static multi-name SSC group is. Also returns a live-resolved
- * CoL taxon id for each real (non-Unclassified) segment of the node's own
- * ancestor chain (see resolveLiveColTaxonIds), so the frontend can link every
- * part of e.g. "Order: Rodentia; Family: Heteromyidae; Genus: Chaetodipus" —
- * not just whichever names happen to already be in the static COL_TAXON_IDS map.
+ * parent the way a static multi-name SSC group is.
  */
-export async function getLiveBreakdown(nodeId: string): Promise<{ breakdown: BreakdownEntry; colIds: Record<string, string> } | null> {
+export async function getLiveBreakdown(nodeId: string): Promise<BreakdownEntry | null> {
   const filter: NodeFilter | undefined = isDynamicNodeId(nodeId) ? (dynamicNodeFilter(nodeId) ?? undefined) : NODE_INDEX.get(nodeId)?.filter;
   if (!filter) return null;
 
@@ -139,14 +135,32 @@ export async function getLiveBreakdown(nodeId: string): Promise<{ breakdown: Bre
   // common name, "muridae (mice)" never equals a row's family "muridae", so the
   // breakdown's species-list click-through silently returned zero species.
   const name = isDynamicNodeId(nodeId) ? dynamicNodeMatchValue(nodeId) : (NODE_INDEX.get(nodeId)?.name ?? nodeId);
-  const breakdown = await computeBreakdownEntry(ctx, name, filter, isDynamicNodeId(nodeId) ? undefined : nodeId);
+  return computeBreakdownEntry(ctx, name, filter, isDynamicNodeId(nodeId) ? undefined : nodeId);
+}
 
-  let colIds: Record<string, string> = {};
-  if (hasBackbone && isDynamicNodeId(nodeId)) {
-    const segments = parseDynamicNodeId(nodeId)?.segments ?? [];
-    const pairs = segments.filter((s) => s.value !== "").map((s) => ({ rank: s.rank, name: s.value }));
-    colIds = await resolveLiveColTaxonIds(conn, ctx.backbonePath!, pairs);
+/**
+ * CoL taxon ids for every real (non-Unclassified) segment of a dynamic node's
+ * own ancestor chain (e.g. "rodentia"/"heteromyidae"/"chaetodipus"), resolved
+ * live via resolveLiveColTaxonIds. Deliberately separate from getLiveBreakdown
+ * (which also runs ensureBackboneHelpers' precomputed-table setup and the much
+ * heavier no-match diagnostic joins) — a handful of point lookups against
+ * backbone.parquet alone resolves far faster, so the frontend can light up
+ * every ancestor-chain link (e.g. the rank/name header shown while the
+ * breakdown table is still loading) well before the slower breakdown itself
+ * comes back, instead of both arriving together only once the slow query
+ * finishes. Degrades to an empty map (unlinked plain text) if backbone.parquet
+ * is unavailable, same as every other backbone-dependent fallback in this file.
+ */
+export async function getLiveColTaxonIds(nodeId: string): Promise<Record<string, string>> {
+  if (!isDynamicNodeId(nodeId)) return {};
+  const segments = parseDynamicNodeId(nodeId)?.segments ?? [];
+  const pairs = segments.filter((s) => s.value !== "").map((s) => ({ rank: s.rank, name: s.value }));
+  if (!pairs.length) return {};
+  try {
+    const conn = await getConn();
+    return await resolveLiveColTaxonIds(conn, parquetUri("backbone.parquet"), pairs);
+  } catch (e) {
+    console.error(`getLiveColTaxonIds: backbone.parquet unavailable for ${nodeId}, degrading:`, e);
+    return {};
   }
-
-  return { breakdown, colIds };
 }

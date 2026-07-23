@@ -12,11 +12,11 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const result = await getLiveBreakdown(nodeId);
-    if (!result) {
+    const breakdown = await getLiveBreakdown(nodeId);
+    if (!breakdown) {
       return NextResponse.json({ error: "Unknown node" }, { status: 404 });
     }
-    return NextResponse.json({ breakdown: result.breakdown, colIds: result.colIds }, { headers: CACHE_1H });
+    return NextResponse.json({ breakdown }, { headers: CACHE_1H });
   } catch (error) {
     console.error(`Live breakdown error for ${nodeId}:`, error);
     const message = error instanceof Error ? error.message : "Unknown error";

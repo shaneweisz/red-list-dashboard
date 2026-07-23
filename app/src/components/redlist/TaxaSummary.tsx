@@ -905,23 +905,38 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
   const [liveBreakdown, setLiveBreakdown] = useState<typeof breakdown>(undefined);
   const [liveBreakdownLoading, setLiveBreakdownLoading] = useState(false);
   const [liveBreakdownError, setLiveBreakdownError] = useState(false);
-  // CoL taxon ids resolved live for this dynamic node's own ancestor chain (e.g.
-  // "rodentia"/"heteromyidae"/"chaetodipus") — see live-breakdown.ts's
-  // resolveLiveColTaxonIds. Fetched alongside liveBreakdown itself (same request),
-  // used as a fallback wherever the precomputed static-tree COL_TAXON_IDS snapshot
-  // doesn't cover a name (which is always, for a purely dynamic node).
-  const [liveColIds, setLiveColIds] = useState<Record<string, string> | undefined>(undefined);
   useEffect(() => {
     if (!open || !isDynamicNodeId(nodeId) || breakdown?.length || liveBreakdown || liveBreakdownLoading) return;
     setLiveBreakdownLoading(true); // eslint-disable-line react-hooks/set-state-in-effect -- kick off the fetch's loading state
     setLiveBreakdownError(false);
     fetch(`/api/redlist/taxa-breakdown-live?nodeId=${encodeURIComponent(nodeId)}`)
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`Live breakdown failed (${res.status})`))))
-      .then((data) => { setLiveBreakdown([data.breakdown]); setLiveColIds(data.colIds); })
+      .then((data) => setLiveBreakdown([data.breakdown]))
       .catch(() => setLiveBreakdownError(true))
       .finally(() => setLiveBreakdownLoading(false));
   }, [open, nodeId, breakdown, liveBreakdown, liveBreakdownLoading]);
   const effectiveBreakdown = breakdown?.length ? breakdown : liveBreakdown;
+  // CoL taxon ids for this dynamic node's own ancestor chain (e.g.
+  // "rodentia"/"heteromyidae"/"chaetodipus"), used as a fallback wherever the
+  // precomputed static-tree COL_TAXON_IDS snapshot doesn't cover a name (which
+  // is always, for a name reached purely through live drilldown). Fetched via
+  // its own separate, much faster endpoint (see the API route's doc comment) —
+  // NOT bundled into the liveBreakdown fetch above — so the rank/name header
+  // (visible only while that slower breakdown is still loading, below) can
+  // show every ancestor as a working link well before the table itself
+  // finishes, rather than both arriving together only once the slow query
+  // does.
+  const [liveColIds, setLiveColIds] = useState<Record<string, string> | undefined>(undefined);
+  const [liveColIdsLoading, setLiveColIdsLoading] = useState(false);
+  useEffect(() => {
+    if (!open || !isDynamicNodeId(nodeId) || liveColIds || liveColIdsLoading) return;
+    setLiveColIdsLoading(true); // eslint-disable-line react-hooks/set-state-in-effect -- kick off the fetch's loading state
+    fetch(`/api/redlist/col-taxon-ids-live?nodeId=${encodeURIComponent(nodeId)}`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`Live CoL taxon id lookup failed (${res.status})`))))
+      .then((data) => setLiveColIds(data.colIds))
+      .catch(() => setLiveColIds({})) // degrade to unlinked plain text, don't retry forever
+      .finally(() => setLiveColIdsLoading(false));
+  }, [open, nodeId, liveColIds, liveColIdsLoading]);
 
   useEffect(() => {
     if (!open) return;
@@ -1001,11 +1016,15 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
   if (source === "iucn" && !node?.estimatedSource) return null;
   const filter = node?.filter ?? dynFilter!;
 
-  // Always includes every set dimension (e.g. a dynamic node's full "Order:
-  // Rodentia; Family: Heteromyidae; Genus: Chaetodipus" ancestor chain, each part
-  // linked to CoL — see describeFilter's own doc comment for why this used to
-  // vanish the instant a breakdown loaded, and no longer does). liveColIds fills
-  // in a CoL link for names the precomputed static-tree snapshot can't cover.
+  // A dynamic node's full ancestor chain (e.g. "Order: Rodentia; Family:
+  // Heteromyidae; Genus: Chaetodipus"), each part linked to CoL — liveColIds
+  // fills in a link for names the precomputed static-tree snapshot can't cover
+  // (see its own fetch above for why it's a separate, faster request than the
+  // breakdown itself: this line is only ever rendered BELOW while
+  // effectiveBreakdown hasn't loaded yet, so every ancestor needs to already be
+  // linked by then, not whenever the slower breakdown eventually finishes).
+  // Once the breakdown table loads, this line is hidden — the table's own
+  // per-name rows (also using liveColIds) take over as the click-through.
   const filterSegs = source === "col" ? describeFilter(filter, node ? nodeId : undefined, liveColIds) : [];
 
   // True for an "Unclassified <Rank>" bucket (dynamicNodeDisplayName's blank-
@@ -1082,7 +1101,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
                   These are real, counted species — they just have no {unclassifiedRankLabel} recorded in Catalogue of Life&apos;s data, so they land here rather than under a named {unclassifiedRankLabel}.
                 </p>
               )}
-              {filterSegs.length > 0 && (
+              {!effectiveBreakdown?.length && filterSegs.length > 0 && (
                 <p>{renderFilterSegs(filterSegs)}</p>
               )}
               {liveBreakdownLoading && (
