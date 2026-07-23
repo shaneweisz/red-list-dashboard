@@ -12,7 +12,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
-import { NODE_INDEX, getCsvGroupsForNode, getAncestors } from "@/lib/taxonomy-utils";
+import { NODE_INDEX, getCsvGroupsForNode, getAncestors, stripNodePrefix } from "@/lib/taxonomy-utils";
 import { canonicalizeTaxonId, mapTaxonId } from "@/lib/data/taxonomy-constants";
 import { getTaxaSummary } from "@/lib/data/species-store";
 import { isDynamicNodeId, dynamicNodeFilter, buildDynamicNodeId, rankOrderFor, type DynamicSegment } from "@/lib/dynamic-taxon";
@@ -723,15 +723,72 @@ const RANK_TO_COLUMN: Record<TaxonSuggestion["rank"], string> = {
   class: "class_name", order: "order_name", family: "family",
 };
 
+// Same single-dimension-match search as GROUP_TO_LEAF_NODE above, but prefers a group's
+// "inv-"/"pl-"/"fu-"-prefixed virtual-duplicate id over its bare one when both exist for
+// the same csvGroup (insects/molluscs/crustaceans/etc. — see dynamic-taxon.ts's
+// DYNAMIC_DRILLDOWN_ROOTS comment). The prefixed id is the one actually nested under
+// invertebrates/plantae/fungi in the default "By Taxon" view that TaxaSummary's
+// ancestor-breadcrumb rendering and this search feature both operate within; the bare id
+// is Table1a mode's separate flat id, whose own ancestor is "all" directly (not
+// invertebrates/plantae/fungi) — a dynamic id built off it resolves to the right species
+// (csvGroups is identical either way) but its ancestor chain doesn't match the id
+// TaxaSummary's precomputed children-summaries use for that group, so the breadcrumb row
+// fails to find its own data and renders a zeroed placeholder (confirmed via a live repro:
+// searching "isopoda" showed "Crustaceans 0 assessed" instead of the real ~3,410 — the
+// exact bug class collapseTaxaToTokens's isDynamicNodeId check fixed elsewhere in this
+// file's git history). GROUP_TO_LEAF_NODE itself must stay bare-preferring: its other
+// callers (querySpecies's search-result rows) set a plain ?taxa= root with no sub-group,
+// where the bare Table1a id is exactly right and no breadcrumb is ever attempted.
+//
+// Unlike GROUP_TO_LEAF_NODE, this is a function (not a precomputed map): a group
+// doesn't always have its own single-csvGroup leaf node (Insects has none — its 8
+// Table 1a groups, beetles/butterflies/etc., only ever appear together under one
+// umbrella node with csvGroups: ALL_INSECT_GROUPS; the per-order split is live-only),
+// so this also has to fall back to the smallest umbrella node whose csvGroups
+// includes the target group. A first-match memo (like GROUP_TO_LEAF_NODE's) would
+// silently return whichever node NODE_INDEX iteration happened to visit first — for
+// Insects that was briefly "ssc-dung-beetle" (an SSC node scoped to just Coleoptera
+// genera, but nothing here checked `genera`/`speciesNames`/etc., only the class/
+// order/family dimensions RANK_VALUE_TO_NODE cares about) before this was rewritten
+// to scan every candidate and pick deliberately, not first-found. Memoized (NODE_INDEX
+// is built once at import time and never changes) since this can run once per
+// suggestion per search request.
+const viewLeafForGroupCache = new Map<string, string | null>();
+function findViewLeafForGroup(taxonGroup: string): string | null {
+  const cached = viewLeafForGroupCache.get(taxonGroup);
+  if (cached !== undefined) return cached;
+  let best: { id: string; size: number } | null = null;
+  for (const [id, node] of NODE_INDEX) {
+    if (isSscGroupNode(id)) continue;
+    const f = node.filter;
+    if (!f.csvGroups.includes(taxonGroup)) continue;
+    // Only a node with NO OTHER filter dimension at all qualifies — anything else is
+    // a curated sub-split of the group (a static family/order node, or a Specialist
+    // Group carved out some other way, e.g. by genera/speciesNames), not the group's
+    // own top-level container.
+    if (f.classNames || f.orderNames || f.families || f.genera || f.excludeClasses ||
+        f.excludeOrders || f.excludeFamilies || f.excludeGenera || f.speciesNames ||
+        f.excludeSpeciesNames || f.extraSpeciesNames) continue;
+    const size = f.csvGroups.length;
+    const prefersOverBest = !best || size < best.size ||
+      (size === best.size && stripNodePrefix(id) !== id && stripNodePrefix(best.id) === best.id);
+    if (prefersOverBest) best = { id, size };
+  }
+  const result = best?.id ?? null;
+  viewLeafForGroupCache.set(taxonGroup, result);
+  return result;
+}
+
 // Resolves a suggestTaxa match to a real node: a curated by-taxon node if one matches
 // exactly (never an SSC Specialist Group node — see isSscGroupNode), else a dynamic
-// drilldown id built against the CSV group's leaf display node. A dynamic id needs every
-// rank from the root's first live-enumerable level down to the matched one, in order
-// (e.g. Isopoda is an "order" match, but Crustaceans drills class-first, so the id needs
-// a class:<value> segment before order:isopoda) — dynamicNodeFilter ANDs each segment's
-// field independently, so a single skip-ahead segment would still filter species
-// correctly, but would leave nextDynamicRank/dynamicNodeAncestors reading the wrong depth
-// for further expansion and ancestor rows. The extra rank value(s) come from one small
+// drilldown id built against the CSV group's leaf display node (its "By Taxon"-view
+// variant — see findViewLeafForGroup). A dynamic id needs every rank from the root's
+// first live-enumerable level down to the matched one, in order (e.g. Isopoda is an
+// "order" match, but Crustaceans drills class-first, so the id needs a class:<value>
+// segment before order:isopoda) — dynamicNodeFilter ANDs each segment's field
+// independently, so a single skip-ahead segment would still filter species correctly,
+// but would leave nextDynamicRank/dynamicNodeAncestors reading the wrong depth for
+// further expansion and ancestor rows. The extra rank value(s) come from one small
 // lookup against a representative row (cheap: at most 2 columns, exact-match on already-
 // warm parquets, LIMIT 1). Falls back to null (old bare ?taxa= browse) only if the root
 // isn't live-drillable at all, or an ancestor rank's lookup comes back empty.
@@ -740,7 +797,7 @@ async function resolveTaxonSuggestionNode(
 ): Promise<string | null> {
   const staticHit = RANK_VALUE_TO_NODE.get(`${rank}:${value}`);
   if (staticHit) return staticHit;
-  const leafRoot = GROUP_TO_LEAF_NODE.get(taxonGroup);
+  const leafRoot = findViewLeafForGroup(taxonGroup);
   if (!leafRoot) return null;
   const order = rankOrderFor(leafRoot);
   const idx = order.indexOf(rank);
