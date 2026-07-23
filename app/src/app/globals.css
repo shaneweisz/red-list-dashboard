@@ -108,40 +108,55 @@ input[type="range"].dual-range-thumb {
   margin: 0;
   background: transparent;
   pointer-events: none;
+  /* The input itself spans the full track width (see comment above), so the
+     browser's default focus ring on keyboard focus would outline the whole
+     track rather than just the handle being moved — suppressed here and
+     re-added on the thumb pseudo-element instead, below. */
+  outline: none;
 }
 input[type="range"].dual-range-thumb::-webkit-slider-runnable-track {
   -webkit-appearance: none;
   background: transparent;
 }
+/* Trim-handle shape (a vertical bar with a grip line down the middle) rather
+   than a plain round thumb, so the two handles read as "ends being dragged
+   in" — the same affordance video/audio trim controls use — instead of two
+   independent dots. */
 input[type="range"].dual-range-thumb::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   pointer-events: auto;
-  width: 14px;
-  height: 14px;
+  width: 8px;
+  height: 18px;
   margin-top: 0;
-  border: 2px solid white;
-  border-radius: 9999px;
-  background: #3b82f6;
-  cursor: pointer;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  border: none;
+  border-radius: 3px;
+  background: #3b82f6 linear-gradient(rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.7)) no-repeat center / 2px 8px;
+  cursor: ew-resize;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
-.dark input[type="range"].dual-range-thumb::-webkit-slider-thumb {
-  border-color: #18181b;
+input[type="range"].dual-range-thumb:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 2px white, 0 0 0 4px #3b82f6;
+}
+.dark input[type="range"].dual-range-thumb:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 2px #18181b, 0 0 0 4px #3b82f6;
 }
 input[type="range"].dual-range-thumb::-moz-range-track {
   background: transparent;
 }
 input[type="range"].dual-range-thumb::-moz-range-thumb {
   pointer-events: auto;
-  width: 14px;
-  height: 14px;
-  border: 2px solid white;
-  border-radius: 9999px;
-  background: #3b82f6;
-  cursor: pointer;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  width: 8px;
+  height: 18px;
+  border: none;
+  border-radius: 3px;
+  background: #3b82f6 linear-gradient(rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.7)) no-repeat center / 2px 8px;
+  cursor: ew-resize;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
-.dark input[type="range"].dual-range-thumb::-moz-range-thumb {
-  border-color: #18181b;
+input[type="range"].dual-range-thumb:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 2px white, 0 0 0 4px #3b82f6;
+}
+.dark input[type="range"].dual-range-thumb:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 2px #18181b, 0 0 0 4px #3b82f6;
 }

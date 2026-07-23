@@ -281,6 +281,13 @@ interface OccurrenceMapRowProps {
    * List assessment's locations (already filtered to origin="Native" upstream in
    * scripts/fetch-redlist-species.ts) — the "Red List" native-range source. */
   nativeCountriesRedList?: string[];
+  /** This species' past Red List assessments (most recent one is covered by
+   * assessmentDate/assessmentYear above, not repeated here unless the caller's
+   * history array happens to include it too — de-duped by date either way when
+   * building the date-range slider's assessment markers). Lazily populated by
+   * RedListView's own history fetch, so may still be empty/stale on first render
+   * of this tab — markers just don't appear yet in that case. */
+  previousAssessments?: { year: string; date: string | null; category?: string }[];
   /** Called once the occurrence data has loaded and there are no records to show,
    * letting the parent fall back to another tab (e.g. Catalogue of Life). */
   onEmpty?: () => void;
@@ -329,6 +336,7 @@ export default function OccurrenceMapRow({
   taxonGroup,
   scientificName,
   nativeCountriesRedList,
+  previousAssessments,
   onEmpty,
 }: OccurrenceMapRowProps) {
   const [occurrences, setOccurrences] = useState<OccurrenceFeature[]>([]);
@@ -862,6 +870,26 @@ export default function OccurrenceMapRow({
     dates.sort();
     return { sliderMinDate: dates[0], sliderMaxDate: dates[dates.length - 1] };
   }, [dateFilterableOccurrences, splitDate]);
+
+  // Assessment dates to mark on the date-range timeline — the current assessment
+  // plus every past one (year-only entries fall back to Jan 1 of that year, same
+  // as elsewhere in this file), de-duped by date since previousAssessments may or
+  // may not already include the current assessment depending on the caller.
+  const assessmentMarkers = useMemo(() => {
+    const seen = new Set<string>();
+    const markers: { date: string; label: string; isCurrent: boolean }[] = [];
+    const add = (date: string | null | undefined, year: string | number | null | undefined, isCurrent: boolean, category?: string | null) => {
+      const d = date && date.length >= 10 ? date.slice(0, 10) : year != null ? `${year}-01-01` : null;
+      if (!d || seen.has(d)) return;
+      seen.add(d);
+      markers.push({ date: d, label: category ? `${d} (${category})` : d, isCurrent });
+    };
+    add(assessmentDate, assessmentYear, true);
+    for (const a of previousAssessments ?? []) {
+      add(a.date, a.year, false, a.category);
+    }
+    return markers.sort((a, b) => a.date.localeCompare(b.date));
+  }, [assessmentDate, assessmentYear, previousAssessments]);
 
   // Split view: partition occurrences by exact assessment date
   const { preAssessmentOccs, postAssessmentOccs } = useMemo(() => {
@@ -1791,7 +1819,7 @@ export default function OccurrenceMapRow({
                   </svg>
                 </button>
                 {dateRangeOpen && (
-                  <div className="absolute left-0 top-full mt-1 z-50 w-72 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg p-3">
+                  <div className="absolute left-0 top-full mt-1 z-50 w-80 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg p-3">
                     {sliderMinDate === sliderMaxDate ? (
                       <p className="text-xs text-zinc-400 dark:text-zinc-500">Not enough dated records loaded to filter by range.</p>
                     ) : (
@@ -1808,54 +1836,118 @@ export default function OccurrenceMapRow({
                           d.setDate(d.getDate() + days);
                           return d.toISOString().slice(0, 10);
                         };
+                        const pct = (days: number) => Math.max(0, Math.min(100, (days / totalDays) * 100));
+
+                        // Assessment markers, positioned against this same track's day
+                        // offsets. Most assessments predate the currently-loaded GBIF
+                        // window (GBIF's own paging is recency-biased — see the comment
+                        // on the outer wrapper), so "before"/"after" the visible track
+                        // are the common case, not an edge case — collapse those into a
+                        // single count badge at the relevant edge rather than a pile of
+                        // off-track dots.
+                        const markerDays = assessmentMarkers.map((m) => ({
+                          ...m,
+                          days: Math.round((new Date(m.date).getTime() - new Date(sliderMinDate).getTime()) / 86400000),
+                        }));
+                        const inRangeMarkers = markerDays.filter((m) => m.days >= 0 && m.days <= totalDays);
+                        const beforeMarkers = markerDays.filter((m) => m.days < 0);
+                        const afterMarkers = markerDays.filter((m) => m.days > totalDays);
+                        const titleFor = (list: typeof markerDays) =>
+                          list.map((m) => `${m.date}${m.isCurrent ? " (current)" : ""}`).join("\n");
+
                         return (
-                          <div className="flex flex-col gap-2">
+                          <div className="flex flex-col gap-1">
                             <div className="flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-300">
                               <span className="font-medium">{dateRangeFrom ?? sliderMinDate}</span>
                               <span className="text-zinc-400">to</span>
                               <span className="font-medium">{dateRangeTo ?? sliderMaxDate}</span>
                             </div>
-                            {/* Single track, two overlapping handles — see the
-                                .dual-range-thumb rules in globals.css for how the
-                                inputs stack without one swallowing the other's clicks. */}
-                            <div className="relative h-4 flex items-center">
-                              <div className="absolute inset-x-0 h-1.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
-                              <div
-                                className="absolute h-1.5 rounded-full bg-blue-500"
-                                style={{
-                                  left: `${(Math.min(fromDays, toDays) / totalDays) * 100}%`,
-                                  right: `${100 - (Math.max(fromDays, toDays) / totalDays) * 100}%`,
-                                }}
-                              />
-                              <input
-                                type="range"
-                                min={0}
-                                max={totalDays}
-                                value={Math.min(fromDays, toDays)}
-                                onChange={(e) => {
-                                  const days = Math.min(parseInt(e.target.value, 10), toDays);
-                                  setDateRangeFrom(days <= 0 ? null : dayOffsetToDate(days));
-                                }}
-                                onPointerDown={() => setActiveDateHandle("from")}
-                                style={{ zIndex: activeDateHandle === "from" ? 5 : 3 }}
-                                className="dual-range-thumb"
-                                aria-label="From date"
-                              />
-                              <input
-                                type="range"
-                                min={0}
-                                max={totalDays}
-                                value={Math.max(toDays, fromDays)}
-                                onChange={(e) => {
-                                  const days = Math.max(parseInt(e.target.value, 10), fromDays);
-                                  setDateRangeTo(days >= totalDays ? null : dayOffsetToDate(days));
-                                }}
-                                onPointerDown={() => setActiveDateHandle("to")}
-                                style={{ zIndex: activeDateHandle === "to" ? 5 : 4 }}
-                                className="dual-range-thumb"
-                                aria-label="To date"
-                              />
+                            {/* Timeline: assessment markers above a single track with two
+                                overlapping trim handles — see the .dual-range-thumb rules
+                                in globals.css for how the inputs stack without one
+                                swallowing the other's clicks. Markers and track share the
+                                same relative coordinate space so their % positions line up. */}
+                            <div className={`relative ${assessmentMarkers.length > 0 ? "pt-2.5" : ""}`}>
+                              {assessmentMarkers.length > 0 && (
+                                <div className="absolute inset-x-0 top-0 h-2.5">
+                                  {inRangeMarkers.map((m) => (
+                                    <div
+                                      key={m.date}
+                                      className="absolute bottom-0"
+                                      style={{ left: `${pct(m.days)}%`, transform: "translateX(-50%)" }}
+                                      title={`Assessed ${m.date}${m.isCurrent ? " (current)" : ""}`}
+                                    >
+                                      <div className={`w-1.5 h-1.5 rounded-full mx-auto ${m.isCurrent ? "bg-amber-500" : "bg-amber-400/70 dark:bg-amber-500/60"}`} />
+                                      <div className={`w-px h-1 mx-auto ${m.isCurrent ? "bg-amber-500" : "bg-amber-400/70 dark:bg-amber-500/60"}`} />
+                                    </div>
+                                  ))}
+                                  {beforeMarkers.length > 0 && (
+                                    <div
+                                      className="absolute bottom-0 left-0 text-[9px] leading-none text-amber-600 dark:text-amber-400 cursor-default"
+                                      title={`Assessed before ${sliderMinDate}:\n${titleFor(beforeMarkers)}`}
+                                    >
+                                      ‹{beforeMarkers.length}
+                                    </div>
+                                  )}
+                                  {afterMarkers.length > 0 && (
+                                    <div
+                                      className="absolute bottom-0 right-0 text-[9px] leading-none text-amber-600 dark:text-amber-400 cursor-default"
+                                      title={`Assessed after ${sliderMaxDate}:\n${titleFor(afterMarkers)}`}
+                                    >
+                                      {afterMarkers.length}›
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                              <div className="relative h-5 flex items-center">
+                                <div className="absolute inset-x-0 h-1.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
+                                <div
+                                  className="absolute h-1.5 rounded-full bg-blue-500"
+                                  style={{
+                                    left: `${pct(Math.min(fromDays, toDays))}%`,
+                                    right: `${100 - pct(Math.max(fromDays, toDays))}%`,
+                                  }}
+                                />
+                                <input
+                                  type="range"
+                                  min={0}
+                                  max={totalDays}
+                                  value={Math.min(fromDays, toDays)}
+                                  onChange={(e) => {
+                                    const days = Math.min(parseInt(e.target.value, 10), toDays);
+                                    setDateRangeFrom(days <= 0 ? null : dayOffsetToDate(days));
+                                  }}
+                                  onPointerDown={() => setActiveDateHandle("from")}
+                                  style={{ zIndex: activeDateHandle === "from" ? 5 : 3 }}
+                                  className="dual-range-thumb"
+                                  aria-label="From date"
+                                />
+                                <input
+                                  type="range"
+                                  min={0}
+                                  max={totalDays}
+                                  value={Math.max(toDays, fromDays)}
+                                  onChange={(e) => {
+                                    const days = Math.max(parseInt(e.target.value, 10), fromDays);
+                                    setDateRangeTo(days >= totalDays ? null : dayOffsetToDate(days));
+                                  }}
+                                  onPointerDown={() => setActiveDateHandle("to")}
+                                  style={{ zIndex: activeDateHandle === "to" ? 5 : 4 }}
+                                  className="dual-range-thumb"
+                                  aria-label="To date"
+                                />
+                              </div>
+                              <div className="flex items-center justify-between text-[9px] text-zinc-400 dark:text-zinc-500 tabular-nums">
+                                <span>{sliderMinDate}</span>
+                                <span>{sliderMaxDate}</span>
+                              </div>
                             </div>
+                            {assessmentMarkers.length > 0 && (
+                              <div className="flex items-center gap-1 text-[9px] text-zinc-400 dark:text-zinc-500">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                                Red List assessment date{assessmentMarkers.length > 1 ? "s" : ""}
+                              </div>
+                            )}
                             {(dateRangeFrom != null || dateRangeTo != null) && (
                               <button
                                 onClick={() => { setDateRangeFrom(null); setDateRangeTo(null); }}
