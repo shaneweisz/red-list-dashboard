@@ -121,7 +121,7 @@ export function resolveWhere(taxonId: string): WhereParts {
 
 export interface PreviousAssessment {
   id: number; year: string; category: string;
-  date: string | null; assessors: string | null; reviewers: string | null;
+  date: string | null; criteria: string | null; assessors: string | null; reviewers: string | null;
 }
 
 const ASSESSED_SELECT = `
@@ -561,7 +561,7 @@ export async function warmConnection(): Promise<void> {
 export async function getAssessmentHistory(sisTaxonId: number): Promise<PreviousAssessment[]> {
   const conn = await getConn();
   const sql = `
-    SELECT id, "year", category, "date", assessors, reviewers
+    SELECT id, "year", category, "date", criteria, assessors, reviewers
     FROM '${parquetUri("assessments.parquet")}'
     WHERE sis_taxon_id = $id
     ORDER BY seq`;
@@ -571,6 +571,7 @@ export async function getAssessmentHistory(sisTaxonId: number): Promise<Previous
     year: String(pa.year ?? ""),
     category: String(pa.category ?? ""),
     date: (pa.date as string) ?? null,
+    criteria: (pa.criteria as string) ?? null,
     assessors: (pa.assessors as string) ?? null,
     reviewers: (pa.reviewers as string) ?? null,
   }));

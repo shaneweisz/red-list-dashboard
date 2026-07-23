@@ -30,7 +30,7 @@ export interface RedListSpecies {
   // previous_assessments when a detail panel opens — empty in the list response.
   latest_assessors: string | null;
   latest_reviewers: string | null;
-  previous_assessments: { id: number; year: string; category: string; date: string | null; assessors: string | null; reviewers: string | null }[];
+  previous_assessments: { id: number; year: string; category: string; date: string | null; criteria: string | null; assessors: string | null; reviewers: string | null }[];
   systems: string[];
   growth_forms: string[];
   movement_pattern: string | null;

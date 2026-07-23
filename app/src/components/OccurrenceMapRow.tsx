@@ -276,6 +276,9 @@ interface OccurrenceMapRowProps {
    * small colored badge on the current-assessment marker in the date-range
    * timeline, alongside the same badges for previousAssessments' categories. */
   category?: string | null;
+  /** This species' current assessment's Red List criteria (e.g. "A2bd") — shown
+   * in the current-assessment marker's tooltip alongside its category. */
+  criteria?: string | null;
   /** CSV taxon group (e.g. "flowering_plants", "mushrooms") — used to default
    * preserved specimens ON for plants & fungi, where herbarium/fungarium
    * records are a core data source. */
@@ -292,7 +295,7 @@ interface OccurrenceMapRowProps {
    * building the date-range slider's assessment markers). Lazily populated by
    * RedListView's own history fetch, so may still be empty/stale on first render
    * of this tab — markers just don't appear yet in that case. */
-  previousAssessments?: { year: string; date: string | null; category?: string }[];
+  previousAssessments?: { year: string; date: string | null; category?: string; criteria?: string | null }[];
   /** Called once the occurrence data has loaded and there are no records to show,
    * letting the parent fall back to another tab (e.g. Catalogue of Life). */
   onEmpty?: () => void;
@@ -339,6 +342,7 @@ export default function OccurrenceMapRow({
   assessmentYear,
   assessmentDate,
   category,
+  criteria,
   taxonGroup,
   scientificName,
   nativeCountriesRedList,
@@ -883,19 +887,25 @@ export default function OccurrenceMapRow({
   // may not already include the current assessment depending on the caller.
   const assessmentMarkers = useMemo(() => {
     const seen = new Set<string>();
-    const markers: { date: string; category: string | null; isCurrent: boolean }[] = [];
-    const add = (date: string | null | undefined, year: string | number | null | undefined, isCurrent: boolean, cat?: string | null) => {
+    const markers: { date: string; category: string | null; criteria: string | null; isCurrent: boolean }[] = [];
+    const add = (
+      date: string | null | undefined,
+      year: string | number | null | undefined,
+      isCurrent: boolean,
+      cat?: string | null,
+      crit?: string | null,
+    ) => {
       const d = date && date.length >= 10 ? date.slice(0, 10) : year != null ? `${year}-01-01` : null;
       if (!d || seen.has(d)) return;
       seen.add(d);
-      markers.push({ date: d, category: cat ? normalizeCategory(cat) : null, isCurrent });
+      markers.push({ date: d, category: cat ? normalizeCategory(cat) : null, criteria: crit || null, isCurrent });
     };
-    add(assessmentDate, assessmentYear, true, category);
+    add(assessmentDate, assessmentYear, true, category, criteria);
     for (const a of previousAssessments ?? []) {
-      add(a.date, a.year, false, a.category);
+      add(a.date, a.year, false, a.category, a.criteria);
     }
     return markers.sort((a, b) => a.date.localeCompare(b.date));
-  }, [assessmentDate, assessmentYear, category, previousAssessments]);
+  }, [assessmentDate, assessmentYear, category, criteria, previousAssessments]);
 
   // Split view: partition occurrences by exact assessment date
   const { preAssessmentOccs, postAssessmentOccs } = useMemo(() => {
@@ -1858,8 +1868,9 @@ export default function OccurrenceMapRow({
                         const inRangeMarkers = markerDays.filter((m) => m.days >= 0 && m.days <= totalDays);
                         const beforeMarkers = markerDays.filter((m) => m.days < 0);
                         const afterMarkers = markerDays.filter((m) => m.days > totalDays);
-                        const titleFor = (list: typeof markerDays) =>
-                          list.map((m) => `${m.date}${m.category ? ` — ${m.category}` : ""}${m.isCurrent ? " (current)" : ""}`).join("\n");
+                        const markerLabel = (m: (typeof markerDays)[number]) =>
+                          `${m.date}${m.category ? ` — ${m.category}${m.criteria ? ` (${m.criteria})` : ""}` : ""}${m.isCurrent ? " (current)" : ""}`;
+                        const titleFor = (list: typeof markerDays) => list.map(markerLabel).join("\n");
 
                         // Snap a handle onto a nearby in-range assessment marker (within
                         // ~1.5% of the track) so it's easy to trim exactly to "everything
@@ -1904,7 +1915,7 @@ export default function OccurrenceMapRow({
                                         key={m.date}
                                         className="absolute bottom-0"
                                         style={{ left: `${pct(m.days)}%`, transform: "translateX(-50%)" }}
-                                        title={`Assessed ${m.date}${m.category ? ` — ${m.category}` : ""}${m.isCurrent ? " (current)" : ""}`}
+                                        title={`Assessed ${markerLabel(m)}`}
                                       >
                                         {color ? (
                                           <span

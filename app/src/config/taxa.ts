@@ -163,6 +163,11 @@ export const CATEGORY_COLORS: Record<string, string> = {
   LC: "#60c659",
   DD: "#6b7280",
   NE: "#a3a3a3",
+  // Pre-1994 Red Data Book category: a catch-all "Threatened" verdict, predating
+  // the CR/EN/VU split — not equivalent to any single modern category, so left
+  // un-normalized (see normalizeCategory below) with its own color rather than
+  // folded into one of them.
+  T: "#ea580c",
 };
 
 // Category order for sorting (most threatened first)
@@ -192,6 +197,7 @@ export const CATEGORY_NAMES: Record<string, string> = {
   LC: "Least Concern",
   DD: "Data Deficient",
   NE: "Not Evaluated",
+  T: "Threatened (pre-1994 category)",
 };
 
 // Older/historical Red List assessments sometimes use legacy category codes
