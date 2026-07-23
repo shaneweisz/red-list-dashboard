@@ -875,6 +875,99 @@ function BreakdownList({
   );
 }
 
+// "# Described Species" COLUMN HEADER info icon — explains what the number means
+// (IUCN Table 1a estimate vs. CoL backbone count) and, since #272/#274's IUCN↔CoL
+// toggle used to live as its own persistent row below the whole table, now also
+// carries that toggle instead — one info icon doing both jobs rather than a
+// tooltip AND a separate always-visible control. Click-to-open (not hover), same
+// reasoning as DescribedInfoIcon below: a hover-only tooltip vanishes the instant
+// the cursor leaves the tiny icon, before it reaches the toggle buttons inside.
+function DescribedSourceInfoIcon({ describedSource, setDescribedSource }: { describedSource: "iucn" | "col"; setDescribedSource: (s: "iucn" | "col") => void }) {
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ top: 0, right: 0, maxWidth: 0, maxHeight: 0 });
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: Event) => {
+      if (e instanceof KeyboardEvent && e.key !== "Escape") return;
+      if (e.type === "mousedown") {
+        const target = e.target as Node;
+        if (popoverRef.current?.contains(target) || btnRef.current?.contains(target)) return;
+      }
+      setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, [open]);
+
+  return (
+    <span className="relative inline-flex">
+      <button
+        type="button"
+        ref={btnRef}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (!open && btnRef.current) setPos(computePopoverPos(btnRef.current.getBoundingClientRect()));
+          setOpen((v) => !v);
+        }}
+        className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+      >
+        <FaInfoCircle size={12} />
+      </button>
+      {open && typeof document !== "undefined" && createPortal(
+        <div
+          ref={popoverRef}
+          onClick={(e) => e.stopPropagation()}
+          className="fixed z-[9999] px-3 py-2 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded-lg shadow-lg normal-case overflow-y-auto text-left"
+          style={{ top: pos.top, right: pos.right, maxWidth: pos.maxWidth, maxHeight: pos.maxHeight }}
+        >
+          <p>
+            {describedSource === "col"
+              ? `Described species from the ${COL_RELEASE_LABEL} backbone`
+              : "Estimates from IUCN Red List Table 1a (2026-1)"}
+          </p>
+          <p className="mt-1">
+            <a
+              href={describedSource === "col" ? COL_RELEASE_URL : IUCN_SOURCE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-300 hover:text-blue-200 underline"
+            >
+              View source
+            </a>
+          </p>
+          <p className="mt-1.5 flex items-center gap-1.5 text-zinc-300">
+            Source:
+            <span className="inline-flex rounded-md overflow-hidden border border-zinc-600 text-[10px] font-semibold">
+              {(["iucn", "col"] as const).map((src) => (
+                <button
+                  key={src}
+                  type="button"
+                  onClick={() => setDescribedSource(src)}
+                  className={`px-1.5 py-0.5 transition-colors ${
+                    describedSource === src
+                      ? "bg-zinc-200 text-zinc-900"
+                      : "text-zinc-300 hover:bg-zinc-600"
+                  }`}
+                >
+                  {src === "iucn" ? "IUCN" : "CoL"}
+                </button>
+              ))}
+            </span>
+          </p>
+        </div>,
+        document.body
+      )}
+    </span>
+  );
+}
+
 // "# Described Species" info icon — click-to-open (not hover), so the popover stays
 // put while the user moves the mouse onto it to read/click a link. An earlier
 // hover-only version (CSS :hover + an offset tooltip) made the tooltip vanish the
@@ -2563,22 +2656,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           <th className={flatMode ? numericThWrapClasses : numericThNoDividerClasses}>
             <span className="inline-flex items-center gap-1">
               # Described Species
-              <span className="relative group">
-                <a
-                  href={describedSource === "col" ? COL_RELEASE_URL : IUCN_SOURCE_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-                >
-                  <FaInfoCircle size={12} />
-                </a>
-                <span className="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible z-50 shadow-lg normal-case">
-                  {describedSource === "col"
-                    ? `Described species from the ${COL_RELEASE_LABEL} backbone`
-                    : "Estimates from IUCN Red List Table 1a (2026-1)"}
-                </span>
-              </span>
+              <DescribedSourceInfoIcon describedSource={describedSource} setDescribedSource={setDescribedSource} />
             </span>
           </th>
         )}
@@ -3235,33 +3313,6 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           {countryMode ? "Hover over a country, or click to lock it and multi-select." : "Click to filter, Cmd/Ctrl+click to multi-select."}
         </span>
         <div className="flex flex-wrap items-center gap-3 pl-3 sm:pl-0">
-          {/* IUCN ↔ CoL source toggle: flips the described count + recomputes % Assessed.
-              Hidden in Country View — its plain 3-column table doesn't show a
-              # Described column at all (see COUNTRY_SCOPED_HIDDEN_COLUMNS), so the
-              toggle would have nothing to actually affect there. */}
-          {!countryMode && (
-            <>
-              <span className="inline-flex items-center gap-1.5">
-                <span className="text-xs text-zinc-400 dark:text-zinc-500">Source for # Described:</span>
-                <span className="inline-flex rounded-md overflow-hidden border border-zinc-300 dark:border-zinc-600 text-[10px] font-semibold" title="Switch # Described Species between IUCN Table 1a estimates and the Catalogue of Life backbone, for the rows with an official IUCN figure — every other row (sub-groups, SSC groups) always shows the CoL-derived count">
-                  {(["iucn", "col"] as const).map((src) => (
-                    <button
-                      key={src}
-                      onClick={(e) => { e.stopPropagation(); setDescribedSource(src); }}
-                      className={`px-1.5 py-0.5 transition-colors ${
-                        describedSource === src
-                          ? "bg-zinc-700 text-white dark:bg-zinc-200 dark:text-zinc-900"
-                          : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700"
-                      }`}
-                    >
-                      {src === "iucn" ? "IUCN" : "CoL"}
-                    </button>
-                  ))}
-                </span>
-              </span>
-              <span className="text-zinc-300 dark:text-zinc-700">|</span>
-            </>
-          )}
           {layoutModeSelect}
           {(table1aMode || sscMode) && (
             <span className="relative group/lm">
