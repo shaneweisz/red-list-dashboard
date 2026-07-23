@@ -77,7 +77,11 @@ export interface TaxonomyNode {
 // ─── Sources ─────────────────────────────────────────────────────────
 
 const IUCN_SOURCE = "IUCN 2026-1";
-const IUCN_SOURCE_URL = "https://nc.iucnredlist.org/redlist/content/attachment_files/2026-1_RL_Table1a.pdf";
+// Exported so the "# Described" info popover (TaxaSummary.tsx) can link to the
+// official Table 1a PDF itself, in addition to a node's own specific citation
+// (MolluscaBase, WoRMS, etc.) — a node's estimatedSourceUrl is that specific
+// citation, not this one, whenever the two differ.
+export const IUCN_SOURCE_URL = "https://nc.iucnredlist.org/redlist/content/attachment_files/2026-1_RL_Table1a.pdf";
 const SSC_GROUP_URL_BASE = "https://iucn.org/our-union/commissions/group/";
 const COL_2025 = "Catalogue of Life 2025";
 const COL_2025_URL = "https://doi.org/10.48580/dgnfb";

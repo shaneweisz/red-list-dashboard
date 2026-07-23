@@ -14,7 +14,8 @@ import {
   type FilterRank, type DescribeFilterSegment,
 } from "@/lib/taxonomy-utils";
 import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
-import { isLiveDrilldownNode, nextDynamicRank, isDynamicNodeId, dynamicNodeDisplayName, dynamicNodeFilter, dynamicNodeRankInfo } from "@/lib/dynamic-taxon";
+import { IUCN_SOURCE_URL } from "@/config/taxonomy-tree";
+import { isLiveDrilldownNode, nextDynamicRank, isDynamicNodeId, dynamicNodeDisplayName, dynamicNodeFilter, dynamicNodeRankInfo, parseDynamicNodeId } from "@/lib/dynamic-taxon";
 import type { RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import { outdatedCutoffDate } from "@/lib/outdated";
 import { ALPHA2_TO_NAME } from "@/lib/countries";
@@ -81,8 +82,6 @@ interface Table1aSectionData {
    * state. Undefined in Table 1a mode, which has no catch-all concept. */
   catchAllId?: string;
 }
-
-const IUCN_SOURCE_URL = "https://nc.iucnredlist.org/redlist/content/attachment_files/2026-1_RL_Table1a.pdf";
 
 // SSC groups mode — one section per taxon that has an SSC pilot built out.
 // Add an entry here (nodeId, parentTaxon, title, catch-all id) when a new
@@ -1000,6 +999,18 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
   // to attach to.
   const filterSegs = source === "col" ? describeFilter(filter, node ? nodeId : undefined, Boolean(effectiveBreakdown?.length)) : [];
 
+  // True for an "Unclassified <Rank>" bucket (dynamicNodeDisplayName's blank-
+  // segment case) — most visible for Molluscs' Gastropoda, where ~44% of
+  // species have no order recorded in Catalogue of Life's data at all (e.g.
+  // Stylommatophora, 3,338+ assessed land snail species, has zero CoL
+  // order-level records). Called out explicitly here rather than left for a
+  // reader to infer from an otherwise-unremarkable row — a real, sizeable
+  // bucket that looks exactly like any other order/family/genus bucket
+  // without this note.
+  const dynSegments = isDynamicNodeId(nodeId) ? parseDynamicNodeId(nodeId)?.segments : undefined;
+  const isUnclassifiedBucket = Boolean(dynSegments?.length && dynSegments[dynSegments.length - 1].value === "");
+  const unclassifiedRankLabel = isUnclassifiedBucket ? dynamicNodeRankInfo(nodeId)!.label.toLowerCase() : "";
+
   return (
     <>
       <button
@@ -1026,21 +1037,42 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
           {source === "iucn" ? (
             // Only ever reached for a real (non-dynamic) node — see the early
             // return above, which bails out for "iucn" whenever node is absent.
+            // estimatedSource often names a specific citation ALONGSIDE IUCN
+            // ("IUCN 2026-1 (MolluscaBase 2025)") but estimatedSourceUrl only
+            // ever links that specific citation — the IUCN Table 1a PDF itself
+            // (where this figure is actually published) had no link at all.
+            // Show both whenever they genuinely differ; nodes that cite IUCN
+            // alone (estimatedSourceUrl === IUCN_SOURCE_URL) still get just one.
             <>
               <p>{node!.estimatedSource}</p>
-              {node!.estimatedSourceUrl && (
+              <p className="mt-1 flex flex-col items-start gap-0.5">
                 <a
-                  href={node!.estimatedSourceUrl}
+                  href={IUCN_SOURCE_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-1 inline-block text-blue-300 hover:text-blue-200 underline"
+                  className="text-blue-300 hover:text-blue-200 underline"
                 >
-                  View source
+                  View IUCN Red List Table 1a
                 </a>
-              )}
+                {node!.estimatedSourceUrl && node!.estimatedSourceUrl !== IUCN_SOURCE_URL && (
+                  <a
+                    href={node!.estimatedSourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-300 hover:text-blue-200 underline"
+                  >
+                    View source
+                  </a>
+                )}
+              </p>
             </>
           ) : (
             <>
+              {isUnclassifiedBucket && (
+                <p className="text-zinc-300 mb-1">
+                  These are real, counted species — they just have no {unclassifiedRankLabel} recorded in Catalogue of Life&apos;s data, so they land here rather than under a named {unclassifiedRankLabel}.
+                </p>
+              )}
               {!effectiveBreakdown?.length && filterSegs.length > 0 && (
                 <p>{renderFilterSegs(filterSegs)}</p>
               )}
