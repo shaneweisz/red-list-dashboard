@@ -12,10 +12,10 @@
 import * as fs from "fs";
 import * as path from "path";
 import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
-import { NODE_INDEX, getCsvGroupsForNode } from "@/lib/taxonomy-utils";
+import { NODE_INDEX, getCsvGroupsForNode, getAncestors } from "@/lib/taxonomy-utils";
 import { canonicalizeTaxonId, mapTaxonId } from "@/lib/data/taxonomy-constants";
 import { getTaxaSummary } from "@/lib/data/species-store";
-import { isDynamicNodeId, dynamicNodeFilter, buildDynamicNodeId, nextDynamicRank } from "@/lib/dynamic-taxon";
+import { isDynamicNodeId, dynamicNodeFilter, buildDynamicNodeId, rankOrderFor, type DynamicSegment } from "@/lib/dynamic-taxon";
 import { filterToSql } from "@/lib/taxonomy-sql";
 
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -660,23 +660,40 @@ export interface TaxonSuggestion {
   /** Lowercased token to pass as ?taxa= (what resolveWhere/querySpecies match on) —
    * kept as the fallback when nodeId can't be resolved. */
   taxon: string;
-  /** A curated static node id (e.g. "felidae") or a synthetic dynamic drilldown id
-   * (e.g. "reptiles~order:squamata") this rank+value resolves to, or null if neither
-   * — in which case the caller falls back to the old bare `taxon` browse. Resolving
-   * to a real node means the caller can select it as a sub-group (selectedSubgroups)
-   * instead of an arbitrary ?taxa= token, so TaxaSummary's ancestor-breadcrumb rows
-   * and the per-taxon stat card both pick it up for free (see resolveTaxonSuggestionNode). */
+  /** A curated by-taxon node id or a synthetic dynamic drilldown id (e.g.
+   * "reptiles~order:squamata", or a multi-segment "crustaceans~class:malacostraca~
+   * order:isopoda") this rank+value resolves to, or null if neither — in which case
+   * the caller falls back to the old bare `taxon` browse. Resolving to a real node
+   * means the caller can select it as a sub-group (selectedSubgroups) instead of an
+   * arbitrary ?taxa= token, so TaxaSummary's ancestor-breadcrumb rows and the
+   * per-taxon stat card both pick it up for free (see resolveTaxonSuggestionNode).
+   * Deliberately never an SSC Specialist Group node — those are a second, independent
+   * lens over the same species (see taxonomy-tree.ts's "SSC SPECIALIST GROUPS"
+   * section) reachable only via SSC groups mode, not a substitute for the plain
+   * by-taxon node a tree-click would reach. */
   nodeId: string | null;
 }
 
-// rank+value → a curated static node whose filter is EXACTLY that one class/order/family
-// dimension (a single value, no other filters/exclusions) — the same node a user reaches
-// by clicking through the tree, so a search jump to it gets full ancestor breadcrumbs and
-// curated labels for free. Mirrors GROUP_TO_LEAF_NODE's single-dimension-match pattern above.
+// SSC Specialist Group nodes (taxonomy-tree.ts's "ssc-groups"/"ssc-reptile-groups"/etc.
+// containers and their children) all use the "ssc-" id prefix by convention; the
+// ancestor-chain check is a defensive backstop in case a future group's id doesn't
+// follow it. suggestTaxa must never resolve a search hit to one of these — see
+// TaxonSuggestion.nodeId's doc comment.
+function isSscGroupNode(id: string): boolean {
+  if (id.startsWith("ssc-")) return true;
+  return getAncestors(id).some((a) => a.startsWith("ssc-"));
+}
+
+// rank+value → a curated by-taxon node whose filter is EXACTLY that one class/order/family
+// dimension (a single value, no other filters/exclusions), excluding SSC Specialist Group
+// nodes — the same node a user reaches by clicking through the default tree, so a search
+// jump to it gets full ancestor breadcrumbs and curated labels for free. Mirrors
+// GROUP_TO_LEAF_NODE's single-dimension-match pattern above.
 const RANK_VALUE_TO_NODE: Map<string, string> = (() => {
   const m = new Map<string, string>();
   const DIMS = ["classNames", "orderNames", "families"] as const;
   for (const [id, node] of NODE_INDEX) {
+    if (isSscGroupNode(id)) continue;
     const f = node.filter;
     const dims = DIMS.filter((k) => f[k]?.length);
     if (dims.length !== 1 || f[dims[0]]!.length !== 1) continue;
@@ -689,19 +706,57 @@ const RANK_VALUE_TO_NODE: Map<string, string> = (() => {
   return m;
 })();
 
-// Resolves a suggestTaxa match to a real node: a curated static node if one matches
-// exactly, else a single-segment dynamic id built against the CSV group's leaf display
-// node — but only when this rank is genuinely the FIRST live-enumerable level for that
-// root (nextDynamicRank on the bare root), so the id is well-formed for later expansion.
-// A "family" match under a root that drills order-first (the common case) would produce
-// a malformed skip-ahead id if built here, so it's left null and falls back to the bare
-// ?taxa= browse instead — no ancestor breadcrumb for that one, but no broken node either.
-function resolveTaxonSuggestionNode(rank: TaxonSuggestion["rank"], value: string, taxonGroup: string): string | null {
+const RANK_TO_COLUMN: Record<TaxonSuggestion["rank"], string> = {
+  class: "class_name", order: "order_name", family: "family",
+};
+
+// Resolves a suggestTaxa match to a real node: a curated by-taxon node if one matches
+// exactly (never an SSC Specialist Group node — see isSscGroupNode), else a dynamic
+// drilldown id built against the CSV group's leaf display node. A dynamic id needs every
+// rank from the root's first live-enumerable level down to the matched one, in order
+// (e.g. Isopoda is an "order" match, but Crustaceans drills class-first, so the id needs
+// a class:<value> segment before order:isopoda) — dynamicNodeFilter ANDs each segment's
+// field independently, so a single skip-ahead segment would still filter species
+// correctly, but would leave nextDynamicRank/dynamicNodeAncestors reading the wrong depth
+// for further expansion and ancestor rows. The extra rank value(s) come from one small
+// lookup against a representative row (cheap: at most 2 columns, exact-match on already-
+// warm parquets, LIMIT 1). Falls back to null (old bare ?taxa= browse) only if the root
+// isn't live-drillable at all, or an ancestor rank's lookup comes back empty.
+async function resolveTaxonSuggestionNode(
+  conn: DuckDBConnection, rank: TaxonSuggestion["rank"], value: string, taxonGroup: string,
+): Promise<string | null> {
   const staticHit = RANK_VALUE_TO_NODE.get(`${rank}:${value}`);
   if (staticHit) return staticHit;
   const leafRoot = GROUP_TO_LEAF_NODE.get(taxonGroup);
-  if (!leafRoot || nextDynamicRank(leafRoot) !== rank) return null;
-  return buildDynamicNodeId(leafRoot, [{ rank, value }]);
+  if (!leafRoot) return null;
+  const order = rankOrderFor(leafRoot);
+  const idx = order.indexOf(rank);
+  if (idx === -1) return null;
+  const segments: DynamicSegment[] = [];
+  if (idx > 0) {
+    // genus is always last in rankOrderFor's list, and idx points at class/order/family
+    // (suggestTaxa never matches genus), so a rank strictly before idx can never be
+    // "genus" — safe to narrow to TaxonSuggestion["rank"] for the RANK_TO_COLUMN lookup.
+    const priorRanks = order.slice(0, idx) as TaxonSuggestion["rank"][];
+    const cols = priorRanks.map((r) => RANK_TO_COLUMN[r]);
+    const matchCol = RANK_TO_COLUMN[rank];
+    const sql = `
+      SELECT ${cols.join(", ")} FROM (
+        SELECT ${cols.join(", ")} FROM '${parquetUri("assessed.parquet")}' WHERE ${matchCol} = $v AND taxon_group = $tg
+        UNION ALL
+        SELECT ${cols.join(", ")} FROM '${parquetUri("unassessed.parquet")}' WHERE ${matchCol} = $v AND taxon_group = $tg
+      ) LIMIT 1`;
+    const rows = (await conn.runAndReadAll(sql, { v: value, tg: taxonGroup })).getRowObjects();
+    if (rows.length === 0) return null;
+    for (const r of priorRanks) {
+      const v = rows[0][RANK_TO_COLUMN[r]];
+      // Coalesce a null ancestor rank to "" — the Unclassified bucket for that rank,
+      // same convention filterToSql/matchesFilter already use, not an error case.
+      segments.push({ rank: r, value: v == null ? "" : String(v).toLowerCase() });
+    }
+  }
+  segments.push({ rank, value });
+  return buildDynamicNodeId(leafRoot, segments);
 }
 
 // Recognize a higher-rank taxon (class / order / family) the user is typing, so the
@@ -737,14 +792,14 @@ export async function suggestTaxa(query: string, limit = 3): Promise<TaxonSugges
     ORDER BY (name = $q) DESC, length(name), name
     LIMIT ${lim}`;
   const rows = (await conn.runAndReadAll(sql, { q })).getRowObjects();
-  return rows.map((r) => {
+  return Promise.all(rows.map(async (r) => {
     const name = String(r.name);
     const rank = String(r.rank) as TaxonSuggestion["rank"];
     return {
       name: name.charAt(0).toUpperCase() + name.slice(1),
       rank,
       taxon: name,
-      nodeId: resolveTaxonSuggestionNode(rank, name, String(r.taxon_group)),
+      nodeId: await resolveTaxonSuggestionNode(conn, rank, name, String(r.taxon_group)),
     };
-  });
+  }));
 }

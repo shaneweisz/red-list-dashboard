@@ -63,7 +63,11 @@ const ROOT_RANK_ORDER: Record<string, DynamicRank[]> = {
   other_invertebrates: CLASS_FIRST_RANK_ORDER,
   "inv-other_invertebrates": CLASS_FIRST_RANK_ORDER,
 };
-function rankOrderFor(rootId: string): DynamicRank[] {
+/** The rank sequence a root drills through (e.g. ["order","family","genus"], or
+ *  ["class","order","family","genus"] for a class-first root) — exported so a
+ *  caller building a multi-segment id from a single matched rank (e.g. search's
+ *  resolveTaxonSuggestionNode) knows which ranks must come before it in the chain. */
+export function rankOrderFor(rootId: string): DynamicRank[] {
   return ROOT_RANK_ORDER[rootId] ?? DEFAULT_RANK_ORDER;
 }
 
