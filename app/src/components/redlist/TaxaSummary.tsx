@@ -451,6 +451,25 @@ function computePopoverPos(rect: { top: number; bottom: number; left: number }):
   };
 }
 
+// Same idea as computePopoverPos, but opens ABOVE the trigger instead of below —
+// for a column HEADER icon (DescribedSourceInfoIcon), where opening below would
+// drop the popover straight onto the table's own first data row instead of into
+// the open space above the header.
+function computePopoverPosAbove(rect: { top: number; bottom: number; left: number }): { bottom: number; right: number; maxWidth: number; maxHeight: number } {
+  const margin = 8;
+  const gap = 4;
+  const spaceLeft = rect.left - gap - margin;
+  const maxWidth = Math.max(120, Math.min(POPOVER_MAX_WIDTH, spaceLeft));
+  const preferredMaxHeight = window.innerHeight * 0.7;
+  const spaceAbove = rect.top - 4 - margin;
+  return {
+    bottom: window.innerHeight - rect.top + 4,
+    right: window.innerWidth - rect.left + gap,
+    maxWidth,
+    maxHeight: Math.max(100, Math.min(preferredMaxHeight, spaceAbove)),
+  };
+}
+
 // Paginated species-level list rendered beside the main popup when a count row
 // (Assessed / Not Evaluated / CoL Match / No CoL Match) is clicked — lets a
 // specialist scroll through every species in that bucket without leaving the page.
@@ -886,7 +905,7 @@ function DescribedSourceInfoIcon({ describedSource, setDescribedSource }: { desc
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState({ top: 0, right: 0, maxWidth: 0, maxHeight: 0 });
+  const [pos, setPos] = useState({ bottom: 0, right: 0, maxWidth: 0, maxHeight: 0 });
 
   useEffect(() => {
     if (!open) return;
@@ -913,7 +932,7 @@ function DescribedSourceInfoIcon({ describedSource, setDescribedSource }: { desc
         ref={btnRef}
         onClick={(e) => {
           e.stopPropagation();
-          if (!open && btnRef.current) setPos(computePopoverPos(btnRef.current.getBoundingClientRect()));
+          if (!open && btnRef.current) setPos(computePopoverPosAbove(btnRef.current.getBoundingClientRect()));
           setOpen((v) => !v);
         }}
         className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
@@ -925,7 +944,7 @@ function DescribedSourceInfoIcon({ describedSource, setDescribedSource }: { desc
           ref={popoverRef}
           onClick={(e) => e.stopPropagation()}
           className="fixed z-[9999] px-3 py-2 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded-lg shadow-lg normal-case overflow-y-auto text-left"
-          style={{ top: pos.top, right: pos.right, maxWidth: pos.maxWidth, maxHeight: pos.maxHeight }}
+          style={{ bottom: pos.bottom, right: pos.right, maxWidth: pos.maxWidth, maxHeight: pos.maxHeight }}
         >
           <p>
             {describedSource === "col"
