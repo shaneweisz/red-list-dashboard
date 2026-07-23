@@ -4052,9 +4052,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                                 mounted={mounted}
                                 assessmentYear={assessmentYear}
                                 assessmentDate={s.assessment_date}
+                                category={s.category}
+                                criteria={s.criteria}
                                 taxonGroup={s.taxon_group}
                                 scientificName={s.scientific_name}
                                 nativeCountriesRedList={s.countries}
+                                previousAssessments={(s.sis_taxon_id ? assessmentHistory[s.sis_taxon_id] : null) ?? s.previous_assessments}
                                 onEmpty={s.category === "NE" ? handleOccurrenceEmpty : undefined}
                               />
                             </div>

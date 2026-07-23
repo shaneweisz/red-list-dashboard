@@ -7,6 +7,7 @@ import type maplibregl from "maplibre-gl";
 import { mapTaxonId } from "@/lib/data/taxonomy-constants";
 import { InatObservation, getThumbUrl, InatPhotoWithPreview } from "./InatPhotoCard";
 import { QualityFlag, QUALITY_FLAG_LABELS, QUALITY_FLAG_DESCRIPTIONS, QUALITY_FLAG_SOURCES } from "@/lib/coordinate-cleaning";
+import { CATEGORY_COLORS, normalizeCategory } from "@/config/taxa";
 import { FaInfoCircle } from "react-icons/fa";
 
 // Fixed page size for iNat photo grid (2 columns x 5 rows)
@@ -182,6 +183,17 @@ function dateToNumeric(eventDate?: string | null, year?: number | null): number 
   return null;
 }
 
+// Comparable yyyy-mm-dd key for the date-range filter — full eventDate when
+// available, otherwise Jan 1 of `year` (same fallback the split-view before/after
+// partition uses). Records with neither can't be placed in a date window, so they
+// have no key and are excluded whenever the date-range filter is active.
+function occurrenceDateKey(o: OccurrenceFeature): string | null {
+  const e = o.properties.eventDate;
+  if (e && e.length >= 10) return e.slice(0, 10);
+  if (o.properties.year != null) return `${String(o.properties.year).padStart(4, "0")}-01-01`;
+  return null;
+}
+
 // Fixed absolute color scale so the same year always maps to the same color
 // across all species. Simple continuous hue gradient: orange-red(20) → green(130).
 // Anchored so that the last ~20 years span the full visible range.
@@ -234,6 +246,10 @@ const GBIF_BASIS_OF_RECORD: Record<string, string> = {
 // How many additional records to fetch per "Load more" click on a Basis of Record row.
 const BASIS_OF_RECORD_LOAD_MORE_BATCH = 200;
 
+// How many additional records to fetch per click of the general "Load N more" button
+// next to the "Loaded X of Y" badge (all basis-of-record categories together).
+const OVERALL_LOAD_MORE_BATCH = 200;
+
 interface RecordTypeBreakdown {
   humanObservation: number;
   machineObservation: number;
@@ -256,6 +272,13 @@ interface OccurrenceMapRowProps {
   mounted: boolean;
   assessmentYear?: number | null;
   assessmentDate?: string | null;
+  /** This species' current IUCN Red List category (e.g. "VU", "EN") — shown as a
+   * small colored badge on the current-assessment marker in the date-range
+   * timeline, alongside the same badges for previousAssessments' categories. */
+  category?: string | null;
+  /** This species' current assessment's Red List criteria (e.g. "A2bd") — shown
+   * in the current-assessment marker's tooltip alongside its category. */
+  criteria?: string | null;
   /** CSV taxon group (e.g. "flowering_plants", "mushrooms") — used to default
    * preserved specimens ON for plants & fungi, where herbarium/fungarium
    * records are a core data source. */
@@ -266,6 +289,13 @@ interface OccurrenceMapRowProps {
    * List assessment's locations (already filtered to origin="Native" upstream in
    * scripts/fetch-redlist-species.ts) — the "Red List" native-range source. */
   nativeCountriesRedList?: string[];
+  /** This species' past Red List assessments (most recent one is covered by
+   * assessmentDate/assessmentYear above, not repeated here unless the caller's
+   * history array happens to include it too — de-duped by date either way when
+   * building the date-range slider's assessment markers). Lazily populated by
+   * RedListView's own history fetch, so may still be empty/stale on first render
+   * of this tab — markers just don't appear yet in that case. */
+  previousAssessments?: { year: string; date: string | null; category?: string; criteria?: string | null }[];
   /** Called once the occurrence data has loaded and there are no records to show,
    * letting the parent fall back to another tab (e.g. Catalogue of Life). */
   onEmpty?: () => void;
@@ -311,9 +341,12 @@ export default function OccurrenceMapRow({
   mounted,
   assessmentYear,
   assessmentDate,
+  category,
+  criteria,
   taxonGroup,
   scientificName,
   nativeCountriesRedList,
+  previousAssessments,
   onEmpty,
 }: OccurrenceMapRowProps) {
   const [occurrences, setOccurrences] = useState<OccurrenceFeature[]>([]);
@@ -339,18 +372,26 @@ export default function OccurrenceMapRow({
   // Custom max-uncertainty entry, shown instead of the preset <select> when active
   const [customUncertaintyMode, setCustomUncertaintyMode] = useState(false);
   const [customUncertaintyInput, setCustomUncertaintyInput] = useState("");
+  // Date-range filter — client-side, narrows the *already-loaded* sample to an
+  // eventDate window. null means "no restriction on that end" (mirrors
+  // maxUncertainty's null-means-off pattern); both start null so the slider's
+  // handles sit at the full loaded range until the user actually drags one.
+  const [dateRangeFrom, setDateRangeFrom] = useState<string | null>(null);
+  const [dateRangeTo, setDateRangeTo] = useState<string | null>(null);
   // Coordinate-cleaning checks (zero/equal coords, GBIF HQ, duplicates — see
   // src/lib/coordinate-cleaning.ts), individually toggleable. Default all off —
   // opt-in, since these are plausibility heuristics with real false-positive risk
   // (documented per-check), not the same as GBIF's own hasGeospatialIssue=false
-  // parsing-error filter, which stays on unconditionally upstream of this. Zero/
-  // null-island coordinates are the one exception — there's no plausible reading
-  // of (0,0) or an axis-zero point as a real location, so it's on by default.
+  // parsing-error filter, which stays on unconditionally upstream of this. Two
+  // exceptions default on: zero/null-island coordinates (no plausible reading of
+  // (0,0) or an axis-zero point as a real location), and repeated coordinates
+  // (an exact duplicate of another record adds nothing on the map and is a very
+  // common GBIF artifact — only the repeat is hidden, the first stays visible).
   const [appliedChecks, setAppliedChecks] = useState<Record<QualityFlag, boolean>>({
     ZERO_COORDINATE: true,
     EQUAL_COORDINATES: false,
     GBIF_HEADQUARTERS: false,
-    DUPLICATE: false,
+    DUPLICATE: true,
     NEAR_CAPITAL: false,
     NEAR_CENTROID: false,
     NEAR_INSTITUTION: false,
@@ -400,7 +441,15 @@ export default function OccurrenceMapRow({
   const [cleaningFilterOpen, setCleaningFilterOpen] = useState(false);
   const cleaningFilterRef = useRef<HTMLDivElement>(null);
 
-  // Overlays dropdown state (Protected areas / POWO native range / IUCN native range)
+  // Date-range filter dropdown state
+  const [dateRangeOpen, setDateRangeOpen] = useState(false);
+  const dateRangeRef = useRef<HTMLDivElement>(null);
+  // Which of the two overlapping range-input handles was most recently grabbed —
+  // given the raise-on-interaction z-index below, so whichever the user is actively
+  // dragging always stays on top and stays grabbable even where the handles overlap.
+  const [activeDateHandle, setActiveDateHandle] = useState<"from" | "to" | null>(null);
+
+  // Overlays dropdown state (Protected areas / POWO native range / IUCN native countries)
   const [overlaysOpen, setOverlaysOpen] = useState(false);
   const overlaysRef = useRef<HTMLDivElement>(null);
 
@@ -436,6 +485,18 @@ export default function OccurrenceMapRow({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [cleaningFilterOpen]);
+
+  // Close date-range popover on outside click
+  useEffect(() => {
+    if (!dateRangeOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (dateRangeRef.current && !dateRangeRef.current.contains(e.target as Node)) {
+        setDateRangeOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [dateRangeOpen]);
 
   // Close overlays popover on outside click
   useEffect(() => {
@@ -476,6 +537,13 @@ export default function OccurrenceMapRow({
   const [totalOccurrences, setTotalOccurrences] = useState<number | null>(null);
   // Bounding box from API: [minLon, minLat, maxLon, maxLat]
   const [bbox, setBbox] = useState<[number, number, number, number] | null>(null);
+  // How far into GBIF's own (unfiltered, all-basis-of-record) result ordering we've
+  // paged — GBIF has no date-sort param (see api/occurrences/route.ts), but its default
+  // order is newest-year-first, so paging further with this offset surfaces the next
+  // oldest batch. Kept separate from occurrences.length, which also grows via
+  // loadMoreForCategory's per-category fetches and would desync from what GBIF's
+  // unfiltered ordering actually considers "next" if reused here.
+  const [generalOffset, setGeneralOffset] = useState(0);
 
   // Fetch occurrences (re-fetches when sample size changes)
   useEffect(() => {
@@ -494,6 +562,7 @@ export default function OccurrenceMapRow({
         setOccurrences(features);
         setTotalOccurrences(data.metadata?.total ?? null);
         setBbox(data.metadata?.bbox ?? null);
+        setGeneralOffset(features.length);
       })
       .catch(console.error)
       .finally(() => setLoadingOccurrences(false));
@@ -502,6 +571,10 @@ export default function OccurrenceMapRow({
   // Basis-of-record category currently fetching more records, if any (drives the
   // per-row "Load more" spinner/disabled state in the dropdown).
   const [loadingMoreCategory, setLoadingMoreCategory] = useState<string | null>(null);
+  // True while the general "Load N more" button (next to the "Loaded X of Y" badge)
+  // is fetching the next unfiltered batch — separate from loadingMoreCategory since
+  // this isn't scoped to one basis-of-record category.
+  const [loadingMoreOverall, setLoadingMoreOverall] = useState(false);
 
   // Load another batch of just one basis-of-record category (e.g. "load 200 more
   // Preserved specimen records"), independent of the overall sample-size selector —
@@ -536,6 +609,37 @@ export default function OccurrenceMapRow({
       .catch(console.error)
       .finally(() => setLoadingMoreCategory(null));
   }, [occurrences, speciesKey, countryCode]);
+
+  // Load the next batch across all basis-of-record categories together — the general
+  // "Load N more" button next to the "Loaded X of Y" badge. Paginates via generalOffset
+  // rather than occurrences.length so per-category loads (loadMoreForCategory) don't
+  // desync it from GBIF's own unfiltered offset; de-dupes the merge by gbifID for the
+  // same reason (a record already pulled in by a per-category load may reappear here).
+  const loadMoreOverall = useCallback(() => {
+    setLoadingMoreOverall(true);
+    const params = new URLSearchParams({
+      speciesKey: speciesKey.toString(),
+      limit: OVERALL_LOAD_MORE_BATCH.toString(),
+      offset: generalOffset.toString(),
+    });
+    if (countryCode) {
+      params.set("country", countryCode);
+    }
+    fetch(`/api/occurrences?${params}`)
+      .then((res) => res.json())
+      .then((data) => {
+        const newFeatures: OccurrenceFeature[] = data.features || [];
+        setOccurrences((prev) => {
+          const seen = new Set(prev.map((o) => o.properties.gbifID));
+          const toAdd = newFeatures.filter((f) => !seen.has(f.properties.gbifID));
+          return [...prev, ...toAdd];
+        });
+        setGeneralOffset((prev) => prev + newFeatures.length);
+        setTotalOccurrences(data.metadata?.total ?? null);
+      })
+      .catch(console.error)
+      .finally(() => setLoadingMoreOverall(false));
+  }, [generalOffset, speciesKey, countryCode]);
 
   // Fetch breakdown data
   useEffect(() => {
@@ -643,8 +747,11 @@ export default function OccurrenceMapRow({
   const powoRangeGeoJson = useMemo(() => buildRangeGeoJson(nativeCountriesWcvp), [buildRangeGeoJson, nativeCountriesWcvp]);
   const iucnRangeGeoJson = useMemo(() => buildRangeGeoJson(nativeCountriesRedList), [buildRangeGeoJson, nativeCountriesRedList]);
 
-  // Multi-stage filtering pipeline
-  const filteredOccurrences = useMemo(() => {
+  // Multi-stage filtering pipeline, minus the date-range filter — kept as a separate
+  // memo so the date-range slider's own track (sliderMinDate/sliderMaxDate below)
+  // reflects the full span these other filters allow through, not a span already
+  // narrowed by wherever the slider's own handles currently sit.
+  const dateFilterableOccurrences = useMemo(() => {
     let result = occurrences;
     // 1. Basis of record checkboxes
     result = result.filter((o) => checkedTypes[classifyOccurrence(o) as keyof typeof checkedTypes]);
@@ -664,6 +771,18 @@ export default function OccurrenceMapRow({
     return result;
   }, [occurrences, checkedTypes, maxUncertainty, appliedChecks, nativeRangeOnly, effectiveNativeCountries]);
 
+  // 5. Date range — applied last, on top of every filter above.
+  const filteredOccurrences = useMemo(() => {
+    if (dateRangeFrom == null && dateRangeTo == null) return dateFilterableOccurrences;
+    return dateFilterableOccurrences.filter((o) => {
+      const d = occurrenceDateKey(o);
+      if (!d) return false;
+      if (dateRangeFrom != null && d < dateRangeFrom) return false;
+      if (dateRangeTo != null && d > dateRangeTo) return false;
+      return true;
+    });
+  }, [dateFilterableOccurrences, dateRangeFrom, dateRangeTo]);
+
   // Of the loaded occurrences that pass every other active filter, how many are
   // outside the species' native range — i.e. how many the "Native range only"
   // checkbox would additionally hide if switched on right now.
@@ -677,10 +796,16 @@ export default function OccurrenceMapRow({
         if (u == null || u > maxUncertainty) continue;
       }
       if (o.properties.qualityFlags?.some((f) => appliedChecks[f as QualityFlag])) continue;
+      if (dateRangeFrom != null || dateRangeTo != null) {
+        const d = occurrenceDateKey(o);
+        if (!d) continue;
+        if (dateRangeFrom != null && d < dateRangeFrom) continue;
+        if (dateRangeTo != null && d > dateRangeTo) continue;
+      }
       if (isOutsideNativeRange(o.properties.countryCode, effectiveNativeCountries)) count++;
     }
     return count;
-  }, [occurrences, checkedTypes, maxUncertainty, appliedChecks, effectiveNativeCountries]);
+  }, [occurrences, checkedTypes, maxUncertainty, appliedChecks, effectiveNativeCountries, dateRangeFrom, dateRangeTo]);
 
   // Per-check counts among the currently loaded occurrences (independent of whether
   // that check is applied), for the coordinate-cleaning dropdown
@@ -697,7 +822,7 @@ export default function OccurrenceMapRow({
 
   // For each check: of the loaded records it flags, how many would actually appear on
   // the map if just this one check were switched off (i.e. they still pass every other
-  // active filter — basis of record, uncertainty, year range, native range, and every
+  // active filter — basis of record, uncertainty, date range, native range, and every
   // other applied coordinate-cleaning check). Mirrors basisLoadedShownCounts's "shown
   // of loaded" semantics so both dropdowns read the same way.
   const flagShownCounts = useMemo(() => {
@@ -709,6 +834,12 @@ export default function OccurrenceMapRow({
         if (u == null || u > maxUncertainty) continue;
       }
       if (nativeRangeOnly && isOutsideNativeRange(o.properties.countryCode, effectiveNativeCountries)) continue;
+      if (dateRangeFrom != null || dateRangeTo != null) {
+        const d = occurrenceDateKey(o);
+        if (!d) continue;
+        if (dateRangeFrom != null && d < dateRangeFrom) continue;
+        if (dateRangeTo != null && d > dateRangeTo) continue;
+      }
       const flags = o.properties.qualityFlags ?? [];
       for (const f of flags) {
         const key = f as QualityFlag;
@@ -717,7 +848,7 @@ export default function OccurrenceMapRow({
       }
     }
     return counts;
-  }, [occurrences, checkedTypes, maxUncertainty, appliedChecks, nativeRangeOnly, effectiveNativeCountries]);
+  }, [occurrences, checkedTypes, maxUncertainty, appliedChecks, nativeRangeOnly, effectiveNativeCountries, dateRangeFrom, dateRangeTo]);
 
   const flagDefs = useMemo(
     () =>
@@ -736,16 +867,45 @@ export default function OccurrenceMapRow({
     setAppliedChecks((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  // Date range for the split view slider
+  // Full date span of what's currently loaded and passing every filter except the
+  // date-range filter itself — shared as the track bounds for both the split-view
+  // before/after slider and the date-range filter slider below, so neither slider's
+  // own bounds shrink as the user drags it.
   const { sliderMinDate, sliderMaxDate } = useMemo(() => {
-    const dates = filteredOccurrences
+    const dates = dateFilterableOccurrences
       .map((o) => o.properties.eventDate)
       .filter((d): d is string => d != null && d.length >= 10)
       .map((d) => d.slice(0, 10));
     if (dates.length === 0) return { sliderMinDate: splitDate, sliderMaxDate: splitDate };
     dates.sort();
     return { sliderMinDate: dates[0], sliderMaxDate: dates[dates.length - 1] };
-  }, [filteredOccurrences, splitDate]);
+  }, [dateFilterableOccurrences, splitDate]);
+
+  // Assessment dates to mark on the date-range timeline — the current assessment
+  // plus every past one (year-only entries fall back to Jan 1 of that year, same
+  // as elsewhere in this file), de-duped by date since previousAssessments may or
+  // may not already include the current assessment depending on the caller.
+  const assessmentMarkers = useMemo(() => {
+    const seen = new Set<string>();
+    const markers: { date: string; category: string | null; criteria: string | null; isCurrent: boolean }[] = [];
+    const add = (
+      date: string | null | undefined,
+      year: string | number | null | undefined,
+      isCurrent: boolean,
+      cat?: string | null,
+      crit?: string | null,
+    ) => {
+      const d = date && date.length >= 10 ? date.slice(0, 10) : year != null ? `${year}-01-01` : null;
+      if (!d || seen.has(d)) return;
+      seen.add(d);
+      markers.push({ date: d, category: cat ? normalizeCategory(cat) : null, criteria: crit || null, isCurrent });
+    };
+    add(assessmentDate, assessmentYear, true, category, criteria);
+    for (const a of previousAssessments ?? []) {
+      add(a.date, a.year, false, a.category, a.criteria);
+    }
+    return markers.sort((a, b) => a.date.localeCompare(b.date));
+  }, [assessmentDate, assessmentYear, category, criteria, previousAssessments]);
 
   // Split view: partition occurrences by exact assessment date
   const { preAssessmentOccs, postAssessmentOccs } = useMemo(() => {
@@ -810,7 +970,7 @@ export default function OccurrenceMapRow({
 
   // Per-category counts among the currently loaded occurrences: how many are in this
   // basis-of-record category at all ("loaded"), and of those, how many also survive
-  // every other active filter — uncertainty, year range, coordinate cleaning, native
+  // every other active filter — uncertainty, date range, coordinate cleaning, native
   // range — but not the basis-of-record checkboxes themselves ("shown"). Distinct from
   // pillDefs' counts, which are true GBIF-wide totals from a separate server aggregation.
   const basisLoadedShownCounts = useMemo(() => {
@@ -825,10 +985,16 @@ export default function OccurrenceMapRow({
       }
       if (o.properties.qualityFlags?.some((f) => appliedChecks[f as QualityFlag])) continue;
       if (nativeRangeOnly && isOutsideNativeRange(o.properties.countryCode, effectiveNativeCountries)) continue;
+      if (dateRangeFrom != null || dateRangeTo != null) {
+        const d = occurrenceDateKey(o);
+        if (!d) continue;
+        if (dateRangeFrom != null && d < dateRangeFrom) continue;
+        if (dateRangeTo != null && d > dateRangeTo) continue;
+      }
       entry.shown++;
     }
     return counts;
-  }, [occurrences, maxUncertainty, appliedChecks, nativeRangeOnly, effectiveNativeCountries]);
+  }, [occurrences, maxUncertainty, appliedChecks, nativeRangeOnly, effectiveNativeCountries, dateRangeFrom, dateRangeTo]);
 
   // Build GeoJSON FeatureCollection with computed styling properties for the circle layer
   const buildStyledFeatureCollection = useCallback((
@@ -1236,6 +1402,20 @@ export default function OccurrenceMapRow({
               ) : (
                 <>Loaded <strong>{occurrences.length.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> total GBIF records.</>
               )}
+              {!isFullSample && (
+                <>
+                  {" "}
+                  <button
+                    onClick={loadMoreOverall}
+                    disabled={loadingMoreOverall}
+                    className="underline decoration-dotted hover:decoration-solid disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {loadingMoreOverall
+                      ? "Loading…"
+                      : `Click to load ${Math.min(OVERALL_LOAD_MORE_BATCH, totalOccurrences - occurrences.length).toLocaleString()} more`}
+                  </button>
+                </>
+              )}
               {filteredOccurrences.length < occurrences.length && (
                 <> Showing <strong>{filteredOccurrences.length.toLocaleString()}</strong> after filters.</>
               )}
@@ -1623,8 +1803,233 @@ export default function OccurrenceMapRow({
                   </div>
                 )}
               </div>
+              {/* Date range — client-side slider filtering the currently loaded sample
+                  to an eventDate window. The track spans whatever the filters above
+                  allow through (dateFilterableOccurrences), not the species' full GBIF
+                  history — the "Load N more" button next to the map's "Loaded X of Y"
+                  badge is what extends that span. GBIF's search API has no server-side
+                  date sort/filter of its own (see api/occurrences/route.ts), so this
+                  operates entirely on what's already been paged in. */}
+              <div className="relative" ref={dateRangeRef}>
+                <button
+                  onClick={() => setDateRangeOpen(!dateRangeOpen)}
+                  className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border text-xs transition-colors ${
+                    dateRangeOpen
+                      ? "bg-zinc-100 dark:bg-zinc-800 border-zinc-400 dark:border-zinc-500"
+                      : "border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                  } text-zinc-700 dark:text-zinc-300`}
+                  title="Filter the loaded sample to an observation date range"
+                >
+                  <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <rect x="3" y="4" width="18" height="17" rx="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 9h18M8 2v4M16 2v4" />
+                  </svg>
+                  Date range
+                  <span className="text-[10px] text-zinc-400 tabular-nums">
+                    {dateRangeFrom == null && dateRangeTo == null
+                      ? "All dates"
+                      : `${dateRangeFrom ?? sliderMinDate} – ${dateRangeTo ?? sliderMaxDate}`}
+                  </span>
+                  <svg className={`w-3 h-3 text-zinc-400 transition-transform ${dateRangeOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {dateRangeOpen && (
+                  <div className="absolute left-0 top-full mt-1 z-50 w-80 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg p-3">
+                    {sliderMinDate === sliderMaxDate ? (
+                      <p className="text-xs text-zinc-400 dark:text-zinc-500">Not enough dated records loaded to filter by range.</p>
+                    ) : (
+                      (() => {
+                        const totalDays = Math.max(1, Math.round((new Date(sliderMaxDate).getTime() - new Date(sliderMinDate).getTime()) / 86400000));
+                        const fromDays = dateRangeFrom != null
+                          ? Math.round((new Date(dateRangeFrom).getTime() - new Date(sliderMinDate).getTime()) / 86400000)
+                          : 0;
+                        const toDays = dateRangeTo != null
+                          ? Math.round((new Date(dateRangeTo).getTime() - new Date(sliderMinDate).getTime()) / 86400000)
+                          : totalDays;
+                        const dayOffsetToDate = (days: number) => {
+                          const d = new Date(sliderMinDate);
+                          d.setDate(d.getDate() + days);
+                          return d.toISOString().slice(0, 10);
+                        };
+                        const pct = (days: number) => Math.max(0, Math.min(100, (days / totalDays) * 100));
+
+                        // Assessment markers, positioned against this same track's day
+                        // offsets. Most assessments predate the currently-loaded GBIF
+                        // window (GBIF's own paging is recency-biased — see the comment
+                        // on the outer wrapper), so "before"/"after" the visible track
+                        // are the common case, not an edge case — collapse those into a
+                        // single count badge at the relevant edge rather than a pile of
+                        // off-track dots.
+                        const markerDays = assessmentMarkers.map((m) => ({
+                          ...m,
+                          days: Math.round((new Date(m.date).getTime() - new Date(sliderMinDate).getTime()) / 86400000),
+                        }));
+                        const inRangeMarkers = markerDays.filter((m) => m.days >= 0 && m.days <= totalDays);
+                        const beforeMarkers = markerDays.filter((m) => m.days < 0);
+                        const afterMarkers = markerDays.filter((m) => m.days > totalDays);
+                        const markerLabel = (m: (typeof markerDays)[number]) =>
+                          `${m.date}${m.category ? ` — ${m.category}${m.criteria ? ` (${m.criteria})` : ""}` : ""}${m.isCurrent ? " (current)" : ""}`;
+                        const titleFor = (list: typeof markerDays) => list.map(markerLabel).join("\n");
+
+                        // Snap a handle onto a nearby in-range assessment marker (within
+                        // ~1.5% of the track) so it's easy to trim exactly to "everything
+                        // since this assessment" rather than fighting day-by-day precision.
+                        // Returns the marker itself (not just its day offset) so callers can
+                        // use its exact date string — going back through dayOffsetToDate's
+                        // UTC-parsed-diff/local-reconstructed round trip can drift by a day.
+                        const snapThresholdDays = Math.max(1, Math.round(totalDays * 0.015));
+                        const snapToMarker = (days: number) => {
+                          let closest: (typeof inRangeMarkers)[number] | null = null;
+                          let closestDist = Infinity;
+                          for (const m of inRangeMarkers) {
+                            const dist = Math.abs(m.days - days);
+                            if (dist <= snapThresholdDays && dist < closestDist) {
+                              closest = m;
+                              closestDist = dist;
+                            }
+                          }
+                          return closest;
+                        };
+
+                        return (
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-300">
+                              <span className="font-medium">{dateRangeFrom ?? sliderMinDate}</span>
+                              <span className="text-zinc-400">to</span>
+                              <span className="font-medium">{dateRangeTo ?? sliderMaxDate}</span>
+                            </div>
+                            {/* Timeline: assessment markers above a single track with two
+                                overlapping trim handles — see the .dual-range-thumb rules
+                                in globals.css for how the inputs stack without one
+                                swallowing the other's clicks. Markers and track share the
+                                same relative coordinate space so their % positions line up. */}
+                            <div className={`relative ${assessmentMarkers.length > 0 ? "pt-4" : ""}`}>
+                              {assessmentMarkers.length > 0 && (
+                                <div className="absolute inset-x-0 top-0 h-4">
+                                  {inRangeMarkers.map((m) => {
+                                    const color = m.category ? CATEGORY_COLORS[m.category] : null;
+                                    const solidText = m.category === "EX" || m.category === "EW";
+                                    return (
+                                      <div
+                                        key={m.date}
+                                        className="absolute bottom-0"
+                                        style={{ left: `${pct(m.days)}%`, transform: "translateX(-50%)" }}
+                                        title={`Assessed ${markerLabel(m)}`}
+                                      >
+                                        {color ? (
+                                          <span
+                                            className={`block px-1 rounded-sm text-[8px] leading-[11px] font-semibold whitespace-nowrap ${
+                                              m.isCurrent ? "ring-1 ring-offset-1 ring-zinc-400 dark:ring-zinc-500 dark:ring-offset-zinc-900" : ""
+                                            }`}
+                                            style={
+                                              solidText
+                                                ? { backgroundColor: color, color: "#fff" }
+                                                : { backgroundColor: `${color}20`, color }
+                                            }
+                                          >
+                                            {m.category}
+                                          </span>
+                                        ) : (
+                                          <div className={`w-1.5 h-1.5 rounded-full mx-auto ${m.isCurrent ? "bg-amber-500" : "bg-amber-400/70 dark:bg-amber-500/60"}`} />
+                                        )}
+                                        <div className={`w-px h-1 mx-auto ${m.isCurrent ? "bg-amber-500" : "bg-zinc-300 dark:bg-zinc-600"}`} />
+                                      </div>
+                                    );
+                                  })}
+                                  {beforeMarkers.length > 0 && (
+                                    <div
+                                      className="absolute bottom-0 left-0 text-[9px] leading-none text-amber-600 dark:text-amber-400 cursor-default"
+                                      title={`Assessed before ${sliderMinDate}:\n${titleFor(beforeMarkers)}`}
+                                    >
+                                      ‹{beforeMarkers.length}
+                                    </div>
+                                  )}
+                                  {afterMarkers.length > 0 && (
+                                    <div
+                                      className="absolute bottom-0 right-0 text-[9px] leading-none text-amber-600 dark:text-amber-400 cursor-default"
+                                      title={`Assessed after ${sliderMaxDate}:\n${titleFor(afterMarkers)}`}
+                                    >
+                                      {afterMarkers.length}›
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                              <div className="relative h-5 flex items-center">
+                                <div className="absolute inset-x-0 h-1.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
+                                <div
+                                  className="absolute h-1.5 rounded-full bg-blue-500"
+                                  style={{
+                                    left: `${pct(Math.min(fromDays, toDays))}%`,
+                                    right: `${100 - pct(Math.max(fromDays, toDays))}%`,
+                                  }}
+                                />
+                                <input
+                                  type="range"
+                                  min={0}
+                                  max={totalDays}
+                                  value={Math.min(fromDays, toDays)}
+                                  onChange={(e) => {
+                                    const raw = Math.min(parseInt(e.target.value, 10), toDays);
+                                    const snapped = snapToMarker(raw);
+                                    if (snapped) {
+                                      setDateRangeFrom(snapped.days <= 0 ? null : snapped.date);
+                                    } else {
+                                      setDateRangeFrom(raw <= 0 ? null : dayOffsetToDate(raw));
+                                    }
+                                  }}
+                                  onPointerDown={() => setActiveDateHandle("from")}
+                                  style={{ zIndex: activeDateHandle === "from" ? 5 : 3 }}
+                                  className="dual-range-thumb"
+                                  aria-label="From date"
+                                />
+                                <input
+                                  type="range"
+                                  min={0}
+                                  max={totalDays}
+                                  value={Math.max(toDays, fromDays)}
+                                  onChange={(e) => {
+                                    const raw = Math.max(parseInt(e.target.value, 10), fromDays);
+                                    const snapped = snapToMarker(raw);
+                                    if (snapped) {
+                                      setDateRangeTo(snapped.days >= totalDays ? null : snapped.date);
+                                    } else {
+                                      setDateRangeTo(raw >= totalDays ? null : dayOffsetToDate(raw));
+                                    }
+                                  }}
+                                  onPointerDown={() => setActiveDateHandle("to")}
+                                  style={{ zIndex: activeDateHandle === "to" ? 5 : 4 }}
+                                  className="dual-range-thumb"
+                                  aria-label="To date"
+                                />
+                              </div>
+                              <div className="flex items-center justify-between text-[9px] text-zinc-400 dark:text-zinc-500 tabular-nums">
+                                <span>{sliderMinDate}</span>
+                                <span>{sliderMaxDate}</span>
+                              </div>
+                            </div>
+                            {assessmentMarkers.length > 0 && (
+                              <div className="text-[9px] text-zinc-400 dark:text-zinc-500">
+                                Marked dates are Red List assessments, colored by category — drag a handle near one to snap to it.
+                              </div>
+                            )}
+                            {(dateRangeFrom != null || dateRangeTo != null) && (
+                              <button
+                                onClick={() => { setDateRangeFrom(null); setDateRangeTo(null); }}
+                                className="self-start text-[10px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:underline"
+                              >
+                                Reset to all dates
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()
+                    )}
+                  </div>
+                )}
+              </div>
               {/* Overlays — informational map layers (Protected areas / POWO
-                  native range / IUCN native range), independent of the
+                  native range / IUCN native countries), independent of the
                   "Native range only" occurrence filter above: these just shade
                   which countries a source considers native, for context. */}
               <div className="relative" ref={overlaysRef}>
@@ -1635,7 +2040,7 @@ export default function OccurrenceMapRow({
                       ? "bg-zinc-100 dark:bg-zinc-800 border-zinc-400 dark:border-zinc-500"
                       : "border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-800"
                   } text-zinc-700 dark:text-zinc-300`}
-                  title="Map overlays: protected areas, POWO/IUCN native range"
+                  title="Map overlays: protected areas, POWO/IUCN native countries"
                 >
                   <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
@@ -1735,7 +2140,7 @@ export default function OccurrenceMapRow({
                         onChange={() => setShowIucnRangeOverlay((v) => !v)}
                         className="w-3 h-3 rounded accent-amber-500 shrink-0"
                       />
-                      <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">IUCN native range</span>
+                      <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">IUCN native countries</span>
                     </label>
                   </div>
                 )}

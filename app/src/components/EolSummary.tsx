@@ -16,6 +16,20 @@ interface EolCommonName {
   lang: string;
 }
 
+interface EolTraitGroup {
+  predicate: string;
+  definition: string | null;
+  value: string;
+  recordCount: number;
+  source: string | null;
+}
+
+interface EolTraitsData {
+  found: boolean;
+  traits?: EolTraitGroup[];
+  dataUrl?: string;
+}
+
 interface EolSummaryData {
   found: boolean;
   eolId?: number;
@@ -116,22 +130,78 @@ function CommonNamesList({ names, englishCount, languageCount }: { names: EolCom
   );
 }
 
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+function TraitsTable({ traits, dataUrl }: { traits: EolTraitGroup[]; dataUrl: string }) {
+  return (
+    <div>
+      <div className="text-xs uppercase tracking-wider text-zinc-400 mb-1.5">Traits ({traits.length})</div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-[10px] uppercase tracking-wide text-zinc-400">
+              <th className="text-left font-medium pb-1 pr-3">Trait</th>
+              <th className="text-left font-medium pb-1 pr-3">Value</th>
+              <th className="text-right font-medium pb-1">Source</th>
+            </tr>
+          </thead>
+          <tbody>
+            {traits.map((t, i) => {
+              const tooltip = [t.definition, t.recordCount > 1 ? `${t.recordCount} records` : null].filter(Boolean).join(" — ");
+              return (
+                <tr key={i} className="border-t border-zinc-100 dark:border-zinc-800">
+                  <td className="py-1 pr-3 align-top whitespace-nowrap">
+                    <span className="text-zinc-600 dark:text-zinc-300" title={tooltip || undefined}>
+                      {capitalize(t.predicate)}
+                    </span>
+                  </td>
+                  <td className="py-1 pr-3 align-top text-zinc-700 dark:text-zinc-300">{t.value}</td>
+                  <td className="py-1 align-top text-right">
+                    {t.source && (
+                      <a href={t.source} target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400" title={`Source: ${t.source}`}>
+                        ↗
+                      </a>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <a href={dataUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 dark:text-blue-400 hover:underline mt-1.5 inline-block">
+        View full trait data on EOL ↗
+      </a>
+    </div>
+  );
+}
+
 export default function EolSummary({ scientificName }: { scientificName: string }) {
   const [data, setData] = useState<EolSummaryData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [traitsData, setTraitsData] = useState<EolTraitsData | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
     setData(null);
+    setTraitsData(null);
     (async () => {
       try {
         const res = await fetch(`/api/eol?name=${encodeURIComponent(scientificName)}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const result = await res.json();
         if (!cancelled) setData(result);
+        if (!cancelled && result.found && result.eolId) {
+          fetch(`/api/eol/traits?pageId=${result.eolId}`)
+            .then((r) => (r.ok ? r.json() : null))
+            .then((t) => {
+              if (!cancelled && t) setTraitsData(t);
+            })
+            .catch(() => {});
+        }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Unknown error");
       } finally {
@@ -168,6 +238,12 @@ export default function EolSummary({ scientificName }: { scientificName: string 
           <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{data.scientificName}</span>
         )}
       </div>
+
+      {/* Traits (TraitBank) — surfaced above common names since this is the
+          data an assessor is most likely to be looking for. */}
+      {traitsData?.found && traitsData.traits && traitsData.dataUrl && (
+        <TraitsTable traits={traitsData.traits} dataUrl={traitsData.dataUrl} />
+      )}
 
       {/* Common names — paginated, English first, with language labels */}
       {commonNames.length > 0 && (
