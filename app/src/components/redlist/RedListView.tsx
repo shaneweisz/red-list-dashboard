@@ -12,8 +12,8 @@ import EolSummary from "../EolSummary";
 import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME, type CountryStats } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID, THREATENED_CATEGORIES } from "@/config/taxa";
-import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode, matchesBreakdownName, breakdownDisplayName } from "@/lib/taxonomy-utils";
-import { dynamicNodeDisplayName } from "@/lib/dynamic-taxon";
+import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode, matchesBreakdownName, breakdownDisplayName, primaryFilterRank } from "@/lib/taxonomy-utils";
+import { dynamicNodeDisplayName, isDynamicNodeId, dynamicNodeRankInfo } from "@/lib/dynamic-taxon";
 import ReviewerChart from "./ReviewerChart";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { iucnRegionCountries, countryToIucnRegion } from "@/lib/regions";
@@ -2209,6 +2209,29 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
     return { name: id.charAt(0).toUpperCase() + id.slice(1), rank };
   }, [selectedTaxa, species]);
 
+  // A single selected sub-group — a dynamic taxonomic-drilldown node (e.g. an
+  // order/family/genus reached via TaxaSummary's own tree) or a static SSC
+  // group/subgroup node — gets the exact same stat-card treatment as
+  // arbitraryTaxon above, even though it's reached through a completely
+  // different mechanism (selectedSubgroups, not a raw ?taxa= search token: see
+  // TaxaSummary.tsx's ancestor-breadcrumb rendering, which keeps its own tree
+  // branch — Mammals → Rodentia → Heteromyidae → ... — visible in the table
+  // above this regardless). A dynamic node has no NODE_INDEX entry (findNode
+  // fails), so it's resolved via dynamicNodeRankInfo/dynamicNodeDisplayName
+  // instead — the same distinction DescribedInfoIcon already draws.
+  const selectedSubgroupTaxon = useMemo(() => {
+    if (selectedSubgroups.size !== 1) return null;
+    const id = [...selectedSubgroups][0];
+    const node = findNode(id);
+    if (node) return { name: node.name, rank: primaryFilterRank(node.filter)?.label ?? null };
+    if (isDynamicNodeId(id)) return { name: dynamicNodeDisplayName(id), rank: dynamicNodeRankInfo(id)?.label ?? null };
+    return null;
+  }, [selectedSubgroups]);
+
+  // Whichever of the two applies — a selected sub-group takes priority since
+  // it's the more specific selection whenever both could theoretically apply.
+  const focusedTaxonCard = selectedSubgroupTaxon ?? arbitraryTaxon;
+
   // GBIF occurrence counts aren't filterable per-country/category/etc. — only show
   // that color/list column when no filter narrower than "a whole top-level taxon"
   // is active. Shared by both WorldMap instances (the always-visible Country chart
@@ -2470,18 +2493,23 @@ export default function RedListView({ viewMode = "reassessments", sharedTaxa, sh
       ) : (
       <div className="space-y-3">
 
-          {/* Arbitrary-taxon header — a non-curated rank (e.g. Carnivora) reached via
-              search. Two stat cards: the taxon (name + matched rank) and the
-              matched-species count (mirrors the table's totalFiltered). No landing
-              cards / drill-down — no honest data for arbitrary ranks. */}
-          {arbitraryTaxon && !isSingleSpecies && (
+          {/* Taxon-focus header — a non-curated arbitrary rank reached via search
+              (arbitraryTaxon), or a specific sub-group row drilled into via
+              TaxaSummary's own tree (selectedSubgroupTaxon: dynamic order/family/
+              genus, or a static SSC group). Two stat cards: the taxon (name +
+              rank) and the matched-species count (mirrors the table's
+              totalFiltered). TaxaSummary's own breadcrumb table above already
+              shows the tree branch that led here (Mammals → Rodentia →
+              Heteromyidae → ...) — this is purely an additional, more prominent
+              summary once you're this deep, not a replacement for it. */}
+          {focusedTaxonCard && !isSingleSpecies && (
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
                 <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                  {arbitraryTaxon.rank ?? "Taxon"}
+                  {focusedTaxonCard.rank ?? "Taxon"}
                 </div>
                 <div className="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                  {arbitraryTaxon.name}
+                  {focusedTaxonCard.name}
                 </div>
               </div>
               <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
