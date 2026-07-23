@@ -78,6 +78,10 @@ const nextConfig: NextConfig = {
     // (live-breakdown.ts) — queries assessed/species_link/species/backbone
     // parquets in R2 via the same DuckDB connection, needs the same trace.
     "/api/redlist/taxa-breakdown-live": DUCKDB_TRACE,
+    // Live CoL-taxon-id lookup for a dynamic node's ancestor chain
+    // (live-breakdown.ts's getLiveColTaxonIds) — same backbone.parquet-via-R2
+    // DuckDB query as taxa-breakdown-live above, needs the same trace.
+    "/api/redlist/col-taxon-ids-live": DUCKDB_TRACE,
     // Queries the committed (not R2) wcvp-native-countries.parquet directly via
     // DuckDB read_parquet() — a raw file path, not a JS import, so Next's tracer
     // needs telling explicitly (same class of miss as the dlopen'd libduckdb.so).
@@ -129,6 +133,11 @@ const nextConfig: NextConfig = {
     // Reads assessed/species_link/species/backbone entirely from R2 (httpfs) — no
     // local data, same as /api/redlist/synonyms and /api/taxa/species above.
     "/api/redlist/taxa-breakdown-live": ["**/data/**"],
+    // Reads only backbone.parquet, entirely from R2 (httpfs) — no local data,
+    // same as taxa-breakdown-live above (without this, Next traces the whole
+    // dataset into the function via the shared live-breakdown.ts import,
+    // blowing well past Vercel's 250MB uncompressed function-size limit).
+    "/api/redlist/col-taxon-ids-live": ["**/data/**"],
     // /browse mirrors /api/redlist/species (same querySpecies): keep taxa-summary.json
     // for the instant NE tooLarge check, drop the heavy data + ALL parquets (the USE_R2
     // gate keys on assessed.parquet being absent locally). /llms.txt reads no data.
