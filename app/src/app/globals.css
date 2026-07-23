@@ -92,3 +92,56 @@ input[type="range"].slider-xs::-moz-range-thumb {
   border-radius: 9999px;
   background: #ef4444;
 }
+
+/* Dual-handle range slider (used for the occurrence date-range filter): two
+   <input type="range"> stacked on the same track via absolute positioning.
+   The input itself ignores pointer events so it doesn't swallow clicks meant
+   for the visible track underneath; only the thumb re-enables them, so each
+   handle is independently draggable despite the full-width overlap. */
+input[type="range"].dual-range-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  background: transparent;
+  pointer-events: none;
+}
+input[type="range"].dual-range-thumb::-webkit-slider-runnable-track {
+  -webkit-appearance: none;
+  background: transparent;
+}
+input[type="range"].dual-range-thumb::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  pointer-events: auto;
+  width: 14px;
+  height: 14px;
+  margin-top: 0;
+  border: 2px solid white;
+  border-radius: 9999px;
+  background: #3b82f6;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+.dark input[type="range"].dual-range-thumb::-webkit-slider-thumb {
+  border-color: #18181b;
+}
+input[type="range"].dual-range-thumb::-moz-range-track {
+  background: transparent;
+}
+input[type="range"].dual-range-thumb::-moz-range-thumb {
+  pointer-events: auto;
+  width: 14px;
+  height: 14px;
+  border: 2px solid white;
+  border-radius: 9999px;
+  background: #3b82f6;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+.dark input[type="range"].dual-range-thumb::-moz-range-thumb {
+  border-color: #18181b;
+}

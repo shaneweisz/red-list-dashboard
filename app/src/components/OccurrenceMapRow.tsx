@@ -364,14 +364,16 @@ export default function OccurrenceMapRow({
   // src/lib/coordinate-cleaning.ts), individually toggleable. Default all off —
   // opt-in, since these are plausibility heuristics with real false-positive risk
   // (documented per-check), not the same as GBIF's own hasGeospatialIssue=false
-  // parsing-error filter, which stays on unconditionally upstream of this. Zero/
-  // null-island coordinates are the one exception — there's no plausible reading
-  // of (0,0) or an axis-zero point as a real location, so it's on by default.
+  // parsing-error filter, which stays on unconditionally upstream of this. Two
+  // exceptions default on: zero/null-island coordinates (no plausible reading of
+  // (0,0) or an axis-zero point as a real location), and repeated coordinates
+  // (an exact duplicate of another record adds nothing on the map and is a very
+  // common GBIF artifact — only the repeat is hidden, the first stays visible).
   const [appliedChecks, setAppliedChecks] = useState<Record<QualityFlag, boolean>>({
     ZERO_COORDINATE: true,
     EQUAL_COORDINATES: false,
     GBIF_HEADQUARTERS: false,
-    DUPLICATE: false,
+    DUPLICATE: true,
     NEAR_CAPITAL: false,
     NEAR_CENTROID: false,
     NEAR_INSTITUTION: false,
@@ -424,8 +426,12 @@ export default function OccurrenceMapRow({
   // Date-range filter dropdown state
   const [dateRangeOpen, setDateRangeOpen] = useState(false);
   const dateRangeRef = useRef<HTMLDivElement>(null);
+  // Which of the two overlapping range-input handles was most recently grabbed —
+  // given the raise-on-interaction z-index below, so whichever the user is actively
+  // dragging always stays on top and stays grabbable even where the handles overlap.
+  const [activeDateHandle, setActiveDateHandle] = useState<"from" | "to" | null>(null);
 
-  // Overlays dropdown state (Protected areas / POWO native range / IUCN native range)
+  // Overlays dropdown state (Protected areas / POWO native range / IUCN native countries)
   const [overlaysOpen, setOverlaysOpen] = useState(false);
   const overlaysRef = useRef<HTMLDivElement>(null);
 
@@ -1352,9 +1358,6 @@ export default function OccurrenceMapRow({
               ) : (
                 <>Loaded <strong>{occurrences.length.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> total GBIF records.</>
               )}
-              {filteredOccurrences.length < occurrences.length && (
-                <> Showing <strong>{filteredOccurrences.length.toLocaleString()}</strong> after filters.</>
-              )}
               {!isFullSample && (
                 <>
                   {" "}
@@ -1365,9 +1368,12 @@ export default function OccurrenceMapRow({
                   >
                     {loadingMoreOverall
                       ? "Loading…"
-                      : `Load ${Math.min(OVERALL_LOAD_MORE_BATCH, totalOccurrences - occurrences.length).toLocaleString()} more`}
+                      : `Click to load ${Math.min(OVERALL_LOAD_MORE_BATCH, totalOccurrences - occurrences.length).toLocaleString()} more`}
                   </button>
                 </>
+              )}
+              {filteredOccurrences.length < occurrences.length && (
+                <> Showing <strong>{filteredOccurrences.length.toLocaleString()}</strong> after filters.</>
               )}
             </div>
           )}
@@ -1809,8 +1815,18 @@ export default function OccurrenceMapRow({
                               <span className="text-zinc-400">to</span>
                               <span className="font-medium">{dateRangeTo ?? sliderMaxDate}</span>
                             </div>
-                            <label className="flex items-center gap-2 text-[10px] text-zinc-400">
-                              From
+                            {/* Single track, two overlapping handles — see the
+                                .dual-range-thumb rules in globals.css for how the
+                                inputs stack without one swallowing the other's clicks. */}
+                            <div className="relative h-4 flex items-center">
+                              <div className="absolute inset-x-0 h-1.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
+                              <div
+                                className="absolute h-1.5 rounded-full bg-blue-500"
+                                style={{
+                                  left: `${(Math.min(fromDays, toDays) / totalDays) * 100}%`,
+                                  right: `${100 - (Math.max(fromDays, toDays) / totalDays) * 100}%`,
+                                }}
+                              />
                               <input
                                 type="range"
                                 min={0}
@@ -1820,11 +1836,11 @@ export default function OccurrenceMapRow({
                                   const days = Math.min(parseInt(e.target.value, 10), toDays);
                                   setDateRangeFrom(days <= 0 ? null : dayOffsetToDate(days));
                                 }}
-                                className="flex-1 h-2.5 sm:h-1.5 accent-blue-500"
+                                onPointerDown={() => setActiveDateHandle("from")}
+                                style={{ zIndex: activeDateHandle === "from" ? 5 : 3 }}
+                                className="dual-range-thumb"
+                                aria-label="From date"
                               />
-                            </label>
-                            <label className="flex items-center gap-2 text-[10px] text-zinc-400">
-                              To
                               <input
                                 type="range"
                                 min={0}
@@ -1834,9 +1850,12 @@ export default function OccurrenceMapRow({
                                   const days = Math.max(parseInt(e.target.value, 10), fromDays);
                                   setDateRangeTo(days >= totalDays ? null : dayOffsetToDate(days));
                                 }}
-                                className="flex-1 h-2.5 sm:h-1.5 accent-blue-500"
+                                onPointerDown={() => setActiveDateHandle("to")}
+                                style={{ zIndex: activeDateHandle === "to" ? 5 : 4 }}
+                                className="dual-range-thumb"
+                                aria-label="To date"
                               />
-                            </label>
+                            </div>
                             {(dateRangeFrom != null || dateRangeTo != null) && (
                               <button
                                 onClick={() => { setDateRangeFrom(null); setDateRangeTo(null); }}
@@ -1853,7 +1872,7 @@ export default function OccurrenceMapRow({
                 )}
               </div>
               {/* Overlays — informational map layers (Protected areas / POWO
-                  native range / IUCN native range), independent of the
+                  native range / IUCN native countries), independent of the
                   "Native range only" occurrence filter above: these just shade
                   which countries a source considers native, for context. */}
               <div className="relative" ref={overlaysRef}>
@@ -1864,7 +1883,7 @@ export default function OccurrenceMapRow({
                       ? "bg-zinc-100 dark:bg-zinc-800 border-zinc-400 dark:border-zinc-500"
                       : "border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-800"
                   } text-zinc-700 dark:text-zinc-300`}
-                  title="Map overlays: protected areas, POWO/IUCN native range"
+                  title="Map overlays: protected areas, POWO/IUCN native countries"
                 >
                   <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
@@ -1964,7 +1983,7 @@ export default function OccurrenceMapRow({
                         onChange={() => setShowIucnRangeOverlay((v) => !v)}
                         className="w-3 h-3 rounded accent-amber-500 shrink-0"
                       />
-                      <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">IUCN native range</span>
+                      <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">IUCN native countries</span>
                     </label>
                   </div>
                 )}
