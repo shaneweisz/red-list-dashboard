@@ -16,7 +16,8 @@ import { NODE_INDEX, getCsvGroupsForNode } from "@/lib/taxonomy-utils";
 import { canonicalizeTaxonId, mapTaxonId } from "@/lib/data/taxonomy-constants";
 import { getTaxaSummary } from "@/lib/data/species-store";
 import { isDynamicNodeId, dynamicNodeFilter } from "@/lib/dynamic-taxon";
-import { filterToSql } from "@/lib/taxonomy-sql";
+import { filterToSql, sqlStrList } from "@/lib/taxonomy-sql";
+import { COL_DOMESTIC_EXCLUDE_NAMES } from "@/config/col-described-overrides";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 // Dev has the parquets on disk; on Vercel they aren't bundled → read from R2.
@@ -200,6 +201,18 @@ export function toSpeciesRow(r: Record<string, unknown>) {
 // otherwise surface as "not evaluated". Keep in sync with build-taxa-summary.
 const EXCLUDED_COL_IDS_SQL = `('6MB3T')`; // Homo sapiens
 
+// Domestic/feral forms (dog, cat, cattle, etc.) excluded from the NE universe here too —
+// each has a wild-form sibling species already counted separately (see
+// COL_DOMESTIC_EXCLUDE_NAMES's doc comment), so counting the domestic form as "Not
+// Evaluated" as well would double up. Matches build-taxa-summary.ts's colCountsByGroup,
+// whose precomputed col_ne this live count must agree with (#397 — Mammals showed 530
+// live vs. 520 precomputed, a gap of exactly these 10 names). Node-scoped queries that
+// go through filterToSql already exclude the wider COL_EXCLUDE_ALL_NODES (this list plus
+// the Bison SG name overrides) via whereSql, making this redundant-but-harmless for them;
+// this is the only exclusion applied for the taxon_group-partition fast path (top-level
+// taxa like "mammals"), which bypasses filterToSql entirely.
+const NOT_DOMESTIC_SQL = `coalesce(lower(scientific_name), '') NOT IN (${sqlStrList(COL_DOMESTIC_EXCLUDE_NAMES)})`;
+
 // Per-taxon_group not-evaluated counts from the precomputed taxa-summary (in memory),
 // used to decide tooLarge instantly without scanning species/ on R2.
 let neByGroupCache: Map<string, number> | null = null;
@@ -279,7 +292,7 @@ export async function querySpecies(opts: {
     // The NE list IS the CoL extant universe under the taxon, not already assessed
     // (minus the small EXCLUDED_COL_IDS denylist). species/ is partitioned by taxon_group,
     // so the SAME `whereSql` used for the assessed parquet filters + prunes it.
-    const univFilter = `${whereSql} AND in_base AND (extinct IS NOT TRUE OR col_id IN (SELECT col_id FROM ne_ex_ew_col_ids)) AND col_id NOT IN ${assessedColIds} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL}`;
+    const univFilter = `${whereSql} AND in_base AND (extinct IS NOT TRUE OR col_id IN (SELECT col_id FROM ne_ex_ew_col_ids)) AND col_id NOT IN ${assessedColIds} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL} AND ${NOT_DOMESTIC_SQL}`;
 
     // Count first (cheap). A giant aggregate (insects ~935k, invertebrates ~1.3M) exceeds
     // the cap — serializing it is a 250MB+ payload the browser can't load. Flag `tooLarge`
