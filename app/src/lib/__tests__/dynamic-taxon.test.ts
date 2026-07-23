@@ -209,6 +209,35 @@ describe("URL token round-trip for a dynamic id (deep-link support)", () => {
     const [token] = collapseTaxaToTokens(["mammals"], [id]);
     expect(expandTaxaToken(token)).toEqual({ taxa: "mammals", subgroup: id });
   });
+
+  // Regression: a dynamic id whose OWN root segment happens to start with one of
+  // the pl-/inv-/fu- virtual-view-group prefixes (reached by drilling into a
+  // virtual-group child like Flowering Plants, Corals, Mushrooms) used to have
+  // that prefix silently stripped by collapseTaxaToTokens' blanket
+  // stripNodePrefix(sg) call — stripNodePrefix is only correct for a STATIC id's
+  // URL-token form (inv-corals -> corals), not for a dynamic id, which round-
+  // trips through the URL as itself. That made the id unstable across any URL
+  // rewrite for an unrelated reason (e.g. toggling the Assessed/Not Evaluated
+  // view mode calls setUrlViewMode, which re-serializes the whole taxa list) —
+  // "pl-flowering_plants~order:malpighiales" silently became
+  // "flowering_plants~order:malpighiales", a DIFFERENT dynamic id as far as
+  // anything keyed on the original root string is concerned (reported: an
+  // ancestor breadcrumb row's cached data went missing after toggling view mode,
+  // since TaxaSummary.tsx's subgroupData cache was keyed by the now-stale prefixed
+  // root and never populated under the new bare one).
+  it("preserves a dynamic id's own pl-/inv-/fu- root prefix through a collapse (does not strip it like a static id's token)", () => {
+    const id = "pl-flowering_plants~order:malpighiales";
+    const tokens = collapseTaxaToTokens(["plantae"], [id]);
+    expect(tokens).toEqual([id]);
+  });
+
+  it("round-trips a prefixed-root dynamic id through repeated collapse+expand cycles unchanged (simulates toggling view mode, which re-serializes the URL)", () => {
+    const id = "pl-flowering_plants~order:malpighiales";
+    const [token1] = collapseTaxaToTokens(["plantae"], [id]);
+    const { taxa, subgroup } = expandTaxaToken(token1);
+    const [token2] = collapseTaxaToTokens([taxa], [subgroup!]);
+    expect(token2).toBe(id);
+  });
 });
 
 describe("dynamicNodeDisplayName", () => {

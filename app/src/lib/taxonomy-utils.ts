@@ -235,7 +235,21 @@ export function collapseTaxaToTokens(taxa: Iterable<string>, subgroups: Iterable
   const tokens = new Set<string>();
   const rootsWithSubgroup = new Set<string>();
   for (const sg of subgroups) {
-    tokens.add(stripNodePrefix(sg));
+    // A dynamic id round-trips through the URL as itself (see expandTaxaToken's own
+    // comment) — stripNodePrefix is only correct for a STATIC node id's token form
+    // (inv-corals -> corals). Applying it unconditionally here was a real bug: a
+    // dynamic id whose OWN root segment happens to start with one of these same
+    // three letters (e.g. "pl-flowering_plants~order:malpighiales", reached by
+    // drilling into a virtual-view-group child like Flowering Plants) had its
+    // prefix silently stripped too, rewriting it to a DIFFERENT dynamic id
+    // ("flowering_plants~order:malpighiales" — a different root identity as far as
+    // isDynamicNodeId/DYNAMIC_DRILLDOWN_ROOTS-based lookups are concerned) every
+    // time the URL was rewritten for an unrelated reason (e.g. toggling the
+    // Assessed/Not Evaluated view mode). TaxaSummary.tsx's subgroupData cache is
+    // keyed by whichever root string first populated it, so this second, bare-
+    // rooted id was a fresh cache miss — its ancestor row silently fell back to a
+    // zeroed placeholder instead of the already-fetched real data.
+    tokens.add(isDynamicNodeId(sg) ? sg : stripNodePrefix(sg));
     const root = getViewRootForNode(sg);
     if (root) rootsWithSubgroup.add(root);
   }

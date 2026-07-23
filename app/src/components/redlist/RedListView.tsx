@@ -424,6 +424,22 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     setUrlViewMode(viewMode);
   }, [viewMode, setUrlViewMode]);
 
+  // Reset to Assessed whenever the taxon/sub-group selection changes — Not
+  // Evaluated is something to opt into per-taxon, not a mode that should
+  // silently follow you from one taxon to the next (you'd otherwise land on a
+  // brand-new taxon already in NE mode from browsing a previous one, with no
+  // visual cue you're not seeing its Assessed data). Skips the very first
+  // render so a shared link's own ?view=new-assessments still works.
+  const prevSelectionRef = useRef<{ taxa: Set<string>; subgroups: Set<string> } | null>(null);
+  useEffect(() => {
+    const prev = prevSelectionRef.current;
+    prevSelectionRef.current = { taxa: selectedTaxa, subgroups: selectedSubgroups };
+    if (prev === null) return;
+    const setsEqual = (a: Set<string>, b: Set<string>) => a.size === b.size && [...a].every((v) => b.has(v));
+    const changed = !setsEqual(prev.taxa, selectedTaxa) || !setsEqual(prev.subgroups, selectedSubgroups);
+    if (changed && isNewAssessments) onViewModeChange?.("reassessments");
+  }, [selectedTaxa, selectedSubgroups, isNewAssessments, onViewModeChange]);
+
   // Reset mode-specific filter state when switching between reassessments and
   // new-assessments. speciesByTaxon/truncationByTaxon are NOT cleared here — they're
   // keyed by (mode, taxonId) (see modeKeyPrefix above), so each mode's data survives
