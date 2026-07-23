@@ -2080,47 +2080,54 @@ export default function OccurrenceMapRow({
                   renderMapPanel(filteredOccurrences, bbox, null)
                 )}
                 {/* In-range/out-of-range breakdown vs. the currently-visible IUCN
-                    range polygons — one table covering Total plus (when an
-                    assessment date is available) Before/After assessment rows,
-                    regardless of whether split view is open. Auto-updates with
-                    every occurrence filter and every range category toggle.
-                    Rendered in-flow below the map(s) (not floated over them) —
-                    it collides with the bottom legend/toolbar row when floated,
-                    since that row can grow wide enough to reach the corner. */}
+                    range polygons — one table covering Total plus (when a split
+                    date is available — defaults to the assessment date, but
+                    tracks wherever the split view slider is dragged to) Before/
+                    After rows, regardless of whether split view is open.
+                    Auto-updates with every occurrence filter and every range
+                    category toggle. Rendered in-flow below the map(s) (not
+                    floated over them) — it collides with the bottom legend/
+                    toolbar row when floated, since that row can grow wide
+                    enough to reach the corner. */}
                 {showRange && rangeCoverageStats && rangeCoverageStats.total.total > 0 && (
-                  <div className="flex justify-end">
-                    <div className="px-2 py-1.5 rounded-lg shadow-md bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-[11px] text-zinc-600 dark:text-zinc-300">
-                      <table className="border-collapse">
-                        <thead>
-                          <tr>
-                            <th className="text-left font-medium text-zinc-700 dark:text-zinc-200 pr-3 pb-1">GBIF vs. range map</th>
-                            <th className="text-right font-medium text-zinc-400 dark:text-zinc-500 px-1.5 pb-1"># Total</th>
-                            <th className="text-right font-medium text-zinc-400 dark:text-zinc-500 px-1.5 pb-1"># In range</th>
-                            <th className="text-right font-medium text-zinc-400 dark:text-zinc-500 px-1.5 pb-1"># Out range</th>
-                            <th className="text-right font-medium text-zinc-400 dark:text-zinc-500 pl-1.5 pb-1">% In range</th>
+                  <div className="w-full px-3 py-2 rounded-lg shadow-md bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-xs text-zinc-600 dark:text-zinc-300">
+                    <table className="w-full border-collapse">
+                      <thead>
+                        <tr>
+                          <th className="text-left font-medium text-zinc-700 dark:text-zinc-200 pr-3 pb-1 w-2/5">GBIF vs. range map</th>
+                          <th className="text-right font-medium text-zinc-400 dark:text-zinc-500 px-2 pb-1 w-[15%]"># Total</th>
+                          <th className="text-right font-medium text-zinc-400 dark:text-zinc-500 px-2 pb-1 w-[15%]"># In range</th>
+                          <th className="text-right font-medium text-zinc-400 dark:text-zinc-500 px-2 pb-1 w-[15%]"># Out range</th>
+                          <th className="text-right font-medium text-zinc-400 dark:text-zinc-500 pl-2 pb-1 w-[15%]">% In range</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(
+                          [
+                            ["Total", rangeCoverageStats.total, true],
+                            ...(rangeCoverageStats.before ? [[`Before ${splitDate}`, rangeCoverageStats.before, false] as const] : []),
+                            ...(rangeCoverageStats.after ? [[`After ${splitDate}`, rangeCoverageStats.after, false] as const] : []),
+                          ] as [string, { inRange: number; outRange: number; total: number }, boolean][]
+                        ).map(([rowLabel, stats, isTotal]) => (
+                          <tr
+                            key={rowLabel}
+                            className={
+                              isTotal
+                                ? "border-t border-b-2 border-zinc-200 dark:border-zinc-600 bg-zinc-50 dark:bg-zinc-900/40 font-semibold text-zinc-800 dark:text-zinc-100"
+                                : "border-t border-zinc-100 dark:border-zinc-700"
+                            }
+                          >
+                            <td className="text-left pr-3 py-1">{rowLabel}</td>
+                            <td className="text-right px-2 py-1">{stats.total.toLocaleString()}</td>
+                            <td className="text-right px-2 py-1">{stats.inRange.toLocaleString()}</td>
+                            <td className="text-right px-2 py-1">{stats.outRange.toLocaleString()}</td>
+                            <td className="text-right pl-2 py-1">
+                              {stats.total > 0 ? `${Math.round((stats.inRange / stats.total) * 100)}%` : "—"}
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody>
-                          {(
-                            [
-                              ["Total", rangeCoverageStats.total],
-                              ...(rangeCoverageStats.before ? [["Before assessment", rangeCoverageStats.before] as const] : []),
-                              ...(rangeCoverageStats.after ? [["After assessment", rangeCoverageStats.after] as const] : []),
-                            ] as [string, { inRange: number; outRange: number; total: number }][]
-                          ).map(([rowLabel, stats]) => (
-                            <tr key={rowLabel} className="border-t border-zinc-100 dark:border-zinc-700">
-                              <td className="text-left pr-3 py-0.5">{rowLabel}</td>
-                              <td className="text-right px-1.5 py-0.5">{stats.total.toLocaleString()}</td>
-                              <td className="text-right px-1.5 py-0.5">{stats.inRange.toLocaleString()}</td>
-                              <td className="text-right px-1.5 py-0.5">{stats.outRange.toLocaleString()}</td>
-                              <td className="text-right pl-1.5 py-0.5">
-                                {stats.total > 0 ? `${Math.round((stats.inRange / stats.total) * 100)}%` : "—"}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
             </div>
