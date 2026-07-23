@@ -1461,15 +1461,15 @@ export default function OccurrenceMapRow({
             <div className="absolute bottom-2 right-2 z-[1000] px-2 py-1.5 rounded-lg shadow-md bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-[11px] text-zinc-600 dark:text-zinc-300 min-w-[130px]">
               <div className="font-medium text-zinc-700 dark:text-zinc-200 mb-1">GBIF vs. range map</div>
               <div className="flex items-center justify-between gap-3">
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 flex-shrink-0 text-center font-semibold text-zinc-500 dark:text-zinc-400" aria-hidden="true">✓</span>
                   In range
                 </span>
                 <strong>{rangeStatsForPanel.inRange.toLocaleString()}</strong>
               </div>
               <div className="flex items-center justify-between gap-3">
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-rose-500 flex-shrink-0" />
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 flex-shrink-0 text-center font-semibold text-zinc-500 dark:text-zinc-400" aria-hidden="true">✕</span>
                   Out of range
                 </span>
                 <strong>{rangeStatsForPanel.outRange.toLocaleString()}</strong>
