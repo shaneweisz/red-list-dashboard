@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { buildQs, type ViewMode } from "../hooks/useFilterParams";
 import { CATEGORY_COLORS } from "../config/taxa";
-import { findNode } from "../lib/taxonomy-utils";
+import { findNode, getViewRootForNode } from "../lib/taxonomy-utils";
 
 interface SearchResult {
   id: number;
@@ -20,11 +20,14 @@ interface SearchResult {
 }
 
 // A higher-rank taxon (class/order/family) the query matched — pinned above the
-// species hits. Selecting it browses the whole taxon via ?taxa=<taxon>.
+// species hits. Selecting it browses the whole taxon via ?taxa=<taxon>, or — when
+// nodeId resolved server-side — via the curated/dynamic node it corresponds to (see
+// selectTaxon), so the taxa-summary table's ancestor-breadcrumb rows populate too.
 interface TaxonSuggestion {
   name: string;
   rank: "class" | "order" | "family";
   taxon: string;
+  nodeId: string | null;
 }
 
 /**
@@ -151,20 +154,29 @@ export function SpeciesSearchBar() {
     []
   );
 
-  // Browse a whole higher-rank taxon (e.g. Felidae): navigate to ?taxa=<taxon> in the
-  // arbitrary-rank taxon flows through resolveWhere → querySpecies just like a
-  // curated node; no species is preselected. Preserve the current view: from the
-  // new-assessments view, browsing a taxon shows its not-evaluated species (charts
-  // come from the assessed/reassessments view).
+  // Browse a whole higher-rank taxon (e.g. Felidae). When suggestTaxa resolved a real
+  // node (nodeId) for it — a curated static node, or a well-formed dynamic drilldown
+  // id — select it as a display-root + sub-group pair, exactly like clicking through
+  // TaxaSummary's own tree would: this is what makes the ancestor-breadcrumb rows
+  // (Mammals → Carnivora → Felidae → ...) populate above the table, and gives the
+  // per-taxon stat card a proper curated label instead of the generic arbitrary-rank
+  // fallback. Otherwise (nodeId null) fall back to the old bare ?taxa=<taxon> browse,
+  // which still flows through resolveWhere → querySpecies just like a curated node,
+  // just without a resolvable tree position. No species is preselected either way.
+  // Preserve the current view: from the new-assessments view, browsing a taxon shows
+  // its not-evaluated species (charts come from the assessed/reassessments view).
   const selectTaxon = useCallback((t: TaxonSuggestion) => {
     const currentView: ViewMode =
       new URLSearchParams(window.location.search).get("view") === "new-assessments"
         ? "new-assessments"
         : "reassessments";
+    const viewRoot = t.nodeId ? getViewRootForNode(t.nodeId) : null;
+    const taxa = viewRoot ?? t.taxon;
+    const subgroup = viewRoot && t.nodeId !== viewRoot ? t.nodeId : null;
     const qs = buildQs({
       viewMode: currentView,
-      taxa: new Set([t.taxon]),
-      subgroups: new Set(),
+      taxa: new Set([taxa]),
+      subgroups: subgroup ? new Set([subgroup]) : new Set(),
       categories: new Set(),
       yearRanges: new Set(),
       assessmentYears: new Set(),
