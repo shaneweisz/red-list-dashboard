@@ -2871,13 +2871,15 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                         <span className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
                           {totalFiltered.toLocaleString()}
                         </span>
-                        {/* Only show "of Y" once a filter has actually narrowed the
-                            count below the taxon's own total (taxaFilteredSpeciesBase —
-                            taxon/subgroup only, no pill filters) — otherwise the two
-                            numbers are identical and the qualifier is just noise. */}
+                        {/* Only show this once a filter has actually narrowed the count
+                            below the taxon's own total (taxaFilteredSpeciesBase — taxon/
+                            subgroup only, no pill filters). Deliberately doesn't state the
+                            unfiltered total ("of 6,054") — that reads as ambiguous with a
+                            totally different ratio (e.g. assessed-of-described), especially
+                            since the two are often close in magnitude for a given taxon. */}
                         {totalFiltered !== taxaFilteredSpeciesBase.length && (
                           <span className="text-sm font-medium text-zinc-400 dark:text-zinc-500">
-                            of {taxaFilteredSpeciesBase.length.toLocaleString()}
+                            matching filters
                           </span>
                         )}
                       </>
