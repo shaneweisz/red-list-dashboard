@@ -9,6 +9,8 @@ import { InatObservation, getThumbUrl, InatPhotoWithPreview } from "./InatPhotoC
 import { QualityFlag, QUALITY_FLAG_LABELS, QUALITY_FLAG_DESCRIPTIONS, QUALITY_FLAG_SOURCES } from "@/lib/coordinate-cleaning";
 import { CATEGORY_COLORS, normalizeCategory } from "@/config/taxa";
 import { FaInfoCircle } from "react-icons/fa";
+import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
+import type { Feature, Polygon, MultiPolygon } from "geojson";
 
 // Fixed page size for iNat photo grid (2 columns x 5 rows)
 const INAT_PAGE_SIZE = 10;
@@ -42,6 +44,15 @@ const MapOccurrenceTooltip = dynamic(
   () => import("./MapOccurrenceTooltip"),
   { ssr: false }
 );
+const RangeMapLayer = dynamic(
+  () => import("./RangeMapLayer"),
+  { ssr: false }
+);
+const AohMapLayer = dynamic(
+  () => import("./AohMapLayer"),
+  { ssr: false }
+);
+
 // Shape of coordinate-cleaning-refdata/countries.json (Natural Earth admin-0
 // country polygons, keyed by ISO 3166-1 alpha-2), dynamically imported for the
 // POWO/IUCN native-range overlays.
@@ -272,6 +283,8 @@ interface OccurrenceMapRowProps {
   mounted: boolean;
   assessmentYear?: number | null;
   assessmentDate?: string | null;
+  assessmentId?: number | null;
+  sisTaxonId?: number | null;
   /** This species' current IUCN Red List category (e.g. "VU", "EN") — shown as a
    * small colored badge on the current-assessment marker in the date-range
    * timeline, alongside the same badges for previousAssessments' categories. */
@@ -341,6 +354,8 @@ export default function OccurrenceMapRow({
   mounted,
   assessmentYear,
   assessmentDate,
+  assessmentId,
+  sisTaxonId,
   category,
   criteria,
   taxonGroup,
@@ -432,6 +447,53 @@ export default function OccurrenceMapRow({
   // Initial fetch size — no longer user-adjustable; loading more of a specific
   // basis-of-record category is handled by loadMoreForCategory below instead.
   const sampleSize = 300;
+
+  // GBIF points toggle (on by default)
+  const [showGbif, setShowGbif] = useState(true);
+
+  // Range maps and AOH are both restricted for now — hide their toggles
+  // unless the signed-in user is an admin. The real enforcement is
+  // server-side (the /range-map and /aoh API routes themselves 403); this is
+  // just so unauthorized users don't see a toggle for a layer they can't
+  // actually load. Triggered on either assessmentId or sisTaxonId since AOH
+  // availability keys off sisTaxonId, not assessmentId.
+  const [canViewRangeMap, setCanViewRangeMap] = useState(false);
+  useEffect(() => {
+    if (!assessmentId && !sisTaxonId) return;
+    let cancelled = false;
+    fetch("/api/auth/me")
+      .then((res) => (res.ok ? res.json() : { canViewRangeMap: false }))
+      .then((data: { canViewRangeMap?: boolean }) => {
+        if (!cancelled) setCanViewRangeMap(!!data.canViewRangeMap);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [assessmentId, sisTaxonId]);
+
+  // Range map layer state
+  const [showRange, setShowRange] = useState(false);
+  const [rangeLoading, setRangeLoading] = useState(false);
+  const [rangeNotFound, setRangeNotFound] = useState(false);
+  const [rangeCategories, setRangeCategories] = useState<import("./RangeMapLayer").RangeCategory[]>([]);
+  const [visibleCategories, setVisibleCategories] = useState<Set<string> | undefined>(undefined);
+  const [rangeCategoriesExpanded, setRangeCategoriesExpanded] = useState(false);
+  const [rangeSimplification, setRangeSimplification] = useState<import("./RangeMapLayer").SimplificationInfo | null>(null);
+  // Currently-visible range polygons (post category-filtering), reported up from
+  // RangeMapLayer — paired with filteredOccurrences below to compute the
+  // in-range/out-of-range breakdown shown in the corner stats table.
+  const [rangePolygons, setRangePolygons] = useState<Feature[] | null>(null);
+
+  // AOH layer state. taxonGroup is the friendly bucket name ("birds", not
+  // "aves") — matches taxon_group from the species API, not class_name.
+  // Gated behind the same admin check as the range map layer — the AOH API
+  // routes enforce this server-side too, this just hides the toggle from
+  // users who can't load it anyway.
+  const isAohAvailable = !!(sisTaxonId && taxonGroup && canViewRangeMap &&
+    ["mammals", "birds", "reptiles", "amphibians"].includes(taxonGroup.toLowerCase()));
+  const [showAoh, setShowAoh] = useState(false);
+  const [aohLoading, setAohLoading] = useState(false);
 
   // Filters dropdown state
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -907,9 +969,11 @@ export default function OccurrenceMapRow({
     return markers.sort((a, b) => a.date.localeCompare(b.date));
   }, [assessmentDate, assessmentYear, category, criteria, previousAssessments]);
 
-  // Split view: partition occurrences by exact assessment date
+  // Partition occurrences by exact assessment date — computed regardless of
+  // split view so the Before/After rows of the range coverage table below stay
+  // populated even when the user isn't in split view.
   const { preAssessmentOccs, postAssessmentOccs } = useMemo(() => {
-    if (!splitView || !splitDate) {
+    if (!splitDate) {
       return { preAssessmentOccs: [], postAssessmentOccs: [] };
     }
     const pre: OccurrenceFeature[] = [];
@@ -926,7 +990,38 @@ export default function OccurrenceMapRow({
       preAssessmentOccs: pre,
       postAssessmentOccs: post,
     };
-  }, [splitView, splitDate, filteredOccurrences]);
+  }, [splitDate, filteredOccurrences]);
+
+  // In-range/out-of-range breakdown of the currently-filtered GBIF occurrences
+  // against the currently-visible IUCN range polygons — recomputed whenever the
+  // range layer's polygons or the filtered occurrence set change, so it tracks
+  // both the coordinate-cleaning/basis-of-record filters and the range category
+  // toggles automatically. Before/after rows use the same assessment-date split
+  // as split view, but are populated regardless of whether split view is open.
+  const rangeCoverageStats = useMemo(() => {
+    if (!rangePolygons || rangePolygons.length === 0) return null;
+    const polygons = rangePolygons as Feature<Polygon | MultiPolygon>[];
+    const computeFor = (occs: OccurrenceFeature[]) => {
+      let inRange = 0;
+      for (const o of occs) {
+        const point: Feature<GeoJSON.Point> = { type: "Feature", properties: {}, geometry: o.geometry };
+        const isInside = polygons.some((poly) => {
+          try {
+            return booleanPointInPolygon(point, poly);
+          } catch {
+            return false;
+          }
+        });
+        if (isInside) inRange++;
+      }
+      return { inRange, outRange: occs.length - inRange, total: occs.length };
+    };
+    return {
+      total: computeFor(filteredOccurrences),
+      before: splitDate ? computeFor(preAssessmentOccs) : null,
+      after: splitDate ? computeFor(postAssessmentOccs) : null,
+    };
+  }, [rangePolygons, filteredOccurrences, splitDate, preAssessmentOccs, postAssessmentOccs]);
 
   // Date range for color gradient (uses full eventDate for finer granularity)
   const { minDateNum, maxDateNum, minDateLabel, maxDateLabel } = useMemo(() => {
@@ -1252,9 +1347,11 @@ export default function OccurrenceMapRow({
                 </Source>
               )}
               {/* Occurrence circles (GeoJSON source + circle layer) */}
-              <Source id={`occurrences-${panelId}`} type="geojson" data={styledGeoJson}>
-                <Layer {...circleLayerStyle} />
-              </Source>
+              {showGbif && (
+                <Source id={`occurrences-${panelId}`} type="geojson" data={styledGeoJson}>
+                  <Layer {...circleLayerStyle} />
+                </Source>
+              )}
               {/* Highlighted dot when hovering an iNat thumbnail (only in the correct split panel) */}
               {hoveredObs && hoveredObs.decimalLatitude != null && hoveredObs.decimalLongitude != null && (
                 !splitView || (
@@ -1305,6 +1402,37 @@ export default function OccurrenceMapRow({
                   />
                 );
               })()}
+              {/* IUCN Range Map layer */}
+              {showRange && assessmentId && canViewRangeMap && (
+                <RangeMapLayer
+                  assessmentId={assessmentId}
+                  visible={showRange}
+                  panelId={panelId}
+                  onLoadingChange={setRangeLoading}
+                  onCategoriesChange={(cats) => {
+                    setRangeCategories(cats);
+                    // Default to showing only Extant (Native) if it exists
+                    if (cats.some((c) => c.key === "1-1")) {
+                      setVisibleCategories(new Set(["1-1"]));
+                    }
+                  }}
+                  onNotFound={setRangeNotFound}
+                  onSimplificationChange={setRangeSimplification}
+                  onPolygonsChange={setRangePolygons}
+                  visibleCategories={visibleCategories}
+                />
+              )}
+              {/* AOH layer */}
+              {showAoh && sisTaxonId && taxonGroup && (
+                <AohMapLayer
+                  sisTaxonId={sisTaxonId}
+                  taxonGroup={taxonGroup}
+                  visible={showAoh}
+                  panelId={panelId}
+                  mapRef={mapRef}
+                  onLoadingChange={setAohLoading}
+                />
+              )}
             </MapGL>
           ) : null}
           {/* Legend */}
@@ -1430,6 +1558,17 @@ export default function OccurrenceMapRow({
   // basis-of-record dropdown's "total" and "loaded" columns are always identical —
   // collapse them into one column rather than showing the same number twice.
   const isFullSample = totalOccurrences == null || totalOccurrences <= occurrences.length;
+
+  // All toggleable map layers in the Overlays dropdown, for its "N of M" badge —
+  // GBIF/range/AOH only count when actually available for this species.
+  const overlayToggleValues = [
+    showGbif,
+    ...(assessmentId && canViewRangeMap ? [showRange] : []),
+    ...(isAohAvailable ? [showAoh] : []),
+    showProtectedAreas,
+    showPowoRangeOverlay,
+    showIucnRangeOverlay,
+  ];
 
   return (
     <div className="bg-zinc-50 dark:bg-zinc-800/50">
@@ -2028,10 +2167,11 @@ export default function OccurrenceMapRow({
                   </div>
                 )}
               </div>
-              {/* Overlays — informational map layers (Protected areas / POWO
-                  native range / IUCN native countries), independent of the
-                  "Native range only" occurrence filter above: these just shade
-                  which countries a source considers native, for context. */}
+              {/* Overlays — every toggleable map layer lives here: GBIF points/
+                  IUCN range map/AOH (species-specific data layers) plus
+                  Protected areas/POWO native range/IUCN native countries
+                  (contextual native-range shading), independent of the
+                  "Native range only" occurrence filter above. */}
               <div className="relative" ref={overlaysRef}>
                 <button
                   onClick={() => setOverlaysOpen(!overlaysOpen)}
@@ -2040,21 +2180,129 @@ export default function OccurrenceMapRow({
                       ? "bg-zinc-100 dark:bg-zinc-800 border-zinc-400 dark:border-zinc-500"
                       : "border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-800"
                   } text-zinc-700 dark:text-zinc-300`}
-                  title="Map overlays: protected areas, POWO/IUCN native countries"
+                  title="Map overlays: GBIF points, IUCN range map, AOH, protected areas, POWO/IUCN native countries"
                 >
                   <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
                   </svg>
                   Overlays
                   <span className="text-[10px] text-zinc-400 tabular-nums">
-                    {[showProtectedAreas, showPowoRangeOverlay, showIucnRangeOverlay].filter(Boolean).length} of 3
+                    {overlayToggleValues.filter(Boolean).length} of {overlayToggleValues.length}
                   </span>
                   <svg className={`w-3 h-3 text-zinc-400 transition-transform ${overlaysOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                   </svg>
                 </button>
                 {overlaysOpen && (
-                  <div className="absolute left-0 top-full mt-1 z-50 w-64 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
+                  <div className="absolute left-0 top-full mt-1 z-50 w-72 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
+                    <label className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs">
+                      <input
+                        type="checkbox"
+                        checked={showGbif}
+                        onChange={() => setShowGbif((v) => !v)}
+                        className="w-3 h-3 rounded accent-blue-500 shrink-0"
+                      />
+                      <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">GBIF Points</span>
+                    </label>
+                    {assessmentId && canViewRangeMap && (
+                      <div>
+                        <label
+                          className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
+                          title="Toggle IUCN range map overlay. Range maps are indicative only and may not reflect current distributions."
+                        >
+                          <input
+                            type="checkbox"
+                            checked={showRange}
+                            onChange={() => setShowRange((v) => !v)}
+                            className="w-3 h-3 rounded accent-rose-500 shrink-0"
+                          />
+                          <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200 flex items-center gap-1">
+                            IUCN Range Map
+                            {rangeLoading && (
+                              <svg className="w-3 h-3 animate-spin text-zinc-400" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                              </svg>
+                            )}
+                          </span>
+                          {showRange && rangeCategories.length > 1 && (
+                            <button
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setRangeCategoriesExpanded(!rangeCategoriesExpanded); }}
+                              className="shrink-0 text-zinc-400 hover:text-zinc-600"
+                            >
+                              {rangeCategoriesExpanded ? "▴" : "▾"}
+                            </button>
+                          )}
+                        </label>
+                        {showRange && rangeNotFound && (
+                          <span className="block px-3 pb-1.5 text-[10px] text-zinc-400 italic">Not yet available</span>
+                        )}
+                        {showRange && !rangeNotFound && rangeSimplification && (
+                          <span
+                            className="flex items-center gap-1 px-3 pb-1.5 text-[10px] text-amber-600 dark:text-amber-400 cursor-help"
+                            title={`This range map has been simplified at ${rangeSimplification.tolerance}° (~${Math.round(rangeSimplification.tolerance * 111)}km) to reduce file size. Fine-scale boundary details may be lost.`}
+                          >
+                            <svg className="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                              <circle cx="12" cy="12" r="10" />
+                              <path d="M12 16v-4M12 8h.01" />
+                            </svg>
+                            Simplified to {rangeSimplification.tolerance}°
+                          </span>
+                        )}
+                        {showRange && rangeCategoriesExpanded && rangeCategories.length > 0 && (
+                          <div className="flex flex-col gap-0.5 px-3 pb-1.5 pl-6">
+                            {rangeCategories.map((cat) => {
+                              const isVisible = !visibleCategories || visibleCategories.has(cat.key);
+                              return (
+                                <button
+                                  key={cat.key}
+                                  onClick={() => {
+                                    setVisibleCategories((prev) => {
+                                      const next = new Set(prev ?? rangeCategories.map((c) => c.key));
+                                      if (next.has(cat.key)) next.delete(cat.key);
+                                      else next.add(cat.key);
+                                      return next;
+                                    });
+                                  }}
+                                  className={`flex items-center gap-1 py-0.5 rounded text-[10px] transition-colors ${
+                                    isVisible ? "text-zinc-700 dark:text-zinc-300" : "text-zinc-400 dark:text-zinc-500 line-through"
+                                  }`}
+                                >
+                                  <span
+                                    className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
+                                    style={{ background: cat.color, opacity: isVisible ? 1 : 0.3 }}
+                                  />
+                                  {cat.label} ({cat.count})
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {isAohAvailable && (
+                      <label
+                        className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
+                        title="Toggle Area of Habitat overlay"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={showAoh}
+                          onChange={() => setShowAoh((v) => !v)}
+                          className="w-3 h-3 rounded accent-green-500 shrink-0"
+                        />
+                        <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200 flex items-center gap-1">
+                          AOH
+                          {aohLoading && (
+                            <svg className="w-3 h-3 animate-spin text-zinc-400" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            </svg>
+                          )}
+                        </span>
+                      </label>
+                    )}
+                    <div className="border-t border-zinc-100 dark:border-zinc-800 my-1" />
                     <label
                       className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
                       title="Overlay the World Database on Protected Areas (WDPA) — UNEP-WCMC & IUCN"
@@ -2228,52 +2476,103 @@ export default function OccurrenceMapRow({
 
             {/* Map(s) — takes remaining width, stretches to match left column */}
             <div className="flex-1 min-w-0 flex flex-col gap-2">
-              {splitView && splitDate ? (
-                <div className="flex flex-col gap-2">
-                  {/* Split view control bar */}
-                  <div className="flex flex-wrap items-center gap-2 px-2 py-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-xs text-zinc-600 dark:text-zinc-300">
-                    <span className="font-medium">Split view</span>
-                    <span className="text-zinc-400">|</span>
-                    <span className="text-zinc-500 dark:text-zinc-400 whitespace-nowrap">Date: <span className="font-medium text-zinc-700 dark:text-zinc-200">{splitDate}</span></span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={Math.max(0, Math.round((new Date(sliderMaxDate).getTime() - new Date(sliderMinDate).getTime()) / 86400000))}
-                      value={Math.max(0, Math.round((new Date(splitDate).getTime() - new Date(sliderMinDate).getTime()) / 86400000))}
-                      onChange={(e) => {
-                        const days = parseInt(e.target.value, 10);
-                        const d = new Date(sliderMinDate);
-                        d.setDate(d.getDate() + days);
-                        setSplitDate(d.toISOString().slice(0, 10));
-                      }}
-                      className="flex-1 min-w-[100px] h-2.5 sm:h-1.5 accent-blue-500"
-                    />
-                    {assessmentDate && splitDate !== assessmentDate.split("T")[0] && (
+                {splitView && splitDate ? (
+                  <div className="flex flex-col gap-2">
+                    {/* Split view control bar */}
+                    <div className="flex flex-wrap items-center gap-2 px-2 py-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-xs text-zinc-600 dark:text-zinc-300">
+                      <span className="font-medium">Split view</span>
+                      <span className="text-zinc-400">|</span>
+                      <span className="text-zinc-500 dark:text-zinc-400 whitespace-nowrap">Date: <span className="font-medium text-zinc-700 dark:text-zinc-200">{splitDate}</span></span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={Math.max(0, Math.round((new Date(sliderMaxDate).getTime() - new Date(sliderMinDate).getTime()) / 86400000))}
+                        value={Math.max(0, Math.round((new Date(splitDate).getTime() - new Date(sliderMinDate).getTime()) / 86400000))}
+                        onChange={(e) => {
+                          const days = parseInt(e.target.value, 10);
+                          const d = new Date(sliderMinDate);
+                          d.setDate(d.getDate() + days);
+                          setSplitDate(d.toISOString().slice(0, 10));
+                        }}
+                        className="flex-1 min-w-[100px] h-2.5 sm:h-1.5 accent-blue-500"
+                      />
+                      {assessmentDate && splitDate !== assessmentDate.split("T")[0] && (
+                        <button
+                          onClick={() => setSplitDate(assessmentDate.split("T")[0])}
+                          className="text-xs sm:text-[10px] px-2 py-1 sm:px-1.5 sm:py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 hover:bg-white dark:hover:bg-zinc-700 transition-colors whitespace-nowrap"
+                        >
+                          Reset to assessment date
+                        </button>
+                      )}
                       <button
-                        onClick={() => setSplitDate(assessmentDate.split("T")[0])}
-                        className="text-xs sm:text-[10px] px-2 py-1 sm:px-1.5 sm:py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 hover:bg-white dark:hover:bg-zinc-700 transition-colors whitespace-nowrap"
+                        onClick={() => setSplitView(false)}
+                        className="ml-auto p-1.5 sm:p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                        title="Close split view"
                       >
-                        Reset to assessment date
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
                       </button>
-                    )}
-                    <button
-                      onClick={() => setSplitView(false)}
-                      className="ml-auto p-1.5 sm:p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                      title="Close split view"
-                    >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      {renderMapPanel(preAssessmentOccs, bbox, `Before ${splitDate} (${preAssessmentOccs.length})`, "before")}
+                      {renderMapPanel(postAssessmentOccs, bbox, `After ${splitDate} (${postAssessmentOccs.length})`, "after")}
+                    </div>
                   </div>
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    {renderMapPanel(preAssessmentOccs, bbox, `Before ${splitDate} (${preAssessmentOccs.length})`, "before")}
-                    {renderMapPanel(postAssessmentOccs, bbox, `After ${splitDate} (${postAssessmentOccs.length})`, "after")}
+                ) : (
+                  renderMapPanel(filteredOccurrences, bbox, null)
+                )}
+                {/* In-range/out-of-range breakdown vs. the currently-visible IUCN
+                    range polygons — one table covering Total plus (when a split
+                    date is available — defaults to the assessment date, but
+                    tracks wherever the split view slider is dragged to) Before/
+                    After rows, regardless of whether split view is open.
+                    Auto-updates with every occurrence filter and every range
+                    category toggle. Rendered in-flow below the map(s) (not
+                    floated over them) — it collides with the bottom legend/
+                    toolbar row when floated, since that row can grow wide
+                    enough to reach the corner. */}
+                {showRange && rangeCoverageStats && rangeCoverageStats.total.total > 0 && (
+                  <div className="w-full px-3 py-2 rounded-lg shadow-md bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-xs text-zinc-600 dark:text-zinc-300">
+                    <table className="w-full border-collapse">
+                      <thead>
+                        <tr>
+                          <th className="text-left font-medium text-zinc-700 dark:text-zinc-200 pr-3 pb-1 w-2/5">GBIF vs. range map</th>
+                          <th className="text-right font-medium text-zinc-400 dark:text-zinc-500 px-2 pb-1 w-[15%]"># Total</th>
+                          <th className="text-right font-medium text-zinc-400 dark:text-zinc-500 px-2 pb-1 w-[15%]"># In range</th>
+                          <th className="text-right font-medium text-zinc-400 dark:text-zinc-500 px-2 pb-1 w-[15%]"># Out range</th>
+                          <th className="text-right font-medium text-zinc-400 dark:text-zinc-500 pl-2 pb-1 w-[15%]">% In range</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(
+                          [
+                            ["Total", rangeCoverageStats.total, true],
+                            ...(rangeCoverageStats.before ? [[`Before ${splitDate}`, rangeCoverageStats.before, false] as const] : []),
+                            ...(rangeCoverageStats.after ? [[`After ${splitDate}`, rangeCoverageStats.after, false] as const] : []),
+                          ] as [string, { inRange: number; outRange: number; total: number }, boolean][]
+                        ).map(([rowLabel, stats, isTotal]) => (
+                          <tr
+                            key={rowLabel}
+                            className={
+                              isTotal
+                                ? "border-t border-b-2 border-zinc-200 dark:border-zinc-600 bg-zinc-50 dark:bg-zinc-900/40 font-semibold text-zinc-800 dark:text-zinc-100"
+                                : "border-t border-zinc-100 dark:border-zinc-700"
+                            }
+                          >
+                            <td className="text-left pr-3 py-1">{rowLabel}</td>
+                            <td className="text-right px-2 py-1">{stats.total.toLocaleString()}</td>
+                            <td className="text-right px-2 py-1">{stats.inRange.toLocaleString()}</td>
+                            <td className="text-right px-2 py-1">{stats.outRange.toLocaleString()}</td>
+                            <td className="text-right pl-2 py-1">
+                              {stats.total > 0 ? `${Math.round((stats.inRange / stats.total) * 100)}%` : "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                </div>
-              ) : (
-                renderMapPanel(filteredOccurrences, bbox, null)
-              )}
+                )}
             </div>
           </div>
         </div>

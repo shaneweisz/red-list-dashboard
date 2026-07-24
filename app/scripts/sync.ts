@@ -15,6 +15,8 @@
  *   Phase 11: build-synonym-index   (→ synonym-index.parquet, search)
  *   Phase 12: build-col-taxon-ids   (taxonomy tree + backbone.parquet → src/config/col-taxon-ids.json, committed to git)
  *   Phase 13: build-taxa-summary    (CSVs + CoL artifacts → taxa-summary.json, incl. col counts)
+ *   Phase 14: upload-range-maps     (IUCN DB → R2, skips existing)
+ *   Phase 15: upload-aoh-maps       (STAR GeoTIFFs → R2, skips existing)
  *
  * Prerequisites:
  *   1. DB connectivity to IUCN Postgres — primary is a local restore from
@@ -49,6 +51,8 @@ import { run as buildBackbone } from "./build-backbone";
 import { run as buildMatching } from "./build-matching";
 import { run as buildSynonymIndex } from "./build-synonym-index";
 import { run as buildColTaxonIds } from "./build-col-taxon-ids";
+import { run as uploadRangeMaps } from "./upload-range-maps";
+import { run as uploadAohMaps } from "./upload-aoh-maps";
 
 async function main() {
   loadEnvFiles();
@@ -147,6 +151,16 @@ async function main() {
     console.log("\nPhase 13: build-taxa-summary");
     console.log("═".repeat(60));
     await buildTaxaSummary();
+
+    // Phase 14: Upload range maps to R2
+    console.log("\nPhase 14: upload-range-maps");
+    console.log("═".repeat(60));
+    await uploadRangeMaps({ taxa: taxaFilter, logger });
+
+    // Phase 15: Upload AOH maps to R2
+    console.log("\nPhase 15: upload-aoh-maps");
+    console.log("═".repeat(60));
+    await uploadAohMaps({ taxa: taxaFilter, logger });
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
     const minutes = Math.floor(Number(elapsed) / 60);
