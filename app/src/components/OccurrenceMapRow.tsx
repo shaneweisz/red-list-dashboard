@@ -483,9 +483,10 @@ export default function OccurrenceMapRow({
   // in-range/out-of-range breakdown shown in the corner stats table.
   const [rangePolygons, setRangePolygons] = useState<Feature[] | null>(null);
 
-  // AOH layer state
+  // AOH layer state. taxonGroup is the friendly bucket name ("birds", not
+  // "aves") — matches taxon_group from the species API, not class_name.
   const isAohAvailable = !!(sisTaxonId && taxonGroup &&
-    ["mammalia", "aves", "reptilia", "amphibia"].includes(taxonGroup.toLowerCase()));
+    ["mammals", "birds", "reptiles", "amphibians"].includes(taxonGroup.toLowerCase()));
   const [showAoh, setShowAoh] = useState(false);
   const [aohLoading, setAohLoading] = useState(false);
 
