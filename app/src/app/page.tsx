@@ -70,11 +70,11 @@ export default function RedListPage() {
   return (
     <div className="min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950 px-4 sm:px-6 py-4 md:px-16 md:py-8">
       <main className="max-w-5xl w-full min-w-0 mx-auto flex-1">
-        {/* Header: two aligned rows (title | view-toggle, subtitle | search).
+        {/* Header: two aligned rows (title | search, subtitle | view + theme).
             Globe sits inline with the title so the subtitle, controls and
             search bar share the same flush-left edge as the table below. */}
         <div className="mb-[0.9rem] md:mb-[1.35rem]">
-          <div className="min-w-0 grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center gap-x-3 gap-y-1.5 sm:gap-y-3 [grid-template-areas:'title'_'subtitle'_'controls'_'search'] sm:[grid-template-areas:'title_controls'_'subtitle_search']">
+          <div className="min-w-0 grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center gap-x-3 gap-y-1.5 sm:gap-y-3 [grid-template-areas:'title'_'subtitle'_'search'_'view'] sm:[grid-template-areas:'title_search'_'subtitle_view']">
             <button
               type="button"
               onClick={() => {
@@ -108,12 +108,12 @@ export default function RedListPage() {
             {brand.subtitle && (
               <p className="[grid-area:subtitle] text-[15px] md:text-[1.375rem] text-zinc-500 dark:text-zinc-400">{brand.subtitle}</p>
             )}
-            <div className="[grid-area:controls] flex items-center gap-2 flex-wrap sm:justify-self-end">
-              <div ref={setViewSelectorSlotEl} className="flex items-center" />
-              <ThemeToggle />
-            </div>
             <div className="[grid-area:search] sm:justify-self-end">
               <SpeciesSearchBar />
+            </div>
+            <div className="[grid-area:view] flex items-center gap-2 flex-wrap sm:justify-self-end">
+              <div ref={setViewSelectorSlotEl} className="flex items-center" />
+              <ThemeToggle />
             </div>
           </div>
         </div>

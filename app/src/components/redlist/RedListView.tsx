@@ -2575,11 +2575,11 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               <button
                 key={taxonId}
                 onClick={() => setSelectedTaxa(prev => { const next = new Set(prev); next.delete(taxonId); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full flex items-center gap-1 hover:opacity-80"
                 style={{ backgroundColor: (TAXA_BY_ID[taxonId]?.color || "#666") + "20", color: TAXA_BY_ID[taxonId]?.color || "#666" }}
               >
                 {TAXA_BY_ID[taxonId]?.name || taxonId}
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {Array.from(selectedSubgroups).map(sgId => {
@@ -2588,72 +2588,72 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <button
                   key={sgId}
                   onClick={() => setSelectedSubgroups(prev => { const next = new Set(prev); next.delete(sgId); return next; })}
-                  className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
+                  className="px-3 py-1.5 text-sm font-medium rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
                 >
                   {sgInfo?.node.name ?? dynamicNodeDisplayName(sgId)}
-                  <span className="text-xs">×</span>
+                  <span className="text-sm">×</span>
                 </button>
               );
             })}
             {breakdownFilter && selectedSubgroups.has(breakdownFilter.nodeId) && (
               <button
                 onClick={() => setBreakdownFilter(null)}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
               >
                 {breakdownDisplayName(breakdownFilter.rank, breakdownFilter.name)}
                 {breakdownFilter.onlyIds?.length ? " — No CoL Match" : breakdownFilter.excludeIds?.length ? " — CoL Match" : ""}
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             )}
             {!isNewAssessments && Array.from(selectedCategories).filter(cat => cat !== "NE").map(cat => (
               <button
                 key={cat}
                 onClick={() => setSelectedCategories(prev => { const next = new Set(prev); next.delete(cat); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full flex items-center gap-1 hover:opacity-80"
                 style={{ backgroundColor: CATEGORY_COLORS[cat] + "20", color: CATEGORY_COLORS[cat] }}
               >
                 {cat}
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {!isNewAssessments && Array.from(selectedYearRanges).map(range => (
               <button
                 key={range}
                 onClick={() => setSelectedYearRanges(prev => { const next = new Set(prev); next.delete(range); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 flex items-center gap-1 hover:opacity-80"
               >
                 {range}
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {!isNewAssessments && Array.from(selectedAssessmentYears).sort((a, b) => Number(b) - Number(a)).map(year => (
               <button
                 key={`ay-${year}`}
                 onClick={() => setSelectedAssessmentYears(prev => { const next = new Set(prev); next.delete(year); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 flex items-center gap-1 hover:opacity-80"
               >
                 Assessed {year}
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {isNewAssessments && Array.from(selectedDescribedYears).map(range => (
               <button
                 key={`dy-${range}`}
                 onClick={() => setSelectedDescribedYears(prev => { const next = new Set(prev); next.delete(range); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
               >
                 Described {range}
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {Array.from(selectedObsRanges).map(range => (
               <button
                 key={range}
                 onClick={() => setSelectedObsRanges(prev => { const next = new Set(prev); next.delete(range); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 flex items-center gap-1 hover:opacity-80"
               >
                 {range} obs
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {(() => {
@@ -2669,10 +2669,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     return (
                       <button
                         onClick={() => setSelectedCountries(new Set())}
-                        className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 flex items-center gap-1 hover:opacity-80"
+                        className="px-3 py-1.5 text-sm font-medium rounded-full bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 flex items-center gap-1 hover:opacity-80"
                       >
                         {region}
-                        <span className="text-xs">×</span>
+                        <span className="text-sm">×</span>
                       </button>
                     );
                   }
@@ -2683,10 +2683,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <button
                   key={code}
                   onClick={() => setSelectedCountries(prev => { const next = new Set(prev); next.delete(code); return next; })}
-                  className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 flex items-center gap-1 hover:opacity-80"
+                  className="px-3 py-1.5 text-sm font-medium rounded-full bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 flex items-center gap-1 hover:opacity-80"
                 >
                   {getCountryName(code)}
-                  <span className="text-xs">×</span>
+                  <span className="text-sm">×</span>
                 </button>
               ));
             })()}
@@ -2694,39 +2694,39 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               <button
                 key={`gf-${gf}`}
                 onClick={() => setSelectedGrowthForms(prev => { const next = new Set(prev); next.delete(gf); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-lime-100 text-lime-600 dark:bg-lime-900/30 dark:text-lime-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-lime-100 text-lime-600 dark:bg-lime-900/30 dark:text-lime-400 flex items-center gap-1 hover:opacity-80"
               >
                 {gf}
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {endemicsOnly && (
               <button
                 onClick={() => setEndemicsOnly(false)}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400 flex items-center gap-1 hover:opacity-80"
               >
                 Endemics only
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             )}
             {Array.from(selectedPopulationTrends).map(trend => (
               <button
                 key={`trend-${trend}`}
                 onClick={() => setSelectedPopulationTrends(prev => { const next = new Set(prev); next.delete(trend); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 flex items-center gap-1 hover:opacity-80"
               >
                 {trend}
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {Array.from(selectedMovementPatterns).map(pattern => (
               <button
                 key={`mov-${pattern}`}
                 onClick={() => setSelectedMovementPatterns(prev => { const next = new Set(prev); next.delete(pattern); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400 flex items-center gap-1 hover:opacity-80"
               >
                 {pattern}
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {Array.from(selectedThreats).map(code => {
@@ -2737,10 +2737,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <button
                   key={`threat-${code}`}
                   onClick={() => setSelectedThreats(prev => { const next = new Set(prev); next.delete(code); return next; })}
-                  className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400 flex items-center gap-1 hover:opacity-80"
+                  className="px-3 py-1.5 text-sm font-medium rounded-full bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400 flex items-center gap-1 hover:opacity-80"
                 >
                   {label}
-                  <span className="text-xs">×</span>
+                  <span className="text-sm">×</span>
                 </button>
               );
             })}
@@ -2748,34 +2748,34 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               <button
                 key={system}
                 onClick={() => setSelectedSystems(prev => { const next = new Set(prev); next.delete(system); return next; })}
-                className={`px-2 md:px-3 py-1 text-xs md:text-sm rounded-full flex items-center gap-1 hover:opacity-80 ${
+                className={`px-3 py-1.5 text-sm font-medium rounded-full flex items-center gap-1 hover:opacity-80 ${
                   system === "Terrestrial" ? "bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400"
                   : system === "Freshwater" ? "bg-cyan-100 text-cyan-600 dark:bg-cyan-900/30 dark:text-cyan-400"
                   : "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
                 }`}
               >
                 {system}
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {!isNewAssessments && Array.from(selectedAssessors).map(name => (
               <button
                 key={`a-${name}`}
                 onClick={() => setSelectedAssessors(prev => { const next = new Set(prev); next.delete(name); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
               >
                 {name} <span className="text-[10px] opacity-60">(assessor)</span>
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {!isNewAssessments && Array.from(selectedReviewers).map(name => (
               <button
                 key={`r-${name}`}
                 onClick={() => setSelectedReviewers(prev => { const next = new Set(prev); next.delete(name); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-fuchsia-100 text-fuchsia-600 dark:bg-fuchsia-900/30 dark:text-fuchsia-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-fuchsia-100 text-fuchsia-600 dark:bg-fuchsia-900/30 dark:text-fuchsia-400 flex items-center gap-1 hover:opacity-80"
               >
                 {name} <span className="text-[10px] opacity-60">(reviewer)</span>
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {/* Exact URL-only filters (typically arrive via an agent/MCP dashboard
@@ -2794,20 +2794,18 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <button
                   key={`ef-${c.key}`}
                   onClick={() => setExactFilters({ [c.key]: null })}
-                  className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800/60 dark:text-slate-300 flex items-center gap-1 hover:opacity-80"
+                  className="px-3 py-1.5 text-sm font-medium rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800/60 dark:text-slate-300 flex items-center gap-1 hover:opacity-80"
                 >
                   {c.label}
-                  <span className="text-xs">×</span>
+                  <span className="text-sm">×</span>
                 </button>
               ));
             })()}
-            <span className="ml-auto text-sm md:text-base font-semibold text-zinc-700 dark:text-zinc-300 tabular-nums flex items-center gap-2">
-              {speciesLoading && totalFiltered === 0 && !singleSpeciesPreview ? (
-                <Spinner className="h-4 w-4" />
-              ) : (
-                <>{totalFiltered.toLocaleString()} species</>
-              )}
-            </span>
+            {/* No standalone species-count readout here anymore — the taxon-focus
+                stat card below shows it (with "of Y" once a filter narrows it),
+                so this row would just be a redundant second copy of the same
+                number. ml-auto moved to the Not Evaluated button so the pills
+                still hug the left and this stays right-aligned. */}
             {!isNewAssessments && (neCount > 0 || neBlockedForAll) && (
               <button
                 disabled={neBlockedForAll}
@@ -2823,7 +2821,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     return next;
                   });
                 }}
-                className={`px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1 md:gap-1.5 ${
+                className={`ml-auto px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1 md:gap-1.5 ${
                   neBlockedForAll
                     ? "bg-white text-zinc-400 border border-zinc-200 opacity-60 cursor-not-allowed dark:bg-zinc-800 dark:text-zinc-500 dark:border-zinc-700"
                     : selectedCategories.has("NE")
@@ -2869,10 +2867,25 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                     {isNewAssessments ? "Not Evaluated Species" : "Assessed Species"}
                   </div>
-                  <div className="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                    {speciesLoading && assessedSpecies.length === 0
-                      ? <Spinner className="h-6 w-6" />
-                      : totalFiltered.toLocaleString()}
+                  <div className="mt-0.5 flex items-baseline gap-1.5">
+                    {speciesLoading && assessedSpecies.length === 0 ? (
+                      <Spinner className="h-6 w-6" />
+                    ) : (
+                      <>
+                        <span className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+                          {totalFiltered.toLocaleString()}
+                        </span>
+                        {/* Only show "of Y" once a filter has actually narrowed the
+                            count below the taxon's own total (taxaFilteredSpeciesBase —
+                            taxon/subgroup only, no pill filters) — otherwise the two
+                            numbers are identical and the qualifier is just noise. */}
+                        {totalFiltered !== taxaFilteredSpeciesBase.length && (
+                          <span className="text-sm font-medium text-zinc-400 dark:text-zinc-500">
+                            of {taxaFilteredSpeciesBase.length.toLocaleString()}
+                          </span>
+                        )}
+                      </>
+                    )}
                   </div>
                 </div>
                 {onViewModeChange && (

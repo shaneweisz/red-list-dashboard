@@ -1481,15 +1481,15 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   // location data, which Not Evaluated species don't have (no assessment means no
   // assessment_locations row), so it's disabled under New Assessments.
   const layoutModeSelect = (
-    <span className="inline-flex items-center gap-1.5">
-      <span className="text-xs text-zinc-400 dark:text-zinc-500">View by:</span>
+    <span className="inline-flex items-center gap-2">
+      <span className="text-sm font-medium text-zinc-600 dark:text-zinc-300">View</span>
       <select
         value={layoutMode ?? "taxonomic"}
         onChange={(e) => {
           const v = e.target.value;
           onLayoutModeChange(v === "taxonomic" ? null : (v as "table1a" | "ssc" | "country"));
         }}
-        className="text-xs bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        className="text-sm bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-2 py-1 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
       >
         <option value="taxonomic">By Taxon</option>
         <option value="country" disabled={isNewAssessments} title={isNewAssessments ? "Not available for New Assessments — Not Evaluated species have no location data" : undefined}>
