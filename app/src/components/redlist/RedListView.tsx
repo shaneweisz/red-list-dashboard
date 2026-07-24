@@ -775,6 +775,24 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // Reset NE fetch when taxon selection changes
   useEffect(() => { setNeSpecies([]); setNeSpeciesFetched(false); }, [neFetchTaxon]);
 
+  // "All Species" (or any multi-taxon selection, which also resolves neFetchTaxon to
+  // "all") has ~1.8M not-evaluated species — far past querySpecies's NE_CAP, so the
+  // fetch above would return tooLarge with an empty species list. Previously this just
+  // made the pill silently disappear (neCount fell back to 0) while any already-active
+  // "NE" filter stayed selected but matched nothing, showing "0 species" with no
+  // explanation. Block it instead: keep the pill visible but disabled, and drop "NE"
+  // from selectedCategories if a prior taxon-scoped selection is carried into this state.
+  const neBlockedForAll = neFetchTaxon === "all";
+  useEffect(() => {
+    if (!neBlockedForAll) return;
+    setSelectedCategories(prev => {
+      if (!prev.has("NE")) return prev;
+      const next = new Set(prev);
+      next.delete("NE");
+      return next;
+    });
+  }, [neBlockedForAll, setSelectedCategories]);
+
   // All species = assessed + NE (in new-assessments mode, assessedSpecies already contains NE species)
   const species = useMemo(() => isNewAssessments ? assessedSpecies : [...assessedSpecies, ...neSpecies], [assessedSpecies, neSpecies, isNewAssessments]);
   const neCount = neSpecies.length;
@@ -3635,9 +3653,11 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <>{totalFiltered.toLocaleString()} species</>
               )}
             </span>
-            {!isNewAssessments && neCount > 0 && (
+            {!isNewAssessments && (neCount > 0 || neBlockedForAll) && (
               <button
+                disabled={neBlockedForAll}
                 onClick={() => {
+                  if (neBlockedForAll) return;
                   setSelectedCategories(prev => {
                     const next = new Set(prev);
                     if (next.has("NE")) {
@@ -3649,14 +3669,16 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   });
                 }}
                 className={`px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1 md:gap-1.5 ${
-                  selectedCategories.has("NE")
+                  neBlockedForAll
+                    ? "bg-white text-zinc-400 border border-zinc-200 opacity-60 cursor-not-allowed dark:bg-zinc-800 dark:text-zinc-500 dark:border-zinc-700"
+                    : selectedCategories.has("NE")
                     ? "bg-zinc-500 text-white"
                     : "bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700"
                 }`}
-                title="Show Not Evaluated species from GBIF"
+                title={neBlockedForAll ? "Not Evaluated species must be loaded per taxon group — too many to load for All Species at once" : "Show Not Evaluated species from GBIF"}
               >
                 Not Evaluated
-                <span className="text-[10px] opacity-70">({neCount.toLocaleString()})</span>
+                {!neBlockedForAll && <span className="text-[10px] opacity-70">({neCount.toLocaleString()})</span>}
               </button>
             )}
           </div>

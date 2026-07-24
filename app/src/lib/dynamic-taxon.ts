@@ -3,10 +3,11 @@
  * chain grafted onto one of the static default-view roots, e.g.
  * "mammals~order:rodentia~family:muridae". `~` never appears in a real static
  * node id (taxonomy-tree.ts ids are all lowercase-hyphen), so isDynamicNodeId is
- * unambiguous and never collides with NODE_INDEX or the unrelated bare-token
- * arbitrary-rank search feature (species-duckdb.ts's resolveWhere/suggestTaxa,
- * used by the search bar to jump straight to e.g. "turdidae" as a root
- * selection — untouched by this module).
+ * unambiguous and never collides with NODE_INDEX or the bare-token arbitrary-rank
+ * search feature (species-duckdb.ts's resolveWhere, used as a fallback when a
+ * search-bar taxon suggestion can't be resolved to a real node — see
+ * suggestTaxa/resolveTaxonSuggestionNode, which DOES build ids via this module's
+ * buildDynamicNodeId/nextDynamicRank when a match resolves to one).
  *
  * matchesFilter/filterToSql already support multiple simultaneous positive
  * dimensions ANDed together and already coalesce null order_name/family to ""
@@ -62,7 +63,11 @@ const ROOT_RANK_ORDER: Record<string, DynamicRank[]> = {
   other_invertebrates: CLASS_FIRST_RANK_ORDER,
   "inv-other_invertebrates": CLASS_FIRST_RANK_ORDER,
 };
-function rankOrderFor(rootId: string): DynamicRank[] {
+/** The rank sequence a root drills through (e.g. ["order","family","genus"], or
+ *  ["class","order","family","genus"] for a class-first root) — exported so a
+ *  caller building a multi-segment id from a single matched rank (e.g. search's
+ *  resolveTaxonSuggestionNode) knows which ranks must come before it in the chain. */
+export function rankOrderFor(rootId: string): DynamicRank[] {
   return ROOT_RANK_ORDER[rootId] ?? DEFAULT_RANK_ORDER;
 }
 
