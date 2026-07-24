@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { shouldSkipRequest, toCacheEntry, type SpeciesCacheEntry } from "./species-cache-logic";
 
 export type { SpeciesCacheEntry };
@@ -29,15 +29,29 @@ export function SpeciesCacheProvider({ children }: { children: ReactNode }) {
   const [entries, setEntries] = useState<Record<string, SpeciesCacheEntry>>({});
   const [loadingUrls, setLoadingUrls] = useState<Set<string>>(new Set());
   const [errors, setErrors] = useState<Record<string, string>>({});
+
   // Tracks in-flight requests so concurrent callers (e.g. both panels mounting at
   // once) dedupe even before the first `entries` update lands.
   const inFlightRef = useRef<Set<string>>(new Set());
+  // One AbortController per in-flight url, aborted on provider unmount — so
+  // navigating away (e.g. leaving /compare) actually cancels in-flight
+  // requests instead of letting them complete for a component tree that's
+  // gone, and their completion doesn't call setState on an unmounted provider.
+  const abortControllersRef = useRef<Record<string, AbortController>>({});
+  useEffect(() => {
+    return () => {
+      Object.values(abortControllersRef.current).forEach(c => c.abort());
+      abortControllersRef.current = {};
+    };
+  }, []);
 
   const request = useCallback((url: string) => {
     if (shouldSkipRequest(url, entries, inFlightRef.current)) return;
     inFlightRef.current.add(url);
+    const controller = new AbortController();
+    abortControllersRef.current[url] = controller;
     setLoadingUrls(prev => new Set(prev).add(url));
-    fetch(url)
+    fetch(url, { signal: controller.signal })
       .then(async res => {
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
@@ -49,16 +63,30 @@ export function SpeciesCacheProvider({ children }: { children: ReactNode }) {
         setEntries(prev => ({ ...prev, [url]: toCacheEntry(data) }));
       })
       .catch(err => {
+        if (controller.signal.aborted) return; // provider unmounted; nothing left to update
         setErrors(prev => ({ ...prev, [url]: err instanceof Error ? err.message : "Unknown error" }));
       })
       .finally(() => {
         inFlightRef.current.delete(url);
+        delete abortControllersRef.current[url];
+        if (controller.signal.aborted) return;
         setLoadingUrls(prev => {
           const next = new Set(prev);
           next.delete(url);
           return next;
         });
       });
+  // `request`'s identity legitimately changes whenever `entries` does — reading
+  // `entries` fresh here (rather than via a ref kept "in sync" by a separate
+  // effect) matters: a ref updated in its own useEffect lags one commit behind
+  // whichever consumer effect's `cache.entries` change triggered it, so a
+  // component whose own fetch just resolved could re-run its request effect
+  // before the ref catches up and re-fire a request for the url it just
+  // received (confirmed by hand — this actually happened). Consumers avoid
+  // over-triggering not by making `request` stable, but by depending on
+  // `cache.entries`/`cache.request` specifically rather than the whole cache
+  // object (see RedListView.tsx) — those two only change together with
+  // `entries`, never independently on a loadingUrls/errors-only update.
   }, [entries]);
 
   const value = useMemo<SpeciesCacheValue>(

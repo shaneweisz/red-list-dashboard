@@ -641,7 +641,14 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   useEffect(() => {
     if (isNewAssessments) return;
     cache.request(`${SPECIES_API}?taxon=all`);
-  }, [isNewAssessments, cache]);
+  // Depends on cache.request specifically, not the whole cache object: the
+  // linter conservatively wants the whole object for any method call off a
+  // hook-returned value, but cache.request's identity only ever changes
+  // together with cache.entries (see SpeciesCacheContext) — depending on the
+  // whole object here would additionally re-run this effect on every
+  // loadingUrls/errors-only update, e.g. another compare-mode panel's fetch
+  // completing or failing, which has nothing to do with this taxon.
+  }, [isNewAssessments, cache.request]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Determine which taxa need fetching, and request them from the shared cache
   useEffect(() => {
@@ -662,7 +669,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (isNewAssessments && taxonId === "all") continue; // NE dataset too large for "all"
       cache.request(speciesApiUrl(taxonId, categoryParam));
     }
-  }, [selectedTaxa, selectedSubgroups, isNewAssessments, cache, speciesApiUrl]);
+  // cache.entries (for the "all" fast-path check above) + cache.request
+  // specifically, not the whole cache object — see the prefetch effect
+  // above for why depending on the whole object over-triggers this.
+  }, [selectedTaxa, selectedSubgroups, isNewAssessments, cache.entries, cache.request, speciesApiUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // "Loading" means one of THIS panel's currently-relevant URLs is still in flight —
   // deliberately not "is anything in the shared cache loading", since in compare mode
@@ -708,7 +718,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     if (isNewAssessments) return;
     if (!selectedCategories.has("NE") || neFetchTaxon === null) return;
     cache.request(speciesApiUrl(neFetchTaxon, "&category=NE"));
-  }, [selectedCategories, neFetchTaxon, isNewAssessments, cache, speciesApiUrl]);
+    // cache.request specifically, not the whole cache object — same reasoning
+    // as the prefetch effect above.
+  }, [selectedCategories, neFetchTaxon, isNewAssessments, cache.request, speciesApiUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const neSpecies = useMemo(() => {
     if (isNewAssessments || !selectedCategories.has("NE") || neFetchTaxon === null) return [];

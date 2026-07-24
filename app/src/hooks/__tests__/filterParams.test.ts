@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseParams, buildQs, mergeParamsIntoSearch } from "../useFilterParams";
+import { parseParams, buildQs, mergeParamsIntoSearch, OWN_PARAM_NAMES } from "../useFilterParams";
 
 describe("parseParams", () => {
   it("defaults viewMode to reassessments", () => {
@@ -738,5 +738,64 @@ describe("param suffixing (compare mode)", () => {
       const state = { ...emptyState, taxa: new Set(["birds"]), categories: new Set(["CR", "EN"]) };
       expect(mergeParamsIntoSearch("", state, "")).toBe(buildQs(state));
     });
+  });
+});
+
+describe("OWN_PARAM_NAMES stays in sync with buildQs", () => {
+  it("every key buildQs can write is in OWN_PARAM_NAMES", () => {
+    // mergeParamsIntoSearch/syncUrl only ever delete this instance's OWN_PARAM_NAMES
+    // keys before re-setting from buildQs's output — if a param were ever added to
+    // buildQs without adding it here too, its stale value would survive every
+    // future write instead of being replaced, and (worse) it'd never get a suffix,
+    // so it would leak across compare-mode panels. This "kitchen sink" state
+    // populates every field with a non-default value so buildQs emits every key it
+    // knows how to write, then asserts each one is accounted for.
+    const kitchenSink = {
+      viewMode: "new-assessments" as const,
+      layoutMode: "table1a" as const,
+      originLayout: "ssc" as const,
+      taxa: new Set(["mammals"]),
+      subgroups: new Set<string>(),
+      categories: new Set(["CR"]),
+      yearRanges: new Set(["<1 year"]),
+      assessmentYears: new Set(["2023"]),
+      describedYears: new Set(["2000-2009"]),
+      countries: new Set(["ZA"]),
+      obsRanges: new Set(["1-10"]),
+      systems: new Set(["Terrestrial"]),
+      populationTrends: new Set(["Decreasing"]),
+      movementPatterns: new Set(["Migratory"]),
+      threats: new Set(["Agriculture"]),
+      breakdown: { nodeId: "n1", rank: "order" as const, name: "Test" },
+      endemicsOnly: true,
+      growthForms: new Set(["Tree"]),
+      assessors: new Set(["Someone"]),
+      reviewers: new Set(["Someone Else"]),
+      search: "shrew",
+      outdated: "yes" as const,
+      minObs: 1,
+      maxObs: 9,
+      minAssessmentYear: 2000,
+      maxAssessmentYear: 2020,
+      minDescribedYear: 1990,
+      maxDescribedYear: 2010,
+      sortField: "category" as const,
+      sortDirection: "asc" as const,
+      mapViewMode: "list" as const,
+      mapSortKey: "outdated" as const,
+      mapSortDirection: "asc" as const,
+      species: 12345,
+      tab: "literature" as const,
+    };
+
+    const qs = buildQs(kitchenSink, "_test");
+    const writtenKeys = [...new URLSearchParams(qs).keys()].map((k) => k.replace(/_test$/, ""));
+    // Sanity check the fixture itself is actually exercising things, so this test
+    // can't silently pass by writing nothing.
+    expect(writtenKeys.length).toBeGreaterThan(20);
+
+    const ownNames = new Set(OWN_PARAM_NAMES);
+    const missing = writtenKeys.filter((k) => !ownNames.has(k));
+    expect(missing).toEqual([]);
   });
 });

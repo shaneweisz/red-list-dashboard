@@ -60,7 +60,12 @@ const paramKey = (name: string, suffix: string): string => (suffix ? `${name}${s
 // syncUrl to know which keys in the URL "belong to" a given hook instance (so it
 // can merge its own writes into the URL without clobbering another instance's
 // differently-suffixed params). Keep in sync with parseParams/buildQs below.
-const OWN_PARAM_NAMES = [
+// Exported so tests can assert this list actually tracks every key
+// parseParams/buildQs read or write — otherwise a future param added to one
+// but not the other would silently leak across compare-mode panels with
+// nothing catching it (see filterParams.test.ts's "OWN_PARAM_NAMES stays in
+// sync" test).
+export const OWN_PARAM_NAMES = [
   "view", "layout", "origin", "countries", "region", "taxa", "subgroups",
   "categories", "years", "assessmentYears", "describedYears", "obsRanges",
   "systems", "trends", "movement", "threats", "bd", "endemics", "growthForms",
