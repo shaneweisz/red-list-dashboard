@@ -1,14 +1,9 @@
 "use client";
 
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
-import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
+import { shouldSkipRequest, toCacheEntry, type SpeciesCacheEntry } from "./species-cache-logic";
 
-export interface SpeciesCacheEntry {
-  species: RedListSpecies[];
-  truncated: boolean;
-  tooLarge: boolean;
-  neTotal: number | null;
-}
+export type { SpeciesCacheEntry };
 
 interface SpeciesCacheValue {
   entries: Record<string, SpeciesCacheEntry>;
@@ -39,7 +34,7 @@ export function SpeciesCacheProvider({ children }: { children: ReactNode }) {
   const inFlightRef = useRef<Set<string>>(new Set());
 
   const request = useCallback((url: string) => {
-    if (entries[url] !== undefined || inFlightRef.current.has(url)) return;
+    if (shouldSkipRequest(url, entries, inFlightRef.current)) return;
     inFlightRef.current.add(url);
     setLoadingUrls(prev => new Set(prev).add(url));
     fetch(url)
@@ -51,15 +46,7 @@ export function SpeciesCacheProvider({ children }: { children: ReactNode }) {
         return res.json();
       })
       .then(data => {
-        setEntries(prev => ({
-          ...prev,
-          [url]: {
-            species: data.species ?? [],
-            truncated: !!data.truncated,
-            tooLarge: !!data.tooLarge,
-            neTotal: data.neTotal ?? null,
-          },
-        }));
+        setEntries(prev => ({ ...prev, [url]: toCacheEntry(data) }));
       })
       .catch(err => {
         setErrors(prev => ({ ...prev, [url]: err instanceof Error ? err.message : "Unknown error" }));

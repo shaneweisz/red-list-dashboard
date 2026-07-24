@@ -311,6 +311,27 @@ export function buildQs(state: {
   return qs ? `?${qs}` : "";
 }
 
+// Pure merge: combines this instance's (suffixed) params into whatever's
+// already present in `currentSearch`, rather than replacing the whole query
+// string — so a second useFilterParams instance with a different paramSuffix
+// (compare mode) can co-exist in the same URL, each only ever touching its
+// own suffixed keys. Exported (and used by syncUrl below, its only caller)
+// so this merge behavior — the actual novel logic here — is directly
+// unit-testable rather than only reachable through the hook itself.
+export function mergeParamsIntoSearch(
+  currentSearch: string,
+  newState: Parameters<typeof buildQs>[0],
+  suffix: string
+): string {
+  const current = new URLSearchParams(currentSearch);
+  for (const name of OWN_PARAM_NAMES) current.delete(paramKey(name, suffix));
+  for (const [ownKey, value] of new URLSearchParams(buildQs(newState, suffix))) {
+    current.set(ownKey, value);
+  }
+  const qs = current.toString();
+  return qs ? `?${qs}` : "";
+}
+
 /**
  * Hook that syncs filter state with URL search parameters,
  * enabling shareable/bookmarkable filtered views.
@@ -352,13 +373,8 @@ export function useFilterParams(paramSuffix: string = "") {
   // different paramSuffix (compare mode) can co-exist in the same URL — each
   // instance only ever touches its own suffixed keys.
   const syncUrl = useCallback((newState: typeof state, push: boolean) => {
-    const current = new URLSearchParams(window.location.search);
-    for (const name of OWN_PARAM_NAMES) current.delete(paramKey(name, paramSuffix));
-    for (const [ownKey, value] of new URLSearchParams(buildQs(newState, paramSuffix))) {
-      current.set(ownKey, value);
-    }
-    const qs = current.toString();
-    const url = window.location.pathname + (qs ? `?${qs}` : "");
+    const qs = mergeParamsIntoSearch(window.location.search, newState, paramSuffix);
+    const url = window.location.pathname + qs;
     if (push) {
       window.history.pushState(null, "", url);
     } else {

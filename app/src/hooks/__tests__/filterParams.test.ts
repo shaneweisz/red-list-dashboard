@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseParams, buildQs } from "../useFilterParams";
+import { parseParams, buildQs, mergeParamsIntoSearch } from "../useFilterParams";
 
 describe("parseParams", () => {
   it("defaults viewMode to reassessments", () => {
@@ -629,5 +629,114 @@ describe("parseParams ↔ buildQs round-trip", () => {
     const qs = buildQs(original);
     const parsed = parseParams(qs);
     expect(parsed.sortField).toBe("newGbif");
+  });
+});
+
+describe("param suffixing (compare mode)", () => {
+  const emptyState = {
+    viewMode: "reassessments" as const,
+    taxa: new Set<string>(),
+    categories: new Set<string>(),
+    yearRanges: new Set<string>(),
+    assessmentYears: new Set<string>(),
+    describedYears: new Set<string>(),
+    countries: new Set<string>(),
+    obsRanges: new Set<string>(),
+    systems: new Set<string>(),
+    populationTrends: new Set<string>(),
+    movementPatterns: new Set<string>(),
+    threats: new Set<string>(),
+    endemicsOnly: false,
+    growthForms: new Set<string>(),
+    assessors: new Set<string>(),
+    reviewers: new Set<string>(),
+    search: "",
+    subgroups: new Set<string>(),
+    sortField: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear" | null,
+    sortDirection: "desc" as const,
+    species: null as number | null,
+    tab: null as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol" | null,
+  };
+
+  describe("parseParams with a suffix", () => {
+    it("reads the suffixed key, not the bare one", () => {
+      const result = parseParams("?taxa_b=reptiles", "_b");
+      expect(result.taxa).toEqual(new Set(["reptiles"]));
+    });
+
+    it("ignores the bare key when a suffix is given", () => {
+      const result = parseParams("?taxa=birds", "_b");
+      expect(result.taxa.size).toBe(0);
+    });
+
+    it("each suffix only sees its own slice of a combined query string", () => {
+      const search = "?taxa=birds&taxa_b=reptiles";
+      expect(parseParams(search, "").taxa).toEqual(new Set(["birds"]));
+      expect(parseParams(search, "_b").taxa).toEqual(new Set(["reptiles"]));
+    });
+
+    it("suffixes categories, search, and sort too, not just taxa", () => {
+      const result = parseParams("?categories_b=CR,EN&search_b=shrew&sort_b=category&dir_b=asc", "_b");
+      expect(result.categories).toEqual(new Set(["CR", "EN"]));
+      expect(result.search).toBe("shrew");
+      expect(result.sortField).toBe("category");
+      expect(result.sortDirection).toBe("asc");
+    });
+  });
+
+  describe("buildQs with a suffix", () => {
+    it("writes the suffixed key", () => {
+      const qs = buildQs({ ...emptyState, taxa: new Set(["reptiles"]) }, "_b");
+      expect(qs).toBe("?taxa_b=reptiles");
+    });
+
+    it("round-trips through parseParams with the same suffix", () => {
+      const qs = buildQs({ ...emptyState, taxa: new Set(["reptiles"]), categories: new Set(["CR"]) }, "_b");
+      const parsed = parseParams(qs, "_b");
+      expect(parsed.taxa).toEqual(new Set(["reptiles"]));
+      expect(parsed.categories).toEqual(new Set(["CR"]));
+    });
+
+    it("defaults to no suffix, matching pre-compare-mode behavior", () => {
+      const qs = buildQs({ ...emptyState, taxa: new Set(["birds"]) });
+      expect(qs).toBe("?taxa=birds");
+    });
+  });
+
+  describe("mergeParamsIntoSearch", () => {
+    it("adds this panel's params without touching an existing different-suffix panel's params", () => {
+      const currentSearch = "?taxa_b=reptiles&categories_b=CR";
+      const qs = mergeParamsIntoSearch(currentSearch, { ...emptyState, taxa: new Set(["birds"]) }, "");
+      const params = new URLSearchParams(qs);
+      expect(params.get("taxa")).toBe("birds");
+      expect(params.get("taxa_b")).toBe("reptiles");
+      expect(params.get("categories_b")).toBe("CR");
+    });
+
+    it("replaces this panel's own previous value rather than accumulating it", () => {
+      const qs = mergeParamsIntoSearch("?taxa=birds", { ...emptyState, taxa: new Set(["mammals"]) }, "");
+      const params = new URLSearchParams(qs);
+      expect(params.getAll("taxa")).toEqual(["mammals"]);
+    });
+
+    it("preserves query params outside this hook's own vocabulary (e.g. utm tracking)", () => {
+      const currentSearch = "?taxa_b=reptiles&utm_source=newsletter";
+      const qs = mergeParamsIntoSearch(currentSearch, { ...emptyState, taxa: new Set(["birds"]) }, "");
+      const params = new URLSearchParams(qs);
+      expect(params.get("utm_source")).toBe("newsletter");
+    });
+
+    it("clears this panel's own params (e.g. returning to the landing page) without touching the other panel's", () => {
+      const currentSearch = "?taxa=birds&taxa_b=reptiles";
+      const qs = mergeParamsIntoSearch(currentSearch, { ...emptyState, taxa: new Set() }, "");
+      const params = new URLSearchParams(qs);
+      expect(params.has("taxa")).toBe(false);
+      expect(params.get("taxa_b")).toBe("reptiles");
+    });
+
+    it("with no existing foreign params, matches buildQs's own output exactly (backward compatible)", () => {
+      const state = { ...emptyState, taxa: new Set(["birds"]), categories: new Set(["CR", "EN"]) };
+      expect(mergeParamsIntoSearch("", state, "")).toBe(buildQs(state));
+    });
   });
 });
