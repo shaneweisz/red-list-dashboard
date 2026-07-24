@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { S3Client, GetObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
+import { createClient } from "@/lib/supabase/server";
+import { isAdmin } from "@/lib/auth/roles";
 
 let r2Client: S3Client | null = null;
 
@@ -67,6 +69,14 @@ export async function GET(
   { params }: { params: Promise<{ key: string }> }
 ) {
   const { key: sisTaxonId } = await params;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!(await isAdmin(supabase, user?.id))) {
+    return NextResponse.json({ error: "Not authorized to view AOH maps" }, { status: 403 });
+  }
 
   try {
     const client = getR2Client();

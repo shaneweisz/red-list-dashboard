@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { S3Client, GetObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { CACHE_1H } from "@/lib/cache-headers";
+import { createClient } from "@/lib/supabase/server";
+import { isAdmin } from "@/lib/auth/roles";
 
 const metaCache = new Map<string, { data: object; timestamp: number }>();
 const CACHE_DURATION = 60 * 60 * 1000; // 1 hour
@@ -66,6 +68,14 @@ export async function GET(
   { params }: { params: Promise<{ key: string }> }
 ) {
   const { key: sisTaxonId } = await params;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!(await isAdmin(supabase, user?.id))) {
+    return NextResponse.json({ error: "Not authorized to view AOH maps" }, { status: 403 });
+  }
 
   // Check in-memory cache
   const cached = metaCache.get(sisTaxonId);

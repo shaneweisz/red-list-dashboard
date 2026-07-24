@@ -451,13 +451,15 @@ export default function OccurrenceMapRow({
   // GBIF points toggle (on by default)
   const [showGbif, setShowGbif] = useState(true);
 
-  // Range maps are restricted for now — hide the toggle unless the signed-in
-  // user is on the allowlist. The real enforcement is server-side (the
-  // /range-map API route itself 403s); this is just so unauthorized users
-  // don't see a toggle for a layer they can't actually load.
+  // Range maps and AOH are both restricted for now — hide their toggles
+  // unless the signed-in user is an admin. The real enforcement is
+  // server-side (the /range-map and /aoh API routes themselves 403); this is
+  // just so unauthorized users don't see a toggle for a layer they can't
+  // actually load. Triggered on either assessmentId or sisTaxonId since AOH
+  // availability keys off sisTaxonId, not assessmentId.
   const [canViewRangeMap, setCanViewRangeMap] = useState(false);
   useEffect(() => {
-    if (!assessmentId) return;
+    if (!assessmentId && !sisTaxonId) return;
     let cancelled = false;
     fetch("/api/auth/me")
       .then((res) => (res.ok ? res.json() : { canViewRangeMap: false }))
@@ -468,7 +470,7 @@ export default function OccurrenceMapRow({
     return () => {
       cancelled = true;
     };
-  }, [assessmentId]);
+  }, [assessmentId, sisTaxonId]);
 
   // Range map layer state
   const [showRange, setShowRange] = useState(false);
@@ -485,7 +487,10 @@ export default function OccurrenceMapRow({
 
   // AOH layer state. taxonGroup is the friendly bucket name ("birds", not
   // "aves") — matches taxon_group from the species API, not class_name.
-  const isAohAvailable = !!(sisTaxonId && taxonGroup &&
+  // Gated behind the same admin check as the range map layer — the AOH API
+  // routes enforce this server-side too, this just hides the toggle from
+  // users who can't load it anyway.
+  const isAohAvailable = !!(sisTaxonId && taxonGroup && canViewRangeMap &&
     ["mammals", "birds", "reptiles", "amphibians"].includes(taxonGroup.toLowerCase()));
   const [showAoh, setShowAoh] = useState(false);
   const [aohLoading, setAohLoading] = useState(false);
