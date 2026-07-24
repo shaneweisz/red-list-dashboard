@@ -54,9 +54,18 @@ export function AuthStatus() {
     return (
       <Link
         href="/login"
-        className="px-3 py-1.5 text-sm font-medium rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+        className="flex items-center justify-center w-8 h-8 rounded-full ring-1 ring-zinc-200 dark:ring-zinc-700 text-zinc-500 dark:text-zinc-400 hover:ring-zinc-300 dark:hover:ring-zinc-600 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors"
+        aria-label="Sign in"
+        title="Sign in"
       >
-        Sign in
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+          />
+        </svg>
       </Link>
     );
   }
@@ -80,7 +89,10 @@ export function AuthStatus() {
       </button>
       {open && (
         <div className="absolute right-0 mt-2 w-56 rounded-lg shadow-md bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 py-1 z-10">
-          <p className="px-3 py-2 text-xs text-zinc-500 dark:text-zinc-400 truncate border-b border-zinc-100 dark:border-zinc-700" title={me.email}>
+          <p
+            className="px-3 py-2 text-xs text-zinc-500 dark:text-zinc-400 truncate bg-zinc-50 dark:bg-zinc-900/40 border-b border-zinc-100 dark:border-zinc-700 cursor-default select-text"
+            title={me.email}
+          >
             {me.email}
           </p>
           <form action={signOut}>
